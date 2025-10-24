@@ -23,7 +23,7 @@ if not SECRET_KEY:
         raise ValueError("SECRET_KEY must be set in production")
 
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
-ALLOWED_HOSTS = [host.strip() for host in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")]
+ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
 
 ZABBIX_API_URL = os.getenv("ZABBIX_API_URL", "")
 ZABBIX_API_USER = os.getenv("ZABBIX_API_USER", "")
@@ -44,7 +44,20 @@ if not FERNET_KEYS:
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
-CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if origin.strip()]
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
+# Segurança adicional apenas quando não está em DEBUG
+if not DEBUG:
+    SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "True").lower() == "true"
+    SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "31536000"))  # 1 ano
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 # -----------------------------------------------------
 # Apps
@@ -60,6 +73,9 @@ INSTALLED_APPS = [
 
     # Observabilidade
     "django_prometheus",
+
+    # Realtime / WebSockets
+    "channels",
 
     # Apps do projeto
     "core",
@@ -86,8 +102,23 @@ WSGI_APPLICATION = "core.wsgi.application"
 ASGI_APPLICATION = "core.asgi.application"
 
 # -----------------------------------------------------
-# Database (MySQL/MariaDB com fallbacks)
+# Database (MySQL/MariaDB com fallbacks) — otimizado
 # -----------------------------------------------------
+DB_OPTIONS = {
+    "charset": "utf8mb4",
+    "init_command": "SET sql_mode='STRICT_ALL_TABLES'",
+    "connect_timeout": 10,
+}
+
+# Pool opcional (quando disponível via driver)
+if os.getenv("DB_USE_CONNECTION_POOL", "false").lower() == "true":
+    DB_OPTIONS.update({
+        "pool_size": int(os.getenv("DB_POOL_SIZE", "10")),
+        "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "20")),
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+    })
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
@@ -96,44 +127,87 @@ DATABASES = {
         "PASSWORD": os.getenv("DB_PASSWORD", "app"),
         "HOST": os.getenv("DB_HOST", "127.0.0.1"),
         "PORT": os.getenv("DB_PORT", "3306"),
-        "OPTIONS": {
-            "charset": "utf8mb4",
-            "init_command": "SET sql_mode='STRICT_ALL_TABLES'",
-            "connect_timeout": 10,
-        },
+        "OPTIONS": DB_OPTIONS,
         "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "0")),
+        "ATOMIC_REQUESTS": os.getenv("DB_ATOMIC_REQUESTS", "false").lower() == "true",
     }
 }
 
 # -----------------------------------------------------
-# Cache (Redis se disponível, senão locmem)
+# Cache (Redis se disponível; senão fallback robusto)
 # -----------------------------------------------------
-REDIS_URL = os.getenv("REDIS_URL", "")
+REDIS_URL = os.getenv("REDIS_URL", "").strip()
 
-if REDIS_URL:
-    CACHES = {
-        "default": {
-            "BACKEND": "django_redis.cache.RedisCache",
-            "LOCATION": REDIS_URL,
-            "OPTIONS": {
-                "CLIENT_CLASS": "django_redis.client.DefaultClient",
-                "COMPRESSOR": "django_redis.compressors.zlib.ZlibCompressor",
-                "SOCKET_CONNECT_TIMEOUT": 5,
-                "SOCKET_TIMEOUT": 5,
-            },
-            "KEY_PREFIX": "mapsprovefiber",
+def get_cache_config():
+    """Retorna configuração de cache baseada na disponibilidade do Redis."""
+    if REDIS_URL:
+        return {
+            "default": {
+                "BACKEND": "django_redis.cache.RedisCache",
+                "LOCATION": REDIS_URL,
+                "OPTIONS": {
+                    "CLIENT_CLASS": "django_redis.client.DefaultClient",
+                    "COMPRESSOR": "django_redis.compressors.zlib.ZlibCompressor",
+                    "SOCKET_CONNECT_TIMEOUT": 5,
+                    "SOCKET_TIMEOUT": 5,
+                    "RETRY_ON_TIMEOUT": True,
+                    "MAX_CONNECTIONS": int(os.getenv("REDIS_MAX_CONNECTIONS", "100")),
+                },
+                "KEY_PREFIX": "mapsprovefiber",
+                "VERSION": 1,
+            }
         }
-    }
+    else:
+        # Em produção sem Redis, usa filebased; em dev, locmem
+        if not DEBUG:
+            return {
+                "default": {
+                    "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+                    "LOCATION": "/tmp/django_cache",
+                    "TIMEOUT": 300,
+                    "OPTIONS": {"MAX_ENTRIES": 1000},
+                }
+            }
+        else:
+            return {
+                "default": {
+                    "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+                    "LOCATION": "mapsprovefiber-local",
+                }
+            }
+
+CACHES = get_cache_config()
+
+# Sessões
+if REDIS_URL:
     SESSION_ENGINE = "django.contrib.sessions.backends.cache"
     SESSION_CACHE_ALIAS = "default"
+    SESSION_COOKIE_AGE = int(os.getenv("SESSION_COOKIE_AGE", "1209600"))  # 2 semanas
 else:
-    CACHES = {
+    SESSION_ENGINE = "django.contrib.sessions.backends.db"
+
+# -----------------------------------------------------
+# ASGI / Channels (WebSockets)
+# -----------------------------------------------------
+CHANNEL_LAYER_URL = os.getenv("CHANNEL_LAYER_URL", os.getenv("REDIS_URL", "")).strip()
+CHANNEL_PREFIX = os.getenv("CHANNEL_REDIS_PREFIX", "mapsprovefiber")
+
+if CHANNEL_LAYER_URL.startswith(("redis://", "rediss://")):
+    CHANNEL_LAYERS = {
         "default": {
-            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-            "LOCATION": "mapsprovefiber-local",
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [CHANNEL_LAYER_URL],
+                "prefix": CHANNEL_PREFIX,
+            },
         }
     }
-    SESSION_ENGINE = "django.contrib.sessions.backends.db"
+else:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        }
+    }
 
 # -----------------------------------------------------
 # Internacionalização / TZ
@@ -153,7 +227,7 @@ MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # -----------------------------------------------------
-# Templates
+# Templates (com cache em produção)
 # -----------------------------------------------------
 TEMPLATES = [
     {
@@ -171,37 +245,93 @@ TEMPLATES = [
     },
 ]
 
+if not DEBUG:
+    # Ativa template caching em produção
+    TEMPLATES[0]["OPTIONS"]["loaders"] = [
+        (
+            "django.template.loaders.cached.Loader",
+            [
+                "django.template.loaders.filesystem.Loader",
+                "django.template.loaders.app_directories.Loader",
+            ],
+        )
+    ]
+
 # -----------------------------------------------------
-# Logging
+# Health Check Configuration
+# -----------------------------------------------------
+HEALTHCHECK_CONFIG = {
+    "DISK_THRESHOLD_GB": float(os.getenv("HEALTHCHECK_DISK_THRESHOLD_GB", "1.0")),
+    "DB_TIMEOUT": int(os.getenv("HEALTHCHECK_DB_TIMEOUT", "5")),
+    "ENABLE_STORAGE_CHECK": os.getenv("HEALTHCHECK_STORAGE", "true").lower() == "true",
+    "ENABLE_SYSTEM_METRICS": os.getenv("HEALTHCHECK_SYSTEM_METRICS", "false").lower() == "true",
+    "DEBUG": os.getenv("HEALTHCHECK_DEBUG", "false").lower() == "true",
+}
+
+# -----------------------------------------------------
+# Logging (com rotação opcional)
 # -----------------------------------------------------
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+LOG_FORMAT = os.getenv("LOG_FORMAT", "verbose")  # "simple" ou "verbose"
+
+FORMATTERS = {
+    "verbose": {
+        "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
+        "style": "{",
+    },
+    "simple": {
+        "format": "{levelname} {asctime} {message}",
+        "style": "{",
+    },
+}
+
+HANDLERS = {
+    "console": {
+        "class": "logging.StreamHandler",
+        "formatter": LOG_FORMAT,
+    },
+}
+
+# File handler opcional (somente produção, se habilitado)
+if not DEBUG and os.getenv("ENABLE_FILE_LOGGING", "false").lower() == "true":
+    HANDLERS["file"] = {
+        "class": "logging.handlers.RotatingFileHandler",
+        "filename": os.getenv("LOG_FILE", "/var/log/django/app.log"),
+        "maxBytes": int(os.getenv("LOG_MAX_BYTES", "10485760")),  # 10MB
+        "backupCount": int(os.getenv("LOG_BACKUP_COUNT", "5")),
+        "formatter": LOG_FORMAT,
+    }
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "formatters": {
-        "verbose": {
-            "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
-            "style": "{",
-        },
-    },
-    "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-            "formatter": "verbose",
-        },
-    },
+    "formatters": FORMATTERS,
+    "handlers": HANDLERS,
     "root": {
-        "handlers": ["console"],
+        "handlers": list(HANDLERS.keys()),
         "level": LOG_LEVEL,
     },
     "loggers": {
         "django": {
-            "handlers": ["console"],
+            "handlers": list(HANDLERS.keys()),
             "level": os.getenv("DJANGO_LOG_LEVEL", "INFO"),
+            "propagate": False,
+        },
+        "django.db.backends": {
+            "handlers": list(HANDLERS.keys()),
+            "level": os.getenv("DB_LOG_LEVEL", "INFO"),
             "propagate": False,
         },
     },
 }
+
+# Log detalhado de queries (opcional)
+if os.getenv("ENABLE_DB_QUERY_LOG", "false").lower() == "true":
+    LOGGING["loggers"]["django.db.backends"] = {
+        "level": "DEBUG",
+        "handlers": ["console"],
+        "propagate": False,
+    }
 
 # -----------------------------------------------------
 # Monitoring (Sentry - opcional)
