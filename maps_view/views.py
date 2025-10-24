@@ -1,3 +1,5 @@
+import logging
+
 from django.shortcuts import render
 from django.conf import settings
 from setup_app.services import runtime_settings
@@ -11,6 +13,9 @@ from zabbix_api.models import Device
 from prometheus_client import REGISTRY, generate_latest
 
 from .realtime.events import build_dashboard_payload
+
+
+logger = logging.getLogger(__name__)
 
 
 class HostStatusProcessor:
@@ -110,7 +115,7 @@ def fetch_zabbix_hosts_data(hostids: List[str]) -> List[Dict]:
             'selectInterfaces': ['interfaceid', 'ip', 'available', 'main']
         }) or []
     except Exception:
-        # TODO: add structured logging; currently silent to avoid breaking the view
+        logger.exception("Falha ao consultar hosts no Zabbix", extra={"hostids": unique_hostids})
         return []
 
 

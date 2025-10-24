@@ -9,10 +9,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .decorators import handle_api_errors
 from .guards import diagnostics_guard, staff_guard
-from .models import FiberCable, FiberEvent
-from .domain.optical import _fetch_port_optical_snapshot
 from .services.zabbix_service import zabbix_request as _zabbix_request
-from .services.fiber_status import get_oper_status_from_port, combine_cable_status as service_combine_cable_status
 from .usecases import inventory as inventory_uc
 from .usecases import fibers as fiber_uc
 from .usecases.fibers import FiberUseCaseError, FiberValidationError
@@ -54,60 +51,6 @@ def api_update_cable_oper_status(request, cable_id):
     except fiber_uc.FiberNotFound as exc:
         return JsonResponse({"error": str(exc)}, status=404)
     return JsonResponse(payload)
-        cable = FiberCable.objects.select_related(
-            "origin_port__device", "destination_port__device"
-        ).get(id=cable_id)
-    except FiberCable.DoesNotExist:
-        return JsonResponse({"error": "FiberCable nao encontrado"}, status=404)
-
-    origin_port = cable.origin_port
-    dest_port = cable.destination_port
-
-    status_origin, raw_origin, meta_origin = get_oper_status_from_port(origin_port)
-    status_dest, raw_dest, meta_dest = get_oper_status_from_port(dest_port)
-
-    meta_origin["port_id"] = origin_port.id
-    meta_origin["port_name"] = origin_port.name
-    meta_origin["device_name"] = origin_port.device.name
-
-    meta_dest["port_id"] = dest_port.id
-    meta_dest["port_name"] = dest_port.name
-    meta_dest["device_name"] = dest_port.device.name
-
-    origin_optical = _fetch_port_optical_snapshot(origin_port)
-    dest_optical = _fetch_port_optical_snapshot(dest_port)
-
-    status = service_combine_cable_status(status_origin, status_dest)
-    previous_status = cable.status
-
-    if status != previous_status:
-        cable.update_status(status)
-        FiberEvent.objects.create(
-            fiber=cable,
-            previous_status=previous_status,
-            new_status=status,
-            detected_reason=(
-                f"zabbix-oper-status:origin={meta_origin.get('method')},"
-                f"dest={meta_dest.get('method')}"
-            ),
-        )
-
-    return JsonResponse(
-        {
-            "cable_id": cable.id,
-            "status": status,
-            "origin_status": status_origin,
-            "origin_raw": raw_origin,
-            "origin_meta": meta_origin,
-            "origin_optical": origin_optical,
-            "destination_status": status_dest,
-            "destination_raw": raw_dest,
-            "destination_meta": meta_dest,
-            "destination_optical": dest_optical,
-            "updated": status != previous_status,
-            "previous_status": previous_status,
-        }
-    )
 
 
 @require_GET
