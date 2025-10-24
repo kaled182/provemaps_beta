@@ -1,29 +1,27 @@
-﻿# Django Maps â€“ Operations & Deployment Guide
+﻿# 🛰️ MapsProveFiber — Guia Completo de Operação e Implantação
 
-This project collects Zabbix telemetry and renders it in two web experiences:
+**MapsProveFiber** é um sistema Django que coleta telemetria do **Zabbix** e a apresenta em duas experiências web integradas:
 
-* **Maps Dashboard (`/maps_view/dashboard/`)** â€“ status cards, host availability and shortcuts to diagnostics.
-* **Fiber Route Builder (`/routes_builder/fiber-route-builder/`)** â€“ draw or import fibre routes (KML), monitor optical power and manage cable metadata.
+- **🌍 Maps Dashboard (`/maps_view/dashboard/`)** — Exibe status em tempo real, disponibilidade de hosts e atalhos de diagnóstico.  
+- **🧭 Fiber Route Builder (`/routes_builder/fiber-route-builder/`)** — Permite desenhar ou importar rotas ópticas (KML), monitorar potência óptica e gerenciar metadados de cabos.  
 
-Observability is built in through Prometheus metrics, structured logging and slow-query inspection. Secrets stay outside the repository and are managed via the bundled setup panel.
+O projeto possui **observabilidade nativa** com métricas Prometheus, logs estruturados e análise de queries lentas.  
+As **chaves e segredos** são gerenciadas de forma segura via painel `setup_app`, fora do repositório.
 
 ---
 
-## 1. Requirements
+## ⚙️ 1. Requisitos
 
-| Component | Version / Notes |
-|-----------|-----------------|
-| Python    | 3.12+ (tested with 3.12) |
-| Node.js   | 18+ (for the existing frontend toolchain) |
-| MariaDB / MySQL | Used as primary database (`mapspro_db`). Slow-query log is optional but recommended. |
-| Redis     | Acts as Celery broker/result backend (`redis://127.0.0.1:6379/0` by default). |
-| Celery worker | Required for async tasks such as warming optical snapshots. |
-| Prometheus (optional) | Scrapes `/metrics/` endpoint for dashboards/alerts. |
+| Componente | Versão / Observações |
+|-------------|----------------------|
+| **Python** | 3.12+ (testado com 3.12) |
+| **Node.js** | 18+ (toolchain do frontend) |
+| **MariaDB/MySQL** | Banco principal (`mapspro_db`), log de queries lentas opcional |
+| **Redis** | Broker/result backend do Celery (`redis://127.0.0.1:6379/0`) |
+| **Celery Worker** | Necessário para tarefas assíncronas (snapshots ópticos, etc.) |
+| **Prometheus (opcional)** | Coleta métricas em `/metrics/` para dashboards e alertas |
 
-### Python dependencies
-
-All server-side dependencies are pinned in `requirements.txt`. Install them in a virtual environment:
-
+**Instalação das dependências:**
 ```bash
 python -m venv .venv
 source .venv/bin/activate         # PowerShell: .\.venv\Scripts\Activate.ps1
@@ -32,188 +30,176 @@ pip install -r requirements.txt
 
 ---
 
-## 2. Environment configuration
+## 🧩 2. Configuração de Ambiente
 
-The project relies on Django settings + environment variables managed through [`django-environ`](https://github.com/joke2k/django-environ).
+O projeto usa `django-environ` para gerenciar variáveis de ambiente.
 
-1. Copy `.env.example` to `.env` and fill the placeholders (database credentials, Redis URL, API keys, etc.).
-2. Generate or reuse a `FERNET_KEY` â€“ it encrypts sensitive values stored through the setup panel:
-
+1. Copie `.env.example` para `.env` e preencha credenciais (DB, Redis, API keys).  
+2. Gere uma chave Fernet (usada para criptografia de segredos):
    ```bash
    python manage.py generate_fernet_key --write
    ```
+3. Em produção, defina `ENV_FILE_PATH` apontando para o `.env` seguro.
 
-3. When running in production, prefer exporting real environment variables or set `ENV_FILE_PATH` to the secure location of your `.env`.
-
-Key flags:
-
-* `ENABLE_DIAGNOSTIC_ENDPOINTS` â€” required for ping/telnet utilities and optical diagnostics.
-* `ENABLE_DIAGNOSTIC_ENDPOINTS=true` should only be set for trusted environments.
-* `CHANNEL_LAYER_URL` â€” optional Channels backend (e.g. `redis://127.0.0.1:6379/1`). Omit for the in-memory layer used in development.
+**Principais variáveis:**
+- `ENABLE_DIAGNOSTIC_ENDPOINTS` → habilita ping/telnet e diagnósticos ópticos.  
+- `CHANNEL_LAYER_URL` → backend Channels (`redis://127.0.0.1:6379/1` em produção).  
 
 ---
 
-## 3. First run
+## 🚀 3. Primeira Execução
 
-1. Apply migrations and collect static assets:
-
+1. Aplique migrações e colete os arquivos estáticos:
    ```bash
    python manage.py migrate
    python manage.py collectstatic
    ```
-
-2. Create an admin user `python manage.py createsuperuser`.
-3. Start supporting services: MariaDB, Redis, a Celery worker and Celery beat (for realtime broadcasts).
-
+2. Crie o usuário administrador:
    ```bash
-   # Terminal 1 â€“ Django/Channels (development)
+   python manage.py createsuperuser
+   ```
+3. Inicie os serviços:
+   ```bash
+   # Django (desenvolvimento)
    python manage.py runserver 0.0.0.0:8000
 
-   # or, for ASGI servers in staging/production
-   daphne -b 0.0.0.0 -p 8000 core.asgi:application
-
-   # Terminal 2 â€“ Celery worker
+   # Worker Celery
    celery -A core worker -l info
-   # Windows tip: add `--pool=solo` if you see spawn/prefork errors
-
-   # Terminal 3 â€“ Celery beat (required for realtime dashboard)
+   # Celery Beat (tarefas agendadas / tempo real)
    celery -A core beat -l info
-   # Windows tip: you can also append `--pool=solo`
    ```
-
-4. Open `/setup_app/first_time/` to feed company and Zabbix credentials. The panel writes the `.env` (when allowed) and caches runtime settings (`setup_app.services.runtime_settings`).
-
-5. After authentication, Quick Actions â†’ **Configure System** (`/setup_app/config/`) lets you rotate credentials and feature flags.
+4. Acesse `/setup_app/first_time/` para inserir credenciais e inicializar o ambiente.  
 
 ---
 
-## 4. Daily operations
+## 🛰️ 4. Operações Diárias
 
-### Fibre Route Builder
+### Fiber Route Builder
+- Desenhe ou importe KMLs de rotas ópticas.  
+- Cada importação aciona atualização automática no painel.  
 
-* Draw paths manually and save; a modal collects origin/destination devices + ports.
-* Import KML (single line-string) via the **Import KML** button. The modal now mirrors the manual save modal and allows one-way monitoring (single-port).
-* Every import/save fires a UI refresh â€“ the dropdown is cleared so you can explicitly load the cable you need.
+### Métricas & Logs
+- `/metrics/` expõe métricas Prometheus (Django, MariaDB, Redis, Celery).  
+- Logs estruturados em `logs/application.log` (rotação automática 5 MB).  
+- Análise de queries lentas:
+  ```bash
+  python manage.py show_slow_queries --limit 10
+  ```
 
-### Metrics & Logging
+### Dashboard em Tempo Real
+- WebSocket `/ws/dashboard/status/` transmite status de hosts via Django Channels.  
+- Fallback para HTTP periódico quando o socket estiver offline.  
 
-* `/metrics/` exposes Prometheus metrics (Django, MariaDB, Redis, Celery). A friendly HTML explorer lives at `/maps_view/metrics/`.
-* Structured logging lands in `logs/application.log` (rotating 5 MB files). Console output is also enabled.
-* Slow query log analysis: `python manage.py show_slow_queries --path "/var/lib/mysql/hostname-slow.log" --limit 10`. It also honours `MYSQL_SLOW_LOG_PATH`.
-* Celery beat keeps the realtime dashboard in sync - leave `celery -A core beat -l info` running alongside the worker.
-
-### Realtime dashboard
-
-* The WebSocket endpoint `/ws/dashboard/status/` streams host availability snapshots via Django Channels.
-* Configure `CHANNEL_LAYER_URL` to point at your Redis instance in multi-process environments; the default in-memory layer is suitable only for development.
-* When the WebSocket is unavailable the dashboard banner indicates the offline state and the UI falls back to periodic HTTP refreshes.
-
-### Observability checklist
-
-See `docs/performance_phase6.md` for detailed steps. Highlights:
-
-* Hook `/metrics/` to Prometheus/Grafana.
-* Automate slow-log ingestion (command above).
-* Consider APM integration for HTTP/Celery traces.
+### Checklist de Observabilidade
+- Conectar `/metrics/` ao Prometheus/Grafana.  
+- Automatizar análise de slow logs.  
+- Integrar APM opcional para rastreamento Celery/HTTP.  
 
 ---
 
-## 5. Diagnostics & APIs
+## 🧠 5. Diagnóstico e APIs
 
-The `zabbix_api` app is split into focused modules:
+| Módulo | Responsabilidade |
+|--------|------------------|
+| `reports.py` | Leitura (hosts, problemas, cache) |
+| `inventory.py` | CRUD de dispositivos/portas/cabos, importação KML |
+| `diagnostics.py` | Ferramentas restritas (ping, telnet, mocks) |
+| `lookup.py` | Autocompletes e consultas rápidas |
 
-| Module | Responsibility |
-|--------|----------------|
-| `reports.py` | Read-only Zabbix data (hosts, problems, cache clearing). |
-| `inventory.py` | Device/port/cable CRUD, KML import, manual route save, optical insights. |
-| `diagnostics.py` | Guarded utilities (ping, telnet, mocks). |
-| `lookup.py` | Autocomplete helpers, host lookups, interface details. |
-
-Public endpoints are re-exported in `zabbix_api/views.py` for backward compatibility.
+Endpoints são expostos via `zabbix_api/views.py` para compatibilidade retroativa.  
+Documentação detalhada em [`API_DOCUMENTATION.md`](./API_DOCUMENTATION.md).
 
 ---
 
-## 6. Running tests
+## 🧪 6. Testes
 
+Execute:
 ```bash
 python manage.py test tests setup_app
 ```
 
-The suite covers runtime settings, diagnostics guards, inventory API and smoke tests. Extend it for custom flows and regression coverage.
+A suíte cobre configurações dinâmicas, guards de diagnóstico e APIs de inventário.  
+Para Pytest:
+```bash
+pytest -v --disable-warnings
+```
 
 ---
 
-## 7. Deployment checklist
+## 🏗️ 7. Implantação (Deploy)
 
-1. Copy `.env.example` to the target node and populate real values (or export env vars).
-2. Set `DEBUG=False`, configure `ALLOWED_HOSTS` and your TLS/CSRF settings.
-3. Run migrations + collect static files.
-4. Start Django (Gunicorn/Uvicorn) behind your preferred web server.
-5. Launch Celery worker(s) and beat (required for scheduled tasks and realtime broadcasts).
-6. Point Prometheus or another collector to `/metrics/`.
-7. Configure log rotation/ shipping (the app already handles rotation inside `logs/`).
-8. Optionally configure backup automation (see below).
+1. Copie `.env.example` e preencha valores reais.  
+2. Configure:
+   ```env
+   DEBUG=False
+   ALLOWED_HOSTS=mapsprovefiber.yourdomain.com
+   ```
+3. Execute migrações e colete estáticos.  
+4. Suba via Gunicorn/Uvicorn (ASGI).  
+5. Inicie Celery Worker + Beat.  
+6. Aponte Prometheus para `/metrics/`.  
+7. Configure rotação de logs e backups.
+
+Consulte [`DEPLOYMENT.md`](./DEPLOYMENT.md) para detalhes de automação e scripts.
 
 ---
 
-## 8. Backup & release packaging
+## 💾 8. Backup e Empacotamento
 
-The repository ships with a PowerShell helper that creates a sanitized ZIP (excludes virtualenvs, node modules, caches). Run from the project root:
-
+O script PowerShell cria pacotes limpos para distribuição:
 ```powershell
 pwsh scripts\package-release.ps1
 ```
-
-The script collects sources into `dist/django-maps-release-YYYYmmddHHMM.zip`. Distribute that bundle to testing or production servers, then install dependencies and run migrations as outlined above.
-
-For manual backups you can run:
-
+Gera `dist/django-maps-release-YYYYmmddHHMM.zip`.  
+Também é possível usar:
 ```powershell
-Compress-Archive `
-  -Path * `
-  -DestinationPath dist\django-maps-backup.zip `
-  -CompressionLevel Optimal `
-  -Exclude *.pyc,*__pycache__*,.git*,.venv*,venv*,logs\*,node_modules\*
+Compress-Archive -Path * -DestinationPath dist\mapsprovefiber-backup.zip -Exclude *.pyc,*__pycache__*,.git*,.venv*,logs\*
 ```
 
-Remember to back up the database (`mysqldump`) and `.env`/`FERNET_KEY` separately.
+---
+
+## 🧭 9. Comandos Úteis
+
+| Comando | Descrição |
+|----------|-----------|
+| `python manage.py show_slow_queries` | Verifica queries lentas |
+| `python manage.py collectstatic` | Coleta arquivos estáticos |
+| `celery -A core worker -l info` | Inicia worker Celery |
+| `celery -A core beat -l info` | Inicia agendador Celery |
+| `python manage.py shell_plus` | Shell ORM interativo |
 
 ---
 
-## 9. Useful commands reference
+## 📚 10. Referências
 
-| Command | Purpose |
-|---------|---------|
-| `python manage.py show_slow_queries --limit 10` | Inspect MariaDB/MySQL slow query log. |
-| `python manage.py collectstatic` | Gather static assets for deployment. |
-| `celery -A core worker -l info` | Start Celery worker. |
-| `celery -A core beat -l info` | (Optional) Run scheduled tasks (warm optical snapshots). |
-| `python manage.py shell_plus` (if installed) | Explore Django ORM interactively. |
-
----
-
-## 10. Further reading
-
-* `docs/performance_phase1..6.md` â€“ progressive hardening & observability improvements.
-* `docs/operations_checklist.md` (new) â€“ concise runbook for dayâ€‘toâ€‘day ops.
-* `API_DOCUMENTATION.md` â€“ legacy reference for REST endpoints.
-
-This README acts as the entry point for onboarding, dayâ€‘toâ€‘day operation and deployment of the Django Maps platform. Contributions improving automation, monitoring or documentation are welcome. Continuous updates keep the bundle deployable and productionâ€‘ready.
+- [`API_DOCUMENTATION.md`](./API_DOCUMENTATION.md) — Endpoints REST  
+- [`CONTRIBUTING.md`](./CONTRIBUTING.md) — Guia de contribuição  
+- [`SECURITY.md`](./SECURITY.md) — Políticas de segurança e disclosure  
+- [`DEPLOYMENT.md`](./DEPLOYMENT.md) — Estratégias de implantação  
+- `docs/performance_phase*.md` — Melhorias progressivas e observabilidade  
+- `docs/operations_checklist.md` — Checklist operacional  
 
 ---
 
-## Refatoracao em andamento
-- Casos de uso de fibras e inventario residem agora em zabbix_api/usecases para compartilhar regras entre views, tasks e comandos.
-- O arquivo zabbix_api/inventory.py tornou-se uma camada fina de HTTP; detalhes de evolucao estao em docs/refactor_fibers.md.
+## 🔧 Refatoração em andamento
+- Casos de uso de fibras/inventário migrados para `zabbix_api/usecases`.  
+- `inventory.py` atua agora apenas como camada HTTP.  
+- Histórico documentado em `docs/refactor_fibers.md`.
 
-## Executar testes rapidamente
-`
+---
+
+## ✅ Testes rápidos
+```bash
 python -m pytest tests
-`
+```
 
-## Gerar pacote para validacao/implantacao
-`
+## 📦 Gerar pacote
+```bash
 pwsh scripts/package-release.ps1
-`
-O script produz um ZIP em dist/ ignorando dependencias locais (env, 
-ode_modules, oracleJdk-25, logs) e pode ser publicado para testes externos.
+```
+
+---
+
+### © 2025 — Projeto **MapsProveFiber**
+Mantido por Simples Internet.  
+Documentação e código sob licença MIT.

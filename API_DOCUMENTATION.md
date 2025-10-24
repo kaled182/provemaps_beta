@@ -1,114 +1,206 @@
-# Zabbix API Documentation
+# 🧭 Documentação da API — MapsProveFiber
 
-The REST endpoints in the `zabbix_api` app power the maps dashboard and the fibre route builder. The code is grouped into:
+Este documento descreve todos os **endpoints REST** utilizados pelo MapsProveFiber, incluindo integração com **Zabbix**, **inventário local**, **rotas de fibra**, **tarefas Celery** e **probes de saúde**.  
+Organizado por módulos, com foco em **claridade**, **segurança** e **diagnóstico rápido**.
 
-- `reports.py` - read-only endpoints for hosts, problems, status and cache clearing.
-- `inventory.py` - operations that write to the local inventory (devices, ports, fibres, KML imports).
-- `diagnostics.py` - guarded utilities such as ping or telnet that respect the diagnostics flag.
-- `lookup.py` - lightweight lookups used by autocomplete widgets and helper dialogs.
+---
 
-`views.py` now re-exports these functions only for backwards compatibility.
+## ⚙️ Estrutura dos módulos principais
 
-## Diagnostics flag
+| Módulo | Arquivo | Função principal |
+|--------|----------|------------------|
+| **Zabbix API** | `zabbix_api/` | Comunicação com Zabbix, diagnósticos e inventário |
+| **Rotas de Fibra** | `routes_builder/` | Tarefas Celery para cálculo e cache de rotas |
+| **Configuração inicial** | `setup_app/` | Gerenciamento do `.env` e variáveis do sistema |
+| **Core** | `core/` | Núcleo Django, Celery, URLs e Health Checks |
 
-Diagnostic endpoints are available only when `ENABLE_DIAGNOSTIC_ENDPOINTS=true`. The guard first checks the `.env` managed by `env_manager` (via `ENV_FILE_PATH`); if the key is absent it falls back to Django settings. When the flag is disabled the endpoints return HTTP 403 without running external commands.
+---
 
-## Base URL
+## 🔐 Acesso e Segurança
+
+- Todos os endpoints **exigem autenticação Django**.  
+- Endpoints administrativos requerem **usuário staff**.
+- Diagnósticos e execução de comandos são controlados por:
+  ```bash
+  ENABLE_DIAGNOSTIC_ENDPOINTS=true
+  ```
+  Quando desativado, as rotas retornam **HTTP 403** sem executar ações externas.
+
+---
+
+## 🌐 Base URL
 
 ```
 http://localhost:8000/zabbix_api/
 ```
 
-## Summary of categories
+> Em produção, substitua `localhost` pelo domínio configurado.
 
-| Category   | Endpoint                    | Description                              |
-|------------|-----------------------------|------------------------------------------|
-| Test       | `/test/`                    | Quick connectivity check                 |
-| Hosts      | `/hosts/`                   | Host inventory                           |
-| Hosts      | `/hosts/{id}/`              | Host details                             |
-| Network    | `/hosts/network-info/`      | Network info for every host              |
-| Network    | `/hosts/{id}/network-info/` | Network info for a specific host         |
-| Status     | `/status/`                  | Overall status of the Zabbix instance    |
-| Problems   | `/problems/critical/`       | Critical problems only                   |
-| Monitoring | `/monitoring/overview/`     | Global monitoring overview               |
+---
 
-All routes listed below are prefixed with `/zabbix_api/`.
+## 🩺 Health & Status
 
-## Status
+| Endpoint | Método | Descrição |
+|-----------|---------|-----------|
+| `/healthz/` | GET | Health check completo (DB, cache, storage, sistema) |
+| `/ready/` | GET | Readiness probe — pronto para receber tráfego |
+| `/live/` | GET | Liveness probe — verifica se o processo está ativo |
 
-- **GET** `/status/` - General summary of the Zabbix environment.
+**Exemplo de resposta:**
+```json
+{
+  "status": "ok",
+  "timestamp": 1731109200.123,
+  "checks": {
+    "db": {"ok": true, "type": "mysql"},
+    "cache": {"ok": true, "backend": "RedisCache"},
+    "storage": {"ok": true, "free_gb": 42.3}
+  },
+  "latency_ms": 23.6
+}
+```
 
-## Hosts
+---
 
-- **GET** `/hosts/` - List hosts with basic metadata.
-- **GET** `/hosts/{hostid}/` - Full details of the selected host.
-- **GET** `/hosts/{hostid}/items/` - Items grouped by category.
-- **GET** `/hosts/{hostid}/triggers/` - Triggers ordered by severity.
-- **GET** `/hosts/{hostid}/graphs/` - Available graphs.
-- **GET** `/hosts/{hostid}/latest/` - Latest values for key items.
-- **GET** `/hosts/{hostid}/performance/` - Performance metrics (CPU, memory, disk).
-- **GET** `/items/{hostid}/{itemid}/history/` - Item history (24h by default).
-- **GET** `/hosts/{hostid}/problems/` - Active problems affecting the host.
+## 🧩 Zabbix API
 
-## Aggregated monitoring
+Endpoints organizados por categoria.  
+Prefixo padrão: `/zabbix_api/`
 
-- **GET** `/monitoring/overview/`
-- **GET** `/monitoring/performance/`
-- **GET** `/monitoring/availability/`
-- **GET** `/monitoring/latest_all/`
+### 📊 Status e Monitoramento
 
-Each endpoint returns summaries ready for dashboard cards and tables.
+| Endpoint | Método | Descrição |
+|-----------|---------|-----------|
+| `/status/` | GET | Estado geral do ambiente Zabbix |
+| `/monitoring/overview/` | GET | Visão global de hosts e problemas |
+| `/monitoring/performance/` | GET | Métricas agregadas (CPU, memória, disco) |
+| `/monitoring/availability/` | GET | Percentuais de uptime |
+| `/monitoring/latest_all/` | GET | Últimos valores de todos os hosts |
 
-## Problems and events
+---
 
-- **GET** `/problems/` - All active problems.
-- **GET** `/problems/summary/` - Aggregated view by severity.
-- **GET** `/problems/by-severity/` - Count problems by severity level.
-- **GET** `/problems/critical/` - Only critical incidents.
-- **GET** `/events/` - Recent events.
-- **GET** `/events/recent/` - Condensed chronological feed.
-- **GET** `/events/summary/` - Distribution by severity/status.
+### 🖥️ Hosts e Itens
 
-## Network information
+| Endpoint | Método | Descrição |
+|-----------|---------|-----------|
+| `/hosts/` | GET | Lista hosts com metadados básicos |
+| `/hosts/{id}/` | GET | Detalhes completos de um host |
+| `/hosts/{id}/items/` | GET | Itens agrupados por categoria |
+| `/hosts/{id}/triggers/` | GET | Triggers por severidade |
+| `/hosts/{id}/graphs/` | GET | Gráficos disponíveis |
+| `/hosts/{id}/latest/` | GET | Últimos valores de métricas |
+| `/hosts/{id}/performance/` | GET | Performance (CPU, RAM, disco) |
+| `/items/{hostid}/{itemid}/history/` | GET | Histórico de 24h do item |
 
-- **GET** `/hosts/network-info/`
-- **GET** `/hosts/{hostid}/network-info/`
+---
 
-These endpoints provide interfaces, IP addresses and inventory metadata (latitude, longitude, address, and so on).
+### ⚠️ Problemas e Eventos
 
-## Local inventory integration
+| Endpoint | Método | Descrição |
+|-----------|---------|-----------|
+| `/problems/` | GET | Problemas ativos |
+| `/problems/summary/` | GET | Agrupamento por severidade |
+| `/problems/by-severity/` | GET | Contagem por nível |
+| `/problems/critical/` | GET | Apenas incidentes críticos |
+| `/events/` | GET | Eventos recentes |
+| `/events/recent/` | GET | Feed cronológico condensado |
+| `/events/summary/` | GET | Distribuição por status/severidade |
 
-Endpoints implemented in `inventory.py`:
+---
 
-- **POST** `/api/add-device-from-zabbix/`
-- **POST** `/api/bulk-create-inventory/`
-- **GET** `/api/device-ports/{device_id}/`
-- **GET** `/api/device-ports-optical/{device_id}/`
-- **GET** `/api/port-optical-status/{port_id}/`
-- **GET** `/api/port-traffic-history/{port_id}/`
-- **POST** `/api/import-fiber-kml/`
-- **GET** `/api/fiber/live-status/{cable_id}/` (and related `fiber` / `fibers` variants)
-- **GET** `/api/fiber/value-mapping-status/{cable_id}/`
+### 🌐 Rede e Inventário
 
-All routes require authentication, and several reuse the diagnostics guard to prevent unsafe actions when the flag is disabled.
+| Endpoint | Método | Descrição |
+|-----------|---------|-----------|
+| `/hosts/network-info/` | GET | Interfaces e IPs de todos os hosts |
+| `/hosts/{id}/network-info/` | GET | Interfaces de um host específico |
+| `/api/add-device-from-zabbix/` | POST | Cria dispositivo local com base no Zabbix |
+| `/api/bulk-create-inventory/` | POST | Criação em massa de dispositivos |
+| `/api/device-ports/{device_id}/` | GET | Lista portas do dispositivo |
+| `/api/port-traffic-history/{port_id}/` | GET | Histórico de tráfego da porta |
+| `/api/import-fiber-kml/` | POST | Importa topologia de fibra em KML |
+| `/api/fiber/live-status/{cable_id}/` | GET | Estado atual do cabo |
+| `/api/fiber/value-mapping-status/{cable_id}/` | GET | Mapeamento de valores (status) |
 
-## Diagnostic tools
+---
 
-Implemented in `diagnostics.py`:
+### 🧰 Ferramentas de Diagnóstico
 
-- **GET** `/api/test/ping/`
-- **GET** `/api/test/telnet/`
-- **GET** `/api/test/ping_telnet/`
-- **POST** `/api/test/cable-up/{id}/` (plus the `cable-down` and `cable-unknown` helpers)
+> Disponíveis apenas quando `ENABLE_DIAGNOSTIC_ENDPOINTS=true` e o usuário é *staff*.
 
-They require an authenticated staff user and `ENABLE_DIAGNOSTIC_ENDPOINTS=true`.
+| Endpoint | Método | Descrição |
+|-----------|---------|-----------|
+| `/api/test/ping/` | GET | Teste de ping remoto |
+| `/api/test/telnet/` | GET | Teste de porta via Telnet |
+| `/api/test/ping_telnet/` | GET | Ping + Telnet combinados |
+| `/api/test/cable-up/{id}/` | POST | Marca cabo como ativo |
+| `/api/test/cable-down/{id}/` | POST | Marca cabo como inativo |
 
-## Lookup endpoints
+---
 
-Implemented in `lookup.py`:
+### 🔍 Endpoints de Lookup
 
-- **GET** `/lookup/hosts/`
-- **GET** `/lookup/hosts/{hostid}/interfaces/`
-- **GET** `/lookup/interfaces/{interfaceid}/details/`
+Usados por **autocompletes** e **widgets interativos**.
 
-These endpoints return lightweight payloads for autocomplete widgets and integration screens.
+| Endpoint | Método | Descrição |
+|-----------|---------|-----------|
+| `/lookup/hosts/` | GET | Busca leve por hosts |
+| `/lookup/hosts/{id}/interfaces/` | GET | Interfaces de um host |
+| `/lookup/interfaces/{id}/details/` | GET | Detalhes de interface |
+
+---
+
+## 🛰️ Routes Builder — API de Tarefas
+
+Prefixo: `/routes/tasks/`
+
+| Endpoint | Método | Descrição |
+|-----------|---------|-----------|
+| `/tasks/build/` | POST | Enfileira cálculo de rota |
+| `/tasks/batch/` | POST | Enfileira múltiplas rotas |
+| `/tasks/invalidate/` | POST | Invalida cache da rota |
+| `/tasks/health/` | GET | Health check do worker |
+| `/tasks/status/{task_id}/` | GET | Consulta status de uma task |
+| `/tasks/bulk/` | POST | Executa operações em massa (build + invalidate) |
+
+**Exemplo:**
+```json
+{
+  "route_id": 12,
+  "force": true,
+  "options": {"recalc_topology": true}
+}
+```
+Resposta:
+```json
+{
+  "status": "enqueued",
+  "task_id": "a23b9cfa-22bb-44c8-8c1f-bcd56f0",
+  "queue": "maps"
+}
+```
+
+---
+
+## 🧱 Estrutura de Erros Padrão
+
+| Código | Tipo | Descrição |
+|--------|------|-----------|
+| **400** | `Bad Request` | JSON inválido ou parâmetros ausentes |
+| **401** | `Unauthorized` | Usuário não autenticado |
+| **403** | `Forbidden` | Sem permissão ou diagnósticos desativados |
+| **404** | `Not Found` | Recurso inexistente |
+| **409** | `Conflict` | Rota bloqueada por outro processo |
+| **500** | `Server Error` | Falha interna — ver logs Celery/Django |
+
+---
+
+## 🧠 Boas Práticas
+
+- Utilize `HTTP 202` para operações assíncronas.
+- Sempre valide `task_id` antes de consultar status.
+- Use `DEBUG=false` em produção.
+- Monitore workers com:
+  ```bash
+  celery -A core.celery_app inspect active
+  ```
