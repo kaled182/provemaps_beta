@@ -1,3 +1,4 @@
+# core/views.py
 import os
 import time
 import platform
@@ -6,8 +7,20 @@ import django
 from django.http import JsonResponse
 from django.db import connection
 from django.core.cache import caches
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render
 
 logger = logging.getLogger(__name__)
+
+
+@login_required
+def zabbix_lookup_page(request):
+    """
+    Render the Zabbix lookup integration page.
+    The frontend consumes the REST endpoints from the zabbix_api app.
+    """
+    return render(request, "zabbix/lookup.html")
+
 
 def healthz(request):
     """
