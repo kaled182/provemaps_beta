@@ -28,10 +28,8 @@ from core import views_health as health_views
 
 
 def redirect_to_maps_view(request):
-    if request.method == 'GET':
-        return redirect('maps_view/dashboard')
-    else:
-        return redirect('maps_view/dashboard')
+    """Redirect root traffic to the dashboard view."""
+    return redirect('maps_view:dashboard_view')
 
 
 urlpatterns = [
@@ -50,6 +48,7 @@ urlpatterns = [
     path('zabbix/lookup/', core_views.zabbix_lookup_page, name='zabbix_lookup'),
 
     # Health checks
+    path('health/', core_views.healthz, name='healthz_legacy'),           # legacy alias
     path('healthz', core_views.healthz, name='healthz'),                 # comprehensive
     path('ready', health_views.healthz_ready, name='healthz_ready'),     # readiness probe
     path('live', health_views.healthz_live, name='healthz_live'),        # liveness probe
