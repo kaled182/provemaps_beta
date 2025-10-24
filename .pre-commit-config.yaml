@@ -1,0 +1,71 @@
+# .pre-commit-config.yaml — qualidade e segurança para o mapsprovefiber
+# Instalação:
+#   pip install pre-commit
+#   pre-commit install
+# Execução manual:
+#   pre-commit run --all-files
+
+repos:
+  # Formatador
+  - repo: https://github.com/psf/black
+    rev: 24.8.0
+    hooks:
+      - id: black
+        args: ["--line-length=100"]
+
+  # Linter ultrarrápido (com falha se algo foi auto-corrigido)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: ["--fix", "--exit-non-zero-on-fix"]
+        # Para também checar templates Django (opcional):
+        # args: ["--fix", "--exit-non-zero-on-fix", "--extend-select", "DJ"]
+
+  # Organização de imports
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ["--profile=black", "--line-length=100"]
+
+  # Hooks utilitários e de segurança genéricos
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-json
+      - id: debug-statements
+      - id: check-ast
+      - id: check-builtin-literals
+      - id: check-docstring-first
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+
+  # Lint para Dockerfile (hadolint)
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint-docker
+
+  # Lint para shell scripts (bash/sh)
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+
+  # (Opcional) Detector de segredos — habilitar quando quiser
+  # - repo: https://github.com/Yelp/detect-secrets
+  #   rev: v1.5.0
+  #   hooks:
+  #     - id: detect-secrets
+  #       args: ["--baseline", ".secrets.baseline"]
+
+  # (Opcional) Validação/format de templates Django
+  # - repo: https://github.com/mattsb42-meta/django-template-hooks
+  #   rev: v1.0.0
+  #   hooks:
+  #     - id: django-template-format

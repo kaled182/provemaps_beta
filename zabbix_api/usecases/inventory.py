@@ -458,10 +458,10 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
                 updates["notes"] = note
         elif role == "traffic_in":
             if item_id and not port.zabbix_item_id_traffic_in:
-                updates["zabbix_item_id_traffic_in"] = item_id
+                updates["zabbix_item_id_trafego_in"] = item_id
         elif role == "traffic_out":
             if item_id and not port.zabbix_item_id_traffic_out:
-                updates["zabbix_item_id_traffic_out"] = item_id
+                updates["zabbix_item_id_trafego_out"] = item_id
         elif role == "optical_rx":
             if key and port.rx_power_item_key != key:
                 updates["rx_power_item_key"] = key

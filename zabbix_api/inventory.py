@@ -50,6 +50,10 @@ inventory_uc.ZABBIX_REQUEST = _call_zabbix_request
 @handle_api_errors
 def api_update_cable_oper_status(request, cable_id):
     try:
+        payload = fiber_uc.update_cable_oper_status(cable_id)
+    except fiber_uc.FiberNotFound as exc:
+        return JsonResponse({"error": str(exc)}, status=404)
+    return JsonResponse(payload)
         cable = FiberCable.objects.select_related(
             "origin_port__device", "destination_port__device"
         ).get(id=cable_id)

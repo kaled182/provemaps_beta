@@ -1,0 +1,143 @@
+# pyproject.toml — configurações unificadas para mapsprovefiber
+
+[build-system]
+requires = ["setuptools>=45.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+skip-string-normalization = false
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.mypy_cache
+  | \.pytest_cache
+  | \.venv
+  | build
+  | dist
+  | migrations
+  | staticfiles
+  | media
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+combine_as_imports = true
+known_first_party = ["core", "maps_view", "setup_app", "routes_builder"]
+skip_glob = ["migrations/*", "**/templates/**"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+select = [
+    "E",   # Pycodestyle errors
+    "W",   # Pycodestyle warnings
+    "F",   # PyFlakes
+    "I",   # Isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "PL",  # Pylint
+    "DJ",  # Django
+    "RUF", # Ruff-specific
+]
+ignore = [
+    "E501",  # line-too-long (handled by black)
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+    "PLR2004", # magic value used in comparison
+    "DJ008", # jQuery is not available in Django
+]
+exclude = [
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".venv",
+    "build",
+    "dist",
+    "migrations",
+    "**/templates/**",
+    "staticfiles",
+    "media",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+
+[tool.ruff.isort]
+known-first-party = ["core", "maps_view", "setup_app", "routes_builder"]
+
+[tool.mypy]
+python_version = 3.12
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true
+show_error_codes = true
+check_untyped_defs = true
+disallow_untyped_defs = false
+warn_return_any = true
+disallow_incomplete_defs = true
+exclude = [
+    'migrations/',
+    'tests/',
+    '.*_test\.py',
+    '^settings/.*',
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "django.*",
+    "celery.*",
+]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+branch = true
+source = ["core", "maps_view", "setup_app", "routes_builder"]
+omit = [
+    "*/tests/*",
+    "*/migrations/*",
+    "*/settings/*",
+    "*/__init__.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self\\.debug",
+    "if settings\\.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "class .*:\\.\\.\\.",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = ["tests", "core/tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*", "*Test"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow",
+    "integration: integration tests",
+    "unit: unit tests",
+    "db: tests requiring database",
+]
+DJANGO_SETTINGS_MODULE = "settings.test"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+]

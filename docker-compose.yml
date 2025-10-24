@@ -1,0 +1,137 @@
+version: "3.9"
+
+services:
+  web:
+    build: .
+    command: >
+      gunicorn core.asgi:application
+      -k uvicorn.workers.UvicornWorker
+      -b 0.0.0.0:8000
+      --workers 3
+      --timeout 120
+      --max-requests 1000
+    entrypoint: ["/docker-entrypoint.sh"]
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_SETTINGS_MODULE: settings.dev
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: app
+      DB_USER: app
+      DB_PASSWORD: app
+      REDIS_URL: redis://redis:6379/1
+      PYTHONUNBUFFERED: 1
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    healthcheck:
+      # Mais tolerante a falhas temporárias (usa Python + fallback SSL)
+      test: ["CMD-SHELL", "python -c \"\nimport urllib.request, urllib.error, ssl, sys\nssl._create_default_https_context = ssl._create_unverified_context\ntry:\n    resp = urllib.request.urlopen('http://localhost:8000/ready', timeout=5)\n    sys.exit(0 if resp.getcode() == 200 else 1)\nexcept Exception:\n    sys.exit(1)\n\""]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    volumes:
+      # monta o entrypoint dentro do container
+      - ./docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      # (opcionais em dev)
+      # - .:/app
+      # - ./logs:/app/logs
+
+  celery:
+    build: .
+    command: celery -A core.celery_app worker -Q default -l info
+    entrypoint: ["/docker-entrypoint.sh"]
+    environment:
+      DJANGO_SETTINGS_MODULE: settings.dev
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: app
+      DB_USER: app
+      DB_PASSWORD: app
+      REDIS_URL: redis://redis:6379/1
+      PYTHONUNBUFFERED: 1
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    healthcheck:
+      # Tenta inspect ping, se falhar verifica processo ativo
+      test: ["CMD-SHELL", "celery -A core.celery_app inspect ping -d celery@$$HOSTNAME -t 5 | grep -qi pong || ps aux | grep -q '[c]elery worker'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    volumes:
+      - ./docker-entrypoint.sh:/docker-entrypoint.sh:ro
+
+  beat:
+    build: .
+    command: celery -A core.celery_app beat -l info --pidfile=/tmp/celerybeat.pid
+    entrypoint: ["/docker-entrypoint.sh"]
+    environment:
+      DJANGO_SETTINGS_MODULE: settings.dev
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: app
+      DB_USER: app
+      DB_PASSWORD: app
+      REDIS_URL: redis://redis:6379/1
+      PYTHONUNBUFFERED: 1
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -q '[c]elery beat'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    volumes:
+      - ./docker-entrypoint.sh:/docker-entrypoint.sh:ro
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  db:
+    image: mariadb:11
+    environment:
+      MARIADB_DATABASE: app
+      MARIADB_USER: app
+      MARIADB_PASSWORD: app
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_INITDB_SKIP_TZINFO: 1
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  mariadb_data:
+  redis_data:

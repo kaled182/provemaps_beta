@@ -23,6 +23,8 @@ from django.views.generic import RedirectView
 
 # HTML views routed through core/views.py
 from core import views as core_views
+# Health endpoints separados em core/views_health.py
+from core import views_health as health_views
 
 
 def redirect_to_maps_view(request):
@@ -46,6 +48,11 @@ urlpatterns = [
 
     # HTML page for Zabbix lookup (rendered via core/views.py)
     path('zabbix/lookup/', core_views.zabbix_lookup_page, name='zabbix_lookup'),
+
+    # Health checks
+    path('healthz', core_views.healthz, name='healthz'),                 # comprehensive
+    path('ready', health_views.healthz_ready, name='healthz_ready'),     # readiness probe
+    path('live', health_views.healthz_live, name='healthz_live'),        # liveness probe
 
     # Favicon
     path('favicon.ico', RedirectView.as_view(url='/static/favicon.ico', permanent=True)),

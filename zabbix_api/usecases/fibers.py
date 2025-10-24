@@ -8,10 +8,12 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from ..domain.geometry import calculate_path_length, sanitize_path_points
 from ..inventory_cache import invalidate_fiber_cache
 from ..models import FiberCable, FiberEvent, Port
+from ..domain.optical import _fetch_port_optical_snapshot
 from ..services.fiber_status import (
     combine_cable_status as combine_cable_status_service,
     evaluate_cable_status_for_cable,
     fetch_interface_status_advanced,
+    get_oper_status_from_port,
 )
 from ..services.zabbix_service import zabbix_request
 
@@ -465,4 +467,60 @@ def create_manual_fiber(data: Dict[str, object]) -> Dict[str, object]:
             },
             "single_port": single_port,
         },
+    }
+
+def update_cable_oper_status(cable_id: int) -> dict:
+    """Fetches the operational status of a cable, updates it, and returns the details."""
+    try:
+        cable = FiberCable.objects.select_related(
+            "origin_port__device", "destination_port__device"
+        ).get(id=cable_id)
+    except FiberCable.DoesNotExist as exc:
+        raise FiberNotFound("FiberCable nao encontrado") from exc
+
+    origin_port = cable.origin_port
+    dest_port = cable.destination_port
+
+    status_origin, raw_origin, meta_origin = get_oper_status_from_port(origin_port)
+    status_dest, raw_dest, meta_dest = get_oper_status_from_port(dest_port)
+
+    meta_origin["port_id"] = origin_port.id
+    meta_origin["port_name"] = origin_port.name
+    meta_origin["device_name"] = origin_port.device.name
+
+    meta_dest["port_id"] = dest_port.id
+    meta_dest["port_name"] = dest_port.name
+    meta_dest["device_name"] = dest_port.device.name
+
+    origin_optical = _fetch_port_optical_snapshot(origin_port)
+    dest_optical = _fetch_port_optical_snapshot(dest_port)
+
+    status = combine_cable_status_service(status_origin, status_dest)
+    previous_status = cable.status
+
+    if status != previous_status:
+        cable.update_status(status)
+        FiberEvent.objects.create(
+            fiber=cable,
+            previous_status=previous_status,
+            new_status=status,
+            detected_reason=(
+                f"zabbix-oper-status:origin={meta_origin.get('method')},"
+                f"dest={meta_dest.get('method')}"
+            ),
+        )
+
+    return {
+        "cable_id": cable.id,
+        "status": status,
+        "origin_status": status_origin,
+        "origin_raw": raw_origin,
+        "origin_meta": meta_origin,
+        "origin_optical": origin_optical,
+        "destination_status": status_dest,
+        "destination_raw": raw_dest,
+        "destination_meta": meta_dest,
+        "destination_optical": dest_optical,
+        "updated": status != previous_status,
+        "previous_status": previous_status,
     }
