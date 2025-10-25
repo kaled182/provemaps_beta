@@ -1,0 +1,172 @@
+{# setup_app/templates/setup/docs/_doc_card.html #}
+<article
+  class="doc-card rounded-lg border border-gray-200 p-4 hover:shadow-sm bg-white transition-all duration-200 group"
+  data-filename="{{ name }}"
+  data-title="{{ item_title|default:name }}"
+  data-summary="{{ item_summary|default:'' }}"
+  data-category="{{ item_category|lower|default:'' }}"
+  data-tags="{{ item_tags|lower|default:'' }}"
+  data-size="{{ item_size|default:'' }}"
+  data-date="{{ item_modified|default:'' }}"
+  data-views="{{ item_views|default:'0' }}"
+  tabindex="0"
+  role="article"
+  aria-labelledby="doc-title-{{ name|slugify }}"
+>
+  <header class="flex items-start justify-between gap-2">
+    <h3 
+      id="doc-title-{{ name|slugify }}"
+      class="text-base font-semibold text-gray-900 truncate flex-1"
+    >
+      <a
+        href="{% url 'setup_docs:view' name %}"
+        class="hover:underline focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:rounded transition-colors duration-200"
+        aria-describedby="doc-filename-{{ name|slugify }}"
+      >
+        {{ item_title|default:name }}
+      </a>
+    </h3>
+
+    {# MELHORIA: Botão favorito com estados mais claros #}
+    <button
+      class="favorite-btn p-1 text-gray-400 hover:text-yellow-500 focus:outline-none focus:ring-2 focus:ring-yellow-500 rounded transition-colors duration-200 group/favorite"
+      data-filename="{{ name }}"
+      aria-label="Adicionar aos favoritos"
+      aria-pressed="false"
+      title="Favoritar este documento"
+      type="button"
+    >
+      <svg class="w-4 h-4 transition-all duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.802 2.036a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.802-2.036a1 1 0 00-1.176 0l-2.802 2.036c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L4.98 8.719c-.783-.57-.38-1.81.588-1.81H9.03a1 1 0 00.95-.69l1.07-3.292z"/>
+      </svg>
+    </button>
+  </header>
+
+  {# MELHORIA: Filename com ID único para acessibilidade #}
+  <p 
+    id="doc-filename-{{ name|slugify }}"
+    class="mt-1 text-xs text-gray-500 truncate font-mono"
+    title="{{ name }}"
+  >
+    {{ name }}
+  </p>
+
+  {# MELHORIA: Resumo com fallback mais informativo #}
+  {% if item_summary %}
+    <p class="mt-3 text-sm text-gray-700 line-clamp-2 leading-relaxed">
+      {{ item_summary }}
+    </p>
+  {% else %}
+    <p class="mt-3 text-sm text-gray-400 italic leading-relaxed">
+      Nenhum resumo disponível para este documento.
+    </p>
+  {% endif %}
+
+  {# MELHORIA: Container de metadados com melhor organização #}
+  <div class="mt-3 flex flex-wrap gap-2" role="list" aria-label="Categorias e tags">
+    {% if item_category %}
+      <span 
+        class="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700 border border-gray-200"
+        role="listitem"
+      >
+        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"/>
+        </svg>
+        {{ item_category|title }}
+      </span>
+    {% endif %}
+
+    {# MELHORIA: Tags com contador acessível #}
+    {% if item_tags %}
+      {% with tag_list=item_tags.split(',') %}
+        <div class="flex flex-wrap gap-1" role="list" aria-label="Tags">
+          {% for tag in tag_list %}
+            {% if tag %}
+              <span 
+                class="inline-flex items-center rounded bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700 border border-indigo-100 hover:bg-indigo-100 transition-colors"
+                role="listitem"
+              >
+                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+                </svg>
+                {{ tag|trim }}
+              </span>
+            {% endif %}
+          {% endfor %}
+        </div>
+      {% endwith %}
+    {% endif %}
+  </div>
+
+  {# MELHORIA: Metadados com ícones semânticos e tooltips #}
+  <div class="mt-4 flex flex-wrap items-center gap-4 text-xs text-gray-500" role="list" aria-label="Informações do documento">
+    {% if item_size %}
+      <span 
+        class="inline-flex items-center gap-1"
+        title="Tamanho do arquivo"
+      >
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        {{ item_size }} KB
+      </span>
+    {% endif %}
+    
+    {% if item_modified %}
+      <span 
+        class="inline-flex items-center gap-1"
+        title="Última modificação"
+      >
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        {{ item_modified }}
+      </span>
+    {% endif %}
+    
+    {% if item_views %}
+      <span 
+        class="inline-flex items-center gap-1"
+        title="Visualizações"
+      >
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+        </svg>
+        {{ item_views }}
+      </span>
+    {% endif %}
+
+    {# MELHORIA: Link GitHub com melhor acessibilidade #}
+    {% if item_github %}
+      <a
+        href="{{ item_github }}"
+        target="_blank"
+        rel="noopener noreferrer nofollow"
+        class="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 hover:underline transition-colors"
+        title="Abrir documento no GitHub (nova aba)"
+        aria-label="Abrir {{ item_title|default:name }} no GitHub"
+      >
+        <svg class="w-3 h-3" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.65 0 8.16c0 3.61 2.29 6.67 5.47 7.75.4.08.55-.18.55-.39 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.5-2.69-.96-.09-.24-.48-.97-.82-1.17-.28-.15-.68-.52-.01-.53.63-.01 1.08.59 1.23.83.72 1.22 1.87.88 2.33.67.07-.53.28-.88.51-1.09-1.78-.21-3.64-.92-3.64-4.08 0-.9.31-1.64.82-2.22-.08-.2-.36-1.02.08-2.12 0 0 .67-.22 2.2.85.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.08 2.2-.85 2.2-.85.44 1.1.16 1.92.08 2.12.51.58.82 1.32.82 2.22 0 3.17-1.87 3.86-3.65 4.07.29.26.54.77.54 1.56 0 1.12-.01 2.02-.01 2.29 0 .22.15.48.55.39A8.02 8.02 0 0016 8.16C16 3.65 12.42 0 8 0Z"/>
+        </svg>
+        GitHub
+      </a>
+    {% endif %}
+  </div>
+
+  {# MELHORIA: Ação principal com destaque visual #}
+  <div class="mt-4 flex items-center gap-3 pt-3 border-t border-gray-100">
+    <a 
+      href="{% url 'setup_docs:view' name %}" 
+      class="inline-flex items-center text-indigo-600 hover:text-indigo-800 hover:underline font-medium text-sm transition-colors group/link"
+      aria-label="Abrir documento: {{ item_title|default:name }}"
+    >
+      Abrir documento
+      <svg class="w-4 h-4 ml-1 transition-transform group-hover/link:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+      </svg>
+    </a>
+  </div>
+</article>
