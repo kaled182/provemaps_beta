@@ -1,0 +1,403 @@
+{# setup_app/templates/setup/docs/view.html #}
+{% extends "setup/setup_dashboard.html" %}
+
+{% block title %}Documentação — {{ filename }}{% endblock %}
+
+{% block content %}
+<div class="flex flex-col gap-4">
+
+  <!-- Header com título + meta -->
+  <header class="flex items-start justify-between gap-4">
+    <div class="min-w-0">
+      <h1 id="doc-title" class="text-xl font-semibold text-gray-900 break-words">
+        {{ doc_meta.title|default:filename }}
+      </h1>
+      <p class="mt-1 text-sm text-gray-500 flex flex-wrap items-center gap-x-3 gap-y-1" aria-describedby="doc-meta">
+        {% if size_kb %}
+          <span title="Tamanho do arquivo" class="inline-flex items-center gap-1" id="doc-size">
+            📦 {{ size_kb }} KB
+          </span>
+        {% endif %}
+        {% if modified_at %}
+          <span title="Última modificação" class="inline-flex items-center gap-1" id="doc-updated">
+            🕒 Atualizado {{ modified_at }}
+          </span>
+        {% endif %}
+        {% if github_doc_url %}
+          <a href="{{ github_doc_url }}" target="_blank" rel="noopener"
+             class="text-blue-600 hover:underline inline-flex items-center gap-1"
+             aria-label="Ver {{ filename }} no GitHub em nova aba">
+            Ver no GitHub ↗
+          </a>
+        {% endif %}
+      </p>
+
+      <!-- Progress bar (scroll) -->
+      <div class="w-full bg-gray-200 h-1 rounded-full mt-3" aria-hidden="true">
+        <div id="scroll-progress" class="bg-indigo-600 h-1 rounded-full" style="width:0%"></div>
+      </div>
+    </div>
+
+    <!-- Busca global da página -->
+    <div class="hidden lg:block w-72">
+      <label for="doc-search" class="sr-only">Pesquisar nesta página</label>
+      <div class="relative">
+        <input
+          id="doc-search"
+          type="search"
+          placeholder="Buscar nesta página…"
+          aria-label="Pesquisar seções da documentação"
+          class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+        <div class="pointer-events-none absolute right-2 top-2.5 text-gray-400 text-xs">/</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="flex gap-6">
+    <!-- Sidebar / TOC -->
+    <aside class="hidden lg:block w-72 shrink-0" aria-label="Navegação do documento">
+      <div class="sticky top-4 space-y-4">
+
+        <!-- Breadcrumbs -->
+        <nav class="text-sm text-gray-500" aria-label="Breadcrumb">
+          <a href="{% url 'setup_docs:index' %}" class="hover:underline">Documentação</a>
+          <span class="mx-1">/</span>
+          <span class="text-gray-700 font-medium break-all">{{ filename }}</span>
+        </nav>
+
+        <!-- Filtro do TOC + colapso -->
+        <div>
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <h2 class="text-xs font-semibold tracking-wider text-gray-500 uppercase">Sumário</h2>
+            <button id="toc-toggle"
+                    type="button"
+                    class="text-xs rounded-md border border-gray-300 px-2 py-1 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    aria-expanded="true"
+                    aria-controls="toc"
+                    title="Recolher/expandir sumário">
+              Recolher
+            </button>
+          </div>
+          <label for="toc-filter" class="sr-only">Filtrar sumário</label>
+          <input
+            id="toc-filter"
+            type="search"
+            placeholder="Filtrar títulos…"
+            class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            aria-label="Filtrar títulos do sumário"
+          />
+        </div>
+
+        <!-- Sumário (TOC) -->
+        <div>
+          <nav id="toc" class="space-y-1 text-sm" aria-label="Sumário da documentação" tabindex="0">
+            <!-- itens gerados via JS -->
+          </nav>
+        </div>
+
+        <!-- Outros documentos (opcional) -->
+        {% if available_docs %}
+        <div class="pt-2 border-t border-gray-200">
+          <h3 class="text-xs font-semibold tracking-wider text-gray-500 uppercase mb-2">Outros documentos</h3>
+          <ul class="space-y-1 text-sm" role="list">
+            {% for name, meta in available_docs.items %}
+              <li role="listitem">
+                <a
+                  href="{% url 'setup_docs:view' filename=name %}"
+                  class="text-gray-700 hover:text-blue-600 hover:underline break-all"
+                >
+                  {{ meta.title|default:name }}
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
+        <!-- Expandir/Recolher <details> do conteúdo -->
+        <div class="pt-2 border-t border-gray-200">
+          <div class="flex items-center gap-2">
+            <button id="expand-all"
+                    type="button"
+                    class="text-xs rounded-md border border-gray-300 px-2 py-1 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    title="Expandir todos os colapsáveis no documento">
+              Expandir tudo
+            </button>
+            <button id="collapse-all"
+                    type="button"
+                    class="text-xs rounded-md border border-gray-300 px-2 py-1 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    title="Recolher todos os colapsáveis no documento">
+              Recolher tudo
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- Conteúdo -->
+    <section class="min-w-0 flex-1" aria-labelledby="doc-title">
+      <!-- Loading state (opcional) -->
+      <div id="loading-indicator" class="hidden" role="status" aria-live="polite">
+        <div class="flex items-center justify-center py-8">
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" aria-hidden="true"></div>
+          <span class="ml-2 text-gray-600">Carregando documentação...</span>
+        </div>
+      </div>
+
+      <!-- Artigo -->
+      <article id="doc-article" class="prose prose-blue max-w-none">
+        {% autoescape off %}
+          {{ content|safe }}
+        {% endautoescape %}
+      </article>
+
+      <div class="mt-8">
+        <a href="{% url 'setup_docs:index' %}" class="inline-flex items-center text-blue-600 hover:underline">
+          ← Voltar para lista de documentos
+        </a>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- Scripts utilitários -->
+<script>
+  // ===== Barra de progresso de scroll =====
+  (function scrollProgress() {
+    const bar = document.getElementById('scroll-progress');
+    if (!bar) return;
+    const refresh = () => {
+      const winH = window.innerHeight || document.documentElement.clientHeight;
+      const docH = document.documentElement.scrollHeight;
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop || 0;
+      const max = Math.max(docH - winH, 1);
+      const pct = Math.min(100, Math.max(0, (scrollTop / max) * 100));
+      bar.style.width = pct + '%';
+    };
+    window.addEventListener('scroll', refresh, { passive: true });
+    window.addEventListener('resize', refresh);
+    refresh();
+  })();
+
+  // ===== Geração do TOC com IDs seguros e Scroll Spy =====
+  (function buildTOC() {
+    const article = document.getElementById('doc-article');
+    const toc = document.getElementById('toc');
+    const tocToggle = document.getElementById('toc-toggle');
+    if (!article || !toc) return;
+
+    const slug = (txt) => (txt || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .substring(0, 60);
+
+    // Coleta headings
+    const headings = Array.from(article.querySelectorAll('h1, h2, h3, h4'));
+    // IDs estáveis se faltarem
+    headings.forEach((h, idx) => {
+      if (!h.id) h.id = slug(h.textContent) || `sec-${idx}`;
+    });
+
+    // Renderiza TOC
+    const renderTOC = (filter = '') => {
+      toc.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      const norm = (s) => (s || '').toLowerCase();
+
+      headings.forEach((h) => {
+        const text = h.textContent.trim();
+        if (filter && !norm(text).includes(norm(filter))) return;
+
+        const level = Number(h.tagName.substring(1));
+        const a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = text;
+        a.className = [
+          'block rounded px-2 py-1 text-gray-700 hover:bg-gray-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500',
+          level === 1 ? 'font-semibold' : '',
+          level === 2 ? 'pl-2' : '',
+          level === 3 ? 'pl-4 text-gray-600' : '',
+          level === 4 ? 'pl-6 text-gray-500' : ''
+        ].join(' ');
+        a.setAttribute('role', 'link');
+        a.setAttribute('tabindex', '0');
+        frag.appendChild(a);
+      });
+
+      toc.appendChild(frag);
+    };
+
+    // Persistência do filtro do TOC
+    const filterInput = document.getElementById('toc-filter');
+    const persistedTOCFilter = sessionStorage.getItem('toc-filter') || '';
+    if (filterInput) {
+      filterInput.value = persistedTOCFilter;
+      let t;
+      filterInput.addEventListener('input', (e) => {
+        clearTimeout(t);
+        t = setTimeout(() => {
+          const val = (e.target.value || '').trim();
+          sessionStorage.setItem('toc-filter', val);
+          renderTOC(val);
+        }, 200);
+      });
+    }
+    renderTOC(persistedTOCFilter);
+
+    // Scroll spy
+    const links = () => Array.from(toc.querySelectorAll('a'));
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const id = entry.target.id;
+        const el = links().find((l) => l.getAttribute('href') === '#' + id);
+        if (!el) return;
+        if (entry.isIntersecting) {
+          links().forEach((l) => l.classList.remove('bg-blue-50', 'text-blue-700'));
+          el.classList.add('bg-blue-50', 'text-blue-700');
+        }
+      });
+    }, { rootMargin: '0px 0px -70% 0px', threshold: 0.1 });
+
+    headings.forEach((h) => obs.observe(h));
+
+    // Acessibilidade: navegação por teclado no TOC
+    toc.addEventListener('keydown', (e) => {
+      const L = links();
+      const idx = L.indexOf(document.activeElement);
+      if (idx < 0) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        (L[idx + 1] || L[0]).focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        (L[idx - 1] || L[L.length - 1]).focus();
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        document.activeElement.click();
+      }
+    });
+
+    // Colapsar/expandir TOC
+    if (tocToggle) {
+      let open = true;
+      tocToggle.addEventListener('click', () => {
+        open = !open;
+        toc.classList.toggle('hidden', !open);
+        tocToggle.textContent = open ? 'Recolher' : 'Expandir';
+        tocToggle.setAttribute('aria-expanded', String(open));
+      });
+    }
+  })();
+
+  // ===== Busca local no conteúdo (com highlight leve) =====
+  (function searchable() {
+    const input = document.getElementById('doc-search');
+    const article = document.getElementById('doc-article');
+    if (!input || !article) return;
+
+    function clearHighlights() {
+      article.querySelectorAll('mark.doc-hit').forEach((m) => {
+        const parent = m.parentNode;
+        parent.replaceChild(document.createTextNode(m.textContent), m);
+        parent.normalize();
+      });
+    }
+
+    function highlightTerm(term) {
+      if (!term) return;
+      const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+      const re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      let first = null;
+
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        const txt = node.nodeValue;
+        if (!txt || !txt.trim()) continue;
+        const idx = txt.search(re);
+        if (idx >= 0) {
+          const span = document.createElement('mark');
+          span.className = 'doc-hit bg-yellow-200';
+          const matched = node.splitText(idx);
+          matched.splitText(term.length);
+          span.textContent = matched.nodeValue;
+          matched.parentNode.replaceChild(span, matched);
+          if (!first) first = span;
+        }
+      }
+      if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // restaura busca
+    input.value = sessionStorage.getItem('doc-search') || '';
+
+    let t;
+    const run = () => {
+      clearHighlights();
+      const q = (input.value || '').trim();
+      sessionStorage.setItem('doc-search', q);
+      if (q.length >= 2) highlightTerm(q);
+    };
+
+    input.addEventListener('input', () => {
+      clearTimeout(t);
+      t = setTimeout(run, 220);
+    });
+
+    // roda ao abrir, se houver valor
+    if (input.value) run();
+  })();
+
+  // ===== "Copiar" nos blocos de código =====
+  (function addCopyButtons() {
+    const blocks = document.querySelectorAll('pre > code');
+    blocks.forEach((code) => {
+      const pre = code.parentElement;
+      pre.classList.add('relative', 'group');
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = 'Copiar';
+      btn.className = 'hidden group-hover:block absolute top-2 right-2 text-xs bg-gray-800 text-white rounded px-2 py-1 opacity-80 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500';
+      btn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(code.innerText);
+          btn.textContent = 'Copiado!';
+          setTimeout(() => (btn.textContent = 'Copiar'), 1200);
+        } catch (e) {
+          btn.textContent = 'Falhou :(';
+          setTimeout(() => (btn.textContent = 'Copiar'), 1200);
+        }
+      });
+      pre.appendChild(btn);
+    });
+  })();
+
+  // ===== Expandir/Recolher todos os <details> do conteúdo =====
+  (function detailsToggles() {
+    const expandAllBtn = document.getElementById('expand-all');
+    const collapseAllBtn = document.getElementById('collapse-all');
+    const article = document.getElementById('doc-article');
+    if (!article) return;
+    const allDetails = () => Array.from(article.querySelectorAll('details'));
+
+    expandAllBtn?.addEventListener('click', () => {
+      allDetails().forEach(d => d.open = true);
+    });
+    collapseAllBtn?.addEventListener('click', () => {
+      allDetails().forEach(d => d.open = false);
+    });
+  })();
+
+  // ===== Ancoragem direta via hash =====
+  (function anchorOnLoad() {
+    if (location.hash) {
+      const target = document.getElementById(location.hash.slice(1));
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  })();
+</script>
+{% endblock %}
