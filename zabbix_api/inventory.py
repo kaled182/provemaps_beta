@@ -12,7 +12,10 @@ from .guards import diagnostics_guard, staff_guard
 from .models import FiberCable, FiberEvent
 from .domain.optical import _fetch_port_optical_snapshot
 from .services.zabbix_service import zabbix_request as _zabbix_request
-from .services.fiber_status import get_oper_status_from_port, combine_cable_status as service_combine_cable_status
+from .services.fiber_status import (
+    get_oper_status_from_port,
+    combine_cable_status as service_combine_cable_status,
+)
 from .usecases import inventory as inventory_uc
 from .usecases import fibers as fiber_uc
 from .usecases.fibers import FiberUseCaseError, FiberValidationError
@@ -49,20 +52,23 @@ inventory_uc.ZABBIX_REQUEST = _call_zabbix_request
 @login_required
 @handle_api_errors
 def api_update_cable_oper_status(request, cable_id):
+    """
+    Atualiza o status operacional de um cabo de fibra,
+    consultando as portas associadas via Zabbix.
+    """
     try:
-        payload = fiber_uc.update_cable_oper_status(cable_id)
-    except fiber_uc.FiberNotFound as exc:
-        return JsonResponse({"error": str(exc)}, status=404)
-    return JsonResponse(payload)
-        cable = FiberCable.objects.select_related(
-            "origin_port__device", "destination_port__device"
-        ).get(id=cable_id)
+        cable = (
+            FiberCable.objects.select_related(
+                "origin_port__device", "destination_port__device"
+            ).get(id=cable_id)
+        )
     except FiberCable.DoesNotExist:
-        return JsonResponse({"error": "FiberCable nao encontrado"}, status=404)
+        return JsonResponse({"error": "FiberCable não encontrado"}, status=404)
 
     origin_port = cable.origin_port
     dest_port = cable.destination_port
 
+    # Coleta status das portas
     status_origin, raw_origin, meta_origin = get_oper_status_from_port(origin_port)
     status_dest, raw_dest, meta_dest = get_oper_status_from_port(dest_port)
 
@@ -77,9 +83,11 @@ def api_update_cable_oper_status(request, cable_id):
     origin_optical = _fetch_port_optical_snapshot(origin_port)
     dest_optical = _fetch_port_optical_snapshot(dest_port)
 
+    # Combina status geral do cabo
     status = service_combine_cable_status(status_origin, status_dest)
     previous_status = cable.status
 
+    # Atualiza e registra evento se houve alteração
     if status != previous_status:
         cable.update_status(status)
         FiberEvent.objects.create(
@@ -156,7 +164,7 @@ def api_add_device_from_zabbix(request):
     try:
         data = json.loads(request.body or "{}")
     except json.JSONDecodeError:
-        return JsonResponse({"error": "JSON invalido"}, status=400)
+        return JsonResponse({"error": "JSON inválido"}, status=400)
 
     try:
         payload = inventory_uc.add_device_from_zabbix(data)
@@ -185,10 +193,11 @@ def api_bulk_create_inventory(request):
     guard = diagnostics_guard(request)
     if guard:
         return guard
+
     try:
         data = json.loads(request.body or "{}")
     except json.JSONDecodeError:
-        return HttpResponseBadRequest("JSON invalido")
+        return HttpResponseBadRequest("JSON inválido")
 
     try:
         payload = inventory_uc.bulk_create_inventory(data)
@@ -196,7 +205,7 @@ def api_bulk_create_inventory(request):
         return JsonResponse({"error": str(exc)}, status=400)
     except InventoryUseCaseError as exc:
         logger.exception("Falha no bulk create: %s", exc)
-        return JsonResponse({"error": "Erro ao criar inventario"}, status=500)
+        return JsonResponse({"error": "Erro ao criar inventário"}, status=500)
 
     return JsonResponse(payload)
 
@@ -219,8 +228,8 @@ def api_port_traffic_history(request, port_id):
     except InventoryValidationError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
     except InventoryUseCaseError as exc:
-        logger.exception("Erro ao consultar historico de traffic: %s", exc)
-        return JsonResponse({"error": "Erro ao consultar historico"}, status=500)
+        logger.exception("Erro ao consultar histórico de tráfego: %s", exc)
+        return JsonResponse({"error": "Erro ao consultar histórico"}, status=500)
     return JsonResponse(payload)
 
 
@@ -235,7 +244,7 @@ def api_create_manual_fiber(request):
     try:
         data = json.loads(request.body or "{}")
     except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON payload"}, status=400)
+        return JsonResponse({"error": "JSON inválido"}, status=400)
 
     try:
         result = fiber_uc.create_manual_fiber(data)
