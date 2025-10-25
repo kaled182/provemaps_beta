@@ -10,43 +10,6 @@ from django.views.decorators.http import require_GET, require_POST
 from .decorators import handle_api_errors
 from .guards import diagnostics_guard, staff_guard
 from .services.zabbix_service import zabbix_request as _zabbix_request
-from .usecases import inventory as inventory_uc
-from .usecases import fibers as fiber_uc
-from .usecases.fibers import FiberUseCaseError, FiberValidationError
-from .usecases.inventory import (
-    InventoryNotFound,
-    InventoryUseCaseError,
-    InventoryValidationError,
-)
-from .inventory_fibers import (
-    api_import_fiber_kml,
-    api_cable_value_mapping_status,
-    import_kml_modal,
-    api_fiber_cables,
-    api_fiber_detail,
-    fetch_interface_status,
-    combine_cable_status as fiber_combine_cable_status,
-    api_fiber_live_status,
-    api_fibers_live_status_all,
-    api_fibers_refresh_status,
-)
-
-logger = logging.getLogger(__name__)
-combine_cable_status = fiber_combine_cable_status
-zabbix_request = _zabbix_request
-
-
-def _call_zabbix_request(method, params=None, **kwargs):
-    return zabbix_request(method, params, **kwargs)
-
-
-inventory_uc.ZABBIX_REQUEST = _call_zabbix_request
-
-
-@login_required
-@handle_api_errors
-def api_update_cable_oper_status(request, cable_id):
-    try:
         payload = fiber_uc.update_cable_oper_status(cable_id)
     except fiber_uc.FiberNotFound as exc:
         return JsonResponse({"error": str(exc)}, status=404)
@@ -99,7 +62,7 @@ def api_add_device_from_zabbix(request):
     try:
         data = json.loads(request.body or "{}")
     except json.JSONDecodeError:
-        return JsonResponse({"error": "JSON invalido"}, status=400)
+        return JsonResponse({"error": "JSON inválido"}, status=400)
 
     try:
         payload = inventory_uc.add_device_from_zabbix(data)
@@ -128,10 +91,11 @@ def api_bulk_create_inventory(request):
     guard = diagnostics_guard(request)
     if guard:
         return guard
+
     try:
         data = json.loads(request.body or "{}")
     except json.JSONDecodeError:
-        return HttpResponseBadRequest("JSON invalido")
+        return HttpResponseBadRequest("JSON inválido")
 
     try:
         payload = inventory_uc.bulk_create_inventory(data)
@@ -139,7 +103,7 @@ def api_bulk_create_inventory(request):
         return JsonResponse({"error": str(exc)}, status=400)
     except InventoryUseCaseError as exc:
         logger.exception("Falha no bulk create: %s", exc)
-        return JsonResponse({"error": "Erro ao criar inventario"}, status=500)
+        return JsonResponse({"error": "Erro ao criar inventário"}, status=500)
 
     return JsonResponse(payload)
 
@@ -162,8 +126,8 @@ def api_port_traffic_history(request, port_id):
     except InventoryValidationError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
     except InventoryUseCaseError as exc:
-        logger.exception("Erro ao consultar historico de traffic: %s", exc)
-        return JsonResponse({"error": "Erro ao consultar historico"}, status=500)
+        logger.exception("Erro ao consultar histórico de tráfego: %s", exc)
+        return JsonResponse({"error": "Erro ao consultar histórico"}, status=500)
     return JsonResponse(payload)
 
 
@@ -178,7 +142,7 @@ def api_create_manual_fiber(request):
     try:
         data = json.loads(request.body or "{}")
     except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON payload"}, status=400)
+        return JsonResponse({"error": "JSON inválido"}, status=400)
 
     try:
         result = fiber_uc.create_manual_fiber(data)
