@@ -50,7 +50,7 @@ urlpatterns = [
     path('zabbix/lookup/', core_views.zabbix_lookup_page, name='zabbix_lookup'),
 
     # Health checks
-    path('healthz', core_views.healthz, name='healthz'),                 # comprehensive
+    path('healthz', health_views.healthz, name='healthz'),               # comprehensive (strict/non-strict, ignore cache support)
     path('ready', health_views.healthz_ready, name='healthz_ready'),     # readiness probe
     path('live', health_views.healthz_live, name='healthz_live'),        # liveness probe
 

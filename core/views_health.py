@@ -72,6 +72,8 @@ def healthz(request):
     started = time.time()
     checks = {}
     debug_mode = os.getenv("HEALTHCHECK_DEBUG", "false").lower() == "true"
+    strict_mode = os.getenv("HEALTHCHECK_STRICT", "true").lower() == "true"
+    ignore_cache = os.getenv("HEALTHCHECK_IGNORE_CACHE", "false").lower() == "true"
 
     # Database check com timeout
     try:
@@ -97,15 +99,22 @@ def healthz(request):
 
     # Cache check com chave única e identificação do backend
     try:
-        cache = caches["default"]
-        probe_key = "healthz_probe_" + str(int(time.time()))
-        cache.set(probe_key, "ok", 5)
-        checks["cache"] = {
-            "ok": (cache.get(probe_key) == "ok"),
-            "backend": str(type(cache).__name__)
-        }
+        if ignore_cache:
+            checks["cache"] = {"ok": True, "ignored": True, "reason": "ignored by HEALTHCHECK_IGNORE_CACHE"}
+        else:
+            cache = caches["default"]
+            probe_key = "healthz_probe_" + str(int(time.time()))
+            cache.set(probe_key, "ok", 5)
+            checks["cache"] = {
+                "ok": (cache.get(probe_key) == "ok"),
+                "backend": str(type(cache).__name__),
+                "ignored": False,
+            }
     except Exception as e:
-        checks["cache"] = {"ok": False, "error": str(e)[:200]}
+        if ignore_cache:
+            checks["cache"] = {"ok": True, "ignored": True, "error": str(e)[:200], "reason": "exception but ignored"}
+        else:
+            checks["cache"] = {"ok": False, "error": str(e)[:200]}
 
     # Storage check (opcional; controlado por env)
     if os.getenv("HEALTHCHECK_STORAGE", "true").lower() == "true":
@@ -115,7 +124,11 @@ def healthz(request):
     if os.getenv("HEALTHCHECK_SYSTEM_METRICS", "false").lower() == "true":
         _add_system_metrics(checks)
 
-    overall_ok = all(v.get("ok") for v in checks.values())
+    if strict_mode:
+        overall_ok = all(v.get("ok") for v in checks.values())
+    else:
+        # Em modo não estrito consideramos apenas DB crítico
+        overall_ok = checks.get("db", {}).get("ok", False)
     latency_ms = round((time.time() - started) * 1000, 2)
 
     # Log somente se degradado ou em modo debug
@@ -134,6 +147,8 @@ def healthz(request):
         "python": platform.python_version(),
         "checks": checks,
         "latency_ms": latency_ms,
+        "strict_mode": strict_mode,
+        "ignore_cache": ignore_cache,
     }
 
     response = JsonResponse(payload, status=200 if overall_ok else 503)

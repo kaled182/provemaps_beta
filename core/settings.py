@@ -57,7 +57,10 @@ SECRET_KEY = env('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env('DEBUG')
 
-ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1', 'testserver'])
+# Garantir inclusão de 'testserver' para testes internos (Django test client)
+if 'testserver' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append('testserver')
 ENABLE_DIAGNOSTIC_ENDPOINTS = env.bool('ENABLE_DIAGNOSTIC_ENDPOINTS', default=False)
 
 
