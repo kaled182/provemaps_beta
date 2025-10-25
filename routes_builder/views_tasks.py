@@ -120,10 +120,14 @@ def _check_rate_limit(request: HttpRequest, action: str, *, limit: int = 10, win
     window: segundos
     """
     key = _rate_limit_key(request, action)
-    current = cache.get(key, 0)
-    if current >= limit:
-        return False
-    cache.set(key, current + 1, timeout=window)
+    try:
+        current = cache.get(key, 0)
+        if current >= limit:
+            return False
+        cache.set(key, current + 1, timeout=window)
+    except Exception:
+        # Se Redis estiver offline, permite a requisição (fail-open em dev)
+        pass
     return True
 
 
