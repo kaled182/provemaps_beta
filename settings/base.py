@@ -14,13 +14,31 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv("SECRET_KEY")
 
 if not SECRET_KEY:
-    if os.getenv("DEBUG", "False").lower() == "true":
+    settings_module = os.getenv("DJANGO_SETTINGS_MODULE", "")
+    if settings_module.endswith(".test"):
+        SECRET_KEY = "test-only-insecure-key"
+    elif os.getenv("DEBUG", "False").lower() == "true":
         SECRET_KEY = "dev-only-insecure-key-for-development"
     else:
         raise ValueError("SECRET_KEY must be set in production")
 
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
+
+ZABBIX_API_URL = os.getenv("ZABBIX_API_URL", "")
+ZABBIX_API_USER = os.getenv("ZABBIX_API_USER", "")
+ZABBIX_API_PASSWORD = os.getenv("ZABBIX_API_PASSWORD", "")
+ZABBIX_API_KEY = os.getenv("ZABBIX_API_KEY", "")
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
+ENABLE_DIAGNOSTIC_ENDPOINTS = os.getenv("ENABLE_DIAGNOSTIC_ENDPOINTS", "False").lower() == "true"
+
+FERNET_KEYS = [key.strip() for key in os.getenv("FERNET_KEYS", "").split(",") if key.strip()]
+if not FERNET_KEYS:
+    single_fernet = os.getenv("FERNET_KEY")
+    if single_fernet:
+        FERNET_KEYS = [single_fernet]
+if not FERNET_KEYS:
+    FERNET_KEYS = [SECRET_KEY]
 
 # Security defaults
 SECURE_BROWSER_XSS_FILTER = True
@@ -194,8 +212,8 @@ else:
 # -----------------------------------------------------
 # Internacionalização / TZ
 # -----------------------------------------------------
-LANGUAGE_CODE = "pt-br"
-TIME_ZONE = "America/Belem"
+LANGUAGE_CODE = os.getenv("LANGUAGE_CODE", "pt-br")
+TIME_ZONE = os.getenv("TIME_ZONE", "America/Belem")
 USE_I18N = True
 USE_TZ = True
 

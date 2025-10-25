@@ -9,113 +9,11 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .decorators import handle_api_errors
 from .guards import diagnostics_guard, staff_guard
-from .models import FiberCable, FiberEvent
-from .domain.optical import _fetch_port_optical_snapshot
 from .services.zabbix_service import zabbix_request as _zabbix_request
-from .services.fiber_status import (
-    get_oper_status_from_port,
-    combine_cable_status as service_combine_cable_status,
-)
-from .usecases import inventory as inventory_uc
-from .usecases import fibers as fiber_uc
-from .usecases.fibers import FiberUseCaseError, FiberValidationError
-from .usecases.inventory import (
-    InventoryNotFound,
-    InventoryUseCaseError,
-    InventoryValidationError,
-)
-from .inventory_fibers import (
-    api_import_fiber_kml,
-    api_cable_value_mapping_status,
-    import_kml_modal,
-    api_fiber_cables,
-    api_fiber_detail,
-    fetch_interface_status,
-    combine_cable_status as fiber_combine_cable_status,
-    api_fiber_live_status,
-    api_fibers_live_status_all,
-    api_fibers_refresh_status,
-)
-
-logger = logging.getLogger(__name__)
-combine_cable_status = fiber_combine_cable_status
-zabbix_request = _zabbix_request
-
-
-def _call_zabbix_request(method, params=None, **kwargs):
-    return zabbix_request(method, params, **kwargs)
-
-
-inventory_uc.ZABBIX_REQUEST = _call_zabbix_request
-
-
-@login_required
-@handle_api_errors
-def api_update_cable_oper_status(request, cable_id):
-    """
-    Atualiza o status operacional de um cabo de fibra,
-    consultando as portas associadas via Zabbix.
-    """
-    try:
-        cable = (
-            FiberCable.objects.select_related(
-                "origin_port__device", "destination_port__device"
-            ).get(id=cable_id)
-        )
-    except FiberCable.DoesNotExist:
-        return JsonResponse({"error": "FiberCable não encontrado"}, status=404)
-
-    origin_port = cable.origin_port
-    dest_port = cable.destination_port
-
-    # Coleta status das portas
-    status_origin, raw_origin, meta_origin = get_oper_status_from_port(origin_port)
-    status_dest, raw_dest, meta_dest = get_oper_status_from_port(dest_port)
-
-    meta_origin["port_id"] = origin_port.id
-    meta_origin["port_name"] = origin_port.name
-    meta_origin["device_name"] = origin_port.device.name
-
-    meta_dest["port_id"] = dest_port.id
-    meta_dest["port_name"] = dest_port.name
-    meta_dest["device_name"] = dest_port.device.name
-
-    origin_optical = _fetch_port_optical_snapshot(origin_port)
-    dest_optical = _fetch_port_optical_snapshot(dest_port)
-
-    # Combina status geral do cabo
-    status = service_combine_cable_status(status_origin, status_dest)
-    previous_status = cable.status
-
-    # Atualiza e registra evento se houve alteração
-    if status != previous_status:
-        cable.update_status(status)
-        FiberEvent.objects.create(
-            fiber=cable,
-            previous_status=previous_status,
-            new_status=status,
-            detected_reason=(
-                f"zabbix-oper-status:origin={meta_origin.get('method')},"
-                f"dest={meta_dest.get('method')}"
-            ),
-        )
-
-    return JsonResponse(
-        {
-            "cable_id": cable.id,
-            "status": status,
-            "origin_status": status_origin,
-            "origin_raw": raw_origin,
-            "origin_meta": meta_origin,
-            "origin_optical": origin_optical,
-            "destination_status": status_dest,
-            "destination_raw": raw_dest,
-            "destination_meta": meta_dest,
-            "destination_optical": dest_optical,
-            "updated": status != previous_status,
-            "previous_status": previous_status,
-        }
-    )
+        payload = fiber_uc.update_cable_oper_status(cable_id)
+    except fiber_uc.FiberNotFound as exc:
+        return JsonResponse({"error": str(exc)}, status=404)
+    return JsonResponse(payload)
 
 
 @require_GET
