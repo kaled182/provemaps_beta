@@ -32,17 +32,17 @@ class DocsViewsSmokeTests(TestCase):
 
     def test_urls_resolve(self):
         """Confirma que as rotas nomeadas existem no URLConf."""
-        idx = reverse("setup_docs:index")
-        view = reverse("setup_docs:view", kwargs={"filename": "README.md"})
+        idx = reverse("setup_app:docs_index")
+        view = reverse("setup_app:docs_view", kwargs={"filename": "README.md"})
         self.assertIsNotNone(resolve(idx))
         self.assertIsNotNone(resolve(view))
 
-    @patch("setup_app.views.docs.get_available_docs")
+    @patch("setup_app.views_docs.get_available_docs")
     def test_docs_index_renders(self, mock_get_docs):
         """A página /docs/ renderiza com os cards e ferramentas."""
         mock_get_docs.return_value = self.sample_docs
 
-        url = reverse("setup_docs:index")
+        url = reverse("setup_app:docs_index")
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
 
@@ -56,10 +56,10 @@ class DocsViewsSmokeTests(TestCase):
         self.assertContains(resp, "Guia Principal")
         self.assertContains(resp, "API — Zabbix e Integrações")
         # Link para abrir o documento
-        self.assertContains(resp, reverse("setup_docs:view", kwargs={"filename": "README.md"}))
+        self.assertContains(resp, reverse("setup_app:docs_view", kwargs={"filename": "README.md"}))
 
-    @patch("setup_app.views.docs.get_available_docs")
-    @patch("setup_app.views.docs.load_markdown_file")
+    @patch("setup_app.views_docs.get_available_docs")
+    @patch("setup_app.views_docs.load_markdown_file")
     def test_docs_view_renders_content_and_toc(self, mock_load_md, mock_get_docs):
         """A página /docs/<filename>/ renderiza o HTML e exibe o TOC/JS."""
         mock_get_docs.return_value = self.sample_docs
@@ -72,7 +72,7 @@ class DocsViewsSmokeTests(TestCase):
             <p>Detalhes B</p>
         """
 
-        url = reverse("setup_docs:view", kwargs={"filename": "README.md"})
+        url = reverse("setup_app:docs_view", kwargs={"filename": "README.md"})
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
 
@@ -86,8 +86,8 @@ class DocsViewsSmokeTests(TestCase):
         self.assertContains(resp, 'id="doc-search"')
         self.assertContains(resp, "Voltar para lista de documentos")
 
-    @patch("setup_app.views.docs.get_available_docs")
-    @patch("setup_app.views.docs.load_markdown_file")
+    @patch("setup_app.views_docs.get_available_docs")
+    @patch("setup_app.views_docs.load_markdown_file")
     def test_docs_view_handles_missing_file(self, mock_load_md, mock_get_docs):
         """Se o arquivo não existir, a view mostra mensagem de erro estilizada."""
         mock_get_docs.return_value = self.sample_docs
@@ -98,17 +98,17 @@ class DocsViewsSmokeTests(TestCase):
             </div>
         """
 
-        url = reverse("setup_docs:view", kwargs={"filename": "NAO_EXISTE.md"})
+        url = reverse("setup_app:docs_view", kwargs={"filename": "NAO_EXISTE.md"})
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Arquivo não encontrado")
 
-    @patch("setup_app.views.docs.get_available_docs")
+    @patch("setup_app.views_docs.get_available_docs")
     def test_docs_index_empty_state(self, mock_get_docs):
         """Quando não há documentos, exibe estado vazio informativo."""
         mock_get_docs.return_value = {}
 
-        url = reverse("setup_docs:index")
+        url = reverse("setup_app:docs_index")
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Nenhum documento encontrado")
