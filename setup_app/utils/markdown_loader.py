@@ -26,7 +26,14 @@ from typing import Dict, Any, List, Optional, TypedDict, Protocol
 from dataclasses import dataclass
 from enum import Enum
 
-import markdown2
+try:
+    import markdown2  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover - fallback
+    markdown2 = None  # type: ignore
+    # logger ainda não definido neste ponto; usa logging direto
+    logging.getLogger(__name__).warning(
+        "markdown2 não instalado; usando renderização básica de Markdown."
+    )
 from django.conf import settings
 from django.core.cache import cache
 from django.utils.translation import gettext_lazy as _
@@ -314,7 +321,24 @@ class AdvancedMarkdownProcessor:
     """Processador Markdown com recursos avançados."""
     
     def __init__(self):
-        self.markdown = markdown2.Markdown(extras=MARKDOWN_EXTRAS, tab_width=4)
+        if markdown2 is not None:
+            self.markdown = markdown2.Markdown(extras=MARKDOWN_EXTRAS, tab_width=4)
+        else:
+            self.markdown = None
+
+    def _basic_convert(self, text: str) -> str:
+        """Conversão extremamente simples quando markdown2 não está disponível."""
+        # Remove fenced code markers but keep content
+        text = re.sub(r'```(.*?)```', r'\1', text, flags=re.DOTALL)
+        # Convert headers to strong text
+        text = re.sub(r'^#{1,6}\s*(.+)$', r'<strong>\1</strong>', text, flags=re.MULTILINE)
+        # Emphasis replacements
+        text = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', text)
+        text = re.sub(r'\*([^*]+)\*', r'<em>\1</em>', text)
+        # Basic links
+        text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', text)
+        # Line breaks to <br>
+        return '<p>' + text.replace('\n\n', '</p><p>').replace('\n', '<br>') + '</p>'
     
     def process(self, text: str, filename: str) -> tuple[str, Dict[str, Any]]:
         """
@@ -329,7 +353,10 @@ class AdvancedMarkdownProcessor:
             text = self._remove_frontmatter(text)
         
         # Processa Markdown
-        html = self.markdown.convert(text)
+        if self.markdown is not None:
+            html = self.markdown.convert(text)
+        else:
+            html = self._basic_convert(text)
         
         # Metadados extras do processamento
         extra_metadata = {
@@ -407,9 +434,107 @@ def _strip_md_for_summary(text: str) -> str:
     
     # Remove elementos Markdown sequencialmente
     patterns = [
-        (r'`([^`]+)`', r'\1'),                    # Código inline
-        (r'^#{1,6}\s*', '', re.MULTILINE),        # Headers
-        (r'!$$[^$$]*\]$[^)]+$', ''),           # Imagens
-        (r'$$([^$$]+)\]$[^)]+$', r'\1'),       # Links
-        (r'\*\*([^*]+)\*\*', r'\1'),             # Negrito
-        (r'\*([^*]+)\*', r'\
+        (r'`([^`]+)`', r'\1'),                              # Código inline
+        (r'^#{1,6}\s+(.*)$', r'\1'),                       # Headers (mantém texto)
+        (r'!\[[^\]]*\]\([^)]*\)', ''),                  # Imagens
+        (r'\[([^\]]+)\]\([^)]*\)', r'\1'),             # Links
+        (r'\*\*([^*]+)\*\*', r'\1'),                    # Negrito
+        (r'__(([^_]+))__', r'\1'),                          # Negrito alternativa
+        (r'\*([^*]+)\*', r'\1'),                          # Itálico
+        (r'_([^_]+)_', r'\1'),                              # Itálico alternativa
+        (r'~~([^~]+)~~', r'\1'),                            # Tachado
+        (r'`{1,2}([^`]+)`{1,2}', r'\1'),                    # Código inline/backticks múltiplos
+    ]
+
+    for pattern, repl in patterns:
+        # MULTILINE para alguns padrões que usam ^
+        flags = re.MULTILINE if '^' in pattern else 0
+        text = re.sub(pattern, repl, text, flags=flags)
+
+    # Remove marcadores de listas e blockquotes residuais
+    text = re.sub(r'^[>\-\*\+]\s+', '', text, flags=re.MULTILINE)
+    # Remove tabelas simples (linhas com |)
+    text = re.sub(r'^\s*\|.*\n', '', text, flags=re.MULTILINE)
+    # Remove HTML tags simples
+    text = re.sub(r'<[^>]+>', '', text)
+
+    # Normaliza espaços
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    # Limita tamanho do resumo
+    if len(text) > CONFIG.summary_length:
+        text = text[:CONFIG.summary_length].rstrip() + '...'
+    return text
+
+# =============================================================================
+# FUNÇÕES PRINCIPAIS (RECUPERADAS APÓS CORRUPÇÃO)
+# =============================================================================
+
+def _safe_read(path: Path) -> str:
+    """Lê arquivo respeitando limite de tamanho configurado."""
+    try:
+        if not path.exists() or not path.is_file():
+            return ""
+        max_bytes = CONFIG.max_file_size_mb * 1024 * 1024
+        if path.stat().st_size > max_bytes:
+            logger.warning("Arquivo %s excede limite de %dMB", path.name, CONFIG.max_file_size_mb)
+            return ""
+        return path.read_text(encoding="utf-8", errors="ignore")
+    except Exception as e:
+        logger.error("Falha ao ler %s: %s", path, e)
+        return ""
+
+def _sanitize_html(html: str) -> str:
+    """Sanitiza HTML se bleach disponível e habilitado."""
+    if not CONFIG.sanitize_html:
+        return html
+    try:  # pragma: no cover - sanitização condicional
+        import bleach  # type: ignore
+    except ModuleNotFoundError:
+        logger.info("Bleach não instalado. Sanitização HTML desativada.")
+        return html
+    allowed_tags = [
+        "p","br","strong","em","ul","ol","li","code","pre","table","thead","tbody","tr","th","td","a","h1","h2","h3","h4","h5","h6"
+    ]
+    return bleach.clean(html, tags=allowed_tags, strip=True)
+
+def get_available_docs() -> Dict[str, Dict[str, Any]]:
+    """Lista documentos Markdown disponíveis com metadados básicos."""
+    docs: Dict[str, Dict[str, Any]] = {}
+    try:
+        for entry in CONFIG.docs_path.glob("*.md"):
+            try:
+                stat = entry.stat()
+                docs[entry.name] = {
+                    "filename": entry.name,
+                    "size_kb": round(stat.st_size / 1024, 1),
+                    "last_modified": stat.st_mtime,
+                    "hash": _file_hash(entry),
+                }
+            except Exception as e:
+                logger.warning("Erro ao coletar metadados de %s: %s", entry, e)
+    except Exception as e:
+        logger.error("Falha ao listar diretório de docs: %s", e)
+    return docs
+
+def load_markdown_file(filename: str, use_cache: bool = True) -> str:
+    """Carrega e converte Markdown em HTML (com cache)."""
+    path = CONFIG.docs_path / filename
+    raw = _safe_read(path)
+    if not raw:
+        return "<p>Documento vazio ou não encontrado.</p>"
+    file_hash = _file_hash(path)
+
+    if use_cache and markdown2 is not None:
+        cached, hit = CACHE_MANAGER.get(filename, file_hash)
+        if hit and cached:
+            return cached
+
+    processor = AdvancedMarkdownProcessor()
+    html, meta = processor.process(raw, filename)
+    html = _sanitize_html(html)
+
+    if use_cache:
+        CACHE_MANAGER.set(filename, file_hash, html)
+
+    return html

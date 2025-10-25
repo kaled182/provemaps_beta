@@ -9,6 +9,479 @@ let cablePolylines = {}; // id -> polyline
 let cableDataCache = {}; // id -> cable object
 let bounds; // Tracks map bounds
 
+const initialHostsSnapshot = Array.isArray(window.HOSTS_DATA) ? window.HOSTS_DATA : [];
+let currentHostsSnapshot = initialHostsSnapshot.slice();
+let currentSummarySnapshot = (window.HOSTS_SUMMARY && typeof window.HOSTS_SUMMARY === 'object')
+    ? { ...window.HOSTS_SUMMARY }
+    : null;
+
+let dashboardSocket = null;
+let activeWsPath = null;
+let dashboardReconnectDelay = 5000;
+const DASHBOARD_WS_MAX_DELAY = 60000;
+const preferredWsPath = (window.location.pathname.startsWith('/maps_view/')
+    ? '/maps_view/ws/dashboard/status/'
+    : '/ws/dashboard/status/');
+const DASHBOARD_WS_PATHS = Array.from(
+    new Set([preferredWsPath, '/ws/dashboard/status/', '/maps_view/ws/dashboard/status/'])
+);
+let wsPathCursor = 0;
+let lastSuccessfulWsPath = null;
+let connectingTimeoutId = null;
+
+function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function truncateText(value, limit = 10) {
+    const text = value ? String(value) : '';
+    if (text.length <= limit) return text;
+    const ellipsis = '...';
+    if (limit <= ellipsis.length) {
+        return ellipsis.slice(0, Math.max(0, limit));
+    }
+    const safeLength = Math.max(0, limit - ellipsis.length);
+    return `${text.slice(0, safeLength)}${ellipsis}`;
+}
+
+function computePercent(part, total) {
+    if (!total || total <= 0) {
+        return 0;
+    }
+    return Math.max(0, Math.min(100, (Number(part) / Number(total)) * 100));
+}
+
+function currentWsPath(forceResolve = false) {
+    if (!forceResolve && lastSuccessfulWsPath) {
+        return lastSuccessfulWsPath;
+    }
+    return DASHBOARD_WS_PATHS[wsPathCursor % DASHBOARD_WS_PATHS.length];
+}
+
+function advanceWsPath(failedPath) {
+    if (DASHBOARD_WS_PATHS.length <= 1) {
+        return null;
+    }
+    const currentIndex = failedPath ? DASHBOARD_WS_PATHS.indexOf(failedPath) : wsPathCursor;
+    const nextIndex = (currentIndex + 1) % DASHBOARD_WS_PATHS.length;
+    if (nextIndex == currentIndex) {
+        return null;
+    }
+    wsPathCursor = nextIndex;
+    return DASHBOARD_WS_PATHS[nextIndex];
+}
+
+const realtimeElements = {
+    pill: null,
+    text: null,
+    dot: null,
+    currentState: null,
+};
+
+const REALTIME_STATUS_CONFIG = {
+    connecting: {
+        text: 'Connecting to realtime updates...',
+        state: 'connecting',
+    },
+    connected: {
+        text: 'Realtime updates active',
+        state: 'connected',
+    },
+    offline: {
+        text: 'Realtime updates offline -- using scheduled refresh',
+        state: 'offline',
+        pulse: true,
+    },
+};
+let fallbackTimeoutId = null;
+
+function cacheRealtimeElements() {
+    if (typeof document === 'undefined') return;
+    realtimeElements.pill = document.getElementById('realtimeStatusPill');
+    realtimeElements.text = document.getElementById('realtimeStatusText');
+    realtimeElements.dot = document.getElementById('realtimeStatusDot');
+    realtimeElements.currentState = realtimeElements.pill
+        ? realtimeElements.pill.dataset.state || null
+        : null;
+}
+
+function updateRealtimeBanner(state) {
+    const config = REALTIME_STATUS_CONFIG[state] || REALTIME_STATUS_CONFIG.connecting;
+    if (!realtimeElements.pill && typeof document !== 'undefined') {
+        cacheRealtimeElements();
+    }
+
+    if (!realtimeElements.pill) {
+        return;
+    }
+
+    realtimeElements.currentState = config.state;
+    realtimeElements.pill.dataset.state = config.state;
+    realtimeElements.pill.classList.remove('bg-gray-100', 'border-gray-200', 'text-gray-600');
+
+    if (realtimeElements.text) {
+        realtimeElements.text.textContent = config.text;
+        realtimeElements.text.dataset.state = config.state;
+    }
+
+    if (realtimeElements.dot) {
+        realtimeElements.dot.dataset.state = config.state;
+    }
+
+    if (config.pulse) {
+        realtimeElements.pill.classList.add('animate-pulse');
+    } else {
+        realtimeElements.pill.classList.remove('animate-pulse');
+    }
+
+    if (config.state === 'connecting') {
+        if (!connectingTimeoutId) {
+            connectingTimeoutId = setTimeout(() => {
+                if (realtimeElements.currentState === 'connecting') {
+                    updateRealtimeBanner('offline');
+                }
+            }, 15000);
+        }
+    } else {
+        if (connectingTimeoutId) {
+            clearTimeout(connectingTimeoutId);
+            connectingTimeoutId = null;
+        }
+    }
+}
+
+function clearFallbackTimer() {
+    if (fallbackTimeoutId) {
+        clearTimeout(fallbackTimeoutId);
+        fallbackTimeoutId = null;
+    }
+}
+
+async function fetchHostsSnapshot() {
+    try {
+        const snapshotResponse = await fetchJSON('/maps_view/api/hosts-status/');
+        if (!snapshotResponse) {
+            return;
+        }
+        if (!Array.isArray(snapshotResponse.hosts)) {
+            return;
+        }
+        const summary = snapshotResponse.summary
+            ? { ...snapshotResponse.summary }
+            : currentSummarySnapshot
+            ? { ...currentSummarySnapshot }
+            : {};
+
+        if (typeof summary.total === 'undefined') {
+            summary.total = typeof snapshotResponse.total !== 'undefined'
+                ? snapshotResponse.total
+                : Array.isArray(snapshotResponse.hosts)
+                ? snapshotResponse.hosts.length
+                : 0;
+        }
+
+        const snapshot = {
+            hosts: snapshotResponse.hosts || [],
+            summary,
+        };
+        applyDashboardSnapshot(snapshot);
+    } catch (error) {
+        console.error('[dashboard] HTTP fallback failed:', error);
+    }
+}
+
+function scheduleHttpFallback(delay = 15000) {
+    if (fallbackTimeoutId) {
+        return;
+    }
+    fallbackTimeoutId = setTimeout(async () => {
+        fallbackTimeoutId = null;
+        await fetchHostsSnapshot();
+        const socketOpen = typeof WebSocket !== 'undefined'
+            && dashboardSocket
+            && dashboardSocket.readyState === WebSocket.OPEN;
+        if (!socketOpen) {
+            scheduleHttpFallback(60000);
+        }
+    }, delay);
+}
+
+function updateSummary(summary) {
+    if (!summary || typeof summary !== 'object') {
+        return;
+    }
+
+    const total = Number(summary.total) || 0;
+    const available = Number(summary.available) || 0;
+    const unavailable = Number(summary.unavailable) || 0;
+    const unknown = Number(summary.unknown) || 0;
+    const availabilityPercentage = Number(summary.availability_percentage ?? computePercent(available, total));
+
+    const totalEl = document.getElementById('summary-total');
+    const availableEl = document.getElementById('summary-available');
+    const unavailableEl = document.getElementById('summary-unavailable');
+    const unknownEl = document.getElementById('summary-unknown');
+    const availabilityEl = document.getElementById('summary-availability');
+
+    if (totalEl) totalEl.textContent = total;
+    if (availableEl) availableEl.textContent = available;
+    if (unavailableEl) unavailableEl.textContent = unavailable;
+    if (unknownEl) unknownEl.textContent = unknown;
+    if (availabilityEl) {
+        const formatted = availabilityPercentage.toFixed(2);
+        availabilityEl.textContent = `${formatted}%`;
+        availabilityEl.classList.remove('text-green-600', 'text-yellow-500', 'text-red-600');
+        if (availabilityPercentage >= 95) {
+            availabilityEl.classList.add('text-green-600');
+        } else if (availabilityPercentage >= 80) {
+            availabilityEl.classList.add('text-yellow-500');
+        } else {
+            availabilityEl.classList.add('text-red-600');
+        }
+    }
+
+    const progressAvailable = document.getElementById('progress-available');
+    const progressUnavailable = document.getElementById('progress-unavailable');
+    const progressUnknown = document.getElementById('progress-unknown');
+
+    if (progressAvailable) progressAvailable.style.width = `${computePercent(available, total).toFixed(2)}%`;
+    if (progressUnavailable) progressUnavailable.style.width = `${computePercent(unavailable, total).toFixed(2)}%`;
+    if (progressUnknown) progressUnknown.style.width = `${computePercent(unknown, total).toFixed(2)}%`;
+}
+
+function renderHostCard(host) {
+    const statusClass = host.status_class || '';
+    const color = host.color || STATUS_COLORS.unknown;
+    const name = escapeHtml(host.name || 'Unknown host');
+    const site = escapeHtml(host.site || '—');
+    const badgeText = escapeHtml(host.available_text || 'Unknown');
+    const hostId = escapeHtml(host.hostid || '');
+    const truncatedHostId = truncateText(hostId, 10);
+    const iface = host.interface || {};
+    const interfaceIp = iface.ip ? escapeHtml(iface.ip) : '';
+    const interfaceName = iface.name ? escapeHtml(iface.name) : '';
+    const zabbixError = host.error ? escapeHtml(host.error) : '';
+
+    const ipBlock = interfaceIp
+        ? `<div class="flex justify-between items-center">
+            <span class="font-medium">IP:</span>
+            <button type="button"
+                    class="ip-action-trigger text-blue-600 hover:text-blue-800 underline ml-2 truncate max-w-[130px] text-left"
+                    data-ip="${interfaceIp}"
+                    title="${interfaceIp}">
+              ${interfaceIp}
+            </button>
+          </div>`
+        : '';
+
+    const interfaceBlock = interfaceName
+        ? `<div class="flex justify-between">
+            <span class="font-medium">Interface:</span>
+            <span class="text-right truncate ml-2" title="${interfaceName}">${interfaceName}</span>
+          </div>`
+        : '';
+
+    const errorBlock = zabbixError
+        ? `<div class="mt-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+            <strong class="block mb-1">Zabbix Error:</strong>
+            <span class="break-words">${truncateText(zabbixError, 100)}</span>
+          </div>`
+        : '';
+
+    return `<div class="device-card p-4 border rounded-lg ${statusClass}" data-host-id="${hostId}">
+        <div class="flex items-start justify-between mb-3">
+          <div class="flex items-center space-x-2 flex-1 min-w-0">
+            <span class="status-indicator" style="background-color: ${color}"></span>
+            <span class="font-medium text-sm truncate" title="${name}">${name}</span>
+          </div>
+          <span class="text-xs px-2 py-1 rounded-full font-medium ${statusClass} whitespace-nowrap">
+            ${badgeText}
+          </span>
+        </div>
+
+        <div class="space-y-2 text-xs text-gray-600">
+          <div class="flex justify-between">
+            <span class="font-medium">Site:</span>
+            <span class="text-right truncate ml-2" title="${site}">${site}</span>
+          </div>
+          ${ipBlock}
+          <div class="flex justify-between">
+            <span class="font-medium">Host ID:</span>
+            <span class="text-right font-mono text-xs" title="${hostId}">${truncatedHostId}</span>
+          </div>
+          ${interfaceBlock}
+        </div>
+        ${errorBlock}
+      </div>`;
+}
+
+function renderHosts(hosts) {
+    const container = document.getElementById('hostsGrid');
+    if (!container) return;
+
+    if (!Array.isArray(hosts) || hosts.length === 0) {
+        container.innerHTML = `<div class="col-span-full text-center py-8">
+            <div class="text-gray-400 mb-3">
+              <svg class="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+            </div>
+            <p class="text-gray-500">No monitored devices were found.</p>
+          </div>`;
+        currentHostsSnapshot = [];
+        window.HOSTS_DATA = [];
+        return;
+    }
+
+    const sortedHosts = hosts.slice().sort((a, b) => {
+        const nameA = (a.name || '').toLowerCase();
+        const nameB = (b.name || '').toLowerCase();
+        return nameA.localeCompare(nameB);
+    });
+
+    container.innerHTML = sortedHosts.map(renderHostCard).join('');
+    currentHostsSnapshot = sortedHosts;
+    window.HOSTS_DATA = sortedHosts;
+}
+
+function applyDashboardSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') {
+        return;
+    }
+    if (snapshot.summary) {
+        currentSummarySnapshot = { ...snapshot.summary };
+        window.HOSTS_SUMMARY = currentSummarySnapshot;
+        updateSummary(currentSummarySnapshot);
+    }
+    if (snapshot.hosts) {
+        renderHosts(snapshot.hosts);
+    }
+}
+
+function initRealtimeUpdates(forceFallbackPath = false) {
+    if (typeof window === 'undefined' || !('WebSocket' in window)) {
+        console.warn('[dashboard] WebSocket not supported; realtime updates disabled.');
+        updateRealtimeBanner('offline');
+        scheduleHttpFallback(0);
+        return;
+    }
+
+    updateRealtimeBanner('connecting');
+
+    const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const chosenPath = forceFallbackPath ? DASHBOARD_WS_PATHS[wsPathCursor % DASHBOARD_WS_PATHS.length] : currentWsPath();
+    const wsUrl = `${scheme}://${window.location.host}${chosenPath}`;
+    activeWsPath = chosenPath;
+
+    try {
+        dashboardSocket = new WebSocket(wsUrl);
+    } catch (err) {
+        console.error('[dashboard] Failed to open realtime socket:', err);
+        updateRealtimeBanner('offline');
+        scheduleHttpFallback(0);
+        return;
+    }
+
+    dashboardSocket.onopen = () => {
+        console.info('[dashboard] realtime socket open', { path: chosenPath });
+        clearFallbackTimer();
+        updateRealtimeBanner('connected');
+        lastSuccessfulWsPath = chosenPath;
+        const resolvedIndex = DASHBOARD_WS_PATHS.indexOf(chosenPath);
+        if (resolvedIndex >= 0) {
+            wsPathCursor = resolvedIndex;
+        }
+        dashboardReconnectDelay = 5000;
+    };
+
+    dashboardSocket.onmessage = (event) => {
+        try {
+            const payload = JSON.parse(event.data);
+            if (payload && payload.event === 'dashboard.status' && payload.data) {
+                applyDashboardSnapshot(payload.data);
+                clearFallbackTimer();
+            }
+        } catch (err) {
+            console.error('[dashboard] Failed to parse realtime payload:', err);
+        }
+    };
+
+    dashboardSocket.onerror = (err) => {
+        console.error('[dashboard] Realtime socket error:', err);
+        updateRealtimeBanner('offline');
+        scheduleHttpFallback(0);
+        if (dashboardSocket) {
+            try {
+                dashboardSocket.close();
+            } catch (closeErr) {
+                console.debug('[dashboard] Socket close after error failed:', closeErr);
+            }
+        }
+    };
+
+    dashboardSocket.onclose = (event) => {
+        dashboardSocket = null;
+        activeWsPath = null;
+        if (event) {
+            console.warn('[dashboard] Realtime socket closed', {
+                code: event.code,
+                reason: event.reason,
+                wasClean: event.wasClean,
+                attemptedPath: chosenPath,
+            });
+        }
+
+        if (event && event.code === 1006) {
+            const nextPath = advanceWsPath(chosenPath);
+            if (nextPath) {
+                console.warn('[dashboard] retrying websocket path', nextPath);
+                setTimeout(() => initRealtimeUpdates(true), 0);
+                return;
+            }
+        }
+
+        updateRealtimeBanner('offline');
+        scheduleHttpFallback(0);
+
+        if (event && event.code === 4401) {
+            console.warn('[dashboard] Realtime socket closed due to authentication; not retrying.');
+            return;
+        }
+        const delay = Math.min(dashboardReconnectDelay, DASHBOARD_WS_MAX_DELAY);
+        setTimeout(initRealtimeUpdates, delay);
+        dashboardReconnectDelay = Math.min(delay * 2, DASHBOARD_WS_MAX_DELAY);
+    };
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    cacheRealtimeElements();
+    updateRealtimeBanner('connecting');
+
+    if (currentSummarySnapshot) {
+        updateSummary(currentSummarySnapshot);
+    } else if (window.HOSTS_SUMMARY) {
+        updateSummary(window.HOSTS_SUMMARY);
+    }
+
+    if (currentHostsSnapshot.length) {
+        renderHosts(currentHostsSnapshot);
+    } else if (Array.isArray(window.HOSTS_DATA) && window.HOSTS_DATA.length) {
+        renderHosts(window.HOSTS_DATA);
+    }
+
+    initRealtimeUpdates();
+
+    if (!currentHostsSnapshot.length) {
+        scheduleHttpFallback(0);
+    }
+});
+
 async function fetchJSON(url) { const r = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } }); return r.json(); }
 
 function addLegend() {
@@ -604,3 +1077,4 @@ if (typeof module !== 'undefined' && module.exports) {
         },
     };
 }
+

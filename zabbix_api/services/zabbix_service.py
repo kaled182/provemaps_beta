@@ -27,6 +27,51 @@ from .zabbix_client import (
 logger = logging.getLogger(__name__)
 
 
+# Utilit?rio de cache seguro para desenvolvimento local
+# -----------------------------------------------------------------------------
+def safe_cache_get(key, default=None):
+    """
+    Wrapper seguro para cache.get() que ignora falhas de conex?o Redis.
+    Retorna None se Redis estiver offline (modo desenvolvimento).
+    """
+    try:
+        return cache.get(key, default=default)
+    except Exception as exc:
+        logger.debug(
+            "Cache offline (Redis indispon?vel), continuando sem cache: %s",
+            exc.__class__.__name__,
+        )
+        return default
+
+
+def safe_cache_set(key, value, timeout=None):
+    """
+    Wrapper seguro para cache.set() que ignora falhas de conex?o Redis.
+    N?o faz nada se Redis estiver offline (modo desenvolvimento).
+    """
+    try:
+        cache.set(key, value, timeout=timeout)
+    except Exception as exc:
+        logger.debug(
+            "Cache offline (Redis indispon?vel), n?o armazenando: %s",
+            exc.__class__.__name__,
+        )
+
+
+def safe_cache_delete(key):
+    """
+    Wrapper seguro para cache.delete() que ignora falhas de conex?o Redis.
+    N?o faz nada se Redis estiver offline (modo desenvolvimento).
+    """
+    try:
+        cache.delete(key)
+    except Exception as exc:
+        logger.debug(
+            "Cache offline (Redis indispon?vel), n?o deletando: %s",
+            exc.__class__.__name__,
+        )
+
+
 def _current_zabbix_config():
     """
     Wrapper mantido por compatibilidade com testes e chamadas existentes.
@@ -537,7 +582,7 @@ def search_hosts(query=None, groupids=None, limit=20):
     q = (query or "").strip()
     gids = ",".join(groupids) if isinstance(groupids, (list, tuple)) else (groupids or "")
     key = _cache_key("search_hosts", q=q, gids=gids, limit=int(limit))
-    cached = cache.get(key)
+    cached = safe_cache_get(key)
     if cached is not None:
         return cached
 
@@ -612,16 +657,14 @@ def search_hosts(query=None, groupids=None, limit=20):
                 "name": h.get("name"),
                 "ip": _primary_ip(interfaces),
                 "available": availability["value"],
-                "status": h.get("status"),
-                "error": h.get("error"),
-                "availability": availability,
-            }
-        )
+            "status": h.get("status"),
+            "error": h.get("error"),
+            "availability": availability,
+        }
+    )
 
-    cache.set(key, normalized, ZABBIX_LOOKUP_CACHE_TTL)
+    safe_cache_set(key, normalized, ZABBIX_LOOKUP_CACHE_TTL)
     return normalized
-
-
 def get_host_interfaces(hostid, only_main: bool = False, limit: int = 200):
     """
     Lista interfaces de um host. Retorna:
@@ -629,7 +672,7 @@ def get_host_interfaces(hostid, only_main: bool = False, limit: int = 200):
     """
     hostid = str(hostid)
     key = _cache_key("host_if", hostid=hostid, main=int(bool(only_main)), limit=int(limit))
-    cached = cache.get(key)
+    cached = safe_cache_get(key)
     if cached is not None:
         return cached
 
@@ -652,15 +695,13 @@ def get_host_interfaces(hostid, only_main: bool = False, limit: int = 200):
                 "main": int(i.get("main") or 0),
                 "port": str(i.get("port") or ""),
                 "available": int(i.get("available") or 0),
-                "type": int(i.get("type") or 0),
-                "useip": int(i.get("useip") or 1),
-            }
-        )
+            "type": int(i.get("type") or 0),
+            "useip": int(i.get("useip") or 1),
+        }
+    )
 
-    cache.set(key, out, ZABBIX_LOOKUP_CACHE_TTL)
+    safe_cache_set(key, out, ZABBIX_LOOKUP_CACHE_TTL)
     return out
-
-
 # -----------------------------------------------------------------------------
 # LOOKUP ? Fase 1: fun??es auxiliares opcionais (seguras)
 # -----------------------------------------------------------------------------
@@ -671,7 +712,7 @@ def search_hosts_by_name_ip(query: str, groupids=None, limit: int = 20):
     Implementada com chamadas válidas ao Zabbix (sem 'search' com lista).
     """
     cache_key = _cache_key("host_search_ext", q=query or "", gids=str(groupids or ""), limit=int(limit))
-    cached = cache.get(cache_key)
+    cached = safe_cache_get(cache_key)
     if cached is not None:
         return cached
 
@@ -748,7 +789,7 @@ def search_hosts_by_name_ip(query: str, groupids=None, limit: int = 20):
             }
         )
 
-    cache.set(cache_key, normalized, ZABBIX_LOOKUP_CACHE_TTL)
+    safe_cache_set(cache_key, normalized, ZABBIX_LOOKUP_CACHE_TTL)
     return normalized
 
 
@@ -758,7 +799,7 @@ def get_host_interfaces_detailed(hostid: str, include_snmp_info: bool = False):
     pois 'hostinterface.port' N?O ? ifIndex e n?o ? seguro inferir.
     """
     cache_key = _cache_key("host_if_detailed", hostid=str(hostid), snmp=int(bool(include_snmp_info)))
-    cached = cache.get(cache_key)
+    cached = safe_cache_get(cache_key)
     if cached is not None:
         return cached
 
@@ -781,17 +822,15 @@ def get_host_interfaces_detailed(hostid: str, include_snmp_info: bool = False):
                 "dns": i.get("dns", ""),
                 "port": i.get("port", ""),
                 "type": i.get("type", "1"),
-                "main": i.get("main", "0"),
-                "available": i.get("available", "0"),
-                "useip": i.get("useip", "1"),
-                "snmp_data": {},  # intencionalmente vazio nesta fase
-            }
-        )
+            "main": i.get("main", "0"),
+            "available": i.get("available", "0"),
+            "useip": i.get("useip", "1"),
+            "snmp_data": {},  # intencionalmente vazio nesta fase
+        }
+    )
 
-    cache.set(cache_key, detailed, ZABBIX_LOOKUP_CACHE_TTL)
+    safe_cache_set(cache_key, detailed, ZABBIX_LOOKUP_CACHE_TTL)
     return detailed
-
-
 def get_interface_snmp_details(interfaceid: str, snmpindex: str = None):
     """
     Detalhes SNMP de uma interface.
@@ -852,7 +891,7 @@ def test_host_connectivity(hostid: str):
     Testa conectividade de um host (disponibilidade Zabbix + ping opcional).
     """
     cache_key = _cache_key("host_connectivity", hostid=str(hostid))
-    cached = cache.get(cache_key)
+    cached = safe_cache_get(cache_key)
     if cached is not None:
         return cached
 
@@ -887,7 +926,7 @@ def test_host_connectivity(hostid: str):
         ip = primary["ip"]
         result["ping_test"] = {"ip": ip, "reachable": check_host_connectivity(ip), "timestamp": time.time()}
 
-    cache.set(cache_key, result, 60)  # curto
+    safe_cache_set(cache_key, result, 60)  # curto
     return result
 
 

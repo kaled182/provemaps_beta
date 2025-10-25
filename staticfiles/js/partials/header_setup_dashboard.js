@@ -1,57 +1,39 @@
-document.addEventListener('DOMContentLoaded', function() {
-  
-  // ========================================= 
-  // DROPDOWN DO USUÁRIO
-  // ========================================= 
+document.addEventListener('DOMContentLoaded', () => {
   const userMenuButton = document.getElementById('userMenuButton');
   const userMenuDropdown = document.getElementById('userMenuDropdown');
   const userMenuArrow = document.getElementById('userMenuArrow');
 
   if (userMenuButton && userMenuDropdown) {
-    // Toggle dropdown do usuário
-    userMenuButton.addEventListener('click', function(e) {
-      e.stopPropagation();
+    userMenuButton.addEventListener('click', (event) => {
+      event.stopPropagation();
       const isHidden = userMenuDropdown.classList.contains('hidden');
-      
-      if (isHidden) {
-        userMenuDropdown.classList.remove('hidden');
-        userMenuArrow.style.transform = 'rotate(180deg)';
-      } else {
+      userMenuDropdown.classList.toggle('hidden', !isHidden);
+      if (userMenuArrow) userMenuArrow.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!userMenuButton.contains(event.target) && !userMenuDropdown.contains(event.target)) {
         userMenuDropdown.classList.add('hidden');
-        userMenuArrow.style.transform = 'rotate(0deg)';
+        if (userMenuArrow) userMenuArrow.style.transform = 'rotate(0deg)';
       }
     });
 
-    // Fechar dropdown ao clicar fora
-    document.addEventListener('click', function(e) {
-      if (!userMenuButton.contains(e.target) && !userMenuDropdown.contains(e.target)) {
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
         userMenuDropdown.classList.add('hidden');
-        userMenuArrow.style.transform = 'rotate(0deg)';
-      }
-    });
-
-    // Fechar dropdown com ESC
-    document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') {
-        userMenuDropdown.classList.add('hidden');
-        userMenuArrow.style.transform = 'rotate(0deg)';
+        if (userMenuArrow) userMenuArrow.style.transform = 'rotate(0deg)';
       }
     });
   }
 
-  // ========================================= 
-  // ALTERNADOR DE TEMA (se existir)
-  // ========================================= 
   const themeToggle = document.getElementById('themeToggle');
   const iconSun = document.getElementById('iconSun');
   const iconMoon = document.getElementById('iconMoon');
 
   if (themeToggle && iconSun && iconMoon) {
-    // Verificar tema atual
     const currentTheme = localStorage.getItem('theme') || 'light';
     document.documentElement.classList.toggle('dark', currentTheme === 'dark');
-    
-    // Mostrar ícone correto
+
     if (currentTheme === 'dark') {
       iconSun.classList.remove('hidden');
       iconMoon.classList.add('hidden');
@@ -60,10 +42,8 @@ document.addEventListener('DOMContentLoaded', function() {
       iconMoon.classList.remove('hidden');
     }
 
-    // Toggle de tema
-    themeToggle.addEventListener('click', function() {
+    themeToggle.addEventListener('click', () => {
       const isDark = document.documentElement.classList.contains('dark');
-      
       if (isDark) {
         document.documentElement.classList.remove('dark');
         localStorage.setItem('theme', 'light');
@@ -78,17 +58,13 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // ========================================= 
-  // MENU MOBILE (se existir)
-  // ========================================= 
   const mobileToggle = document.querySelector('[data-mobile-toggle]');
   const mobileNav = document.getElementById('mobileNav');
 
   if (mobileToggle && mobileNav) {
-    mobileToggle.addEventListener('click', function() {
+    mobileToggle.addEventListener('click', () => {
       const isExpanded = mobileToggle.getAttribute('aria-expanded') === 'true';
-      
-      mobileToggle.setAttribute('aria-expanded', !isExpanded);
+      mobileToggle.setAttribute('aria-expanded', (!isExpanded).toString());
       mobileNav.classList.toggle('hidden');
     });
   }

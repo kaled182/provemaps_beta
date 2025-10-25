@@ -47,7 +47,7 @@ def docs_index(request):
     context = {
         "available_docs": normalized,
     }
-    return render(request, "setup/docs/index.html", context)
+    return render(request, "docs/docs_index.html", context)
 
 def docs_view(request, filename: str = "README.md"):
     """
@@ -74,4 +74,4 @@ def docs_view(request, filename: str = "README.md"):
         "github_doc_url": os.getenv("GITHUB_DOCS_URL", ""),
         "available_docs": available,
     }
-    return render(request, "setup/docs/view.html", context)
+    return render(request, "docs/view.html", context)

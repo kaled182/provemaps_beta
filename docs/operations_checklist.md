@@ -11,10 +11,63 @@ Resumo rápido para administrar o ambiente em produção ou homologação.
 
 
 ## Monitoramento
-- **Prometheus /metrics** – expõe métricas de Django, Celery, Redis e banco.
+- **Prometheus /metrics/metrics** – expõe ~200 métricas de Django, Celery, Redis e banco.
+- **Health Checks** – `/healthz` (completo), `/ready` (readiness), `/live` (liveness).
 - **Dashboard HTML** – `/maps_view/metrics/` facilita buscas rápidas.
-- **Logs** – `logs/application.log` com `RotatingFileHandler` (5 × 5 MB).
+- **Logs** – `logs/application.log` com `RotatingFileHandler` (5 × 5 MB).
 - **Slow queries** – `python manage.py show_slow_queries --limit 10` lendo `MYSQL_SLOW_LOG_PATH` ou `--path` manual.
+
+### Health Check Endpoints
+
+| Endpoint | Finalidade | Status Code |
+|----------|------------|-------------|
+| `/healthz` | Verificação completa (DB, cache, storage, métricas de sistema) | 200 (ok), 503 (degraded) |
+| `/ready` | Readiness probe (conectividade DB apenas) | 200 (ready), 503 (not ready) |
+| `/live` | Liveness probe (processo Django ativo) | 200 (alive) |
+
+**Configuração via variáveis de ambiente:**
+
+```bash
+# Modo estrito (padrão): falha em qualquer check resulta em 503
+HEALTHCHECK_STRICT=true
+
+# Ignorar falhas de cache (útil em dev sem Redis)
+HEALTHCHECK_IGNORE_CACHE=false
+
+# Timeout para verificação de DB (Unix/Linux, padrão 5s)
+HEALTHCHECK_DB_TIMEOUT=5
+
+# Limiar de espaço em disco (padrão 1 GB)
+HEALTHCHECK_DISK_THRESHOLD_GB=1.0
+
+# Controle de checks opcionais
+HEALTHCHECK_STORAGE=true
+HEALTHCHECK_SYSTEM_METRICS=false  # CPU/memória no payload
+HEALTHCHECK_DEBUG=false           # força log mesmo quando ok
+```
+
+**Uso em Kubernetes/Docker:**
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /live
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8000
+  initialDelaySeconds: 5
+  periodSeconds: 5
+```
+
+**Desenvolvimento sem Redis:**
+```bash
+HEALTHCHECK_IGNORE_CACHE=true python manage.py runserver
+```
 
 ## Fluxos principais
 - **Setup inicial**: `/setup_app/first_time/` (usa `FERNET_KEY`). Depois `Quick Actions` → `Configure System` para rotinas.

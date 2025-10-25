@@ -18,6 +18,16 @@ const manualSinglePortCheckbox = document.getElementById('manualSinglePortOnly')
 const manualDestDeviceSelect = document.getElementById('manualDestDeviceSelect');
 const manualDestPortSelect = document.getElementById('manualDestPortSelect');
 const manualDestNotice = document.getElementById('manualDestNotice');
+const editFiberBtn = document.getElementById('editFiber');
+let editingFiberId = null;
+let currentFiberMeta = null;
+
+function updateEditButtonState() {
+    if (!editFiberBtn) return;
+    editFiberBtn.disabled = !activeFiberId;
+}
+
+updateEditButtonState();
 
 function haversineKm(pointA, pointB) {
     const earthRadiusKm = 6371;
@@ -156,6 +166,13 @@ function initMap() {
     });
 
     map.addListener('click', (event) => {
+        if (activeFiberId && currentPath.length === 0) {
+            activeFiberId = null;
+            const fiberSelect = document.getElementById('fiberSelect');
+            if (fiberSelect) {
+                fiberSelect.value = '';
+            }
+        }
         const point = { lat: event.latLng.lat(), lng: event.latLng.lng() };
         currentPath.push(point);
         addMarker(point);
@@ -169,31 +186,211 @@ function initMap() {
 window.initMap = initMap;
 
 async function loadFibers() {
-    const response = await fetch('/zabbix_api/api/fibers/');
-    const data = await response.json();
-    const select = document.getElementById('fiberSelect');
-    select.innerHTML = '<option value="">-- select a cable --</option>';
-    data.cables.forEach((cable) => {
-        const option = document.createElement('option');
-        option.value = cable.id;
-        option.textContent = cable.name;
-        select.appendChild(option);
-    });
+    try {
+        const response = await fetch('/zabbix_api/api/fibers/', {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache',
+            },
+            cache: 'no-store',
+        });
+        if (!response.ok) {
+            console.error('Failed to load fiber list:', response.status);
+            return null;
+        }
+        const data = await response.json();
+        const select = document.getElementById('fiberSelect');
+        if (select) {
+            select.innerHTML = '<option value="">-- select a cable --</option>';
+            data.cables.forEach((cable) => {
+                const option = document.createElement('option');
+                option.value = cable.id;
+                option.textContent = cable.name;
+                select.appendChild(option);
+            });
+        }
+        return data;
+    } catch (error) {
+        console.error('Error fetching fibers:', error);
+        return null;
+    }
 }
 
 async function loadFiberDetail(id) {
-    const response = await fetch(`/zabbix_api/api/fiber/${id}/`);
+
+    const response = await fetch(`/zabbix_api/api/fiber/${id}/`, {
+
+        method: 'GET',
+
+        headers: {
+
+            'Accept': 'application/json',
+
+            'Cache-Control': 'no-cache',
+
+            'Pragma': 'no-cache',
+
+        },
+
+        cache: 'no-store',
+
+    });
+
     if (!response.ok) {
+
         alert('Error loading cable');
+
         return;
+
     }
+
     const data = await response.json();
+
     activeFiberId = data.id;
+
+    currentFiberMeta = {
+
+        name: data.name || '',
+
+        origin_device_id: data.origin?.device_id || null,
+
+        origin_port_id: data.origin?.port_id || null,
+
+        dest_device_id: data.destination?.device_id || null,
+
+        dest_port_id: data.destination?.port_id || null,
+
+        single_port: Boolean(data.single_port),
+
+    };
+
+    updateEditButtonState();
+
     const path = (data.path && data.path.length)
+
         ? data.path
+
         : buildDefaultFromEndpoints(data);
+
     setPath(path);
+
 }
+
+
+
+async function openEditFiberModal() {
+
+    if (!activeFiberId || !currentFiberMeta) {
+
+        alert('Select a cable first.');
+
+        return;
+
+    }
+
+    editingFiberId = activeFiberId;
+
+    if (!manualModal || !manualForm) {
+
+        console.warn('Manual save modal not found.');
+
+        return;
+
+    }
+
+
+
+    if (manualRouteNameInput) {
+
+        manualRouteNameInput.value = currentFiberMeta.name || '';
+
+    }
+
+    if (manualSinglePortCheckbox) {
+
+        manualSinglePortCheckbox.checked = Boolean(currentFiberMeta.single_port);
+
+    }
+
+
+
+    if (manualOriginDeviceSelect) {
+
+        manualOriginDeviceSelect.value = currentFiberMeta.origin_device_id ? String(currentFiberMeta.origin_device_id) : '';
+
+        await loadPortsForSelect(manualOriginDeviceSelect.value, manualOriginPortSelect);
+
+        if (manualOriginPortSelect) {
+
+            manualOriginPortSelect.value = currentFiberMeta.origin_port_id ? String(currentFiberMeta.origin_port_id) : '';
+
+        }
+
+    }
+
+
+
+    if (manualSinglePortCheckbox && manualSinglePortCheckbox.checked) {
+
+        if (manualDestDeviceSelect) {
+
+            manualDestDeviceSelect.value = manualOriginDeviceSelect ? manualOriginDeviceSelect.value : '';
+
+        }
+
+        if (manualDestPortSelect) {
+
+            manualDestPortSelect.innerHTML = '<option value="">-- destino desabilitado --</option>';
+
+            manualDestPortSelect.disabled = true;
+
+        }
+
+    } else {
+
+        if (manualDestDeviceSelect) {
+
+            manualDestDeviceSelect.disabled = false;
+
+            manualDestDeviceSelect.value = currentFiberMeta.dest_device_id ? String(currentFiberMeta.dest_device_id) : '';
+
+            await loadPortsForSelect(manualDestDeviceSelect.value, manualDestPortSelect);
+
+        }
+
+        if (manualDestPortSelect) {
+
+            manualDestPortSelect.disabled = false;
+
+            manualDestPortSelect.value = currentFiberMeta.dest_port_id ? String(currentFiberMeta.dest_port_id) : '';
+
+        }
+
+    }
+
+
+
+    await syncDestinationDevice();
+
+    if (manualRouteDistanceEl) {
+
+        manualRouteDistanceEl.textContent = `${totalDistance().toFixed(3)} km`;
+
+    }
+
+    const submitButton = manualForm.querySelector('button[type="submit"]');
+
+    if (submitButton) submitButton.textContent = 'Atualizar cabo';
+
+
+
+    openManualSaveModal(true);
+
+}
+
+
 
 function buildDefaultFromEndpoints(fiber) {
     const points = [];
@@ -243,45 +440,98 @@ async function updateExistingPath() {
 }
 
 function resetManualSaveForm() {
+
     if (!manualForm) return;
+
     manualForm.reset();
+
     if (manualOriginPortSelect) {
+
         manualOriginPortSelect.innerHTML = '<option value="">Selecione...</option>';
+
     }
+
     if (manualDestPortSelect) {
+
         manualDestPortSelect.innerHTML = '<option value="">Selecione...</option>';
+
         manualDestPortSelect.disabled = false;
+
     }
+
     if (manualDestDeviceSelect) {
+
         manualDestDeviceSelect.disabled = false;
+
     }
+
     if (manualSinglePortCheckbox) {
+
         manualSinglePortCheckbox.checked = false;
+
     }
+
     if (manualDestNotice) {
+
         manualDestNotice.classList.add('hidden');
+
     }
+
+    const submitButton = manualForm.querySelector('button[type="submit"]');
+
+    if (submitButton) submitButton.textContent = 'Salvar rota';
+
 }
 
-function openManualSaveModal() {
+
+
+function openManualSaveModal(skipReset = false) {
+
     if (!manualModal || !manualModalContent) {
+
         console.warn('Manual save modal not found in the DOM.');
+
         return;
+
     }
-    resetManualSaveForm();
+
+    if (!skipReset) {
+
+        editingFiberId = null;
+
+        resetManualSaveForm();
+
+    }
+
     if (manualRouteDistanceEl) {
+
         const distance = totalDistance();
+
         manualRouteDistanceEl.textContent = `${distance.toFixed(3)} km`;
+
     }
+
     manualModal.classList.remove('pointer-events-none');
+
     manualModal.classList.add('opacity-100');
+
     manualModalContent.classList.add('opacity-100', 'scale-100');
+
     manualModalContent.classList.remove('opacity-0', 'scale-95');
+
     if (manualRouteNameInput) {
+
         requestAnimationFrame(() => manualRouteNameInput.focus());
+
     }
+
     syncDestinationDevice();
+
+    updateEditButtonState();
+
 }
+
+
 
 function closeManualSaveModal() {
     if (!manualModal || !manualModalContent) return;
@@ -292,8 +542,12 @@ function closeManualSaveModal() {
     setTimeout(() => {
         manualModal.classList.add('pointer-events-none');
     }, 300);
+    editingFiberId = null;
+    if (manualForm) {
+        const submitButton = manualForm.querySelector('button[type="submit"]');
+        if (submitButton) submitButton.textContent = 'Salvar rota';
+    }
 }
-
 async function loadPortsForSelect(deviceId, targetSelect) {
     if (!targetSelect) return;
     targetSelect.innerHTML = '<option value="">Carregando...</option>';
@@ -352,9 +606,72 @@ async function syncDestinationDevice() {
     }
 }
 
-async function createManualFiber(event) {
+async function performCreateFiber(payload) {
+    const csrftoken = getCookie('csrftoken');
+    const response = await fetch('/zabbix_api/api/fibers/manual-create/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken,
+        },
+        body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.error || 'Erro inesperado');
+    }
+
+    alert('Rota criada com sucesso.');
+    closeManualSaveModal();
+    setPath([]);
+    activeFiberId = null;
+    document.dispatchEvent(new CustomEvent('fiber:cable-created', {
+        detail: { fiberId: data.fiber_id },
+    }));
+}
+
+async function performUpdateFiber(fiberId, payload) {
+    const csrftoken = getCookie('csrftoken');
+    const response = await fetch(`/zabbix_api/api/fiber/${fiberId}/`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken,
+        },
+        body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.error || 'Erro inesperado');
+    }
+
+    alert('Cabo atualizado com sucesso.');
+    closeManualSaveModal();
+    currentFiberMeta = {
+        name: data.name || '',
+        origin_device_id: data.origin?.device_id || null,
+        origin_port_id: data.origin?.port_id || null,
+        dest_device_id: data.destination?.device_id || null,
+        dest_port_id: data.destination?.port_id || null,
+        single_port: Boolean(data.single_port),
+    };
+    await loadFibers();
+    if (activeFiberId) {
+        const fiberSelect = document.getElementById('fiberSelect');
+        if (fiberSelect) {
+            fiberSelect.value = String(activeFiberId);
+        }
+        await loadFiberDetail(activeFiberId);
+    }
+}
+
+async function handleManualFormSubmit(event) {
     event.preventDefault();
-    if (currentPath.length < 2) {
+    const isEditing = Boolean(editingFiberId);
+
+    if (!isEditing && currentPath.length < 2) {
         alert('Adicione pelo menos dois pontos ao mapa antes de salvar a rota.');
         return;
     }
@@ -371,7 +688,6 @@ async function createManualFiber(event) {
             : formData.get('dest_device_id'),
         dest_port_id: singlePort ? null : formData.get('dest_port_id'),
         single_port: singlePort,
-        path: currentPath.map((point) => ({ lat: point.lat, lng: point.lng })),
     };
 
     if (!payload.name || !payload.origin_device_id || !payload.origin_port_id) {
@@ -383,43 +699,26 @@ async function createManualFiber(event) {
         return;
     }
 
+    if (!isEditing) {
+        payload.path = currentPath.map((point) => ({ lat: point.lat, lng: point.lng }));
+    }
+
     const submitButton = manualForm.querySelector('button[type="submit"]');
     if (submitButton) submitButton.disabled = true;
 
     try {
-        const csrftoken = getCookie('csrftoken');
-        const response = await fetch('/zabbix_api/api/fibers/manual-create/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrftoken,
-            },
-            body: JSON.stringify(payload),
-        });
-
-        const data = await response.json();
-        if (!response.ok) {
-            alert(`Falha ao salvar rota: ${data.error || 'Erro inesperado'}`);
-            return;
+        if (isEditing && editingFiberId) {
+            await performUpdateFiber(editingFiberId, payload);
+        } else {
+            await performCreateFiber(payload);
         }
-
-        activeFiberId = data.fiber_id;
-        await loadFibers();
-        const fiberSelect = document.getElementById('fiberSelect');
-        if (fiberSelect) {
-            fiberSelect.value = String(data.fiber_id);
-        }
-        refreshList();
-        alert('Rota criada com sucesso.');
-        closeManualSaveModal();
     } catch (error) {
-        console.error('Erro ao criar rota manual:', error);
-        alert('Falha de conexão ou erro inesperado ao criar a rota.');
+        console.error('Erro ao salvar rota:', error);
+        alert(error.message || 'Falha ao salvar a rota.');
     } finally {
         if (submitButton) submitButton.disabled = false;
     }
 }
-
 function handleSaveClick() {
     if (activeFiberId) {
         updateExistingPath();
@@ -477,15 +776,27 @@ document.addEventListener('DOMContentLoaded', () => {
         loadFiberDetail(id);
     });
     document.getElementById('clearPath').addEventListener('click', () => {
+        activeFiberId = null;
+        currentFiberMeta = null;
+        updateEditButtonState();
+        const fiberSelect = document.getElementById('fiberSelect');
+        if (fiberSelect) {
+            fiberSelect.value = '';
+        }
         setPath([]);
     });
     document.getElementById('savePath').addEventListener('click', handleSaveClick);
     document.getElementById('deleteCable').addEventListener('click', deleteCable);
 
-    if (manualForm) {
-        manualForm.addEventListener('submit', createManualFiber);
+    if (editFiberBtn) {
+        editFiberBtn.addEventListener('click', openEditFiberModal);
     }
-    if (manualOriginDeviceSelect) {
+
+    if (manualForm) {
+        manualForm.addEventListener('submit', handleManualFormSubmit);
+    }
+
+if (manualOriginDeviceSelect) {
         manualOriginDeviceSelect.addEventListener('change', async () => {
             await loadPortsForSelect(manualOriginDeviceSelect.value, manualOriginPortSelect);
             await syncDestinationDevice();
@@ -514,3 +825,20 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 window.closeManualSaveModal = closeManualSaveModal;
+window.loadFibers = loadFibers;
+window.loadFiberDetail = loadFiberDetail;
+window.loadPortsForSelect = loadPortsForSelect;
+
+document.addEventListener('fiber:cable-created', async (event) => {
+    const fiberId = event.detail?.fiberId;
+    await loadFibers();
+    const fiberSelect = document.getElementById('fiberSelect');
+    if (fiberSelect) {
+        fiberSelect.value = '';
+    }
+    activeFiberId = null;
+    setPath([]);
+    if (fiberId) {
+        console.info(`Novo cabo criado: ${fiberId}`);
+    }
+});

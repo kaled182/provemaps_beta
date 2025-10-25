@@ -79,12 +79,21 @@ def use_transactional_db(transactional_db):
 
 @pytest.fixture(autouse=True)
 def clear_cache():
-    """Limpa o cache antes e depois de cada teste para garantir isolamento."""
-    cache.clear()
+    """Limpa o cache antes e depois de cada teste para garantir isolamento.
+    Ignora falhas de conexão Redis para permitir testes sem Redis disponível.
+    """
+    try:
+        cache.clear()
+    except Exception:
+        pass  # Ignora falhas de cache (útil quando Redis está offline)
+    
     try:
         yield
     finally:
-        cache.clear()
+        try:
+            cache.clear()
+        except Exception:
+            pass  # Ignora falhas de cache no teardown
 
 
 # =============================================================================

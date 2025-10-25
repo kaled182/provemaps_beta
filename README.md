@@ -45,6 +45,57 @@ O projeto usa `django-environ` para gerenciar variáveis de ambiente.
 - `ENABLE_DIAGNOSTIC_ENDPOINTS` → habilita ping/telnet e diagnósticos ópticos.  
 - `CHANNEL_LAYER_URL` → backend Channels (`redis://127.0.0.1:6379/1` em produção).  
 
+### 🏥 Health Checks & Observabilidade
+
+O projeto expõe três endpoints de saúde para monitoramento:
+
+| Endpoint | Propósito | Uso |
+|----------|-----------|-----|
+| `/healthz` | Health check completo (DB, cache, storage, métricas) | Load balancer, status geral |
+| `/ready` | Readiness probe (DB connectivity) | Kubernetes readinessProbe |
+| `/live` | Liveness probe (processo ativo) | Kubernetes livenessProbe |
+
+**Variáveis de configuração:**
+
+```bash
+# Modo de severidade (padrão: true = falhas em qualquer check resultam em 503)
+HEALTHCHECK_STRICT=true
+
+# Ignorar falhas de cache (útil em dev quando Redis está offline)
+HEALTHCHECK_IGNORE_CACHE=false
+
+# Timeout para verificação de DB em segundos (Unix/Linux apenas)
+HEALTHCHECK_DB_TIMEOUT=5
+
+# Limiar de espaço em disco em GB (padrão: 1 GB)
+HEALTHCHECK_DISK_THRESHOLD_GB=1.0
+
+# Habilitar/desabilitar verificação de storage
+HEALTHCHECK_STORAGE=true
+
+# Incluir métricas de sistema (CPU, memória) no payload
+HEALTHCHECK_SYSTEM_METRICS=false
+
+# Modo debug (força log mesmo quando healthy)
+HEALTHCHECK_DEBUG=false
+```
+
+**Exemplos de uso:**
+
+```bash
+# Health check em modo não-estrito (apenas DB é crítico)
+HEALTHCHECK_STRICT=false python manage.py runserver
+
+# Desenvolvimento sem Redis (ignora falhas de cache)
+HEALTHCHECK_IGNORE_CACHE=true python manage.py runserver
+
+# Verificar status
+curl http://localhost:8000/healthz
+# Responde: HTTP 200 (ok) ou HTTP 503 (degraded)
+```
+
+**Prometheus Metrics:** `/metrics/metrics` expõe ~200 métricas (GC, requests, DB, cache).
+
 ---
 
 ## 🚀 3. Primeira Execução
