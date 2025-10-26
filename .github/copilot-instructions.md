@@ -23,8 +23,8 @@ This is a multi-app Django project for network mapping, route building, and devi
 - **Debugging:** Use Django's built-in error pages; settings in `core/settings.py`.
 
 ## Project-Specific Patterns
-- Models may be split (e.g., `models.py` and `models_old.py` in `maps_view` and `routes_builder`). Prefer `models.py` unless legacy code is required.
-- Views and URLs also have `_old.py` versions; use main files unless maintaining legacy endpoints.
+- Models are in each app's `models.py` file (e.g., `inventory/models.py`, `zabbix_api/models.py`)
+- Views and URLs are in each app's `views.py` and `urls.py` files
 - Templates are organized per app; shared templates in `templates/` and partials in `maps_view/templates/partials/`.
 - Static assets are per-app and global (`staticfiles/`).
 - Management commands extend Django's CLI for custom DB or network operations.
@@ -39,9 +39,9 @@ This is a multi-app Django project for network mapping, route building, and devi
 - For a new route builder feature, update `routes_builder/models.py`, `routes_builder/views.py`, and corresponding templates/static files.
 
 ## Conventions
-- Use main files (`models.py`, `views.py`, `urls.py`) unless legacy support is needed.
-- Organize static and template files per app for maintainability.
-- Place custom management commands in the relevant app's `management/commands/` directory.
+- Use standard Django file structure: `models.py`, `views.py`, `urls.py`
+- Organize static and template files per app for maintainability
+- Place custom management commands in the relevant app's `management/commands/` directory
 
 ---
 For questions or unclear patterns, review the relevant app's main files or ask for clarification.

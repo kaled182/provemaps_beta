@@ -48,6 +48,7 @@ async function populatePorts(deviceId, targetSelect) {
                 'Pragma': 'no-cache',
             },
             cache: 'no-store',
+            credentials: 'same-origin',
         });
         if (!response.ok) {
             targetSelect.innerHTML = '<option value="">Falha ao carregar</option>';
@@ -125,6 +126,7 @@ if (importFormEl) {
                 headers: {
                     'X-CSRFToken': csrfToken,
                 },
+                credentials: 'same-origin',
                 body: formData,
             });
 

@@ -11,7 +11,7 @@ from maps_view.views import get_hosts_status_data
 logger = logging.getLogger(__name__)
 
 
-@shared_task(queue="mapspro_default")
+@shared_task
 def broadcast_dashboard_snapshot() -> Dict[str, Any]:
     """
     Celery task that captures the current dashboard snapshot and pushes it to
@@ -36,7 +36,7 @@ def broadcast_dashboard_snapshot() -> Dict[str, Any]:
     }
 
 
-@shared_task(queue="mapspro_default")
+@shared_task
 def refresh_dashboard_cache_task() -> Dict[str, Any]:
     """
     Celery task para refresh de cache SWR do dashboard em background.
