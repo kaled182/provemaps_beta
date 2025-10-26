@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from zabbix_api.models import Device, FiberCable, Port, Site
+from inventory.models import Device, FiberCable, Port, Site
 
 
 class PortTrafficHistoryAPITests(TestCase):

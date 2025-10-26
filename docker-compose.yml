@@ -27,6 +27,9 @@ services:
       INIT_MIGRATE: "true"
       INIT_COLLECTSTATIC: "true"
       CELERY_STATUS_TIMEOUT: "6"
+      CELERY_PING_TIMEOUT: "2"
+      CELERY_METRICS_ENABLED: "true"
+      CELERY_METRICS_UPDATE_INTERVAL: "30"
     depends_on:
       redis:
         condition: service_healthy
@@ -64,6 +67,8 @@ services:
       # Garante que o worker espera os serviços antes de iniciar
       WAIT_FOR_DB: "true"
       WAIT_FOR_REDIS: "true"
+      CELERY_METRICS_ENABLED: "true"
+      CELERY_METRICS_UPDATE_INTERVAL: "30"
     depends_on:
       redis:
         condition: service_healthy
@@ -98,6 +103,8 @@ services:
       PYTHONUNBUFFERED: 1
       WAIT_FOR_DB: "true"
       WAIT_FOR_REDIS: "true"
+      CELERY_METRICS_ENABLED: "true"
+      CELERY_METRICS_UPDATE_INTERVAL: "30"
     depends_on:
       redis:
         condition: service_healthy

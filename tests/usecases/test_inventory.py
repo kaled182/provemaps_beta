@@ -2,7 +2,7 @@
 from django.test import TestCase
 from unittest.mock import patch, MagicMock
 from decimal import Decimal
-from zabbix_api.models import Site, Device, Port
+from inventory.models import Device, Port, Site
 from zabbix_api.usecases.inventory import get_device_ports, add_device_from_zabbix, InventoryNotFound, InventoryValidationError
 
 class GetDevicePortsTests(TestCase):

@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from zabbix_api.models import Device, Port
+from inventory.models import Device, Port
 from zabbix_api.domain.optical import _fetch_port_optical_snapshot
 from zabbix_api import tasks
 

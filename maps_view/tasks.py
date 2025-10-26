@@ -34,3 +34,52 @@ def broadcast_dashboard_snapshot() -> Dict[str, Any]:
         "broadcasted": broadcasted,
         "hosts_count": len(snapshot.get("hosts_status", [])),
     }
+
+
+@shared_task(queue="mapspro_default")
+def refresh_dashboard_cache_task() -> Dict[str, Any]:
+    """
+    Celery task para refresh de cache SWR do dashboard em background.
+    
+    Esta task é disparada automaticamente quando dados stale são servidos,
+    garantindo que o próximo request terá dados frescos.
+    
+    Returns:
+        Dict com status do refresh (success, hosts_count, duration)
+    """
+    import time
+    from maps_view.cache_swr import dashboard_cache
+
+    start = time.time()
+    
+    try:
+        # Busca dados frescos (sem usar cache)
+        fresh_data = get_hosts_status_data()
+        
+        # Atualiza cache
+        dashboard_cache.set_cached_data(fresh_data)
+        
+        duration = time.time() - start
+        hosts_count = len(fresh_data.get("hosts_status", []))
+        
+        logger.info(
+            "Dashboard cache refreshed successfully: %d hosts, %.2fs",
+            hosts_count,
+            duration,
+        )
+        
+        return {
+            "success": True,
+            "hosts_count": hosts_count,
+            "duration_seconds": round(duration, 3),
+        }
+        
+    except Exception as exc:
+        duration = time.time() - start
+        logger.exception("Failed to refresh dashboard cache: %s", exc)
+        return {
+            "success": False,
+            "error": str(exc),
+            "duration_seconds": round(duration, 3),
+        }
+

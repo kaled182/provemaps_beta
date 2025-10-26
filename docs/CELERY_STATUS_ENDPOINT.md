@@ -175,10 +175,47 @@ Quando disponível, contém:
 # prometheus.yml
 scrape_configs:
   - job_name: 'celery-status'
-    metrics_path: '/celery/status'
+    metrics_path: '/metrics'
     static_configs:
       - targets: ['app:8000']
 ```
+
+#### Métricas Exportadas
+
+O endpoint `/celery/status` atualiza métricas Prometheus (Gauges) definidas em `core/metrics_celery.py`. A coleta das métricas é exposta normalmente pelo endpoint global `/metrics` (via `prometheus_client` / `django-prometheus`). A atualização ocorre a cada requisição ao `/celery/status`. Para scraping direto das métricas use somente `/metrics`.
+
+Variável de controle:
+
+```bash
+CELERY_METRICS_ENABLED=true  # desabilite com 'false' para não atualizar gauges
+```
+
+Gauges disponíveis:
+
+| Nome | Descrição |
+|------|-----------|
+| `celery_worker_available` | 1 se o ping ao worker respondeu, 0 caso contrário |
+| `celery_status_latency_ms` | Latência da última chamada a `/celery/status` em ms |
+| `celery_worker_count` | Quantidade de workers respondendo à inspeção |
+| `celery_active_tasks` | Soma de tarefas ativas em todos os workers |
+| `celery_scheduled_tasks` | Soma de tarefas agendadas (ETA) |
+| `celery_reserved_tasks` | Soma de tarefas reservadas |
+
+Exemplo de scrape parcial (`/metrics`):
+
+```
+celery_worker_available 1
+celery_status_latency_ms 87.12
+celery_worker_count 1
+celery_active_tasks 0
+celery_scheduled_tasks 0
+celery_reserved_tasks 0
+```
+
+Boas práticas:
+- Combine com dashboard Grafana: painel de disponibilidade + latência.
+- Adicione alertas: `celery_worker_available == 0` por 3m ou `increase(celery_status_latency_ms[5m]) > 5000`.
+- Para reduzir sobrecarga, cachear resposta do endpoint ou usar uma task periódica futura para atualizar métricas sem chamadas externas.
 
 ### Healthcheck Docker
 
@@ -336,6 +373,10 @@ Este endpoint complementa os health checks existentes:
 - ✨ Endpoint inicial implementado
 - ✅ Testes unitários adicionados
 - 📝 Documentação criada
+- 📊 Métricas Prometheus integradas ao endpoint (`update_metrics`)
+- ⚡ Cache de 5s adicionado ao endpoint para reduzir latência
+- 🔄 Task periódica do beat (`update_celery_metrics_task`) para atualizar métricas a cada 30s
+- 🚨 Guia de alertas Prometheus criado (`docs/PROMETHEUS_ALERTS.md`)
 
 ---
 

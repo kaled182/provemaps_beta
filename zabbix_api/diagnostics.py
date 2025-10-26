@@ -15,7 +15,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .decorators import handle_api_errors
 from .guards import diagnostics_guard
-from .models import FiberCable, FiberEvent
+from inventory.models import FiberCable, FiberEvent
 
 
 @require_POST

@@ -47,15 +47,16 @@ O projeto usa `django-environ` para gerenciar variáveis de ambiente.
 
 ### 🏥 Health Checks & Observabilidade
 
-O projeto expõe três endpoints de saúde para monitoramento:
+O projeto expõe endpoints de saúde para monitoramento completo:
 
 | Endpoint | Propósito | Uso |
 |----------|-----------|-----|
 | `/healthz` | Health check completo (DB, cache, storage, métricas) | Load balancer, status geral |
 | `/ready` | Readiness probe (DB connectivity) | Kubernetes readinessProbe |
 | `/live` | Liveness probe (processo ativo) | Kubernetes livenessProbe |
+| `/celery/status` | Status dos workers Celery e filas | Monitoramento de tarefas assíncronas |
 
-**Variáveis de configuração:**
+**Variáveis de configuração Health Checks:**
 
 ```bash
 # Modo de severidade (padrão: true = falhas em qualquer check resultam em 503)
@@ -80,6 +81,22 @@ HEALTHCHECK_SYSTEM_METRICS=false
 HEALTHCHECK_DEBUG=false
 ```
 
+**Variáveis de configuração Celery Status:**
+
+```bash
+# Timeout para coleta de estatísticas detalhadas (default: 3s)
+CELERY_STATUS_TIMEOUT=6
+
+# Timeout para ping leve do worker (default: 2s)
+CELERY_PING_TIMEOUT=2
+
+# Habilitar métricas Prometheus do Celery (default: true)
+CELERY_METRICS_ENABLED=true
+
+# Intervalo de atualização periódica via beat (default: 30s)
+CELERY_METRICS_UPDATE_INTERVAL=30
+```
+
 **Exemplos de uso:**
 
 ```bash
@@ -89,12 +106,24 @@ HEALTHCHECK_STRICT=false python manage.py runserver
 # Desenvolvimento sem Redis (ignora falhas de cache)
 HEALTHCHECK_IGNORE_CACHE=true python manage.py runserver
 
-# Verificar status
+# Verificar status geral
 curl http://localhost:8000/healthz
 # Responde: HTTP 200 (ok) ou HTTP 503 (degraded)
+
+# Verificar status do Celery
+curl http://localhost:8000/celery/status
+# Retorna: worker disponível, estatísticas de filas, latência
 ```
 
-**Prometheus Metrics:** `/metrics/metrics` expõe ~200 métricas (GC, requests, DB, cache).
+**Prometheus Metrics:** `/metrics/metrics` expõe métricas Django + Celery incluindo:
+- `celery_worker_available` — Disponibilidade do worker (1=ok, 0=down)
+- `celery_status_latency_ms` — Latência da verificação
+- `celery_active_tasks` — Tarefas em execução
+- `celery_worker_count` — Número de workers ativos
+
+📖 **Documentação detalhada:**
+- [Endpoint Celery Status](./docs/CELERY_STATUS_ENDPOINT.md) — Guia completo com exemplos
+- [Alertas Prometheus](./docs/PROMETHEUS_ALERTS.md) — Regras de alerta e dashboards Grafana
 
 ---
 
@@ -130,7 +159,8 @@ curl http://localhost:8000/healthz
 - Cada importação aciona atualização automática no painel.  
 
 ### Métricas & Logs
-- `/metrics/` expõe métricas Prometheus (Django, MariaDB, Redis, Celery).  
+- `/metrics/metrics` expõe métricas Prometheus (Django, MariaDB, Redis, Celery).  
+- `/celery/status` fornece status em tempo real dos workers e filas (veja [docs](./docs/CELERY_STATUS_ENDPOINT.md)).
 - Logs estruturados em `logs/application.log` (rotação automática 5 MB).  
 - Análise de queries lentas:
   ```bash
@@ -142,7 +172,8 @@ curl http://localhost:8000/healthz
 - Fallback para HTTP periódico quando o socket estiver offline.  
 
 ### Checklist de Observabilidade
-- Conectar `/metrics/` ao Prometheus/Grafana.  
+- Conectar `/metrics/metrics` ao Prometheus/Grafana.  
+- Configurar alertas do Celery conforme [`docs/PROMETHEUS_ALERTS.md`](./docs/PROMETHEUS_ALERTS.md).
 - Automatizar análise de slow logs.  
 - Integrar APM opcional para rastreamento Celery/HTTP.  
 
@@ -187,8 +218,8 @@ pytest -v --disable-warnings
    ```
 3. Execute migrações e colete estáticos.  
 4. Suba via Gunicorn/Uvicorn (ASGI).  
-5. Inicie Celery Worker + Beat.  
-6. Aponte Prometheus para `/metrics/`.  
+5. Inicie Celery Worker + Beat (task periódica de métricas incluída).  
+6. Aponte Prometheus para `/metrics/metrics` e configure alertas (veja [`docs/PROMETHEUS_ALERTS.md`](./docs/PROMETHEUS_ALERTS.md)).  
 7. Configure rotação de logs e backups.
 
 Consulte [`DEPLOYMENT.md`](./DEPLOYMENT.md) para detalhes de automação e scripts.
@@ -216,8 +247,10 @@ Compress-Archive -Path * -DestinationPath dist\mapsprovefiber-backup.zip -Exclud
 | `python manage.py show_slow_queries` | Verifica queries lentas |
 | `python manage.py collectstatic` | Coleta arquivos estáticos |
 | `celery -A core worker -l info` | Inicia worker Celery |
-| `celery -A core beat -l info` | Inicia agendador Celery |
+| `celery -A core beat -l info` | Inicia agendador Celery (inclui task periódica de métricas) |
 | `python manage.py shell_plus` | Shell ORM interativo |
+| `scripts/check_celery.sh` | Script de monitoramento do status Celery (bash) |
+| `scripts/check_celery.ps1` | Script de monitoramento do status Celery (PowerShell) |
 
 ---
 
@@ -227,6 +260,8 @@ Compress-Archive -Path * -DestinationPath dist\mapsprovefiber-backup.zip -Exclud
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md) — Guia de contribuição  
 - [`SECURITY.md`](./SECURITY.md) — Políticas de segurança e disclosure  
 - [`DEPLOYMENT.md`](./DEPLOYMENT.md) — Estratégias de implantação  
+- [`docs/CELERY_STATUS_ENDPOINT.md`](./docs/CELERY_STATUS_ENDPOINT.md) — Endpoint de status Celery completo
+- [`docs/PROMETHEUS_ALERTS.md`](./docs/PROMETHEUS_ALERTS.md) — Alertas, queries e dashboards Prometheus/Grafana
 - `docs/performance_phase*.md` — Melhorias progressivas e observabilidade  
 - `docs/operations_checklist.md` — Checklist operacional  
 

@@ -1,6 +1,6 @@
 from celery import shared_task
 
-from .models import Port
+from inventory.models import Port
 from .domain.optical import _fetch_port_optical_snapshot
 
 
