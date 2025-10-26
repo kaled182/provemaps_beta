@@ -3,11 +3,6 @@
 {% block title %}Fiber Route Builder{% endblock %}
 {% block extra_head %}
 <style>
-  #builderMap {
-    height: 70vh;
-    width: 100%;
-  }
-
   .point-row:hover {
     background: #f1f5f9;
   }
@@ -15,48 +10,109 @@
 {% endblock %}
 {% block content %}
 <h2 class="text-2xl font-bold mb-4">Fiber Route Builder</h2>
-<div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-  <div class="lg:col-span-3 space-y-4">
-    <div id="builderMap" class="rounded border border-gray-300"></div>
-    <div class="flex gap-2 flex-wrap">
-      <select id="fiberSelect" class="border rounded px-2 py-1 text-sm"></select>
-      <button id="loadFiber" class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-500">Load</button>
-      <button type="button"
-              onclick="openKmlModal()"
-              class="bg-fuchsia-500 text-white px-3 py-1 rounded text-sm shadow-[0_0_12px_rgba(217,70,239,0.6)] hover:bg-fuchsia-400 hover:shadow-[0_0_16px_rgba(217,70,239,0.75)] transition">
-        Import KML
+
+<!-- Mapa em tela cheia com painéis flutuantes -->
+<div class="relative">
+  <div id="builderMap" class="rounded border border-gray-300" style="height: 80vh;"></div>
+  
+  <!-- Barra de ferramentas minimalista no topo do mapa -->
+  <div class="absolute top-4 left-4 right-4 bg-white/95 backdrop-blur rounded-lg shadow-lg p-3 flex gap-2 items-center z-10">
+    <span class="text-sm font-semibold text-gray-700">Fiber Route Builder</span>
+    <select id="fiberSelect" class="border rounded px-2 py-1 text-sm ml-4"></select>
+    <button id="loadFiber" class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-500">Load Cable</button>
+    
+    <span class="text-xs text-gray-500 ml-4">💡 Right-click anywhere for menu | Drag markers to adjust path</span>
+    
+    <!-- Botões para toggle dos painéis -->
+    <div class="ml-auto flex gap-2">
+      <button id="toggleRoutePoints" class="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-500">
+        📍 Route Points
       </button>
-      <button id="editFiber" disabled
-              class="bg-cyan-500 text-white px-3 py-1 rounded text-sm hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-cyan-300 transition">
-        Edit Cable
+      <button id="toggleHelp" class="bg-emerald-600 text-white px-3 py-1 rounded text-sm hover:bg-emerald-500">
+        ❓ Help
       </button>
-      <button id="clearPath" class="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-400">Clear</button>
-      <button id="savePath" class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-500" disabled>Save</button>
-      <button id="deleteCable" class="bg-yellow-600 text-white px-3 py-1 rounded text-sm hover:bg-yellow-500">Delete Cable</button>
     </div>
   </div>
-  <div class="space-y-4">
-    <div class="bg-white rounded shadow p-4">
-      <h3 class="font-semibold mb-2">Route Points</h3>
-      <ol id="pointsList" class="text-sm space-y-1 max-h-64 overflow-auto"></ol>
-      <p class="text-xs text-gray-500 mt-2">
-        Click the map to add intermediate points. Drag a marker to adjust its position.
-      </p>
-      <p class="text-xs text-gray-500">
-        Double-click an intermediate marker to remove it.
-      </p>
-      <div class="mt-2 text-sm">
-        Estimated distance: <span id="distanceKm">0</span> km
+  
+  <!-- Painel de Route Points (retrátil) -->
+  <div id="routePointsPanel" class="absolute top-24 right-4 bg-white/95 backdrop-blur rounded-lg shadow-lg p-4 w-80 z-10 hidden">
+    <div class="flex justify-between items-center mb-2">
+      <h3 class="font-semibold">Route Points</h3>
+      <button onclick="document.getElementById('routePointsPanel').classList.add('hidden')" class="text-gray-500 hover:text-gray-700">✕</button>
+    </div>
+    <ol id="pointsList" class="text-sm space-y-1 max-h-64 overflow-auto"></ol>
+    <p class="text-xs text-gray-500 mt-2">
+      Click the map to add intermediate points. Drag a marker to adjust its position.
+    </p>
+    <p class="text-xs text-gray-500">
+      Double-click an intermediate marker to remove it.
+    </p>
+    <div class="mt-2 text-sm font-semibold">
+      Estimated distance: <span id="distanceKm">0</span> km
+    </div>
+  </div>
+  
+  <!-- Painel de Help (retrátil) -->
+  <div id="helpPanel" class="absolute top-24 right-4 bg-white/95 backdrop-blur rounded-lg shadow-lg p-4 w-80 z-10 hidden">
+    <div class="flex justify-between items-center mb-2">
+      <h3 class="font-semibold">Help</h3>
+      <button onclick="document.getElementById('helpPanel').classList.add('hidden')" class="text-gray-500 hover:text-gray-700">✕</button>
+    </div>
+    <ul class="list-disc ml-4 text-xs space-y-1">
+      <li>Right-click anywhere on map to open context menu</li>
+      <li>Right-click on a cable loads it for editing</li>
+      <li>Menu options change based on selected cable</li>
+      <li>Drag markers to adjust cable path</li>
+      <li>Double-click marker to remove intermediate point</li>
+      <li>All cables load automatically on page open</li>
+    </ul>
+  </div>
+  
+  <!-- Menu de contexto (botão direito) -->
+  <!-- VERSÃO ATUALIZADA 2025-10-26 16:32 -->
+  <div id="contextMenu" class="absolute bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-20 hidden" style="min-width: 220px;">
+    <!-- Informação do cabo selecionado (se houver) -->
+    <div id="contextCableInfo" class="px-4 py-2 bg-blue-50 border-b border-blue-200 text-xs font-semibold text-blue-700 hidden">
+      <span id="contextCableName"></span>
+    </div>
+    
+    <!-- Opções para CRIANDO novo cabo (aparece quando tem pontos mas não tem activeFiberId) -->
+    <div id="contextCreatingOptions" class="hidden">
+      <div class="px-4 py-2 bg-green-50 border-b border-green-200 text-xs font-semibold text-green-700">
+        ➕ Creating New Cable
       </div>
+      <button id="contextSaveNewCable" class="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2">
+        <span>✏️</span> Assign the Cable
+      </button>
+      <button id="contextClearNew" class="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2">
+        <span>🧹</span> Clear Points
+      </button>
     </div>
-    <div class="bg-white rounded shadow p-4">
-      <h3 class="font-semibold mb-2">Help</h3>
-      <ul class="list-disc ml-4 text-xs space-y-1">
-        <li>The first two points can represent origin and destination when no saved path exists.</li>
-        <li>Add intermediate points to reflect the physical cable path.</li>
-        <li>Distance uses the Haversine formula as a geodesic approximation.</li>
-      </ul>
+    
+    <!-- Opções condicionais (aparecem só se cabo selecionado) -->
+    <div id="contextSelectedOptions" class="hidden">
+      <button id="contextEditCable" class="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2">
+        <span>✏️</span> Assign the Cable
+      </button>
+      <button id="contextSavePath" class="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2">
+        <span>💾</span> Save Path Changes
+      </button>
+      <button id="contextDeleteCable" class="w-full text-left px-4 py-2 hover:bg-red-50 text-sm flex items-center gap-2 text-red-600">
+        <span>🗑️</span> Delete Selected Cable
+      </button>
     </div>
+    
+    <!-- Opções gerais (Import - aparece quando mapa vazio) -->
+    <div id="contextGeneralOptions">
+      <button id="contextImportKML" class="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2">
+        <span>📥</span> Import KML
+      </button>
+    </div>
+    
+    <!-- Opções de utilitários (sempre visíveis) -->
+    <button id="contextLoadAll" class="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2">
+      <span>🔄</span> <span id="contextLoadAllText">Reload All Cables</span>
+    </button>
   </div>
 </div>
 
@@ -65,7 +121,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/partials/import_kml.js' %}"></script>
-<script defer src="{% static 'js/fiber_route_builder.js' %}"></script>
+<script src="{% static 'js/partials/import_kml.js' %}?v=20251026-1"></script>
+<script defer src="{% static 'js/fiber_route_builder.js' %}?v=20251026-1"></script>
 <script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&callback=initMap" async defer></script>
 {% endblock %}

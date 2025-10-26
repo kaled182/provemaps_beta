@@ -109,6 +109,8 @@ def manage_environment(request):
         form = EnvConfigForm(request.POST)
         if form.is_valid():
             cleaned = form.cleaned_data
+
+            # 1. Salva no arquivo .env (para desenvolvimento local)
             payload = {
                 "SECRET_KEY": cleaned["secret_key"],
                 "DEBUG": "True" if cleaned["debug"] else "False",
@@ -118,17 +120,56 @@ def manage_environment(request):
                 "ZABBIX_API_KEY": cleaned["zabbix_api_key"],
                 "GOOGLE_MAPS_API_KEY": cleaned["google_maps_api_key"],
                 "ALLOWED_HOSTS": cleaned["allowed_hosts"],
-                "ENABLE_DIAGNOSTIC_ENDPOINTS": "True" if cleaned["enable_diagnostics"] else "False",
+                "ENABLE_DIAGNOSTIC_ENDPOINTS": (
+                    "True" if cleaned["enable_diagnostics"] else "False"
+                ),
             }
             env_manager.write_values(payload)
+
+            # 2. Salva no banco de dados (para Docker/produção)
+            from .models import FirstTimeSetup
+            from .services.config_loader import clear_runtime_config_cache
+
+            # Determina auth_type baseado nos campos preenchidos
+            auth_type = "token" if cleaned["zabbix_api_key"] else "login"
+
+            # Atualiza ou cria configuração
+            api_key = (
+                cleaned["zabbix_api_key"] if auth_type == "token" else None
+            )
+            user = (
+                cleaned["zabbix_api_user"] if auth_type == "login" else None
+            )
+            password = (
+                cleaned["zabbix_api_password"]
+                if auth_type == "login"
+                else None
+            )
+
+            FirstTimeSetup.objects.update_or_create(
+                configured=True,
+                defaults={
+                    "company_name": "MapsproveFiber",
+                    "zabbix_url": cleaned["zabbix_api_url"],
+                    "auth_type": auth_type,
+                    "zabbix_api_key": api_key,
+                    "zabbix_user": user,
+                    "zabbix_password": password,
+                    "maps_api_key": cleaned["google_maps_api_key"],
+                }
+            )
+
+            # Limpa cache de configuração
+            clear_runtime_config_cache()
             runtime_settings.reload_config()
+
             from zabbix_api.services.zabbix_service import clear_token_cache
 
             clear_token_cache()
             reload_diagnostics_flag_cache()
             messages.success(
                 request,
-                "Environment saved successfully. Restart the server to apply the new values.",
+                "Configuration saved successfully. Changes are now active!",
             )
             return redirect("setup_app:manage_environment")
     else:
@@ -138,11 +179,18 @@ def manage_environment(request):
                 "debug": current_values.get("DEBUG", "").lower() == "true",
                 "zabbix_api_url": current_values.get("ZABBIX_API_URL", ""),
                 "zabbix_api_user": current_values.get("ZABBIX_API_USER", ""),
-                "zabbix_api_password": current_values.get("ZABBIX_API_PASSWORD", ""),
+                "zabbix_api_password": current_values.get(
+                    "ZABBIX_API_PASSWORD", ""
+                ),
                 "zabbix_api_key": current_values.get("ZABBIX_API_KEY", ""),
-                "google_maps_api_key": current_values.get("GOOGLE_MAPS_API_KEY", ""),
+                "google_maps_api_key": current_values.get(
+                    "GOOGLE_MAPS_API_KEY", ""
+                ),
                 "allowed_hosts": current_values.get("ALLOWED_HOSTS", ""),
-                "enable_diagnostics": current_values.get("ENABLE_DIAGNOSTIC_ENDPOINTS", "").lower() == "true",
+                "enable_diagnostics": (
+                    current_values.get("ENABLE_DIAGNOSTIC_ENDPOINTS", "").lower()
+                    == "true"
+                ),
             }
         )
 

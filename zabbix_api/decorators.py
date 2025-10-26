@@ -23,5 +23,23 @@ def handle_api_errors(func: Callable) -> Callable:
     return wrapper
 
 
-__all__ = ["handle_api_errors"]
+def api_login_required(func: Callable) -> Callable:
+    """
+    Decorador para APIs REST que verifica autenticação.
+    Retorna JSON 401 em vez de redirecionar para página de login.
+    """
+
+    @wraps(func)
+    def wrapper(request, *args: Any, **kwargs: Any):
+        if not request.user.is_authenticated:
+            return JsonResponse(
+                {"error": "Authentication required", "detail": "You must be logged in to access this resource"},
+                status=401
+            )
+        return func(request, *args, **kwargs)
+
+    return wrapper
+
+
+__all__ = ["handle_api_errors", "api_login_required"]
 

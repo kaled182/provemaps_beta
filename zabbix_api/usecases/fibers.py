@@ -100,6 +100,7 @@ def create_fiber_from_kml(
     origin_port_id: str,
     dest_port_id: str,
     kml_file,
+    single_port: bool = False,
 ) -> Dict[str, object]:
     if FiberCable.objects.filter(name__iexact=name).exists():
         raise FiberValidationError("Ja existe um cabo com este nome")
@@ -111,10 +112,13 @@ def create_fiber_from_kml(
         raise FiberValidationError("Porta de origem nao pertence ao device selecionado")
     if str(dest_port.device_id) != str(dest_device_id):
         raise FiberValidationError("Porta de destino nao pertence ao device selecionado")
-    if origin_port == dest_port:
-        raise FiberValidationError("Portas de origem e destino devem ser diferentes")
-    if origin_port.device_id == dest_port.device_id:
-        raise FiberValidationError("Devices de origem e destino devem ser diferentes")
+    
+    # Validação de portas diferentes apenas se não for single port mode
+    if not single_port:
+        if origin_port == dest_port:
+            raise FiberValidationError("Portas de origem e destino devem ser diferentes")
+        if origin_port.device_id == dest_port.device_id:
+            raise FiberValidationError("Devices de origem e destino devem ser diferentes")
 
     coords = parse_kml_coordinates(kml_file)
 
@@ -263,16 +267,21 @@ def fiber_detail_payload(cable: FiberCable) -> Dict[str, object]:
             "lat": float(origin_site.latitude) if origin_site and origin_site.latitude is not None else None,
             "lng": float(origin_site.longitude) if origin_site and origin_site.longitude is not None else None,
             "device": cable.origin_port.device.name,
+            "device_id": cable.origin_port.device.id,
             "port": cable.origin_port.name,
+            "port_id": cable.origin_port.id,
         },
         "destination": {
             "site": dest_site.name if dest_site else None,
             "lat": float(dest_site.latitude) if dest_site and dest_site.latitude is not None else None,
             "lng": float(dest_site.longitude) if dest_site and dest_site.longitude is not None else None,
             "device": cable.destination_port.device.name,
+            "device_id": cable.destination_port.device.id,
             "port": cable.destination_port.name,
+            "port_id": cable.destination_port.id,
         },
         "path": cable.path_coordinates or [],
+        "single_port": cable.origin_port == cable.destination_port,
     }
 
 
@@ -288,6 +297,54 @@ def update_fiber_path(cable: FiberCable, raw_path) -> Dict[str, object]:
     cable.save(update_fields=["path_coordinates", "length_km"])
     invalidate_fiber_cache()
     return {"status": "ok", "length_km": length_km, "points": len(sanitized)}
+
+
+
+
+def update_fiber_metadata(
+    cable: FiberCable,
+    name: Optional[str] = None,
+    origin_port_id: Optional[int] = None,
+    dest_port_id: Optional[int] = None,
+) -> Dict[str, object]:
+    """
+    Atualiza metadados de um cabo (nome, portas origem/destino).
+    """
+    updated_fields = []
+    
+    if name is not None:
+        name = name.strip()
+        if not name:
+            raise FiberValidationError("Nome não pode ser vazio")
+        cable.name = name
+        updated_fields.append("name")
+    
+    if origin_port_id is not None:
+        try:
+            origin_port = Port.objects.get(id=origin_port_id)
+        except Port.DoesNotExist as exc:
+            raise FiberValidationError(f"Porta de origem {origin_port_id} não encontrada") from exc
+        cable.origin_port = origin_port
+        updated_fields.append("origin_port")
+    
+    if dest_port_id is not None:
+        try:
+            dest_port = Port.objects.get(id=dest_port_id)
+        except Port.DoesNotExist as exc:
+            raise FiberValidationError(f"Porta de destino {dest_port_id} não encontrada") from exc
+        cable.destination_port = dest_port
+        updated_fields.append("destination_port")
+    
+    if updated_fields:
+        cable.save(update_fields=updated_fields)
+        invalidate_fiber_cache()
+    
+    return {
+        "status": "ok",
+        "updated_fields": updated_fields,
+        "cable_id": cable.id,
+        "name": cable.name,
+    }
 
 
 def delete_fiber(cable: FiberCable) -> None:

@@ -1,4 +1,4 @@
-version: "3.9"
+﻿version: "3.9"
 
 services:
   web:
@@ -23,9 +23,9 @@ services:
       DB_PASSWORD: app
       REDIS_URL: redis://redis:6379/1
       PYTHONUNBUFFERED: 1
-      # Inicializações automatizadas no primeiro start
       INIT_MIGRATE: "true"
       INIT_COLLECTSTATIC: "true"
+      INIT_ENSURE_SUPERUSER: "true"
       CELERY_STATUS_TIMEOUT: "6"
       CELERY_PING_TIMEOUT: "2"
       CELERY_METRICS_ENABLED: "true"
@@ -36,17 +36,14 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      # Mais tolerante a falhas temporárias (usa Python + fallback SSL)
-      test: ["CMD-SHELL", "python -c \"\nimport urllib.request, urllib.error, ssl, sys\nssl._create_default_https_context = ssl._create_unverified_context\ntry:\n    resp = urllib.request.urlopen('http://localhost:8000/ready', timeout=5)\n    sys.exit(0 if resp.getcode() == 200 else 1)\nexcept Exception:\n    sys.exit(1)\n\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; resp = urllib.request.urlopen('http://localhost:8000/ready', timeout=5); exit(0 if resp.getcode() == 200 else 1)\" || exit 1"]
       interval: 30s
       timeout: 15s
       retries: 3
       start_period: 40s
     restart: unless-stopped
     volumes:
-      # monta o entrypoint dentro do container
       - ./docker-entrypoint.sh:/docker-entrypoint.sh:ro
-      # código local montado para desenvolvimento  
       - .:/app
       - ./logs:/app/logs
 
@@ -64,7 +61,6 @@ services:
       DB_PASSWORD: app
       REDIS_URL: redis://redis:6379/1
       PYTHONUNBUFFERED: 1
-      # Garante que o worker espera os serviços antes de iniciar
       WAIT_FOR_DB: "true"
       WAIT_FOR_REDIS: "true"
       CELERY_METRICS_ENABLED: "true"
@@ -75,7 +71,6 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      # Tenta inspect ping, se falhar verifica processo ativo
       test: ["CMD-SHELL", "celery -A core.celery_app inspect ping -d celery@$$HOSTNAME -t 5 | grep -qi pong || ps aux | grep -q '[c]elery worker'"]
       interval: 30s
       timeout: 10s
@@ -124,7 +119,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6380:6379"  # Porta externa alterada para 6380 para evitar conflitos
+      - "6380:6379"
     command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -144,7 +139,7 @@ services:
       MARIADB_ROOT_PASSWORD: root
       MARIADB_INITDB_SKIP_TZINFO: 1
     ports:
-      - "3307:3306"  # Porta externa alterada para 3307 para evitar conflitos
+      - "3307:3306"
     volumes:
       - mariadb_data:/var/lib/mysql
       - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro

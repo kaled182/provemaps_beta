@@ -145,7 +145,7 @@ class InventoryModelsRelationshipTests(TestCase):
         self.assertEqual(fiber.origin_port, port_a)
         self.assertEqual(fiber.destination_port, port_b)
         self.assertEqual(fiber.status, "up")
-        self.assertEqual(str(fiber.length_km), "10.50")
+        self.assertEqual(float(fiber.length_km), 10.5)
 
         # Verify reverse relationships
         self.assertIn(fiber, port_a.fiber_origin.all())

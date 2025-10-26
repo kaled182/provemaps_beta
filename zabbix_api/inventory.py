@@ -8,7 +8,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseBadRequest, JsonResponse
 from django.views.decorators.http import require_GET, require_POST
 
-from .decorators import handle_api_errors
+from .decorators import api_login_required, handle_api_errors
 from .guards import diagnostics_guard, staff_guard
 from .services.zabbix_service import zabbix_request as _zabbix_request
 from .usecases import inventory as inventory_uc
@@ -142,13 +142,13 @@ def api_port_traffic_history(request, port_id: int):
 
 # FIBERS (implementações mínimas)
 @require_GET
-@login_required
+@api_login_required
 @handle_api_errors
 def api_fiber_cables(request):
     return JsonResponse({"fibers": fiber_uc.list_fiber_cables()})
 
 @require_GET
-@login_required
+@api_login_required
 @handle_api_errors
 def api_fiber_detail(request, cable_id: int):
     try:
