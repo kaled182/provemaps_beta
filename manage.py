@@ -5,8 +5,15 @@ import sys
 
 
 def main():
-    """Run administrative tasks."""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
+    """Run administrative tasks.
+
+    Prefer the new split settings module. Falls back to 'settings.dev' if
+    DJANGO_SETTINGS_MODULE not provided. Old 'core.settings' deprecated.
+    """
+    os.environ.setdefault(
+        'DJANGO_SETTINGS_MODULE',
+        os.getenv('DJANGO_SETTINGS_MODULE', 'settings.dev')
+    )
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:

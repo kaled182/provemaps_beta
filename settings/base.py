@@ -15,8 +15,11 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 
 if not SECRET_KEY:
     settings_module = os.getenv("DJANGO_SETTINGS_MODULE", "")
+    # Permite chave insegura automática em ambientes de teste e desenvolvimento
     if settings_module.endswith(".test"):
         SECRET_KEY = "test-only-insecure-key"
+    elif settings_module.endswith(".dev"):
+        SECRET_KEY = "dev-only-insecure-key-for-development"
     elif os.getenv("DEBUG", "False").lower() == "true":
         SECRET_KEY = "dev-only-insecure-key-for-development"
     else:
@@ -78,7 +81,7 @@ INSTALLED_APPS = [
     "channels",
 
     # Apps do projeto
-    "core",
+    "core.apps.CoreConfig",
     "maps_view",
     # Inventário de rede (modelos migrados de zabbix_api)
     "inventory",
@@ -228,6 +231,9 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Versão para cache bust (sobreposta em dev/prod via env STATIC_ASSET_VERSION)
+STATIC_ASSET_VERSION = os.getenv("STATIC_ASSET_VERSION", "20251026.1")
+
 # -----------------------------------------------------
 # Templates (com cache em produção)
 # -----------------------------------------------------
@@ -242,6 +248,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "setup_app.context_processors.static_version",
             ],
         },
     },
