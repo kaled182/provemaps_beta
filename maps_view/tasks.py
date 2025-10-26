@@ -6,7 +6,7 @@ from typing import Dict, Any
 from celery import shared_task
 
 from maps_view.realtime.publisher import broadcast_dashboard_status
-from maps_view.views import get_hosts_status_data
+from maps_view.services import get_hosts_status_data
 
 logger = logging.getLogger(__name__)
 

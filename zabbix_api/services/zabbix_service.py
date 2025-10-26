@@ -83,15 +83,19 @@ def _current_zabbix_config():
 
 def get_host_performance_metrics(hostid):
     """
-    Obt?m m?tricas de performance b?sicas de um host.
-
-    Observa??o: Zabbix 'search' n?o aceita lista; para evitar erro,
-    fazemos m?ltiplas consultas por termos e unimos os resultados.
+    Obtém métricas de performance básicas de um host.
+    
+    OTIMIZADO: Usa batching para evitar N+1 queries.
+    Faz uma única chamada history.get com todos os itemids.
+    
+    Observação: Zabbix 'search' não aceita lista; para evitar erro,
+    fazemos múltiplas consultas por termos e unimos os resultados.
     """
     terms = ["system.cpu", "vm.memory", "vfs.fs", "net.if", "disk", "memory", "cpu"]
     seen = set()
     items = []
 
+    # Step 1: Coletar todos os items (múltiplas buscas necessárias)
     for term in terms:
         res = zabbix_request(
             "item.get",
@@ -113,22 +117,49 @@ def get_host_performance_metrics(hostid):
     if not items:
         return None
 
-    latest = []
+    # Step 2: BATCHING - Coletar todos os itemids e fazer UMA chamada history.get
+    # Agrupar por value_type para fazer chamadas mais eficientes
+    items_by_type = {}
     for it in items:
-        hist = zabbix_request(
+        value_type = it["value_type"]
+        if value_type not in items_by_type:
+            items_by_type[value_type] = []
+        items_by_type[value_type].append(it)
+
+    # Step 3: Fazer uma chamada history.get por value_type (muito melhor que N chamadas)
+    history_map = {}
+    for value_type, typed_items in items_by_type.items():
+        itemids = [it["itemid"] for it in typed_items]
+        
+        hist_results = zabbix_request(
             "history.get",
             {
-                "itemids": it["itemid"],
-                "history": it["value_type"],
+                "itemids": itemids,
+                "history": value_type,
                 "sortfield": "clock",
                 "sortorder": "DESC",
-                "limit": 1,
+                "limit": len(itemids),  # Pega o valor mais recente de cada item
             },
-        )
-        if hist:
-            it["latest_value"] = hist[0]["value"]
-            it["latest_timestamp"] = hist[0]["clock"]
+        ) or []
+        
+        # Criar mapa itemid -> último valor
+        for hist in hist_results:
+            itemid = hist.get("itemid")
+            if itemid and itemid not in history_map:
+                history_map[itemid] = {
+                    "value": hist.get("value"),
+                    "clock": hist.get("clock")
+                }
+
+    # Step 4: Enriquecer items com valores históricos
+    latest = []
+    for it in items:
+        hist_data = history_map.get(it["itemid"])
+        if hist_data:
+            it["latest_value"] = hist_data["value"]
+            it["latest_timestamp"] = hist_data["clock"]
         latest.append(it)
+    
     return latest
 
 
@@ -177,7 +208,12 @@ def format_host_data(host_data):
 
 
 def get_host_network_details(hostid):
-    """Informa??es de rede + ?ltimos valores relevantes + problemas do host."""
+    """
+    Informações de rede + últimos valores relevantes + problemas do host.
+    
+    OTIMIZADO: Usa batching para evitar N+1 queries.
+    Faz uma única chamada history.get com todos os itemids.
+    """
     try:
         host_info = zabbix_request(
             "host.get",
@@ -193,7 +229,8 @@ def get_host_network_details(hostid):
             return None
 
         host = host_info[0]
-        # Coleta alguns itens de rede comuns com m?ltiplas buscas seguras
+        
+        # Step 1: Coleta itens de rede comuns com múltiplas buscas seguras
         terms = ["net.if", "agent.ping", "icmpping", "system.uptime"]
         items = []
         seen = set()
@@ -215,27 +252,69 @@ def get_host_network_details(hostid):
                     seen.add(iid)
                     items.append(it)
 
-        network_data = {}
+        # Step 2: BATCHING - Agrupar items por value_type
+        items_by_type = {}
         for it in items:
+            value_type = it["value_type"]
+            if value_type not in items_by_type:
+                items_by_type[value_type] = []
+            items_by_type[value_type].append(it)
+
+        # Step 3: Fazer uma chamada history.get por value_type
+        # (em vez de N chamadas individuais)
+        history_map = {}
+        for value_type, typed_items in items_by_type.items():
+            itemids = [it["itemid"] for it in typed_items]
+            
             try:
-                hist = zabbix_request(
+                hist_results = zabbix_request(
                     "history.get",
                     {
-                        "itemids": it["itemid"],
-                        "history": it["value_type"],
+                        "itemids": itemids,
+                        "history": value_type,
                         "sortfield": "clock",
                         "sortorder": "DESC",
-                        "limit": 1,
+                        "limit": len(itemids),
                     },
-                )
-                if hist:
-                    network_data[it["key_"]] = {"name": it["name"], "value": hist[0]["value"], "timestamp": hist[0]["clock"]}
+                ) or []
+                
+                # Criar mapa itemid -> último valor
+                for hist in hist_results:
+                    itemid = hist.get("itemid")
+                    if itemid and itemid not in history_map:
+                        history_map[itemid] = {
+                            "value": hist.get("value"),
+                            "clock": hist.get("clock")
+                        }
             except Exception:
                 continue
 
-        problems = zabbix_request("problem.get", {"output": ["eventid", "name", "severity", "clock"], "hostids": hostid, "recent": True}) or []
+        # Step 4: Construir network_data usando o mapa
+        network_data = {}
+        for it in items:
+            hist_data = history_map.get(it["itemid"])
+            if hist_data:
+                network_data[it["key_"]] = {
+                    "name": it["name"],
+                    "value": hist_data["value"],
+                    "timestamp": hist_data["clock"]
+                }
 
-        return {"host_info": host, "network_data": network_data, "problems": problems}
+        # Step 5: Buscar problemas (única chamada)
+        problems = zabbix_request(
+            "problem.get",
+            {
+                "output": ["eventid", "name", "severity", "clock"],
+                "hostids": hostid,
+                "recent": True
+            }
+        ) or []
+
+        return {
+            "host_info": host,
+            "network_data": network_data,
+            "problems": problems
+        }
     except Exception:
         return None
 
