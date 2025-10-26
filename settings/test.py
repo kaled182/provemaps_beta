@@ -10,6 +10,8 @@ from .base import *  # noqa
 # -----------------------------------------------------
 DEBUG = False
 TESTING = True
+# Evita redirecionamentos HTTP->HTTPS em testes
+SECURE_SSL_REDIRECT = False
 
 # Banco de dados em memória
 DATABASES = {
