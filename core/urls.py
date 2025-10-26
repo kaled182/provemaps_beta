@@ -20,6 +20,7 @@ from django.shortcuts import redirect
 from django.conf import settings
 from django.conf.urls.static import static
 from django.views.generic import RedirectView
+from typing import Any
 
 # HTML views routed through core/views.py
 from core import views as core_views
@@ -27,17 +28,18 @@ from core import views as core_views
 from core import views_health as health_views
 
 
-def redirect_to_maps_view(request):
-    if request.method == 'GET':
-        return redirect('maps_view/dashboard')
-    else:
-        return redirect('maps_view/dashboard')
+def redirect_to_maps_view(request: Any):
+    """Redireciona raiz para dashboard."""
+    return redirect('maps_view/dashboard')
 
 
-urlpatterns = [
+urlpatterns: list[Any] = [
     path('', redirect_to_maps_view),
     path('admin/', admin.site.urls),
-    path('accounts/', include('django.contrib.auth.urls')),  # auth (login/logout/password views)
+    path(
+        'accounts/',
+        include('django.contrib.auth.urls'),
+    ),
     path('metrics/', include('django_prometheus.urls')),
 
     # Apps
@@ -47,19 +49,40 @@ urlpatterns = [
     path('routes_builder/', include('routes_builder.urls')),
 
     # HTML page for Zabbix lookup (rendered via core/views.py)
-    path('zabbix/lookup/', core_views.zabbix_lookup_page, name='zabbix_lookup'),
+    path(
+        'zabbix/lookup/',
+        core_views.zabbix_lookup_page,
+        name='zabbix_lookup'
+    ),
 
     # Health checks
-    path('healthz', health_views.healthz, name='healthz'),               # comprehensive (strict/non-strict, ignore cache support)
-    path('ready', health_views.healthz_ready, name='healthz_ready'),     # readiness probe
-    path('live', health_views.healthz_live, name='healthz_live'),        # liveness probe
+    path('healthz', health_views.healthz, name='healthz'),
+    path('ready', health_views.healthz_ready, name='healthz_ready'),
+    path('live', health_views.healthz_live, name='healthz_live'),
+    path(
+        'celery/status',
+        health_views.celery_status,
+        name='celery_status'
+    ),
 
     # Favicon
-    path('favicon.ico', RedirectView.as_view(url='/static/favicon.ico', permanent=True)),
+    path(
+        'favicon.ico',
+        RedirectView.as_view(url='/static/favicon.ico', permanent=True)
+    ),
 ]
 
 # Serve static files during development
 if settings.DEBUG:
-    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
-    urlpatterns += static(settings.STATIC_URL, document_root=settings.BASE_DIR / 'maps_view' / 'static')
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(
+        settings.STATIC_URL,
+        document_root=settings.STATIC_ROOT
+    )
+    urlpatterns += static(
+        settings.STATIC_URL,
+        document_root=settings.BASE_DIR / 'maps_view' / 'static'
+    )
+    urlpatterns += static(
+        settings.MEDIA_URL,
+        document_root=settings.MEDIA_ROOT
+    )

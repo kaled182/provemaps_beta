@@ -246,16 +246,9 @@ TEMPLATES = [
 ]
 
 if not DEBUG:
-    # Ativa template caching em produção
-    TEMPLATES[0]["OPTIONS"]["loaders"] = [
-        (
-            "django.template.loaders.cached.Loader",
-            [
-                "django.template.loaders.filesystem.Loader",
-                "django.template.loaders.app_directories.Loader",
-            ],
-        )
-    ]
+    # Ativa template caching em produção (ajuste realizado somente em settings/prod.py)
+    # Mantemos APP_DIRS=True aqui e delegamos loaders para o arquivo de produção.
+    pass
 
 # -----------------------------------------------------
 # Health Check Configuration

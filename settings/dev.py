@@ -105,7 +105,6 @@ if DEBUG:
     
     # Template debugging
     TEMPLATES[0]["OPTIONS"]["debug"] = True
-    TEMPLATES[0]["OPTIONS"]["auto_reload"] = True
 
 # -----------------------------------------------------
 # Development Tools (Optional)
