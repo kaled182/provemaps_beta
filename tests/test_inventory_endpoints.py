@@ -35,8 +35,8 @@ class PortTrafficHistoryAPITests(TestCase):
         self.port.zabbix_item_id_traffic_out = "222"
         self.port.save(
             update_fields=[
-                "zabbix_item_id_trafego_in",
-                "zabbix_item_id_trafego_out",
+                "zabbix_item_id_traffic_in",
+                "zabbix_item_id_traffic_out",
             ]
         )
 

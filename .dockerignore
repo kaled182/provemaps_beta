@@ -1,0 +1,144 @@
+# ====================================================
+# 🐳 Docker Build Context Exclusions
+# ====================================================
+# Prevent local configuration and development files from
+# being copied into Docker images
+# ====================================================
+
+# ----------------------------------------------------
+# Git
+# ----------------------------------------------------
+.git
+.gitignore
+.gitattributes
+
+# ----------------------------------------------------
+# Docker
+# ----------------------------------------------------
+.dockerignore
+docker-compose*.yml
+dockerfile
+Dockerfile
+
+# ----------------------------------------------------
+# Python
+# ----------------------------------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+.pytest_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ----------------------------------------------------
+# IDEs / Editors
+# ----------------------------------------------------
+.vscode/
+.idea/
+*.sublime-*
+*.swp
+*.swo
+*~
+
+# ----------------------------------------------------
+# OS Specific
+# ----------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ----------------------------------------------------
+# Local Environment Files (CRITICAL)
+# ----------------------------------------------------
+# These contain host-specific settings that should NOT
+# be used inside containers. Docker Compose will provide
+# the correct environment variables via the 'environment'
+# section in docker-compose.yml
+.env
+.env.*
+!.env.example
+
+# ----------------------------------------------------
+# Logs and Runtime Data
+# ----------------------------------------------------
+logs/
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# ----------------------------------------------------
+# Media and Static Files
+# ----------------------------------------------------
+# These are generated/collected at runtime or build time
+media/
+staticfiles/
+node_modules/
+
+# ----------------------------------------------------
+# Database Files
+# ----------------------------------------------------
+# SQLite databases should not be in the image
+db.sqlite3
+db.sqlite3-journal
+*.db
+
+# ----------------------------------------------------
+# Documentation and Project Files
+# ----------------------------------------------------
+README.md
+CONTRIBUTING.md
+CHANGELOG*.md
+DEPLOYMENT.md
+QUICKSTART*.md
+TUTORIAL*.md
+STATUS*.md
+SECURITY.md
+COMANDOS_RAPIDOS.md
+AGENTS.md
+API_DOCUMENTATION.md
+docs/
+legacy_backup/
+
+# ----------------------------------------------------
+# Test Files
+# ----------------------------------------------------
+tests/
+test_*.sh
+conftest.py
+pytest.ini
+.pytest_cache/
+
+# ----------------------------------------------------
+# CI/CD and Scripts
+# ----------------------------------------------------
+.github/
+scripts/
+makefile
+
+# ----------------------------------------------------
+# Other
+# ----------------------------------------------------
+celerybeat-schedule
+celerybeat.pid
+package.json
+package-lock.json
+pyproject.toml

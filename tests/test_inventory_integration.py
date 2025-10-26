@@ -220,20 +220,22 @@ class InventoryModelsRelationshipTests(TestCase):
         port = Port.objects.create(
             device=device,
             name="Test Port",
-            zabbix_item_id_trafego_in="item_in_123",
-            zabbix_item_id_trafego_out="item_out_456",
+            zabbix_item_id_traffic_in="item_in_123",
+            zabbix_item_id_traffic_out="item_out_456",
         )
 
-        # Test English property names (backwards compatibility)
+        # Test field values directly
         self.assertEqual(port.zabbix_item_id_traffic_in, "item_in_123")
         self.assertEqual(port.zabbix_item_id_traffic_out, "item_out_456")
 
-        # Test setters
+        # Test updating via English field names
         port.zabbix_item_id_traffic_in = "new_in_789"
         port.zabbix_item_id_traffic_out = "new_out_012"
+        port.save()
 
-        self.assertEqual(port.zabbix_item_id_trafego_in, "new_in_789")
-        self.assertEqual(port.zabbix_item_id_trafego_out, "new_out_012")
+        port.refresh_from_db()
+        self.assertEqual(port.zabbix_item_id_traffic_in, "new_in_789")
+        self.assertEqual(port.zabbix_item_id_traffic_out, "new_out_012")
 
 
 class InventoryAdminTests(TestCase):
