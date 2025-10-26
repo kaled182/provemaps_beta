@@ -22,9 +22,9 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-# Configurações SWR
-SWR_FRESH_TTL = getattr(settings, "SWR_FRESH_TTL", 300)  # 5 min
-SWR_STALE_TTL = getattr(settings, "SWR_STALE_TTL", 1800)  # 30 min
+# Configurações SWR - Reduzido para monitoramento em tempo real
+SWR_FRESH_TTL = getattr(settings, "SWR_FRESH_TTL", 30)  # 30 segundos (fresh)
+SWR_STALE_TTL = getattr(settings, "SWR_STALE_TTL", 60)  # 1 min (stale)
 SWR_ENABLED = getattr(settings, "SWR_ENABLED", True)
 
 

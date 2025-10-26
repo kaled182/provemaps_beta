@@ -86,10 +86,17 @@ Acesse o sistema:
 
 ## 🧭 3. Inicialização Manual (primeira execução)
 
-Crie o banco e o usuário administrador:
+> ℹ️ **Nota:** O superuser padrão (`admin`/`admin123`) é criado automaticamente com `INIT_ENSURE_SUPERUSER=true` no docker-compose.
+
+Se precisar executar comandos manualmente:
 ```bash
+# Aplicar migrações (já executado automaticamente)
 docker compose exec web python manage.py migrate
+
+# Criar superuser customizado (opcional)
 docker compose exec web python manage.py createsuperuser
+
+# Collectstatic (já executado automaticamente)
 docker compose exec web python manage.py collectstatic --noinput
 ```
 

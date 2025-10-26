@@ -138,6 +138,8 @@ if (importFormEl) {
                 await populatePorts('', kmlOriginPortSelect);
                 await populatePorts('', kmlDestPortSelect);
                 await syncKmlDestination();
+                
+                // Disparar evento para limpar mapa e recarregar lista
                 document.dispatchEvent(new CustomEvent('fiber:cable-created', {
                     detail: { fiberId: data.fiber_id },
                 }));

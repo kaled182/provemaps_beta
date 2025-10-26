@@ -56,8 +56,8 @@ class SyncZabbixInventoryCommandTests(TestCase):
         # Verify site created
         site = Site.objects.get(name="DataCenter A")
         self.assertIsNotNone(site)
-        self.assertEqual(str(site.latitude), "51.5074")
-        self.assertEqual(str(site.longitude), "-0.1278")
+        self.assertAlmostEqual(float(site.latitude), 51.5074, places=4)
+        self.assertAlmostEqual(float(site.longitude), -0.1278, places=4)
 
         # Verify device created
         device = Device.objects.get(zabbix_hostid="12345")

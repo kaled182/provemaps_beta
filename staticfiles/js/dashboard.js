@@ -372,8 +372,7 @@ function initRealtimeUpdates(forceFallbackPath = false) {
         return;
     }
 
-    updateRealtimeBanner('connecting');
-
+    // Não mostra "connecting" - vai direto tentar conectar
     const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const chosenPath = forceFallbackPath ? DASHBOARD_WS_PATHS[wsPathCursor % DASHBOARD_WS_PATHS.length] : currentWsPath();
     const wsUrl = `${scheme}://${window.location.host}${chosenPath}`;
@@ -461,7 +460,7 @@ function initRealtimeUpdates(forceFallbackPath = false) {
 
 document.addEventListener('DOMContentLoaded', () => {
     cacheRealtimeElements();
-    updateRealtimeBanner('connecting');
+    // Não mostra "connecting" inicial - deixa vazio até conectar ou falhar
 
     if (currentSummarySnapshot) {
         updateSummary(currentSummarySnapshot);
