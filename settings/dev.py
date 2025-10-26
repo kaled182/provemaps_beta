@@ -71,31 +71,45 @@ LOGGING["loggers"]["django.db.backends"] = {
 # -----------------------------------------------------
 try:
     import debug_toolbar  # noqa
-    
     INSTALLED_APPS += ["debug_toolbar"]
     MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
-    
-    DEBUG_TOOLBAR_CONFIG = {
-        "SHOW_TOOLBAR_CALLBACK": lambda request: True,
-    }
-    
-    INTERNAL_IPS = [
-        "127.0.0.1",
-        "localhost", 
-        "0.0.0.0",
-        "172.16.0.0/12",
-    ]
-    
-    print("🎛️  Django Debug Toolbar habilitado")
+    DEBUG_TOOLBAR_CONFIG = {"SHOW_TOOLBAR_CALLBACK": lambda request: True}
+    INTERNAL_IPS = ["127.0.0.1", "localhost", "0.0.0.0", "172.16.0.0/12"]
+    print("[DEBUG_TOOLBAR] Django Debug Toolbar habilitado")
 except ImportError:
-    print("ℹ️  Django Debug Toolbar não instalado - pule 'pip install django-debug-toolbar'")
+    print("[INFO] Django Debug Toolbar nao instalado")
+except Exception as e:
+    print(f"[WARN] Erro ao configurar Debug Toolbar: {e}")
+
 
 # -----------------------------------------------------
 # Development-specific
 # -----------------------------------------------------
 
-# Static files em dev
-STATICFILES_STORAGE = "django.contrib.staticfiles.storage.StaticFilesStorage"
+# Static files em dev (Manifest para gerar hash por conteúdo)
+STATICFILES_STORAGE = "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"
+
+import time as _time  # noqa: E402
+import subprocess  # noqa: E402
+
+def _git_sha():
+    """Retorna SHA curto do commit atual ou 'nosha' se indisponível."""
+    try:
+        sha = subprocess.check_output([
+            "git", "rev-parse", "--short", "HEAD"
+        ], cwd=BASE_DIR).decode().strip()
+        if sha:
+            return sha
+    except Exception:
+        return "nosha"
+    return "nosha"
+
+# sha-timestamp para cache bust e rastreabilidade
+STATIC_ASSET_VERSION = f"{_git_sha()}-{_time.strftime('%Y%m%d%H%M%S')}"
+print(f"[STATIC_VERSION] STATIC_ASSET_VERSION={STATIC_ASSET_VERSION}")
+
+# Middleware no-cache para rotas sensíveis
+MIDDLEWARE.append('core.middleware.no_cache_dev.NoCacheDevMiddleware')
 
 # Security relaxations for development
 if DEBUG:
@@ -114,7 +128,7 @@ if DEBUG:
 try:
     import django_extensions  # noqa
     INSTALLED_APPS += ["django_extensions"]
-    print("🔧 Django Extensions habilitado")
+    print("[DJANGO_EXTENSIONS] Habilitado")
 except ImportError:
     pass
 
@@ -122,4 +136,4 @@ except ImportError:
 SHELL_PLUS = "ipython"
 SHELL_PLUS_PRINT_SQL = True
 
-print(f"🚀 Ambiente de DESENVOLVIMENTO carregado - DEBUG={DEBUG}")
+print(f"[DEV] Ambiente de DESENVOLVIMENTO carregado - DEBUG={DEBUG}")
