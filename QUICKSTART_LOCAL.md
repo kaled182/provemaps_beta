@@ -8,6 +8,9 @@
 - **Usuário:** `admin`
 - **Senha:** `admin123`
 
+> 💡 **Nota:** No Docker, o superuser é criado automaticamente no primeiro deploy.  
+> Para desenvolvimento local, execute: `python manage.py ensure_superuser`
+
 ### Banco de Dados
 - **Tipo:** SQLite (db.sqlite3)
 - **Sem necessidade de MySQL/MariaDB**
@@ -39,7 +42,10 @@ python manage.py makemigrations
 # Aplicar migrações
 python manage.py migrate
 
-# Criar superusuário
+# Criar superusuário padrão (admin/admin123)
+python manage.py ensure_superuser
+
+# Criar superusuário customizado (interativo)
 python manage.py createsuperuser
 
 # Shell Django

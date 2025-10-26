@@ -48,6 +48,7 @@ async function populatePorts(deviceId, targetSelect) {
                 'Pragma': 'no-cache',
             },
             cache: 'no-store',
+            credentials: 'same-origin',
         });
         if (!response.ok) {
             targetSelect.innerHTML = '<option value="">Falha ao carregar</option>';
@@ -125,6 +126,7 @@ if (importFormEl) {
                 headers: {
                     'X-CSRFToken': csrfToken,
                 },
+                credentials: 'same-origin',
                 body: formData,
             });
 
@@ -136,6 +138,8 @@ if (importFormEl) {
                 await populatePorts('', kmlOriginPortSelect);
                 await populatePorts('', kmlDestPortSelect);
                 await syncKmlDestination();
+                
+                // Disparar evento para limpar mapa e recarregar lista
                 document.dispatchEvent(new CustomEvent('fiber:cable-created', {
                     detail: { fiberId: data.fiber_id },
                 }));

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import diagnostics, inventory, lookup, reports
+from . import diagnostics, inventory, inventory_fibers, lookup, reports
 from .services import zabbix_service
 
 app_name = "zabbix_api"
@@ -97,7 +97,7 @@ urlpatterns = [
     # FIBER CABLES
     # =========================================================================
     path("api/fibers/", inventory.api_fiber_cables, name="api_fiber_cables"),
-    path("api/fiber/<int:cable_id>/", inventory.api_fiber_detail, name="api_fiber_detail"),
+    path("api/fiber/<int:cable_id>/", inventory_fibers.api_fiber_detail, name="api_fiber_detail"),
     path(
         "api/fiber/live-status/<int:cable_id>/",
         inventory.api_fiber_live_status,
@@ -123,8 +123,8 @@ urlpatterns = [
     # KML IMPORT / BUILDER
     # =========================================================================
     path("api/import-fiber-kml/", inventory.api_import_fiber_kml, name="api_import_fiber_kml"),
-    path("api/fibers/manual-create/", inventory.api_create_manual_fiber, name="api_create_manual_fiber"),
-    path("api/fibers/import-kml/", inventory.api_import_fiber_kml, name="api_import_fiber_kml_alt"),
+    path("api/fibers/manual-create/", inventory_fibers.api_create_manual_fiber, name="api_create_manual_fiber"),
+    path("api/fibers/import-kml/", inventory_fibers.api_import_fiber_kml, name="api_import_fiber_kml_alt"),
     path("import-kml-modal/", inventory.import_kml_modal, name="import_kml_modal"),
 
     # =========================================================================

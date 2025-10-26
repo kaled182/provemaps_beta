@@ -31,6 +31,7 @@ WAIT_FOR_DB="${WAIT_FOR_DB:-}"
 WAIT_FOR_REDIS="${WAIT_FOR_REDIS:-}"
 INIT_MIGRATE="${INIT_MIGRATE:-false}"
 INIT_COLLECTSTATIC="${INIT_COLLECTSTATIC:-false}"
+INIT_ENSURE_SUPERUSER="${INIT_ENSURE_SUPERUSER:-false}"
 MIGRATE_TIMEOUT="${MIGRATE_TIMEOUT:-300}"
 COLLECTSTATIC_TIMEOUT="${COLLECTSTATIC_TIMEOUT:-120}"
 
@@ -137,6 +138,13 @@ maybe_collectstatic() {
   fi
 }
 
+maybe_ensure_superuser() {
+  if [[ "${INIT_ENSURE_SUPERUSER:-false}" == "true" ]]; then
+    log "Garantindo superuser padrão..."
+    run_manage ensure_superuser
+  fi
+}
+
 setup_signal_handlers() {
   trap 'log "Recebido sinal de interrupção..."; exit 0' SIGINT SIGTERM
 }
@@ -183,6 +191,7 @@ main() {
   # Inicializações opcionais
   maybe_migrate
   maybe_collectstatic
+  maybe_ensure_superuser
 
   log "Iniciando processo: $*"
   exec "$@"

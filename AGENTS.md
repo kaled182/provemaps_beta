@@ -12,7 +12,7 @@
 
 ## Architecture
 - **Django 5.x** multi-app project: `core` (settings/root URLs), `maps_view` (network dashboard), `routes_builder` (fiber routes/KML), `setup_app` (config UI), `zabbix_api` (Zabbix integration, REST APIs, use cases)
-- **Database:** MariaDB/MySQL (`mapspro_db`), models in `zabbix_api/models.py` (active), `maps_view/models_old.py` (legacy)
+- **Database:** MariaDB/MySQL (`mapspro_db`), active models in `inventory/models.py` and `zabbix_api/models.py`
 - **Async:** Celery (Redis broker), Django Channels (WebSocket `/ws/dashboard/status/`)
 - **Observability:** Prometheus metrics (`/metrics/`), structured logs (`logs/application.log`), slow query tracking
 - **Config:** Split settings (`settings/dev.py`, `settings/prod.py`, `settings/test.py`), `django-environ` for secrets

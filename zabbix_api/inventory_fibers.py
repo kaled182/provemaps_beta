@@ -6,9 +6,9 @@ import logging
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseBadRequest, JsonResponse
 from django.shortcuts import render
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
-from .decorators import handle_api_errors
+from .decorators import api_login_required, handle_api_errors
 from .domain.optical import (
     _discover_optical_keys_by_portname,
     _fetch_item_value,
@@ -46,6 +46,7 @@ __all__ = [
     'api_fibers_refresh_status',
 ]
 
+@api_login_required
 def api_import_fiber_kml(request):
     """
     Importa arquivo KML e cria rota de fibra (FiberCable) com pontos extraídos.
@@ -59,10 +60,21 @@ def api_import_fiber_kml(request):
     dest_device_id = request.POST.get("dest_device_id")
     origin_port_id = request.POST.get("origin_port_id")
     dest_port_id = request.POST.get("dest_port_id")
+    single_port = request.POST.get("single_port") == "true"
     kml_file = request.FILES.get("kml_file")
 
-    if not (name and origin_device_id and dest_device_id and origin_port_id and dest_port_id and kml_file):
-        return JsonResponse({"error": "Campos obrigatorios ausentes"}, status=400)
+    # Validação: single_port permite dest_port_id vazio
+    if not (name and origin_device_id and origin_port_id and kml_file):
+        return JsonResponse({"error": "Campos obrigatórios ausentes"}, status=400)
+    
+    # Se não é single port, dest_device_id e dest_port_id são obrigatórios
+    if not single_port and not (dest_device_id and dest_port_id):
+        return JsonResponse({"error": "Porta de destino é obrigatória quando não está em modo single port"}, status=400)
+    
+    # Em single port mode, dest = origin
+    if single_port:
+        dest_device_id = origin_device_id
+        dest_port_id = origin_port_id
 
     try:
         payload = fiber_uc.create_fiber_from_kml(
@@ -72,6 +84,7 @@ def api_import_fiber_kml(request):
             origin_port_id,
             dest_port_id,
             kml_file,
+            single_port=single_port,
         )
     except fiber_uc.FiberValidationError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
@@ -107,12 +120,15 @@ def import_kml_modal(request):
         'devices': devices
     })
 
+@api_login_required
 def api_fiber_cables(request):
     """
     Lista todos os cabos de fibra com informações detalhadas.
     """
     return JsonResponse({"cables": fiber_uc.list_fiber_cables()})
 
+@require_http_methods(["GET", "PUT", "POST", "DELETE"])
+@api_login_required
 def api_fiber_detail(request, cable_id):
     """
     Detalhes e atualizacao de path de um cabo de fibra.
@@ -133,17 +149,39 @@ def api_fiber_detail(request, cable_id):
         try:
             body = json.loads(request.body or "{}")
         except json.JSONDecodeError:
-            return HttpResponseBadRequest("JSON invalido")
+            return JsonResponse({"error": "JSON invalido"}, status=400)
 
+        # Processar path se fornecido
         path = body.get("path")
-        if path is None or not isinstance(path, list):
-            return HttpResponseBadRequest('Campo "path" deve ser lista de pontos')
+        if path is not None:
+            if not isinstance(path, list):
+                return JsonResponse({"error": 'Campo "path" deve ser lista de pontos'}, status=400)
+            try:
+                fiber_uc.update_fiber_path(cable, path)
+            except fiber_uc.FiberValidationError as exc:
+                return JsonResponse({"error": str(exc)}, status=400)
 
-        try:
-            payload = fiber_uc.update_fiber_path(cable, path)
-        except fiber_uc.FiberValidationError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
-        return JsonResponse(payload)
+        # Processar metadados se fornecidos
+        name = body.get("name")
+        origin_port_id = body.get("origin_port_id")
+        dest_port_id = body.get("dest_port_id")
+        
+        if name or origin_port_id or dest_port_id:
+            try:
+                fiber_uc.update_fiber_metadata(
+                    cable,
+                    name=name if name else None,
+                    origin_port_id=int(origin_port_id) if origin_port_id else None,
+                    dest_port_id=int(dest_port_id) if dest_port_id else None,
+                )
+            except fiber_uc.FiberValidationError as exc:
+                return JsonResponse({"error": str(exc)}, status=400)
+
+        # Recarregar do banco para garantir dados atualizados
+        cable.refresh_from_db()
+        
+        # Retornar payload atualizado
+        return JsonResponse(fiber_uc.fiber_detail_payload(cable))
 
     return HttpResponseBadRequest("Metodo nao suportado")
 
