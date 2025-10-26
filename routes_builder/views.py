@@ -2,7 +2,7 @@ from django.shortcuts import render
 from django.conf import settings
 from setup_app.services import runtime_settings
 from django.contrib.auth.decorators import login_required
-from zabbix_api.models import Device
+from inventory.models import Device
 
 @login_required
 def fiber_route_builder_view(request):

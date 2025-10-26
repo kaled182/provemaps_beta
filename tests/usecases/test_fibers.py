@@ -1,7 +1,7 @@
 
 from unittest.mock import patch
 from django.test import TestCase
-from zabbix_api.models import Site, Device, Port, FiberCable
+from inventory.models import Device, FiberCable, Port, Site
 from zabbix_api.usecases.fibers import (
     create_manual_fiber, 
     create_fiber_from_kml, 

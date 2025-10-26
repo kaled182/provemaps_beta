@@ -17,7 +17,7 @@ from .domain.optical import (
     _score_optical_candidate,
 )
 from .guards import diagnostics_guard, staff_guard
-from .models import Device, FiberCable
+from inventory.models import Device, FiberCable
 from .services.fiber_status import (
     combine_cable_status as combine_cable_status_service,
     fetch_interface_status_advanced,

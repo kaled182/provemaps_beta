@@ -100,6 +100,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'maps_view',
+    'inventory',  # New app for network inventory models (migrated from zabbix_api)
     'zabbix_api',
     'setup_app',
     'routes_builder',

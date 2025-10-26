@@ -4,7 +4,7 @@ import time
 from django.core.management.base import BaseCommand, CommandError
 from django.test import Client
 
-from zabbix_api.models import Device, FiberCable, Port
+from inventory.models import Device, FiberCable, Port
 
 
 class Command(BaseCommand):
