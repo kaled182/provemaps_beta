@@ -91,6 +91,17 @@ app.conf.update(
     # Dead letter queue para tarefas que falham repetidamente
     task_reject_on_worker_lost=True,
     task_acks_on_failure_or_timeout=False,
+    
+    # Beat schedule para tarefas periódicas
+    beat_schedule={
+        "update-celery-metrics": {
+            "task": "core.celery.update_celery_metrics_task",
+            "schedule": float(
+                os.getenv("CELERY_METRICS_UPDATE_INTERVAL", "30")
+            ),
+            "options": {"queue": "default"},
+        },
+    },
 )
 
 # ---------------------------------------------------------------------
@@ -195,3 +206,54 @@ def get_queue_stats(self):
         }
     except Exception as e:
         return {"error": str(e), "timestamp": time.time()}
+
+
+# ---------------------------------------------------------------------
+# Task periódica para atualizar métricas Prometheus sem HTTP requests
+# ---------------------------------------------------------------------
+@app.task(bind=True)
+def update_celery_metrics_task(self):
+    """
+    Task periódica para atualizar métricas Prometheus.
+    Configurada no beat schedule (30s por padrão).
+    Não faz scraping pesado - apenas chama ping + stats e atualiza gauges.
+    """
+    try:
+        # Importa lógica de métricas
+        from core.metrics_celery import update_metrics  # type: ignore
+        
+        # Coleta dados leves (similar ao endpoint mas sem HTTP overhead)
+        payload: dict = {
+            "timestamp": time.time(),
+            "latency_ms": 0,  # não aplicável em task interna
+            "status": "degraded",
+            "worker": {"available": False, "error": None, "stats": None},
+        }
+        
+        # Tenta ping
+        ping_ok = False
+        try:
+            pong_res = ping.delay()  # type: ignore[attr-defined]
+            pong_val = pong_res.get(timeout=2)
+            ping_ok = pong_val == "pong"
+        except Exception as e:
+            payload["worker"]["error"] = str(e)[:200]
+        
+        # Tenta stats se ping ok
+        if ping_ok:
+            payload["worker"]["available"] = True
+            try:
+                stats_res = get_queue_stats.delay()  # type: ignore
+                stats = stats_res.get(timeout=3)
+                if isinstance(stats, dict) and "error" not in stats:
+                    payload["worker"]["stats"] = stats
+                    payload["status"] = "ok"
+            except Exception:
+                pass  # ignora erro de stats, mantém available=True
+        
+        # Atualiza métricas
+        update_metrics(payload)
+        return {"status": "updated", "worker_available": ping_ok}
+    
+    except Exception as e:
+        return {"status": "error", "message": str(e)[:200]}
