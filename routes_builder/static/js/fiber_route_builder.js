@@ -195,6 +195,7 @@ async function loadFibers() {
                 'Pragma': 'no-cache',
             },
             cache: 'no-store',
+            credentials: 'same-origin',
         });
         if (!response.ok) {
             console.error('Failed to load fiber list:', response.status);
@@ -235,6 +236,8 @@ async function loadFiberDetail(id) {
         },
 
         cache: 'no-store',
+
+        credentials: 'same-origin',
 
     });
 
@@ -422,6 +425,7 @@ async function updateExistingPath() {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': csrftoken,
             },
+            credentials: 'same-origin',
             body: JSON.stringify({ path: currentPath }),
         });
 
@@ -556,7 +560,9 @@ async function loadPortsForSelect(deviceId, targetSelect) {
         return;
     }
     try {
-        const response = await fetch(`/zabbix_api/api/device-ports/${deviceId}/`);
+        const response = await fetch(`/zabbix_api/api/device-ports/${deviceId}/`, {
+            credentials: 'same-origin'
+        });
         if (!response.ok) {
             targetSelect.innerHTML = '<option value="">Falha ao carregar</option>';
             return;
@@ -614,6 +620,7 @@ async function performCreateFiber(payload) {
             'Content-Type': 'application/json',
             'X-CSRFToken': csrftoken,
         },
+        credentials: 'same-origin',
         body: JSON.stringify(payload),
     });
 
@@ -639,6 +646,7 @@ async function performUpdateFiber(fiberId, payload) {
             'Content-Type': 'application/json',
             'X-CSRFToken': csrftoken,
         },
+        credentials: 'same-origin',
         body: JSON.stringify(payload),
     });
 
@@ -749,6 +757,7 @@ async function deleteCable() {
             headers: {
                 'X-CSRFToken': csrftoken,
             },
+            credentials: 'same-origin',
         });
 
         if (response.status === 204) {
