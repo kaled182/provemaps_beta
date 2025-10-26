@@ -113,7 +113,8 @@ async function loadAllCablesForVisualization() {
             }
         }
         
-        alert(`${loadedCount} cabos carregados para visualização.\n\n💡 Dica: Right-click em um cabo azul para editá-lo!`);
+    // Removido alerta visual intrusivo; usar log discreto
+    console.info(`Visualization: ${loadedCount} cables loaded.`);
         
     } catch (error) {
         console.error('Erro ao carregar todos os cabos:', error);
@@ -282,8 +283,7 @@ function initMap() {
             }
         }
         const point = { lat: event.latLng.lat(), lng: event.latLng.lng() };
-        currentPath.push(point);
-        console.log('🎯 Ponto adicionado! Total de pontos:', currentPath.length, 'activeFiberId:', activeFiberId);
+    currentPath.push(point);
         addMarker(point);
         redrawPolyline();
         refreshList();
@@ -294,35 +294,17 @@ function initMap() {
         event.stop(); // Prevenir menu padrão do navegador
         showContextMenu(event.domEvent.clientX, event.domEvent.clientY);
     });
-
-        // Adicionar botão Clear Selection ao mapa
-        const clearSelectionButton = document.createElement('button');
-        clearSelectionButton.textContent = '🗑️ Clear Selection';
-        clearSelectionButton.className = 'bg-white/95 backdrop-blur px-4 py-2 rounded-lg shadow-lg text-sm font-medium hover:bg-gray-100 border border-gray-300';
-        clearSelectionButton.style.margin = '10px';
-        clearSelectionButton.addEventListener('click', () => {
-            // Limpar seleção de cabo
-            activeFiberId = null;
-            currentFiberMeta = null;
-            updateEditButtonState();
-            const fiberSelect = document.getElementById('fiberSelect');
-            if (fiberSelect) {
-                fiberSelect.value = '';
-            }
-            // Limpar pontos desenhados
-            currentPath = [];
-            markers.forEach(m => m.setMap(null));
-            markers = [];
-            if (polyline) {
-                polyline.setMap(null);
-                polyline = null;
-            }
-            refreshList();
-            console.log('✅ Seleção limpa');
-        });
-        map.controls[google.maps.ControlPosition.BOTTOM_RIGHT].push(clearSelectionButton);
-
     loadFibers();
+    // Carregar visualização de todos os cabos logo após o mapa estar pronto
+    // Garantir pequeno delay para evitar race com Google Maps internals
+    setTimeout(() => {
+        if (map) {
+            loadAllCablesForVisualization();
+        } else {
+            console.warn('Map not ready to load cables. Retrying...');
+            setTimeout(() => map && loadAllCablesForVisualization(), 500);
+        }
+    }, 300);
 }
 
 // Funções do menu de contexto
@@ -330,13 +312,11 @@ function showContextMenu(x, y) {
     const menu = document.getElementById('contextMenu');
     if (!menu) return;
     
-    // Calcular posição do menu para não sair da tela e ficar próximo do clique
-    const menuWidth = 220; // min-width do menu
-    const menuHeight = 300; // altura estimada
+    // -------- POSICIONAMENTO --------
+    const menuWidth = 220;
+    const menuHeight = 300; // estimado (não crítico)
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
-    
-    // Offset REDUZIDO - menu mais próximo do clique (5px direita, 5px baixo)
     const offsetX = 5;
     const offsetY = 5;
     
@@ -359,8 +339,15 @@ function showContextMenu(x, y) {
     if (adjustedY < 20) {
         adjustedY = 20;
     }
+    updateContextMenuState();
     
-    // Atualizar opções condicionais baseadas no cabo ativo
+    menu.style.left = adjustedX + 'px';
+    menu.style.top = adjustedY + 'px';
+    menu.classList.remove('hidden');
+}
+
+// Função separada para lógica dos 3 cenários
+function updateContextMenuState() {
     const selectedOptions = document.getElementById('contextSelectedOptions');
     const creatingOptions = document.getElementById('contextCreatingOptions');
     const cableInfo = document.getElementById('contextCableInfo');
@@ -369,75 +356,49 @@ function showContextMenu(x, y) {
     const generalOptions = document.getElementById('contextGeneralOptions');
     const reloadButton = document.getElementById('contextLoadAll');
     const reloadText = document.getElementById('contextLoadAllText');
-    
-    // Verificar se está criando um novo cabo (tem pontos mas não tem cabo ativo)
-    const isCreatingNewCable = !activeFiberId && currentPath.length > 0;
-    
-    // DEBUG - remover depois
-    console.log('🔍 showContextMenu DEBUG:', {
-        activeFiberId,
-        currentPathLength: currentPath.length,
-        isCreatingNewCable,
-        currentFiberMeta
-    });
-    
+
+    const isCreatingNewCable = !activeFiberId && currentPath.length > 0; // Cenário B
+    const isSelectedCable = !!activeFiberId && !!currentFiberMeta; // Cenário C
+    const isEmpty = !activeFiberId && currentPath.length === 0; // Cenário A
+
+    // Reset base
+    selectedOptions?.classList.add('hidden');
+    creatingOptions?.classList.add('hidden');
+    cableInfo?.classList.add('hidden');
+    generalOptions?.classList.add('hidden');
+    reloadButton?.classList.add('hidden');
+
     if (isCreatingNewCable) {
-        // CRIANDO NOVO CABO - Mostrar opções de salvamento
-        console.log('✅ Mostrando menu de criação');
+        // Cenário B
         creatingOptions?.classList.remove('hidden');
-        selectedOptions?.classList.add('hidden');
-        cableInfo?.classList.add('hidden');
-        generalOptions?.classList.add('hidden');
-        reloadButton?.classList.add('hidden');
-        
-    } else if (activeFiberId && currentFiberMeta) {
-        // CABO SELECIONADO - Mostrar opções de edição
+        // Sem reload, sem import
+    } else if (isSelectedCable) {
+        // Cenário C
         selectedOptions?.classList.remove('hidden');
-        creatingOptions?.classList.add('hidden');
         cableInfo?.classList.remove('hidden');
         if (cableName) {
             const isEditing = currentPath.length > 0;
             const status = isEditing ? ' - EDITING' : '';
             cableName.textContent = `📌 ${currentFiberMeta.name || 'Cable #' + activeFiberId}${status}`;
         }
-        
-        // Se está editando, esconder Create e Import
-        if (currentPath.length > 0 && generalOptions) {
-            generalOptions.classList.add('hidden');
-        } else if (generalOptions) {
-            generalOptions.classList.remove('hidden');
-        }
-        
-        // Mudar texto do Reload para "Reload This Cable"
+        // Reload This Cable
         if (reloadButton && reloadText) {
             reloadButton.classList.remove('hidden');
             reloadText.textContent = 'Reload This Cable';
         }
-        
-        // Habilitar/desabilitar Save Path baseado se há mudanças
+        // Save Path habilitado somente se >=2 pontos
         if (savePath) {
             savePath.disabled = currentPath.length < 2;
             savePath.style.opacity = currentPath.length >= 2 ? '1' : '0.5';
         }
-    } else {
-        // SEM CABO SELECIONADO E SEM PONTOS - Mostrar opções gerais
-        selectedOptions?.classList.add('hidden');
-        creatingOptions?.classList.add('hidden');
-        cableInfo?.classList.add('hidden');
-        
-        // Mostrar opções gerais e Reload All Cables
-        if (generalOptions) {
-            generalOptions.classList.remove('hidden');
-        }
+    } else if (isEmpty) {
+        // Cenário A
+        generalOptions?.classList.remove('hidden'); // Import KML
         if (reloadButton && reloadText) {
             reloadButton.classList.remove('hidden');
             reloadText.textContent = 'Reload All Cables';
         }
     }
-    
-    menu.style.left = adjustedX + 'px';
-    menu.style.top = adjustedY + 'px';
-    menu.classList.remove('hidden');
 }
 function hideContextMenu() {
     const menu = document.getElementById('contextMenu');
@@ -759,14 +720,15 @@ async function updateExistingPath() {
             return;
         }
 
-        const payload = await response.json();
-        alert(`Saved successfully.\nPoints: ${payload.points}\nDistance: ${payload.length_km} km`);
-        
-        // Limpar o cabo do mapa após salvar path
-        clearMapAndResetState();
-        
-        // Recarregar lista de cabos
-        await loadFibers();
+    const payload = await response.json();
+    alert(`Saved successfully.\nPoints: ${payload.points}\nDistance: ${payload.length_km} km`);
+
+    // Limpar o cabo do mapa após salvar path
+    clearMapAndResetState();
+
+    // Recarregar lista de cabos e visualização
+    await loadFibers();
+    await loadAllCablesForVisualization();
     } catch (error) {
         console.error('Request error:', error);
         alert('Connection failure or unexpected error while saving.');
@@ -961,10 +923,13 @@ async function performCreateFiber(payload) {
 
     alert('Rota criada com sucesso.');
     closeManualSaveModal();
-    
+
     document.dispatchEvent(new CustomEvent('fiber:cable-created', {
         detail: { fiberId: data.fiber_id },
     }));
+
+    // Recarregar visualização completa
+    await loadAllCablesForVisualization();
 }
 
 async function performUpdateFiber(fiberId, payload) {
@@ -986,12 +951,13 @@ async function performUpdateFiber(fiberId, payload) {
 
     alert('Cabo atualizado com sucesso.');
     closeManualSaveModal();
-    
+
     // Limpar o cabo do mapa após salvar edição
     clearMapAndResetState();
-    
-    // Recarregar lista de cabos
+
+    // Recarregar lista de cabos e visualização
     await loadFibers();
+    await loadAllCablesForVisualization();
 }
 
 async function handleManualFormSubmit(event) {
@@ -1082,7 +1048,8 @@ async function deleteCable() {
             alert('Cable removed successfully.');
             activeFiberId = null;
             setPath([]);
-            loadFibers();
+            await loadFibers();
+            await loadAllCablesForVisualization();
         } else {
             const details = await response.text();
             alert(`Failed to delete: ${details}`);
@@ -1190,22 +1157,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    document.getElementById('loadFiber').addEventListener('click', () => {
-        const id = document.getElementById('fiberSelect').value;
+    // Botão de carregar cabo removido do layout; listener protegido
+    document.getElementById('loadFiber')?.addEventListener('click', () => {
+        const id = document.getElementById('fiberSelect')?.value;
         if (!id) {
             alert('Select a cable first.');
             return;
         }
-        // NÃO limpar cabos de visualização, apenas carregar cabo específico para edição
         loadFiberDetail(id);
     });
     
     // Botão Clear não existe mais - funcionalidade no menu de contexto
     
-    // Carregar todos os cabos automaticamente ao iniciar
-    setTimeout(() => {
-        loadAllCablesForVisualization();
-    }, 1000); // Aguardar 1s para garantir que mapa foi inicializado
+    // Autoload de cabos movido para initMap para garantir que o mapa exista
     
     // Event listeners antigos removidos (savePath, deleteCable, editFiber)
     // Agora tudo é via menu de contexto

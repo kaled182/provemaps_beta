@@ -14,24 +14,14 @@
 <!-- Mapa em tela cheia com painéis flutuantes -->
 <div class="relative">
   <div id="builderMap" class="rounded border border-gray-300" style="height: 80vh;"></div>
-  
-  <!-- Barra de ferramentas minimalista no topo do mapa -->
-  <div class="absolute top-4 left-4 right-4 bg-white/95 backdrop-blur rounded-lg shadow-lg p-3 flex gap-2 items-center z-10">
-    <span class="text-sm font-semibold text-gray-700">Fiber Route Builder</span>
-    <select id="fiberSelect" class="border rounded px-2 py-1 text-sm ml-4"></select>
-    <button id="loadFiber" class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-500">Load Cable</button>
-    
-    <span class="text-xs text-gray-500 ml-4">💡 Right-click anywhere for menu | Drag markers to adjust path</span>
-    
-    <!-- Botões para toggle dos painéis -->
-    <div class="ml-auto flex gap-2">
-      <button id="toggleRoutePoints" class="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-500">
-        📍 Route Points
-      </button>
-      <button id="toggleHelp" class="bg-emerald-600 text-white px-3 py-1 rounded text-sm hover:bg-emerald-500">
-        ❓ Help
-      </button>
-    </div>
+  <!-- Botões flutuantes (apenas Route Points e Help) lado direito centro do mapa -->
+  <div class="absolute top-1/2 right-4 -translate-y-1/2 flex flex-col gap-3 z-10">
+    <button id="toggleRoutePoints" class="bg-indigo-600 shadow-lg shadow-indigo-300/40 text-white px-4 py-2 rounded text-sm hover:bg-indigo-500">
+      📍 Route Points
+    </button>
+    <button id="toggleHelp" class="bg-emerald-600 shadow-lg shadow-emerald-300/40 text-white px-4 py-2 rounded text-sm hover:bg-emerald-500">
+      ❓ Help
+    </button>
   </div>
   
   <!-- Painel de Route Points (retrátil) -->
@@ -121,7 +111,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/partials/import_kml.js' %}?v=20251026-1"></script>
-<script defer src="{% static 'js/fiber_route_builder.js' %}?v=20251026-1"></script>
+<script src="{% static 'js/partials/import_kml.js' %}?v={{ STATIC_ASSET_VERSION }}"></script>
+<script defer src="{% static 'js/fiber_route_builder.js' %}?v={{ STATIC_ASSET_VERSION }}"></script>
 <script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&callback=initMap" async defer></script>
 {% endblock %}
