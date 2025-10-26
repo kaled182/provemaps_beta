@@ -10,6 +10,7 @@ import django
 from django.http import JsonResponse
 from django.db import connection
 from django.core.cache import caches
+from django.views.decorators.cache import cache_page
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,7 @@ def _storage_check(checks: Dict[str, Any]) -> None:
 def _add_system_metrics(checks: Dict[str, Any]) -> None:
     """Adiciona métricas do sistema sem afetar o status geral"""
     try:
-        import psutil
+        import psutil  # type: ignore
         checks["system"] = {
             "cpu_percent": psutil.cpu_percent(interval=0.1),
             "memory_percent": psutil.virtual_memory().percent,
@@ -214,11 +215,13 @@ def healthz_live(request: HttpRequest):
     return response
 
 
+@cache_page(5)  # cache de 5s para reduzir latência em scraping frequente
 def celery_status(request: HttpRequest):
     """Endpoint de status do Celery (/celery/status)
     - Dispara a task get_queue_stats
     - Timeout curto (default 3s via env CELERY_STATUS_TIMEOUT)
     - Resposta sempre JSON com status geral
+    - Cache de 5s habilitado (ajustável removendo decorator)
     """
     started = time.time()
     timeout_seconds = float(os.getenv("CELERY_STATUS_TIMEOUT", "3"))
@@ -251,7 +254,8 @@ def celery_status(request: HttpRequest):
     except Exception as e:  # pragma: no cover
         payload["worker"]["error"] = f"PingError: {e}"[:200]
 
-    # Se ping funcionou, tenta estatísticas com timeout maior sem falhar o status geral
+    # Se ping funcionou, tenta estatísticas com timeout maior
+    # sem falhar o status geral
     stats_error = None
     stats = None
     if ping_ok:
@@ -268,7 +272,8 @@ def celery_status(request: HttpRequest):
         payload["worker"]["error"] = stats_error
 
     # Define status final
-    if ping_ok and isinstance(stats, dict) and (stats is None or "error" not in stats):
+    # Status ok somente se ping respondeu e estatísticas não possuem erro
+    if ping_ok and isinstance(stats, dict) and "error" not in stats:
         payload["status"] = "ok"
     elif ping_ok:
         # Worker responde mas estatísticas falharam
@@ -278,7 +283,7 @@ def celery_status(request: HttpRequest):
 
     payload["latency_ms"] = round((time.time() - started) * 1000, 2)
 
-    # Atualiza métricas Prometheus (silencioso em caso de erro ou se desabilitado)
+    # Atualiza métricas Prometheus (ignora erros ou se desabilitado)
     try:  # pragma: no cover - defensivo
         from core.metrics_celery import update_metrics  # type: ignore
         update_metrics(payload)
