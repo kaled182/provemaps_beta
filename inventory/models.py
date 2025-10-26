@@ -1,3 +1,9 @@
+"""
+Inventory models for network infrastructure management.
+
+These models were migrated from zabbix_api app but preserve the original
+database table names using Meta.db_table to avoid data migration issues.
+"""
 from __future__ import annotations
 
 from django.db import models
@@ -5,6 +11,10 @@ from django.utils import timezone
 
 
 class Site(models.Model):
+    """
+    Physical location/site containing network devices.
+    Original table: zabbix_api_site
+    """
     name = models.CharField(max_length=120, unique=True)
     city = models.CharField(max_length=120, blank=True)
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
@@ -13,14 +23,17 @@ class Site(models.Model):
 
     class Meta:
         ordering = ["name"]
-        managed = False  # Model moved to inventory app
-        db_table = "zabbix_api_site"
+        db_table = "zabbix_api_site"  # Preserve original table name
 
     def __str__(self) -> str:
         return self.name
 
 
 class Device(models.Model):
+    """
+    Network device (router, switch, OLT, etc.) at a site.
+    Original table: zabbix_api_device
+    """
     site = models.ForeignKey(Site, related_name="devices", on_delete=models.CASCADE)
     device_icon = models.ImageField(upload_to="img/device_icons/", null=True, blank=True)
     name = models.CharField(max_length=120)
@@ -39,14 +52,17 @@ class Device(models.Model):
     class Meta:
         unique_together = ("site", "name")
         ordering = ["site__name", "name"]
-        managed = False  # Model moved to inventory app
-        db_table = "zabbix_api_device"
+        db_table = "zabbix_api_device"  # Preserve original table name
 
     def __str__(self) -> str:
         return f"{self.site.name} - {self.name}" if self.site_id else self.name
 
 
 class Port(models.Model):
+    """
+    Network port/interface on a device.
+    Original table: zabbix_api_port
+    """
     device = models.ForeignKey(Device, related_name="ports", on_delete=models.CASCADE)
     name = models.CharField(max_length=64)
     zabbix_item_key = models.CharField(
@@ -82,8 +98,7 @@ class Port(models.Model):
     class Meta:
         unique_together = ("device", "name")
         ordering = ["device__site__name", "device__name", "name"]
-        managed = False  # Model moved to inventory app
-        db_table = "zabbix_api_port"
+        db_table = "zabbix_api_port"  # Preserve original table name
 
     def __str__(self) -> str:
         return f"{self.device}::{self.name}"
@@ -107,6 +122,10 @@ class Port(models.Model):
 
 
 class FiberCable(models.Model):
+    """
+    Fiber optic cable connecting two ports.
+    Original table: zabbix_api_fibercable
+    """
     STATUS_UP = "up"
     STATUS_DOWN = "down"
     STATUS_DEGRADED = "degraded"
@@ -134,13 +153,13 @@ class FiberCable(models.Model):
 
     class Meta:
         ordering = ["name"]
-        managed = False  # Model moved to inventory app
-        db_table = "zabbix_api_fibercable"
+        db_table = "zabbix_api_fibercable"  # Preserve original table name
 
     def __str__(self) -> str:
         return self.name
 
     def update_status(self, new_status: str) -> None:
+        """Update fiber status with timestamp."""
         if new_status not in dict(self.STATUS_CHOICES):
             new_status = self.STATUS_UNKNOWN
         self.status = new_status
@@ -149,6 +168,10 @@ class FiberCable(models.Model):
 
 
 class FiberEvent(models.Model):
+    """
+    Event log for fiber status changes.
+    Original table: zabbix_api_fiberevent
+    """
     fiber = models.ForeignKey(FiberCable, related_name="events", on_delete=models.CASCADE)
     timestamp = models.DateTimeField(default=timezone.now)
     previous_status = models.CharField(max_length=15, blank=True)
@@ -157,8 +180,7 @@ class FiberEvent(models.Model):
 
     class Meta:
         ordering = ["-timestamp"]
-        managed = False  # Model moved to inventory app
-        db_table = "zabbix_api_fiberevent"
+        db_table = "zabbix_api_fiberevent"  # Preserve original table name
 
     def __str__(self) -> str:
         return f"{self.fiber.name} {self.previous_status}->{self.new_status} @ {self.timestamp:%Y-%m-%d %H:%M:%S}"

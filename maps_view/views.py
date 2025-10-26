@@ -9,7 +9,7 @@ from django.views.decorators.http import require_GET
 from django.db.models import Q
 from typing import List, Dict, Any, Optional
 from zabbix_api.services.zabbix_service import zabbix_request
-from zabbix_api.models import Device
+from inventory.models import Device
 from prometheus_client import REGISTRY, generate_latest
 
 from .realtime.events import build_dashboard_payload
@@ -191,8 +191,30 @@ def build_dashboard_event_payload() -> Dict[str, Any]:
 
 @login_required
 def dashboard_view(request):
-    """Dashboard principal (HTML)."""
-    context = get_hosts_status_data()
+    """
+    Dashboard principal (HTML) com Cache SWR.
+    
+    Serve dados do cache (frescos ou stale) imediatamente.
+    Se stale, dispara refresh em background.
+    """
+    from maps_view.cache_swr import get_dashboard_cached
+    from maps_view.tasks import refresh_dashboard_cache_task
+    
+    # Get data com SWR pattern
+    cache_result = get_dashboard_cached(
+        fetch_fn=get_hosts_status_data,
+        async_task=refresh_dashboard_cache_task.delay,
+    )
+    
+    context = cache_result["data"]
+    
+    # Adiciona metadata de cache para o template
+    context["cache_metadata"] = {
+        "is_stale": cache_result.get("is_stale", False),
+        "timestamp": cache_result.get("timestamp"),
+        "cache_hit": cache_result.get("cache_hit", False),
+    }
+    
     return render(request, 'dashboard.html', {
         'GOOGLE_MAPS_API_KEY': runtime_settings.get_runtime_config().google_maps_api_key or getattr(settings, 'GOOGLE_MAPS_API_KEY', ''),
         **context
@@ -208,8 +230,21 @@ def dashboard_with_hosts_status():
 @login_required
 @require_GET
 def api_zabbix_hosts_status(request):
-    """JSON API mirroring the dashboard calculations for a single source of truth."""
-    data = get_hosts_status_data()
+    """
+    JSON API mirroring dashboard calculations with SWR cache.
+    
+    Returns data with cache metadata (is_stale, timestamp).
+    """
+    from maps_view.cache_swr import get_dashboard_cached
+    from maps_view.tasks import refresh_dashboard_cache_task
+    
+    # Get data com SWR pattern
+    cache_result = get_dashboard_cached(
+        fetch_fn=get_hosts_status_data,
+        async_task=refresh_dashboard_cache_task.delay,
+    )
+    
+    data = cache_result["data"]
 
     if not data['hosts_status']:
         return JsonResponse(
@@ -220,7 +255,12 @@ def api_zabbix_hosts_status(request):
     return JsonResponse({
         'total': data['hosts_summary']['total'],
         'hosts': data['hosts_status'],
-        'summary': data['hosts_summary']
+        'summary': data['hosts_summary'],
+        'cache_metadata': {
+            'is_stale': cache_result.get("is_stale", False),
+            'timestamp': cache_result.get("timestamp"),
+            'cache_hit': cache_result.get("cache_hit", False),
+        }
     })
 
 
