@@ -43,39 +43,56 @@ class Device(models.Model):
         db_table = "zabbix_api_device"
 
     def __str__(self) -> str:
-        return f"{self.site.name} - {self.name}" if self.site_id else self.name
+        # Keep string short; rely on FK relation even if site not loaded.
+        site_part = getattr(self.site, "name", "")
+        return f"{site_part} - {self.name}" if site_part else self.name
 
 
 class Port(models.Model):
-    device = models.ForeignKey(Device, related_name="ports", on_delete=models.CASCADE)
+    device = models.ForeignKey(
+        Device,
+        related_name="ports",
+        on_delete=models.CASCADE,
+    )
     name = models.CharField(max_length=64)
     zabbix_item_key = models.CharField(
         max_length=255,
         blank=True,
         help_text="Zabbix interface item key (e.g. net.if.in[ether10])",
     )
-    zabbix_item_id_trafego_in = models.CharField(
+    # Traffic item IDs (English names; legacy column via db_column)
+    zabbix_item_id_traffic_in = models.CharField(
         max_length=32,
         blank=True,
+        db_column="zabbix_item_id_trafego_in",
         help_text="Zabbix itemid for ingress traffic",
     )
-    zabbix_item_id_trafego_out = models.CharField(
+    zabbix_item_id_traffic_out = models.CharField(
         max_length=32,
         blank=True,
+        db_column="zabbix_item_id_trafego_out",
         help_text="Zabbix itemid for egress traffic",
     )
-    zabbix_interfaceid = models.CharField(max_length=32, blank=True, help_text="interfaceid inside Zabbix")
-    zabbix_itemid = models.CharField(max_length=32, blank=True, help_text="Generic itemid inside Zabbix")
-    # Optional optical power items (RX/TX) leveraged when ifOperStatus is missing
+    zabbix_interfaceid = models.CharField(
+        max_length=32,
+        blank=True,
+        help_text="interfaceid inside Zabbix",
+    )
+    zabbix_itemid = models.CharField(
+        max_length=32,
+        blank=True,
+        help_text="Generic itemid inside Zabbix",
+    )
+    # Optional optical power items (RX/TX) when ifOperStatus is missing
     rx_power_item_key = models.CharField(
         max_length=255,
         blank=True,
-        help_text="Optical RX power item key (e.g. hwEntityOpticalLaneRxPower[ID])",
+        help_text="Optical RX power (e.g. hwEntityOpticalLaneRxPower[ID])",
     )
     tx_power_item_key = models.CharField(
         max_length=255,
         blank=True,
-        help_text="Optical TX power item key (e.g. hwEntityOpticalLaneTxPower[ID])",
+        help_text="Optical TX power (e.g. hwEntityOpticalLaneTxPower[ID])",
     )
     notes = models.CharField(max_length=255, blank=True)
 
@@ -88,22 +105,7 @@ class Port(models.Model):
     def __str__(self) -> str:
         return f"{self.device}::{self.name}"
 
-    # Backwards compatibility helpers: expose English attribute names while reusing legacy fields
-    @property
-    def zabbix_item_id_traffic_in(self) -> str:
-        return getattr(self, "zabbix_item_id_trafego_in", "")
-
-    @zabbix_item_id_traffic_in.setter
-    def zabbix_item_id_traffic_in(self, value: str) -> None:
-        self.zabbix_item_id_trafego_in = value
-
-    @property
-    def zabbix_item_id_traffic_out(self) -> str:
-        return getattr(self, "zabbix_item_id_trafego_out", "")
-
-    @zabbix_item_id_traffic_out.setter
-    def zabbix_item_id_traffic_out(self, value: str) -> None:
-        self.zabbix_item_id_trafego_out = value
+    # Attribute names map directly via db_column.
 
 
 class FiberCable(models.Model):
@@ -119,16 +121,33 @@ class FiberCable(models.Model):
     ]
 
     name = models.CharField(max_length=150, unique=True)
-    origin_port = models.ForeignKey(Port, related_name="fiber_origin", on_delete=models.PROTECT)
-    destination_port = models.ForeignKey(Port, related_name="fiber_destination", on_delete=models.PROTECT)
-    length_km = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
-    # List of intermediate coordinates used when plotting the route (may include origin/destination)
+    origin_port = models.ForeignKey(
+        Port,
+        related_name="fiber_origin",
+        on_delete=models.PROTECT,
+    )
+    destination_port = models.ForeignKey(
+        Port,
+        related_name="fiber_destination",
+        on_delete=models.PROTECT,
+    )
+    length_km = models.DecimalField(
+        max_digits=7,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    # Intermediate coordinates for plotting (may include origin/destination)
     path_coordinates = models.JSONField(
         blank=True,
         null=True,
-        help_text="Coordinate list [{'lat': -16.6, 'lng': -49.2}, ...]",
+        help_text="Coordinate list e.g. [{'lat': -16.6, 'lng': -49.2}, ...]",
     )
-    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default=STATUS_UNKNOWN)
+    status = models.CharField(
+        max_length=15,
+        choices=STATUS_CHOICES,
+        default=STATUS_UNKNOWN,
+    )
     last_status_update = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True)
 
@@ -149,7 +168,11 @@ class FiberCable(models.Model):
 
 
 class FiberEvent(models.Model):
-    fiber = models.ForeignKey(FiberCable, related_name="events", on_delete=models.CASCADE)
+    fiber = models.ForeignKey(
+        FiberCable,
+        related_name="events",
+        on_delete=models.CASCADE,
+    )
     timestamp = models.DateTimeField(default=timezone.now)
     previous_status = models.CharField(max_length=15, blank=True)
     new_status = models.CharField(max_length=15)
@@ -161,4 +184,7 @@ class FiberEvent(models.Model):
         db_table = "zabbix_api_fiberevent"
 
     def __str__(self) -> str:
-        return f"{self.fiber.name} {self.previous_status}->{self.new_status} @ {self.timestamp:%Y-%m-%d %H:%M:%S}"
+        return (
+            f"{self.fiber.name} {self.previous_status}->{self.new_status} "
+            f"@ {self.timestamp:%Y-%m-%d %H:%M:%S}"
+        )
