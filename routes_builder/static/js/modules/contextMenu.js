@@ -60,7 +60,12 @@ export function initContextMenu() {
  * @param {number} y - Y coordinate (clientY from mouse event)
  */
 export function showContextMenu(x, y) {
-    if (!menuElement) return;
+    console.log('[contextMenu] showContextMenu called at:', { x, y });
+    
+    if (!menuElement) {
+        console.error('[contextMenu] ERROR: menuElement is null! Menu not initialized?');
+        return;
+    }
 
     // Menu dimensions and viewport constraints
     const menuWidth = 220;
@@ -95,6 +100,8 @@ export function showContextMenu(x, y) {
     menuElement.style.left = adjustedX + 'px';
     menuElement.style.top = adjustedY + 'px';
     menuElement.classList.remove('hidden');
+    
+    console.log('[contextMenu] Menu positioned at:', { left: adjustedX, top: adjustedY }, 'visible:', !menuElement.classList.contains('hidden'));
 }
 
 /**
@@ -118,10 +125,14 @@ export function hideContextMenu() {
 export function updateContextMenuState(context) {
     const { hasActiveFiber, fiberMeta, pathLength } = context;
 
+    console.log('[contextMenu] updateContextMenuState called with:', { hasActiveFiber, fiberMeta, pathLength });
+
     // Determine scenario
     const isCreatingNewCable = !hasActiveFiber && pathLength > 0; // Scenario B
     const isSelectedCable = hasActiveFiber && !!fiberMeta; // Scenario C
     const isEmpty = !hasActiveFiber && pathLength === 0; // Scenario A
+
+    console.log('[contextMenu] Scenarios:', { isCreatingNewCable, isSelectedCable, isEmpty });
 
     // Reset all sections (hide everything)
     selectedOptionsEl?.classList.add('hidden');
@@ -131,10 +142,12 @@ export function updateContextMenuState(context) {
     reloadButtonEl?.classList.add('hidden');
 
     if (isCreatingNewCable) {
+        console.log('[contextMenu] Showing: Creating New Cable options');
         // Scenario B: Drawing new cable
         creatingOptionsEl?.classList.remove('hidden');
         // No reload, no import options
     } else if (isSelectedCable) {
+        console.log('[contextMenu] Showing: Cable Selected options');
         // Scenario C: Cable selected for editing
         selectedOptionsEl?.classList.remove('hidden');
         cableInfoEl?.classList.remove('hidden');
@@ -159,6 +172,7 @@ export function updateContextMenuState(context) {
             savePathEl.style.opacity = pathLength >= 2 ? '1' : '0.5';
         }
     } else if (isEmpty) {
+        console.log('[contextMenu] Showing: Empty State options');
         // Scenario A: Empty state
         generalOptionsEl?.classList.remove('hidden'); // Show "Import KML"
 
@@ -168,6 +182,13 @@ export function updateContextMenuState(context) {
             reloadTextEl.textContent = 'Reload All Cables';
         }
     }
+    
+    console.log('[contextMenu] Elements visibility:', {
+        selectedOptions: !selectedOptionsEl?.classList.contains('hidden'),
+        creatingOptions: !creatingOptionsEl?.classList.contains('hidden'),
+        cableInfo: !cableInfoEl?.classList.contains('hidden'),
+        generalOptions: !generalOptionsEl?.classList.contains('hidden')
+    });
 }
 
 /**
