@@ -193,6 +193,15 @@ main() {
   maybe_collectstatic
   maybe_ensure_superuser
 
+  # Limpar PID file do Celery Beat se o comando for celery beat
+  if [[ "$*" == *"celery"* && "$*" == *"beat"* ]]; then
+    local pidfile="/tmp/celerybeat.pid"
+    if [[ -f "$pidfile" ]]; then
+      warn "Removendo PID file antigo: $pidfile"
+      rm -f "$pidfile"
+    fi
+  fi
+
   log "Iniciando processo: $*"
   exec "$@"
 }

@@ -78,19 +78,21 @@ class TestContextBinding:
         mock_bind.assert_called_once()
         call_kwargs = mock_bind.call_args[1]
         assert 'request_id' in call_kwargs
-        assert call_kwargs['method'] == 'GET'
-        assert call_kwargs['path'] == '/test/'
+        assert call_kwargs['request_method'] == 'GET'
+        assert call_kwargs['request_path'] == '/test/'
         assert call_kwargs['remote_addr'] == '127.0.0.1'
 
     @patch('core.middleware.request_id.structlog.contextvars.clear_contextvars')
     def test_clears_context_after_response(self, mock_clear):
         """Test that context is cleared after response."""
+        from django.http import HttpResponse
+        
         middleware = get_middleware()
         factory = RequestFactory()
         request = factory.get('/')
         request.request_id = str(uuid.uuid4())
 
-        response = Mock()
+        response = HttpResponse()
         middleware.process_response(request, response)
 
         mock_clear.assert_called_once()
@@ -157,6 +159,8 @@ class TestClientIPExtraction:
         middleware = get_middleware()
         factory = RequestFactory()
         request = factory.get('/')
+        # Remove REMOTE_ADDR to force 'unknown' default
+        del request.META['REMOTE_ADDR']
 
         client_ip = middleware._get_client_ip(request)
 
@@ -192,8 +196,8 @@ class TestExceptionHandling:
         call_args = mock_error.call_args[1]
         assert 'request_id' in call_args
         assert call_args['request_id'] == request.request_id
-        assert call_args['path'] == '/test/'
-        assert call_args['method'] == 'GET'
+        assert call_args['request_path'] == '/test/'
+        assert call_args['request_method'] == 'GET'
 
     @patch('core.middleware.request_id.logger.error')
     def test_handles_exception_without_request_id(self, mock_error):
@@ -208,7 +212,8 @@ class TestExceptionHandling:
         # Should not raise exception
         middleware.process_exception(request, exception)
 
-        mock_error.assert_called_once()
+        # Logger should NOT be called when there's no request_id
+        mock_error.assert_not_called()
 
 
 class TestMiddlewareIntegration:
