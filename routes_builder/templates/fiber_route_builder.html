@@ -112,6 +112,6 @@
 
 {% block extra_scripts %}
 <script src="{% static 'js/partials/import_kml.js' %}?v={{ STATIC_ASSET_VERSION }}"></script>
-<script defer src="{% static 'js/fiber_route_builder.js' %}?v={{ STATIC_ASSET_VERSION }}"></script>
+<script type="module" src="{% static 'js/fiber_route_builder.js' %}?v={{ STATIC_ASSET_VERSION }}"></script>
 <script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&callback=initMap" async defer></script>
 {% endblock %}
