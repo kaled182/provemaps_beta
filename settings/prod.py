@@ -5,6 +5,9 @@ boas práticas de execução atrás de proxy/reverse-proxy e ajustes de logging.
 """
 
 import os
+
+import structlog
+
 from .base import *  # noqa
 
 # -----------------------------------------------------
@@ -95,6 +98,115 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv("DATA_UPLOAD_MAX_MEMORY_SIZE", "1048
 FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv("FILE_UPLOAD_MAX_MEMORY_SIZE", "10485760"))
 
 # -----------------------------------------------------
+# Redis High Availability Configuration
+# -----------------------------------------------------
+# Option A: Managed Service (AWS ElastiCache, Google Memorystore, Azure Cache)
+# Set REDIS_URL to managed service endpoint
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
+# Option B: Self-Managed Redis Sentinel
+# Uncomment below and set REDIS_USE_SENTINEL=true
+REDIS_USE_SENTINEL = os.getenv("REDIS_USE_SENTINEL", "false").lower() == "true"
+
+if REDIS_USE_SENTINEL:
+    # Parse sentinel hosts from env: "host1:port1,host2:port2,host3:port3"
+    sentinel_hosts_str = os.getenv("REDIS_SENTINELS", "localhost:26379")
+    REDIS_SENTINELS = [
+        (h.split(":")[0], int(h.split(":")[1]))
+        for h in sentinel_hosts_str.split(",")
+        if ":" in h
+    ]
+    REDIS_MASTER_NAME = os.getenv("REDIS_MASTER_NAME", "mymaster")
+    REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
+    
+    # Cache with Sentinel
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": f"redis://{REDIS_MASTER_NAME}/0",
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.SentinelClient",
+                "SENTINELS": REDIS_SENTINELS,
+                "SENTINEL_KWARGS": {
+                    "password": REDIS_PASSWORD,
+                } if REDIS_PASSWORD else {},
+                "PASSWORD": REDIS_PASSWORD,
+                "CONNECTION_POOL_KWARGS": {
+                    "max_connections": 50,
+                    "retry_on_timeout": True,
+                },
+                "SOCKET_CONNECT_TIMEOUT": 5,
+                "SOCKET_TIMEOUT": 5,
+            }
+        }
+    }
+    
+    # Celery with Sentinel
+    sentinel_urls = ";".join(
+        [f"sentinel://{h}:{p}" for h, p in REDIS_SENTINELS]
+    )
+    CELERY_BROKER_URL = sentinel_urls
+    CELERY_BROKER_TRANSPORT_OPTIONS = {
+        "master_name": REDIS_MASTER_NAME,
+        "sentinel_kwargs": (
+            {"password": REDIS_PASSWORD} if REDIS_PASSWORD else {}
+        ),
+    }
+    CELERY_RESULT_BACKEND = sentinel_urls
+    
+    # Channels with Sentinel
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": REDIS_SENTINELS,
+                "master_name": REDIS_MASTER_NAME,
+                "sentinel_kwargs": (
+                    {"password": REDIS_PASSWORD} if REDIS_PASSWORD else {}
+                ),
+                "password": REDIS_PASSWORD,
+                "capacity": 1500,
+                "expiry": 10,
+            },
+        },
+    }
+else:
+    # Standard Redis configuration (Managed Service or single instance)
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": REDIS_URL,
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
+                "SOCKET_CONNECT_TIMEOUT": 5,
+                "SOCKET_TIMEOUT": 5,
+                "CONNECTION_POOL_KWARGS": {
+                    "max_connections": 50,
+                    "retry_on_timeout": True
+                },
+                "PARSER_CLASS": "redis.connection.HiredisParser",
+            }
+        }
+    }
+    
+    # Celery
+    CELERY_BROKER_URL = REDIS_URL
+    CELERY_RESULT_BACKEND = REDIS_URL
+    CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+    
+    # Channels
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [REDIS_URL],
+                "capacity": 1500,
+                "expiry": 10,
+            },
+        },
+    }
+
+# -----------------------------------------------------
 # E-mail
 # -----------------------------------------------------
 EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
@@ -108,18 +220,22 @@ DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@localhost")
 SERVER_EMAIL = DEFAULT_FROM_EMAIL  # Para error reports
 
 # -----------------------------------------------------
-# Logging (Production-ready)
+# Logging (Production-ready with Structlog)
 # -----------------------------------------------------
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 DJANGO_LOG_LEVEL = os.getenv("DJANGO_LOG_LEVEL", "WARNING")
 
+# Standard Django logging configuration
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
         "json": {
             "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
-            "format": "%(levelname)s %(asctime)s %(name)s %(module)s %(process)d %(thread)d %(message)s",
+            "format": (
+                "%(levelname)s %(asctime)s %(name)s %(module)s "
+                "%(process)d %(thread)d %(message)s"
+            ),
         },
         "simple": {
             "format": "[%(levelname)s] %(asctime)s %(name)s: %(message)s",
@@ -129,7 +245,9 @@ LOGGING = {
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
-            "formatter": "json" if os.getenv("LOG_FORMAT") == "json" else "simple",
+            "formatter": (
+                "json" if os.getenv("LOG_FORMAT") == "json" else "simple"
+            ),
         },
     },
     "root": {
@@ -154,6 +272,24 @@ LOGGING = {
         },
     },
 }
+
+# Structlog configuration for structured logging
+structlog.configure(
+    processors=[
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.filter_by_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.processors.UnicodeDecoder(),
+        structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+    ],
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    cache_logger_on_first_use=True,
+)
 
 # -----------------------------------------------------
 # Sentry (Production configuration)
