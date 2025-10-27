@@ -1,3 +1,5 @@
+import { fetchFibers, fetchFiber, createFiberManual, updateFiber, removeFiber, fetchDevicePorts } from './modules/apiClient.js';
+
 let map;
 let polyline;
 let currentPath = [];
@@ -431,26 +433,11 @@ window.initMap = initMap;
 
 async function loadFibers() {
     try {
-        const response = await fetch('/zabbix_api/api/fibers/', {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                'Cache-Control': 'no-cache',
-                'Pragma': 'no-cache',
-            },
-            cache: 'no-store',
-            credentials: 'same-origin',
-        });
-        if (!response.ok) {
-            console.error('Failed to load fiber list:', response.status);
-            return null;
-        }
-        const data = await response.json();
+        const data = await fetchFibers();
         const select = document.getElementById('fiberSelect');
         if (select) {
             select.innerHTML = '<option value="">-- select a cable --</option>';
-            // API retorna "fibers" não "cables"
-            const cables = data.fibers || data.cables || [];
+            const cables = (data && (data.fibers || data.cables)) ? (data.fibers || data.cables) : [];
             cables.forEach((cable) => {
                 const option = document.createElement('option');
                 option.value = cable.id;
@@ -469,70 +456,27 @@ async function loadFibers() {
 window.loadFibers = loadFibers;
 
 async function loadFiberDetail(id) {
-
-    const response = await fetch(`/zabbix_api/api/fiber/${id}/`, {
-
-        method: 'GET',
-
-        headers: {
-
-            'Accept': 'application/json',
-
-            'Cache-Control': 'no-cache',
-
-            'Pragma': 'no-cache',
-
-        },
-
-        cache: 'no-store',
-
-        credentials: 'same-origin',
-
-    });
-
-    if (!response.ok) {
-
+    try {
+        const data = await fetchFiber(id);
+        activeFiberId = data.id;
+        currentFiberMeta = {
+            name: data.name || '',
+            origin_device_id: data.origin?.device_id || null,
+            origin_port_id: data.origin?.port_id || null,
+            dest_device_id: data.destination?.device_id || null,
+            dest_port_id: data.destination?.port_id || null,
+            single_port: Boolean(data.single_port),
+        };
+        updateEditButtonState();
+        const path = (data.path && data.path.length) ? data.path : buildDefaultFromEndpoints(data);
+        setPath(path);
+        if (path && path.length > 0) {
+            fitMapToBounds(path);
+        }
+    } catch (err) {
+        console.error('Error loading cable', err);
         alert('Error loading cable');
-
-        return;
-
     }
-
-    const data = await response.json();
-
-    activeFiberId = data.id;
-
-    currentFiberMeta = {
-
-        name: data.name || '',
-
-        origin_device_id: data.origin?.device_id || null,
-
-        origin_port_id: data.origin?.port_id || null,
-
-        dest_device_id: data.destination?.device_id || null,
-
-        dest_port_id: data.destination?.port_id || null,
-
-        single_port: Boolean(data.single_port),
-
-    };
-
-    updateEditButtonState();
-
-    const path = (data.path && data.path.length)
-
-        ? data.path
-
-        : buildDefaultFromEndpoints(data);
-
-    setPath(path);
-
-    // Centralizar e ajustar zoom para mostrar todo o cabo
-    if (path && path.length > 0) {
-        fitMapToBounds(path);
-    }
-
 }
 
 function fitMapToBounds(path) {
@@ -700,35 +644,13 @@ function getCookie(name) {
 
 async function updateExistingPath() {
     if (!activeFiberId) return;
-
-    const csrftoken = getCookie('csrftoken');
-
     try {
-        const response = await fetch(`/zabbix_api/api/fiber/${activeFiberId}/`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrftoken,
-            },
-            credentials: 'same-origin',
-            body: JSON.stringify({ path: currentPath }),
-        });
-
-        if (!response.ok) {
-            const details = await response.text();
-            alert(`Failed to save: ${details}`);
-            return;
-        }
-
-    const payload = await response.json();
-    alert(`Saved successfully.\nPoints: ${payload.points}\nDistance: ${payload.length_km} km`);
-
-    // Limpar o cabo do mapa após salvar path
-    clearMapAndResetState();
-
-    // Recarregar lista de cabos e visualização
-    await loadFibers();
-    await loadAllCablesForVisualization();
+        const pathPayload = { path: currentPath };
+        const result = await updateFiber(activeFiberId, pathPayload);
+        alert(`Saved successfully.\nPoints: ${result.points}\nDistance: ${result.length_km} km`);
+        clearMapAndResetState();
+        await loadFibers();
+        await loadAllCablesForVisualization();
     } catch (error) {
         console.error('Request error:', error);
         alert('Connection failure or unexpected error while saving.');
@@ -852,14 +774,7 @@ async function loadPortsForSelect(deviceId, targetSelect) {
         return;
     }
     try {
-        const response = await fetch(`/zabbix_api/api/device-ports/${deviceId}/`, {
-            credentials: 'same-origin'
-        });
-        if (!response.ok) {
-            targetSelect.innerHTML = '<option value="">Falha ao carregar</option>';
-            return;
-        }
-        const data = await response.json();
+        const data = await fetchDevicePorts(deviceId);
         targetSelect.innerHTML = '<option value="">Selecione...</option>';
         if (Array.isArray(data.ports)) {
             data.ports.forEach((port) => {
@@ -905,59 +820,30 @@ async function syncDestinationDevice() {
 }
 
 async function performCreateFiber(payload) {
-    const csrftoken = getCookie('csrftoken');
-    const response = await fetch('/zabbix_api/api/fibers/manual-create/', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': csrftoken,
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify(payload),
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
-        throw new Error(data.error || 'Erro inesperado');
+    try {
+        const data = await createFiberManual(payload);
+        alert('Rota criada com sucesso.');
+        closeManualSaveModal();
+        document.dispatchEvent(new CustomEvent('fiber:cable-created', { detail: { fiberId: data.fiber_id } }));
+        await loadAllCablesForVisualization();
+    } catch (error) {
+        console.error('Erro ao criar rota:', error);
+        throw error;
     }
-
-    alert('Rota criada com sucesso.');
-    closeManualSaveModal();
-
-    document.dispatchEvent(new CustomEvent('fiber:cable-created', {
-        detail: { fiberId: data.fiber_id },
-    }));
-
-    // Recarregar visualização completa
-    await loadAllCablesForVisualization();
 }
 
 async function performUpdateFiber(fiberId, payload) {
-    const csrftoken = getCookie('csrftoken');
-    const response = await fetch(`/zabbix_api/api/fiber/${fiberId}/`, {
-        method: 'PUT',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': csrftoken,
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify(payload),
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
-        throw new Error(data.error || 'Erro inesperado');
+    try {
+        await updateFiber(fiberId, payload);
+        alert('Cabo atualizado com sucesso.');
+        closeManualSaveModal();
+        clearMapAndResetState();
+        await loadFibers();
+        await loadAllCablesForVisualization();
+    } catch (error) {
+        console.error('Erro ao atualizar cabo:', error);
+        throw error;
     }
-
-    alert('Cabo atualizado com sucesso.');
-    closeManualSaveModal();
-
-    // Limpar o cabo do mapa após salvar edição
-    clearMapAndResetState();
-
-    // Recarregar lista de cabos e visualização
-    await loadFibers();
-    await loadAllCablesForVisualization();
 }
 
 async function handleManualFormSubmit(event) {
@@ -1028,32 +914,16 @@ async function deleteCable() {
         alert('No cable selected to delete.');
         return;
     }
-
     if (!confirm('Confirm cable deletion? This action cannot be undone.')) {
         return;
     }
-
-    const csrftoken = getCookie('csrftoken');
-
     try {
-        const response = await fetch(`/zabbix_api/api/fiber/${activeFiberId}/`, {
-            method: 'DELETE',
-            headers: {
-                'X-CSRFToken': csrftoken,
-            },
-            credentials: 'same-origin',
-        });
-
-        if (response.status === 204) {
-            alert('Cable removed successfully.');
-            activeFiberId = null;
-            setPath([]);
-            await loadFibers();
-            await loadAllCablesForVisualization();
-        } else {
-            const details = await response.text();
-            alert(`Failed to delete: ${details}`);
-        }
+        await removeFiber(activeFiberId);
+        alert('Cable removed successfully.');
+        activeFiberId = null;
+        setPath([]);
+        await loadFibers();
+        await loadAllCablesForVisualization();
     } catch (error) {
         console.error('Request error:', error);
         alert('Connection failure or unexpected error while deleting.');
