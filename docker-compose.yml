@@ -1,6 +1,4 @@
-﻿version: "3.9"
-
-services:
+﻿services:
   web:
     build: .
     command: >
@@ -13,6 +11,8 @@ services:
     entrypoint: ["/docker-entrypoint.sh"]
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
       DJANGO_SETTINGS_MODULE: settings.dev
       SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
@@ -51,6 +51,8 @@ services:
     build: .
     command: celery -A core.celery_app worker -Q default -l info -c 4
     entrypoint: ["/docker-entrypoint.sh"]
+    env_file:
+      - .env
     environment:
       DJANGO_SETTINGS_MODULE: settings.dev
       SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
@@ -86,6 +88,8 @@ services:
     build: .
     command: celery -A core.celery_app beat -l info --pidfile=/tmp/celerybeat.pid
     entrypoint: ["/docker-entrypoint.sh"]
+    env_file:
+      - .env
     environment:
       DJANGO_SETTINGS_MODULE: settings.dev
       SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
