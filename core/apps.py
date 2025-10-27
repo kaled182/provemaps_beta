@@ -10,4 +10,7 @@ class CoreConfig(AppConfig):
         """Initialize Prometheus metrics on Django startup."""
         # Import here to avoid AppRegistryNotReady
         from core.metrics_static_version import init_static_version_metric
+        from core.metrics_custom import init_metrics
+
         init_static_version_metric()
+        init_metrics()
