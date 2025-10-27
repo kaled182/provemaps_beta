@@ -1,11 +1,8 @@
 // Core modules
-import { getPath, setPath as setPathState, addPoint, updatePoint, removePoint, reorderPath, clearPath, totalDistance as calculateDistance, onPathChange } from './modules/pathState.js';
+import { getPath, setPath as setPathState, addPoint, updatePoint, clearPath, totalDistance as calculateDistance, onPathChange } from './modules/pathState.js';
 import { initMap as initializeMap, onMapClick, onMapRightClick, drawPolyline, clearPolyline, addMarker as createMarker, removeMarker, clearMarkers as clearAllMarkers, attachPolylineRightClick } from './modules/mapCore.js';
 import { initContextMenu, showContextMenu, hideContextMenu, updateContextMenuState } from './modules/contextMenu.js';
-import { initModalEditor, openModalForCreate, openModalForEdit, closeModal, getEditingFiberId, updateEditButtonState } from './modules/modalEditor.js';
-
-// API client modules
-import { fetchFibers, fetchFiber, createFiberManual, updateFiber, removeFiber } from './modules/apiClient.js';
+import { initModalEditor, openModalForCreate, openModalForEdit, closeModal, getEditingFiberId } from './modules/modalEditor.js';
 
 // Business logic modules
 import { loadCableList, loadCableDetails, createCable, updateCableData, deleteCable, loadAllCablesForVisualization, clearCablePolylines, validateCablePayload } from './modules/cableService.js';
@@ -21,10 +18,6 @@ let activeFiberId = null;
 let currentFiberMeta = null;
 let allCablesPolylines = [];
 
-// DOM elements
-let manualForm;
-let manualModal;
-
 /**
  * Clear map and reset application state
  */
@@ -39,7 +32,6 @@ function clearMapAndResetState() {
 /**
  * Setup path change callback - handles UI updates when path changes
  */
-onPathChange(({ path, distance }) => {
     // Redraw polyline
     if (polyline) {
         clearPolyline();
@@ -77,8 +69,55 @@ function clearAllCablesFromMap() {
     allCablesPolylines = [];
 }
 
-// Note: loadAllCablesForVisualization is imported from cableService.js
-// Do not redeclare it here to avoid "Identifier already declared" error
+async function loadAllCablesForVisualization() {
+    try {
+        // Clear previous cables
+        clearAllCablesFromMap();
+        
+        const data = await fetchFibers();
+        const cables = data.fibers || data.cables || [];
+        
+        if (cables.length === 0) {
+            alert('No cables found.');
+            return;
+        }
+        
+        let loadedCount = 0;
+        
+        // Load details for each cable and draw on map
+        for (const cable of cables) {
+            try {
+                const detail = await fetchFiber(cable.id);
+                const path = detail.path || [];
+                
+                if (path.length < 2) continue;
+                
+                // Create polyline for visualization (clickable for editing)
+                const viewPolyline = createCablePolyline(path, {
+                    strokeColor: '#e90000ff', // Dark blue for visualization
+                    strokeOpacity: 1.0,
+                    strokeWeight: 2,
+                });
+                
+                // Add right-click for editing
+                makeCableEditable(viewPolyline, cable.id, cable.name);
+                
+                allCablesPolylines.push(viewPolyline);
+                loadedCount++;
+                
+            } catch (error) {
+                console.error(`Error loading cable ${cable.id}:`, error);
+            }
+        }
+        
+    // Removed intrusive visual alert; use discrete log
+    console.info(`Visualization: ${loadedCount} cables loaded.`);
+        
+    } catch (error) {
+        console.error('Error loading all cables:', error);
+        alert('Error loading cables.');
+    }
+}
 
 // Expose function globally for use in import_kml.js
 window.clearMapAndResetState = clearMapAndResetState;
@@ -143,16 +182,13 @@ function clearMarkers() {
 }
 
 function addMarker(point, removable = true) {
-    console.log(`[addMarker] Creating draggable marker at:`, point);
     const marker = createMarker(point, { draggable: true });
     markers.push(marker);
-    console.log(`[addMarker] Total markers now: ${markers.length}`);
 
     marker.addListener('dragend', () => {
         const index = markers.indexOf(marker);
         if (index > -1) {
             const newPos = marker.getPosition();
-            console.log(`[addMarker] Marker #${index} dragged to:`, newPos.lat(), newPos.lng());
             updatePoint(index, newPos.lat(), newPos.lng());
             // onPathChange callback will redraw
         }
@@ -162,7 +198,6 @@ function addMarker(point, removable = true) {
         const removeMarkerHandler = () => {
             const index = markers.indexOf(marker);
             if (index > -1) {
-                console.log(`[addMarker] Removing marker #${index}`);
                 markers.splice(index, 1);
                 removePoint(index);
                 removeMarker(marker);
@@ -305,7 +340,6 @@ window.loadFibers = loadFibers;
 async function loadFiberDetail(id) {
     try {
         const data = await fetchFiber(id);
-        console.log(`[loadFiberDetail] Loaded cable #${id}:`, data);
         activeFiberId = data.id;
         currentFiberMeta = {
             name: data.name || '',
@@ -317,9 +351,7 @@ async function loadFiberDetail(id) {
         };
         updateEditButtonState();
         const path = (data.path && data.path.length) ? data.path : buildDefaultFromEndpoints(data);
-        console.log(`[loadFiberDetail] Setting path with ${path.length} points:`, path);
         setPath(path);
-        console.log(`[loadFiberDetail] Created ${markers.length} markers`);
         if (path && path.length > 0) {
             fitMapToBounds(path);
         }
@@ -500,14 +532,28 @@ function handleSaveClick() {
     openManualSaveModal();
 }
 
-// Note: deleteCable is imported from cableService.js
-// Do not redeclare it here to avoid "Identifier already declared" error
+async function deleteCable() {
+    if (!activeFiberId) {
+        alert('No cable selected to delete.');
+        return;
+    }
+    if (!confirm('Confirm cable deletion? This action cannot be undone.')) {
+        return;
+    }
+    try {
+        await removeFiber(activeFiberId);
+        alert('Cable removed successfully.');
+        activeFiberId = null;
+        setPath([]);
+        await loadFibers();
+        await loadAllCablesForVisualization();
+    } catch (error) {
+        console.error('Request error:', error);
+        alert('Connection failure or unexpected error while deleting.');
+    }
+}
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialize DOM elements
-    manualForm = document.getElementById('manualSaveForm');
-    manualModal = document.getElementById('manualSaveModal');
-    
     // Initialize modules
     initContextMenu();
     initModalEditor();
@@ -555,23 +601,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // Context menu - Conditional options (cable selected)
-    document.getElementById('contextEditPath')?.addEventListener('click', () => {
-        hideContextMenu();
-        if (activeFiberId && currentFiberMeta) {
-            console.log('[contextEditPath] Entering path edit mode');
-            // Cable is already loaded, just ensure markers are visible
-            const currentPath = getPath();
-            if (currentPath.length === 0) {
-                // If path empty, reload the cable
-                loadFiberDetail(activeFiberId);
-            } else {
-                console.log(`[contextEditPath] Path already loaded with ${currentPath.length} points`);
-                // Path already loaded by right-click event, markers should be visible
-                alert(`Path edit mode active!\n${currentPath.length} draggable markers loaded.\nDrag markers to edit, right-click marker to remove.`);
-            }
-        }
-    });
-    
     document.getElementById('contextEditCable')?.addEventListener('click', () => {
         hideContextMenu();
         if (activeFiberId) {
@@ -666,9 +695,6 @@ document.addEventListener('fiber:cable-created', async (event) => {
     
     // Recarregar lista de cabos
     await loadFibers();
-    
-    // Recarregar visualização de todos os cabos no mapa
-    await loadAllCablesForVisualization();
     
     if (fiberId) {
         console.info(`New cable created: ${fiberId}`);

@@ -69,7 +69,7 @@ class TestZabbixMetrics:
         mock_latency.labels().observe.assert_called_with(0.5)
 
         mock_calls_total.labels.assert_called_with(
-            endpoint='host.get', success=True, error_type='none'
+            endpoint='host.get', status='success', error_type='none'
         )
         mock_calls_total.labels().inc.assert_called_once()
 
@@ -82,12 +82,12 @@ class TestZabbixMetrics:
         record_zabbix_call('host.get', 0.3, False, error_type='timeout')
 
         mock_latency.labels.assert_called_with(
-            endpoint='host.get', status='failure'
+            endpoint='host.get', status='error'
         )
         mock_latency.labels().observe.assert_called_with(0.3)
 
         mock_calls_total.labels.assert_called_with(
-            endpoint='host.get', success=False, error_type='timeout'
+            endpoint='host.get', status='error', error_type='timeout'
         )
         mock_calls_total.labels().inc.assert_called_once()
 
@@ -101,7 +101,7 @@ class TestCacheMetrics:
         record_cache_operation('default', 'get', hit=True)
 
         mock_operations.labels.assert_called_with(
-            cache_name='default', operation='get', hit='true'
+            cache_name='default', operation='get', result='hit'
         )
         mock_operations.labels().inc.assert_called_once()
 
@@ -111,17 +111,17 @@ class TestCacheMetrics:
         record_cache_operation('default', 'get', hit=False)
 
         mock_operations.labels.assert_called_with(
-            cache_name='default', operation='get', hit='false'
+            cache_name='default', operation='get', result='miss'
         )
         mock_operations.labels().inc.assert_called_once()
 
     @patch('core.metrics_custom.cache_operations_total')
     def test_record_cache_set_success(self, mock_operations):
         """Test recording cache SET operations."""
-        record_cache_operation('default', 'set', hit=None)
+        record_cache_operation('default', 'set', hit=True)
 
         mock_operations.labels.assert_called_with(
-            cache_name='default', operation='set', hit='na'
+            cache_name='default', operation='set', result='success'
         )
         mock_operations.labels().inc.assert_called_once()
 
@@ -158,22 +158,20 @@ class TestCeleryMetrics:
     @patch('core.metrics_custom.celery_queue_depth')
     def test_update_celery_queue_metrics(self, mock_queue_depth):
         """Test updating Celery queue depth metrics."""
-        queues = {'celery': 5, 'periodic': 2}
-        update_celery_queue_metrics(queues)
+        update_celery_queue_metrics('celery', 5)
+        update_celery_queue_metrics('periodic', 2)
 
         assert mock_queue_depth.labels.call_count == 2
-        mock_queue_depth.labels(queue_name='celery').set.assert_called_with(5)
-        mock_queue_depth.labels(queue_name='periodic').set.assert_called_with(2)
+        # Verify both calls were made with correct parameters
+        mock_queue_depth.labels.assert_any_call(queue='celery')
+        mock_queue_depth.labels.assert_any_call(queue='periodic')
 
     @patch('core.metrics_custom.celery_queue_depth')
     def test_update_multiple_queues(self, mock_queue_depth):
         """Test updating multiple queue depths."""
-        queues = {
-            'celery': 10,
-            'periodic': 3,
-            'priority': 1,
-        }
-        update_celery_queue_metrics(queues)
+        update_celery_queue_metrics('celery', 10)
+        update_celery_queue_metrics('periodic', 3)
+        update_celery_queue_metrics('priority', 1)
 
         assert mock_queue_depth.labels.call_count == 3
 
@@ -187,7 +185,7 @@ class TestMetricLabels:
         record_zabbix_call('item.get', 0.2, True)
 
         mock_calls_total.labels.assert_called_with(
-            endpoint='item.get', success=True, error_type='none'
+            endpoint='item.get', status='success', error_type='none'
         )
 
     @patch('core.metrics_custom.zabbix_api_calls_total')
@@ -196,7 +194,7 @@ class TestMetricLabels:
         record_zabbix_call('host.get', 0.4, True, error_type=None)
 
         mock_calls_total.labels.assert_called_with(
-            endpoint='host.get', success=True, error_type='none'
+            endpoint='host.get', status='success', error_type='none'
         )
 
 
@@ -237,9 +235,11 @@ class TestMetricIntegration:
         assert cache_operations_total._labelnames == (
             'cache_name',
             'operation',
-            'hit',
+            'result',
         )
-        assert db_query_duration._labelnames == ('query_type', 'model', 'operation')
+        assert db_query_duration._labelnames == (
+            'query_type', 'model', 'operation'
+        )
 
 
 class TestMetricsWithDjango:

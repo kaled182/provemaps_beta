@@ -1,9 +1,10 @@
 """
 Settings para TESTES do mapsprovefiber.
-Isola dependências externas e acelera a execução dos testes.
+Usa MariaDB (Docker) para ambiente de teste próximo à produção.
 """
 
 from .base import *  # noqa
+import os
 
 # -----------------------------------------------------
 # Configurações de Teste
@@ -13,11 +14,25 @@ TESTING = True
 # Evita redirecionamentos HTTP->HTTPS em testes
 SECURE_SSL_REDIRECT = False
 
-# Banco de dados em memória
+# Banco de dados - MariaDB (Docker) para testes de integração
+# Usa as mesmas credenciais do docker-compose.yml
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": ":memory:",
+        "ENGINE": "django.db.backends.mysql",
+        "NAME": os.getenv("DB_NAME", "app"),
+        "USER": os.getenv("DB_USER", "app"),
+        "PASSWORD": os.getenv("DB_PASSWORD", "app"),  # Senha correta do docker-compose.yml
+        "HOST": os.getenv("DB_HOST", "db"),  # Nome do serviço no Docker
+        "PORT": os.getenv("DB_PORT", "3306"),
+        "TEST": {
+            # pytest-django criará automaticamente test_app
+            "CHARSET": "utf8mb4",
+            "COLLATION": "utf8mb4_unicode_ci",
+        },
+        "OPTIONS": {
+            "init_command": "SET sql_mode='STRICT_TRANS_TABLES'",
+            "charset": "utf8mb4",
+        },
     }
 }
 
