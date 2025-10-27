@@ -1,9 +1,51 @@
+import { fetchFibers, fetchFiber, createFiberManual, updateFiber, removeFiber, fetchDevicePorts } from './modules/apiClient.js';
+import { 
+  getPath, 
+  setPath as setPathState, 
+  addPoint, 
+  removePoint, 
+  updatePoint, 
+  reorderPath, 
+  clearPath, 
+  totalDistance as calculateDistance,
+  onPathChange 
+} from './modules/pathState.js';
+import { 
+  initMap as initializeMap, 
+  getMap, 
+  onMapClick, 
+  onMapRightClick,
+  drawPolyline, 
+  clearPolyline,
+  addMarker as createMarker, 
+  removeMarker, 
+  clearMarkers as clearAllMarkers,
+  getMarkers,
+  fitMapToBounds as fitBounds,
+  createCablePolyline,
+  attachPolylineRightClick
+} from './modules/mapCore.js';
+import {
+  initContextMenu,
+  showContextMenu,
+  hideContextMenu,
+  updateContextMenuState
+} from './modules/contextMenu.js';
+import {
+  initModalEditor,
+  openModalForCreate,
+  openModalForEdit,
+  closeModal,
+  getEditingFiberId,
+  isEditMode,
+  resetForm as resetModalForm
+} from './modules/modalEditor.js';
+
 let map;
 let polyline;
-let currentPath = [];
 let markers = [];
 let activeFiberId = null;
-let allCablesPolylines = []; // Armazena polylines de todos os cabos para visualização
+let allCablesPolylines = []; // Stores polylines for all cables visualization
 
 const distanceEl = document.getElementById('distanceKm');
 
@@ -23,8 +65,8 @@ let editingFiberId = null;
 let currentFiberMeta = null;
 
 function updateEditButtonState() {
-    // Função mantida para compatibilidade, mas não há mais botão de edição
-    // Edição agora é via menu de contexto
+    // Function kept for compatibility, but no edit button exists anymore
+    // Editing is now done via context menu
 }
 
 function clearMapAndResetState() {
@@ -36,139 +78,116 @@ function clearMapAndResetState() {
         fiberSelect.value = '';
     }
     setPath([]);
-    clearAllCablesFromMap(); // Também limpar cabos de visualização
+    clearAllCablesFromMap(); // Also clear visualization cables
 }
 
+// Path change callback will handle UI updates
+onPathChange(({ path, distance }) => {
+    // Redraw polyline
+    if (polyline) {
+        clearPolyline();
+    }
+    if (path.length > 0) {
+        polyline = drawPolyline(path);
+        // Add right-click to polyline
+        if (polyline) {
+            attachPolylineRightClick(polyline, ({ clientX, clientY }) => {
+                showContextMenu(clientX, clientY);
+                updateContextMenuStateWrapper();
+            });
+        }
+    }
+    
+    // Update distance display
+    if (distanceEl) {
+        distanceEl.textContent = distance.toFixed(3);
+    }
+    
+    // Rebuild marker list
+    refreshList();
+    
+    // Update save button state
+    const saveButton = document.getElementById('savePath');
+    if (saveButton) {
+        const allowSave = (path.length >= 2) || (activeFiberId && path.length === 0);
+        saveButton.disabled = !allowSave;
+    }
+});
+
 function clearAllCablesFromMap() {
-    // Remover todas as polylines de visualização
+    // Remove all visualization polylines
     allCablesPolylines.forEach(polyline => polyline.setMap(null));
     allCablesPolylines = [];
 }
 
 async function loadAllCablesForVisualization() {
     try {
-        // Limpar cabos anteriores
+        // Clear previous cables
         clearAllCablesFromMap();
         
-        const response = await fetch('/zabbix_api/api/fibers/', {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                'Cache-Control': 'no-cache',
-            },
-            credentials: 'same-origin',
-        });
-        
-        if (!response.ok) {
-            console.error('Failed to load cables:', response.status);
-            alert('Falha ao carregar cabos para visualização.');
-            return;
-        }
-        
-        const data = await response.json();
+        const data = await fetchFibers();
         const cables = data.fibers || data.cables || [];
         
         if (cables.length === 0) {
-            alert('Nenhum cabo encontrado.');
+            alert('No cables found.');
             return;
         }
         
         let loadedCount = 0;
         
-        // Carregar detalhes de cada cabo e desenhar no mapa
+        // Load details for each cable and draw on map
         for (const cable of cables) {
             try {
-                const detailResponse = await fetch(`/zabbix_api/api/fiber/${cable.id}/`, {
-                    method: 'GET',
-                    headers: { 'Accept': 'application/json' },
-                    credentials: 'same-origin',
-                });
-                
-                if (!detailResponse.ok) continue;
-                
-                const detail = await detailResponse.json();
+                const detail = await fetchFiber(cable.id);
                 const path = detail.path || [];
                 
                 if (path.length < 2) continue;
                 
-                // Criar polyline para visualização (clicável para edição)
-                const viewPolyline = new google.maps.Polyline({
-                    path: path,
-                    geodesic: true,
-                    strokeColor: '#1E3A8A', // Azul escuro para visualização
-                    strokeOpacity: 0.6,
+                // Create polyline for visualization (clickable for editing)
+                const viewPolyline = createCablePolyline(path, {
+                    strokeColor: '#e90000ff', // Dark blue for visualization
+                    strokeOpacity: 1.0,
                     strokeWeight: 2,
-                    map: map,
-                    clickable: true,
                 });
                 
-                // Adicionar right-click para editar
+                // Add right-click for editing
                 makeCableEditable(viewPolyline, cable.id, cable.name);
                 
                 allCablesPolylines.push(viewPolyline);
                 loadedCount++;
                 
             } catch (error) {
-                console.error(`Erro ao carregar cabo ${cable.id}:`, error);
+                console.error(`Error loading cable ${cable.id}:`, error);
             }
         }
         
-    // Removido alerta visual intrusivo; usar log discreto
+    // Removed intrusive visual alert; use discrete log
     console.info(`Visualization: ${loadedCount} cables loaded.`);
         
     } catch (error) {
-        console.error('Erro ao carregar todos os cabos:', error);
-        alert('Erro ao carregar cabos.');
+        console.error('Error loading all cables:', error);
+        alert('Error loading cables.');
     }
 }
 
-// Expor função globalmente para uso em import_kml.js
+// Expose function globally for use in import_kml.js
 window.clearMapAndResetState = clearMapAndResetState;
 
 updateEditButtonState();
 
-function haversineKm(pointA, pointB) {
-    const earthRadiusKm = 6371;
-    const dLat = (pointB.lat - pointA.lat) * Math.PI / 180;
-    const dLng = (pointB.lng - pointA.lng) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 +
-        Math.cos(pointA.lat * Math.PI / 180) *
-        Math.cos(pointB.lat * Math.PI / 180) *
-        Math.sin(dLng / 2) ** 2;
-    return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
+// Legacy functions removed - now using pathState module
+// haversineKm and totalDistance are imported from pathState.js
 
 function totalDistance() {
-    let total = 0;
-    for (let i = 0; i < currentPath.length - 1; i += 1) {
-        total += haversineKm(currentPath[i], currentPath[i + 1]);
-    }
-    distanceEl.textContent = total.toFixed(3);
-    return total;
+    // Wrapper for compatibility - delegates to imported calculateDistance
+    return calculateDistance();
 }
 
-function redrawPolyline() {
-    if (polyline) {
-        polyline.setMap(null);
-    }
-    polyline = new google.maps.Polyline({
-        path: currentPath,
-        map,
-        strokeColor: '#2563eb',
-        strokeWeight: 4,
-        strokeOpacity: 0.9,
-        clickable: true,
-    });
-    
-    // Adicionar right-click na polyline editável também
-    polyline.addListener('rightclick', (event) => {
-        event.stop();
-        showContextMenu(event.domEvent.clientX, event.domEvent.clientY);
-    });
-}
+// redrawPolyline removed - handled by onPathChange callback
 
 function refreshList() {
     const list = document.getElementById('pointsList');
+    const currentPath = getPath(); // Get from module
     list.innerHTML = '';
     currentPath.forEach((point, index) => {
         const item = document.createElement('li');
@@ -197,84 +216,74 @@ function refreshList() {
             const fromIndex = parseInt(event.dataTransfer.getData('text/plain'), 10);
             const toIndex = parseInt(item.dataset.idx, 10);
             if (Number.isInteger(fromIndex) && Number.isInteger(toIndex) && fromIndex !== toIndex) {
-                const moved = currentPath.splice(fromIndex, 1)[0];
-                currentPath.splice(toIndex, 0, moved);
-                setPath(currentPath);
+                reorderPath(fromIndex, toIndex);
+                // No need to call setPath - onPathChange will handle it
             }
         });
 
         list.appendChild(item);
     });
-    totalDistance();
-
-    const saveButton = document.getElementById('savePath');
-    if (saveButton) {
-        const allowSave =
-            (currentPath.length >= 2) ||
-            (activeFiberId && currentPath.length === 0);
-        saveButton.disabled = !allowSave;
-    }
+    // Distance already updated via onPathChange callback
 }
 
+// clearMarkers and addMarker now delegate to mapCore module
 function clearMarkers() {
-    markers.forEach((marker) => marker.setMap(null));
-    markers = [];
+    clearAllMarkers();
+    markers = []; // Keep local array in sync
 }
 
 function addMarker(point, removable = true) {
-    const marker = new google.maps.Marker({ position: point, map, draggable: true });
+    const marker = createMarker(point, { draggable: true });
+    markers.push(marker);
 
     marker.addListener('dragend', () => {
         const index = markers.indexOf(marker);
         if (index > -1) {
-            currentPath[index] = {
-                lat: marker.getPosition().lat(),
-                lng: marker.getPosition().lng(),
-            };
-            redrawPolyline();
-            refreshList();
+            const newPos = marker.getPosition();
+            updatePoint(index, newPos.lat(), newPos.lng());
+            // onPathChange callback will redraw
         }
     });
 
     if (removable) {
-        const removeMarker = () => {
+        const removeMarkerHandler = () => {
             const index = markers.indexOf(marker);
             if (index > -1) {
                 markers.splice(index, 1);
-                currentPath.splice(index, 1);
-                marker.setMap(null);
-                redrawPolyline();
-                refreshList();
+                removePoint(index);
+                removeMarker(marker);
+                // onPathChange callback will redraw
             }
         };
 
-        marker.addListener('dblclick', removeMarker);
-        marker.addListener('rightclick', removeMarker);
+        marker.addListener('dblclick', removeMarkerHandler);
+        marker.addListener('rightclick', removeMarkerHandler);
     }
 
-    markers.push(marker);
+    return marker;
 }
 
+// setPath now syncs markers with path from module
 function setPath(points) {
     clearMarkers();
-    currentPath = points.slice();
+    setPathState(points);
+    const currentPath = getPath();
     currentPath.forEach((point) => addMarker(point));
-    redrawPolyline();
-    refreshList();
+    // onPathChange callback will handle polyline drawing
 }
 
 function initMap() {
-    map = new google.maps.Map(document.getElementById('builderMap'), {
+    map = initializeMap('builderMap', {
         center: { lat: -16.6869, lng: -49.2648 },
         zoom: 6,
         mapTypeId: 'terrain',
     });
 
-    // Click para adicionar pontos
-    map.addListener('click', (event) => {
-        // Fechar menu de contexto se estiver aberto
+    // Setup click handler via mapCore
+    onMapClick(({ lat, lng }) => {
         hideContextMenu();
         
+        const currentPath = getPath();
         if (activeFiberId && currentPath.length === 0) {
             activeFiberId = null;
             const fiberSelect = document.getElementById('fiberSelect');
@@ -282,21 +291,20 @@ function initMap() {
                 fiberSelect.value = '';
             }
         }
-        const point = { lat: event.latLng.lat(), lng: event.latLng.lng() };
-    currentPath.push(point);
+        const point = { lat, lng };
+        addPoint(lat, lng);
         addMarker(point);
-        redrawPolyline();
-        refreshList();
+        // onPathChange callback will handle redraw
     });
     
-    // Right-click para abrir menu de contexto
-    map.addListener('rightclick', (event) => {
-        event.stop(); // Prevenir menu padrão do navegador
-        showContextMenu(event.domEvent.clientX, event.domEvent.clientY);
+    // Setup right-click handler via mapCore
+    onMapRightClick(({ clientX, clientY }) => {
+        showContextMenu(clientX, clientY);
+        updateContextMenuStateWrapper();
     });
+    
     loadFibers();
-    // Carregar visualização de todos os cabos logo após o mapa estar pronto
-    // Garantir pequeno delay para evitar race com Google Maps internals
+    // Load visualization of all cables right after map is ready
     setTimeout(() => {
         if (map) {
             loadAllCablesForVisualization();
@@ -307,150 +315,62 @@ function initMap() {
     }, 300);
 }
 
-// Funções do menu de contexto
-function showContextMenu(x, y) {
-    const menu = document.getElementById('contextMenu');
-    if (!menu) return;
-    
-    // -------- POSICIONAMENTO --------
-    const menuWidth = 220;
-    const menuHeight = 300; // estimado (não crítico)
-    const windowWidth = window.innerWidth;
-    const windowHeight = window.innerHeight;
-    const offsetX = 5;
-    const offsetY = 5;
-    
-    // Ajustar X para não sair da tela (com margem de 20px)
-    let adjustedX = x + offsetX;
-    if (adjustedX + menuWidth > windowWidth - 20) {
-        // Se não couber à direita, colocar à esquerda do clique
-        adjustedX = x - menuWidth - offsetX;
-        // Se ainda sair da tela à esquerda, forçar margem mínima
-        if (adjustedX < 20) {
-            adjustedX = 20;
-        }
-    }
-    
-    // Ajustar Y para não sair da tela (com margem de 20px)
-    let adjustedY = y + offsetY;
-    if (adjustedY + menuHeight > windowHeight - 20) {
-        adjustedY = windowHeight - menuHeight - 20;
-    }
-    if (adjustedY < 20) {
-        adjustedY = 20;
-    }
-    updateContextMenuState();
-    
-    menu.style.left = adjustedX + 'px';
-    menu.style.top = adjustedY + 'px';
-    menu.classList.remove('hidden');
+// Context menu wrapper - delegates to module with current app state
+function updateContextMenuStateWrapper() {
+    updateContextMenuState({
+        hasActiveFiber: !!activeFiberId,
+        fiberMeta: currentFiberMeta,
+        pathLength: getPath().length,
+    });
 }
 
-// Função separada para lógica dos 3 cenários
-function updateContextMenuState() {
-    const selectedOptions = document.getElementById('contextSelectedOptions');
-    const creatingOptions = document.getElementById('contextCreatingOptions');
-    const cableInfo = document.getElementById('contextCableInfo');
-    const cableName = document.getElementById('contextCableName');
-    const savePath = document.getElementById('contextSavePath');
-    const generalOptions = document.getElementById('contextGeneralOptions');
-    const reloadButton = document.getElementById('contextLoadAll');
-    const reloadText = document.getElementById('contextLoadAllText');
-
-    const isCreatingNewCable = !activeFiberId && currentPath.length > 0; // Cenário B
-    const isSelectedCable = !!activeFiberId && !!currentFiberMeta; // Cenário C
-    const isEmpty = !activeFiberId && currentPath.length === 0; // Cenário A
-
-    // Reset base
-    selectedOptions?.classList.add('hidden');
-    creatingOptions?.classList.add('hidden');
-    cableInfo?.classList.add('hidden');
-    generalOptions?.classList.add('hidden');
-    reloadButton?.classList.add('hidden');
-
-    if (isCreatingNewCable) {
-        // Cenário B
-        creatingOptions?.classList.remove('hidden');
-        // Sem reload, sem import
-    } else if (isSelectedCable) {
-        // Cenário C
-        selectedOptions?.classList.remove('hidden');
-        cableInfo?.classList.remove('hidden');
-        if (cableName) {
-            const isEditing = currentPath.length > 0;
-            const status = isEditing ? ' - EDITING' : '';
-            cableName.textContent = `📌 ${currentFiberMeta.name || 'Cable #' + activeFiberId}${status}`;
-        }
-        // Reload This Cable
-        if (reloadButton && reloadText) {
-            reloadButton.classList.remove('hidden');
-            reloadText.textContent = 'Reload This Cable';
-        }
-        // Save Path habilitado somente se >=2 pontos
-        if (savePath) {
-            savePath.disabled = currentPath.length < 2;
-            savePath.style.opacity = currentPath.length >= 2 ? '1' : '0.5';
-        }
-    } else if (isEmpty) {
-        // Cenário A
-        generalOptions?.classList.remove('hidden'); // Import KML
-        if (reloadButton && reloadText) {
-            reloadButton.classList.remove('hidden');
-            reloadText.textContent = 'Reload All Cables';
-        }
-    }
-}
-function hideContextMenu() {
-    const menu = document.getElementById('contextMenu');
-    if (menu) {
-        menu.classList.add('hidden');
-    }
-}
-
-// Tornar cabos de visualização clicáveis com right-click
+// Make visualization cables clickable with right-click
 function makeCableEditable(cablePolyline, cableId, cableName) {
-    // Right-click no cabo para carregar + abrir menu
+    // Right-click on cable to load + open menu
     cablePolyline.addListener('rightclick', async (event) => {
         event.stop();
         
-        // Carregar cabo para edição
+        // Load cable for editing
         const fiberSelect = document.getElementById('fiberSelect');
         if (fiberSelect) {
             fiberSelect.value = String(cableId);
         }
         await loadFiberDetail(cableId);
         
-        // Aguardar um momento para garantir que currentFiberMeta foi atualizado
+        // Wait a moment to ensure currentFiberMeta was updated
         setTimeout(() => {
             showContextMenu(event.domEvent.clientX, event.domEvent.clientY);
+            updateContextMenuStateWrapper();
         }, 100);
     });
 }
 
+// Make initMap available globally for Google Maps callback (legacy support)
 window.initMap = initMap;
+
+// Initialize map when Google Maps API is ready
+function waitForGoogleMaps() {
+    if (typeof google !== 'undefined' && google.maps) {
+        initMap();
+    } else {
+        setTimeout(waitForGoogleMaps, 100);
+    }
+}
+
+// Start checking when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', waitForGoogleMaps);
+} else {
+    waitForGoogleMaps();
+}
 
 async function loadFibers() {
     try {
-        const response = await fetch('/zabbix_api/api/fibers/', {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                'Cache-Control': 'no-cache',
-                'Pragma': 'no-cache',
-            },
-            cache: 'no-store',
-            credentials: 'same-origin',
-        });
-        if (!response.ok) {
-            console.error('Failed to load fiber list:', response.status);
-            return null;
-        }
-        const data = await response.json();
+        const data = await fetchFibers();
         const select = document.getElementById('fiberSelect');
         if (select) {
             select.innerHTML = '<option value="">-- select a cable --</option>';
-            // API retorna "fibers" não "cables"
-            const cables = data.fibers || data.cables || [];
+            const cables = (data && (data.fibers || data.cables)) ? (data.fibers || data.cables) : [];
             cables.forEach((cable) => {
                 const option = document.createElement('option');
                 option.value = cable.id;
@@ -465,74 +385,31 @@ async function loadFibers() {
     }
 }
 
-// Expor função globalmente para uso em import_kml.js
+// Expose function globally for use in import_kml.js
 window.loadFibers = loadFibers;
 
 async function loadFiberDetail(id) {
-
-    const response = await fetch(`/zabbix_api/api/fiber/${id}/`, {
-
-        method: 'GET',
-
-        headers: {
-
-            'Accept': 'application/json',
-
-            'Cache-Control': 'no-cache',
-
-            'Pragma': 'no-cache',
-
-        },
-
-        cache: 'no-store',
-
-        credentials: 'same-origin',
-
-    });
-
-    if (!response.ok) {
-
+    try {
+        const data = await fetchFiber(id);
+        activeFiberId = data.id;
+        currentFiberMeta = {
+            name: data.name || '',
+            origin_device_id: data.origin?.device_id || null,
+            origin_port_id: data.origin?.port_id || null,
+            dest_device_id: data.destination?.device_id || null,
+            dest_port_id: data.destination?.port_id || null,
+            single_port: Boolean(data.single_port),
+        };
+        updateEditButtonState();
+        const path = (data.path && data.path.length) ? data.path : buildDefaultFromEndpoints(data);
+        setPath(path);
+        if (path && path.length > 0) {
+            fitMapToBounds(path);
+        }
+    } catch (err) {
+        console.error('Error loading cable', err);
         alert('Error loading cable');
-
-        return;
-
     }
-
-    const data = await response.json();
-
-    activeFiberId = data.id;
-
-    currentFiberMeta = {
-
-        name: data.name || '',
-
-        origin_device_id: data.origin?.device_id || null,
-
-        origin_port_id: data.origin?.port_id || null,
-
-        dest_device_id: data.destination?.device_id || null,
-
-        dest_port_id: data.destination?.port_id || null,
-
-        single_port: Boolean(data.single_port),
-
-    };
-
-    updateEditButtonState();
-
-    const path = (data.path && data.path.length)
-
-        ? data.path
-
-        : buildDefaultFromEndpoints(data);
-
-    setPath(path);
-
-    // Centralizar e ajustar zoom para mostrar todo o cabo
-    if (path && path.length > 0) {
-        fitMapToBounds(path);
-    }
-
 }
 
 function fitMapToBounds(path) {
@@ -540,15 +417,15 @@ function fitMapToBounds(path) {
 
     const bounds = new google.maps.LatLngBounds();
     
-    // Adicionar todos os pontos aos bounds
+    // Add all points to bounds
     path.forEach(point => {
         bounds.extend(new google.maps.LatLng(point.lat, point.lng));
     });
 
-    // Ajustar o mapa para mostrar todos os pontos
+    // Adjust map to show all points
     map.fitBounds(bounds);
 
-    // Adicionar um pequeno padding
+    // Add small padding
     const padding = { top: 50, right: 50, bottom: 50, left: 50 };
     map.fitBounds(bounds, padding);
 }
@@ -556,129 +433,13 @@ function fitMapToBounds(path) {
 
 
 async function openEditFiberModal() {
-
     if (!activeFiberId || !currentFiberMeta) {
-
         alert('Select a cable first.');
-
         return;
-
     }
 
-    editingFiberId = activeFiberId;
-
-    if (!manualModal || !manualForm) {
-
-        console.warn('Manual save modal not found.');
-
-        return;
-
-    }
-
-
-
-    if (manualRouteNameInput) {
-
-        manualRouteNameInput.value = currentFiberMeta.name || '';
-
-    }
-
-    if (manualSinglePortCheckbox) {
-
-        manualSinglePortCheckbox.checked = Boolean(currentFiberMeta.single_port);
-
-    }
-
-
-
-    if (manualOriginDeviceSelect) {
-
-        manualOriginDeviceSelect.value = currentFiberMeta.origin_device_id ? String(currentFiberMeta.origin_device_id) : '';
-
-        await loadPortsForSelect(manualOriginDeviceSelect.value, manualOriginPortSelect);
-
-        if (manualOriginPortSelect) {
-
-            manualOriginPortSelect.value = currentFiberMeta.origin_port_id ? String(currentFiberMeta.origin_port_id) : '';
-
-        }
-
-    }
-
-
-
-    if (manualSinglePortCheckbox && manualSinglePortCheckbox.checked) {
-
-        if (manualDestDeviceSelect) {
-
-            manualDestDeviceSelect.value = manualOriginDeviceSelect ? manualOriginDeviceSelect.value : '';
-
-        }
-
-        if (manualDestPortSelect) {
-
-            manualDestPortSelect.innerHTML = '<option value="">-- destino desabilitado --</option>';
-
-            manualDestPortSelect.disabled = true;
-
-        }
-
-    } else {
-
-        if (manualDestDeviceSelect) {
-
-            manualDestDeviceSelect.disabled = false;
-
-            manualDestDeviceSelect.value = currentFiberMeta.dest_device_id ? String(currentFiberMeta.dest_device_id) : '';
-
-            // Aguardar portas carregarem
-            await loadPortsForSelect(manualDestDeviceSelect.value, manualDestPortSelect);
-
-            // Set port value AFTER ports are loaded
-            // Retry logic para garantir que portas estejam disponíveis
-            if (manualDestPortSelect && currentFiberMeta.dest_port_id) {
-
-                const setPortValue = () => {
-                    const optionsCount = manualDestPortSelect.options.length;
-
-                    if (optionsCount <= 1) {
-                        // Portas ainda não carregaram, tentar novamente
-                        setTimeout(setPortValue, 100);
-                        return;
-                    }
-
-                    manualDestPortSelect.disabled = false;
-                    manualDestPortSelect.value = String(currentFiberMeta.dest_port_id);
-                };
-
-                setTimeout(setPortValue, 100);
-
-            }
-
-        }
-
-    }
-
-    // Não chamar syncDestinationDevice() aqui porque já configuramos tudo manualmente
-    // await syncDestinationDevice();
-
-    if (manualRouteDistanceEl) {
-
-        manualRouteDistanceEl.textContent = `${totalDistance().toFixed(3)} km`;
-
-    }
-
-    const submitButton = manualForm.querySelector('button[type="submit"]');
-
-    if (submitButton) submitButton.textContent = 'Atualizar cabo';
-
-
-
-    openManualSaveModal(true);
-
+    await openModalForEdit(currentFiberMeta, totalDistance());
 }
-
-
 
 function buildDefaultFromEndpoints(fiber) {
     const points = [];
@@ -700,272 +461,71 @@ function getCookie(name) {
 
 async function updateExistingPath() {
     if (!activeFiberId) return;
-
-    const csrftoken = getCookie('csrftoken');
-
     try {
-        const response = await fetch(`/zabbix_api/api/fiber/${activeFiberId}/`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrftoken,
-            },
-            credentials: 'same-origin',
-            body: JSON.stringify({ path: currentPath }),
-        });
-
-        if (!response.ok) {
-            const details = await response.text();
-            alert(`Failed to save: ${details}`);
-            return;
-        }
-
-    const payload = await response.json();
-    alert(`Saved successfully.\nPoints: ${payload.points}\nDistance: ${payload.length_km} km`);
-
-    // Limpar o cabo do mapa após salvar path
-    clearMapAndResetState();
-
-    // Recarregar lista de cabos e visualização
-    await loadFibers();
-    await loadAllCablesForVisualization();
+        const pathPayload = { path: getPath() };
+        const result = await updateFiber(activeFiberId, pathPayload);
+        alert(`Saved successfully.\nPoints: ${result.points}\nDistance: ${result.length_km} km`);
+        clearMapAndResetState();
+        await loadFibers();
+        await loadAllCablesForVisualization();
     } catch (error) {
         console.error('Request error:', error);
         alert('Connection failure or unexpected error while saving.');
     }
 }
 
-function resetManualSaveForm() {
-
-    if (!manualForm) return;
-
-    manualForm.reset();
-
-    if (manualOriginPortSelect) {
-
-        manualOriginPortSelect.innerHTML = '<option value="">Selecione...</option>';
-
-    }
-
-    if (manualDestPortSelect) {
-
-        manualDestPortSelect.innerHTML = '<option value="">Selecione...</option>';
-
-        manualDestPortSelect.disabled = false;
-
-    }
-
-    if (manualDestDeviceSelect) {
-
-        manualDestDeviceSelect.disabled = false;
-
-    }
-
-    if (manualSinglePortCheckbox) {
-
-        manualSinglePortCheckbox.checked = false;
-
-    }
-
-    if (manualDestNotice) {
-
-        manualDestNotice.classList.add('hidden');
-
-    }
-
-    const submitButton = manualForm.querySelector('button[type="submit"]');
-
-    if (submitButton) submitButton.textContent = 'Salvar rota';
-
-}
-
-
-
+// Modal management wrappers - delegate to modalEditor module
 function openManualSaveModal(skipReset = false) {
-
-    if (!manualModal || !manualModalContent) {
-
-        console.warn('Manual save modal not found in the DOM.');
-
+    if (skipReset) {
+        // Editing mode - modal already populated by openModalForEdit
         return;
-
     }
-
-    if (!skipReset) {
-
-        editingFiberId = null;
-
-        resetManualSaveForm();
-
-    }
-
-    if (manualRouteDistanceEl) {
-
-        const distance = totalDistance();
-
-        manualRouteDistanceEl.textContent = `${distance.toFixed(3)} km`;
-
-    }
-
-    manualModal.classList.remove('pointer-events-none');
-
-    manualModal.classList.add('opacity-100');
-
-    manualModalContent.classList.add('opacity-100', 'scale-100');
-
-    manualModalContent.classList.remove('opacity-0', 'scale-95');
-
-    if (manualRouteNameInput) {
-
-        requestAnimationFrame(() => manualRouteNameInput.focus());
-
-    }
-
-    syncDestinationDevice();
-
-    updateEditButtonState();
-
+    openModalForCreate(totalDistance());
 }
-
-
 
 function closeManualSaveModal() {
-    if (!manualModal || !manualModalContent) return;
-    manualModal.classList.remove('opacity-100');
-    manualModal.classList.add('opacity-0');
-    manualModalContent.classList.remove('opacity-100', 'scale-100');
-    manualModalContent.classList.add('opacity-0', 'scale-95');
-    setTimeout(() => {
-        manualModal.classList.add('pointer-events-none');
-    }, 300);
-    editingFiberId = null;
-    if (manualForm) {
-        const submitButton = manualForm.querySelector('button[type="submit"]');
-        if (submitButton) submitButton.textContent = 'Salvar rota';
-    }
-}
-async function loadPortsForSelect(deviceId, targetSelect) {
-    if (!targetSelect) return;
-    targetSelect.innerHTML = '<option value="">Carregando...</option>';
-    if (!deviceId) {
-        targetSelect.innerHTML = '<option value="">Selecione...</option>';
-        return;
-    }
-    try {
-        const response = await fetch(`/zabbix_api/api/device-ports/${deviceId}/`, {
-            credentials: 'same-origin'
-        });
-        if (!response.ok) {
-            targetSelect.innerHTML = '<option value="">Falha ao carregar</option>';
-            return;
-        }
-        const data = await response.json();
-        targetSelect.innerHTML = '<option value="">Selecione...</option>';
-        if (Array.isArray(data.ports)) {
-            data.ports.forEach((port) => {
-                const option = document.createElement('option');
-                option.value = port.id;
-                option.textContent = port.name;
-                targetSelect.appendChild(option);
-            });
-        }
-    } catch (error) {
-        console.error('Failed to load ports:', error);
-        targetSelect.innerHTML = '<option value="">Falha ao carregar</option>';
-    }
+    closeModal();
 }
 
-async function syncDestinationDevice() {
-    const singlePort = manualSinglePortCheckbox && manualSinglePortCheckbox.checked;
-
-    if (manualDestNotice) {
-        manualDestNotice.classList.toggle('hidden', !singlePort);
-    }
-
-    if (manualDestDeviceSelect) {
-        manualDestDeviceSelect.disabled = singlePort;
-        if (singlePort) {
-            manualDestDeviceSelect.value = manualOriginDeviceSelect ? manualOriginDeviceSelect.value : '';
-        }
-    }
-
-    if (manualDestPortSelect) {
-        if (singlePort) {
-            manualDestPortSelect.innerHTML = '<option value="">-- destino desabilitado --</option>';
-            manualDestPortSelect.disabled = true;
-        } else {
-            manualDestPortSelect.disabled = false;
-            if (manualDestDeviceSelect && manualDestDeviceSelect.value) {
-                await loadPortsForSelect(manualDestDeviceSelect.value, manualDestPortSelect);
-            } else {
-                manualDestPortSelect.innerHTML = '<option value="">Selecione...</option>';
-            }
-        }
-    }
-}
+// Legacy functions removed - now handled by modalEditor module
+// All device/port loading logic moved to modalEditor.js
+// Legacy functions kept only for external compatibility if needed
 
 async function performCreateFiber(payload) {
-    const csrftoken = getCookie('csrftoken');
-    const response = await fetch('/zabbix_api/api/fibers/manual-create/', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': csrftoken,
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify(payload),
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
-        throw new Error(data.error || 'Erro inesperado');
+    try {
+        const data = await createFiberManual(payload);
+        alert('Cable created successfully.');
+        closeManualSaveModal();
+        document.dispatchEvent(new CustomEvent('fiber:cable-created', { detail: { fiberId: data.fiber_id } }));
+        await loadAllCablesForVisualization();
+    } catch (error) {
+        console.error('Error creating cable:', error);
+        throw error;
     }
-
-    alert('Rota criada com sucesso.');
-    closeManualSaveModal();
-
-    document.dispatchEvent(new CustomEvent('fiber:cable-created', {
-        detail: { fiberId: data.fiber_id },
-    }));
-
-    // Recarregar visualização completa
-    await loadAllCablesForVisualization();
 }
 
 async function performUpdateFiber(fiberId, payload) {
-    const csrftoken = getCookie('csrftoken');
-    const response = await fetch(`/zabbix_api/api/fiber/${fiberId}/`, {
-        method: 'PUT',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': csrftoken,
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify(payload),
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
-        throw new Error(data.error || 'Erro inesperado');
+    try {
+        await updateFiber(fiberId, payload);
+        alert('Cable updated successfully.');
+        closeManualSaveModal();
+        clearMapAndResetState();
+        await loadFibers();
+        await loadAllCablesForVisualization();
+    } catch (error) {
+        console.error('Error updating cable:', error);
+        throw error;
     }
-
-    alert('Cabo atualizado com sucesso.');
-    closeManualSaveModal();
-
-    // Limpar o cabo do mapa após salvar edição
-    clearMapAndResetState();
-
-    // Recarregar lista de cabos e visualização
-    await loadFibers();
-    await loadAllCablesForVisualization();
 }
 
 async function handleManualFormSubmit(event) {
     event.preventDefault();
+    const editingFiberId = getEditingFiberId();
     const isEditing = Boolean(editingFiberId);
+    const path = getPath();
 
-    if (!isEditing && currentPath.length < 2) {
-        alert('Adicione pelo menos dois pontos ao mapa antes de salvar a rota.');
+    if (!isEditing && path.length < 2) {
+        alert('Add at least two points to the map before saving the route.');
         return;
     }
 
@@ -984,16 +544,16 @@ async function handleManualFormSubmit(event) {
     };
 
     if (!payload.name || !payload.origin_device_id || !payload.origin_port_id) {
-        alert('Preencha todos os campos obrigatórios.');
+        alert('Please fill all required fields.');
         return;
     }
     if (!singlePort && !payload.dest_port_id) {
-        alert('Preencha todos os campos obrigatórios.');
+        alert('Please fill all required fields.');
         return;
     }
 
-        // Sempre incluir o path, tanto ao criar quanto ao editar
-        payload.path = currentPath.map((point) => ({ lat: point.lat, lng: point.lng }));
+    // Always include path, both when creating and editing
+    payload.path = path.map((point) => ({ lat: point.lat, lng: point.lng }));
 
     const submitButton = manualForm.querySelector('button[type="submit"]');
     if (submitButton) submitButton.disabled = true;
@@ -1005,8 +565,8 @@ async function handleManualFormSubmit(event) {
             await performCreateFiber(payload);
         }
     } catch (error) {
-        console.error('Erro ao salvar rota:', error);
-        alert(error.message || 'Falha ao salvar a rota.');
+        console.error('Error saving route:', error);
+        alert(error.message || 'Failed to save the route.');
     } finally {
         if (submitButton) submitButton.disabled = false;
     }
@@ -1016,8 +576,8 @@ function handleSaveClick() {
         updateExistingPath();
         return;
     }
-    if (currentPath.length < 2) {
-        alert('Adicione pelo menos dois pontos ao mapa antes de salvar a rota.');
+    if (getPath().length < 2) {
+        alert('Add at least two points to the map before saving the route.');
         return;
     }
     openManualSaveModal();
@@ -1028,32 +588,16 @@ async function deleteCable() {
         alert('No cable selected to delete.');
         return;
     }
-
     if (!confirm('Confirm cable deletion? This action cannot be undone.')) {
         return;
     }
-
-    const csrftoken = getCookie('csrftoken');
-
     try {
-        const response = await fetch(`/zabbix_api/api/fiber/${activeFiberId}/`, {
-            method: 'DELETE',
-            headers: {
-                'X-CSRFToken': csrftoken,
-            },
-            credentials: 'same-origin',
-        });
-
-        if (response.status === 204) {
-            alert('Cable removed successfully.');
-            activeFiberId = null;
-            setPath([]);
-            await loadFibers();
-            await loadAllCablesForVisualization();
-        } else {
-            const details = await response.text();
-            alert(`Failed to delete: ${details}`);
-        }
+        await removeFiber(activeFiberId);
+        alert('Cable removed successfully.');
+        activeFiberId = null;
+        setPath([]);
+        await loadFibers();
+        await loadAllCablesForVisualization();
     } catch (error) {
         console.error('Request error:', error);
         alert('Connection failure or unexpected error while deleting.');
@@ -1061,13 +605,17 @@ async function deleteCable() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Botões de toggle para painéis
+    // Initialize modules
+    initContextMenu();
+    initModalEditor();
+    
+    // Toggle buttons for panels
     document.getElementById('toggleRoutePoints')?.addEventListener('click', () => {
         const panel = document.getElementById('routePointsPanel');
         const helpPanel = document.getElementById('helpPanel');
         if (panel) {
             panel.classList.toggle('hidden');
-            // Esconder help se route points for mostrado
+            // Hide help if route points is shown
             if (!panel.classList.contains('hidden')) {
                 helpPanel?.classList.add('hidden');
             }
@@ -1079,21 +627,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const routePanel = document.getElementById('routePointsPanel');
         if (panel) {
             panel.classList.toggle('hidden');
-            // Esconder route points se help for mostrado
+            // Hide route points if help is shown
             if (!panel.classList.contains('hidden')) {
                 routePanel?.classList.add('hidden');
             }
         }
     });
     
-    // Menu de contexto - Opções gerais
+    // Context menu - General options
     document.getElementById('contextLoadAll')?.addEventListener('click', () => {
         hideContextMenu();
         if (activeFiberId) {
-            // Recarregar apenas o cabo atual
+            // Reload only current cable
             loadFiberDetail(activeFiberId);
         } else {
-            // Recarregar todos os cabos
+            // Reload all cables
             loadAllCablesForVisualization();
         }
     });
@@ -1103,7 +651,7 @@ document.addEventListener('DOMContentLoaded', () => {
         openKmlModal();
     });
     
-    // Menu de contexto - Opções condicionais (cabo selecionado)
+    // Context menu - Conditional options (cable selected)
     document.getElementById('contextEditCable')?.addEventListener('click', () => {
         hideContextMenu();
         if (activeFiberId) {
@@ -1113,7 +661,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     document.getElementById('contextSavePath')?.addEventListener('click', () => {
         hideContextMenu();
-        if (activeFiberId && currentPath.length >= 2) {
+        if (activeFiberId && getPath().length >= 2) {
             handleSaveClick();
         }
     });
@@ -1128,7 +676,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Menu de contexto - Opções ao criar novo cabo
     document.getElementById('contextSaveNewCable')?.addEventListener('click', () => {
         hideContextMenu();
-        if (currentPath.length >= 2) {
+        if (getPath().length >= 2) {
             openManualSaveModal(false); // false = criando novo cabo
         } else {
             alert('Draw at least 2 points to create a cable.');
@@ -1138,14 +686,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('contextClearNew')?.addEventListener('click', () => {
         hideContextMenu();
         // Limpar pontos desenhados
-        currentPath = [];
-        markers.forEach(m => m.setMap(null));
-        markers = [];
-        if (currentPolyline) {
-            currentPolyline.setMap(null);
-            currentPolyline = null;
-        }
-        redrawPolyline();
+        clearPath();
+        clearAllMarkers();
+        clearPolyline();
+        // onPathChange callback will handle UI updates
         refreshList();
     });
     
@@ -1178,23 +722,9 @@ document.addEventListener('DOMContentLoaded', () => {
         manualForm.addEventListener('submit', handleManualFormSubmit);
     }
 
-if (manualOriginDeviceSelect) {
-        manualOriginDeviceSelect.addEventListener('change', async () => {
-            await loadPortsForSelect(manualOriginDeviceSelect.value, manualOriginPortSelect);
-            await syncDestinationDevice();
-        });
-    }
-    if (manualDestDeviceSelect) {
-        manualDestDeviceSelect.addEventListener('change', async () => {
-            if (manualDestDeviceSelect.disabled) return;
-            await loadPortsForSelect(manualDestDeviceSelect.value, manualDestPortSelect);
-        });
-    }
-    if (manualSinglePortCheckbox) {
-        manualSinglePortCheckbox.addEventListener('change', () => {
-            syncDestinationDevice();
-        });
-    }
+    // Device/port change listeners now handled by modalEditor module
+    // Removed duplicate listeners to avoid conflicts
+
     if (manualModal) {
         manualModal.addEventListener('click', (event) => {
             if (event.target === manualModal) {
@@ -1202,14 +732,11 @@ if (manualOriginDeviceSelect) {
             }
         });
     }
-
-    syncDestinationDevice();
 });
 
 window.closeManualSaveModal = closeManualSaveModal;
 window.loadFibers = loadFibers;
 window.loadFiberDetail = loadFiberDetail;
-window.loadPortsForSelect = loadPortsForSelect;
 
 document.addEventListener('fiber:cable-created', async (event) => {
     const fiberId = event.detail?.fiberId;
@@ -1221,6 +748,6 @@ document.addEventListener('fiber:cable-created', async (event) => {
     await loadFibers();
     
     if (fiberId) {
-        console.info(`Novo cabo criado: ${fiberId}`);
+        console.info(`New cable created: ${fiberId}`);
     }
 });
