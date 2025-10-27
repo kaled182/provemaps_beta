@@ -1,8 +1,33 @@
 import { fetchFibers, fetchFiber, createFiberManual, updateFiber, removeFiber, fetchDevicePorts } from './modules/apiClient.js';
+import { 
+  getPath, 
+  setPath as setPathState, 
+  addPoint, 
+  removePoint, 
+  updatePoint, 
+  reorderPath, 
+  clearPath, 
+  totalDistance as calculateDistance,
+  onPathChange 
+} from './modules/pathState.js';
+import { 
+  initMap as initializeMap, 
+  getMap, 
+  onMapClick, 
+  onMapRightClick,
+  drawPolyline, 
+  clearPolyline,
+  addMarker as createMarker, 
+  removeMarker, 
+  clearMarkers as clearAllMarkers,
+  getMarkers,
+  fitMapToBounds as fitBounds,
+  createCablePolyline,
+  attachPolylineRightClick
+} from './modules/mapCore.js';
 
 let map;
 let polyline;
-let currentPath = [];
 let markers = [];
 let activeFiberId = null;
 let allCablesPolylines = []; // Armazena polylines de todos os cabos para visualização
@@ -41,6 +66,44 @@ function clearMapAndResetState() {
     clearAllCablesFromMap(); // Também limpar cabos de visualização
 }
 
+// Adapter function to bridge pathState module
+function setPath(points) {
+    setPathState(points);
+    // Trigger redraw via path change callback
+}
+
+// Path change callback will handle UI updates
+onPathChange(({ path, distance }) => {
+    // Redraw polyline
+    if (polyline) {
+        clearPolyline();
+    }
+    if (path.length > 0) {
+        polyline = drawPolyline(path);
+        // Add right-click to polyline
+        if (polyline) {
+            attachPolylineRightClick(polyline, ({ clientX, clientY }) => {
+                showContextMenu(clientX, clientY);
+            });
+        }
+    }
+    
+    // Update distance display
+    if (distanceEl) {
+        distanceEl.textContent = distance.toFixed(3);
+    }
+    
+    // Rebuild marker list
+    refreshList();
+    
+    // Update save button state
+    const saveButton = document.getElementById('savePath');
+    if (saveButton) {
+        const allowSave = (path.length >= 2) || (activeFiberId && path.length === 0);
+        saveButton.disabled = !allowSave;
+    }
+});
+
 function clearAllCablesFromMap() {
     // Remover todas as polylines de visualização
     allCablesPolylines.forEach(polyline => polyline.setMap(null));
@@ -52,22 +115,7 @@ async function loadAllCablesForVisualization() {
         // Limpar cabos anteriores
         clearAllCablesFromMap();
         
-        const response = await fetch('/zabbix_api/api/fibers/', {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                'Cache-Control': 'no-cache',
-            },
-            credentials: 'same-origin',
-        });
-        
-        if (!response.ok) {
-            console.error('Failed to load cables:', response.status);
-            alert('Falha ao carregar cabos para visualização.');
-            return;
-        }
-        
-        const data = await response.json();
+        const data = await fetchFibers();
         const cables = data.fibers || data.cables || [];
         
         if (cables.length === 0) {
@@ -80,28 +128,16 @@ async function loadAllCablesForVisualization() {
         // Carregar detalhes de cada cabo e desenhar no mapa
         for (const cable of cables) {
             try {
-                const detailResponse = await fetch(`/zabbix_api/api/fiber/${cable.id}/`, {
-                    method: 'GET',
-                    headers: { 'Accept': 'application/json' },
-                    credentials: 'same-origin',
-                });
-                
-                if (!detailResponse.ok) continue;
-                
-                const detail = await detailResponse.json();
+                const detail = await fetchFiber(cable.id);
                 const path = detail.path || [];
                 
                 if (path.length < 2) continue;
                 
                 // Criar polyline para visualização (clicável para edição)
-                const viewPolyline = new google.maps.Polyline({
-                    path: path,
-                    geodesic: true,
+                const viewPolyline = createCablePolyline(path, {
                     strokeColor: '#1E3A8A', // Azul escuro para visualização
                     strokeOpacity: 0.6,
                     strokeWeight: 2,
-                    map: map,
-                    clickable: true,
                 });
                 
                 // Adicionar right-click para editar
@@ -129,48 +165,19 @@ window.clearMapAndResetState = clearMapAndResetState;
 
 updateEditButtonState();
 
-function haversineKm(pointA, pointB) {
-    const earthRadiusKm = 6371;
-    const dLat = (pointB.lat - pointA.lat) * Math.PI / 180;
-    const dLng = (pointB.lng - pointA.lng) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 +
-        Math.cos(pointA.lat * Math.PI / 180) *
-        Math.cos(pointB.lat * Math.PI / 180) *
-        Math.sin(dLng / 2) ** 2;
-    return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
+// Legacy functions removed - now using pathState module
+// haversineKm and totalDistance are imported from pathState.js
 
 function totalDistance() {
-    let total = 0;
-    for (let i = 0; i < currentPath.length - 1; i += 1) {
-        total += haversineKm(currentPath[i], currentPath[i + 1]);
-    }
-    distanceEl.textContent = total.toFixed(3);
-    return total;
+    // Wrapper for compatibility - delegates to imported calculateDistance
+    return calculateDistance();
 }
 
-function redrawPolyline() {
-    if (polyline) {
-        polyline.setMap(null);
-    }
-    polyline = new google.maps.Polyline({
-        path: currentPath,
-        map,
-        strokeColor: '#2563eb',
-        strokeWeight: 4,
-        strokeOpacity: 0.9,
-        clickable: true,
-    });
-    
-    // Adicionar right-click na polyline editável também
-    polyline.addListener('rightclick', (event) => {
-        event.stop();
-        showContextMenu(event.domEvent.clientX, event.domEvent.clientY);
-    });
-}
+// redrawPolyline removed - handled by onPathChange callback
 
 function refreshList() {
     const list = document.getElementById('pointsList');
+    const currentPath = getPath(); // Get from module
     list.innerHTML = '';
     currentPath.forEach((point, index) => {
         const item = document.createElement('li');
@@ -199,84 +206,74 @@ function refreshList() {
             const fromIndex = parseInt(event.dataTransfer.getData('text/plain'), 10);
             const toIndex = parseInt(item.dataset.idx, 10);
             if (Number.isInteger(fromIndex) && Number.isInteger(toIndex) && fromIndex !== toIndex) {
-                const moved = currentPath.splice(fromIndex, 1)[0];
-                currentPath.splice(toIndex, 0, moved);
-                setPath(currentPath);
+                reorderPath(fromIndex, toIndex);
+                // No need to call setPath - onPathChange will handle it
             }
         });
 
         list.appendChild(item);
     });
-    totalDistance();
-
-    const saveButton = document.getElementById('savePath');
-    if (saveButton) {
-        const allowSave =
-            (currentPath.length >= 2) ||
-            (activeFiberId && currentPath.length === 0);
-        saveButton.disabled = !allowSave;
-    }
+    // Distance already updated via onPathChange callback
 }
 
+// clearMarkers and addMarker now delegate to mapCore module
 function clearMarkers() {
-    markers.forEach((marker) => marker.setMap(null));
-    markers = [];
+    clearAllMarkers();
+    markers = []; // Keep local array in sync
 }
 
 function addMarker(point, removable = true) {
-    const marker = new google.maps.Marker({ position: point, map, draggable: true });
+    const marker = createMarker(point, { draggable: true });
+    markers.push(marker);
 
     marker.addListener('dragend', () => {
         const index = markers.indexOf(marker);
         if (index > -1) {
-            currentPath[index] = {
-                lat: marker.getPosition().lat(),
-                lng: marker.getPosition().lng(),
-            };
-            redrawPolyline();
-            refreshList();
+            const newPos = marker.getPosition();
+            updatePoint(index, newPos.lat(), newPos.lng());
+            // onPathChange callback will redraw
         }
     });
 
     if (removable) {
-        const removeMarker = () => {
+        const removeMarkerHandler = () => {
             const index = markers.indexOf(marker);
             if (index > -1) {
                 markers.splice(index, 1);
-                currentPath.splice(index, 1);
-                marker.setMap(null);
-                redrawPolyline();
-                refreshList();
+                removePoint(index);
+                removeMarker(marker);
+                // onPathChange callback will redraw
             }
         };
 
-        marker.addListener('dblclick', removeMarker);
-        marker.addListener('rightclick', removeMarker);
+        marker.addListener('dblclick', removeMarkerHandler);
+        marker.addListener('rightclick', removeMarkerHandler);
     }
 
-    markers.push(marker);
+    return marker;
 }
 
+// setPath now syncs markers with path from module
 function setPath(points) {
     clearMarkers();
-    currentPath = points.slice();
+    setPathState(points);
+    const currentPath = getPath();
     currentPath.forEach((point) => addMarker(point));
-    redrawPolyline();
-    refreshList();
+    // onPathChange callback will handle polyline drawing
 }
 
 function initMap() {
-    map = new google.maps.Map(document.getElementById('builderMap'), {
+    map = initializeMap('builderMap', {
         center: { lat: -16.6869, lng: -49.2648 },
         zoom: 6,
         mapTypeId: 'terrain',
     });
 
-    // Click para adicionar pontos
-    map.addListener('click', (event) => {
-        // Fechar menu de contexto se estiver aberto
+    // Setup click handler via mapCore
+    onMapClick(({ lat, lng }) => {
         hideContextMenu();
         
+        const currentPath = getPath();
         if (activeFiberId && currentPath.length === 0) {
             activeFiberId = null;
             const fiberSelect = document.getElementById('fiberSelect');
@@ -284,21 +281,19 @@ function initMap() {
                 fiberSelect.value = '';
             }
         }
-        const point = { lat: event.latLng.lat(), lng: event.latLng.lng() };
-    currentPath.push(point);
+        const point = { lat, lng };
+        addPoint(lat, lng);
         addMarker(point);
-        redrawPolyline();
-        refreshList();
+        // onPathChange callback will handle redraw
     });
     
-    // Right-click para abrir menu de contexto
-    map.addListener('rightclick', (event) => {
-        event.stop(); // Prevenir menu padrão do navegador
-        showContextMenu(event.domEvent.clientX, event.domEvent.clientY);
+    // Setup right-click handler via mapCore
+    onMapRightClick(({ clientX, clientY }) => {
+        showContextMenu(clientX, clientY);
     });
+    
     loadFibers();
     // Carregar visualização de todos os cabos logo após o mapa estar pronto
-    // Garantir pequeno delay para evitar race com Google Maps internals
     setTimeout(() => {
         if (map) {
             loadAllCablesForVisualization();
@@ -359,9 +354,10 @@ function updateContextMenuState() {
     const reloadButton = document.getElementById('contextLoadAll');
     const reloadText = document.getElementById('contextLoadAllText');
 
-    const isCreatingNewCable = !activeFiberId && currentPath.length > 0; // Cenário B
+    const path = getPath();
+    const isCreatingNewCable = !activeFiberId && path.length > 0; // Cenário B
     const isSelectedCable = !!activeFiberId && !!currentFiberMeta; // Cenário C
-    const isEmpty = !activeFiberId && currentPath.length === 0; // Cenário A
+    const isEmpty = !activeFiberId && path.length === 0; // Cenário A
 
     // Reset base
     selectedOptions?.classList.add('hidden');
@@ -379,7 +375,7 @@ function updateContextMenuState() {
         selectedOptions?.classList.remove('hidden');
         cableInfo?.classList.remove('hidden');
         if (cableName) {
-            const isEditing = currentPath.length > 0;
+            const isEditing = path.length > 0;
             const status = isEditing ? ' - EDITING' : '';
             cableName.textContent = `📌 ${currentFiberMeta.name || 'Cable #' + activeFiberId}${status}`;
         }
@@ -390,8 +386,8 @@ function updateContextMenuState() {
         }
         // Save Path habilitado somente se >=2 pontos
         if (savePath) {
-            savePath.disabled = currentPath.length < 2;
-            savePath.style.opacity = currentPath.length >= 2 ? '1' : '0.5';
+            savePath.disabled = path.length < 2;
+            savePath.style.opacity = path.length >= 2 ? '1' : '0.5';
         }
     } else if (isEmpty) {
         // Cenário A
@@ -645,7 +641,7 @@ function getCookie(name) {
 async function updateExistingPath() {
     if (!activeFiberId) return;
     try {
-        const pathPayload = { path: currentPath };
+        const pathPayload = { path: getPath() };
         const result = await updateFiber(activeFiberId, pathPayload);
         alert(`Saved successfully.\nPoints: ${result.points}\nDistance: ${result.length_km} km`);
         clearMapAndResetState();
@@ -849,8 +845,9 @@ async function performUpdateFiber(fiberId, payload) {
 async function handleManualFormSubmit(event) {
     event.preventDefault();
     const isEditing = Boolean(editingFiberId);
+    const path = getPath();
 
-    if (!isEditing && currentPath.length < 2) {
+    if (!isEditing && path.length < 2) {
         alert('Adicione pelo menos dois pontos ao mapa antes de salvar a rota.');
         return;
     }
@@ -879,7 +876,7 @@ async function handleManualFormSubmit(event) {
     }
 
         // Sempre incluir o path, tanto ao criar quanto ao editar
-        payload.path = currentPath.map((point) => ({ lat: point.lat, lng: point.lng }));
+        payload.path = path.map((point) => ({ lat: point.lat, lng: point.lng }));
 
     const submitButton = manualForm.querySelector('button[type="submit"]');
     if (submitButton) submitButton.disabled = true;
@@ -902,7 +899,7 @@ function handleSaveClick() {
         updateExistingPath();
         return;
     }
-    if (currentPath.length < 2) {
+    if (getPath().length < 2) {
         alert('Adicione pelo menos dois pontos ao mapa antes de salvar a rota.');
         return;
     }
@@ -983,7 +980,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     document.getElementById('contextSavePath')?.addEventListener('click', () => {
         hideContextMenu();
-        if (activeFiberId && currentPath.length >= 2) {
+        if (activeFiberId && getPath().length >= 2) {
             handleSaveClick();
         }
     });
@@ -998,7 +995,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Menu de contexto - Opções ao criar novo cabo
     document.getElementById('contextSaveNewCable')?.addEventListener('click', () => {
         hideContextMenu();
-        if (currentPath.length >= 2) {
+        if (getPath().length >= 2) {
             openManualSaveModal(false); // false = criando novo cabo
         } else {
             alert('Draw at least 2 points to create a cable.');
@@ -1008,14 +1005,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('contextClearNew')?.addEventListener('click', () => {
         hideContextMenu();
         // Limpar pontos desenhados
-        currentPath = [];
-        markers.forEach(m => m.setMap(null));
-        markers = [];
-        if (currentPolyline) {
-            currentPolyline.setMap(null);
-            currentPolyline = null;
-        }
-        redrawPolyline();
+        clearPath();
+        clearAllMarkers();
+        clearPolyline();
+        // onPathChange callback will handle UI updates
         refreshList();
     });
     
