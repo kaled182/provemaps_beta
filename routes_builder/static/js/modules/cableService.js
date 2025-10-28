@@ -1,11 +1,11 @@
 /**
  * cableService.js - Cable Business Logic Module
  * 
- * Encapsulates all cable-related operations:
+ * Encapsulates all cable-related operations with callback injection pattern:
  * - Loading cable list and details
  * - Creating and updating cables
  * - Deleting cables
- * - Cable visualization on map
+ * - Cable visualization on map with injected makeEditable callback
  * - Cable path management
  * 
  * @module cableService
@@ -21,6 +21,35 @@ import {
 import { 
     createCablePolyline 
 } from './mapCore.js';
+import { showErrorMessage } from './uiHelpers.js';
+
+// Stores the callback responsible for making the polyline editable
+let _makeEditableCallback = null;
+let _mapInstance = null; // Keep a reference to the current map instance
+
+// Local list to manage visualization polylines created by this module
+let visualizationPolylines = [];
+
+/**
+ * Initializes cableService with external dependencies.
+ * @param {object} config - Configuration object.
+ * @param {function} config.makeEditableCallback - Callback that makes polylines editable (from fiber_route_builder).
+ * @param {google.maps.Map} config.map - Map instance.
+ */
+export function initCableService(config) {
+    if (config && typeof config.makeEditableCallback === 'function') {
+        _makeEditableCallback = config.makeEditableCallback;
+        console.log("[cableService] makeEditableCallback received.");
+    } else {
+        console.error("[cableService] Initialization failed: makeEditableCallback is missing or not a function.");
+    }
+    if (config && config.map) {
+        _mapInstance = config.map;
+        console.log("[cableService] Map instance received.");
+    } else {
+         console.error("[cableService] Initialization failed: Map instance is missing.");
+    }
+}
 
 /**
  * Load all cables and populate dropdown select.
@@ -121,105 +150,165 @@ export async function updateCableData(cableId, payload) {
 }
 
 /**
- * Delete cable by ID.
- * 
- * @param {number|string} cableId - Cable ID
- * @returns {Promise<void>}
+ * Clears every visualization polyline created by this module.
  */
-export async function deleteCable(cableId) {
-    if (!confirm('Confirm cable deletion? This action cannot be undone.')) {
+export function clearCablePolylines({ excludeCableId = null } = {}) {
+    if (!visualizationPolylines.length) {
         return;
     }
-    
-    try {
-        await removeFiber(cableId);
-        return true;
-    } catch (error) {
-        console.error('Error deleting cable:', error);
-        throw error;
-    }
+    console.log(`[cableService] Clearing ${visualizationPolylines.length} visualization polylines (exclude=${excludeCableId ?? 'none'}).`);
+    visualizationPolylines = visualizationPolylines.filter((record) => {
+        if (excludeCableId != null && String(record?.id) === String(excludeCableId)) {
+            return true;
+        }
+        if (record?.polyline && typeof record.polyline.setMap === 'function') {
+            record.polyline.setMap(null);
+        }
+        return false;
+    });
 }
 
 /**
- * Load all cables and draw them on the map.
+ * Removes visualization for a specific cable.
+ * @param {number|string} cableId
+ */
+export function removeCableVisualization(cableId) {
+    if (!visualizationPolylines.length) return;
+    const idStr = String(cableId);
+    const remaining = [];
+    visualizationPolylines.forEach((record) => {
+        if (record && String(record.id) === idStr) {
+            if (record.polyline && typeof record.polyline.setMap === 'function') {
+                record.polyline.setMap(null);
+            }
+        } else {
+            remaining.push(record);
+        }
+    });
+    visualizationPolylines = remaining;
+}
+
+/**
+ * Loads all cables from the API and draws them on the map for visualization.
+ * Usa o callback injetado (_makeEditableCallback) para anexar o evento de right-click.
  * 
- * @param {Object} options - Configuration options
- * @param {Function} options.onCableClick - Callback when cable is clicked
- * @param {Object} options.styleOptions - Polyline style options
- * @returns {Promise<Array>} Array of polyline objects
+ * @returns {Promise<void>}
  */
 export async function loadAllCablesForVisualization(options = {}) {
     const {
-        onCableClick = null,
-        styleOptions = {
-            strokeColor: '#1E3A8A',
-            strokeOpacity: 0.6,
-            strokeWeight: 2,
-        }
+        excludeCableId = null,
+        fitToBounds = true,
     } = options;
-    
+
+    // Ensure initialization completed successfully
+    if (!_makeEditableCallback || !_mapInstance) {
+        console.error('[loadAllCablesForVisualization] cableService not initialized correctly. Cannot proceed.');
+        showErrorMessage("Cable service error. Visualization unavailable.");
+        return;
+    }
+
+    console.log('[loadAllCablesForVisualization - cableService] Starting to load cables...', { excludeCableId, fitToBounds });
+    clearCablePolylines({}); // Clear prior visualization polylines tracked by this module
+
     try {
-        const data = await fetchFibers();
-        const cables = data.fibers || data.cables || [];
-        
+        const data = await fetchFibers(); // Usa apiClient
+        const cables = (data && (data.fibers || data.cables)) ? (data.fibers || data.cables) :
+                       Array.isArray(data) ? data : [];
+
+        console.log(`[loadAllCablesForVisualization - cableService] Fetched ${cables.length} cables.`);
+
         if (cables.length === 0) {
-            console.info('No cables found for visualization.');
-            return [];
+            console.log('[loadAllCablesForVisualization - cableService] No cables to display.');
+            return;
         }
-        
-        const polylines = [];
-        let loadedCount = 0;
-        
-        for (const cable of cables) {
-            try {
-                const detail = await fetchFiber(cable.id);
-                const path = detail.path || [];
-                
-                if (path.length < 2) continue;
-                
-                // Create polyline for visualization
-                const polyline = createCablePolyline(path, styleOptions);
-                
-                // Attach click handler if provided
-                if (onCableClick && polyline) {
-                    polyline.set('cableId', cable.id);
-                    polyline.set('cableName', cable.name);
-                    
-                    polyline.addListener('rightclick', (event) => {
-                        event.stop();
-                        onCableClick({
-                            cableId: cable.id,
-                            cableName: cable.name,
-                            event: event.domEvent
-                        });
+
+        let bounds = null;
+        if (fitToBounds && typeof google !== 'undefined' && google.maps) {
+            bounds = new google.maps.LatLngBounds();
+        }
+
+        let drawnCount = 0;
+        cables.forEach((cable) => {
+            if (excludeCableId != null && String(cable?.id) === String(excludeCableId)) {
+                return;
+            }
+            if (!cable || cable.id == null || !cable.path || !Array.isArray(cable.path) || cable.path.length < 2) {
+                console.warn(`[cableService] Skipping cable ID ${cable?.id} due to insufficient path data.`);
+                return;
+            }
+             const validPath = cable.path.filter(p => p && typeof p.lat === 'number' && typeof p.lng === 'number');
+             if (validPath.length < 2) {
+                 console.warn(`[cableService] Skipping cable ID ${cable.id} after filtering invalid points (remaining: ${validPath.length}).`);
+                 return;
+             }
+
+            // Use mapCore.createCablePolyline (does not interfere with the editing polyline)
+            const viewPolyline = createCablePolyline(validPath, {
+                strokeColor: '#0000FF', // Blue stroke for visualization
+                strokeOpacity: 0.6,
+                strokeWeight: 4,
+                clickable: true,
+                map: _mapInstance // Ensure we reuse the current map instance
+            });
+
+            if (viewPolyline) {
+                viewPolyline.set('cableId', cable.id);
+                visualizationPolylines.push({ id: cable.id, polyline: viewPolyline }); // Track in local list
+                drawnCount++;
+
+                if (bounds) {
+                    validPath.forEach((point) => {
+                        bounds.extend(new google.maps.LatLng(point.lat, point.lng));
                     });
                 }
-                
-                polylines.push(polyline);
-                loadedCount++;
-                
-            } catch (error) {
-                console.error(`Error loading cable ${cable.id}:`, error);
+
+                // ✅ AQUI USAMOS O CALLBACK RECEBIDO
+                _makeEditableCallback(viewPolyline, cable.id, cable.name || `Cable ${cable.id}`);
+
+            } else {
+                console.warn(`[cableService] Failed to create polyline object for cable ID ${cable.id}`);
+            }
+        });
+        console.log(`[loadAllCablesForVisualization - cableService] ✅ Finished drawing ${drawnCount} valid cable polylines.`);
+
+        if (bounds) {
+            try {
+                _mapInstance.fitBounds(bounds);
+            } catch (err) {
+                console.warn('[cableService] Failed to fit bounds for visualization:', err);
             }
         }
-        
-        console.info(`Visualization: ${loadedCount} cables loaded.`);
-        return polylines;
-        
+
     } catch (error) {
-        console.error('Error loading cables for visualization:', error);
-        throw error;
+        console.error('[loadAllCablesForVisualization - cableService] Error loading or drawing cables:', error);
+        showErrorMessage('Failed to load cable visualizations.');
     }
 }
 
 /**
- * Clear all cable polylines from map.
+ * Delete cable by ID with callback support.
  * 
- * @param {Array} polylines - Array of Google Maps Polyline objects
+ * @param {number|string} cableId - Cable ID
+ * @param {Object} callbacks - Success/error callbacks
+ * @param {Function} callbacks.onSuccess - Called on successful deletion
+ * @param {Function} callbacks.onError - Called on error
+ * @returns {Promise<void>}
  */
-export function clearCablePolylines(polylines) {
-    polylines.forEach(polyline => polyline.setMap(null));
-    polylines.length = 0; // Clear array
+export async function deleteCable(cableId, callbacks = {}) {
+    try {
+        await removeFiber(cableId);
+        console.log(`[cableService] Cable ${cableId} deleted via API.`);
+
+        // Remover a polyline correspondente do mapa e da lista local
+        removeCableVisualization(cableId);
+
+        if (callbacks.onSuccess) callbacks.onSuccess();
+
+    } catch (error) {
+        console.error(`[cableService] Error deleting cable ${cableId}:`, error);
+        if (callbacks.onError) callbacks.onError(error);
+        throw error;
+    }
 }
 
 /**

@@ -22,8 +22,8 @@ def pytest_configure():
 
     # Debug info apenas se não for CI
     if not os.getenv("CI"):
-        print(f"🧪 pytest configured for {getattr(settings, 'APP_NAME', 'mapsprovefiber')}")
-        print(f"📁 Settings module: {os.getenv('DJANGO_SETTINGS_MODULE')}")
+        print(f"[pytest] configured for {getattr(settings, 'APP_NAME', 'mapsprovefiber')}")
+        print(f"[pytest] settings module: {os.getenv('DJANGO_SETTINGS_MODULE')}")
 
 
 def pytest_addoption(parser):

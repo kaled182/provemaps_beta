@@ -22,6 +22,9 @@ from .usecases.inventory import (
 
 logger = logging.getLogger(__name__)
 
+# Compatibilidade com código legado que importa zabbix_request diretamente deste módulo.
+zabbix_request = _zabbix_request
+
 # ---------------------------------------------------------------------------
 # ENDPOINTS CORRIGIDOS (arquivo estava corrompido anteriormente)
 # Apenas implementações essenciais; podem ser expandidas depois.

@@ -29,7 +29,7 @@ class PortTrafficHistoryAPITests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("traffic items", response.json()["error"])
 
-    @patch("zabbix_api.inventory.zabbix_request")
+    @patch("zabbix_api.usecases.inventory.ZABBIX_REQUEST")
     def test_returns_history_payload(self, request_mock):
         self.port.zabbix_item_id_traffic_in = "111"
         self.port.zabbix_item_id_traffic_out = "222"

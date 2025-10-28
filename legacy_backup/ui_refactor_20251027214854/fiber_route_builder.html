@@ -11,99 +11,6 @@
     z-index: 2147483647;
     pointer-events: auto;
   }
-  #toastHost, #confirmHost {
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 2147483647;
-  }
-  #toastHost {
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding: 1.5rem;
-  }
-  #confirmHost {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1.5rem;
-    pointer-events: none;
-  }
-  #confirmHost.active {
-    pointer-events: auto;
-  }
-  .confirm-backdrop {
-    position: absolute;
-    inset: 0;
-    background: rgba(15, 23, 42, 0.45);
-    backdrop-filter: blur(2px);
-  }
-  .confirm-card {
-    position: relative;
-    pointer-events: auto;
-    width: min(420px, 92vw);
-    background: rgba(255, 255, 255, 0.97);
-    border-radius: 1rem;
-    padding: 1.5rem;
-    box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.45);
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-  .confirm-card h3 {
-    font-size: 1.125rem;
-    font-weight: 600;
-    color: #0f172a;
-  }
-  .confirm-card p {
-    font-size: 0.95rem;
-    color: #334155;
-  }
-  .confirm-buttons {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.75rem;
-  }
-  .confirm-buttons button {
-    border-radius: 0.5rem;
-    padding: 0.5rem 1rem;
-    font-size: 0.95rem;
-    font-weight: 500;
-  }
-  .confirm-buttons button[data-variant="secondary"] {
-    background: #e2e8f0;
-    color: #0f172a;
-  }
-  .confirm-buttons button[data-variant="danger"] {
-    background: #ef4444;
-    color: #fff;
-  }
-  .toast-card {
-    pointer-events: auto;
-    min-width: 240px;
-    max-width: 360px;
-    background: rgba(255, 255, 255, 0.9);
-    border-radius: 0.75rem;
-    box-shadow: 0 20px 25px -5px rgba(15, 23, 42, 0.3);
-    backdrop-filter: blur(8px);
-    padding: 1rem 1.25rem;
-    display: flex;
-    gap: 0.75rem;
-    border: 1px solid rgba(148, 163, 184, 0.4);
-    color: #0f172a;
-    font-size: 0.95rem;
-  }
-  .toast-card.toast-success {
-    border-left: 6px solid #22c55e;
-  }
-  .toast-card.toast-error {
-    border-left: 6px solid #ef4444;
-  }
-  .toast-card strong {
-    font-weight: 600;
-  }
 </style>
 {% endblock %}
 {% block content %}
@@ -207,8 +114,6 @@
     </button>
   </div>
 </div>
-<div id="toastHost" class="hidden"></div>
-<div id="confirmHost" class="hidden"></div>
 
 {% include 'partials/save_manual_modal.html' %}
 

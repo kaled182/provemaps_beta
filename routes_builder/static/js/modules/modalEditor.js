@@ -64,6 +64,9 @@ export function initModalEditor() {
     if (manualSinglePortCheckbox) {
         manualSinglePortCheckbox.addEventListener('change', () => {
             syncDestinationDevice();
+            document.dispatchEvent(new CustomEvent('fiber:single-port-toggle', {
+                detail: { enabled: manualSinglePortCheckbox.checked },
+            }));
         });
     }
 }
@@ -137,7 +140,8 @@ export async function openModalForEdit(cableData, distance) {
     }
 
     // Populate destination device and ports
-    if (manualSinglePortCheckbox && manualSinglePortCheckbox.checked) {
+    const isSinglePort = Boolean(cableData.single_port);
+    if (isSinglePort) {
         // Single port mode: sync destination with origin
         if (manualDestDeviceSelect) {
             manualDestDeviceSelect.value = manualOriginDeviceSelect 
@@ -173,6 +177,8 @@ export async function openModalForEdit(cableData, distance) {
             }
         }
     }
+
+    await syncDestinationDevice();
 
     // Update distance display
     if (manualRouteDistanceEl) {
@@ -217,6 +223,18 @@ export function closeModal() {
  */
 export function getEditingFiberId() {
     return editingFiberId;
+}
+
+/**
+ * Determine whether the modal is currently visible.
+ *
+ * @returns {boolean}
+ */
+export function isModalOpen() {
+    if (!manualModal) {
+        return false;
+    }
+    return !manualModal.classList.contains('pointer-events-none') && manualModal.classList.contains('opacity-100');
 }
 
 /**

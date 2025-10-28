@@ -21,8 +21,30 @@ class TimeoutException(Exception):
 
 @contextmanager
 def timeout(seconds: int):
-    """No-op de timeout (placeholder)."""
-    yield
+    """
+    Context manager que aborta a operação após ``seconds`` em plataformas Unix.
+
+    Em Windows o timeout ainda é tratado externamente (sem sinal), portanto
+    permanece como no-op para evitar incompatibilidades com SIGALRM.
+    """
+    if seconds <= 0 or platform.system() == "Windows":
+        yield
+        return
+
+    import signal
+
+    def _raise_timeout(signum, frame):  # pragma: no cover - dependente de sinal
+        raise TimeoutException(f"Operation timed out after {seconds} seconds")
+
+    previous_handler = signal.signal(signal.SIGALRM, _raise_timeout)
+    try:
+        # Usa ITIMER_REAL para garantir cancelamento após yield
+        signal.setitimer(signal.ITIMER_REAL, seconds)
+        yield
+    finally:
+        # Cancela o timer e restaura handler original
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
 
 
 def _storage_check(checks: Dict[str, Any]) -> None:

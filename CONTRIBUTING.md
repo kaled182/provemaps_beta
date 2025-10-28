@@ -73,10 +73,11 @@ docs: atualiza guia de deploy
 
 ## 🔄 Pull Requests
 
-1. Crie branch a partir de `main`
-2. Rode `make test` e `make lint`
-3. Atualize documentação se necessário
-4. Envie PR com descrição clara
+1. Crie branch a partir de `main`.
+2. Rode `make test` e `make lint` (e `npm test` quando alterar JS).
+3. Revise a checklist de internacionalização em [docs/i18n_and_pr_guidelines.md](docs/i18n_and_pr_guidelines.md).
+4. Preencha o template de PR (adição automática via GitHub) marcando cada item da checklist.
+5. Atualize documentação ou ADRs sempre que alterar convenções ou arquitetura.
 
 ---
 

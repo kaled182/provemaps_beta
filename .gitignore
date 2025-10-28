@@ -108,6 +108,10 @@ celerybeat.pid
 
 # Environments
 .env
+.env.*
+!.env.example
+!.env.production.example
+.envrc
 .venv
 env/
 venv/
@@ -157,3 +161,11 @@ Desktop.ini
 # Node.js artifacts
 node_modules/
 package-lock.json
+
+# Project-specific generated artifacts
+logs/
+staticfiles/
+htmlcov/
+dist/
+celerybeat-schedule
+celerybeat.pid

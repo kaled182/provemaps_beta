@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.shortcuts import redirect, render
@@ -9,7 +12,14 @@ from zabbix_api.guards import reload_diagnostics_flag_cache
 from .forms import EnvConfigForm, FirstTimeSetupForm
 from .models import FirstTimeSetup
 from .services import runtime_settings
+from .services.service_reloader import trigger_restart
 from .utils import env_manager
+
+DEFAULT_SERVICE_RESTART_COMMANDS = (
+    settings.SERVICE_RESTART_COMMANDS
+    if getattr(settings, "SERVICE_RESTART_COMMANDS", "")
+    else "docker compose restart web; docker compose restart celery; docker compose restart beat"
+)
 
 
 def get_setup_logo():
@@ -20,7 +30,6 @@ def _staff_check(user):
     return user.is_active and user.is_staff
 
 
-@login_required
 def first_time_setup(request):
     if FirstTimeSetup.objects.filter(configured=True).exists():
         return redirect("setup_app:setup_dashboard")
@@ -39,14 +48,27 @@ def first_time_setup(request):
                 zabbix_password=data.get("zabbix_password"),
                 maps_api_key=data["maps_api_key"],
                 unique_licence=data["unique_licence"],
+                db_host=data["db_host"],
+                db_port=data["db_port"],
+                db_name=data["db_name"],
+                db_user=data["db_user"],
+                db_password=data["db_password"],
+                redis_url=data["redis_url"],
                 configured=True,
             )
 
+            commands = settings.SERVICE_RESTART_COMMANDS or DEFAULT_SERVICE_RESTART_COMMANDS
             env_payload = {
                 "COMPANY_NAME": data["company_name"],
                 "ZABBIX_API_URL": data["zabbix_url"],
                 "GOOGLE_MAPS_API_KEY": data["maps_api_key"],
                 "UNIQUE_LICENCE": data["unique_licence"],
+                "DB_HOST": data["db_host"],
+                "DB_PORT": data["db_port"],
+                "DB_NAME": data["db_name"],
+                "DB_USER": data["db_user"],
+                "DB_PASSWORD": data["db_password"],
+                "REDIS_URL": data["redis_url"],
             }
             if data["auth_type"] == "token":
                 env_payload.update(
@@ -64,12 +86,17 @@ def first_time_setup(request):
                         "ZABBIX_API_KEY": "",
                     }
                 )
+            env_payload["SERVICE_RESTART_COMMANDS"] = commands
             env_manager.write_values(env_payload)
             runtime_settings.reload_config()
             from zabbix_api.services.zabbix_service import clear_token_cache
 
             clear_token_cache()
             reload_diagnostics_flag_cache()
+            command_string = env_payload.get("SERVICE_RESTART_COMMANDS", "").strip()
+            os.environ["SERVICE_RESTART_COMMANDS"] = command_string
+            if command_string:
+                trigger_restart()
             return redirect("setup_app:setup_dashboard")
     else:
         form = FirstTimeSetupForm()
@@ -102,6 +129,13 @@ def manage_environment(request):
         "GOOGLE_MAPS_API_KEY",
         "ALLOWED_HOSTS",
         "ENABLE_DIAGNOSTIC_ENDPOINTS",
+        "DB_HOST",
+        "DB_PORT",
+        "DB_NAME",
+        "DB_USER",
+        "DB_PASSWORD",
+        "REDIS_URL",
+        "SERVICE_RESTART_COMMANDS",
     ]
     current_values = env_manager.read_values(editable_keys)
 
@@ -123,8 +157,16 @@ def manage_environment(request):
                 "ENABLE_DIAGNOSTIC_ENDPOINTS": (
                     "True" if cleaned["enable_diagnostics"] else "False"
                 ),
+                "DB_HOST": cleaned["db_host"],
+                "DB_PORT": cleaned["db_port"],
+                "DB_NAME": cleaned["db_name"],
+                "DB_USER": cleaned["db_user"],
+                "DB_PASSWORD": cleaned["db_password"],
+                "REDIS_URL": cleaned["redis_url"],
+                "SERVICE_RESTART_COMMANDS": cleaned["service_restart_commands"],
             }
             env_manager.write_values(payload)
+            os.environ["SERVICE_RESTART_COMMANDS"] = cleaned["service_restart_commands"]
 
             # 2. Salva no banco de dados (para Docker/produção)
             from .models import FirstTimeSetup
@@ -156,6 +198,12 @@ def manage_environment(request):
                     "zabbix_user": user,
                     "zabbix_password": password,
                     "maps_api_key": cleaned["google_maps_api_key"],
+                    "db_host": cleaned["db_host"],
+                    "db_port": cleaned["db_port"],
+                    "db_name": cleaned["db_name"],
+                    "db_user": cleaned["db_user"],
+                    "db_password": cleaned["db_password"],
+                    "redis_url": cleaned["redis_url"],
                 }
             )
 
@@ -167,6 +215,8 @@ def manage_environment(request):
 
             clear_token_cache()
             reload_diagnostics_flag_cache()
+            if cleaned["service_restart_commands"].strip():
+                trigger_restart()
             messages.success(
                 request,
                 "Configuration saved successfully. Changes are now active!",
@@ -191,6 +241,14 @@ def manage_environment(request):
                     current_values.get("ENABLE_DIAGNOSTIC_ENDPOINTS", "").lower()
                     == "true"
                 ),
+                "db_host": current_values.get("DB_HOST", ""),
+                "db_port": current_values.get("DB_PORT", ""),
+                "db_name": current_values.get("DB_NAME", ""),
+                "db_user": current_values.get("DB_USER", ""),
+                "db_password": current_values.get("DB_PASSWORD", ""),
+                "redis_url": current_values.get("REDIS_URL", ""),
+                "service_restart_commands": current_values.get("SERVICE_RESTART_COMMANDS", "")
+                or DEFAULT_SERVICE_RESTART_COMMANDS,
             }
         )
 

@@ -188,3 +188,11 @@ export function attachPolylineRightClick(polyline, callback) {
     });
   });
 }
+
+/**
+ * Get the current map instance
+ * @returns {google.maps.Map|null} The map instance or null if not initialized
+ */
+export function getMapInstance() {
+  return map;
+}

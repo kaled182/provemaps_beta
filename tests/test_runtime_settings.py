@@ -44,6 +44,12 @@ class RuntimeSettingsTests(TestCase):
             zabbix_password="pwd",
             maps_api_key="maps-123",
             unique_licence="licence-1",
+            db_host="db.internal",
+            db_port="3306",
+            db_name="mapspro_db",
+            db_user="maps_user",
+            db_password="maps_pass",
+            redis_url="redis://redis.internal:6379/1",
             configured=True,
         )
         runtime_settings.reload_config()
@@ -51,6 +57,10 @@ class RuntimeSettingsTests(TestCase):
         self.assertEqual(config.zabbix_api_url, "http://zabbix.local/api_jsonrpc.php")
         self.assertEqual(config.zabbix_api_user, "admin")
         self.assertEqual(config.google_maps_api_key, "maps-123")
+        self.assertEqual(config.db_host, "db.internal")
+        self.assertEqual(config.db_name, "mapspro_db")
+        self.assertEqual(config.db_user, "maps_user")
+        self.assertEqual(config.redis_url, "redis://redis.internal:6379/1")
 
 
 class ManageEnvironmentViewTests(TestCase):
@@ -59,6 +69,13 @@ class ManageEnvironmentViewTests(TestCase):
         self.original_env_path = env_manager.ENV_PATH
         env_manager.ENV_PATH = Path(self.tmp_dir.name) / ".env"
         env_manager.ENV_PATH.write_text("SECRET_KEY=abc\nDEBUG=True\n", encoding="utf-8")
+        FirstTimeSetup.objects.create(
+            company_name="Configured Corp",
+            zabbix_url="http://example.com/api_jsonrpc.php",
+            auth_type="token",
+            zabbix_api_key="initial",
+            configured=True,
+        )
 
         self.client = Client()
         User = get_user_model()
@@ -86,6 +103,13 @@ class ManageEnvironmentViewTests(TestCase):
             "google_maps_api_key": "maps-key",
             "allowed_hosts": "localhost,127.0.0.1",
             "enable_diagnostics": "on",
+            "db_host": "db.local",
+            "db_port": "3307",
+            "db_name": "maps_db",
+            "db_user": "maps_user",
+            "db_password": "maps_pass",
+            "redis_url": "redis://redis:6379/2",
+            "service_restart_commands": "",
         }
         response = self.client.post(reverse("setup_app:manage_environment"), data=payload)
         self.assertEqual(response.status_code, 302)
@@ -93,6 +117,10 @@ class ManageEnvironmentViewTests(TestCase):
         self.assertEqual(content["SECRET_KEY"], "new-secret")
         self.assertEqual(content["ZABBIX_API_URL"], "http://example/api_jsonrpc.php")
         self.assertEqual(content["ENABLE_DIAGNOSTIC_ENDPOINTS"], "True")
+        self.assertEqual(content["DB_HOST"], "db.local")
+        self.assertEqual(content["DB_PORT"], "3307")
+        self.assertEqual(content["REDIS_URL"], "redis://redis:6379/2")
+        self.assertEqual(content.get("SERVICE_RESTART_COMMANDS", ""), "")
 
     def test_non_staff_redirects(self):
         User = get_user_model()
@@ -111,6 +139,13 @@ class DiagnosticsEndpointsTests(TestCase):
         env_manager.ENV_PATH.write_text("ENABLE_DIAGNOSTIC_ENDPOINTS=False\n", encoding="utf-8")
         runtime_settings.reload_config()
         reload_diagnostics_flag_cache()
+        FirstTimeSetup.objects.create(
+            company_name="Configured Corp",
+            zabbix_url="http://example.com/api_jsonrpc.php",
+            auth_type="token",
+            zabbix_api_key="initial",
+            configured=True,
+        )
         User = get_user_model()
         self.staff = User.objects.create_user("diag-staff", password="pass", is_staff=True)
         self.client = Client()

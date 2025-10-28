@@ -34,6 +34,10 @@ ZABBIX_API_PASSWORD = os.getenv("ZABBIX_API_PASSWORD", "")
 ZABBIX_API_KEY = os.getenv("ZABBIX_API_KEY", "")
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 ENABLE_DIAGNOSTIC_ENDPOINTS = os.getenv("ENABLE_DIAGNOSTIC_ENDPOINTS", "False").lower() == "true"
+SERVICE_RESTART_COMMANDS = os.getenv(
+    "SERVICE_RESTART_COMMANDS",
+    "",
+)
 
 FERNET_KEYS = [key.strip() for key in os.getenv("FERNET_KEYS", "").split(",") if key.strip()]
 if not FERNET_KEYS:
@@ -97,6 +101,8 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "core.middleware.request_id.RequestIDMiddleware",
+    "core.middleware.first_time_setup.FirstTimeSetupRedirectMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "django_prometheus.middleware.PrometheusAfterMiddleware",

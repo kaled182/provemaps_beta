@@ -33,29 +33,24 @@ class TestFiberEditPersistence:
         device1 = Device.objects.create(
             name="Device A",
             site=site,
-            device_type="switch"
         )
         device2 = Device.objects.create(
             name="Device B",
             site=site,
-            device_type="switch"
         )
 
         # Criar portas
         port_origin = Port.objects.create(
             device=device1,
             name="eth0/1",
-            port_type="fiber"
         )
         port_dest_old = Port.objects.create(
             device=device2,
             name="eth0/2",
-            port_type="fiber"
         )
         port_dest_new = Port.objects.create(
             device=device2,
             name="eth0/3",
-            port_type="fiber"
         )
 
         # Criar cabo
