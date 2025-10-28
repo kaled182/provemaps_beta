@@ -22,6 +22,21 @@ class FirstTimeSetupForm(forms.Form):
     )
     maps_api_key = forms.CharField(label="Google Maps API key", max_length=255)
     unique_licence = forms.CharField(label="License key", max_length=255)
+    db_host = forms.CharField(label="Database host", max_length=255)
+    db_port = forms.CharField(label="Database port", max_length=16, initial="3306")
+    db_name = forms.CharField(label="Database name", max_length=255)
+    db_user = forms.CharField(label="Database user", max_length=255)
+    db_password = forms.CharField(
+        label="Database password",
+        max_length=255,
+        widget=forms.PasswordInput,
+    )
+    redis_url = forms.CharField(
+        label="Redis URL",
+        max_length=255,
+        initial="redis://redis:6379/1",
+        help_text="Example: redis://redis:6379/1",
+    )
 
 
 class EnvConfigForm(forms.Form):
@@ -55,6 +70,30 @@ class EnvConfigForm(forms.Form):
         max_length=255,
         required=False,
         help_text="Comma separated. Example: localhost,127.0.0.1,example.com",
+    )
+    db_host = forms.CharField(label="DB_HOST", max_length=255)
+    db_port = forms.CharField(label="DB_PORT", max_length=16, initial="3306")
+    db_name = forms.CharField(label="DB_NAME", max_length=255)
+    db_user = forms.CharField(label="DB_USER", max_length=255)
+    db_password = forms.CharField(
+        label="DB_PASSWORD",
+        max_length=255,
+        widget=forms.PasswordInput(render_value=True),
+    )
+    redis_url = forms.CharField(
+        label="REDIS_URL",
+        max_length=255,
+        required=False,
+        help_text="Example: redis://redis:6379/1",
+    )
+    service_restart_commands = forms.CharField(
+        label="SERVICE_RESTART_COMMANDS",
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text=(
+            "Comandos executados após salvar as credenciais. "
+            "Separe múltiplos comandos com ';'. Ex.: docker compose restart web; docker compose restart worker"
+        ),
     )
     enable_diagnostics = forms.BooleanField(
         label="ENABLE_DIAGNOSTIC_ENDPOINTS",

@@ -481,7 +481,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-async function fetchJSON(url) { const r = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } }); return r.json(); }
+async function fetchJSON(url) {
+    const response = await fetch(url, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin'
+    });
+
+    if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Request failed: ${response.status} ${response.statusText} – ${body || 'empty response'}`);
+    }
+
+    return response.json();
+}
 
 function addLegend() {
     const legend = document.createElement('div'); legend.className = 'legend';
@@ -926,63 +938,65 @@ async function addDeviceMarker(dev, siteName, siteCity) {
 }
 
 async function loadData() {
-    const [cablesResp, sitesResp] = await Promise.all([
-        fetchJSON('/zabbix_api/api/fibers/'),
-        fetchJSON('/zabbix_api/api/sites/')
-    ]);
+    try {
+        const [cablesResp, sitesResp] = await Promise.all([
+            fetchJSON('/zabbix_api/api/fibers/'),
+            fetchJSON('/zabbix_api/api/sites/')
+        ]);
 
-    // Devices per site
-    const siteUl = document.getElementById('siteList');
-    sitesResp.sites.forEach(s => {
-        const li = document.createElement('li');
-        //li.textContent = s.name + (s.city ? ' - ' + s.city : '');
-        siteUl.appendChild(li);
-        (s.devices || []).forEach(d => addDeviceMarker(d, s.name, s.city));
-    });
-
-    // Cables
-    const cableUl = document.getElementById('cableList');
-    cablesResp.cables.forEach(c => {
-        cableDataCache[c.id] = c;
-        const poly = drawCable(c);
-        if (poly) { cablePolylines[c.id] = poly; }
-        const li = document.createElement('li');
-        li.id = 'cable-li-' + c.id;
-        //li.innerHTML = `<span class="inline-block w-3 h-3 rounded-full mr-1 status-dot" data-cable="${c.id}" style="background:${STATUS_COLORS[c.status] || STATUS_COLORS.unknown}"></span>${c.name}`;
-        cableUl.appendChild(li);
-    });
-
-    // Fit the map after the data loads
-    fitMapToBounds();
-
-    startStatusPolling();
-}
-
-// Utility to fetch the CSRF token from cookies
-function getCSRFToken() {
-    const name = 'csrftoken=';
-    const decodedCookie = decodeURIComponent(document.cookie);
-    const cookies = decodedCookie.split(';');
-    for (let c of cookies) {
-        c = c.trim();
-        if (c.startsWith(name)) {
-            return c.substring(name.length);
+        // Devices per site
+        const siteUl = document.getElementById('siteList');
+        const sites = Array.isArray(sitesResp?.sites) ? sitesResp.sites : [];
+        if (siteUl) {
+            siteUl.innerHTML = '';
+            sites.forEach((site) => {
+                const li = document.createElement('li');
+                siteUl.appendChild(li);
+                (site.devices || []).forEach((device) => addDeviceMarker(device, site.name, site.city));
+            });
         }
+
+        // Cables (API may return either `fibers` or `cables`)
+        const cables = Array.isArray(cablesResp?.fibers)
+            ? cablesResp.fibers
+            : Array.isArray(cablesResp?.cables)
+                ? cablesResp.cables
+                : [];
+
+        const cableUl = document.getElementById('cableList');
+        if (cableUl) {
+            cableUl.innerHTML = '';
+            cables.forEach((cable) => {
+                cableDataCache[cable.id] = cable;
+                const polyline = drawCable(cable);
+                if (polyline) {
+                    cablePolylines[cable.id] = polyline;
+                }
+                const li = document.createElement('li');
+                li.id = `cable-li-${cable.id}`;
+                cableUl.appendChild(li);
+            });
+        }
+
+        // Fit the map after the data loads
+        fitMapToBounds();
+
+        startStatusPolling();
+    } catch (error) {
+        console.error('Failed to load dashboard data', error);
+        showNotification('Failed to load dashboard data. Check console for details.', 'error');
     }
-    return '';
 }
 
 async function refreshCableStatusValueMapped() {
     const ids = Object.keys(cablePolylines);
-    const csrftoken = getCSRFToken();
 
     await Promise.all(ids.map(async (cid) => {
         try {
             const resp = await fetch(`/zabbix_api/api/update-cable-oper-status/${cid}/`, {
-                method: 'POST',
+                method: 'GET',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrftoken,
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
                 credentials: 'same-origin',
             });

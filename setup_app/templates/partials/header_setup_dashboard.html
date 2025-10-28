@@ -25,13 +25,13 @@
           {% with current=request.resolver_match.url_name %}
           <li>
             <a href="{% url 'maps_view:dashboard_view' %}"
-              class="px-2 py-2 rounded-md transition-colors duration-200 {{ 'bg-white/20 text-white' if current == 'dashboard_view' else 'text-gray-100 hover:text-white hover:bg-white/10' }}">
+              class="px-2 py-2 rounded-md transition-colors duration-200 {% if current == 'dashboard_view' %}bg-white/20 text-white{% else %}text-gray-100 hover:text-white hover:bg-white/10{% endif %}">
               Dashboard
             </a>
           </li>
           <li>
             <a href="{% url 'routes_builder:fiber_route_builder' %}"
-              class="px-2 py-2 rounded-md transition-colors duration-200 {{ 'bg-white/20 text-white' if current == 'fiber_route_builder' else 'text-gray-100 hover:text-white hover:bg-white/10' }}">
+              class="px-2 py-2 rounded-md transition-colors duration-200 {% if current == 'fiber_route_builder' %}bg-white/20 text-white{% else %}text-gray-100 hover:text-white hover:bg-white/10{% endif %}">
               Build Route
             </a>
           </li>

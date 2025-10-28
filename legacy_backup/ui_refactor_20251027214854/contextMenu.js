@@ -18,24 +18,16 @@ let reloadTextEl = null;
 
 const MENU_Z_INDEX = 2147483647;
 
-function fullscreenElement() {
-    return (
-        document.fullscreenElement ||
-        document.webkitFullscreenElement ||
-        document.mozFullScreenElement ||
-        document.msFullscreenElement ||
-        null
-    );
-}
-
-function attachMenuTo(parent) {
-    if (!menuElement || !parent) {
+function ensureMenuAttachedToBody() {
+    if (!menuElement) {
         return;
     }
-    if (menuElement.parentElement !== parent) {
-        parent.appendChild(menuElement);
+    if (menuElement.parentElement !== document.body) {
+        document.body.appendChild(menuElement);
     }
+    menuElement.style.position = 'fixed';
     menuElement.style.zIndex = String(MENU_Z_INDEX);
+    menuElement.style.pointerEvents = 'auto';
 }
 
 export function initContextMenu() {
@@ -49,9 +41,7 @@ export function initContextMenu() {
     reloadButtonEl = document.getElementById('contextLoadAll');
     reloadTextEl = document.getElementById('contextLoadAllText');
 
-    attachMenuTo(document.body);
-    menuElement.style.position = 'fixed';
-    menuElement.style.pointerEvents = 'auto';
+    ensureMenuAttachedToBody();
 
     document.addEventListener('click', (event) => {
         if (menuElement && !menuElement.classList.contains('hidden') && !menuElement.contains(event.target)) {
@@ -64,21 +54,6 @@ export function initContextMenu() {
             hideContextMenu();
         }
     });
-
-    const handleFullscreenChange = () => {
-        const fsElement = fullscreenElement();
-        if (fsElement) {
-            attachMenuTo(fsElement);
-            menuElement.style.position = 'absolute';
-        } else {
-            attachMenuTo(document.body);
-            menuElement.style.position = 'fixed';
-        }
-    };
-
-    ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach((evt) => {
-        document.addEventListener(evt, handleFullscreenChange);
-    });
 }
 
 export function showContextMenu(x, y) {
@@ -87,11 +62,7 @@ export function showContextMenu(x, y) {
         return;
     }
 
-    const fsElement = fullscreenElement();
-    const parent = fsElement || document.body;
-    attachMenuTo(parent);
-    const parentRect = parent.getBoundingClientRect();
-    menuElement.style.position = fsElement ? 'absolute' : 'fixed';
+    ensureMenuAttachedToBody();
 
     const menuWidth = menuElement.offsetWidth || 220;
     const menuHeight = menuElement.offsetHeight || 300;
@@ -99,17 +70,14 @@ export function showContextMenu(x, y) {
     const offsetX = 6;
     const offsetY = 6;
 
-    const baseX = x - parentRect.left;
-    const baseY = y - parentRect.top;
+    let adjustedX = x + offsetX;
+    let adjustedY = y + offsetY;
 
-    let adjustedX = baseX + offsetX;
-    let adjustedY = baseY + offsetY;
-
-    const viewportWidth = parentRect.width;
-    const viewportHeight = parentRect.height;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
 
     if (adjustedX + menuWidth > viewportWidth - margin) {
-        adjustedX = baseX - menuWidth - offsetX;
+        adjustedX = x - menuWidth - offsetX;
         if (adjustedX < margin) adjustedX = margin;
     } else if (adjustedX < margin) {
         adjustedX = margin;
