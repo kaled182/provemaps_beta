@@ -11,6 +11,7 @@ from typing import Dict
 from django.core.cache import cache
 from django.db import connection
 
+from setup_app.models import FirstTimeSetup
 
 _CONFIG_CACHE_KEY = "setup_app:runtime_config"
 _CONFIG_CACHE_TTL = 300  # 5 minutos
@@ -39,58 +40,43 @@ def get_runtime_config() -> Dict[str, str]:
 def _load_from_database() -> Dict[str, str]:
     """
     Carrega configurações do banco de dados.
-    Usa SQL direto para evitar problemas de import circular.
     """
     config = {}
-    
-    try:
-        # Verifica se a tabela existe
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT TABLE_NAME
-                FROM information_schema.TABLES
-                WHERE TABLE_SCHEMA = DATABASE()
-                AND TABLE_NAME = 'setup_app_firsttimesetup'
-            """)
-            if not cursor.fetchone():
-                return config
+    record = (
+        FirstTimeSetup.objects.filter(configured=True)
+        .order_by("-configured_at")
+        .first()
+    )
+    if not record:
+        return config
 
-            # Busca a configuração mais recente
-            cursor.execute("""
-                SELECT
-                    zabbix_url,
-                    auth_type,
-                    zabbix_api_key,
-                    zabbix_user,
-                    zabbix_password,
-                    maps_api_key
-                FROM setup_app_firsttimesetup
-                WHERE configured = 1
-                ORDER BY configured_at DESC
-                LIMIT 1
-            """)
-            
-            row = cursor.fetchone()
-            if row:
-                zabbix_url, auth_type, api_key, user, password, maps_key = row
+    if record.zabbix_url:
+        config["ZABBIX_API_URL"] = record.zabbix_url
 
-                if zabbix_url:
-                    config['ZABBIX_API_URL'] = zabbix_url
+    if record.auth_type == "token":
+        if record.zabbix_api_key:
+            config["ZABBIX_API_KEY"] = record.zabbix_api_key
+    else:
+        if record.zabbix_user:
+            config["ZABBIX_API_USER"] = record.zabbix_user
+        if record.zabbix_password:
+            config["ZABBIX_API_PASSWORD"] = record.zabbix_password
 
-                if auth_type == 'token' and api_key:
-                    config['ZABBIX_API_KEY'] = api_key
-                elif auth_type == 'login':
-                    if user:
-                        config['ZABBIX_API_USER'] = user
-                    if password:
-                        config['ZABBIX_API_PASSWORD'] = password
+    if record.maps_api_key:
+        config["GOOGLE_MAPS_API_KEY"] = record.maps_api_key
 
-                if maps_key:
-                    config['GOOGLE_MAPS_API_KEY'] = maps_key
-
-    except Exception:
-        # Se houver erro (tabela não existe, etc), retorna config vazio
-        pass
+    if record.db_host:
+        config["DB_HOST"] = record.db_host
+    if record.db_port:
+        config["DB_PORT"] = record.db_port
+    if record.db_name:
+        config["DB_NAME"] = record.db_name
+    if record.db_user:
+        config["DB_USER"] = record.db_user
+    if record.db_password:
+        config["DB_PASSWORD"] = record.db_password
+    if record.redis_url:
+        config["REDIS_URL"] = record.redis_url
 
     return config
 

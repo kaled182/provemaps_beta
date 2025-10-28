@@ -1,16 +1,11 @@
 /**
- * contextMenu.js - Context Menu Management Module
- * 
- * Handles right-click context menu display, positioning, and state management.
- * Supports three scenarios:
- * - Scenario A: Empty state (no cable selected, no points drawn)
- * - Scenario B: Creating new cable (points drawn, no cable selected)
- * - Scenario C: Cable selected (editing existing cable)
- * 
- * @module contextMenu
+ * contextMenu.js - Context menu positioning and visibility management.
+ *
+ * Designed to work both in normal mode and when the Google Maps container
+ * enters fullscreen. The menu is rendered as a direct child of <body> with
+ * position:fixed so it always floats above the map.
  */
 
-// DOM element cache
 let menuElement = null;
 let selectedOptionsEl = null;
 let creatingOptionsEl = null;
@@ -21,11 +16,28 @@ let generalOptionsEl = null;
 let reloadButtonEl = null;
 let reloadTextEl = null;
 
-/**
- * Initialize the context menu module.
- * Caches DOM references and sets up event listeners.
- * Should be called once on page load.
- */
+const MENU_Z_INDEX = 2147483647;
+
+function fullscreenElement() {
+    return (
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.mozFullScreenElement ||
+        document.msFullscreenElement ||
+        null
+    );
+}
+
+function attachMenuTo(parent) {
+    if (!menuElement || !parent) {
+        return;
+    }
+    if (menuElement.parentElement !== parent) {
+        parent.appendChild(menuElement);
+    }
+    menuElement.style.zIndex = String(MENU_Z_INDEX);
+}
+
 export function initContextMenu() {
     menuElement = document.getElementById('contextMenu');
     selectedOptionsEl = document.getElementById('contextSelectedOptions');
@@ -37,104 +49,96 @@ export function initContextMenu() {
     reloadButtonEl = document.getElementById('contextLoadAll');
     reloadTextEl = document.getElementById('contextLoadAllText');
 
-    // Setup global click listener to hide menu when clicking outside
-    document.addEventListener('click', (e) => {
-        if (menuElement && !menuElement.contains(e.target)) {
+    attachMenuTo(document.body);
+    menuElement.style.position = 'fixed';
+    menuElement.style.pointerEvents = 'auto';
+
+    document.addEventListener('click', (event) => {
+        if (menuElement && !menuElement.classList.contains('hidden') && !menuElement.contains(event.target)) {
             hideContextMenu();
         }
     });
 
-    // Setup ESC key to close menu
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
             hideContextMenu();
         }
+    });
+
+    const handleFullscreenChange = () => {
+        const fsElement = fullscreenElement();
+        if (fsElement) {
+            attachMenuTo(fsElement);
+            menuElement.style.position = 'absolute';
+        } else {
+            attachMenuTo(document.body);
+            menuElement.style.position = 'fixed';
+        }
+    };
+
+    ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach((evt) => {
+        document.addEventListener(evt, handleFullscreenChange);
     });
 }
 
-/**
- * Show context menu at specified coordinates.
- * Automatically adjusts position to stay within viewport bounds.
- * 
- * @param {number} x - X coordinate (clientX from mouse event)
- * @param {number} y - Y coordinate (clientY from mouse event)
- */
 export function showContextMenu(x, y) {
-    console.log('[contextMenu] showContextMenu called at:', { x, y });
-    
     if (!menuElement) {
-        console.error('[contextMenu] ERROR: menuElement is null! Menu not initialized?');
+        console.error('[contextMenu] menuElement is not initialized.');
         return;
     }
 
-    // Menu dimensions and viewport constraints
-    const menuWidth = 220;
-    const menuHeight = 300; // Estimated (not critical)
-    const windowWidth = window.innerWidth;
-    const windowHeight = window.innerHeight;
-    const offsetX = 5;
-    const offsetY = 5;
-    const margin = 20; // Safety margin from viewport edges
+    const fsElement = fullscreenElement();
+    const parent = fsElement || document.body;
+    attachMenuTo(parent);
+    const parentRect = parent.getBoundingClientRect();
+    menuElement.style.position = fsElement ? 'absolute' : 'fixed';
 
-    // Adjust X to prevent overflow (right side)
-    let adjustedX = x + offsetX;
-    if (adjustedX + menuWidth > windowWidth - margin) {
-        // Position to the left of cursor
-        adjustedX = x - menuWidth - offsetX;
-        // If still overflows left side, force minimum margin
-        if (adjustedX < margin) {
-            adjustedX = margin;
-        }
+    const menuWidth = menuElement.offsetWidth || 220;
+    const menuHeight = menuElement.offsetHeight || 300;
+    const margin = 20;
+    const offsetX = 6;
+    const offsetY = 6;
+
+    const baseX = x - parentRect.left;
+    const baseY = y - parentRect.top;
+
+    let adjustedX = baseX + offsetX;
+    let adjustedY = baseY + offsetY;
+
+    const viewportWidth = parentRect.width;
+    const viewportHeight = parentRect.height;
+
+    if (adjustedX + menuWidth > viewportWidth - margin) {
+        adjustedX = baseX - menuWidth - offsetX;
+        if (adjustedX < margin) adjustedX = margin;
+    } else if (adjustedX < margin) {
+        adjustedX = margin;
     }
 
-    // Adjust Y to prevent overflow (bottom)
-    let adjustedY = y + offsetY;
-    if (adjustedY + menuHeight > windowHeight - margin) {
-        adjustedY = windowHeight - menuHeight - margin;
-    }
-    if (adjustedY < margin) {
+    if (adjustedY + menuHeight > viewportHeight - margin) {
+        adjustedY = viewportHeight - menuHeight - margin;
+    } else if (adjustedY < margin) {
         adjustedY = margin;
     }
 
-    // Position and show menu
-    menuElement.style.left = adjustedX + 'px';
-    menuElement.style.top = adjustedY + 'px';
+    menuElement.style.left = `${adjustedX}px`;
+    menuElement.style.top = `${adjustedY}px`;
     menuElement.classList.remove('hidden');
-    
-    console.log('[contextMenu] Menu positioned at:', { left: adjustedX, top: adjustedY }, 'visible:', !menuElement.classList.contains('hidden'));
 }
 
-/**
- * Hide the context menu.
- */
 export function hideContextMenu() {
     if (menuElement) {
         menuElement.classList.add('hidden');
     }
 }
 
-/**
- * Update context menu state based on application context.
- * Shows/hides appropriate menu sections based on current scenario.
- * 
- * @param {Object} context - Application state context
- * @param {boolean} context.hasActiveFiber - Whether a cable is currently selected
- * @param {Object|null} context.fiberMeta - Metadata of selected cable (name, id, etc.)
- * @param {number} context.pathLength - Number of points in current path
- */
-export function updateContextMenuState(context) {
-    const { hasActiveFiber, fiberMeta, pathLength } = context;
+export function updateContextMenuState({ hasActiveFiber, fiberMeta, pathLength }) {
+    if (!menuElement) return;
 
-    console.log('[contextMenu] updateContextMenuState called with:', { hasActiveFiber, fiberMeta, pathLength });
+    const isCreatingNewCable = !hasActiveFiber && pathLength > 0;
+    const isSelectedCable = hasActiveFiber && !!fiberMeta;
+    const isEmpty = !hasActiveFiber && pathLength === 0;
 
-    // Determine scenario
-    const isCreatingNewCable = !hasActiveFiber && pathLength > 0; // Scenario B
-    const isSelectedCable = hasActiveFiber && !!fiberMeta; // Scenario C
-    const isEmpty = !hasActiveFiber && pathLength === 0; // Scenario A
-
-    console.log('[contextMenu] Scenarios:', { isCreatingNewCable, isSelectedCable, isEmpty });
-
-    // Reset all sections (hide everything)
     selectedOptionsEl?.classList.add('hidden');
     creatingOptionsEl?.classList.add('hidden');
     cableInfoEl?.classList.add('hidden');
@@ -142,69 +146,37 @@ export function updateContextMenuState(context) {
     reloadButtonEl?.classList.add('hidden');
 
     if (isCreatingNewCable) {
-        console.log('[contextMenu] Showing: Creating New Cable options');
-        // Scenario B: Drawing new cable
         creatingOptionsEl?.classList.remove('hidden');
-        // No reload, no import options
     } else if (isSelectedCable) {
-        console.log('[contextMenu] Showing: Cable Selected options');
-        // Scenario C: Cable selected for editing
         selectedOptionsEl?.classList.remove('hidden');
         cableInfoEl?.classList.remove('hidden');
-
-        // Update cable name display
         if (cableNameEl) {
-            const isEditing = pathLength > 0;
-            const status = isEditing ? ' - EDITING' : '';
-            const displayName = fiberMeta.name || `Cable #${fiberMeta.id || '?'}`;
-            cableNameEl.textContent = `📌 ${displayName}${status}`;
+            const editingSuffix = pathLength > 0 ? ' - EDITING' : '';
+            const displayName = fiberMeta.name || `Cable #${fiberMeta.id ?? '?'}`;
+            cableNameEl.textContent = `📌 ${displayName}${editingSuffix}`;
         }
-
-        // Show "Reload This Cable" button
         if (reloadButtonEl && reloadTextEl) {
             reloadButtonEl.classList.remove('hidden');
             reloadTextEl.textContent = 'Reload This Cable';
         }
-
-        // Enable "Save Path" only if ≥2 points
         if (savePathEl) {
-            savePathEl.disabled = pathLength < 2;
-            savePathEl.style.opacity = pathLength >= 2 ? '1' : '0.5';
+            const enabled = pathLength >= 2;
+            savePathEl.disabled = !enabled;
+            savePathEl.style.opacity = enabled ? '1' : '0.5';
         }
     } else if (isEmpty) {
-        console.log('[contextMenu] Showing: Empty State options');
-        // Scenario A: Empty state
-        generalOptionsEl?.classList.remove('hidden'); // Show "Import KML"
-
-        // Show "Reload All Cables" button
+        generalOptionsEl?.classList.remove('hidden');
         if (reloadButtonEl && reloadTextEl) {
             reloadButtonEl.classList.remove('hidden');
             reloadTextEl.textContent = 'Reload All Cables';
         }
     }
-    
-    console.log('[contextMenu] Elements visibility:', {
-        selectedOptions: !selectedOptionsEl?.classList.contains('hidden'),
-        creatingOptions: !creatingOptionsEl?.classList.contains('hidden'),
-        cableInfo: !cableInfoEl?.classList.contains('hidden'),
-        generalOptions: !generalOptionsEl?.classList.contains('hidden')
-    });
 }
 
-/**
- * Check if context menu is currently visible.
- * 
- * @returns {boolean} True if menu is visible, false otherwise
- */
 export function isContextMenuVisible() {
-    return menuElement && !menuElement.classList.contains('hidden');
+    return Boolean(menuElement && !menuElement.classList.contains('hidden'));
 }
 
-/**
- * Get the current position of the context menu.
- * 
- * @returns {{x: number, y: number}|null} Menu position or null if menu not visible
- */
 export function getContextMenuPosition() {
     if (!menuElement || menuElement.classList.contains('hidden')) {
         return null;

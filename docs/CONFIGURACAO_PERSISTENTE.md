@@ -189,3 +189,22 @@ Agora você pode:
 ---
 
 **Status**: ✅ Sistema pronto para uso!
+
+## 🔄 Automa��o de rein�cio de servi�os
+
+- Utilize `SERVICE_RESTART_COMMANDS` para executar comandos imediatos ap�s salvar credenciais pelo painel ou via `sync_env_from_setup`.
+- Inclua todos os servi�os relevantes (por exemplo: web, celery, beat) na mesma linha separados por ponto e v�rgula.
+- Em ambientes Docker, defina no `.env`:
+
+  ```
+  SERVICE_RESTART_COMMANDS="docker compose restart web; docker compose restart celery; docker compose restart beat"
+  ```
+
+- Para systemd/supervisord, liste os comandos equivalentes, por exemplo:
+
+  ```
+  SERVICE_RESTART_COMMANDS="systemctl restart mapsprovefiber-web; systemctl restart mapsprovefiber-worker; systemctl restart mapsprovefiber-beat"
+  ```
+
+- O campo aparece em **Setup → Manage Environment** e aceita m�ltiplos comandos separados por `;`. Falhas de execu��o s�o registradas nos logs do aplicativo.
+

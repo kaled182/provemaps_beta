@@ -32,17 +32,32 @@ def docs_index(request):
     """
     available = get_available_docs()  # dict {filename: {...}}
     # Adapta estrutura para o template que já temos
-    normalized = {}
+    normalized: dict[str, dict[str, object]] = {}
     for name, meta in available.items():
+        last_modified = meta.get("last_modified")
+        modified_at = ""
+        if isinstance(last_modified, (int, float)):
+            modified_at = datetime.fromtimestamp(last_modified).strftime("%Y-%m-%d %H:%M")
+        elif isinstance(meta.get("modified_at"), str):
+            modified_at = meta["modified_at"]
+
+        raw_tags = meta.get("tags", [])
+        if isinstance(raw_tags, str):
+            tags = [tag.strip() for tag in raw_tags.split(",") if tag.strip()]
+        elif isinstance(raw_tags, (list, tuple, set)):
+            tags = [str(tag).strip() for tag in raw_tags if str(tag).strip()]
+        else:
+            tags = []
+
         normalized[name] = {
             "title": meta.get("title") or name,
-            "summary": "",           # opcional: preencher lendo cabeçalho do MD
-            "category": "",          # opcional: derivar por pasta—se aplicável
-            "tags": [],              # opcional: derivar por front-matter—se existir
+            "summary": meta.get("summary", ""),
+            "category": meta.get("category", ""),
+            "tags": tags,
             "size_kb": meta.get("size_kb"),
-            "modified_at": datetime.fromtimestamp(meta["last_modified"]).strftime("%Y-%m-%d %H:%M"),
-            "github_doc_url": os.getenv("GITHUB_DOCS_URL", ""),  # opcional
-            "views": 0,
+            "modified_at": modified_at,
+            "github_doc_url": meta.get("github_doc_url") or os.getenv("GITHUB_DOCS_URL", ""),
+            "views": meta.get("views", 0),
         }
     context = {
         "available_docs": normalized,
@@ -58,20 +73,20 @@ def docs_view(request, filename: str = "README.md"):
         raise Http404
 
     path = DOCS_DIR / filename
-    if not path.exists() or not path.is_file():
-        raise Http404("Documento não encontrado")
+    missing = not (path.exists() and path.is_file())
 
     html = load_markdown_file(filename, use_cache=True)
-    meta = _meta_for(filename)
+    meta = _meta_for(filename) if not missing else {}
     available = get_available_docs()
 
     context = {
         "filename": filename,
-        "content": html,              # já sanitizado no loader (se ativado)
+        "content": html,
         "doc_meta": {"title": meta.get("title", filename)},
         "size_kb": meta.get("size_kb"),
         "modified_at": meta.get("modified_at"),
         "github_doc_url": os.getenv("GITHUB_DOCS_URL", ""),
         "available_docs": available,
+        "missing": missing,
     }
     return render(request, "docs/view.html", context)

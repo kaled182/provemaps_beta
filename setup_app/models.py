@@ -19,9 +19,14 @@ class FirstTimeSetup(models.Model):
     zabbix_password = EncryptedCharField(max_length=512, blank=True, null=True)
     maps_api_key = EncryptedCharField(max_length=512, blank=True, null=True)
     unique_licence = EncryptedCharField(max_length=512, blank=True, null=True)
+    db_host = EncryptedCharField(max_length=512, blank=True, null=True)
+    db_port = EncryptedCharField(max_length=64, blank=True, null=True)
+    db_name = EncryptedCharField(max_length=512, blank=True, null=True)
+    db_user = EncryptedCharField(max_length=512, blank=True, null=True)
+    db_password = EncryptedCharField(max_length=512, blank=True, null=True)
+    redis_url = EncryptedCharField(max_length=512, blank=True, null=True)
     configured = models.BooleanField(default=False)
     configured_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:
         return self.company_name
-
