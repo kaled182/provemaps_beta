@@ -1,0 +1,39 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans "Home" %}</a>
+    &rsaquo; <a href="{% url 'admin:service_accounts_serviceaccount_changelist' %}">{% trans "Service Accounts" %}</a>
+    &rsaquo; <a href="{% url 'admin:service_accounts_serviceaccount_change' original.pk %}">{{ original }}</a>
+    &rsaquo; {% trans "Generate token" %}
+  </div>
+{% endblock %}
+
+{% block content %}
+  <div class="app-service_accounts module">
+    <h1>{% trans "Generate service token" %}</h1>
+    <p>{% trans "O valor do token sera exibido apenas uma vez. Copie antes de sair desta pagina." %}</p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      <fieldset class="module aligned">
+        {% for field in form %}
+          <div class="form-row">
+            {{ field.errors }}
+            <div>
+              <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% if field.help_text %}
+                <p class="help">{{ field.help_text }}</p>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </fieldset>
+      <div class="submit-row">
+        <input type="submit" value="{% trans "Generate token" %}" class="default">
+        <a href="{% url 'admin:service_accounts_serviceaccount_change' original.pk %}" class="button cancel-link">{% trans "Cancel" %}</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

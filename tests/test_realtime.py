@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from asyncio import CancelledError
-
 from asgiref.sync import async_to_sync
-from channels.testing import WebsocketCommunicator
+from django.db import connections
+from channels.layers import get_channel_layer
+from channels.testing import ApplicationCommunicator
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from unittest.mock import AsyncMock, patch
 
-from core.asgi import application
 from maps_view.realtime.consumers import DashboardStatusConsumer
 from maps_view.realtime.events import build_dashboard_payload
 from maps_view.realtime.publisher import DASHBOARD_STATUS_GROUP, broadcast_dashboard_status
@@ -21,24 +21,63 @@ from maps_view.tasks import broadcast_dashboard_snapshot
 )
 class DashboardRealtimeTests(TestCase):
     def test_consumer_rejects_anonymous_connections(self):
-        communicator = WebsocketCommunicator(application, "/ws/dashboard/status/")
-        connected, close_code = async_to_sync(communicator.connect)()
-        self.assertFalse(connected)
-        self.assertEqual(close_code, 4401)
-        # No explicit disconnect needed since handshake was rejected.
+        channel_layer = get_channel_layer()
+
+        async def run_consumer():
+            communicator = ApplicationCommunicator(
+                DashboardStatusConsumer.as_asgi(),
+                {
+                    "type": "websocket",
+                    "path": "/ws/dashboard/status/",
+                    "headers": [],
+                    "query_string": b"",
+                    "client": ["testserver", 80],
+                    "server": ["testserver", 80],
+                    "subprotocols": [],
+                    "user": AnonymousUser(),
+                    "channel_layer": channel_layer,
+                },
+            )
+
+            await communicator.send_input({"type": "websocket.connect"})
+            response = await communicator.receive_output(timeout=1)
+            assert response["type"] == "websocket.close"
+            assert response.get("code") == 4401
+
+        async_to_sync(run_consumer)()
+        connections["default"].set_rollback(False)
 
     def test_authenticated_connection_succeeds(self):
         user = get_user_model().objects.create_user("ws-ok", password="pass")
-        communicator = WebsocketCommunicator(application, "/ws/dashboard/status/")
-        communicator.scope["user"] = user
+        channel_layer = get_channel_layer()
 
-        connected, _ = async_to_sync(communicator.connect)()
-        self.assertTrue(connected)
+        async def run_consumer():
+            communicator = ApplicationCommunicator(
+                DashboardStatusConsumer.as_asgi(),
+                {
+                    "type": "websocket",
+                    "path": "/ws/dashboard/status/",
+                    "headers": [],
+                    "query_string": b"",
+                    "client": ["testserver", 80],
+                    "server": ["testserver", 80],
+                    "subprotocols": [],
+                    "user": user,
+                    "channel_layer": channel_layer,
+                },
+            )
 
-        try:
-            async_to_sync(communicator.disconnect)()
-        except CancelledError:
-            pass
+            try:
+                await communicator.send_input({"type": "websocket.connect"})
+                response = await communicator.receive_output(timeout=1)
+                assert response["type"] == "websocket.accept"
+            finally:
+                await communicator.send_input({"type": "websocket.disconnect", "code": 1000})
+                await communicator.wait()
+
+        async_to_sync(run_consumer)()
+
+        connections["default"].set_rollback(False)
 
     def test_authenticated_client_receives_broadcast(self):
         hosts_status_data = {

@@ -12,7 +12,9 @@
 ✅ **Observabilidade implementada:** Health endpoints, métricas Celery, alertas Prometheus  
 ✅ **Segurança em evolução:** Guards, CSP-ready, settings segregados  
 ⚠️ **Refatorações estruturais:** Separação de apps e modelos em progresso  
-⚠️ **Performance:** Cliente Zabbix precisa hardening (retry/batching/SWR)
+✅ **Performance reforçada:** Cliente Zabbix resiliente + cache SWR em produção
+✅ **Readiness estável:** Timeout desativado fora da main thread (`HEALTHCHECK_FORCE_NO_TIMEOUT=true`)
+✅ **Qualidade validada:** Pytest completo executado dentro do stack Docker (207 testes)
 
 ---
 
@@ -69,6 +71,8 @@
   - `HEALTHCHECK_DB_TIMEOUT`, `HEALTHCHECK_DISK_THRESHOLD_GB`
   - `HEALTHCHECK_STORAGE`, `HEALTHCHECK_SYSTEM_METRICS`
   - `HEALTHCHECK_DEBUG`
+    - `HEALTHCHECK_FORCE_NO_TIMEOUT` (novidade) — evita `SIGALRM` fora da main thread (Gunicorn/Uvicorn)
+- ✅ Logging defensivo ampliado: readiness agora registra exceções reais e avisa quando o timeout é pulado
 
 ---
 
@@ -91,7 +95,9 @@
 - ✅ Volumes para desenvolvimento (hot-reload)
 - ✅ Entrypoint com init automático (migrate, collectstatic)
 - ✅ Variáveis Celery propagadas
+- ✅ `HEALTHCHECK_DB_TIMEOUT=5` e `HEALTHCHECK_FORCE_NO_TIMEOUT=true` injetados no serviço `web`
 - ✅ Ports mapeados (8000:8000, 3307:3306, 6380:6379)
+- ✅ Script `sql/init.sql` garante criação do `test_app` e privilégios do usuário `app`
 
 ---
 
@@ -112,6 +118,7 @@
 - ✅ Pre-commit hooks (Black, Ruff, isort)
 - ✅ Pytest configurado com pytest-django
 - ✅ Scripts de packaging: `package-release.ps1`
+- ✅ Suíte completa (`pytest -q`) validada dentro do container `web` (207 testes)
 
 ### 7. Inventário Zabbix ✅ NOVO
 **Status:** Comando, task Celery e testes atualizados
@@ -129,6 +136,30 @@
 #### Testes:
 - ✅ `tests/test_sync_inventory_command.py` — cobre cenários de criação/atualização
 - ✅ `tests/test_celery_schedule.py` — garante agendamento do beat
+
+---
+
+### 8. Automação de Service Accounts ✅ NOVO
+**Status:** Stage 2 concluído (rotação automática + notificações)
+
+#### Implementações:
+- ✅ Novos campos nos modelos: `auto_rotate_days`, `notify_before_days`, `notification_webhook_url` e `last_notified_at`
+- ✅ Helper `ServiceAccount.get_active_token()` e cálculo de prazos (`get_rotation_deadline`, `get_notification_deadline`)
+- ✅ Serviço orquestrador em `service_accounts/services.py` com rotação automática, envio de webhooks e auditoria dedicada (`rotation_notice`)
+- ✅ Task Celery `service_accounts.enforce_rotation_policies_task` agendada a cada 1h (configurável) via beat
+- ✅ Admin expõe `last_notified_at` e mantém logging consistente
+
+#### Configuração:
+- ✅ Novas variáveis de ambiente em `.env.example` e `docker-compose.yml`:
+    - `SERVICE_ACCOUNT_ROTATION_INTERVAL_SECONDS`
+    - `SERVICE_ACCOUNT_WEBHOOK_CONNECT_TIMEOUT`
+    - `SERVICE_ACCOUNT_WEBHOOK_READ_TIMEOUT`
+- ✅ Eventos de webhook documentados (`service_account.rotation_warning`, `service_account.token_rotated`)
+
+#### Testes e validação:
+- ✅ `service_accounts/tests.py` expandido (7 cenários) garantindo rotação e aviso único
+- ✅ Execução manual da task via `python manage.py shell -c "from service_accounts.tasks import enforce_rotation_policies_task as t; print(t())"`
+- ✅ Migração `service_accounts.0003_auto_rotation_policy` aplicada localmente (`python manage.py migrate`)
 
 ---
 
@@ -174,7 +205,7 @@ class FiberCable(models.Model):
 - [x] Ajustar todos os imports (`from inventory.models import Device`)
 - [x] Atualizar `admin.py` (ambos os apps)
 - [x] Executar `makemigrations` e validar (NÃO DEVE ter DropTable)
-- [ ] Executar `migrate`
+- [x] Executar `migrate` (rodado via `docker compose run --rm web python manage.py migrate`)
 - [x] Rodar testes completos
 
 **Arquivo de apoio:** Posso gerar script de migração completo.
@@ -238,12 +269,12 @@ class ZabbixClient:
 ```
 
 **Checklist:**
-- [ ] Criar `zabbix_api/client.py` com classe `ZabbixClient`
-- [ ] Implementar retry/backoff/timeout
-- [ ] Adicionar batching para `history.get`, `item.get`
-- [ ] Atualizar `zabbix_api/services.py` para usar o novo client
-- [ ] Adicionar testes unitários com mocks
-- [ ] Métricas Prometheus: `zabbix_request_latency_seconds`, `zabbix_request_failures_total`
+- [x] Criar `zabbix_api/client.py` com classe `ZabbixClient`
+- [x] Implementar retry/backoff/timeout
+- [x] Adicionar batching para `history.get`, `item.get`
+- [x] Atualizar `zabbix_api/services.py` para usar o novo client
+- [x] Adicionar testes unitários com mocks
+- [x] Métricas Prometheus: `zabbix_request_latency_seconds`, `zabbix_request_failures_total`
 
 **Arquivo de apoio:** Posso gerar client completo + testes.
 
@@ -310,12 +341,12 @@ def refresh_dashboard_cache():
 ```
 
 **Checklist:**
-- [ ] Criar `maps_view/services.py` com função SWR
-- [ ] Atualizar views para usar serviço
-- [ ] Criar task `refresh_dashboard_cache`
-- [ ] Agendar no beat (1min)
-- [ ] Frontend: exibir banner "Dados de X min atrás" se stale
-- [ ] Testes: mock cache + timeout
+- [x] Criar helper SWR (`maps_view/cache_swr.py`)
+- [x] Atualizar views para usar serviço
+- [x] Criar task `refresh_dashboard_cache`
+- [x] Agendar no beat (1min)
+- [x] Frontend: exibir banner "Dados de X min atrás" se stale
+- [x] Testes: mock cache + timeout
 
 **Arquivo de apoio:** Posso gerar serviço + task + testes.
 
