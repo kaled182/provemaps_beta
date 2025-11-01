@@ -1,0 +1,13 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+  {{ block.super }}
+  {% if original %}
+    <li>
+      <a href="{% url 'admin:service_accounts_serviceaccount_generate_token' original.pk %}" class="addlink">
+        {% trans "Generate service token" %}
+      </a>
+    </li>
+  {% endif %}
+{% endblock %}

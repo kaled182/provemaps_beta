@@ -47,6 +47,10 @@ _inventory_sync_interval = float(
     os.getenv("INVENTORY_SYNC_INTERVAL_SECONDS", "86400")
 )
 
+_service_account_rotation_interval = float(
+    os.getenv("SERVICE_ACCOUNT_ROTATION_INTERVAL_SECONDS", "3600")
+)
+
 # ---------------------------------------------------------------------
 # Opções padrão (podem ser sobrescritas via settings ou env)
 # ---------------------------------------------------------------------
@@ -141,6 +145,11 @@ app.conf.update(
         "sync-zabbix-inventory": {
             "task": "inventory.tasks.sync_zabbix_inventory_task",
             "schedule": _inventory_sync_interval,
+            "options": {"queue": "default"},
+        },
+        "service-account-rotation": {
+            "task": "service_accounts.enforce_rotation_policies_task",
+            "schedule": _service_account_rotation_interval,
             "options": {"queue": "default"},
         },
     },
