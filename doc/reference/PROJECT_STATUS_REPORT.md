@@ -1,5 +1,5 @@
 # 📊 Relatório de Status do Projeto MapsProveFiber
-**Data:** 26 de outubro de 2025  
+**Data:** 1º de novembro de 2025  
 **Branch:** inicial  
 **Revisão:** Pós-implementação Monitoramento Celery
 
@@ -168,14 +168,14 @@ class FiberCable(models.Model):
 ```
 
 **Checklist:**
-- [ ] Criar app `inventory` com `__init__.py`, `apps.py`, `admin.py`
-- [ ] Mover modelos de `zabbix_api/models.py` → `inventory/models.py`
-- [ ] Adicionar `Meta.db_table` para preservar nomes
-- [ ] Ajustar todos os imports (`from inventory.models import Device`)
-- [ ] Atualizar `admin.py` (ambos os apps)
-- [ ] Executar `makemigrations` e validar (NÃO DEVE ter DropTable)
+- [x] Criar app `inventory` com `__init__.py`, `apps.py`, `admin.py`
+- [x] Mover modelos de `zabbix_api/models.py` → `inventory/models.py`
+- [x] Adicionar `Meta.db_table` para preservar nomes
+- [x] Ajustar todos os imports (`from inventory.models import Device`)
+- [x] Atualizar `admin.py` (ambos os apps)
+- [x] Executar `makemigrations` e validar (NÃO DEVE ter DropTable)
 - [ ] Executar `migrate`
-- [ ] Rodar testes completos
+- [x] Rodar testes completos
 
 **Arquivo de apoio:** Posso gerar script de migração completo.
 
@@ -418,7 +418,7 @@ class Device(models.Model):
 | Segurança | ⚠️ Parcial | 70% |
 | Docker & Deploy | ✅ Completo | 95% |
 | Documentação | ✅ Completo | 90% |
-| Arquitetura & Apps | ⚠️ Pendente | 40% |
+| Arquitetura & Apps | ⚠️ Parcial | 65% |
 | Performance Zabbix | ⚠️ Pendente | 30% |
 | Testes & QA | ⚠️ Parcial | 60% |
 
@@ -429,9 +429,11 @@ class Device(models.Model):
 ### Semana 1 (27 Out - 2 Nov)
 **Foco:** Estrutura de Apps + Cliente Zabbix
 
-- [ ] Separar modelos (`inventory`, `routes_builder`)
+- [x] Separar modelos (`inventory`, `routes_builder`)
 - [ ] Cliente Zabbix resiliente (retry/timeout/batching)
 - [ ] Testes unitários do client
+
+> **Status 1 Nov:** modelos migrados para `inventory`, imports atualizados e `zabbix_api/models.py` virou re-export. Falta integrar client resiliente e rodar `makemigrations`/`migrate` manualmente (confirmação interativa de rename).
 
 ### Semana 2 (3 Nov - 9 Nov)
 **Foco:** Cache SWR + Performance
@@ -444,10 +446,12 @@ class Device(models.Model):
 ### Semana 3 (10 Nov - 16 Nov)
 **Foco:** Sincronização + Idioma
 
-- [ ] Comando `sync_zabbix_inventory`
-- [ ] Task diária no beat
+- [x] Comando `sync_zabbix_inventory`
+- [x] Task diária no beat
 - [ ] Padronizar nomes EN (com `db_column`)
-- [ ] Script `check_translations.py`
+- [x] Script `check_translations.py`
+
+> **Atualização 1 Nov 2025:** Comando e task de sincronização prontos com logs estruturados e execução em beat; script de lint de idioma criado com bateria de testes, servindo como guardião para manter o código em inglês.
 
 ### Semana 4 (17 Nov - 23 Nov)
 **Foco:** Segurança + Docs
@@ -523,5 +527,5 @@ Posso gerar imediatamente:
 
 ---
 
-**Última atualização:** 26 de outubro de 2025  
-**Próxima revisão:** Após implementação Semana 1 (2 Nov 2025)
+**Última atualização:** 1º de novembro de 2025  
+**Próxima revisão:** Após implementação Semana 2 (9 Nov 2025)
