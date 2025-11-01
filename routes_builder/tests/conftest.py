@@ -1,0 +1,72 @@
+"""Fixtures dedicated to the routes_builder app tests."""
+
+from __future__ import annotations
+
+import itertools
+import uuid
+
+import pytest
+
+from inventory.models import Device, Port, Site
+from routes_builder.models import Route, RouteEvent, RouteSegment
+
+
+_PORT_COUNTER = itertools.count()
+_ROUTE_COUNTER = itertools.count()
+
+
+@pytest.fixture
+def port_factory(db):
+    """Create inventory ports with unique device/site combos."""
+
+    def factory(*, prefix: str = "port") -> Port:
+        counter = next(_PORT_COUNTER)
+        site = Site.objects.create(name=f"Test Site {uuid.uuid4().hex[:8]}")
+        device = Device.objects.create(
+            site=site,
+            name=f"Test Device {prefix}-{counter}",
+        )
+        return Port.objects.create(
+            device=device,
+            name=f"{prefix.upper()}-{counter}",
+        )
+
+    return factory
+
+
+@pytest.fixture
+def route(port_factory: pytest.FixtureRequest) -> Route:
+    """Persisted route ready for tests."""
+
+    origin = port_factory(prefix="origin")
+    destination = port_factory(prefix="destination")
+    counter = next(_ROUTE_COUNTER)
+    return Route.objects.create(
+        name=f"Test Route {counter}",
+        origin_port=origin,
+        destination_port=destination,
+    )
+
+
+@pytest.fixture
+def route_segment(route: Route, port_factory) -> RouteSegment:
+    """Persisted segment linked to the base route."""
+
+    return RouteSegment.objects.create(
+        route=route,
+        order=1,
+        from_port=route.origin_port,
+        to_port=route.destination_port,
+    )
+
+
+@pytest.fixture
+def route_event(route: Route) -> RouteEvent:
+    """Persisted event associated with the base route."""
+
+    return RouteEvent.objects.create(
+        route=route,
+        event_type=RouteEvent.EVENT_BUILD,
+        message="Initial build",
+        created_by="tests",
+    )
