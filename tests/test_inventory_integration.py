@@ -29,16 +29,13 @@ class InventoryModelsImportTests(SimpleTestCase):
         except ImportError as e:
             self.fail(f"Failed to import inventory models: {e}")
 
-    def test_zabbix_api_models_are_unmanaged(self):
-        """Verify old zabbix_api models exist but are managed=False."""
-        from zabbix_api.models import (
-            Device as OldDevice,
-            Site as OldSite,
-        )
+    def test_zabbix_api_models_reexport_inventory(self):
+        """Legacy import path should re-export inventory models."""
+        from zabbix_api import models as legacy_models
 
-        # Models should exist but be unmanaged
-        self.assertFalse(OldSite._meta.managed)
-        self.assertFalse(OldDevice._meta.managed)
+        self.assertIs(legacy_models.Site, Site)
+        self.assertIs(legacy_models.Device, Device)
+        self.assertIs(legacy_models.Port, Port)
 
     def test_models_use_correct_db_tables(self):
         """Verify models use preserved database table names."""

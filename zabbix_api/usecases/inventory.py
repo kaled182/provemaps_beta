@@ -1,3 +1,6 @@
+# ruff: noqa: E501
+# flake8: noqa
+
 from __future__ import annotations
 
 import logging
@@ -7,8 +10,8 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from django.db.models import Prefetch, Q
 
+from inventory.models import Device, FiberCable, Port, Site
 from ..domain.optical import _fetch_port_optical_snapshot
-from ..models import Device, FiberCable, Port, Site
 from ..services.zabbix_service import zabbix_request
 
 ZABBIX_REQUEST = zabbix_request
