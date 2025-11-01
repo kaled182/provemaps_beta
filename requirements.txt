@@ -44,6 +44,7 @@ pyOpenSSL==25.3.0
 pytest==8.3.3
 pytest-django==4.9.0
 pytest-cov==6.0.0
+coverage==7.6.1
 python-dateutil==2.9.0.post0
 redis==7.0.0
 requests==2.32.5

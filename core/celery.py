@@ -42,6 +42,11 @@ _dashboard_refresh_interval = float(
     os.getenv("DASHBOARD_CACHE_REFRESH_INTERVAL", "60")
 )
 
+# Intervalo padrão (segundos) para sync de inventário do Zabbix
+_inventory_sync_interval = float(
+    os.getenv("INVENTORY_SYNC_INTERVAL_SECONDS", "86400")
+)
+
 # ---------------------------------------------------------------------
 # Opções padrão (podem ser sobrescritas via settings ou env)
 # ---------------------------------------------------------------------
@@ -132,6 +137,11 @@ app.conf.update(
             "task": "maps_view.tasks.refresh_dashboard_cache_task",
             "schedule": _dashboard_refresh_interval,
             "options": {"queue": "maps"},
+        },
+        "sync-zabbix-inventory": {
+            "task": "inventory.tasks.sync_zabbix_inventory_task",
+            "schedule": _inventory_sync_interval,
+            "options": {"queue": "default"},
         },
     },
 )
