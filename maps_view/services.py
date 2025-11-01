@@ -38,13 +38,13 @@ class HostStatusProcessor:
         if not interfaces:
             return None
         
-        # Procura interface principal
+    # Prefer the primary interface when available
         for iface in interfaces:
             main = iface.get('main')
             if str(main) == '1':  # aceita '1' ou 1
                 return iface
         
-        # Fallback para primeira interface
+    # Fallback to the first interface in the list
         return interfaces[0] if interfaces else None
 
     @classmethod

@@ -39,13 +39,13 @@ def broadcast_dashboard_snapshot() -> Dict[str, Any]:
 @shared_task
 def refresh_dashboard_cache_task() -> Dict[str, Any]:
     """
-    Celery task para refresh de cache SWR do dashboard em background.
-    
-    Esta task é disparada automaticamente quando dados stale são servidos,
-    garantindo que o próximo request terá dados frescos.
-    
+    Background Celery task that refreshes the dashboard SWR cache.
+
+    The task is usually dispatched when stale data is served so the next
+    request receives a fresh snapshot.
+
     Returns:
-        Dict com status do refresh (success, hosts_count, duration)
+        Dict containing the refresh status (success, hosts_count, duration).
     """
     import time
     from maps_view.cache_swr import dashboard_cache
@@ -53,12 +53,12 @@ def refresh_dashboard_cache_task() -> Dict[str, Any]:
     start = time.time()
     
     try:
-        # Busca dados frescos (sem usar cache)
+        # Fetch fresh data (without reading the cache)
         fresh_data = get_hosts_status_data()
-        
-        # Atualiza cache
+
+        # Update cache entries
         dashboard_cache.set_cached_data(fresh_data)
-        
+
         duration = time.time() - start
         hosts_count = len(fresh_data.get("hosts_status", []))
         

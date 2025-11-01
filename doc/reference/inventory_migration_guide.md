@@ -91,25 +91,19 @@ from inventory.models import Site, Device, Port, FiberCable, FiberEvent
 
 ---
 
-## ✅ Passo 6: Remover modelos antigos de zabbix_api
+## ✅ Passo 6: Desativar modelos antigos em `zabbix_api`
 
-Após confirmar que tudo funciona, **delete** as definições dos modelos de `zabbix_api/models.py`:
+Substitua o conteúdo de `zabbix_api/models.py` por um **re-export** simples apontando para `inventory`.
+Isso garante compatibilidade com códigos antigos sem duplicar modelos:
 
 ```python
-# REMOVER completamente as classes:
-# - Site
-# - Device
-# - Port
-# - FiberCable
-# - FiberEvent
+from inventory.models import Device, FiberCable, FiberEvent, Port, Site
+
+__all__ = ["Site", "Device", "Port", "FiberCable", "FiberEvent"]
 ```
 
-Crie uma migração para refletir isso:
-
-```powershell
-python manage.py makemigrations zabbix_api --name remove_inventory_models
-python manage.py migrate zabbix_api
-```
+Nenhuma migração adicional é necessária no app `zabbix_api` – as tabelas agora são
+gerenciadas exclusivamente por `inventory`.
 
 ---
 
