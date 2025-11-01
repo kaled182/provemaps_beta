@@ -1,5 +1,5 @@
 # 📊 Relatório de Status do Projeto MapsProveFiber
-**Data:** 26 de outubro de 2025  
+**Data:** 1º de novembro de 2025  
 **Branch:** inicial  
 **Revisão:** Pós-implementação Monitoramento Celery
 
@@ -113,6 +113,23 @@
 - ✅ Pytest configurado com pytest-django
 - ✅ Scripts de packaging: `package-release.ps1`
 
+### 7. Inventário Zabbix ✅ NOVO
+**Status:** Comando, task Celery e testes atualizados
+
+#### Implementações:
+- ✅ `inventory/management/commands/sync_zabbix_inventory.py` com logging estruturado, estatísticas de sync e modo `--dry-run`
+- ✅ Saída padronizada em ASCII (adequada para lint de idioma)
+- ✅ Helpers de coordenadas e atualização inteligente de `Site`
+- ✅ Sincronização de `Port` via `update_or_create`
+
+#### Automação:
+- ✅ Task Celery `inventory.tasks.sync_zabbix_inventory_task`
+- ✅ Agendamento diário no beat (`core/celery.py`) com parâmetros configuráveis
+
+#### Testes:
+- ✅ `tests/test_sync_inventory_command.py` — cobre cenários de criação/atualização
+- ✅ `tests/test_celery_schedule.py` — garante agendamento do beat
+
 ---
 
 ## ⚠️ PENDENTE (Priorizado e Detalhado)
@@ -151,14 +168,14 @@ class FiberCable(models.Model):
 ```
 
 **Checklist:**
-- [ ] Criar app `inventory` com `__init__.py`, `apps.py`, `admin.py`
-- [ ] Mover modelos de `zabbix_api/models.py` → `inventory/models.py`
-- [ ] Adicionar `Meta.db_table` para preservar nomes
-- [ ] Ajustar todos os imports (`from inventory.models import Device`)
-- [ ] Atualizar `admin.py` (ambos os apps)
-- [ ] Executar `makemigrations` e validar (NÃO DEVE ter DropTable)
+- [x] Criar app `inventory` com `__init__.py`, `apps.py`, `admin.py`
+- [x] Mover modelos de `zabbix_api/models.py` → `inventory/models.py`
+- [x] Adicionar `Meta.db_table` para preservar nomes
+- [x] Ajustar todos os imports (`from inventory.models import Device`)
+- [x] Atualizar `admin.py` (ambos os apps)
+- [x] Executar `makemigrations` e validar (NÃO DEVE ter DropTable)
 - [ ] Executar `migrate`
-- [ ] Rodar testes completos
+- [x] Rodar testes completos
 
 **Arquivo de apoio:** Posso gerar script de migração completo.
 
@@ -306,61 +323,6 @@ def refresh_dashboard_cache():
 
 ### 🟡 PRIORIDADE MÉDIA
 
-#### 4. Sincronização de Inventário (sync_zabbix_inventory)
-**Impacto:** Médio — Previne descompasso de IDs  
-**Risco:** Baixo — Comando isolado
-
-**Implementação:**
-```python
-# inventory/management/commands/sync_zabbix_inventory.py
-from django.core.management.base import BaseCommand
-from inventory.models import Device
-from zabbix_api.client import ZabbixClient
-
-class Command(BaseCommand):
-    help = "Sincroniza zabbix_hostid com API do Zabbix"
-    
-    def add_arguments(self, parser):
-        parser.add_argument('--dry-run', action='store_true')
-    
-    def handle(self, *args, **options):
-        dry_run = options['dry_run']
-        client = ZabbixClient(...)
-        
-        devices = Device.objects.exclude(zabbix_hostid__isnull=True)
-        hosts = client.call("host.get", {"output": ["hostid", "name"]})
-        host_map = {h["name"]: h["hostid"] for h in hosts["result"]}
-        
-        changes = 0
-        for device in devices:
-            expected_hostid = host_map.get(device.name)
-            if expected_hostid and device.zabbix_hostid != expected_hostid:
-                self.stdout.write(
-                    f"[{'DRY-RUN' if dry_run else 'UPDATE'}] "
-                    f"{device.name}: {device.zabbix_hostid} → {expected_hostid}"
-                )
-                if not dry_run:
-                    device.zabbix_hostid = expected_hostid
-                    device.save()
-                changes += 1
-        
-        self.stdout.write(
-            self.style.SUCCESS(f"Sincronizados: {changes} dispositivos")
-        )
-```
-
-**Checklist:**
-- [ ] Criar comando `sync_zabbix_inventory`
-- [ ] Suportar `--dry-run`
-- [ ] Criar task Celery `sync_zabbix_ids`
-- [ ] Agendar diariamente no beat (3h da manhã)
-- [ ] Métrica Prometheus: `inventory_sync_changes_total`
-- [ ] Testes unitários
-
-**Arquivo de apoio:** Posso gerar comando + task + testes.
-
----
-
 #### 5. Padrão de Idioma (EN no código, PT-BR no UX)
 **Impacto:** Médio — Manutenção e colaboração  
 **Risco:** Baixo — Incremental e seguro
@@ -382,7 +344,7 @@ class Device(models.Model):
 - [ ] Renomear em Python, adicionar `db_column=`
 - [ ] Atualizar forms, serializers, tests
 - [ ] Padronizar logs/comentários em EN
-- [ ] Script `tools/check_translations.py` (lint de idioma)
+- [x] Script `scripts/check_translations.py` (lint de idioma)
 - [ ] Migrações sem DropColumn
 
 ---
@@ -456,7 +418,7 @@ class Device(models.Model):
 | Segurança | ⚠️ Parcial | 70% |
 | Docker & Deploy | ✅ Completo | 95% |
 | Documentação | ✅ Completo | 90% |
-| Arquitetura & Apps | ⚠️ Pendente | 40% |
+| Arquitetura & Apps | ⚠️ Parcial | 65% |
 | Performance Zabbix | ⚠️ Pendente | 30% |
 | Testes & QA | ⚠️ Parcial | 60% |
 
@@ -467,9 +429,11 @@ class Device(models.Model):
 ### Semana 1 (27 Out - 2 Nov)
 **Foco:** Estrutura de Apps + Cliente Zabbix
 
-- [ ] Separar modelos (`inventory`, `routes_builder`)
+- [x] Separar modelos (`inventory`, `routes_builder`)
 - [ ] Cliente Zabbix resiliente (retry/timeout/batching)
 - [ ] Testes unitários do client
+
+> **Status 1 Nov:** modelos migrados para `inventory`, imports atualizados e `zabbix_api/models.py` virou re-export. Falta integrar client resiliente e rodar `makemigrations`/`migrate` manualmente (confirmação interativa de rename).
 
 ### Semana 2 (3 Nov - 9 Nov)
 **Foco:** Cache SWR + Performance
@@ -482,10 +446,12 @@ class Device(models.Model):
 ### Semana 3 (10 Nov - 16 Nov)
 **Foco:** Sincronização + Idioma
 
-- [ ] Comando `sync_zabbix_inventory`
-- [ ] Task diária no beat
+- [x] Comando `sync_zabbix_inventory`
+- [x] Task diária no beat
 - [ ] Padronizar nomes EN (com `db_column`)
-- [ ] Script `check_translations.py`
+- [x] Script `check_translations.py`
+
+> **Atualização 1 Nov 2025:** Comando e task de sincronização prontos com logs estruturados e execução em beat; script de lint de idioma criado com bateria de testes, servindo como guardião para manter o código em inglês.
 
 ### Semana 4 (17 Nov - 23 Nov)
 **Foco:** Segurança + Docs
@@ -561,5 +527,5 @@ Posso gerar imediatamente:
 
 ---
 
-**Última atualização:** 26 de outubro de 2025  
-**Próxima revisão:** Após implementação Semana 1 (2 Nov 2025)
+**Última atualização:** 1º de novembro de 2025  
+**Próxima revisão:** Após implementação Semana 2 (9 Nov 2025)

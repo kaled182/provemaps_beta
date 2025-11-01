@@ -4,7 +4,7 @@ Teste end-to-end para persistência de edição de cabos de fibra.
 import pytest
 from django.test import Client
 from django.contrib.auth.models import User
-from zabbix_api.models import FiberCable, Port, Device, Site
+from inventory.models import Device, FiberCable, Port, Site
 
 
 @pytest.mark.django_db
