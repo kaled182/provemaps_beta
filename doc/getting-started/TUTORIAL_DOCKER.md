@@ -39,7 +39,7 @@ docker compose version
 
 ### Clone o repositório
 ```bash
-git clone https://github.com/kaled182/mapsprovefiber.git
+git clone https://github.com/kaled182/provemaps_beta.git
 cd mapsprovefiber
 ```
 

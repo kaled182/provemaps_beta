@@ -20,7 +20,7 @@ docker compose version
 
 ## 2. Clonagem e Estrutura
 ```powershell
-git clone https://github.com/kaled182/mapsprovefiber.git
+git clone https://github.com/kaled182/provemaps_beta.git
 cd mapsprovefiber
 ```
 

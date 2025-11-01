@@ -107,8 +107,8 @@ Para executar sem Docker, consulte as instruções de desenvolvimento local (`ru
 - Checklist operacional contínuo: [`doc/reference/operations_checklist.md`](./doc/reference/operations_checklist.md).
 
 ## Suporte
-- Issue tracker: [GitHub Issues](https://github.com/kaled182/mapsprovefiber/issues)
-- Discussões técnicas: [GitHub Discussions](https://github.com/kaled182/mapsprovefiber/discussions)
+- Issue tracker: [GitHub Issues](https://github.com/kaled182/provemaps_beta/issues)
+- Discussões técnicas: [GitHub Discussions](https://github.com/kaled182/provemaps_beta/discussions)
 - Segurança e disclosure responsável: [`doc/security/SECURITY.md`](./doc/security/SECURITY.md)
 
 ---
