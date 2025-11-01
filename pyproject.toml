@@ -36,25 +36,6 @@ skip_glob = ["migrations/*", "**/templates/**"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-select = [
-    "E",   # Pycodestyle errors
-    "W",   # Pycodestyle warnings
-    "F",   # PyFlakes
-    "I",   # Isort
-    "B",   # flake8-bugbear
-    "C4",  # flake8-comprehensions
-    "UP",  # pyupgrade
-    "PL",  # Pylint
-    "DJ",  # Django
-    "RUF", # Ruff-specific
-]
-ignore = [
-    "E501",  # line-too-long (handled by black)
-    "B008",  # do not perform function calls in argument defaults
-    "C901",  # too complex
-    "PLR2004", # magic value used in comparison
-    "DJ008", # jQuery is not available in Django
-]
 exclude = [
     ".git",
     ".mypy_cache",
@@ -68,12 +49,33 @@ exclude = [
     "media",
 ]
 
+[tool.ruff.lint]
+select = [
+    "E",   # Pycodestyle errors
+    "W",   # Pycodestyle warnings
+    "F",   # PyFlakes
+    "I",   # Isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "PL",  # Pylint
+    "DJ",  # Django
+    "RUF", # Ruff-specific
+]
+ignore = [
+    "E501",   # line-too-long (handled by black)
+    "B008",   # do not perform function calls in argument defaults
+    "C901",   # too complex
+    "PLR2004", # magic value used in comparison
+    "DJ008",  # jQuery is not available in Django
+]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ["core", "maps_view", "setup_app", "routes_builder"]
 
 [tool.mypy]
