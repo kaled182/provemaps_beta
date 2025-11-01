@@ -37,8 +37,6 @@ import time
 from typing import Any
 
 from django.core.management.base import BaseCommand, CommandParser
-from django.db import transaction
-from django.utils import timezone
 
 from inventory.models import Device, Port, Site
 from zabbix_api.services.zabbix_service import zabbix_request
@@ -47,7 +45,10 @@ logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = "Synchronize Zabbix inventory (hosts, interfaces) with local database"
+    help = (
+        "Synchronize Zabbix inventory (hosts, interfaces) "
+        "with local database"
+    )
 
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
@@ -87,6 +88,15 @@ class Command(BaseCommand):
         verbose = options["verbose"]
 
         start_time = time.time()
+        logger.info(
+            "sync_zabbix_inventory.start",
+            extra={
+                "dry_run": dry_run,
+                "limit": limit,
+                "host_filter": host_filter,
+                "update_only": update_only,
+            },
+        )
 
         self.stdout.write(
             self.style.SUCCESS("=" * 70)
@@ -100,7 +110,9 @@ class Command(BaseCommand):
 
         if dry_run:
             self.stdout.write(
-                self.style.WARNING("⚠️  DRY RUN MODE - No changes will be saved")
+                self.style.WARNING(
+                    "⚠️  DRY RUN MODE - No changes will be saved"
+                )
             )
 
         # Fetch hosts from Zabbix
@@ -130,17 +142,31 @@ class Command(BaseCommand):
 
         for idx, host in enumerate(hosts, 1):
             if verbose:
+                host_label = host.get('name', 'Unknown')
                 self.stdout.write(
-                    f"\n[{idx}/{len(hosts)}] Processing: {host.get('name', 'Unknown')}"
+                    f"\n[{idx}/{len(hosts)}] Processing: {host_label}"
                 )
 
             try:
                 result = self._sync_host(host, dry_run, update_only, verbose)
                 for key, value in result.items():
                     stats[key] += value
+                logger.info(
+                    "sync_zabbix_inventory.host_synced",
+                    extra={
+                        "hostid": host.get("hostid"),
+                        "host": host.get("name"),
+                        "stats": result,
+                        "dry_run": dry_run,
+                    },
+                )
             except Exception as e:
                 stats["errors"] += 1
-                logger.exception(f"Error syncing host {host.get('hostid')}: {e}")
+                logger.exception(
+                    "Error syncing host %s: %s",
+                    host.get("hostid"),
+                    e,
+                )
                 self.stdout.write(
                     self.style.ERROR(f"  ✗ Error: {str(e)}")
                 )
@@ -148,6 +174,17 @@ class Command(BaseCommand):
         # Summary
         elapsed = time.time() - start_time
         self._print_summary(stats, elapsed, dry_run)
+        logger.info(
+            "sync_zabbix_inventory.finish",
+            extra={
+                "dry_run": dry_run,
+                "elapsed_seconds": round(elapsed, 2),
+                "stats": stats,
+                "limit": limit,
+                "host_filter": host_filter,
+                "update_only": update_only,
+            },
+        )
 
     def _fetch_zabbix_hosts(
         self,
@@ -157,7 +194,14 @@ class Command(BaseCommand):
         """Fetch hosts from Zabbix API."""
         params: dict[str, Any] = {
             "output": ["hostid", "host", "name", "status"],
-            "selectInterfaces": ["interfaceid", "ip", "dns", "port", "type", "main"],
+            "selectInterfaces": [
+                "interfaceid",
+                "ip",
+                "dns",
+                "port",
+                "type",
+                "main",
+            ],
             "selectInventory": ["location", "location_lat", "location_lon"],
             "selectGroups": ["groupid", "name"],
         }
@@ -201,9 +245,11 @@ class Command(BaseCommand):
 
         if not hostid:
             if verbose:
-                self.stdout.write(
-                    self.style.WARNING(f"  ⚠️  Skipping host without hostid: {host_name}")
+                message = (
+                    "  ⚠️  Skipping host without hostid: "
+                    f"{host_name}"
                 )
+                self.stdout.write(self.style.WARNING(message))
             return stats
 
         # Get or create site
@@ -211,12 +257,20 @@ class Command(BaseCommand):
         site = None
 
         if not dry_run:
-            site, site_created = self._get_or_create_site(host, site_name)
+            site, site_created, site_updated = self._get_or_create_site(
+                host, site_name
+            )
             if site_created:
                 stats["sites_created"] += 1
                 if verbose:
                     self.stdout.write(
                         self.style.SUCCESS(f"  ✓ Created site: {site_name}")
+                    )
+            if site_updated:
+                stats["sites_updated"] += 1
+                if verbose:
+                    self.stdout.write(
+                        f"  → Updated site coordinates: {site_name}"
                     )
         else:
             # Dry run - check if site exists
@@ -224,8 +278,13 @@ class Command(BaseCommand):
             if not site:
                 stats["sites_created"] += 1
                 if verbose:
+                    message = f"  ✓ Would create site: {site_name}"
+                    self.stdout.write(self.style.SUCCESS(message))
+            elif self._site_would_update(site, host):
+                stats["sites_updated"] += 1
+                if verbose:
                     self.stdout.write(
-                        self.style.SUCCESS(f"  ✓ Would create site: {site_name}")
+                        f"  → Would update site coordinates: {site_name}"
                     )
 
         # Get or create device
@@ -260,9 +319,17 @@ class Command(BaseCommand):
             if verbose:
                 self.stdout.write(
                     self.style.WARNING(
-                        f"  ⚠️  Skipping new device (update-only mode): {host_name}"
+                        f"  ⚠️  Skipping new device (update-only mode):"
+                        f" {host_name}"
                     )
                 )
+            logger.info(
+                "sync_zabbix_inventory.device_skipped_update_only",
+                extra={
+                    "hostid": hostid,
+                    "host": host_name,
+                },
+            )
 
         # Sync interfaces (ports)
         interfaces = host.get("interfaces", [])
@@ -296,19 +363,9 @@ class Command(BaseCommand):
         self,
         host: dict[str, Any],
         site_name: str
-    ) -> tuple[Site, bool]:
-        """Get or create a Site record."""
-        inventory = host.get("inventory") or {}
-        lat = inventory.get("location_lat")
-        lon = inventory.get("location_lon")
-
-        # Try to parse lat/lon
-        try:
-            latitude = float(lat) if lat else None
-            longitude = float(lon) if lon else None
-        except (ValueError, TypeError):
-            latitude = None
-            longitude = None
+    ) -> tuple[Site, bool, bool]:
+        """Get or create a Site record (returns created/updated flags)."""
+        latitude, longitude = self._parse_coordinates(host)
 
         site, created = Site.objects.get_or_create(
             name=site_name,
@@ -318,19 +375,61 @@ class Command(BaseCommand):
             }
         )
 
-        if not created and (latitude or longitude):
-            # Update coordinates if provided
-            updated = False
-            if latitude and site.latitude != latitude:
-                site.latitude = latitude
-                updated = True
-            if longitude and site.longitude != longitude:
-                site.longitude = longitude
-                updated = True
-            if updated:
-                site.save()
+        updated = False
+        if not created and (latitude is not None or longitude is not None):
+            fields_to_update: list[str] = []
 
-        return site, created
+            if latitude is not None:
+                current_lat = float(site.latitude) if site.latitude else None
+                if current_lat != latitude:
+                    site.latitude = latitude
+                    fields_to_update.append("latitude")
+
+            if longitude is not None:
+                current_lon = float(site.longitude) if site.longitude else None
+                if current_lon != longitude:
+                    site.longitude = longitude
+                    fields_to_update.append("longitude")
+
+            if fields_to_update:
+                site.save(update_fields=fields_to_update)
+                updated = True
+
+        return site, created, updated
+
+    def _parse_coordinates(
+        self, host: dict[str, Any]
+    ) -> tuple[float | None, float | None]:
+        inventory = host.get("inventory") or {}
+        lat = inventory.get("location_lat")
+        lon = inventory.get("location_lon")
+
+        def _safe_float(value: Any) -> float | None:
+            if value in (None, ""):
+                return None
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
+        return _safe_float(lat), _safe_float(lon)
+
+    def _site_would_update(
+        self, site: Site, host: dict[str, Any]
+    ) -> bool:
+        latitude, longitude = self._parse_coordinates(host)
+
+        if latitude is not None:
+            current_lat = float(site.latitude) if site.latitude else None
+            if current_lat != latitude:
+                return True
+
+        if longitude is not None:
+            current_lon = float(site.longitude) if site.longitude else None
+            if current_lon != longitude:
+                return True
+
+        return False
 
     def _sync_interfaces(
         self,
@@ -348,7 +447,6 @@ class Command(BaseCommand):
                 continue
 
             # Create port name from interface details
-            iface_type = iface.get("type", "1")  # 1=agent, 2=SNMP
             ip = iface.get("ip", "")
             dns = iface.get("dns", "")
             port_name = dns or ip or f"interface-{interfaceid}"
@@ -434,11 +532,11 @@ class Command(BaseCommand):
         )
 
         if dry_run and total_changes > 0:
-            self.stdout.write(
-                self.style.WARNING(
-                    f"\n💡 Run without --dry-run to apply {total_changes} change(s)"
-                )
+            hint = (
+                "\n💡 Run without --dry-run to apply "
+                f"{total_changes} change(s)"
             )
+            self.stdout.write(self.style.WARNING(hint))
         elif not dry_run:
             self.stdout.write(
                 self.style.SUCCESS("\n✅ Sync completed successfully!")
