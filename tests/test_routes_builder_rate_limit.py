@@ -20,7 +20,9 @@ def patch_celery(monkeypatch):
         return fake_result
 
     monkeypatch.setattr(
-        "routes_builder.views_tasks.build_route.apply_async", fake_async, raising=False
+        "routes_builder.views_tasks.build_route.apply_async",
+        fake_async,
+        raising=False,
     )
     monkeypatch.setattr(
         "routes_builder.views_tasks.invalidate_route_cache.apply_async",
@@ -29,6 +31,11 @@ def patch_celery(monkeypatch):
     )
     monkeypatch.setattr(
         "routes_builder.views_tasks.build_routes_batch.apply_async",
+        fake_async,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "routes_builder.views_tasks.import_route_from_payload.apply_async",
         fake_async,
         raising=False,
     )
@@ -43,7 +50,12 @@ def patch_celery(monkeypatch):
 def _bulk_payload(route_id=101, *, action="build"):
     return {
         "operations": [
-            {"action": action, "route_id": route_id, "force": False, "options": {}},
+            {
+                "action": action,
+                "route_id": route_id,
+                "force": False,
+                "options": {},
+            },
         ]
     }
 
@@ -54,11 +66,19 @@ def test_enqueue_bulk_operations_rate_limit(staff_client):
     body = json.dumps(_bulk_payload())
 
     for _ in range(10):
-        response = staff_client.post(url, data=body, content_type="application/json")
+        response = staff_client.post(
+            url,
+            data=body,
+            content_type="application/json",
+        )
         assert response.status_code == 202
 
     # 11th request should be blocked by the limiter
-    response = staff_client.post(url, data=body, content_type="application/json")
+    response = staff_client.post(
+        url,
+        data=body,
+        content_type="application/json",
+    )
     assert response.status_code == 429
     assert response.json()["error"] == "Rate limit exceeded"
 
@@ -69,22 +89,78 @@ def test_enqueue_bulk_operations_mixed_actions(staff_client):
     body = json.dumps(
         {
             "operations": [
-                {"action": "build", "route_id": 200, "force": True, "options": {"foo": "bar"}},
+                {
+                    "action": "build",
+                    "route_id": 200,
+                    "force": True,
+                    "options": {"foo": "bar"},
+                },
                 {"action": "invalidate", "route_id": 200},
+                {
+                    "action": "import",
+                    "payload": {
+                        "name": "Route X",
+                        "origin_port_id": 1,
+                        "destination_port_id": 2,
+                    },
+                    "created_by": "tester",
+                },
                 {"action": "unknown", "route_id": 200},
             ]
         }
     )
 
-    response = staff_client.post(url, data=body, content_type="application/json")
+    response = staff_client.post(
+        url,
+        data=body,
+        content_type="application/json",
+    )
     assert response.status_code == 202
     payload = response.json()
 
     assert payload["status"] == "bulk_enqueued"
-    assert payload["operations"] == 3
+    assert payload["operations"] == 4
     results = {entry["action"]: entry for entry in payload["results"]}
     assert results["build"]["status"] == "enqueued"
     assert results["invalidate"]["status"] == "enqueued"
+    assert results["import"]["status"] == "enqueued"
     assert results["unknown"]["status"] == "skipped"
     assert "task_id" in results["build"]
     assert "task_id" in results["invalidate"]
+    assert "task_id" in results["import"]
+
+
+def test_enqueue_import_route_requires_payload(staff_client):
+    url = reverse("routes_builder:tasks:enqueue_import_route")
+    response = staff_client.post(
+        url,
+        data="{}",
+        content_type="application/json",
+    )
+    assert response.status_code == 400
+    assert response.content
+
+
+def test_enqueue_import_route_success(staff_client):
+    url = reverse("routes_builder:tasks:enqueue_import_route")
+    body = json.dumps(
+        {
+            "payload": {
+                "name": "New Route",
+                "origin_port_id": 1,
+                "destination_port_id": 2,
+            },
+            "created_by": "tests",
+        }
+    )
+
+    response = staff_client.post(
+        url,
+        data=body,
+        content_type="application/json",
+    )
+    assert response.status_code == 202
+    data = response.json()
+    assert data["status"] == "enqueued"
+    assert data["task"] == "routes_builder.tasks.import_route_from_payload"
+    assert data["created_by"] == "tests"
