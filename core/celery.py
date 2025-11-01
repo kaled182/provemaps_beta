@@ -1,7 +1,8 @@
 """
 Celery app do projeto mapsprovefiber.
 
-- Lê configurações do Django (namespace CELERY_) e cai para env vars quando necessário.
+- Lê configurações do Django (namespace CELERY_)
+    e cai para env vars quando necessário.
 - Define filas/rotas para workloads diferentes (default, zabbix, maps).
 - Configura opções sensatas de desempenho e segurança.
 """
@@ -29,8 +30,22 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 # Fallbacks de broker/backend a partir de variáveis de ambiente
 # ---------------------------------------------------------------------
 # Prioridade: CELERY_BROKER_URL -> REDIS_URL -> default local
-_broker_url = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL") or "redis://localhost:6379/1"
+_broker_url = (
+    os.getenv("CELERY_BROKER_URL")
+    or os.getenv("REDIS_URL")
+    or "redis://localhost:6379/1"
+)
 _result_backend = os.getenv("CELERY_RESULT_BACKEND") or _broker_url
+
+# Intervalo padrão (segundos) para refresh do dashboard via SWR
+_dashboard_refresh_interval = float(
+    os.getenv("DASHBOARD_CACHE_REFRESH_INTERVAL", "60")
+)
+
+# Intervalo padrão (segundos) para sync de inventário do Zabbix
+_inventory_sync_interval = float(
+    os.getenv("INVENTORY_SYNC_INTERVAL_SECONDS", "86400")
+)
 
 # ---------------------------------------------------------------------
 # Opções padrão (podem ser sobrescritas via settings ou env)
@@ -49,29 +64,46 @@ app.conf.update(
     enable_utc=True,
 
     # Confiabilidade / desempenho
-    task_acks_late=True,  # evita perder tarefa se o worker cair durante execução
-    worker_prefetch_multiplier=int(os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER", "1")),
-    worker_max_tasks_per_child=int(os.getenv("CELERY_WORKER_MAX_TASKS_PER_CHILD", "100")),
-    task_soft_time_limit=int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", "300")),  # 5 min
-    task_time_limit=int(os.getenv("CELERY_TASK_TIME_LIMIT", "600")),            # 10 min
-    task_default_rate_limit=os.getenv("CELERY_TASK_DEFAULT_RATE_LIMIT", None),  # ex.: "10/s"
+    # evita perder tarefa se o worker cair durante execução
+    task_acks_late=True,
+    worker_prefetch_multiplier=int(
+        os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER", "1")
+    ),
+    worker_max_tasks_per_child=int(
+        os.getenv("CELERY_WORKER_MAX_TASKS_PER_CHILD", "100")
+    ),
+    # 5 min
+    task_soft_time_limit=int(
+        os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", "300")
+    ),
+    # 10 min
+    task_time_limit=int(os.getenv("CELERY_TASK_TIME_LIMIT", "600")),
+    # ex.: "10/s"
+    task_default_rate_limit=os.getenv(
+        "CELERY_TASK_DEFAULT_RATE_LIMIT", None
+    ),
     broker_connection_retry_on_startup=True,
 
     # Execução síncrona em testes (pode ser definida no env/test)
-    task_always_eager=os.getenv("CELERY_TASK_ALWAYS_EAGER", "false").lower() == "true",
+    task_always_eager=(
+        os.getenv("CELERY_TASK_ALWAYS_EAGER", "false").lower() == "true"
+    ),
     task_eager_propagates=True,
 
     # Logging mais detalhado
     worker_log_format=os.getenv(
-        "CELERY_WORKER_LOG_FORMAT", 
-        "[%(asctime)s: %(levelname)s/%(processName)s] %(message)s"
+        "CELERY_WORKER_LOG_FORMAT",
+        "[%(asctime)s: %(levelname)s/%(processName)s] %(message)s",
     ),
     worker_task_log_format=os.getenv(
         "CELERY_TASK_LOG_FORMAT",
-        "[%(asctime)s: %(levelname)s/%(processName)s] [%(task_name)s(%(task_id)s)] %(message)s"
+        (
+            "[%(asctime)s: %(levelname)s/%(processName)s] "
+            "[%(task_name)s(%(task_id)s)] %(message)s"
+        ),
     ),
     worker_redirect_stdouts=False,
-    
+
     # Retry policies
     task_publish_retry=True,
     task_publish_retry_policy={
@@ -87,7 +119,7 @@ app.conf.update(
     
     # Result expiration (evita acumular resultados antigos)
     result_expires=int(os.getenv("CELERY_RESULT_EXPIRES", "3600")),  # 1 hora
-    
+
     # Dead letter queue para tarefas que falham repetidamente
     task_reject_on_worker_lost=True,
     task_acks_on_failure_or_timeout=False,
@@ -99,6 +131,16 @@ app.conf.update(
             "schedule": float(
                 os.getenv("CELERY_METRICS_UPDATE_INTERVAL", "30")
             ),
+            "options": {"queue": "default"},
+        },
+        "refresh-dashboard-cache": {
+            "task": "maps_view.tasks.refresh_dashboard_cache_task",
+            "schedule": _dashboard_refresh_interval,
+            "options": {"queue": "maps"},
+        },
+        "sync-zabbix-inventory": {
+            "task": "inventory.tasks.sync_zabbix_inventory_task",
+            "schedule": _inventory_sync_interval,
             "options": {"queue": "default"},
         },
     },
@@ -127,6 +169,9 @@ app.conf.task_routes = {
 
     # Tarefas de rotas/fibra (ex.: routes_builder/tasks.py)
     "routes_builder.tasks.*": {"queue": "maps", "routing_key": "maps"},
+
+    # Tarefas de dashboard/maps view
+    "maps_view.tasks.*": {"queue": "maps", "routing_key": "maps"},
 }
 
 # ---------------------------------------------------------------------
@@ -154,8 +199,6 @@ def health_check(self):
     """
     Health check mais completo para workers
     """
-    from celery.exceptions import TimeoutError
-    
     # Teste básico de funcionamento
     basic_test = "pong"
     

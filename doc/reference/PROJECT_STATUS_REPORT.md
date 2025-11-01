@@ -474,10 +474,10 @@ class Device(models.Model):
 ### Semana 2 (3 Nov - 9 Nov)
 **Foco:** Cache SWR + Performance
 
-- [ ] Implementar `maps_view/services.py` com SWR
-- [ ] Task Celery `refresh_dashboard_cache`
-- [ ] Agendar no beat (1min)
-- [ ] Frontend: banner de staleness
+- [x] Implementar `maps_view/services.py` com SWR
+- [x] Task Celery `refresh_dashboard_cache`
+- [x] Agendar no beat (1min)
+- [x] Frontend: banner de staleness
 
 ### Semana 3 (10 Nov - 16 Nov)
 **Foco:** Sincronização + Idioma

@@ -67,6 +67,11 @@ nano .env.production
 # - ALLOWED_HOSTS
 # - DB_PASSWORD
 # - REDIS_URL (or Redis Sentinel config)
+# Optional tuning
+# - DASHBOARD_CACHE_REFRESH_INTERVAL=60
+#   Celery beat SWR refresh cadence
+# - INVENTORY_SYNC_INTERVAL_SECONDS=86400
+#   Celery beat diário para sync de inventário
 ```
 
 ### 2. Build and Deploy
