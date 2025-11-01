@@ -97,7 +97,8 @@ Para executar sem Docker, consulte as instruções de desenvolvimento local (`ru
 ## Testes e Qualidade
 - Guia rápido de testes: [`doc/reference/TESTING_QUICK_REFERENCE.md`](./doc/reference/TESTING_QUICK_REFERENCE.md).
 - Planos detalhados e relatórios de bugs: [`doc/reference/TEST_ERRORS_DETAILED_REPORT.md`](./doc/reference/TEST_ERRORS_DETAILED_REPORT.md).
-- Execução recomendada: `pytest -q` (ou `make test`). Consulte [`doc/developer/README.md`](./doc/developer/README.md) para variações.
+- Execução recomendada: `pytest -q` (ou `make test`), e `pytest --cov --cov-report=term-missing` para cobertura.
+- CI: GitHub Actions em `.github/workflows/tests.yml` roda a suíte completa com `--cov-fail-under=45` em pushes/PRs para `main` e `inicial`.
 
 ## Deploy e Operações
 - Checklist completo de deploy: [`doc/operations/DEPLOYMENT.md`](./doc/operations/DEPLOYMENT.md).

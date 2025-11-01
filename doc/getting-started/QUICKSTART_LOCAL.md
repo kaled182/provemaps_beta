@@ -88,7 +88,7 @@ python -m pytest --cov --cov-report=html
 
 ### Documentação
 - **Docs Index:** http://localhost:8000/setup_app/docs/
-- **API Docs:** http://localhost:8000/setup_app/docs/API_DOCUMENTATION.md/
+- **API Docs:** http://localhost:8000/setup_app/docs/reference-root/API_DOCUMENTATION.md/
 
 ---
 
