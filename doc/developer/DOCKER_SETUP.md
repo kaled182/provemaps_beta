@@ -49,6 +49,8 @@ DB_HOST=db
 DB_USER=app
 DB_PASSWORD=app
 REDIS_URL=redis://redis:6379/1
+# Intervalo de refresh do dashboard (segundos, padrão=60)
+DASHBOARD_CACHE_REFRESH_INTERVAL=60
 ```
 
 > Gere uma chave Fernet após o primeiro `up` com `docker compose exec web python manage.py generate_fernet_key --write` e armazene com segurança.
