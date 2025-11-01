@@ -8,24 +8,30 @@ class DocsViewsSmokeTests(TestCase):
     def setUp(self):
         # Dicionário que a index usa para montar os cards
         self.sample_docs = {
-            "README.md": {
+            "developer/README.md": {
                 "title": "Guia Principal",
                 "summary": "Introdução e visão geral do projeto.",
                 "category": "guia",
                 "tags": ["intro", "deploy"],
                 "size_kb": 42,
                 "modified_at": "2025-01-01T12:34:56Z",
-                "github_doc_url": "https://github.com/kaled182/mapsprovefiber/blob/main/README.md",
+                "github_doc_url": (
+                    "https://github.com/kaled182/mapsprovefiber/blob/main/"
+                    "README.md"
+                ),
                 "views": 10,
             },
-            "API_DOCUMENTATION.md": {
+            "reference-root/API_DOCUMENTATION.md": {
                 "title": "API — Zabbix e Integrações",
                 "summary": "Referência das rotas e contratos.",
                 "category": "api",
                 "tags": ["api", "zabbix"],
                 "size_kb": 88,
                 "modified_at": "2025-01-02T09:00:00Z",
-                "github_doc_url": "https://github.com/kaled182/mapsprovefiber/blob/main/API_DOCUMENTATION.md",
+                "github_doc_url": (
+                    "https://github.com/kaled182/mapsprovefiber/blob/main/"
+                    "API_DOCUMENTATION.md"
+                ),
                 "views": 5,
             },
         }
@@ -33,7 +39,10 @@ class DocsViewsSmokeTests(TestCase):
     def test_urls_resolve(self):
         """Confirma que as rotas nomeadas existem no URLConf."""
         idx = reverse("setup_app:docs_index")
-        view = reverse("setup_app:docs_view", kwargs={"filename": "README.md"})
+        view = reverse(
+            "setup_app:docs_view",
+            kwargs={"filename": "developer/README.md"},
+        )
         self.assertIsNotNone(resolve(idx))
         self.assertIsNotNone(resolve(view))
 
@@ -56,11 +65,21 @@ class DocsViewsSmokeTests(TestCase):
         self.assertContains(resp, "Guia Principal")
         self.assertContains(resp, "API — Zabbix e Integrações")
         # Link para abrir o documento
-        self.assertContains(resp, reverse("setup_app:docs_view", kwargs={"filename": "README.md"}))
+        self.assertContains(
+            resp,
+            reverse(
+                "setup_app:docs_view",
+                kwargs={"filename": "developer/README.md"},
+            ),
+        )
 
     @patch("setup_app.views_docs.get_available_docs")
     @patch("setup_app.views_docs.load_markdown_file")
-    def test_docs_view_renders_content_and_toc(self, mock_load_md, mock_get_docs):
+    def test_docs_view_renders_content_and_toc(
+        self,
+        mock_load_md,
+        mock_get_docs,
+    ):
         """A página /docs/<filename>/ renderiza o HTML e exibe o TOC/JS."""
         mock_get_docs.return_value = self.sample_docs
         mock_load_md.return_value = """
@@ -72,7 +91,10 @@ class DocsViewsSmokeTests(TestCase):
             <p>Detalhes B</p>
         """
 
-        url = reverse("setup_app:docs_view", kwargs={"filename": "README.md"})
+        url = reverse(
+            "setup_app:docs_view",
+            kwargs={"filename": "developer/README.md"},
+        )
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
 
@@ -88,8 +110,12 @@ class DocsViewsSmokeTests(TestCase):
 
     @patch("setup_app.views_docs.get_available_docs")
     @patch("setup_app.views_docs.load_markdown_file")
-    def test_docs_view_handles_missing_file(self, mock_load_md, mock_get_docs):
-        """Se o arquivo não existir, a view mostra mensagem de erro estilizada."""
+    def test_docs_view_handles_missing_file(
+        self,
+        mock_load_md,
+        mock_get_docs,
+    ):
+        """A view exibe alerta amigável quando o arquivo está ausente."""
         mock_get_docs.return_value = self.sample_docs
         # Simula retorno do loader para arquivo ausente
         mock_load_md.return_value = """
@@ -98,7 +124,10 @@ class DocsViewsSmokeTests(TestCase):
             </div>
         """
 
-        url = reverse("setup_app:docs_view", kwargs={"filename": "NAO_EXISTE.md"})
+        url = reverse(
+            "setup_app:docs_view",
+            kwargs={"filename": "NAO_EXISTE.md"},
+        )
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Arquivo não encontrado")

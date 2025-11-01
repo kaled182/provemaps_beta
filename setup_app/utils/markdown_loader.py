@@ -55,7 +55,7 @@ class DocsConfig:
     """Configuração centralizada para o módulo de documentação."""
     
     # Paths e diretórios
-    docs_dir: str = os.getenv("DOCS_DIR", "docs")
+    docs_dir: str = os.getenv("DOCS_DIR", "doc")
     docs_path: Path = None
     
     # Cache
@@ -124,31 +124,31 @@ class MarkdownProcessor(Protocol):
 
 # Arquivos principais (aparecem primeiro/ganham prioridade)
 DEFAULT_FILES = {
-    "README.md": {
+    "developer/README.md": {
         "title": _("Documentação Principal"),
-        "category": "guide",
-        "priority": 100
+        "category": "developer",
+        "priority": 100,
     },
-    "API_DOCUMENTATION.md": {
-        "title": _("Documentação da API"),
-        "category": "api", 
-        "priority": 90
+    "getting-started/QUICKSTART_LOCAL.md": {
+        "title": _("Guia Rápido: Ambiente Local"),
+        "category": "getting-started",
+        "priority": 95,
     },
-    "OPERATIONS.md": {
-        "title": _("Guia de Operações"),
-        "category": "operations",
-        "priority": 80
-    },
-    "DEPLOYMENT.md": {
+    "operations/DEPLOYMENT.md": {
         "title": _("Guia de Deploy e Containers"),
-        "category": "deployment",
-        "priority": 85
+        "category": "operations",
+        "priority": 90,
     },
-    "DEVELOPMENT.md": {
-        "title": _("Guia de Desenvolvimento"),
-        "category": "development",
-        "priority": 70
-    }
+    "reference-root/API_DOCUMENTATION.md": {
+        "title": _("Documentação da API"),
+        "category": "api",
+        "priority": 85,
+    },
+    "reference/README.md": {
+        "title": _("Referências Técnicas"),
+        "category": "reference",
+        "priority": 80,
+    },
 }
 
 # Extensões otimizadas do markdown2
@@ -466,9 +466,74 @@ def _strip_md_for_summary(text: str) -> str:
         text = text[:CONFIG.summary_length].rstrip() + '...'
     return text
 
+
+def normalize_requested_filename(filename: str) -> str:
+    """Normaliza nomes de arquivos recebidos de requisições/URLs."""
+    normalized = filename.strip().replace("\\", "/")
+    if normalized.startswith("./"):
+        normalized = normalized[2:]
+
+    while "//" in normalized:
+        normalized = normalized.replace("//", "/")
+
+    return normalized.lstrip("/")
+
+
+def resolve_doc_path(filename: str) -> Path:
+    """Resolve de forma segura o caminho absoluto de um documento."""
+    normalized = normalize_requested_filename(filename)
+    if not normalized:
+        raise ValueError("Nome de arquivo inválido")
+
+    base_path = CONFIG.docs_path.resolve()
+    candidate = (base_path / normalized).resolve()
+
+    try:
+        candidate.relative_to(base_path)
+    except ValueError as exc:
+        raise ValueError(
+            "Caminho de documento fora do diretório permitido"
+        ) from exc
+
+    return candidate
+
+
+def _generate_title_from_path(relative_path: Path) -> str:
+    """Gera título amigável com base no nome do arquivo."""
+    stem = relative_path.stem.replace("_", " ").replace("-", " ").strip()
+    return stem.title() if stem else relative_path.name
+
+
+def _derive_category_from_path(relative_path: Path) -> str:
+    """Retorna a categoria inferida pelo primeiro segmento do caminho."""
+    if not relative_path.parts:
+        return ""
+    return relative_path.parts[0]
+
+
+def _extract_summary_from_file(path: Path) -> str:
+    """Lê pequeno trecho do arquivo para gerar resumo automático."""
+    try:
+        with path.open("r", encoding="utf-8", errors="ignore") as handle:
+            snippet = handle.read(2000)
+    except Exception as exc:  # pragma: no cover - leitura pode falhar
+        logger.debug("Não foi possível extrair resumo de %s: %s", path, exc)
+        return ""
+
+    return _strip_md_for_summary(snippet)
+
+
+def _build_github_url(relative_path: str) -> str:
+    """Monta URL para visualização no GitHub se configurado."""
+    if not CONFIG.github_base_url:
+        return ""
+    return f"{CONFIG.github_base_url}/{relative_path}"
+
+
 # =============================================================================
 # FUNÇÕES PRINCIPAIS (RECUPERADAS APÓS CORRUPÇÃO)
 # =============================================================================
+
 
 def _safe_read(path: Path) -> str:
     """Lê arquivo respeitando limite de tamanho configurado."""
@@ -477,12 +542,17 @@ def _safe_read(path: Path) -> str:
             return ""
         max_bytes = CONFIG.max_file_size_mb * 1024 * 1024
         if path.stat().st_size > max_bytes:
-            logger.warning("Arquivo %s excede limite de %dMB", path.name, CONFIG.max_file_size_mb)
+            logger.warning(
+                "Arquivo %s excede limite de %dMB",
+                path.name,
+                CONFIG.max_file_size_mb,
+            )
             return ""
         return path.read_text(encoding="utf-8", errors="ignore")
     except Exception as e:
         logger.error("Falha ao ler %s: %s", path, e)
         return ""
+
 
 def _sanitize_html(html: str) -> str:
     """Sanitiza HTML se bleach disponível e habilitado."""
@@ -494,47 +564,120 @@ def _sanitize_html(html: str) -> str:
         logger.info("Bleach não instalado. Sanitização HTML desativada.")
         return html
     allowed_tags = [
-        "p","br","strong","em","ul","ol","li","code","pre","table","thead","tbody","tr","th","td","a","h1","h2","h3","h4","h5","h6"
+        "p",
+        "br",
+        "strong",
+        "em",
+        "ul",
+        "ol",
+        "li",
+        "code",
+        "pre",
+        "table",
+        "thead",
+        "tbody",
+        "tr",
+        "th",
+        "td",
+        "a",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
     ]
     return bleach.clean(html, tags=allowed_tags, strip=True)
+
 
 def get_available_docs() -> Dict[str, Dict[str, Any]]:
     """Lista documentos Markdown disponíveis com metadados básicos."""
     docs: Dict[str, Dict[str, Any]] = {}
     try:
-        for entry in CONFIG.docs_path.glob("*.md"):
+        base_path = CONFIG.docs_path.resolve()
+        for entry in base_path.rglob("*.md"):
+            try:
+                relative_path = entry.relative_to(base_path)
+            except ValueError:
+                logger.debug("Ignorando arquivo fora da pasta docs: %s", entry)
+                continue
+
+            if any(part.startswith(".") for part in relative_path.parts):
+                continue
+
+            rel_key = relative_path.as_posix()
+
             try:
                 stat = entry.stat()
-                docs[entry.name] = {
-                    "filename": entry.name,
-                    "size_kb": round(stat.st_size / 1024, 1),
-                    "last_modified": stat.st_mtime,
-                    "hash": _file_hash(entry),
-                }
-            except Exception as e:
-                logger.warning("Erro ao coletar metadados de %s: %s", entry, e)
-    except Exception as e:
-        logger.error("Falha ao listar diretório de docs: %s", e)
-    return docs
+            except OSError as exc:
+                logger.warning(
+                    "Erro ao coletar metadados de %s: %s",
+                    entry,
+                    exc,
+                )
+                continue
+
+            metadata: Dict[str, Any] = {
+                "filename": rel_key,
+                "size_kb": round(stat.st_size / 1024, 1),
+                "last_modified": stat.st_mtime,
+                "hash": _file_hash(entry),
+                "category": _derive_category_from_path(relative_path),
+                "github_doc_url": _build_github_url(rel_key),
+            }
+
+            defaults = DEFAULT_FILES.get(rel_key)
+            if defaults:
+                metadata.update(defaults)
+
+            metadata.setdefault(
+                "title", _generate_title_from_path(relative_path)
+            )
+            metadata.setdefault("summary", _extract_summary_from_file(entry))
+
+            docs[rel_key] = metadata
+    except Exception as exc:
+        logger.error("Falha ao listar diretório de docs: %s", exc)
+
+    sorted_items = sorted(
+        docs.items(),
+        key=lambda item: (
+            -int(item[1].get("priority", 0)),
+            str(item[1].get("title", item[0])).lower(),
+        ),
+    )
+    return {key: value for key, value in sorted_items}
+
 
 def load_markdown_file(filename: str, use_cache: bool = True) -> str:
     """Carrega e converte Markdown em HTML (com cache)."""
-    path = CONFIG.docs_path / filename
+    normalized = normalize_requested_filename(filename)
+
+    try:
+        path = resolve_doc_path(normalized)
+    except ValueError:
+        logger.warning(
+            "Caminho de documentação inválido solicitado: %s",
+            filename,
+        )
+        return "<p>Documento vazio ou não encontrado.</p>"
+
     raw = _safe_read(path)
     if not raw:
         return "<p>Documento vazio ou não encontrado.</p>"
+
     file_hash = _file_hash(path)
 
     if use_cache and markdown2 is not None:
-        cached, hit = CACHE_MANAGER.get(filename, file_hash)
+        cached, hit = CACHE_MANAGER.get(normalized, file_hash)
         if hit and cached:
             return cached
 
     processor = AdvancedMarkdownProcessor()
-    html, meta = processor.process(raw, filename)
+    html, meta = processor.process(raw, normalized)
     html = _sanitize_html(html)
 
     if use_cache:
-        CACHE_MANAGER.set(filename, file_hash, html)
+        CACHE_MANAGER.set(normalized, file_hash, html)
 
     return html

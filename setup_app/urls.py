@@ -11,5 +11,5 @@ urlpatterns = [
 
     # Documentação
     path("docs/", views_docs.docs_index, name="docs_index"),
-    path("docs/<str:filename>/", views_docs.docs_view, name="docs_view"),
+    path("docs/<path:filename>/", views_docs.docs_view, name="docs_view"),
 ]
