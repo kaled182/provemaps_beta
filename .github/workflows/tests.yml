@@ -33,7 +33,9 @@ jobs:
         env:
           PYTHONPATH: "${{ github.workspace }}"
         run: |
-          python -m pytest -p pytest_cov --cov --cov-report=xml --cov-report=term-missing --cov-fail-under=45
+          coverage run -m pytest
+          coverage report --show-missing --fail-under=45
+          coverage xml
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
