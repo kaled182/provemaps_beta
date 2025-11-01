@@ -10,6 +10,7 @@ Coverage:
 - ✅ Métricas Prometheus
 """
 
+import time
 from unittest.mock import Mock, patch
 
 import requests
@@ -39,8 +40,7 @@ class ResilientZabbixClientTests(SimpleTestCase):
     def setUp(self):
         """Setup: limpa cache e reseta circuit breaker."""
         cache.clear()
-        resilient_client._cached_token = None
-        resilient_client._token_timestamp = 0.0
+        resilient_client.clear_token_cache()
         resilient_client.reset_circuit_breaker()
 
     def tearDown(self):
@@ -73,10 +73,9 @@ class ResilientZabbixClientTests(SimpleTestCase):
 
         # Garante que não há cache (forçando novo login)
         cache.clear()
-        resilient_client._cached_token = None
-        resilient_client._token_timestamp = 0.0
+        resilient_client.clear_token_cache()
 
-        token = resilient_client._get_token()
+        token = resilient_client.login()
 
         # Verifica que o token retornado é uma string válida
         self.assertIsInstance(token, str)
@@ -95,7 +94,7 @@ class ResilientZabbixClientTests(SimpleTestCase):
             zabbix_api_key="api-key-123",
         )
 
-        token = resilient_client._get_token()
+        token = resilient_client.login()
 
         self.assertEqual(token, "api-key-123")
 
@@ -107,7 +106,12 @@ class ResilientZabbixClientTests(SimpleTestCase):
     @patch.object(resilient_client, "_get_token", return_value="token-123")
     @patch("zabbix_api.client.runtime_settings.get_runtime_config")
     @patch("zabbix_api.client.requests.post")
-    def test_retry_on_network_failure(self, post_mock, config_mock, token_mock):
+    def test_retry_on_network_failure(
+        self,
+        post_mock,
+        config_mock,
+        token_mock,
+    ):
         """Testa retry automático em caso de falha de rede."""
         config_mock.return_value = Mock(
             zabbix_api_url="http://example.com/api_jsonrpc.php",
@@ -143,6 +147,66 @@ class ResilientZabbixClientTests(SimpleTestCase):
         # 3 tentativas
         self.assertEqual(post_mock.call_count, 3)
 
+    @patch("zabbix_api.client.runtime_settings.get_runtime_config")
+    def test_api_key_backoff_reuses_key_without_credentials(
+        self,
+        config_mock,
+    ):
+        """Se não houver credenciais, a API key em backoff é reutilizada."""
+        config_mock.return_value = Mock(
+            zabbix_api_url="http://example.com/api_jsonrpc.php",
+            zabbix_api_user="",
+            zabbix_api_password="",
+            zabbix_api_key="api-key-123",
+        )
+
+        resilient_client.clear_token_cache()
+        resilient_client._failed_api_key = "api-key-123"  # noqa: SLF001
+        resilient_client._api_key_backoff_until = (  # noqa: SLF001
+            time.time() + 120
+        )
+
+        token = resilient_client.login()
+        metrics = resilient_client.get_metrics()
+
+        self.assertEqual(token, "api-key-123")
+        self.assertIsNone(metrics["failed_api_key"])
+        self.assertEqual(metrics["api_key_backoff_seconds_remaining"], 0.0)
+
+    @patch("zabbix_api.client.requests.post")
+    @patch("zabbix_api.client.runtime_settings.get_runtime_config")
+    def test_api_key_backoff_uses_credentials_when_available(
+        self,
+        config_mock,
+        post_mock,
+    ):
+        """Com credenciais válidas, backoff força login clássico."""
+        config_mock.return_value = Mock(
+            zabbix_api_url="http://example.com/api_jsonrpc.php",
+            zabbix_api_user="admin",
+            zabbix_api_password="secret",
+            zabbix_api_key="api-key-123",
+        )
+
+        success_response = Mock()
+        success_response.json.return_value = {"result": "token-fresh"}
+        success_response.raise_for_status.return_value = None
+        post_mock.return_value = success_response
+
+        resilient_client.clear_token_cache()
+        resilient_client._failed_api_key = "api-key-123"  # noqa: SLF001
+        resilient_client._api_key_backoff_until = (  # noqa: SLF001
+            time.time() + 60
+        )
+
+        token = resilient_client.login()
+        metrics = resilient_client.get_metrics()
+
+        self.assertEqual(token, "token-fresh")
+        self.assertEqual(post_mock.call_count, 1)
+        self.assertEqual(metrics["failed_api_key"], "api-key-123")
+        self.assertGreater(metrics["api_key_backoff_seconds_remaining"], 0.0)
+
     # -------------------------------------------------------------------- #
     # Testes de Circuit Breaker
     # -------------------------------------------------------------------- #
@@ -151,8 +215,162 @@ class ResilientZabbixClientTests(SimpleTestCase):
     @patch.object(resilient_client, "_get_token", return_value="token-123")
     @patch("zabbix_api.client.runtime_settings.get_runtime_config")
     @patch("zabbix_api.client.requests.post")
+    def test_request_retries_with_authorization_header(
+        self,
+        post_mock,
+        config_mock,
+        _token_mock,
+    ):
+        """Erros -32602/-32500 refazem request com header Authorization."""
+        config_mock.return_value = Mock(
+            zabbix_api_url="http://example.com/api_jsonrpc.php",
+            zabbix_api_user="admin",
+            zabbix_api_password="password",
+            zabbix_api_key="",
+        )
+
+        error_response = Mock()
+        error_response.raise_for_status.return_value = None
+        error_response.json.return_value = {
+            "error": {
+                "code": -32500,
+                "message": "Application error",
+                "data": "Incorrect auth",
+            }
+        }
+
+        success_response = Mock()
+        success_response.raise_for_status.return_value = None
+        success_response.json.return_value = {"result": ["ok"]}
+
+        post_mock.side_effect = [error_response, success_response]
+
+        result = resilient_client.call("host.get", {"output": ["hostid"]})
+
+        self.assertEqual(result, ["ok"])
+        self.assertEqual(post_mock.call_count, 2)
+
+        first_kwargs = post_mock.call_args_list[0].kwargs
+        self.assertIn("auth", first_kwargs["json"])
+        self.assertNotIn("Authorization", first_kwargs["headers"])
+
+        second_kwargs = post_mock.call_args_list[1].kwargs
+        self.assertNotIn("auth", second_kwargs["json"])
+        self.assertEqual(
+            second_kwargs["headers"].get("Authorization"),
+            "Bearer token-123",
+        )
+
+    @override_settings(ZABBIX_READ_ONLY=False)
+    @patch.object(resilient_client, "_get_token", return_value="token-123")
+    @patch.object(resilient_client, "_mark_token_as_expired")
+    @patch("zabbix_api.client.runtime_settings.get_runtime_config")
+    @patch("zabbix_api.client.requests.post")
+    def test_request_retries_on_token_expired(
+        self,
+        post_mock,
+        config_mock,
+        mark_expired_mock,
+        _token_mock,
+    ):
+        """Erros de token expirado solicitam novo login."""
+        config_mock.return_value = Mock(
+            zabbix_api_url="http://example.com/api_jsonrpc.php",
+            zabbix_api_user="admin",
+            zabbix_api_password="password",
+            zabbix_api_key="",
+        )
+
+        expired_response = Mock()
+        expired_response.raise_for_status.return_value = None
+        expired_response.json.return_value = {
+            "error": {
+                "code": -32500,
+                "message": "Token expired",
+                "data": "Session terminated",
+            }
+        }
+
+        expired_response_retry = Mock()
+        expired_response_retry.raise_for_status.return_value = None
+        expired_response_retry.json.return_value = {
+            "error": {
+                "code": -32500,
+                "message": "Token expired",
+                "data": "Session terminated",
+            }
+        }
+
+        success_response = Mock()
+        success_response.raise_for_status.return_value = None
+        success_response.json.return_value = {"result": ["ok"]}
+
+        post_mock.side_effect = [
+            expired_response,
+            expired_response_retry,
+            success_response,
+        ]
+
+        result = resilient_client.call("host.get", {"output": ["hostid"]})
+
+        self.assertEqual(result, ["ok"])
+        self.assertEqual(post_mock.call_count, 3)
+        mark_expired_mock.assert_called_once()
+
+    @override_settings(ZABBIX_READ_ONLY=False)
+    @patch.object(resilient_client, "_get_token", return_value="token-123")
+    @patch("zabbix_api.client.runtime_settings.get_runtime_config")
+    @patch("zabbix_api.client.requests.post")
+    def test_batch_retries_when_token_expired(
+        self,
+        post_mock,
+        config_mock,
+        _token_mock,
+    ):
+        """Batch reexecuta quando token expira em qualquer item."""
+        config_mock.return_value = Mock(
+            zabbix_api_url="http://example.com/api_jsonrpc.php",
+            zabbix_api_user="admin",
+            zabbix_api_password="password",
+            zabbix_api_key="",
+        )
+
+        expired_batch = Mock()
+        expired_batch.raise_for_status.return_value = None
+        expired_batch.json.return_value = [
+            {
+                "id": 1,
+                "error": {
+                    "message": "Session terminated",
+                    "data": "Expired",
+                },
+            }
+        ]
+
+        success_batch = Mock()
+        success_batch.raise_for_status.return_value = None
+        success_batch.json.return_value = [
+            {"id": 1, "result": ["ok"]},
+        ]
+
+        post_mock.side_effect = [expired_batch, success_batch]
+
+        results = resilient_client.batch(
+            [("host.get", {"output": ["hostid"]})]
+        )
+
+        self.assertEqual(results, [["ok"]])
+        self.assertEqual(post_mock.call_count, 2)
+
+    @override_settings(ZABBIX_READ_ONLY=False)
+    @patch.object(resilient_client, "_get_token", return_value="token-123")
+    @patch("zabbix_api.client.runtime_settings.get_runtime_config")
+    @patch("zabbix_api.client.requests.post")
     def test_circuit_breaker_opens_after_failures(
-        self, post_mock, config_mock, token_mock
+        self,
+        post_mock,
+        config_mock,
+        token_mock,
     ):
         """
         Testa que circuit breaker abre após X falhas consecutivas.
