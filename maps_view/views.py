@@ -32,23 +32,23 @@ def build_dashboard_event_payload():
 @login_required
 def dashboard_view(request):
     """
-    Dashboard principal (HTML) com Cache SWR.
-    
-    Serve dados do cache (frescos ou stale) imediatamente.
-    Se stale, dispara refresh em background.
+    Primary dashboard (HTML) backed by the SWR cache helper.
+
+    The view uses the cache to serve fresh or stale data immediately and
+    schedules a background refresh when the snapshot is stale.
     """
     from maps_view.cache_swr import get_dashboard_cached
     from maps_view.tasks import refresh_dashboard_cache_task
-    
-    # Get data com SWR pattern
+
+    # Retrieve data following the SWR pattern
     cache_result = get_dashboard_cached(
         fetch_fn=get_hosts_status_data,
         async_task=refresh_dashboard_cache_task.delay,
     )
-    
+
     context = cache_result["data"]
-    
-    # Adiciona metadata de cache para o template
+
+    # Inject cache metadata for the template to display status banners
     context["cache_metadata"] = {
         "is_stale": cache_result.get("is_stale", False),
         "timestamp": cache_result.get("timestamp"),
@@ -71,24 +71,24 @@ def dashboard_with_hosts_status():
 @require_GET
 def api_zabbix_hosts_status(request):
     """
-    JSON API mirroring dashboard calculations with SWR cache.
-    
-    Returns data with cache metadata (is_stale, timestamp).
+    JSON API mirroring the dashboard data served via the SWR cache.
+
+    The payload contains cache metadata such as ``is_stale`` and ``timestamp``.
     """
     from maps_view.cache_swr import get_dashboard_cached
     from maps_view.tasks import refresh_dashboard_cache_task
-    
-    # Get data com SWR pattern
+
+    # Retrieve data following the SWR pattern
     cache_result = get_dashboard_cached(
         fetch_fn=get_hosts_status_data,
         async_task=refresh_dashboard_cache_task.delay,
     )
-    
+
     data = cache_result["data"]
 
     if not data['hosts_status']:
         return JsonResponse(
-            {'error': 'Nenhum device com Zabbix configurado'},
+            {'error': 'No devices configured with Zabbix'},
             status=404
         )
 
@@ -107,8 +107,9 @@ def api_zabbix_hosts_status(request):
 @login_required
 def metrics_dashboard(request):
     """
-    Exibe métricas Prometheus em HTML simples para facilitar inspeção manual.
-    Permite filtro por nome/descrição.
+    Render a simple HTML view for Prometheus metrics to aid manual inspection.
+
+    Includes a basic client-side filter by metric name or description.
     """
     raw_lines = generate_latest(REGISTRY).decode("utf-8").splitlines()
     metrics = []
@@ -120,7 +121,12 @@ def metrics_dashboard(request):
                 metrics.append(current)
             _, _, remainder = line.partition("HELP ")
             name, _, help_text = remainder.partition(" ")
-            current = {"name": name, "help": help_text, "type": "", "samples": []}
+            current = {
+                "name": name,
+                "help": help_text,
+                "type": "",
+                "samples": [],
+            }
         elif line.startswith("# TYPE"):
             _, _, remainder = line.partition("TYPE ")
             name, _, metric_type = remainder.partition(" ")
@@ -143,7 +149,11 @@ def metrics_dashboard(request):
             else:
                 metric_name, value = sample.split(" ", 1)
             current["samples"].append(
-                {"raw": sample, "value": value.strip(), "labels": metrics_labels}
+                {
+                    "raw": sample,
+                    "value": value.strip(),
+                    "labels": metrics_labels,
+                }
             )
 
     if current["name"]:
