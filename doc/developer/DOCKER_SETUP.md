@@ -53,7 +53,16 @@ REDIS_URL=redis://redis:6379/1
 DASHBOARD_CACHE_REFRESH_INTERVAL=60
 # Intervalo do sync de inventário (segundos, padrão=86400)
 INVENTORY_SYNC_INTERVAL_SECONDS=86400
+# Intervalo de rotação automática (segundos, padrão=3600)
+SERVICE_ACCOUNT_ROTATION_INTERVAL_SECONDS=3600
+# Timeouts para webhook de aviso (segundos)
+SERVICE_ACCOUNT_WEBHOOK_CONNECT_TIMEOUT=3
+SERVICE_ACCOUNT_WEBHOOK_READ_TIMEOUT=5
 ```
+
+Com esses valores a tarefa periódica `service_accounts.enforce_rotation_policies_task`
+roda a cada hora e dispara avisos pelos webhooks configurados nas contas de
+serviço. Ajuste os timeouts conforme o SLA do endpoint de destino.
 
 > Gere uma chave Fernet após o primeiro `up` com `docker compose exec web python manage.py generate_fernet_key --write` e armazene com segurança.
 

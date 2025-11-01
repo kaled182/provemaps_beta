@@ -57,7 +57,16 @@ DB_USER=app
 DB_PASSWORD=app
 REDIS_URL=redis://redis:6379/1
 DJANGO_SETTINGS_MODULE=settings.dev
+# Rotação automática de tokens de serviço (segundos)
+SERVICE_ACCOUNT_ROTATION_INTERVAL_SECONDS=3600
+# Timeouts opcionais de webhook (segundos)
+SERVICE_ACCOUNT_WEBHOOK_CONNECT_TIMEOUT=3
+SERVICE_ACCOUNT_WEBHOOK_READ_TIMEOUT=5
 ```
+
+Esses parâmetros habilitam a rotação automática das contas de serviço. Ajuste o
+intervalo conforme a política interna e configure o webhook para receber os
+eventos `service_account.rotation_warning` e `service_account.token_rotated`.
 
 ---
 

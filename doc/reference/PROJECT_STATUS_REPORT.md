@@ -139,6 +139,30 @@
 
 ---
 
+### 8. Automação de Service Accounts ✅ NOVO
+**Status:** Stage 2 concluído (rotação automática + notificações)
+
+#### Implementações:
+- ✅ Novos campos nos modelos: `auto_rotate_days`, `notify_before_days`, `notification_webhook_url` e `last_notified_at`
+- ✅ Helper `ServiceAccount.get_active_token()` e cálculo de prazos (`get_rotation_deadline`, `get_notification_deadline`)
+- ✅ Serviço orquestrador em `service_accounts/services.py` com rotação automática, envio de webhooks e auditoria dedicada (`rotation_notice`)
+- ✅ Task Celery `service_accounts.enforce_rotation_policies_task` agendada a cada 1h (configurável) via beat
+- ✅ Admin expõe `last_notified_at` e mantém logging consistente
+
+#### Configuração:
+- ✅ Novas variáveis de ambiente em `.env.example` e `docker-compose.yml`:
+    - `SERVICE_ACCOUNT_ROTATION_INTERVAL_SECONDS`
+    - `SERVICE_ACCOUNT_WEBHOOK_CONNECT_TIMEOUT`
+    - `SERVICE_ACCOUNT_WEBHOOK_READ_TIMEOUT`
+- ✅ Eventos de webhook documentados (`service_account.rotation_warning`, `service_account.token_rotated`)
+
+#### Testes e validação:
+- ✅ `service_accounts/tests.py` expandido (7 cenários) garantindo rotação e aviso único
+- ✅ Execução manual da task via `python manage.py shell -c "from service_accounts.tasks import enforce_rotation_policies_task as t; print(t())"`
+- ✅ Migração `service_accounts.0003_auto_rotation_policy` aplicada localmente (`python manage.py migrate`)
+
+---
+
 ## ⚠️ PENDENTE (Priorizado e Detalhado)
 
 ### 🔴 PRIORIDADE ALTA

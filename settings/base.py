@@ -87,6 +87,7 @@ INSTALLED_APPS = [
     # Apps do projeto
     "core.apps.CoreConfig",
     "maps_view",
+    "service_accounts.apps.ServiceAccountsConfig",
     # Inventário de rede (modelos migrados de zabbix_api)
     "inventory",
     "routes_builder",
