@@ -30,6 +30,8 @@
       CELERY_PING_TIMEOUT: "2"
       CELERY_METRICS_ENABLED: "true"
       CELERY_METRICS_UPDATE_INTERVAL: "30"
+      HEALTHCHECK_DB_TIMEOUT: "5"
+      HEALTHCHECK_FORCE_NO_TIMEOUT: "true"
     depends_on:
       redis:
         condition: service_healthy
