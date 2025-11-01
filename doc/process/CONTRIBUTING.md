@@ -17,7 +17,7 @@ Este guia explica como configurar o ambiente local, rodar testes e seguir o padr
 ### 2. Setup local
 
 ```bash
-git clone https://github.com/kaled182/mapsprovefiber.git
+git clone https://github.com/kaled182/provemaps_beta.git
 cd mapsprovefiber
 cp .env.dev.example .env.dev
 make up

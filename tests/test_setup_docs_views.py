@@ -16,7 +16,7 @@ class DocsViewsSmokeTests(TestCase):
                 "size_kb": 42,
                 "modified_at": "2025-01-01T12:34:56Z",
                 "github_doc_url": (
-                    "https://github.com/kaled182/mapsprovefiber/blob/main/"
+                    "https://github.com/kaled182/provemaps_beta/blob/main/"
                     "README.md"
                 ),
                 "views": 10,
@@ -29,7 +29,7 @@ class DocsViewsSmokeTests(TestCase):
                 "size_kb": 88,
                 "modified_at": "2025-01-02T09:00:00Z",
                 "github_doc_url": (
-                    "https://github.com/kaled182/mapsprovefiber/blob/main/"
+                    "https://github.com/kaled182/provemaps_beta/blob/main/"
                     "API_DOCUMENTATION.md"
                 ),
                 "views": 5,
