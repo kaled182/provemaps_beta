@@ -102,7 +102,7 @@ class Command(BaseCommand):
             self.style.SUCCESS("=" * 70)
         )
         self.stdout.write(
-            self.style.SUCCESS("🔄 Zabbix Inventory Sync")
+            self.style.SUCCESS("Zabbix Inventory Sync")
         )
         self.stdout.write(
             self.style.SUCCESS("=" * 70)
@@ -111,12 +111,12 @@ class Command(BaseCommand):
         if dry_run:
             self.stdout.write(
                 self.style.WARNING(
-                    "⚠️  DRY RUN MODE - No changes will be saved"
+                    "DRY RUN MODE - No changes will be saved"
                 )
             )
 
         # Fetch hosts from Zabbix
-        self.stdout.write("📡 Fetching hosts from Zabbix API...")
+        self.stdout.write("Fetching hosts from Zabbix API...")
         hosts = self._fetch_zabbix_hosts(host_filter, limit)
 
         if not hosts:
@@ -126,7 +126,7 @@ class Command(BaseCommand):
             return
 
         self.stdout.write(
-            self.style.SUCCESS(f"✓ Found {len(hosts)} host(s) in Zabbix")
+            self.style.SUCCESS(f"[OK] Found {len(hosts)} host(s) in Zabbix")
         )
 
         # Sync hosts
@@ -168,7 +168,7 @@ class Command(BaseCommand):
                     e,
                 )
                 self.stdout.write(
-                    self.style.ERROR(f"  ✗ Error: {str(e)}")
+                    self.style.ERROR(f"  [ERROR] {str(e)}")
                 )
 
         # Summary
@@ -246,7 +246,7 @@ class Command(BaseCommand):
         if not hostid:
             if verbose:
                 message = (
-                    "  ⚠️  Skipping host without hostid: "
+                    "  [WARN] Skipping host without hostid: "
                     f"{host_name}"
                 )
                 self.stdout.write(self.style.WARNING(message))
@@ -264,13 +264,13 @@ class Command(BaseCommand):
                 stats["sites_created"] += 1
                 if verbose:
                     self.stdout.write(
-                        self.style.SUCCESS(f"  ✓ Created site: {site_name}")
+                        self.style.SUCCESS(f"  [OK] Created site: {site_name}")
                     )
             if site_updated:
                 stats["sites_updated"] += 1
                 if verbose:
                     self.stdout.write(
-                        f"  → Updated site coordinates: {site_name}"
+                        f"  -> Updated site coordinates: {site_name}"
                     )
         else:
             # Dry run - check if site exists
@@ -278,13 +278,13 @@ class Command(BaseCommand):
             if not site:
                 stats["sites_created"] += 1
                 if verbose:
-                    message = f"  ✓ Would create site: {site_name}"
+                    message = f"  [OK] Would create site: {site_name}"
                     self.stdout.write(self.style.SUCCESS(message))
             elif self._site_would_update(site, host):
                 stats["sites_updated"] += 1
                 if verbose:
                     self.stdout.write(
-                        f"  → Would update site coordinates: {site_name}"
+                        f"  -> Would update site coordinates: {site_name}"
                     )
 
         # Get or create device
@@ -300,7 +300,7 @@ class Command(BaseCommand):
             stats["devices_updated"] += 1
             if verbose:
                 self.stdout.write(
-                    self.style.SUCCESS(f"  ✓ Updated device: {host_name}")
+                    self.style.SUCCESS(f"  [OK] Updated device: {host_name}")
                 )
         elif not update_only:
             # Create new device
@@ -313,13 +313,13 @@ class Command(BaseCommand):
             stats["devices_created"] += 1
             if verbose:
                 self.stdout.write(
-                    self.style.SUCCESS(f"  ✓ Created device: {host_name}")
+                    self.style.SUCCESS(f"  [OK] Created device: {host_name}")
                 )
         else:
             if verbose:
                 self.stdout.write(
                     self.style.WARNING(
-                        f"  ⚠️  Skipping new device (update-only mode):"
+                        f"  [WARN] Skipping new device (update-only mode):"
                         f" {host_name}"
                     )
                 )
@@ -463,7 +463,7 @@ class Command(BaseCommand):
                     stats["created"] += 1
                     if verbose:
                         self.stdout.write(
-                            f"    → Would create port: {port_name}"
+                            f"    -> Would create port: {port_name}"
                         )
             else:
                 port, created = Port.objects.update_or_create(
@@ -477,7 +477,7 @@ class Command(BaseCommand):
                     stats["created"] += 1
                     if verbose:
                         self.stdout.write(
-                            f"    → Created port: {port_name}"
+                            f"    -> Created port: {port_name}"
                         )
                 else:
                     stats["updated"] += 1
@@ -493,7 +493,7 @@ class Command(BaseCommand):
         """Print sync summary."""
         self.stdout.write("\n" + "=" * 70)
         self.stdout.write(
-            self.style.SUCCESS("📊 Sync Summary")
+            self.style.SUCCESS("Sync Summary")
         )
         self.stdout.write("=" * 70)
 
@@ -522,7 +522,7 @@ class Command(BaseCommand):
 
         if stats["errors"] > 0:
             self.stdout.write(
-                self.style.ERROR(f"\n⚠️  Errors: {stats['errors']}")
+                self.style.ERROR(f"\nErrors: {stats['errors']}")
             )
 
         total_changes = (
@@ -533,11 +533,11 @@ class Command(BaseCommand):
 
         if dry_run and total_changes > 0:
             hint = (
-                "\n💡 Run without --dry-run to apply "
+                "\nRun without --dry-run to apply "
                 f"{total_changes} change(s)"
             )
             self.stdout.write(self.style.WARNING(hint))
         elif not dry_run:
             self.stdout.write(
-                self.style.SUCCESS("\n✅ Sync completed successfully!")
+                self.style.SUCCESS("\nSync completed successfully!")
             )

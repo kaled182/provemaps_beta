@@ -1,16 +1,16 @@
 """
-Cache SWR (Stale-While-Revalidate) para Dashboard.
+Stale-While-Revalidate cache helpers for the dashboard.
 
-Estratégia:
-1. Serve dados stale do cache imediatamente (resposta rápida)
-2. Dispara revalidação em background via Celery task
-3. Frontend exibe banner de "dados desatualizados" com timestamp
+Strategy:
+1. Serve cached (possibly stale) data immediately for fast responses.
+2. Trigger a background refresh via Celery when data is stale.
+3. Let the frontend display a "stale data" banner with a timestamp.
 
 Features:
-- TTL: 5 minutos (dados frescos)
-- Stale TTL: 30 minutos (serve stale se cache expirou mas ainda disponível)
-- Background refresh via Celery
-- Fallback para fetch síncrono se cache totalmente vazio
+- Fresh TTL defaults to 30 seconds.
+- Stale TTL defaults to 60 seconds (data remains servable while refresh runs).
+- Background refresh powered by Celery tasks.
+- Synchronous fallback when the cache does not have any snapshot yet.
 """
 
 import logging
@@ -22,7 +22,7 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-# Configurações SWR - Reduzido para monitoramento em tempo real
+# SWR configuration tuned for near real-time monitoring
 SWR_FRESH_TTL = getattr(settings, "SWR_FRESH_TTL", 30)  # 30 segundos (fresh)
 SWR_STALE_TTL = getattr(settings, "SWR_STALE_TTL", 60)  # 1 min (stale)
 SWR_ENABLED = getattr(settings, "SWR_ENABLED", True)
@@ -30,9 +30,9 @@ SWR_ENABLED = getattr(settings, "SWR_ENABLED", True)
 
 class SWRCache:
     """
-    Cache com padrão Stale-While-Revalidate.
-    
-    Exemplo:
+    Cache helper that follows the Stale-While-Revalidate pattern.
+
+    Example:
         cache_swr = SWRCache(key="dashboard:hosts")
         data = cache_swr.get_or_fetch(
             fetch_fn=lambda: get_hosts_status_data(),
@@ -48,9 +48,9 @@ class SWRCache:
     ):
         """
         Args:
-            key: Cache key único
-            fresh_ttl: Tempo (segundos) que dados são considerados frescos
-            stale_ttl: Tempo (segundos) que dados stale ainda podem ser servidos
+            key: Unique cache key identifier.
+            fresh_ttl: Number of seconds data is considered fresh.
+            stale_ttl: Number of seconds stale data can still be served.
         """
         self.key = key
         self.fresh_ttl = fresh_ttl
@@ -59,10 +59,11 @@ class SWRCache:
 
     def get_cached_data(self) -> Optional[Dict[str, Any]]:
         """
-        Retorna dados do cache (frescos ou stale).
-        
+        Return cached data (fresh or stale) if available.
+
         Returns:
-            Dict com 'data', 'timestamp', 'is_stale' ou None se cache vazio
+            Dict with ``data``, ``timestamp``, ``is_stale`` or ``None`` if
+            the cache is empty.
         """
         try:
             data = cache.get(self.key)
@@ -82,25 +83,25 @@ class SWRCache:
                 "is_stale": is_stale,
             }
         except Exception:
-            logger.exception("Erro ao ler cache SWR para key=%s", self.key)
+            logger.exception("Failed to read SWR cache for key=%s", self.key)
             return None
 
     def set_cached_data(self, data: Any) -> None:
         """
-        Armazena dados no cache com timestamp.
-        
+        Store data in the cache together with a timestamp.
+
         Args:
-            data: Dados para cachear
+            data: Payload to store.
         """
         try:
             now = time.time()
             cache.set(self.key, data, self.stale_ttl)
             cache.set(self.timestamp_key, now, self.stale_ttl)
             logger.debug(
-                "Cache SWR atualizado: key=%s, ttl=%d", self.key, self.stale_ttl
+                "SWR cache updated: key=%s, ttl=%d", self.key, self.stale_ttl
             )
         except Exception:
-            logger.exception("Erro ao gravar cache SWR para key=%s", self.key)
+            logger.exception("Failed to write SWR cache for key=%s", self.key)
 
     def get_or_fetch(
         self,
@@ -108,22 +109,22 @@ class SWRCache:
         async_task: Optional[Callable] = None,
     ) -> Dict[str, Any]:
         """
-        Implementação do padrão SWR.
-        
-        Lógica:
-        1. Se cache fresco → retorna imediatamente
-        2. Se cache stale → retorna stale + dispara refresh async
-        3. Se cache vazio → faz fetch síncrono
-        
+        Implement the SWR pattern for the configured cache key.
+
+        Workflow:
+        1. Fresh cache -> return immediately.
+        2. Stale cache -> return stale data and trigger a background refresh.
+        3. Empty cache -> perform a synchronous fetch.
+
         Args:
-            fetch_fn: Função síncrona para buscar dados frescos
-            async_task: Celery task para refresh assíncrono (opcional)
-        
+            fetch_fn: Synchronous callable that retrieves fresh data.
+            async_task: Optional Celery task trigger for async refresh.
+
         Returns:
-            Dict com 'data', 'timestamp', 'is_stale', 'cache_hit'
+            Dict with ``data``, ``timestamp``, ``is_stale`` and ``cache_hit``.
         """
         if not SWR_ENABLED:
-            # SWR desabilitado: fetch direto
+            # SWR disabled: fetch directly
             data = fetch_fn()
             return {
                 "data": data,
@@ -135,8 +136,11 @@ class SWRCache:
         cached = self.get_cached_data()
 
         if cached is None:
-            # Cache vazio: fetch síncrono
-            logger.info("Cache SWR miss (vazio): key=%s, fetching sync", self.key)
+            # Empty cache: synchronous fetch
+            logger.info(
+                "SWR cache miss (empty): key=%s, fetching sync",
+                self.key,
+            )
             data = fetch_fn()
             self.set_cached_data(data)
             return {
@@ -147,13 +151,18 @@ class SWRCache:
             }
 
         if not cached["is_stale"]:
-            # Cache fresco: serve imediatamente
-            logger.debug("Cache SWR hit (fresco): key=%s, age=%ds", self.key, cached["age_seconds"])
+            # Fresh cache: serve immediately
+            logger.debug(
+                "SWR cache hit (fresh): key=%s, age=%ds",
+                self.key,
+                cached["age_seconds"],
+            )
             return {**cached, "cache_hit": True}
 
-        # Cache stale: serve + dispara refresh async
+        # Stale cache: serve now and trigger refresh
         logger.info(
-            "Cache SWR hit (stale): key=%s, age=%ds, triggering background refresh",
+            "SWR cache hit (stale): key=%s, age=%ds, "
+            "triggering background refresh",
             self.key,
             cached["age_seconds"],
         )
@@ -161,25 +170,32 @@ class SWRCache:
         if async_task:
             try:
                 async_task()
-                logger.debug("Background refresh task dispatched for key=%s", self.key)
+                logger.debug(
+                    "Background refresh task dispatched for key=%s",
+                    self.key,
+                )
             except Exception:
                 logger.exception(
-                    "Falha ao disparar background refresh para key=%s", self.key
+                    "Failed to dispatch background refresh for key=%s",
+                    self.key,
                 )
 
         return {**cached, "cache_hit": True}
 
     def invalidate(self) -> None:
-        """Remove dados do cache."""
+        """Remove cached data for this key."""
         try:
             cache.delete(self.key)
             cache.delete(self.timestamp_key)
-            logger.info("Cache SWR invalidado: key=%s", self.key)
+            logger.info("SWR cache invalidated: key=%s", self.key)
         except Exception:
-            logger.exception("Erro ao invalidar cache SWR para key=%s", self.key)
+            logger.exception(
+                "Failed to invalidate SWR cache for key=%s",
+                self.key,
+            )
 
 
-# Instância global para dashboard
+# Global instance reused by the dashboard view
 dashboard_cache = SWRCache(key="dashboard:hosts_status")
 
 
@@ -187,23 +203,12 @@ def get_dashboard_cached(
     fetch_fn: Callable[[], Dict[str, Any]],
     async_task: Optional[Callable] = None,
 ) -> Dict[str, Any]:
-    """
-    Helper para cache SWR do dashboard.
-    
-    Usage:
-        data = get_dashboard_cached(
-            fetch_fn=lambda: get_hosts_status_data(),
-            async_task=refresh_dashboard_cache_task.delay
-        )
-    
-    Returns:
-        Dict com dados + metadata (is_stale, timestamp, etc.)
-    """
+    """Helper around :class:`SWRCache` for the dashboard payload."""
     return dashboard_cache.get_or_fetch(fetch_fn, async_task)
 
 
 def invalidate_dashboard_cache() -> None:
-    """Invalida cache do dashboard (útil após updates no inventário)."""
+    """Invalidate the dashboard cache (useful after inventory updates)."""
     dashboard_cache.invalidate()
 
 

@@ -9,20 +9,25 @@ from maps_view.services.fiber_status import (
 )
 
 LOCK_FILE = "/tmp/update_fiber_status.lock"
-LOCK_STALE_SECONDS = 60 * 10  # 10 minutos
+LOCK_STALE_SECONDS = 60 * 10  # 10 minutes
 
 
 @contextmanager
 def file_lock(path: str, force: bool = False):
-    """Lock simples baseado em arquivo. Evita execu??es concorrentes.
-    Remove lock se estiver obsoleto. Se force=True, ignora lock existente.
+    """Simple file-based lock to avoid concurrent executions.
+
+    Removes the lock if it is stale. When ``force`` is True the existing lock
+    is ignored.
     """
     if os.path.exists(path) and not force:
         try:
             mtime = os.path.getmtime(path)
             age = time.time() - mtime
             if age < LOCK_STALE_SECONDS:
-                raise RuntimeError("Lock ativo: outra execu??o em andamento (use --force para ignorar)")
+                raise RuntimeError(
+                    "Lock active: another execution is running "
+                    "(use --force to ignore)"
+                )
             else:
                 # Stale lock
                 os.remove(path)
@@ -41,13 +46,29 @@ def file_lock(path: str, force: bool = False):
 
 
 class Command(BaseCommand):
-    help = 'Atualiza status dos cabos de fibra consultando o Zabbix.'
+    help = "Update fiber cable statuses by querying Zabbix."
 
     def add_arguments(self, parser):
-        parser.add_argument('--dry-run', action='store_true', help='N?o persiste altera??es, s? exibe o que faria.')
-        parser.add_argument('--cable', type=str, help='Nome ou ID espec?fico de cabo para atualizar.')
-        parser.add_argument('--verbose-json', action='store_true', help='Imprime JSON detalhado do resultado.')
-        parser.add_argument('--force', action='store_true', help='For?a execu??o ignorando lock existente.')
+        parser.add_argument(
+            '--dry-run',
+            action='store_true',
+            help='Do not persist changes; only show the planned updates.',
+        )
+        parser.add_argument(
+            '--cable',
+            type=str,
+            help='Cable name or specific ID to limit the update.',
+        )
+        parser.add_argument(
+            '--verbose-json',
+            action='store_true',
+            help='Print detailed JSON output for inspection.',
+        )
+        parser.add_argument(
+            '--force',
+            action='store_true',
+            help='Ignore an existing lock and force execution.',
+        )
 
     def handle(self, *args, **options):
         dry_run = options['dry_run']
@@ -67,7 +88,9 @@ class Command(BaseCommand):
 
         total = qs.count()
         if total == 0:
-            self.stdout.write(self.style.WARNING('Nenhum cabo encontrado para atualizar.'))
+            self.stdout.write(
+                self.style.WARNING('No cables found to update.')
+            )
             return
 
         try:
@@ -102,7 +125,9 @@ class Command(BaseCommand):
                         'old_status': old_status,
                         'new_status': new_status,
                         'origin_interface_status': eval_data['origin_status'],
-                        'destination_interface_status': eval_data['destination_status'],
+                        'destination_interface_status': (
+                            eval_data['destination_status']
+                        ),
                         'changed': changed,
                         'origin_reason': eval_data['origin_reason'],
                         'destination_reason': eval_data['destination_reason'],
@@ -112,15 +137,37 @@ class Command(BaseCommand):
             return
 
         if verbose_json:
-            self.stdout.write(json.dumps({'updated': updated, 'total': total, 'results': results}, ensure_ascii=False, indent=2))
+            self.stdout.write(
+                json.dumps(
+                    {'updated': updated, 'total': total, 'results': results},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
             return
 
         for r in results:
             mark = '*' if r['changed'] else '-'
-            self.stdout.write(f"{mark} {r['cable']} {r['old_status']} -> {r['new_status']} (orig={r['origin_interface_status']} dest={r['destination_interface_status']})")
-        self.stdout.write(self.style.SUCCESS(f"Cabos processados: {total} | Alterados: {updated}"))
+            self.stdout.write(
+                f"{mark} {r['cable']} {r['old_status']} -> {r['new_status']} "
+                f"(orig={r['origin_interface_status']} "
+                f"dest={r['destination_interface_status']})"
+            )
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Cables processed: {total} | Updated: {updated}"
+            )
+        )
         unknown_after = sum(1 for r in results if r['new_status'] == 'unknown')
         if unknown_after:
-            self.stdout.write(self.style.WARNING(f"Cabos ainda 'unknown': {unknown_after}"))
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Cables still in 'unknown' status: {unknown_after}"
+                )
+            )
         if dry_run:
-            self.stdout.write(self.style.WARNING('Execu??o em modo --dry-run, nenhuma altera??o persistida.'))
+            self.stdout.write(
+                self.style.WARNING(
+                    'Executed in --dry-run mode; no changes were persisted.'
+                )
+            )
