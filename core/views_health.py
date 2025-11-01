@@ -1,15 +1,16 @@
-import os
-import time
-import platform
 import logging
+import os
+import platform
 import shutil
+import threading
+import time
 from contextlib import contextmanager
 from typing import Any, Dict
 
 import django
-from django.http import JsonResponse
-from django.db import connection
 from django.core.cache import caches
+from django.db import connection
+from django.http import HttpRequest, JsonResponse
 from django.views.decorators.cache import cache_page
 
 logger = logging.getLogger(__name__)
@@ -33,7 +34,7 @@ def timeout(seconds: int):
 
     import signal
 
-    def _raise_timeout(signum, frame):  # pragma: no cover - dependente de sinal
+    def _raise_timeout(signum, frame):  # pragma: no cover
         raise TimeoutException(f"Operation timed out after {seconds} seconds")
 
     previous_handler = signal.signal(signal.SIGALRM, _raise_timeout)
@@ -77,9 +78,6 @@ def _add_system_metrics(checks: Dict[str, Any]) -> None:
         checks["system"] = {"error": "psutil not available"}
     except Exception as e:
         checks["system"] = {"error": str(e)[:200]}
-
-
-from django.http import HttpRequest
 
 
 def healthz(request: HttpRequest):
@@ -197,20 +195,44 @@ def healthz_ready(request: HttpRequest):
     """
     started = time.time()
     db_ok = True
+    db_timeout = 5
+    db_timeout_env = os.getenv("HEALTHCHECK_DB_TIMEOUT", "5")
+    force_no_timeout_env = os.getenv(
+        "HEALTHCHECK_FORCE_NO_TIMEOUT", "false"
+    )
+
     try:
-        db_timeout = int(os.getenv("HEALTHCHECK_DB_TIMEOUT", "5"))
+        db_timeout = int(db_timeout_env)
+        force_no_timeout = force_no_timeout_env.lower() == "true"
+        is_main_thread = threading.current_thread() is threading.main_thread()
+        use_timeout = (
+            db_timeout > 0
+            and platform.system() != "Windows"
+            and not force_no_timeout
+            and is_main_thread
+        )
+
         with connection.cursor() as cursor:
-            if platform.system() != "Windows":
+            if use_timeout:
                 with timeout(db_timeout):
                     cursor.execute("SELECT 1")
                     cursor.fetchone()
             else:
                 cursor.execute("SELECT 1")
                 cursor.fetchone()
+            if not is_main_thread and db_timeout > 0 and not force_no_timeout:
+                logger.debug(
+                    "Readiness DB check outside main thread; timeout skipped"
+                )
     except TimeoutException:
         db_ok = False
+        logger.warning(
+            "Readiness DB check timeout",
+            extra={"timeout_seconds": db_timeout},
+        )
     except Exception:
         db_ok = False
+        logger.exception("Readiness DB check failed")
 
     status_code = 200 if db_ok else 503
     response = JsonResponse(

@@ -64,6 +64,7 @@ ZABBIX_CIRCUIT_BREAKER_TIMEOUT = env.int(
     "ZABBIX_CIRCUIT_BREAKER_TIMEOUT", default=60
 )
 ZABBIX_BATCH_SIZE = env.int("ZABBIX_BATCH_SIZE", default=10)
+API_KEY_BACKOFF_SECONDS = env.int("ZABBIX_API_KEY_BACKOFF", default=1800)
 
 TOKEN_CACHE_TIME = 300  # 5 minutos
 TOKEN_CACHE_KEY = "zabbix_client_resilient_token"
@@ -227,6 +228,9 @@ class ResilientZabbixClient:
         self.circuit_breaker = CircuitBreaker()
         self._cached_token: Optional[str] = None
         self._token_timestamp: float = 0.0
+        self._last_api_key_used: Optional[str] = None
+        self._failed_api_key: Optional[str] = None
+        self._api_key_backoff_until: float = 0.0
 
     # --------------------------------------------------------------------------
     # Configuração e Autenticação
@@ -244,6 +248,14 @@ class ResilientZabbixClient:
             ),
             api_key=config.zabbix_api_key or settings.ZABBIX_API_KEY,
         )
+
+    def get_current_config(self) -> ZabbixConfig:
+        """Retorna configuração atual (compatibilidade legada)."""
+        return self._get_config()
+
+    def normalize_url(self, url: str) -> str:
+        """Normaliza URL usando helper interno (API pública)."""
+        return self._normalize_url(url)
 
     @staticmethod
     def _normalize_url(url: str) -> str:
@@ -274,17 +286,45 @@ class ResilientZabbixClient:
         if cached:
             self._cached_token = cached
             self._token_timestamp = time.time()
+            self._last_api_key_used = None
             return cached
 
         # Faz login
         config = self._get_config()
 
-        # Se tiver API key, usa diretamente
-        if config.api_key:
-            self._cached_token = config.api_key
-            self._token_timestamp = time.time()
-            cache.set(TOKEN_CACHE_KEY, config.api_key, TOKEN_CACHE_TIME)
-            return config.api_key
+        api_key = (config.api_key or "").strip()
+        credentials_available = bool(
+            (config.user or "").strip()
+            and (config.password or "").strip()
+        )
+        now = time.time()
+
+        if api_key:
+            skip_api_key = (
+                self._failed_api_key
+                and api_key == self._failed_api_key
+                and now < self._api_key_backoff_until
+            )
+            if skip_api_key and not credentials_available:
+                logger.debug(
+                    "Stored API key is in backoff but no fallback credentials "
+                    "are configured; reusing key",
+                )
+                self._failed_api_key = None
+                self._api_key_backoff_until = 0.0
+                skip_api_key = False
+
+            if skip_api_key:
+                logger.debug(
+                    "Skipping stored Zabbix API key; backoff ends in %.0fs",
+                    self._api_key_backoff_until - now,
+                )
+            else:
+                self._cached_token = api_key
+                self._token_timestamp = now
+                self._last_api_key_used = api_key
+                cache.set(TOKEN_CACHE_KEY, api_key, TOKEN_CACHE_TIME)
+                return api_key
 
         # Login com user/password
         payload = {
@@ -312,6 +352,7 @@ class ResilientZabbixClient:
             if token:
                 self._cached_token = token
                 self._token_timestamp = time.time()
+                self._last_api_key_used = None
                 cache.set(TOKEN_CACHE_KEY, token, TOKEN_CACHE_TIME)
             return token
 
@@ -319,10 +360,17 @@ class ResilientZabbixClient:
             logger.error("Zabbix login request failed: %s", exc)
             return None
 
+    def login(self) -> Optional[str]:
+        """Compat: retorna token autenticado atual."""
+        return self._get_token()
+
     def clear_token_cache(self) -> None:
         """Limpa cache de autenticação."""
         self._cached_token = None
         self._token_timestamp = 0.0
+        self._last_api_key_used = None
+        self._failed_api_key = None
+        self._api_key_backoff_until = 0.0
         cache.delete(TOKEN_CACHE_KEY)
 
     # --------------------------------------------------------------------------
@@ -412,6 +460,9 @@ class ResilientZabbixClient:
         method: str,
         params: Optional[Dict[str, Any]],
         attempt: int,
+        *,
+        retry_without_auth: bool = False,
+        token_retry: bool = False,
     ) -> Optional[Any]:
         """Executa requisição HTTP ao Zabbix API."""
         config = self._get_config()
@@ -432,10 +483,12 @@ class ResilientZabbixClient:
         }
         if params is not None:
             payload["params"] = params
-        if include_auth and token:
+        if include_auth and not retry_without_auth and token:
             payload["auth"] = token
 
         headers = {"Content-Type": "application/json"}
+        if include_auth and retry_without_auth and token:
+            headers["Authorization"] = f"Bearer {token}"
 
         # Métricas: início
         start_time = time.perf_counter()
@@ -468,8 +521,55 @@ class ResilientZabbixClient:
         # Verifica erros do Zabbix
         if "error" in data:
             error = data["error"]
+
+            if (
+                include_auth
+                and not retry_without_auth
+                and error.get("code") in (-32602, -32500)
+            ):
+                logger.debug(
+                    "Zabbix call %s returned error code %s; retrying with "
+                    "Authorization header",
+                    method,
+                    error.get("code"),
+                )
+                return self._execute_request(
+                    method,
+                    params,
+                    attempt,
+                    retry_without_auth=True,
+                    token_retry=token_retry,
+                )
+
+            error_blob = " ".join(
+                part
+                for part in [
+                    str(error.get("message", "")),
+                    str(error.get("data", "")),
+                ]
+                if part
+            ).lower()
+            token_expired = (
+                "token expired" in error_blob
+                or "session terminated" in error_blob
+            )
+
+            if include_auth and not token_retry and token_expired:
+                logger.info(
+                    "Zabbix token expired while calling %s; retrying "
+                    "authentication",
+                    method,
+                )
+                self._mark_token_as_expired()
+                return self._execute_request(
+                    method,
+                    params,
+                    attempt,
+                    retry_without_auth=False,
+                    token_retry=True,
+                )
+
             logger.warning("Zabbix API error for %s: %s", method, error)
-            # Limpa cache de token se erro de autenticação
             if error.get("code") in (-32602, -32500):
                 self.clear_token_cache()
             return None
@@ -599,7 +699,8 @@ class ResilientZabbixClient:
                 ).observe(duration_seconds)
 
             logger.debug(
-                "Batch call with %d requests (attempt %d) completed in %.3f seconds",
+                "Batch call with %d requests (attempt %d) completed in %.3f "
+                "seconds",
                 len(calls),
                 attempt,
                 duration_seconds,
@@ -613,6 +714,22 @@ class ResilientZabbixClient:
         results = []
         for data in data_list:
             if "error" in data:
+                error_blob = " ".join(
+                    part
+                    for part in [
+                        str(data["error"].get("message", "")),
+                        str(data["error"].get("data", "")),
+                    ]
+                    if part
+                ).lower()
+                if (
+                    "token expired" in error_blob
+                    or "session terminated" in error_blob
+                ):
+                    self._mark_token_as_expired()
+                    raise requests.RequestException(
+                        "Token expired during batch"
+                    )
                 logger.warning("Batch item error: %s", data["error"])
                 results.append(None)
             else:
@@ -633,8 +750,15 @@ class ResilientZabbixClient:
         """Retorna métricas atuais do cliente."""
         return {
             "circuit_breaker_state": self.circuit_breaker.state.name,
-            "circuit_breaker_failure_count": self.circuit_breaker.failure_count,
+            "circuit_breaker_failure_count": (
+                self.circuit_breaker.failure_count
+            ),
             "token_cached": self._cached_token is not None,
+            "failed_api_key": self._failed_api_key,
+            "api_key_backoff_seconds_remaining": max(
+                0.0,
+                self._api_key_backoff_until - time.time(),
+            ),
             "metrics_enabled": METRICS_ENABLED,
             "config": {
                 "timeout": ZABBIX_REQUEST_TIMEOUT,
@@ -643,8 +767,26 @@ class ResilientZabbixClient:
                 "circuit_breaker_threshold": ZABBIX_CIRCUIT_BREAKER_THRESHOLD,
                 "circuit_breaker_timeout": ZABBIX_CIRCUIT_BREAKER_TIMEOUT,
                 "batch_size": ZABBIX_BATCH_SIZE,
+                "api_key_backoff": API_KEY_BACKOFF_SECONDS,
             },
         }
+
+    def _reset_cached_token(self) -> None:
+        self._cached_token = None
+        self._token_timestamp = 0.0
+        self._last_api_key_used = None
+
+    def _mark_token_as_expired(self) -> None:
+        failed_key = self._last_api_key_used
+        self._reset_cached_token()
+        if failed_key:
+            self._failed_api_key = failed_key
+            self._api_key_backoff_until = (
+                time.time() + API_KEY_BACKOFF_SECONDS
+            )
+        else:
+            self._failed_api_key = None
+            self._api_key_backoff_until = 0.0
 
 
 # ==============================================================================
@@ -659,12 +801,16 @@ resilient_client = ResilientZabbixClient()
 # ==============================================================================
 
 
-def zabbix_call(method: str, params: Optional[Dict[str, Any]] = None) -> Optional[Any]:
+def zabbix_call(
+    method: str, params: Optional[Dict[str, Any]] = None
+) -> Optional[Any]:
     """Wrapper para chamada simples ao Zabbix API."""
     return resilient_client.call(method, params)
 
 
-def zabbix_batch(calls: List[Tuple[str, Optional[Dict[str, Any]]]]) -> List[Optional[Any]]:
+def zabbix_batch(
+    calls: List[Tuple[str, Optional[Dict[str, Any]]]]
+) -> List[Optional[Any]]:
     """Wrapper para batch de chamadas ao Zabbix API."""
     return resilient_client.batch(calls)
 
