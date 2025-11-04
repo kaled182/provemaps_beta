@@ -17,6 +17,7 @@ from .domain.optical import (
     _fetch_port_optical_snapshot,
     _safe_float,
     _score_optical_candidate,
+    fetch_port_optical_snapshot,
 )
 from .guards import diagnostics_guard, staff_guard
 from .services.fiber_status import (
@@ -33,6 +34,7 @@ __all__ = [
     "_score_optical_candidate",
     "_discover_optical_keys_by_portname",
     "_fetch_port_optical_snapshot",
+    "fetch_port_optical_snapshot",
     "fetch_interface_status",
     "combine_cable_status",
     "api_import_fiber_kml",

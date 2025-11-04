@@ -1,23 +1,51 @@
-# Alertas Prometheus para Celery
+# Prometheus Alerts For Celery
 
-Este documento fornece exemplos de regras de alerta (Prometheus Alert Manager) e queries PromQL úteis para monitorar a saúde dos workers Celery via métricas exportadas pelo endpoint `/celery/status`.
+This reference contains example alert rules (Prometheus Alertmanager) and PromQL queries that use the metrics exposed by `/celery/status`.
 
-## Métricas Disponíveis
+## Available Metrics
 
-| Métrica | Tipo | Descrição |
-|---------|------|-----------|
-| `celery_worker_available` | Gauge | 1 se worker respondeu ao ping, 0 caso contrário |
-| `celery_status_latency_ms` | Gauge | Latência da última verificação em ms |
-| `celery_worker_count` | Gauge | Número de workers ativos |
-| `celery_active_tasks` | Gauge | Total de tarefas em execução |
-| `celery_scheduled_tasks` | Gauge | Total de tarefas agendadas (ETA) |
-| `celery_reserved_tasks` | Gauge | Total de tarefas reservadas |
+| Metric | Type | Description |
+|--------|------|-------------|
+| `celery_worker_available` | Gauge | 1 when the worker replied to the ping, otherwise 0 |
+| `celery_status_latency_ms` | Gauge | Latency of the last status check (ms) |
+| `celery_worker_count` | Gauge | Number of active workers |
+| `celery_active_tasks` | Gauge | Total tasks currently processing |
+| `celery_scheduled_tasks` | Gauge | Total tasks scheduled with ETA |
+| `celery_reserved_tasks` | Gauge | Total reserved tasks |
 
-## Regras de Alerta Recomendadas
+## Recommended Alert Rules
 
-### 1. Worker Indisponível
+### Zabbix Client: Circuit Breaker Open
 
-Alerta quando nenhum worker está respondendo por mais de 3 minutos.
+```yaml
+      - alert: ZabbixCircuitBreakerOpen
+        expr: zabbix_circuit_breaker_state > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: zabbix
+        annotations:
+          summary: "Zabbix circuit breaker opened"
+          description: "Circuit breaker remains open for more than 60 seconds on method {{ $labels.method }}."
+```
+
+### Zabbix Client: Retry Burst
+
+```yaml
+      - alert: ZabbixRetryBurst
+        expr: increase(zabbix_retry_attempts_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: zabbix
+        annotations:
+          summary: "Excessive retry attempts in the Zabbix client"
+          description: "More than 10 retry attempts in 5 minutes. Check backend availability."
+```
+
+### 1. Worker Unavailable
+
+Triggers when no worker replies for longer than three minutes.
 
 ```yaml
 # prometheus/alerts/celery.yml
@@ -32,20 +60,20 @@ groups:
           severity: critical
           component: celery
         annotations:
-          summary: "Celery worker indisponível"
-          description: "Nenhum worker Celery respondeu ao ping nos últimos 3 minutos. Verificar logs e status dos containers."
+          summary: "Celery workers unavailable"
+          description: "No Celery worker acknowledged the ping during the last 3 minutes. Check logs and container status."
 ```
 
-**Ações recomendadas:**
-- Verificar logs: `docker compose logs celery --tail=100`
-- Reiniciar workers: `docker compose restart celery beat`
-- Validar conectividade com Redis: `docker compose logs redis`
+Recommended response:
+- Inspect logs: `docker compose logs celery --tail=100`
+- Restart workers: `docker compose restart celery beat`
+- Verify Redis connectivity: `docker compose logs redis`
 
 ---
 
-### 2. Latência Alta
+### 2. Elevated Latency
 
-Alerta quando a latência de verificação excede 5 segundos consistentemente.
+Fires when the status call exceeds five seconds for an extended period.
 
 ```yaml
       - alert: CeleryHighLatency
@@ -55,20 +83,20 @@ Alerta quando a latência de verificação excede 5 segundos consistentemente.
           severity: warning
           component: celery
         annotations:
-          summary: "Latência elevada no Celery"
-          description: "Latência de verificação do Celery está acima de 5s por mais de 5 minutos. Possível sobrecarga ou lentidão no broker."
+          summary: "High Celery status latency"
+          description: "Status latency has been above 5 seconds for more than 5 minutes. Broker overload or slow workers suspected."
 ```
 
-**Ações recomendadas:**
-- Verificar uso de CPU/memória dos workers: `docker stats celery`
-- Avaliar backlog de tarefas: acessar `/celery/status` e verificar `active_tasks`
-- Considerar aumentar concorrência: ajustar `-c` no `docker-compose.yml`
+Recommended response:
+- Check CPU and memory usage: `docker stats celery`
+- Review backlog via `/celery/status` and `active_tasks`
+- Consider increasing concurrency (`-c` flag in `docker-compose.yml`)
 
 ---
 
-### 3. Nenhum Worker Ativo
+### 3. No Active Workers
 
-Alerta se contagem de workers cai para zero.
+Triggers when the worker count drops to zero.
 
 ```yaml
       - alert: CeleryNoWorkersActive
@@ -78,20 +106,20 @@ Alerta se contagem de workers cai para zero.
           severity: critical
           component: celery
         annotations:
-          summary: "Nenhum worker Celery ativo"
-          description: "Contagem de workers Celery está em zero. Sistema não processará tarefas assíncronas."
+          summary: "No Celery workers active"
+          description: "Celery worker count is zero. Asynchronous tasks will not execute."
 ```
 
-**Ações recomendadas:**
-- Verificar se containers estão rodando: `docker compose ps`
-- Reiniciar serviços Celery: `docker compose up -d celery beat`
-- Verificar erros de inicialização: `docker compose logs celery`
+Recommended response:
+- Confirm containers: `docker compose ps`
+- Restart services: `docker compose up -d celery beat`
+- Review startup errors: `docker compose logs celery`
 
 ---
 
-### 4. Acúmulo de Tarefas Ativas
+### 4. Active Task Accumulation
 
-Alerta quando muitas tarefas estão em execução simultaneamente (possível indicador de travamento).
+Signals a possible bottleneck when many tasks run concurrently for long periods.
 
 ```yaml
       - alert: CeleryHighActiveTasks
@@ -101,20 +129,20 @@ Alerta quando muitas tarefas estão em execução simultaneamente (possível ind
           severity: warning
           component: celery
         annotations:
-          summary: "Alto número de tarefas ativas no Celery"
-          description: "{{ $value }} tarefas ativas há mais de 10 minutos. Possível gargalo ou travamento."
+          summary: "High number of active Celery tasks"
+          description: "{{ $value }} tasks have been active for more than 10 minutes. Investigate slow or blocked jobs."
 ```
 
-**Ações recomendadas:**
-- Verificar tarefas lentas via `/celery/status`
-- Inspecionar logs para tarefas travadas: `docker compose logs celery | grep ERROR`
-- Considerar aumentar timeout de tarefas (`CELERY_TASK_TIME_LIMIT`)
+Recommended response:
+- Inspect `/celery/status` for slow tasks
+- Search logs for errors: `docker compose logs celery | Select-String "ERROR"`
+- Adjust task time limits (`CELERY_TASK_TIME_LIMIT`)
 
 ---
 
-### 5. Crescimento de Tarefas Agendadas
+### 5. Scheduled Task Backlog
 
-Alerta se backlog de tarefas agendadas cresce rapidamente (indica workers não dando conta).
+Highlights growth in the scheduled queue that might indicate insufficient capacity.
 
 ```yaml
       - alert: CeleryScheduledTasksGrowing
@@ -124,44 +152,44 @@ Alerta se backlog de tarefas agendadas cresce rapidamente (indica workers não d
           severity: warning
           component: celery
         annotations:
-          summary: "Backlog de tarefas agendadas crescendo"
-          description: "Tarefas agendadas crescendo a uma taxa de {{ $value }}/min. Workers podem estar sobrecarregados."
+          summary: "Scheduled task backlog increasing"
+          description: "Scheduled tasks are increasing at {{ $value }} per minute. Workers might be overloaded."
 ```
 
-**Ações recomendadas:**
-- Escalar workers horizontalmente: `docker compose up -d --scale celery=3`
-- Revisar taxa de chegada de tarefas
-- Ajustar prefetch multiplier (`CELERY_WORKER_PREFETCH_MULTIPLIER`)
+Recommended response:
+- Scale workers horizontally: `docker compose up -d --scale celery=3`
+- Review task arrival rate
+- Tweak `CELERY_WORKER_PREFETCH_MULTIPLIER`
 
 ---
 
-## Queries PromQL Úteis
+## Useful PromQL Queries
 
-### Taxa de Disponibilidade (últimas 24h)
+### Availability Rate (Last 24h)
 
 ```promql
 avg_over_time(celery_worker_available[24h]) * 100
 ```
 
-### Latência Média (última hora)
+### Average Latency (Last Hour)
 
 ```promql
 avg_over_time(celery_status_latency_ms[1h])
 ```
 
-### Pico de Tarefas Ativas (últimas 6h)
+### Active Task Peak (Last 6h)
 
 ```promql
 max_over_time(celery_active_tasks[6h])
 ```
 
-### Taxa de Crescimento de Tarefas Reservadas
+### Reserved Task Growth Rate
 
 ```promql
 rate(celery_reserved_tasks[5m])
 ```
 
-### Contagem de Workers Ativos ao Longo do Tempo
+### Worker Count Over Time
 
 ```promql
 celery_worker_count
@@ -169,9 +197,9 @@ celery_worker_count
 
 ---
 
-## Dashboards Grafana
+## Grafana Dashboards
 
-### Painel Básico de Monitoramento
+### Basic Monitoring Panel
 
 ```json
 {
@@ -203,18 +231,33 @@ celery_worker_count
 }
 ```
 
-### Importação Rápida
+### Quick Import Steps
 
-1. Acesse Grafana → Dashboards → Import
-2. Cole o JSON acima ou crie manualmente
-3. Selecione datasource Prometheus
-4. Ajuste intervalos conforme necessário
+1. Grafana -> Dashboards -> Import.
+2. Paste the JSON above or create the panels manually.
+3. Select the Prometheus datasource.
+4. Adjust time ranges as needed.
 
 ---
 
-## Configuração do Alert Manager
+### Zabbix Resilient Client Panel
 
-### Roteamento de Alertas
+Dashboard JSON lives at `doc/reference/grafana/zabbix_resilient_client_dashboard.json`.
+
+Featured panels:
+- p95 latency (`histogram_quantile(0.95, sum(rate(zabbix_request_duration_seconds_bucket[5m])) by (le, method))`)
+- Request volume (`sum(rate(zabbix_requests_total[5m])) by (method, status)`)
+- Current circuit breaker state (`zabbix_circuit_breaker_state`)
+- Recent retries (`increase(zabbix_retry_attempts_total[5m])`)
+- Requests within the last minute (`sum(increase(zabbix_api_calls_total[1m]))`)
+
+Import the JSON to enable the Stage 3 dashboard.
+
+---
+
+## Alertmanager Configuration
+
+### Alert Routing
 
 ```yaml
 # alertmanager.yml
@@ -246,34 +289,35 @@ receivers:
 
 ---
 
-## Integração com CI/CD
+## CI/CD Integration
 
-### Validação Pré-Deploy
+### Pre-Deploy Validation
 
-Antes de fazer deploy, valide se métricas estão operacionais:
+Check whether metrics are present before deployment:
 
-```bash
-#!/bin/bash
-# scripts/validate_metrics.sh
+```powershell
+# scripts/validate_metrics.ps1
 
-METRICS_URL="http://localhost:8000/metrics"
-REQUIRED_METRICS=(
-  "celery_worker_available"
-  "celery_status_latency_ms"
+$MetricsUrl = "http://localhost:8000/metrics"
+$RequiredMetrics = @(
+  "celery_worker_available",
+  "celery_status_latency_ms",
   "celery_worker_count"
 )
 
-for metric in "${REQUIRED_METRICS[@]}"; do
-  if ! curl -s "$METRICS_URL" | grep -q "$metric"; then
-    echo "❌ Métrica ausente: $metric"
-    exit 1
-  fi
-done
+$metricsContent = (Invoke-WebRequest -Uri $MetricsUrl -UseBasicParsing).Content
 
-echo "✅ Todas as métricas Celery presentes"
+foreach ($metric in $RequiredMetrics) {
+  if (-not $metricsContent.Contains($metric)) {
+    Write-Host "Metric missing: $metric" -ForegroundColor Red
+    exit 1
+  }
+}
+
+Write-Host "All Celery metrics detected" -ForegroundColor Green
 ```
 
-### Health Check Kubernetes
+### Kubernetes Health Checks
 
 ```yaml
 # k8s/deployment.yml
@@ -305,52 +349,46 @@ spec:
 
 ## Troubleshooting
 
-### Métricas Não Atualizando
+### Metrics Not Updating
 
-**Sintoma:** Valores congelados ou ausentes.
+**Symptom:** Values look stale or missing.
 
-**Verificação:**
-```bash
-# Validar se task periódica está rodando
+**Checks:**
+```powershell
 docker compose exec celery celery -A core inspect scheduled
-
-# Verificar logs do beat
-docker compose logs beat --tail=50 | grep update_celery_metrics_task
+docker compose logs beat --tail=50 | Select-String "update_celery_metrics_task"
 ```
 
-**Solução:**
-```bash
-# Reiniciar beat
+**Resolution:**
+```powershell
 docker compose restart beat
-
-# Validar variável de ambiente
 docker compose exec web python -c "import os; print(os.getenv('CELERY_METRICS_ENABLED', 'true'))"
 ```
 
 ---
 
-### Alertas Falsos Positivos
+### Frequent False Positives
 
-**Sintoma:** Alertas disparando frequentemente sem causa real.
+**Symptom:** Alerts fire often without real incidents.
 
-**Ajustes:**
-- Aumentar `for` duration nas regras (de 3m para 5m)
-- Ajustar thresholds (ex.: latência de 5s para 8s)
-- Revisar timeouts no endpoint (`CELERY_STATUS_TIMEOUT`)
-
----
-
-## Boas Práticas
-
-1. **Ambientes separados**: Use labels Prometheus para diferenciar `environment=prod` vs `environment=staging`
-2. **Retention**: Configure retenção de métricas (mínimo 30 dias para análise de tendências)
-3. **Agregação**: Use `sum()`, `avg()`, `max()` em queries para múltiplos workers
-4. **Runbooks**: Documente procedimentos de resposta para cada alerta
-5. **Testes**: Simule falhas (parar workers) para validar alertas antes de produção
+**Adjustments:**
+- Increase the `for` duration (for example from 3m to 5m).
+- Raise thresholds (for example, latency from 5s to 8s).
+- Review endpoint timeouts (`CELERY_STATUS_TIMEOUT`).
 
 ---
 
-## Referências
+## Best Practices
+
+1. **Separate environments**: apply Prometheus labels such as `environment=prod` vs `environment=staging`.
+2. **Retention planning**: keep at least 30 days of metrics to analyse trends and regressions.
+3. **Aggregation**: rely on functions such as `sum()`, `avg()`, and `max()` when querying multiple workers.
+4. **Runbooks**: document response steps for each alert so on-call engineers can react quickly.
+5. **Testing**: simulate failures (for example stopping workers) to validate alert rules before production rollout.
+
+---
+
+## References
 
 - [Prometheus Alerting](https://prometheus.io/./alerting/latest/overview/)
 - [Alert Manager Configuration](https://prometheus.io/./alerting/latest/configuration/)
@@ -359,5 +397,5 @@ docker compose exec web python -c "import os; print(os.getenv('CELERY_METRICS_EN
 
 ---
 
-**Última atualização:** 26 de outubro de 2025  
-**Autor:** Sistema de desenvolvimento automatizado
+**Last updated:** 26 October 2025  
+**Author:** Automated development system

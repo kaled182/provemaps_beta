@@ -1,222 +1,217 @@
-# 🐳 Guia de Implantação com Docker — MapsProveFiber
+# Docker Deployment Guide - MapsProveFiber
 
-Este tutorial foi criado para quem tem pouca familiaridade com Docker e deseja subir rapidamente o ambiente completo do **MapsProveFiber** com segurança.
-
----
-
-## 🧱 Estrutura dos Containers
-
-A pilha Docker é composta pelos seguintes serviços:
-
-| Serviço | Função |
-|----------|--------|
-| **web** | Django + Gunicorn + Uvicorn (porta 8000) |
-| **celery** | Worker Celery (tarefas assíncronas) |
-| **beat** | Agendador Celery |
-| **redis** | Cache e broker de mensagens |
-| **db** | Banco de dados MariaDB |
-
-O script `docker-entrypoint.sh` é responsável por:
-- Aguardar o banco e o Redis ficarem disponíveis  
-- Rodar migrações automaticamente  
-- Coletar arquivos estáticos  
-- Iniciar o servidor web  
+This tutorial targets new Docker users who need to start the full **MapsProveFiber** stack quickly and safely.
 
 ---
 
-## 🚀 1. Preparação do Ambiente
+## Container Stack Overview
 
-### Instale Docker e Docker Compose
+The Docker Compose stack defines these services:
+
+| Service | Purpose |
+|---------|---------|
+| **web** | Django with Gunicorn and Uvicorn (port 8000) |
+| **celery** | Celery worker for async tasks |
+| **beat** | Celery beat scheduler |
+| **redis** | Cache and message broker |
+| **db** | MariaDB database |
+
+The `docker-entrypoint.sh` script handles:
+- Waiting for MariaDB and Redis to become healthy
+- Running database migrations
+- Collecting static files
+- Starting the web server
+
+---
+
+## 1. Environment Preparation
+
+### Install Docker and Docker Compose
 ```bash
 sudo apt install docker.io docker-compose-plugin
 ```
 
-Verifique as versões:
+Check the installed versions:
 ```bash
 docker --version
 docker compose version
 ```
 
-### Clone o repositório
+### Clone the repository
 ```bash
 git clone https://github.com/kaled182/provemaps_beta.git
-cd mapsprovefiber
+cd provemaps_beta
 ```
 
-### Configure o arquivo `.env`
-Copie o exemplo e ajuste as variáveis básicas:
+### Configure the `.env` file
+Copy the example file and adjust the baseline variables:
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-Exemplo de valores mínimos:
+Minimal values:
 ```env
 DB_HOST=db
 DB_USER=app
 DB_PASSWORD=app
 REDIS_URL=redis://redis:6379/1
 DJANGO_SETTINGS_MODULE=settings.dev
-# Rotação automática de tokens de serviço (segundos)
+# Automatic service account token rotation interval (seconds)
 SERVICE_ACCOUNT_ROTATION_INTERVAL_SECONDS=3600
-# Timeouts opcionais de webhook (segundos)
+# Optional webhook timeouts (seconds)
 SERVICE_ACCOUNT_WEBHOOK_CONNECT_TIMEOUT=3
 SERVICE_ACCOUNT_WEBHOOK_READ_TIMEOUT=5
 ```
 
-Esses parâmetros habilitam a rotação automática das contas de serviço. Ajuste o
-intervalo conforme a política interna e configure o webhook para receber os
-eventos `service_account.rotation_warning` e `service_account.token_rotated`.
+These values enable automatic service account rotation. Adjust the interval per internal policy and configure the webhook to receive `service_account.rotation_warning` and `service_account.token_rotated` events.
 
 ---
 
-## ⚙️ 2. Subir o Ambiente Completo
+## 2. Start the Full Stack
 
-### Build e inicialização
+### Build and launch
 ```bash
 docker compose up -d --build
 ```
 
-Isso:
-- Gera as imagens do Django e Celery  
-- Cria os volumes persistentes (MariaDB, Redis)  
-- Inicia todos os containers necessários
+This command:
+- Builds the Django and Celery images
+- Creates persistent volumes for MariaDB and Redis
+- Starts every required container
 
-Verifique o status:
+Check container status:
 ```bash
 docker compose ps
 docker compose logs -f web
 ```
 
-Acesse o sistema:  
-👉 **http://localhost:8000**
+Open the app at **http://localhost:8000**.
 
 ---
 
-## 🧭 3. Inicialização Manual (primeira execução)
+## 3. Manual Bootstrapping (first run)
 
-> ℹ️ **Nota:** O superuser padrão (`admin`/`admin123`) é criado automaticamente com `INIT_ENSURE_SUPERUSER=true` no docker-compose.
+Note: the default superuser (`admin`/`admin123`) is created automatically when `INIT_ENSURE_SUPERUSER=true` is set in the compose file.
 
-Se precisar executar comandos manualmente:
+Run manual commands if needed:
 ```bash
-# Aplicar migrações (já executado automaticamente)
+# Apply migrations (already handled automatically)
 docker compose exec web python manage.py migrate
 
-# Criar superuser customizado (opcional)
+# Create a custom superuser (optional)
 docker compose exec web python manage.py createsuperuser
 
-# Collectstatic (já executado automaticamente)
+# Collect static assets (already handled automatically)
 docker compose exec web python manage.py collectstatic --noinput
 ```
 
 ---
 
-## ⚙️ 4. Subida Automática (com script)
+## 4. Automatic Deployment Script
 
-Use o **orquestrador de deploy** incluído no projeto:  
-`scripts/deploy.sh`
+Use the bundled deployment orchestrator `scripts/deploy.sh`:
 
 ```bash
 chmod +x scripts/deploy.sh
 ./scripts/deploy.sh --compose docker-compose.yml --settings settings.prod --health http://localhost:8000/healthz
 ```
 
-O script executa automaticamente:
+The script performs:
 1. `docker compose build --pull`
 2. `docker compose up -d db redis`
-3. Migrações + collectstatic
-4. Subida dos serviços (`web`, `celery`, `beat`)
-5. Verificação de `/healthz`
-6. Rollback automático em caso de falha
+3. Database migrations and static collection
+4. Bring up `web`, `celery`, and `beat`
+5. Check `/healthz`
+6. Roll back automatically on failure
 
 ---
 
-## 🧪 5. Dicas para Iniciantes
+## 5. Common Commands
 
-| Ação | Comando |
+| Action | Command |
 |------|----------|
-| Ver logs de um serviço | `docker compose logs -f web` |
-| Reiniciar o app | `docker compose restart web` |
-| Parar tudo | `docker compose down` |
-| Limpar volumes | `docker compose down -v` |
-| Acessar o shell Django | `docker compose exec web python manage.py shell` |
+| Follow service logs | `docker compose logs -f web` |
+| Restart the web app | `docker compose restart web` |
+| Stop every container | `docker compose down` |
+| Remove volumes | `docker compose down -v` |
+| Open Django shell | `docker compose exec web python manage.py shell` |
 
 ---
 
-## 💻 6. Modo Desenvolvimento (Hot Reload)
+## 6. Development Mode (hot reload)
 
-Para que o código local recarregue automaticamente:
+To reload local code automatically:
 
-1. No `docker-compose.yml`, descomente:
+1. In `docker-compose.yml`, uncomment:
    ```yaml
    volumes:
      - .:/app
      - ./logs:/app/logs
    ```
 
-2. Inicie o container de desenvolvimento:
+2. Start the development container:
    ```bash
    docker compose up -d web
    ```
 
-3. As alterações no código serão refletidas imediatamente.
+3. Code changes now propagate instantly.
 
 ---
 
-## 🧰 7. Solução de Problemas
+## 7. Troubleshooting
 
-| Sintoma | Solução |
+| Symptom | Fix |
 |----------|----------|
-| Web não sobe | Verifique `docker compose logs web` |
-| Erro de banco | Execute `docker compose exec web python manage.py migrate` |
-| Healthcheck falha | Confirme as variáveis do `.env` |
-| Redis inativo | Reinicie com `docker compose restart redis` |
+| Web service is down | Check `docker compose logs web` |
+| Database errors | Run `docker compose exec web python manage.py migrate` |
+| Health check failing | Double check `.env` variables |
+| Redis unavailable | Restart with `docker compose restart redis` |
 
 ---
 
-## 🔄 8. Atualizações e Rollbacks
+## 8. Updates and Rollbacks
 
-Atualize o ambiente:
+To update the deployment:
 ```bash
 git pull
 docker compose build
 docker compose up -d
 ```
 
-Se algo der errado:
+If you need to revert:
 ```bash
 docker compose down
-git checkout <commit-anterior>
+git checkout <previous-commit>
 docker compose up -d
 ```
 
 ---
 
-## 🧩 9. Estrutura de Diretórios Relevante
+## 9. Relevant Directory Structure
 
 ```
-mapsprovefiber/
-├── core/                    # Núcleo Django
-├── routes_builder/          # Módulo Fiber Route Builder
-├── zabbix_api/              # Integração Zabbix
-├── setup_app/               # Configuração inicial via painel
-├── docker-compose.yml       # Stack de containers
-├── Dockerfile               # Imagem base
-├── docker-entrypoint.sh     # Entrypoint
-├── scripts/deploy.sh        # Script de deploy automatizado
-└── README.md                # Guia principal
+provemaps_beta/
+|- core/                    # Django project core
+|- routes_builder/          # Fiber Route Builder frontend
+|- zabbix_api/              # Zabbix integration layer
+|- setup_app/               # Initial setup via UI
+|- docker-compose.yml       # Container stack definition
+|- Dockerfile               # Base image recipe
+|- docker-entrypoint.sh     # Docker entrypoint script
+|- scripts/deploy.sh        # Automated deployment script
+`- README.md                # Main project guide
 ```
 
 ---
 
-## 🎯 Conclusão
+## Conclusion
 
-Você agora consegue subir o ambiente completo com um único comando, mesmo sem experiência com Docker.
+You can now bootstrap the entire environment with a single command, even if Docker is new to you.
 
-Para monitorar logs e métricas:
-- Django: `/admin/logs/`
-- Prometheus: `/metrics/`
-- Healthcheck: `/healthz`
+Monitor logs and metrics here:
+- Django admin logs: `/admin/logs/`
+- Prometheus metrics: `/metrics/`
+- Health check endpoint: `/healthz`
 
-🧡 Projeto mantido por **Simples Internet**.  
-Para dúvidas ou sugestões, consulte o guia [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+Project maintained by **Simples Internet**. For questions or contributions, review `CONTRIBUTING.md`.

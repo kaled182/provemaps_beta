@@ -1,4 +1,4 @@
-# Script PowerShell para atualizar imports de zabbix_api.models para inventory.models
+# PowerShell script to update imports from zabbix_api.models to inventory.models
 
 $files = @(
     "tests\test_inventory_endpoints.py",
@@ -12,7 +12,7 @@ $files = @(
 foreach ($file in $files) {
     $filePath = "d:\Gemini\Provemaps_GPT-Tier2\mapsprovefiber\$file"
     if (Test-Path $filePath) {
-        Write-Host "Atualizando: $file" -ForegroundColor Cyan
+    Write-Host "Updating: $file" -ForegroundColor Cyan
         
         $content = Get-Content $filePath -Raw
         
@@ -21,10 +21,10 @@ foreach ($file in $files) {
         
         Set-Content -Path $filePath -Value $content -NoNewline
         
-        Write-Host "✓ Concluído: $file" -ForegroundColor Green
+        Write-Host "OK: Completed $file" -ForegroundColor Green
     } else {
-        Write-Host "✗ Arquivo não encontrado: $file" -ForegroundColor Red
+        Write-Host "ERROR: File not found $file" -ForegroundColor Red
     }
 }
 
-Write-Host "`nTodos os imports atualizados!" -ForegroundColor Yellow
+Write-Host "`nAll imports updated!" -ForegroundColor Yellow

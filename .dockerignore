@@ -1,8 +1,8 @@
 # ====================================================
-# 🐳 Docker Build Context Exclusions
+# Docker Build Context Exclusions
 # ====================================================
-# Prevent local configuration and development files from
-# being copied into Docker images
+# Keep local configuration and development artifacts out of
+# Docker image builds to ensure reproducible deployments.
 # ====================================================
 
 # ----------------------------------------------------
@@ -13,7 +13,7 @@
 .gitattributes
 
 # ----------------------------------------------------
-# Docker
+# Docker Tooling
 # ----------------------------------------------------
 .dockerignore
 docker-compose*.yml
@@ -66,12 +66,11 @@ Thumbs.db
 desktop.ini
 
 # ----------------------------------------------------
-# Local Environment Files (CRITICAL)
+# Local Environment Files (critical)
 # ----------------------------------------------------
-# These contain host-specific settings that should NOT
-# be used inside containers. Docker Compose will provide
-# the correct environment variables via the 'environment'
-# section in docker-compose.yml
+# Host-specific settings should stay outside containers.
+# Docker Compose populates the correct variables via the
+# environment section in compose files.
 .env
 .env.*
 !.env.example
@@ -88,7 +87,7 @@ logs/
 # ----------------------------------------------------
 # Media and Static Files
 # ----------------------------------------------------
-# These are generated/collected at runtime or build time
+# Generated during runtime or build; avoid bundling cached output.
 media/
 staticfiles/
 node_modules/

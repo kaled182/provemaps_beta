@@ -1,69 +1,69 @@
 """
-Pacote de configuração unificado do projeto mapsprovefiber.
-Permite importar `settings.dev` ou `settings.prod` conforme o ambiente.
+Unified configuration package for mapsprovefiber.
+
+Provides helpers to import environment modules like ``settings.dev`` or
+``settings.prod`` automatically.
 """
 
 import os
 import sys
+from typing import TYPE_CHECKING, Any, Dict
 
 # -----------------------------------------------------
-# Configuração de Ambiente com Validação
+# Environment configuration with validation
 # -----------------------------------------------------
 
 
-def setup_environment():
-    """
-    Configura o ambiente Django com fallbacks seguros.
-    Retorna o nome do módulo de settings a ser usado.
-    """
+def setup_environment() -> str:
+    """Configure Django with safe fallbacks and return the settings module."""
     env_settings = os.getenv("DJANGO_SETTINGS_MODULE", "").strip()
 
-    # Se não especificado, tenta determinar pelo contexto
+    # If not specified, determine from context
     if not env_settings:
         if os.getenv("DEBUG", "").lower() == "true":
             env_settings = "settings.dev"
         elif os.getenv("PRODUCTION", "").lower() == "true":
             env_settings = "settings.prod"
         else:
-            # Fallback baseado em convenções comuns
+            # Fallback based on common conventions
             argv = " ".join(sys.argv)
             if "pytest" in argv:
                 env_settings = "settings.test"
             elif "runserver" in argv or "shell" in argv:
                 env_settings = "settings.dev"
             else:
-                env_settings = "settings.dev"  # Default seguro
+                env_settings = "settings.dev"  # Safe default
 
-    # Normaliza o formato
+    # Normalize module format
     if env_settings and not env_settings.startswith("settings."):
         env_settings = f"settings.{env_settings}"
 
-    # Valida que o módulo existe (exceto base)
+    # Validate that the module exists (except base)
     if env_settings and env_settings != "settings.base":
         try:
             __import__(env_settings)
         except ImportError as e:
-            print(f"⚠️  AVISO: Não foi possível importar {env_settings}: {e}")
-            print("📁 Usando settings.dev como fallback")
+            print(f"⚠️  Warning: failed to import {env_settings}: {e}")
+            print("📁 Falling back to settings.dev")
             env_settings = "settings.dev"
 
-    # Define no ambiente
+    # Update environment variable
     if env_settings:
         os.environ.setdefault("DJANGO_SETTINGS_MODULE", env_settings)
 
     return env_settings
 
 
-# Executa a configuração
+# Execute setup
 current_settings = setup_environment()
 
 # -----------------------------------------------------
-# Utilitários para Debug
+# Debug helpers
 # -----------------------------------------------------
 
 
-def get_settings_info():
-    """Retorna informações sobre as settings atuais para debug."""
+def get_settings_info() -> Dict[str, Any]:
+    """Return metadata about the current settings for debugging purposes."""
     env = "production" if current_settings.endswith(".prod") else (
         "test" if current_settings.endswith(".test") else "development"
     )
@@ -76,10 +76,9 @@ def get_settings_info():
 
 
 # -----------------------------------------------------
-# Importação Condicional para Type Checkers / IDE
+# Conditional imports for IDEs and type checkers (never run at runtime)
 # -----------------------------------------------------
-# Isso ajuda IDEs e type checkers a entenderem a estrutura (nunca executa em runtime)
-if False:  # pragma: no cover
-    from .base import *  # type: ignore
-    from .dev import *  # type: ignore
-    from .prod import *  # type: ignore
+if TYPE_CHECKING:  # pragma: no cover
+    from .base import *  # noqa: F401,F403
+    from .dev import *  # noqa: F401,F403
+    from .prod import *  # noqa: F401,F403

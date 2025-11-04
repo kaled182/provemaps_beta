@@ -1,17 +1,18 @@
 # tests/test_setup_docs_views.py
-from unittest.mock import patch
+from typing import Any, Dict
+from unittest.mock import Mock, patch
 from django.test import TestCase
 from django.urls import reverse, resolve
 
 
 class DocsViewsSmokeTests(TestCase):
     def setUp(self):
-        # Dicionário que a index usa para montar os cards
-        self.sample_docs = {
+        # Dictionary used by the index view to render cards
+        self.sample_docs: Dict[str, Dict[str, Any]] = {
             "developer/README.md": {
-                "title": "Guia Principal",
-                "summary": "Introdução e visão geral do projeto.",
-                "category": "guia",
+                "title": "Main Guide",
+                "summary": "Project introduction and overview.",
+                "category": "guide",
                 "tags": ["intro", "deploy"],
                 "size_kb": 42,
                 "modified_at": "2025-01-01T12:34:56Z",
@@ -22,8 +23,8 @@ class DocsViewsSmokeTests(TestCase):
                 "views": 10,
             },
             "reference-root/API_DOCUMENTATION.md": {
-                "title": "API — Zabbix e Integrações",
-                "summary": "Referência das rotas e contratos.",
+                "title": "API - Zabbix and Integrations",
+                "summary": "Reference for routes and contracts.",
                 "category": "api",
                 "tags": ["api", "zabbix"],
                 "size_kb": 88,
@@ -37,7 +38,7 @@ class DocsViewsSmokeTests(TestCase):
         }
 
     def test_urls_resolve(self):
-        """Confirma que as rotas nomeadas existem no URLConf."""
+        """Ensure the named routes exist in the URLConf."""
         idx = reverse("setup_app:docs_index")
         view = reverse(
             "setup_app:docs_view",
@@ -47,24 +48,24 @@ class DocsViewsSmokeTests(TestCase):
         self.assertIsNotNone(resolve(view))
 
     @patch("setup_app.views_docs.get_available_docs")
-    def test_docs_index_renders(self, mock_get_docs):
-        """A página /docs/ renderiza com os cards e ferramentas."""
+    def test_docs_index_renders(self, mock_get_docs: Mock) -> None:
+        """The /docs/ page renders cards and helper widgets."""
         mock_get_docs.return_value = self.sample_docs
 
         url = reverse("setup_app:docs_index")
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
 
-        # Cabeçalho e elementos de UI
-        self.assertContains(resp, "Documentação")
+        # Header and UI controls
+        self.assertContains(resp, "Documentation")
         self.assertContains(resp, 'id="doc-search"')
         self.assertContains(resp, 'id="filter-category"')
         self.assertContains(resp, 'id="doc-list"')
 
-        # Cards (títulos e links)
-        self.assertContains(resp, "Guia Principal")
-        self.assertContains(resp, "API — Zabbix e Integrações")
-        # Link para abrir o documento
+        # Cards (titles and links)
+        self.assertContains(resp, "Main Guide")
+        self.assertContains(resp, "API - Zabbix and Integrations")
+        # Link used to open the document
         self.assertContains(
             resp,
             reverse(
@@ -77,18 +78,18 @@ class DocsViewsSmokeTests(TestCase):
     @patch("setup_app.views_docs.load_markdown_file")
     def test_docs_view_renders_content_and_toc(
         self,
-        mock_load_md,
-        mock_get_docs,
-    ):
-        """A página /docs/<filename>/ renderiza o HTML e exibe o TOC/JS."""
+        mock_load_md: Mock,
+        mock_get_docs: Mock,
+    ) -> None:
+        """``/docs/<filename>/`` renders HTML and exposes the TOC/JS."""
         mock_get_docs.return_value = self.sample_docs
         mock_load_md.return_value = """
-            <h1>Guia Principal</h1>
-            <p>Conteúdo de exemplo.</p>
-            <h2>Seção A</h2>
-            <p>Detalhes A</p>
-            <h2>Seção B</h2>
-            <p>Detalhes B</p>
+            <h1>Main Guide</h1>
+            <p>Sample content.</p>
+            <h2>Section A</h2>
+            <p>Details A</p>
+            <h2>Section B</h2>
+            <p>Details B</p>
         """
 
         url = reverse(
@@ -98,29 +99,29 @@ class DocsViewsSmokeTests(TestCase):
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
 
-        # Título e conteúdo
-        self.assertContains(resp, "Guia Principal")
-        self.assertContains(resp, "Conteúdo de exemplo")
+        # Title and content
+        self.assertContains(resp, "Main Guide")
+        self.assertContains(resp, "Sample content")
 
-        # Sidebar/TOC e elementos auxiliares
+        # Sidebar/TOC and auxiliary elements
         self.assertContains(resp, 'id="toc"')
         self.assertContains(resp, 'id="doc-article"')
         self.assertContains(resp, 'id="doc-search"')
-        self.assertContains(resp, "Voltar para lista de documentos")
+        self.assertContains(resp, "<- Back to document list")
 
     @patch("setup_app.views_docs.get_available_docs")
     @patch("setup_app.views_docs.load_markdown_file")
     def test_docs_view_handles_missing_file(
         self,
-        mock_load_md,
-        mock_get_docs,
-    ):
-        """A view exibe alerta amigável quando o arquivo está ausente."""
+        mock_load_md: Mock,
+        mock_get_docs: Mock,
+    ) -> None:
+        """The view shows a friendly alert when the file is missing."""
         mock_get_docs.return_value = self.sample_docs
-        # Simula retorno do loader para arquivo ausente
+        # Simulate loader response for a missing file
         mock_load_md.return_value = """
             <div class="alert alert-warning" role="alert">
-                <strong>📄 Arquivo não encontrado:</strong>
+                <strong>File not found:</strong>
             </div>
         """
 
@@ -130,15 +131,15 @@ class DocsViewsSmokeTests(TestCase):
         )
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "Arquivo não encontrado")
+        self.assertContains(resp, "File not found")
 
     @patch("setup_app.views_docs.get_available_docs")
-    def test_docs_index_empty_state(self, mock_get_docs):
-        """Quando não há documentos, exibe estado vazio informativo."""
+    def test_docs_index_empty_state(self, mock_get_docs: Mock) -> None:
+        """When no documents exist we render an informative empty state."""
         mock_get_docs.return_value = {}
 
         url = reverse("setup_app:docs_index")
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "Nenhum documento encontrado")
+        self.assertContains(resp, "No documents were found")
         self.assertContains(resp, "/docs")

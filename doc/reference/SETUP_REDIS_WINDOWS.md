@@ -1,154 +1,157 @@
-# 🚀 Setup Redis + Serviços no Windows
+# 🚀 Setting Up Redis + Services on Windows
 
-## 📋 Pré-requisitos
+## 📋 Prerequisites
 
 - Windows 10/11
-- Python 3.13 já instalado ✅
-- Django rodando ✅
+- Python 3.13 already installed ✅
+- Django running ✅
 
 ---
 
-## 🔴 Opção 1: Redis via Docker (Recomendado)
+## 🔴 Option 1: Redis via Docker (Recommended)
 
-### Vantagens
-- ✅ Instalação mais rápida
-- ✅ Isolado do sistema
-- ✅ Fácil de remover
-- ✅ Mesma versão que produção
+### Advantages
+- ✅ Fastest install path
+- ✅ Isolated from the host OS
+- ✅ Easy to remove
+- ✅ Matches the production version
 
-### Instalação
+### Installation
 
-#### 1. Instalar Docker Desktop
+#### 1. Install Docker Desktop
 ```powershell
-# Baixe e instale do site oficial:
+# Download and install from the official site:
 # https://www.docker.com/products/docker-desktop/
 
-# Ou use winget (Windows Package Manager)
+# Or use winget (Windows Package Manager)
 winget install Docker.DockerDesktop
 ```
 
-#### 2. Iniciar Docker Desktop
-- Abra o Docker Desktop após instalação
-- Aguarde inicializar (ícone fica verde)
+#### 2. Launch Docker Desktop
+- Open Docker Desktop after installation
+- Wait for it to finish initializing (icon turns green)
 
-#### 3. Rodar Redis
+#### 3. Run Redis
 ```powershell
-# Redis standalone
-docker run -d --name redis-mapspro -p 6379:6379 redis:alpine
+# Inside the project folder
+cd D:\provemaps_beta
 
-# Verificar se está rodando
-docker ps
+# Start only the Redis service using docker compose
+docker compose up -d redis
+
+# Check status
+docker compose ps redis
 
 # Logs
-docker logs redis-mapspro
+docker compose logs redis --tail 50
 
-# Parar
-docker stop redis-mapspro
+# Stop
+docker compose stop redis
 
-# Iniciar novamente
-docker start redis-mapspro
+# Start again
+docker compose start redis
 
-# Remover (se necessário)
-docker rm -f redis-mapspro
+# Remove (if needed)
+docker compose rm -f redis
 ```
 
 ---
 
-## 🔴 Opção 2: Redis Nativo no Windows
+## 🔴 Option 2: Native Redis on Windows
 
-### Vantagens
-- ✅ Sem necessidade de Docker
-- ✅ Startup automático possível
+### Advantages
+- ✅ No Docker requirement
+- ✅ Can configure automatic startup
 
-### Desvantagens
-- ⚠️ Redis oficial não suporta Windows
-- ⚠️ Usa port não-oficial da Microsoft (descontinuado)
+### Disadvantages
+- ⚠️ Redis does not officially support Windows
+- ⚠️ Relies on Microsoft's unofficial port (now discontinued)
 
-### Instalação
+### Installation
 
 #### Via Chocolatey
 ```powershell
-# Instalar Chocolatey (se ainda não tem)
+# Install Chocolatey (if you do not have it yet)
 Set-ExecutionPolicy Bypass -Scope Process -Force
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
 iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
 
-# Instalar Redis
+# Install Redis
 choco install redis-64 -y
 
-# Iniciar serviço
+# Start the service
 redis-server --service-start
 
-# Verificar status
+# Check status
 redis-cli ping
-# Deve retornar: PONG
+# Should return: PONG
 ```
 
-#### Via Download Manual
+#### Via manual download
 ```powershell
-# 1. Baixar de: https://github.com/tporadowski/redis/releases
-# 2. Extrair para C:\Redis
-# 3. Adicionar ao PATH
+# 1. Download from: https://github.com/tporadowski/redis/releases
+# 2. Extract to C:\Redis
+# 3. Add it to the PATH
 
-# Iniciar Redis
+# Start Redis
 cd C:\Redis
 redis-server.exe
 
-# Em outro terminal, testar
+# In another terminal, test
 redis-cli ping
 ```
 
 ---
 
-## 🔴 Opção 3: Redis via WSL2 (Windows Subsystem for Linux)
+## 🔴 Option 3: Redis via WSL2 (Windows Subsystem for Linux)
 
-### Vantagens
-- ✅ Redis oficial/nativo Linux
-- ✅ Performance melhor que Docker Desktop
-- ✅ Mais leve
+### Advantages
+- ✅ Official Linux Redis
+- ✅ Better performance than Docker Desktop
+- ✅ Lighter footprint
 
-### Instalação
+### Installation
 
 ```powershell
-# 1. Instalar WSL2
+# 1. Install WSL2
 wsl --install
 
-# 2. Reiniciar o computador
+# 2. Reboot the computer
 
-# 3. Abrir Ubuntu WSL
+# 3. Open Ubuntu WSL
 wsl
 
-# 4. Dentro do WSL, instalar Redis
+# 4. Inside WSL, install Redis
 sudo apt update
 sudo apt install redis-server -y
 
-# 5. Iniciar Redis
+# 5. Start Redis
 sudo service redis-server start
 
-# 6. Verificar
+# 6. Verify
 redis-cli ping
-# Deve retornar: PONG
+# Should return: PONG
 
-# 7. Voltar ao Windows
+# 7. Return to Windows
 exit
 ```
 
 ---
 
-## ✅ Verificar Instalação
+## ✅ Verify Installation
 
-### Teste de Conexão Python
+### Python connection test
 ```powershell
-# No diretório do projeto
+# Inside the project directory
 python -c "import redis; r = redis.Redis(host='localhost', port=6379); print('✅ Redis conectado!', r.ping())"
 ```
 
-Deve exibir:
+Expected output:
 ```
 ✅ Redis conectado! True
 ```
 
-### Teste via Django
+### Django cache test
 ```powershell
 python manage.py shell
 ```
@@ -156,193 +159,200 @@ python manage.py shell
 ```python
 from django.core.cache import cache
 
-# Testar set
+# Set
 cache.set('test_key', 'Hello Redis!', 30)
 
-# Testar get
-print(cache.get('test_key'))  # Deve exibir: Hello Redis!
+# Get
+print(cache.get('test_key'))  # Should print: Hello Redis!
 
-# Limpar
+# Clean up
 cache.delete('test_key')
 exit()
 ```
 
 ---
 
-## 🔧 Configuração do Projeto
+## 🔧 Project Configuration
 
-### 1. Atualizar .env
+### 1. Update `.env`
 ```bash
-# Adicione ou descomente:
+# Add or uncomment:
 REDIS_URL=redis://localhost:6379/0
 
-# Para WSL2 ou Docker com rede específica, use o IP adequado
+# For WSL2 or Docker with a specific network, use the proper IP
 # REDIS_URL=redis://172.x.x.x:6379/0
 ```
 
-### 2. Reiniciar Servidor Django
+### 2. Restart the Django server
 ```powershell
-# CTRL+C no terminal do servidor
+# CTRL+C in the server terminal
 python manage.py runserver 0.0.0.0:8000
 ```
 
-### 3. Verificar Logs
-Agora você **não** deve ver mais:
+### 3. Check logs
+You should **no longer** see:
 ```
-[DEBUG] Cache offline (Redis indisponível)
+[DEBUG] Cache offline (Redis unavailable)
 ```
 
-Deve ver cache funcionando normalmente (sem logs, pois está operacional).
+Instead, caching should work normally (no debug messages when healthy).
 
 ---
 
-## 🎯 Serviços Adicionais
+## 🎯 Additional Services
 
-### Celery Worker (Tarefas Assíncronas)
+### Celery worker (asynchronous tasks)
 
 ```powershell
-# Terminal separado - Worker
+# Separate terminal – worker
 celery -A core worker -l info --pool=solo
 
-# Pool=solo é necessário no Windows (threads não funcionam bem)
+# pool=solo is required on Windows (threads are unreliable)
 ```
 
-### Celery Beat (Tarefas Agendadas)
+### Celery Beat (scheduled tasks)
 
 ```powershell
-# Terminal separado - Beat
+# Separate terminal – beat
 celery -A core beat -l info
 ```
 
-### Todos os Serviços Juntos
+### All services together
 
-**Terminal 1 - Django:**
+**Terminal 1 – Django:**
 ```powershell
 python manage.py runserver 0.0.0.0:8000
 ```
 
-**Terminal 2 - Celery Worker:**
+**Terminal 2 – Celery worker:**
 ```powershell
 celery -A core worker -l info --pool=solo
 ```
 
-**Terminal 3 - Celery Beat:**
+**Terminal 3 – Celery Beat:**
 ```powershell
 celery -A core beat -l info
 ```
 
-**Terminal 4 - Redis (se não for serviço):**
+**Terminal 4 – Redis (if not already running):**
 ```powershell
-redis-server
-# Ou docker start redis-mapspro
+docker compose up -d redis
 ```
 
 ---
 
 ## 🐛 Troubleshooting
 
-### Redis não conecta
+### Redis will not connect
 
-**Erro:** `ConnectionRefusedError: [WinError 10061]`
+**Error:** `ConnectionRefusedError: [WinError 10061]`
 
-**Solução:**
+**Fix:**
 ```powershell
-# Verificar se Redis está rodando
+# Check that Redis is running
 redis-cli ping
 
-# Se não responder:
-# Docker: docker start redis-mapspro
-# Nativo: redis-server --service-start
+# If it does not respond:
+# Docker compose: docker compose start redis
+# Native: redis-server --service-start
 # WSL2: wsl -d Ubuntu -e sudo service redis-server start
 ```
 
-### Celery não inicia no Windows
+### Celery refuses to start on Windows
 
-**Erro:** `AttributeError: 'module' object has no attribute 'Poll'`
+**Error:** `AttributeError: 'module' object has no attribute 'Poll'`
 
-**Solução:**
+**Fix:**
 ```powershell
-# SEMPRE use --pool=solo no Windows
+# ALWAYS use --pool=solo on Windows
 celery -A core worker -l info --pool=solo
 ```
 
-### Porta 6379 já em uso
+### Port 6379 already in use
 
 ```powershell
-# Ver qual processo está usando
+# Discover which process is using the port
 netstat -ano | findstr :6379
 
-# Matar processo (substitua PID)
-taskkill /PID <número> /F
+# Kill the process (replace PID)
+taskkill /PID <number> /F
 
-# Ou usar outra porta no .env
+# Or use another port in `.env`
 # REDIS_URL=redis://localhost:6380/0
 ```
 
-### Redis perde dados ao reiniciar
+### Redis loses data after restart
 
 ```powershell
-# Habilitar persistência (Docker)
-docker run -d --name redis-mapspro -p 6379:6379 -v redis-data:/data redis:alpine redis-server --appendonly yes
+# Enable persistence (Docker Compose)
+# Create a docker-compose.override.yml with:
+# services:
+#   redis:
+#     command: redis-server --appendonly yes
+#     volumes:
+#       - redis_data:/data
+# Then apply:
+docker compose up -d --force-recreate redis
 
-# Nativo: editar redis.conf
+# Native: edit redis.conf
 # appendonly yes
 # save 900 1
 ```
 
 ---
 
-## 📊 Monitoramento
+## 📊 Monitoring
 
 ### Redis CLI
 ```powershell
-# Conectar
+# Connect
 redis-cli
 
-# Comandos úteis:
-INFO                  # Estatísticas gerais
-DBSIZE                # Número de chaves
-KEYS *                # Listar todas as chaves (NÃO usar em produção!)
-MONITOR               # Ver comandos em tempo real
-CLIENT LIST           # Ver conexões ativas
-CONFIG GET maxmemory  # Ver configuração de memória
+# Useful commands:
+INFO                  # General statistics
+DBSIZE                # Number of keys
+KEYS *                # List all keys (do NOT use in production!)
+MONITOR               # Observe commands in real time
+CLIENT LIST           # See active connections
+CONFIG GET maxmemory  # View memory configuration
 ```
 
 ### Django Admin
 ```powershell
-# Ver métricas do cache
+# Inspect cache metrics
 curl http://localhost:8000/metrics/metrics | findstr cache
 ```
 
 ---
 
-## 🚀 Quickstart (Docker - Mais Rápido)
+## 🚀 Quickstart (Docker – Fastest Path)
 
 ```powershell
-# 1. Instalar Docker Desktop (se não tiver)
+# 1. Install Docker Desktop (if missing)
 winget install Docker.DockerDesktop
 
-# 2. Abrir Docker Desktop e aguardar inicializar
+# 2. Open Docker Desktop and wait for it to initialize
 
-# 3. Rodar Redis
-docker run -d --name redis-mapspro -p 6379:6379 redis:alpine
+# 3. Run Redis
+cd D:\provemaps_beta
+docker compose up -d redis
 
-# 4. Verificar
-docker ps
+# 4. Validate
+docker compose ps redis
 python -c "import redis; print(redis.Redis().ping())"
 
-# 5. Atualizar .env
+# 5. Update `.env`
 # REDIS_URL=redis://localhost:6379/0
 
-# 6. Reiniciar Django
+# 6. Restart Django
 python manage.py runserver 0.0.0.0:8000
 
-# ✅ Pronto!
+# ✅ Done!
 ```
 
 ---
 
-## 🔗 Links Úteis
+## 🔗 Helpful Links
 
 - **Redis Official:** https://redis.io/
 - **Redis Docker Hub:** https://hub.docker.com/_/redis
@@ -351,8 +361,8 @@ python manage.py runserver 0.0.0.0:8000
 
 ---
 
-**Qual opção você prefere?** 
+**Which option fits you best?** 
 
-- 🐳 **Opção 1 (Docker)** - Mais simples, recomendado
-- 💻 **Opção 2 (Nativo)** - Se não quiser Docker
-- 🐧 **Opção 3 (WSL2)** - Se já usa Linux no Windows
+- 🐳 **Option 1 (Docker)** – simplest, recommended
+- 💻 **Option 2 (Native)** – if you want to avoid Docker
+- 🐧 **Option 3 (WSL2)** – if you already use Linux on Windows

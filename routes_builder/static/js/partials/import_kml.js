@@ -139,7 +139,7 @@ if (importFormEl) {
                 await populatePorts('', kmlDestPortSelect);
                 await syncKmlDestination();
                 
-                // Disparar evento para limpar mapa e recarregar lista
+                // Dispatch event to clear the map and reload the list
                 document.dispatchEvent(new CustomEvent('fiber:cable-created', {
                     detail: { fiberId: data.fiber_id },
                 }));

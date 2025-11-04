@@ -1,33 +1,48 @@
-import json
+from typing import Any, Optional
 from unittest.mock import MagicMock
+
 import pytest
 from django.urls import reverse
 
+
 @pytest.mark.django_db
-def test_celery_status_fallback_timeout(client, monkeypatch, settings):
-    """Se estatísticas de fila falham por timeout mas ping funciona, deve retornar degraded com available=True."""
-    settings.CELERY_STATUS_TIMEOUT = 0.1  # garantir timeout curto
+def test_celery_status_fallback_timeout(
+    client: Any,
+    monkeypatch: Any,
+    settings: Any,
+) -> None:
+    """If stats timeout but ping works, the fallback reports degraded."""
+    settings.CELERY_STATUS_TIMEOUT = 0.1  # ensure a short timeout
 
     # Mock ping task result (returns pong quickly)
     class PingResult:
-        def get(self, timeout=None):
+        def get(self, timeout: Optional[float] = None) -> str:
             return "pong"
-    def mock_ping_delay():
+
+    def mock_ping_delay() -> PingResult:
         return PingResult()
 
     # Mock stats task result to raise TimeoutError
     class StatsResult:
-        def get(self, timeout=None):
+        def get(self, timeout: Optional[float] = None) -> None:
             raise Exception("Simulated timeout")
-    def mock_stats_delay():
+
+    def mock_stats_delay() -> StatsResult:
         return StatsResult()
 
-    # Import alvo
-    import core.views_health as vh
+    # Import target modules lazily
     from core import celery as celery_mod
 
-    monkeypatch.setattr(celery_mod, "ping", MagicMock(delay=mock_ping_delay))
-    monkeypatch.setattr(celery_mod, "get_queue_stats", MagicMock(delay=mock_stats_delay))
+    monkeypatch.setattr(
+        celery_mod,
+        "ping",
+        MagicMock(delay=mock_ping_delay),
+    )
+    monkeypatch.setattr(
+        celery_mod,
+        "get_queue_stats",
+        MagicMock(delay=mock_stats_delay),
+    )
 
     url = reverse("celery_status")
     resp = client.get(url)

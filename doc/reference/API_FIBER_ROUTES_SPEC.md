@@ -1,18 +1,18 @@
-# API Fiber Routes - Especificação Completa
+# Fiber Routes API Specification
 
-## 📋 Endpoints Descobertos
+## Available Endpoints
 
-### **1. Listar Cabos**
+### 1. List Cables
 ```
 GET /zabbix_api/api/fibers/
 ```
-**Response:**
+Response example:
 ```json
 {
   "cables": [
     {
       "id": 1,
-      "name": "Cabo SP-RJ",
+      "name": "Cable SP-RJ",
       "status": "up",
       "length_km": 435.5
     }
@@ -20,15 +20,15 @@ GET /zabbix_api/api/fibers/
 }
 ```
 
-### **2. Detalhes do Cabo**
+### 2. Cable Details
 ```
 GET /zabbix_api/api/fiber/<cable_id>/
 ```
-**Response:**
+Response example:
 ```json
 {
   "id": 1,
-  "name": "Cabo SP-RJ",
+  "name": "Cable SP-RJ",
   "status": "up",
   "length_km": 435.5,
   "origin": {
@@ -58,12 +58,12 @@ GET /zabbix_api/api/fiber/<cable_id>/
 }
 ```
 
-### **3. Atualizar Path do Cabo**
+### 3. Update Cable Path
 ```
 PUT /zabbix_api/api/fiber/<cable_id>/
 Content-Type: application/json
 ```
-**Request Body:**
+Request example:
 ```json
 {
   "path": [
@@ -73,7 +73,7 @@ Content-Type: application/json
   ]
 }
 ```
-**Response:**
+Response example:
 ```json
 {
   "status": "ok",
@@ -82,15 +82,15 @@ Content-Type: application/json
 }
 ```
 
-### **4. Criar Cabo Manual**
+### 4. Create Cable Manually
 ```
 POST /zabbix_api/api/fibers/manual-create/
 Content-Type: application/json
 ```
-**Request Body:**
+Request example:
 ```json
 {
-  "name": "Novo Cabo",
+  "name": "New Cable",
   "origin_device_id": 1,
   "origin_port_id": 1,
   "dest_device_id": 2,
@@ -102,11 +102,11 @@ Content-Type: application/json
   "single_port": false
 }
 ```
-**Response:**
+Response example:
 ```json
 {
   "fiber_id": 3,
-  "name": "Novo Cabo",
+  "name": "New Cable",
   "points": 2,
   "length_km": 435.5,
   "origin_port": {...},
@@ -114,31 +114,31 @@ Content-Type: application/json
 }
 ```
 
-### **5. Deletar Cabo**
+### 5. Delete Cable
 ```
 DELETE /zabbix_api/api/fiber/<cable_id>/
 ```
-**Response:** 204 No Content
+Response: HTTP 204 No Content
 
-### **6. Importar KML**
+### 6. Import Cable From KML
 ```
 POST /zabbix_api/api/fibers/import-kml/
 Content-Type: multipart/form-data
 ```
-**Form Data:**
-- `name`: Nome do cabo
-- `origin_device_id`: ID do device origem
-- `origin_port_id`: ID da porta origem
-- `dest_device_id`: ID do device destino
-- `dest_port_id`: ID da porta destino
-- `single_port`: "true"/"false"
-- `kml_file`: Arquivo KML
+Form fields:
+- `name`: cable label
+- `origin_device_id`: source device identifier
+- `origin_port_id`: source port identifier
+- `dest_device_id`: destination device identifier
+- `dest_port_id`: destination port identifier
+- `single_port`: "true" or "false"
+- `kml_file`: uploaded KML file
 
-**Response:**
+Response example:
 ```json
 {
   "fiber_id": 4,
-  "name": "Cabo Importado",
+  "name": "Imported Cable",
   "points": 50,
   "path_coordinates": [...]
 }
@@ -146,66 +146,64 @@ Content-Type: multipart/form-data
 
 ---
 
-## 🔑 **IMPORTANTE - Campo Path**
+## Working With The Path Field
 
-### **Na API (JSON):**
-- **Enviar**: `"path": [...]`
-- **Receber**: `"path": [...]`
+### API Contract
+- Requests must use the `"path"` key
+- Responses also expose the `"path"` key
 
-### **No Banco de Dados (modelo):**
-- **Campo**: `path_coordinates` (JSONField)
+### Storage Model
+- Database column is `path_coordinates` (JSONField)
 
-### **Conversão Automática:**
-O backend faz a conversão automaticamente:
-- `inventory_fibers.py` linha 158: `path = body.get("path")`
-- `usecases/fibers.py` linha 288: `cable.path_coordinates = sanitized`
-- `usecases/fibers.py` linha 257: retorna `"path": cable.path_coordinates`
+### Internal Conversion
+The backend maps between the API shape and the stored JSON:
+- `inventory_fibers.py` line 158 reads `path = body.get("path")`
+- `usecases/fibers.py` line 288 assigns `cable.path_coordinates = sanitized`
+- `usecases/fibers.py` line 257 returns `"path": cable.path_coordinates`
 
-**Conclusão:** O JavaScript está CORRETO usando `"path"`!
-
----
-
-## ✅ **Validações do Backend**
-
-### **Path:**
-- Mínimo 2 pontos (exceto se `allow_empty=True`)
-- Cada ponto deve ter `lat` e `lng`
-- Latitude: -90.0 a 90.0
-- Longitude: -180.0 a 180.0
-
-### **Nome:**
-- Obrigatório
-- Único (case-insensitive)
-- Não pode ser vazio após strip()
-
-### **Portas:**
-- Origem e destino devem existir
-- Devem pertencer aos devices especificados
-- Se `single_port=false`: devem ser diferentes
-- Se `single_port=true`: destino = origem
-
-### **Single Port Mode:**
-- Permite origem e destino iguais
-- Útil para monitoramento de loopback
-- Campo `notes` = "single-port-monitoring"
+Conclusion: frontend JavaScript correctly uses the `path` attribute.
 
 ---
 
-## 🧪 **Status de Testes**
+## Backend Validation Rules
 
-Arquivo: `routes_builder/tests/test_fiber_routes_full.py`
+### Path
+- Requires at least two points unless `allow_empty=True`
+- Each point must include `lat` and `lng`
+- Latitude range: -90.0 to 90.0
+- Longitude range: -180.0 to 180.0
 
-**18 testes criados:**
-- ✅ Listagem de cabos (vazia e com dados)
-- ✅ Detalhes de cabo (existente e inexistente)
-- ✅ Criação manual
-- ✅ Atualização de path
-- ✅ Atualização de metadados
-- ✅ Deleção
-- ✅ Visualização no mapa
-- ✅ Validação de modelo
-- ✅ Casos extremos (1 ponto, 100 pontos, path vazio)
-- ✅ Permissões (autenticado/não autenticado)
+### Name
+- Mandatory field
+- Must be unique (case-insensitive)
+- Cannot be blank after trimming whitespace
 
-**Status Atual:** 4/18 passando (22%)
-**Bloqueio:** Fixtures com campos incorretos dos modelos
+### Ports
+- Both origin and destination must exist
+- Ports must belong to the provided devices
+- If `single_port=false`, origin and destination must differ
+- If `single_port=true`, origin and destination must be the same port
+
+### Single-Port Mode
+- Allows monitoring loops that use a single physical port
+- Adds the marker `notes = "single-port-monitoring"`
+
+---
+
+## Test Coverage Snapshot
+
+Location: `routes_builder/tests/test_fiber_routes_full.py`
+
+Planned suite of 18 tests covers:
+- Listing cables with and without data
+- Cable detail responses for existing and missing records
+- Manual creation flows
+- Path updates
+- Metadata edits
+- Deletion paths
+- Map visualization endpoints
+- Model validation rules
+- Edge cases (single point, long paths, empty path)
+- Permission checks for authenticated and anonymous users
+
+Current status: 4 of 18 tests passing (22%) due to fixtures with incorrect model fields.

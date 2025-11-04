@@ -1,23 +1,23 @@
 {% extends 'base_dashboard.html' %}
 
-{% block title %}Prometheus Metrics · Fiber Network{% endblock %}
+{% block title %}Prometheus Metrics - Fiber Network{% endblock %}
 
 {% block content %}
 <section class="bg-white shadow rounded-lg p-6">
   <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
     <div>
       <h1 class="text-2xl font-semibold text-gray-900">Prometheus Metrics</h1>
-      <p class="text-sm text-gray-600">Visualização amigável das métricas expostas em <code>/metrics/</code>.</p>
+    <p class="text-sm text-gray-600">Friendly view of the metrics exposed at <code>/metrics/</code>.</p>
     </div>
     <form method="get" class="w-full sm:w-80">
-      <label for="metrics-search" class="sr-only">Filtrar métricas</label>
+    <label for="metrics-search" class="sr-only">Filter metrics</label>
       <div class="relative">
         <input
           id="metrics-search"
           type="search"
           name="q"
           value="{{ query }}"
-          placeholder="Buscar por nome ou descrição..."
+          placeholder="Search by identifier or description..."
           class="w-full rounded-md border border-gray-300 py-2 pl-10 pr-3 text-sm focus:border-blue-500 focus:ring-blue-500"
         >
         <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
@@ -31,8 +31,8 @@
 
   {% if metrics %}
     <p class="text-sm text-gray-500 mb-4">
-      Exibindo <span class="font-semibold">{{ metrics|length }}</span> métricas registradas.
-      {% if query %}Filtro aplicado: <span class="italic">{{ query }}</span>.{% endif %}
+    Showing <span class="font-semibold">{{ metrics|length }}</span> recorded metrics.
+    {% if query %}Applied filter: <span class="italic">{{ query }}</span>.{% endif %}
     </p>
 
     <div class="space-y-6">
@@ -54,7 +54,7 @@
               <div class="px-5 py-3 text-sm text-gray-700 flex flex-col gap-1">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                   <code class="text-xs font-mono bg-gray-100 rounded px-2 py-1 break-all">{{ sample.raw }}</code>
-                  <span class="text-xs font-semibold text-gray-800">Valor: {{ sample.value }}</span>
+                  <span class="text-xs font-semibold text-gray-800">Value: {{ sample.value }}</span>
                 </div>
                 {% if sample.labels %}
                   <dl class="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500">
@@ -68,7 +68,7 @@
                 {% endif %}
               </div>
             {% empty %}
-              <p class="px-5 py-3 text-sm text-gray-500">Sem amostras registradas.</p>
+              <p class="px-5 py-3 text-sm text-gray-500">No samples recorded.</p>
             {% endfor %}
           </div>
         </article>
@@ -76,8 +76,8 @@
     </div>
   {% else %}
     <div class="text-center py-12 text-gray-500">
-      <p>Nenhuma métrica disponível no momento{% if query %} para o filtro aplicado{% endif %}.</p>
-      <p class="text-xs mt-2">Confirme se o scraper Prometheus está apontando para <code>{{ metrics_source_url }}</code>.</p>
+    <p>No metrics available at the moment{% if query %} for the current filter{% endif %}.</p>
+    <p class="text-xs mt-2">Make sure the Prometheus scraper targets <code>{{ metrics_source_url }}</code>.</p>
     </div>
   {% endif %}
 </section>

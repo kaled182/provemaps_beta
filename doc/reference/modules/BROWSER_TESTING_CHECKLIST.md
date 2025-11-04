@@ -9,11 +9,11 @@
 ## Module Loading Tests
 ### Expected in Console (No Errors):
 ```
-✓ Module apiClient.js loaded
-✓ Module pathState.js loaded  
-✓ Module mapCore.js loaded
-✓ Google Maps API initialized
-✓ Map rendered in #builderMap container
+OK Module apiClient.js loaded
+OK Module pathState.js loaded
+OK Module mapCore.js loaded
+OK Google Maps API initialized
+OK Map rendered in #builderMap container
 ```
 
 ### Check Network Tab:
@@ -24,40 +24,40 @@
 - [ ] No CORS errors
 
 ## Map Initialization Tests
-- [ ] **Map displays** with correct center (Goiás, Brazil region)
+- [ ] **Map displays** with correct center (Goias, Brazil region)
 - [ ] **Zoom controls** work (+ / - buttons)
 - [ ] **Map type selector** visible (terrain/satellite toggle)
 - [ ] **No console errors** on map load
 
 ## Path Drawing Tests (Scenario A: Empty State)
-1. [ ] Click map → **marker appears**
-2. [ ] Click again → **second marker appears**
-3. [ ] [ ] **Red polyline** connects markers
+1. [ ] Click map -> **marker appears**
+2. [ ] Click again -> **second marker appears**
+3. [ ] **Red polyline** connects markers
 4. [ ] **Distance display** updates automatically
 5. [ ] **Point list** shows coordinates
-6. [ ] **Save button** enables (when ≥2 points)
-7. [ ] Right-click → **context menu appears** with "Save New Cable" option
+6. [ ] **Save button** enables (when 2 or more points)
+7. [ ] Right-click -> **context menu appears** with "Save New Cable" option
 
 ## Marker Interaction Tests
-- [ ] **Drag marker** → polyline updates in real-time
-- [ ] **Drag marker** → distance recalculates automatically
-- [ ] **Click remove icon** on marker → marker disappears
-- [ ] **Remove marker** → polyline redraws correctly
-- [ ] **Remove marker** → point count updates in list
+- [ ] **Drag marker** -> polyline updates in real time
+- [ ] **Drag marker** -> distance recalculates automatically
+- [ ] **Click remove icon** on marker -> marker disappears
+- [ ] **Remove marker** -> polyline redraws correctly
+- [ ] **Remove marker** -> point count updates in list
 
 ## Context Menu Tests (Empty State)
 ### Right-click map:
 - [ ] Menu displays at cursor position
 - [ ] Shows "Import KML" option
-- [ ] Shows "Save New Cable" option (if ≥2 points)
+- [ ] Shows "Save New Cable" option (if 2 or more points)
 - [ ] Shows "Clear Points" option (if points exist)
-- [ ] Click outside menu → menu closes
-- [ ] ESC key → menu closes
+- [ ] Click outside menu -> menu closes
+- [ ] ESC key -> menu closes
 
 ## Cable Creation Tests (Scenario B: Creating New)
 ### Steps:
-1. [ ] Draw 2+ points on map
-2. [ ] Right-click → select "Save New Cable"
+1. [ ] Draw 2 or more points on map
+2. [ ] Right-click -> select "Save New Cable"
 3. [ ] Modal opens with form
 4. [ ] Fill required fields (name, origin device, origin port)
 5. [ ] Click "Save"
@@ -68,20 +68,20 @@
 ### Verify in Console:
 ```javascript
 // Should see:
-POST /zabbix_api/api/fibers/ → 201 Created
-GET /zabbix_api/api/fibers/ → 200 OK (reload list)
+POST /zabbix_api/api/fibers/ -> 201 Created
+GET /zabbix_api/api/fibers/ -> 200 OK (reload list)
 ```
 
 ## Cable Visualization Tests
 ### On page load:
-- [ ] **All cables load** automatically after ~300ms
+- [ ] **All cables load** automatically after about 300 ms
 - [ ] **Blue polylines** appear for each cable
 - [ ] Console shows: `Visualization: X cables loaded.`
 - [ ] No error alerts
 
 ### Right-click existing cable:
 - [ ] Context menu shows **cable-specific options**
-- [ ] Shows cable name with 📌 icon
+- [ ] Shows cable name with text indicator "PIN"
 - [ ] Shows "Edit Cable Details" option
 - [ ] Shows "Save Path" option (if edited)
 - [ ] Shows "Delete Cable" option
@@ -89,55 +89,55 @@ GET /zabbix_api/api/fibers/ → 200 OK (reload list)
 
 ## Cable Editing Tests (Scenario C: Selected Cable)
 ### Steps:
-1. [ ] Right-click blue cable → select "Edit Cable Details"
-2. [ ] Cable loads → **markers appear** at path points
-3. [ ] Polyline changes from **blue → red** (editing mode)
+1. [ ] Right-click blue cable -> select "Edit Cable Details"
+2. [ ] Cable loads -> **markers appear** at path points
+3. [ ] Polyline changes from **blue -> red** (editing mode)
 4. [ ] Cable name shows in context menu with "- EDITING" suffix
 5. [ ] **Drag markers** to modify path
 6. [ ] Add points by clicking map
 7. [ ] Remove points via marker remove icons
-8. [ ] Right-click → "Save Path" option enabled (if ≥2 points)
-9. [ ] Save changes → success alert
-10. [ ] Map reloads → cable shows with new path (blue)
+8. [ ] Right-click -> "Save Path" option enabled (if 2 or more points)
+9. [ ] Save changes -> success alert
+10. [ ] Map reloads -> cable shows with new path (blue)
 
 ## Cable Selection Tests
 ### Fiber dropdown:
 - [ ] Dropdown populates with all cables
-- [ ] Select cable → **loads path** in editing mode
+- [ ] Select cable -> **loads path** in editing mode
 - [ ] Shows cable details in context menu
 - [ ] Save button state updates correctly
 
 ## Cable Deletion Tests
 ### Steps:
-1. [ ] Right-click cable → "Delete Cable"
+1. [ ] Right-click cable -> "Delete Cable"
 2. [ ] Confirmation prompt appears
-3. [ ] Confirm → DELETE request sent
+3. [ ] Confirm -> DELETE request sent
 4. [ ] Success alert appears
 5. [ ] Cable removed from visualization
 6. [ ] Fiber dropdown updates (cable removed)
 
 ## Import KML Tests
 ### Steps:
-1. [ ] Right-click empty map → "Import KML"
+1. [ ] Right-click empty map -> "Import KML"
 2. [ ] File picker opens
 3. [ ] Select valid KML file
-4. [ ] Path imports → markers appear
+4. [ ] Path imports -> markers appear
 5. [ ] Polyline draws correctly
 6. [ ] Can save imported path as new cable
 
 ## State Management Tests
 ### Verify pub/sub pattern:
-- [ ] **Add point** → distance updates automatically (no manual refresh call)
-- [ ] **Remove point** → polyline redraws automatically
-- [ ] **Drag marker** → all UI elements update (list, distance, button state)
-- [ ] **Clear path** → all UI elements reset
+- [ ] **Add point** -> distance updates automatically (no manual refresh call)
+- [ ] **Remove point** -> polyline redraws automatically
+- [ ] **Drag marker** -> all UI elements update (list, distance, button state)
+- [ ] **Clear path** -> all UI elements reset
 
 ### Check Console for:
 ```javascript
 // Should NOT see these errors:
-❌ "currentPath is not defined"
-❌ "redrawPolyline is not a function"
-❌ TypeError: Cannot read properties of undefined
+ERROR "currentPath is not defined"
+ERROR "redrawPolyline is not a function"
+ERROR TypeError: Cannot read properties of undefined
 ```
 
 ## API Integration Tests
@@ -151,19 +151,19 @@ GET /zabbix_api/api/fibers/ → 200 OK (reload list)
 
 ### Check Network Tab Headers:
 ```
-X-CSRFToken: <token_value>  ← Should be present
+X-CSRFToken: <token_value>  <- Should be present
 Content-Type: application/json
 ```
 
 ## Error Handling Tests
 ### Test failure scenarios:
-- [ ] **Network offline** → graceful error message
-- [ ] **Invalid cable ID** → error alert (not crash)
-- [ ] **Backend 500 error** → error logged to console
-- [ ] **Missing CSRF token** → request fails with clear error
+- [ ] **Network offline** -> graceful error message
+- [ ] **Invalid cable ID** -> error alert (not crash)
+- [ ] **Backend 500 error** -> error logged to console
+- [ ] **Missing CSRF token** -> request fails with clear error
 
 ## Performance Tests
-- [ ] **Cable visualization loads** in <2 seconds (for ~20 cables)
+- [ ] **Cable visualization loads** in under 2 seconds (for about 20 cables)
 - [ ] **Marker dragging** smooth (no lag)
 - [ ] **Path updates** instant (no visible delay)
 - [ ] **No memory leaks** (check DevTools Memory tab after 5 minutes of use)
@@ -177,39 +177,39 @@ Content-Type: application/json
 - [ ] **Clear button** resets map state
 
 ## Edge Cases
-- [ ] **Create cable with 1 point** → validation error
-- [ ] **Delete all points while editing** → activeFiberId clears
-- [ ] **Switch cables without saving** → warns about unsaved changes (if implemented)
-- [ ] **Import KML over existing path** → replaces current path
-- [ ] **Right-click during creation** → shows creation-specific menu
-- [ ] **Right-click during editing** → shows editing-specific menu
+- [ ] **Create cable with 1 point** -> validation error
+- [ ] **Delete all points while editing** -> activeFiberId clears
+- [ ] **Switch cables without saving** -> warns about unsaved changes (if implemented)
+- [ ] **Import KML over existing path** -> replaces current path
+- [ ] **Right-click during creation** -> shows creation-specific menu
+- [ ] **Right-click during editing** -> shows editing-specific menu
 
 ## Console Error Checks
 ### Should NOT appear:
 ```javascript
-❌ Uncaught ReferenceError: currentPath is not defined
-❌ Uncaught TypeError: redrawPolyline is not a function
-❌ Failed to load module: ./modules/apiClient.js
-❌ CORS policy blocked
-❌ 404 Not Found: /static/js/modules/...
+ERROR Uncaught ReferenceError: currentPath is not defined
+ERROR Uncaught TypeError: redrawPolyline is not a function
+ERROR Failed to load module: ./modules/apiClient.js
+ERROR CORS policy blocked
+ERROR 404 Not Found: /static/js/modules/...
 ```
 
 ### Should appear (expected):
 ```javascript
-✓ Visualization: X cables loaded.
-✓ (No errors)
+OK Visualization: X cables loaded.
+OK No errors
 ```
 
 ## Module Isolation Tests
 ### In browser console, verify:
 ```javascript
 // Modules are NOT in global scope:
-typeof fetchFibers === 'undefined'  // ✓ true (good!)
-typeof getPath === 'undefined'      // ✓ true (good!)
-typeof initializeMap === 'undefined' // ✓ true (good!)
+typeof fetchFibers === 'undefined'  // expected true
+typeof getPath === 'undefined'      // expected true
+typeof initializeMap === 'undefined' // expected true
 
 // Only main file exports necessary globals:
-typeof clearMapAndResetState === 'function'  // ✓ true (for KML import)
+typeof clearMapAndResetState === 'function'  // expected true (for KML import)
 ```
 
 ## Test Results Template
@@ -231,18 +231,18 @@ typeof clearMapAndResetState === 'function'  // ✓ true (for KML import)
 
 ## Next Actions Based on Results
 
-### If All Tests Pass (✅):
+### If All Tests Pass (PASS):
 - Proceed with **contextMenu.js extraction** (Sprint 2 Phase 2)
 - Proceed with **modalEditor.js extraction** (Sprint 2 Phase 3)
 - Document success in CHANGELOG
 
-### If Critical Issues Found (❌):
+### If Critical Issues Found (FAIL):
 - **Rollback** modular changes (git checkout)
 - **Debug** specific failing test
 - **Fix** issue in module or integration code
 - **Re-test** until passing
 
-### If Minor Issues Found (⚠️):
+### If Minor Issues Found (WARN):
 - Create **GitHub Issues** for each problem
 - **Document** workaround if available
 - **Prioritize** fixes in next sprint
@@ -250,7 +250,7 @@ typeof clearMapAndResetState === 'function'  // ✓ true (for KML import)
 ## Testing Completed By: __________
 ## Date: __________
 ## Browser(s) Tested: Chrome _____ / Firefox _____ / Safari _____
-## Overall Status: ✅ PASS / ⚠️ PARTIAL / ❌ FAIL
+## Overall Status: PASS / PARTIAL / FAIL
 
 ---
 

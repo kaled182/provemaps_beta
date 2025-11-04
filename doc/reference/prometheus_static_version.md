@@ -1,108 +1,109 @@
-# Cache Busting + Prometheus Integration Summary
+# Cache Busting and Prometheus Integration Summary
 
-Todas as seguintes funcionalidades foram implementadas com sucesso:
+The following capabilities are now live and verified:
 
-## 1. ManifestStaticFilesStorage em Dev
-- Arquivo: `settings/dev.py`
-- Storage: `ManifestStaticFilesStorage` para hash automático de arquivos
-- Requer: `python manage.py collectstatic --noinput` após mudanças
+## 1. ManifestStaticFilesStorage in Development
+- File: `settings/dev.py`
+- Storage: `ManifestStaticFilesStorage` to append hash digests to asset filenames automatically
+- Requirement: run `& D:\provemaps_beta\venv\Scripts\python.exe manage.py collectstatic --noinput` after any change to static files
 
-## 2. Versão com Git SHA
-- Arquivo: `settings/dev.py`
-- Função: `_git_sha()` captura SHA curto do commit
-- Formato: `<sha>-<timestamp>` (ex: `e90e25c-20251026200851`)
-- Print no console: `[STATIC_VERSION] STATIC_ASSET_VERSION=...`
+## 2. Version Tag with Git SHA
+- File: `settings/dev.py`
+- Function: `_git_sha()` captures the short commit SHA
+- Format: `<sha>-<timestamp>` (example: `e90e25c-20251026200851`)
+- Console output: `[STATIC_VERSION] STATIC_ASSET_VERSION=...`
 
-## 3. Métrica Prometheus
-- Arquivos criados:
-  - `core/metrics_static_version.py` (define métrica Info)
-  - `core/apps.py` (CoreConfig com ready() para init)
-- Métrica: `static_asset_version_info{version="...",git_sha="...",timestamp="..."}`
-- Endpoint: `/metrics/metrics` (django-prometheus)
+## 3. Prometheus Metric
+- Files created:
+  - `core/metrics_static_version.py` (defines an Info metric)
+  - `core/apps.py` (CoreConfig with `ready()` that registers the metric)
+- Metric: `static_asset_version_info{version="...",git_sha="...",timestamp="..."}`
+- Endpoint: `/metrics/metrics` provided by `django-prometheus`
 
-## 4. Script de Verificação
-- Arquivo: `scripts/verify_asset_version.py`
-- Valida se versão atual contém SHA do repo
-- Uso:
+## 4. Verification Script
+- File: `scripts/verify_asset_version.py`
+- Purpose: validates that the configured version string includes the current Git SHA
+- Usage:
   ```powershell
   $env:DJANGO_SETTINGS_MODULE = "settings.dev"
-  python scripts/verify_asset_version.py
+  & D:\provemaps_beta\venv\Scripts\python.exe scripts\verify_asset_version.py
   ```
 
-## 5. Documentação
-- Arquivo: `./cache_busting.md`
-- Seções:
-  - Estratégias (query param, no-cache, hashing, SHA)
-  - Workflow de dev
-  - Verificação (script + Prometheus)
+## 5. Documentation
+- File: `cache_busting.md`
+- Sections:
+  - Strategies (query parameter, no cache headers, hashing, SHA)
+  - Development workflow
+  - Verification steps (script plus Prometheus)
   - Troubleshooting
 
-## Pontos de Atenção
+## Points to Watch
 
-### Encoding (Windows)
-- **Issue**: Emojis (🔐, 🎛️) causam `UnicodeDecodeError` em Windows (cp1252)
-- **Fix**: Substituídos por tags ASCII: `[STATIC_VERSION]`, `[DEBUG_TOOLBAR]`, etc.
+### Encoding on Windows
+- Issue: emojis such as lock or control icons trigger `UnicodeDecodeError` under Windows code page 1252
+- Fix: replace those symbols with ASCII tags like `[STATIC_VERSION]` and `[DEBUG_TOOLBAR]`
 
-### Database (Opcional)
-- O servidor requer DB válido para init completo
-- Métrica Prometheus é inicializada no `CoreConfig.ready()`
-- Se DB falha, ready() não executa → métrica não aparece
-- **Workaround**:
-  - Usar SQLite em dev: `$env:DB_ENGINE="sqlite"` ou
-  - Configurar credenciais MySQL/MariaDB corretas em `.env`
+### Database Dependency (optional)
+- The Django app needs a working database connection to complete startup
+- The Prometheus metric is registered inside `CoreConfig.ready()`
+- If the database connection fails the `ready()` hook does not execute and the metric does not appear
+- Workaround:
+  - Use SQLite in development: `$env:DB_ENGINE="sqlite"`, or
+  - Provide valid MySQL or MariaDB credentials in `.env`
 
-### Endpoint Prometheus
-- URL correta: `/metrics/metrics` (não `/metrics/`)
-- django-prometheus adiciona sub-rota `metrics` dentro de `metrics/`
+### Prometheus Endpoint
+- Correct URL: `/metrics/metrics` (note the nested `metrics` path)
+- `django-prometheus` mounts the Prometheus view at `/metrics/`
+- Every exported metric is therefore available at `/metrics/metrics`
 
-## Validação Manual
+## Manual Validation
 
-### 1. Verificar SHA no Console
+### 1. Confirm the SHA in the console
 ```powershell
 $env:DEBUG = "True"
 $env:DJANGO_SETTINGS_MODULE = "settings.dev"
-python manage.py check
-# Saída esperada:
+& D:\provemaps_beta\venv\Scripts\python.exe manage.py check
+# Expected output:
 # [STATIC_VERSION] STATIC_ASSET_VERSION=abc123-YYYYMMDDHHMMSS
 # System check identified no issues (0 silenced).
 ```
 
-### 2. Ver Métrica no Prometheus
+### 2. Inspect the metric via Prometheus
 ```powershell
-# Start server (com DB válido)
-python manage.py runserver 8000
+# Start the development server (with a valid database connection)
+& D:\provemaps_beta\venv\Scripts\python.exe manage.py runserver 8000
 
-# Query via browser ou curl
+# Query by browser or curl
 # http://localhost:8000/metrics/metrics
-# Procurar por: static_asset_version_info{...}
+# Look for: static_asset_version_info{...}
 ```
 
-### 3. Script de Verificação
+### 3. Run the verification script
 ```powershell
 $env:DJANGO_SETTINGS_MODULE = "settings.dev"
-python scripts/verify_asset_version.py
-# Output:
+& D:\provemaps_beta\venv\Scripts\python.exe scripts\verify_asset_version.py
+# Expected output:
 # STATIC_ASSET_VERSION=abc123-20251026200851
 # GIT_SHA=abc123
-# OK: versão contém SHA.
+# OK: version string includes the SHA.
 ```
 
-## Próximos Passos (Opcional)
+## Next Steps (optional)
 
-1. **Badge UI**: Adicionar badge visual com versão no rodapé ou header da aplicação
-2. **Grafana Dashboard**: Criar painel mostrando histórico de versões deployadas
-3. **CI/CD Integration**: Adicionar versão ao build artifact metadata
-4. **Alerting**: Configurar alerta se versão não muda após N horas (indica deploy travado)
+1. **User interface badge**: add a visual badge with the current version in the footer or header.
+2. **Grafana dashboard**: chart historic deployments using the Prometheus metric.
+3. **CI or CD integration**: attach the same version string to build artifacts.
+4. **Alerting**: raise an alert if the version remains unchanged for several hours, which can reveal stalled deployments.
 
-## Arquivos Modificados
+## Files Touched
 
-- `settings/base.py`: Adicionado `core.apps.CoreConfig` em INSTALLED_APPS
-- `settings/dev.py`: ManifestStaticFilesStorage, `_git_sha()`, versão com SHA, emojis removidos
-- `core/apps.py`: Criado CoreConfig.ready() para init de métrica
-- `core/metrics_static_version.py`: Criado módulo de métrica Prometheus
-- `./cache_busting.md`: Atualizado com SHA, Prometheus, verificação
-- `scripts/verify_asset_version.py`: Criado script de validação
+- `settings/base.py`: added `core.apps.CoreConfig` to `INSTALLED_APPS`
+- `settings/dev.py`: enabled `ManifestStaticFilesStorage`, introduced `_git_sha()`, removed emojis
+- `core/apps.py`: created `CoreConfig.ready()` to initialize the Prometheus metric
+- `core/metrics_static_version.py`: new module that defines the metric
+- `cache_busting.md`: updated with SHA strategy, Prometheus usage, and verification steps
+- `scripts/verify_asset_version.py`: new validation script
 
 ---
 
-**Status**: ✅ Implementação completa. Testado com `manage.py check`. Métrica exposta em `/metrics/metrics` quando servidor inicia com DB válido.
+**Status**: implementation complete. Validated with `manage.py check`. Metric is exposed at `/metrics/metrics` when the server starts with a working database connection.

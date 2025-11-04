@@ -1,37 +1,36 @@
-# FASE 4 - Relatório de Testes e Análise de Melhorias
+# Phase 4 - Test Report and Improvement Analysis
 
-**Data:** 27 de Outubro de 2025  
-**Fase:** FASE 4 - Testing (Observabilidade)  
-**Status Geral:** ⚠️ Parcialmente Completo - Requer Decisões
-
----
-
-## 📊 Resumo Executivo
-
-### ✅ Melhorias Implementadas com Sucesso
-
-1. **FASE 3 - Observabilidade (100% Completo)**
-   - ✅ 15 métricas customizadas Prometheus
-   - ✅ Logging estruturado com structlog
-   - ✅ Middleware de Request ID para rastreamento distribuído
-   - ✅ Documentação completa (400+ linhas)
-
-2. **FASE 4 - Testes (60% Completo)**
-   - ✅ 18 testes para métricas customizadas (test_metrics.py - 350 linhas)
-   - ✅ 17 testes para middleware (test_middleware.py - 280 linhas)
-   - ✅ Coverage de 99% no código de métricas quando executado corretamente
-   - ⚠️ 15 testes falhando por incompatibilidade de assertivas
-   - ⚠️ Dependência crítica de SQLite para testes unitários
+**Date:** 27 October 2025  
+**Phase:** Phase 4 - Testing (Observability)  
+**Overall Status:** Partially complete - pending decisions
 
 ---
 
-## 🔴 Problemas Críticos Identificados
+## Executive Summary
 
-### Problema 1: Banco de Dados de Testes
+### Successfully Delivered Items
 
-**Situação Atual:**
+1. **Phase 3 - Observability (100 percent complete)**
+   - Fifteen custom Prometheus metrics implemented.
+   - Structured logging in place with structlog.
+   - Request ID middleware available for distributed tracing.
+   - Supporting documentation exceeds four hundred lines.
+
+2. **Phase 4 - Testing (approximately 60 percent complete)**
+   - Eighteen tests cover the custom metrics module (`tests/test_metrics.py`).
+   - Seventeen tests cover the request ID middleware (`tests/test_middleware.py`).
+   - Metrics package reaches 99 percent coverage when the suite executes correctly.
+   - Fifteen tests currently fail because of assertion mismatches.
+   - Test suite depends on SQLite when run locally.
+
+---
+
+## Critical Issues Observed
+
+### Issue 1: Test Database Strategy
+
+Current configuration (`settings/test.py`):
 ```python
-# settings/test.py (linha 16-22)
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -40,447 +39,174 @@ DATABASES = {
 }
 ```
 
-**Impacto:**
-- ❌ Testes unitários NÃO devem depender de banco de dados
-- ❌ pytest-django força criação de BD mesmo sem decorator `@pytest.mark.django_db`
-- ❌ Tentava conectar ao MariaDB de produção por padrão
-- ✅ RESOLVIDO temporariamente: `$env:DJANGO_SETTINGS_MODULE='settings.test'`
+Impact:
+- Unit tests should avoid external dependencies. SQLite in memory satisfies that goal.
+- When `DJANGO_SETTINGS_MODULE` is not set to `settings.test`, pytest attempts to use the default MariaDB configuration and fails with authentication errors.
+- Temporary workaround: export `DJANGO_SETTINGS_MODULE=settings.test` before running pytest.
 
-**Execução Atual:**
+Execution examples:
 ```powershell
-# ❌ FALHA - Tenta conectar MariaDB
-pytest tests/
+# Fails - attempts to reach MariaDB
+D:/provemaps_beta/venv/Scripts/python.exe -m pytest tests/
 
-# ✅ FUNCIONA - Força SQLite
-$env:DJANGO_SETTINGS_MODULE='settings.test'; pytest tests/
+# Succeeds - forces SQLite
+$env:DJANGO_SETTINGS_MODULE='settings.test'; D:/provemaps_beta/venv/Scripts/python.exe -m pytest tests/
 ```
 
-### Problema 2: Assertivas Incorretas nos Testes
+### Issue 2: Outdated Assertions
 
-**15 Testes Falhando por Diferenças de API:**
+Fifteen tests assert older interfaces:
 
-#### A) Métricas Zabbix (5 falhas)
-```python
-# ❌ Teste Esperava:
-labels(endpoint='host.get', success=True, error_type='none')
-
-# ✅ Implementação Real:
-labels(endpoint='host.get', status='success', error_type='none')
-```
-**Causa:** Label `success` foi implementado como `status`
-
-#### B) Métricas Cache (4 falhas)
-```python
-# ❌ Teste Esperava:
-labels(cache_name='default', operation='get', hit='true')
-
-# ✅ Implementação Real:
-labels(cache_name='default', operation='get', result='hit')
-```
-**Causa:** Label `hit` foi implementado como `result`
-
-#### C) Métricas Celery (2 falhas)
-```python
-# ❌ Teste Chamava:
-update_celery_queue_metrics(queues)  # Dict
-
-# ✅ Implementação Real:
-update_celery_queue_metrics(queue_name: str, depth: int)
-```
-**Causa:** Assinatura de função incompatível
-
-#### D) Middleware (4 falhas)
-```python
-# ❌ Teste Esperava kwargs individuais:
-assert call_kwargs['method'] == 'GET'
-assert call_kwargs['path'] == '/test/'
-
-# ✅ Implementação Real - passa todos como **kwargs:
-structlog.contextvars.bind_contextvars(
-    request_id=request_id,
-    method=request.method,
-    path=request.path,
-    remote_addr=client_ip
-)
-```
-**Causa:** Estrutura de chamada de contextvars diferente
+- **Zabbix metrics (five failures)**: tests expect the label `success=True`; implementation publishes `status='success'` or `status='error'`.
+- **Cache metrics (four failures)**: tests expect the label `hit`; implementation uses `result` with values `hit`, `miss`, or `success`.
+- **Celery queue metrics (two failures)**: tests call `update_celery_queue_metrics` with a mapping; implementation accepts a queue name and depth as separate arguments.
+- **Request ID middleware (four failures)**: tests inspect individual keyword arguments, but the implementation passes the entire set directly into `structlog.contextvars.bind_contextvars`.
 
 ---
 
-## 📈 Resultados de Coverage
+## Coverage Snapshot
 
-### Execução com SQLite (Forçado)
+Run performed with SQLite in memory:
 ```
 ---------- coverage: platform win32, python 3.13.9-final-0 -----------
-Name                     Stmts   Miss Branch BrPart  Cover   Missing
---------------------------------------------------------------------
-core\metrics_custom.py      31      1      4      0    97%   145
-core\middleware\request_id.py  COMPLETE COVERAGE (100%)
---------------------------------------------------------------------
-TOTAL                       61      1     12      0    99%
+Name                             Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------
+core/metrics_custom.py              31      1      4      0    97%   145
+core/middleware/request_id.py       30      0      8      0   100%
+----------------------------------------------------------------------------
+TOTAL                                61      1     12      0    99%
 
-Testes: 20 PASSED, 15 FAILED
-Tempo: 0.83s
+Outcome: 20 passed, 15 failed. Duration: 0.83 seconds
 ```
 
-### Análise de Coverage
-- ✅ **97% de coverage em metrics_custom.py** - Apenas linha 145 não testada
-- ✅ **100% de coverage em request_id.py** - Cobertura completa
-- ✅ **99% coverage total** - Excelente cobertura de código
-- ⚠️ **15 falhas não afetam coverage** - São erros de assertivas, não de implementação
+Highlights:
+- `metrics_custom.py` lacks coverage for a single branch on line 145.
+- `request_id.py` achieves full statement and branch coverage.
+- The failing tests do not reduce coverage because they reach the relevant code paths. The failures stem from assertion logic only.
 
 ---
 
-## 🎯 Decisões Necessárias
+## Decisions Required
 
-### Decisão 1: Estratégia de Banco de Dados para Testes
+### Decision 1: Test Database Baseline
 
-#### Opção A: ✅ RECOMENDADO - Manter SQLite APENAS para testes
-**Prós:**
-- ✅ Testes unitários rápidos (0.83s para 35 testes)
-- ✅ Não requer infraestrutura externa
-- ✅ Isolamento completo de dados
-- ✅ CI/CD simplificado
-- ✅ Padrão Django recomendado
+- **Recommended**: continue using SQLite in memory for unit tests.
+  - Pros: fast (35 tests in under one second), isolated, no external services, easy to run on CI.
+  - Cons: does not capture MariaDB specific SQL behaviour, though those differences are minimal for the covered modules.
+  - Implementation: keep `settings/test.py` as-is and ensure the `DJANGO_SETTINGS_MODULE` environment variable is set.
 
-**Contras:**
-- ⚠️ Não testa funcionalidades específicas de MariaDB
-- ⚠️ Diferenças de SQL dialect (raro em testes unitários)
+- **Alternative (not recommended)**: depend on MariaDB for unit tests.
+  - Pros: exercises the production SQL dialect.
+  - Cons: requires Docker Compose or a dedicated server, slows the suite by an order of magnitude, complicates CI configuration, and introduces flakiness due to credentials and permissions.
 
-**Implementação:**
-```python
-# settings/test.py - JÁ IMPLEMENTADO
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": ":memory:",  # BD em memória, destruído após teste
-    }
-}
-```
+### Decision 2: Fix the Test Failures
 
-**Comando:**
-```powershell
-# Fixar no pytest.ini ou script de teste
-$env:DJANGO_SETTINGS_MODULE='settings.test'
-pytest tests/
-```
+- **Recommended**: update affected tests to match the current interfaces.
+  - Estimated effort: roughly thirty minutes.
+  - Scope: adjust label expectations in `tests/test_metrics.py`; update the queue metric helper calls; allow middleware assertions to inspect the aggregated keyword dictionary or use helper functions for extraction.
+
+- **Alternative (not recommended)**: revert the implementation to satisfy outdated tests.
+  - This would undo the label normalisation performed in Phase 3 and require documentation updates.
+
+### Decision 3: Execution Workflow
+
+- **Recommended**: add a dedicated PowerShell script (`scripts/run_tests.ps1`) that sets the environment variable and runs pytest with coverage. This removes manual steps and prevents accidental MariaDB usage.
+- Optionally, mirror the script in the `makefile` for consistency with Unix environments.
 
 ---
 
-#### Opção B: ❌ NÃO RECOMENDADO - Usar MariaDB para testes
-**Prós:**
-- ✅ Testa dialeto SQL real
-- ✅ Testa constraints específicas de MariaDB
+## Recommended Remediation Plan
 
-**Contras:**
-- ❌ Requer MariaDB rodando (Docker ou local)
-- ❌ Testes 10-20x mais lentos
-- ❌ Dificulta CI/CD
-- ❌ Isolamento de dados complexo
-- ❌ Requer limpeza de dados entre testes
-- ❌ Problemas de permissão (visto nos erros)
+### High Priority Tasks
 
-**Problemas Observados:**
-```
-OperationalError: (1045, "Access denied for user 'app'@'localhost'")
-```
+1. **Fix the environment variable**
+   - Add `Set-Item -Path Env:DJANGO_SETTINGS_MODULE -Value 'settings.test'` to the engineer profile or call it in scripts prior to pytest.
 
----
+2. **Update failing assertions**
+   - `tests/test_metrics.py`: align the expected label names (`status`, `result`) and update the Celery queue metric helper usage.
+   - `tests/test_middleware.py`: adapt the mocks so they provide `__setitem__`, remove hard coded expectations for individual kwargs, and use the context dictionary instead.
 
-### Decisão 2: Correção dos Testes Falhando
+3. **Create `scripts/run_tests.ps1`**
+   ```powershell
+   Write-Host "Running unit tests with SQLite in-memory..." -ForegroundColor Cyan
+   $env:DJANGO_SETTINGS_MODULE = 'settings.test'
+   & D:/provemaps_beta/venv/Scripts/python.exe -m pytest tests/ `
+       --cov=core.metrics_custom `
+       --cov=core.middleware.request_id `
+       --cov-report=term-missing `
+       --cov-report=html `
+       --tb=short `
+       -v
+   if ($LASTEXITCODE -eq 0) {
+       Write-Host "All tests passed." -ForegroundColor Green
+       Write-Host "Coverage report: htmlcov/index.html" -ForegroundColor Cyan
+   } else {
+       Write-Host "Test failures detected." -ForegroundColor Red
+       exit 1
+   }
+   ```
 
-#### Opção A: ✅ RECOMENDADO - Corrigir Assertivas dos Testes
-**Tempo estimado:** 30 minutos  
-**Impacto:** Baixo
+### Medium Priority Tasks
 
-**Mudanças necessárias:**
-1. **test_metrics.py** (10 testes):
-   - Trocar `success=True/False` → `status='success'/'error'`
-   - Trocar `hit='true'/'false'` → `result='hit'/'miss'`
-   - Corrigir assinatura `update_celery_queue_metrics`
+4. **Document the workflow**
+   - Add a testing section to `OBSERVABILITY_PHASE3.md` describing the PowerShell script, direct pytest command, and coverage locations.
 
-2. **test_middleware.py** (5 testes):
-   - Ajustar estrutura de `call_kwargs`
-   - Corrigir mock de response (suportar `__setitem__`)
-   - Ajustar IP padrão de 'unknown' para '127.0.0.1'
+5. **Ignore build artefacts**
+   - Ensure `.gitignore` contains `htmlcov/`, `.coverage`, `.coverage.*`, and `.pytest_cache/` entries.
 
-**Resultado esperado:**
-- ✅ 35/35 testes passando
-- ✅ 99% coverage mantido
-- ✅ FASE 4 completa
+### Low Priority (Optional)
 
----
+6. **Integrate with CI/CD**
+   - Example GitHub Actions job:
+   ```yaml
+   name: Tests
 
-#### Opção B: ❌ NÃO RECOMENDADO - Alterar Implementação
-**Tempo estimado:** 2-3 horas  
-**Impacto:** Alto (requer reteste de FASE 3)
+   on: [push, pull_request]
 
-**Mudanças necessárias:**
-- Alterar labels de métricas Prometheus
-- Re-escrever funções de helper
-- Re-testar toda integração
-- Atualizar documentação (./OBSERVABILITY_PHASE3.md)
-
----
-
-### Decisão 3: Estratégia de Execução de Testes
-
-#### Opção A: ✅ RECOMENDADO - Script Dedicado
-**Criar `scripts/run_tests.ps1`:**
-```powershell
-# scripts/run_tests.ps1
-$env:DJANGO_SETTINGS_MODULE='settings.test'
-& venv/Scripts/python.exe -m pytest tests/ `
-  --cov=core --cov=maps_view --cov=routes_builder `
-  --cov-report=term-missing `
-  --cov-report=html `
-  -v
-
-Write-Host "`n✅ Coverage report: htmlcov/index.html" -ForegroundColor Green
-```
-
-**Uso:**
-```powershell
-.\scripts\run_tests.ps1
-```
+   jobs:
+     test:
+       runs-on: ubuntu-latest
+       steps:
+         - uses: actions/checkout@v4
+         - uses: actions/setup-python@v5
+           with:
+             python-version: '3.13'
+         - run: pip install -r requirements.txt pytest pytest-cov pytest-django
+         - env:
+             DJANGO_SETTINGS_MODULE: settings.test
+           run: pytest tests/ --cov=core --cov-report=xml
+         - uses: codecov/codecov-action@v4
+   ```
 
 ---
 
-#### Opção B: Atualizar Makefile
-**Adicionar ao `makefile`:**
-```makefile
-test-windows:
-	@powershell -Command "$$env:DJANGO_SETTINGS_MODULE='settings.test'; python -m pytest tests/"
+## Implementation Checklist
 
-test-coverage-windows:
-	@powershell -Command "$$env:DJANGO_SETTINGS_MODULE='settings.test'; python -m pytest tests/ --cov=core --cov-report=html"
-```
+### Phase 1 (critical)
+- [ ] Persist the environment variable configuration.
+- [ ] Update ten assertions in `tests/test_metrics.py`.
+- [ ] Update five assertions in `tests/test_middleware.py`.
+- [ ] Add `scripts/run_tests.ps1` to the repository.
+- [ ] Rerun the suite and confirm 35 of 35 tests pass.
 
-**Uso:**
-```powershell
-make test-windows
-```
+### Phase 2 (documentation and hygiene)
+- [ ] Update observability documentation with testing guidance.
+- [ ] Add coverage artefacts to `.gitignore`.
+- [ ] Optionally create `TESTING_STRATEGY.md` for quick reference.
 
----
-
-## 🔧 Ações Corretivas Recomendadas
-
-### 📌 Prioridade ALTA (Essencial)
-
-#### 1. Fixar Variável de Ambiente (5 minutos)
-```powershell
-# Adicionar ao perfil do PowerShell
-# C:\Users\[User]\Documents\PowerShell\Microsoft.PowerShell_profile.ps1
-$env:DJANGO_SETTINGS_MODULE = 'settings.test'
-```
-
-#### 2. Corrigir Testes Falhando (30 minutos)
-**Arquivo:** `tests/test_metrics.py`
-- Linhas 71, 84, 103, 113, 123: Trocar labels
-- Linhas 162, 176: Corrigir chamada `update_celery_queue_metrics`
-
-**Arquivo:** `tests/test_middleware.py`
-- Linhas 81, 195: Ajustar extração de kwargs
-- Linha 94: Usar Mock compatível com `__setitem__`
-- Linha 163: Ajustar IP padrão
-
-#### 3. Criar Script de Teste (10 minutos)
-**Arquivo:** `scripts/run_tests.ps1`
-```powershell
-#!/usr/bin/env pwsh
-# Script para executar testes com configuração correta
-
-Write-Host "🧪 Executando testes com SQLite in-memory..." -ForegroundColor Cyan
-
-$env:DJANGO_SETTINGS_MODULE = 'settings.test'
-
-& venv/Scripts/python.exe -m pytest tests/ `
-    --cov=core.metrics_custom `
-    --cov=core.middleware.request_id `
-    --cov-report=term-missing `
-    --cov-report=html `
-    --tb=short `
-    -v
-
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "`n✅ Todos os testes passaram!" -ForegroundColor Green
-    Write-Host "📊 Relatório de coverage: htmlcov/index.html" -ForegroundColor Cyan
-} else {
-    Write-Host "`n❌ Alguns testes falharam" -ForegroundColor Red
-    exit 1
-}
-```
+### Phase 3 (quality automation)
+- [ ] Wire the test script into GitHub Actions or another CI pipeline.
+- [ ] Upload coverage reports if needed.
 
 ---
 
-### 📌 Prioridade MÉDIA (Recomendado)
+## Key Takeaways
 
-#### 4. Documentar Estratégia de Testes (20 minutos)
-**Adicionar a `./OBSERVABILITY_PHASE3.md`:**
-```markdown
-## Executando Testes
-
-### Windows (PowerShell)
-```powershell
-# Opção 1: Script dedicado
-.\scripts\run_tests.ps1
-
-# Opção 2: Comando direto
-$env:DJANGO_SETTINGS_MODULE='settings.test'
-pytest tests/ --cov=core --cov-report=html
-```
-
-### Linux/Mac
-```bash
-DJANGO_SETTINGS_MODULE=settings.test pytest tests/ --cov=core
-```
-
-### Coverage Report
-Após executar os testes, abra `htmlcov/index.html` no navegador.
-```
-
-#### 5. Adicionar .gitignore Entries (2 minutos)
-```gitignore
-# Coverage reports
-htmlcov/
-.coverage
-.coverage.*
-
-# Pytest cache
-.pytest_cache/
-```
+- The implementation is stable; failing tests stem from outdated expectations.
+- SQLite in memory keeps the feedback loop fast and reliable.
+- Automating the setup prevents regressions caused by missing environment variables.
+- Once the fifteen assertions are updated, Phase 4 can be marked complete.
 
 ---
 
-### 📌 Prioridade BAIXA (Opcional)
-
-#### 6. Integração com CI/CD
-**GitHub Actions (`.github/workflows/tests.yml`):**
-```yaml
-name: Tests
-
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.13'
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-cov pytest-django
-      - name: Run tests
-        env:
-          DJANGO_SETTINGS_MODULE: settings.test
-        run: pytest tests/ --cov=core --cov-report=xml
-      - name: Upload coverage
-        uses: codecov/codecov-action@v3
-```
-
----
-
-## 📋 Checklist de Implementação
-
-### Fase 1: Correções Críticas (45 minutos)
-- [ ] Adicionar `$env:DJANGO_SETTINGS_MODULE='settings.test'` ao perfil PowerShell
-- [ ] Corrigir 10 assertivas em `test_metrics.py`
-- [ ] Corrigir 5 assertivas em `test_middleware.py`
-- [ ] Criar `scripts/run_tests.ps1`
-- [ ] Executar testes: ✅ 35/35 passando
-
-### Fase 2: Documentação (30 minutos)
-- [ ] Atualizar `./OBSERVABILITY_PHASE3.md` com seção de testes
-- [ ] Adicionar `htmlcov/` e `.coverage` ao `.gitignore`
-- [ ] Criar `./TESTING_STRATEGY.md` (opcional)
-
-### Fase 3: Qualidade (20 minutos)
-- [ ] Executar testes completos: `pytest tests/ -v`
-- [ ] Verificar coverage: deve ser >95%
-- [ ] Validar HTML report: `htmlcov/index.html`
-- [ ] Commit e push das correções
-
----
-
-## 🎯 Recomendação Final
-
-### ✅ DECISÃO RECOMENDADA
-
-**1. Manter SQLite para testes unitários**
-- Rápido, isolado, sem dependências externas
-- Padrão Django e melhor prática da indústria
-
-**2. Corrigir assertivas dos testes**
-- Mudanças mínimas, baixo risco
-- 30 minutos de trabalho
-- 35/35 testes passando após correção
-
-**3. Criar script dedicado de testes**
-- `scripts/run_tests.ps1` para Windows
-- `scripts/run_tests.sh` para Linux/Mac
-- Simplifica execução e CI/CD
-
-**4. Usar MariaDB apenas para testes de integração**
-- Criar `tests/integration/` separado (futuro)
-- Executar manualmente ou em CI/CD
-- Não misturar com testes unitários
-
-### ⏱️ Tempo Total Estimado
-- **Correções críticas:** 45 minutos
-- **Documentação:** 30 minutos
-- **Validação:** 20 minutos
-- **TOTAL:** ~1h30min
-
-### 📊 Resultado Esperado
-```
-================================ test session starts =================================
-collected 35 items
-
-tests/test_metrics.py::TestMetricsInitialization::... PASSED           [  2%]
-tests/test_metrics.py::TestZabbixMetrics::...         PASSED           [  5%]
-...
-tests/test_middleware.py::TestConcurrency::...        PASSED           [100%]
-
----------- coverage: platform win32, python 3.13.9-final-0 -----------
-Name                            Stmts   Miss  Cover   Missing
--------------------------------------------------------------
-core/metrics_custom.py             31      0   100%
-core/middleware/request_id.py      30      0   100%
--------------------------------------------------------------
-TOTAL                              61      0   100%
-
-========================== 35 passed in 0.85s ================================
-
-✅ Coverage report gerado: htmlcov/index.html
-```
-
----
-
-## 📞 Próximos Passos
-
-Após aprovação desta análise, posso:
-
-1. ✅ **Implementar correções nos testes** (30 min)
-2. ✅ **Criar script `run_tests.ps1`** (10 min)
-3. ✅ **Atualizar documentação** (20 min)
-4. ✅ **Validar 35/35 testes passando** (5 min)
-
-**Aguardando decisão para prosseguir com as correções.**
-
----
-
-## 📚 Referências
-
-- [Django Testing Best Practices](https://docs.djangoproject.com/en/5.0/topics/testing/)
-- [pytest-django Documentation](https://pytest-django.readthedocs.io/)
-- [Prometheus Python Client](https://github.com/prometheus/client_python)
-- [structlog Documentation](https://www.structlog.org/)
-
----
-
-**Relatório gerado em:** 27/10/2025  
-**Autor:** GitHub Copilot  
-**Versão:** 1.0
+**Next steps:** approve the recommended plan, adjust the tests, and re-run the suite to close Phase 4.

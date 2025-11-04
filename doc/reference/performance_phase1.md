@@ -1,19 +1,19 @@
-# Fase 1 – Preparação e Diagnóstico de Desempenho
+# Phase 1 – Performance Preparation and Diagnostics
 
-Esta primeira etapa tem como objetivo levantar uma linha de base confiável antes de aplicarmos mudanças mais invasivas. Todos os passos abaixo podem ser executados no ambiente atual (SQLite) e repetidos após a migração para validar os ganhos.
+This first stage collects a trustworthy baseline before we apply invasive changes. All of the steps below can be executed in the current environment (SQLite) and repeated after migration to validate the gains.
 
-## 1. Linha de base dos endpoints
+## 1. Endpoint baseline
 
-1. Garanta que exista um usuário com acesso aos endpoints (ex.: `staff`).
-2. Execute o comando de profiling recém-criado:
+1. Make sure there is a user with access to the endpoints (for example, `staff`).
+2. Run the newly created profiling command:
 
    ```bash
    python manage.py profile_endpoints --username=<USER> --password=<PASS> --runs=5
    ```
 
-   O comando exercita as rotas críticas (`/zabbix_api/api/fibers/`, `/zabbix_api/api/sites/`, `/zabbix_api/api/device-ports/<id>/`, etc.) e imprime a média, p95 e tempo máximo em milissegundos. Use esse resultado como referência para comparar depois da migração/cache.
+   The command exercises the critical routes (`/zabbix_api/api/fibers/`, `/zabbix_api/api/sites/`, `/zabbix_api/api/device-ports/<id>/`, etc.) and prints the average, p95, and max time in milliseconds. Use this result as the reference for comparisons after migration or caching.
 
-3. Caso queira mais detalhes, habilite temporariamente o log de tempo das requisições Django, adicionando ao `settings.py`:
+3. If you need additional detail, temporarily enable Django request timing logs by adding the following to `settings.py`:
 
    ```python
    LOGGING["loggers"]["django.request"] = {
@@ -22,13 +22,13 @@ Esta primeira etapa tem como objetivo levantar uma linha de base confiável ante
    }
    ```
 
-   Ou utilize ferramentas de carga (Locust, k6) apontando para os endpoints REST e registrando throughput/latência.
+   Alternatively, use load-testing tools (Locust, k6) against the REST endpoints to record throughput and latency.
 
-## 2. Instrumentação das chamadas ao Zabbix
+## 2. Instrument Zabbix calls
 
-Agora toda chamada `zabbix_request` é logada com duração e status (`DEBUG`). Para coletar o volume real:
+All `zabbix_request` calls are now logged with duration and status (`DEBUG`). To capture the real volume:
 
-1. No `LOGGING` do Django, habilite o namespace `zabbix_api.services.zabbix_service` em nível `DEBUG` durante o período de medição:
+1. In Django `LOGGING`, enable the `zabbix_api.services.zabbix_service` namespace at the `DEBUG` level during the measurement window:
 
    ```python
    LOGGING["loggers"]["zabbix_api.services.zabbix_service"] = {
@@ -37,13 +37,13 @@ Agora toda chamada `zabbix_request` é logada com duração e status (`DEBUG`). 
    }
    ```
 
-2. Rode o sistema normalmente (ou o comando de profiling acima) e observe no console a quantidade de chamadas, duração média, presença de retries, etc. Esse log servirá para validar se as futuras otimizações (batch requests, cache) reduzem o número e o tempo dessas chamadas.
+2. Run the system normally (or execute the profiling command above) and watch the console for the number of calls, average duration, presence of retries, and similar data. This log will validate whether future optimizations (batch requests, cache) reduce the volume and duration of those calls.
 
-## 3. Consumo de CPU/IO do banco atual
+## 3. Current database CPU/IO consumption
 
-Mesmo em SQLite é possível monitorar o impacto das consultas:
+Even with SQLite you can monitor the impact of queries:
 
-- Ative a saída de queries lentas pelo Django adicionando:
+- Enable Django slow query logging by adding:
 
   ```python
   LOGGING["loggers"]["django.db.backends"] = {
@@ -52,40 +52,40 @@ Mesmo em SQLite é possível monitorar o impacto das consultas:
   }
   ```
 
-  Isso imprime cada SQL executado com a duração estimada (útil para identificar N+1 ou consultas custosas).
+  This prints every executed SQL statement alongside its estimated duration (helpful to spot N+1 patterns or expensive queries).
 
-- Utilize ferramentas do sistema operacional (Task Manager, `Get-Process`, `perfmon`) para observar uso de CPU/IO enquanto os testes rodam.
+- Use operating system tools (Task Manager, `Get-Process`, `perfmon`) to inspect CPU and IO usage while the tests run.
 
-- Para ambientes Linux, `iotop` e `htop` ajudam a visualizar gargalos.
+- On Linux, `iotop` and `htop` make bottlenecks easy to visualize.
 
-Essas evidências indicarão quão limitado o SQLite está e quais tabelas consultamos com mais frequência.
+These observations highlight both SQLite’s limitations and the tables we query most frequently.
 
-## 4. Mapeamento da infraestrutura atual e planejamento da migração
+## 4. Map current infrastructure and plan the migration
 
-- Confirmamos que o projeto utiliza SQLite (`django.db.backends.sqlite3`) e o arquivo `db.sqlite3` fica em `C:\Users\Paulo Adriano\Downloads\django-maps-prove-master-fixed\db.sqlite3`. Esse formato não suporta bem múltiplos processos nem carga concorrente.
+- Confirm that the project uses SQLite (`django.db.backends.sqlite3`) and that the `db.sqlite3` file resides at `C:\Users\Paulo Adriano\Downloads\django-maps-prove-master-fixed\db.sqlite3`. This engine does not handle multiple processes or concurrent loads well.
 
-- Levante onde mais o projeto roda (staging/prod). Se também usa SQLite, será necessário agendar downtime para migração.
+- Determine where else the project runs (staging/production). If those environments also rely on SQLite, schedule downtime for migration.
 
-- Defina o alvo: MySQL 8.x ou MariaDB 10.x são recomendados pelo ecossistema Zabbix, mas PostgreSQL também é suportado pelo Django. Verifique com a equipe de infra quais opções de hospedagem/backup existem.
+- Choose the target database: MySQL 8.x or MariaDB 10.x are recommended by the Zabbix ecosystem, but PostgreSQL is also fully supported by Django. Coordinate with infrastructure to understand hosting and backup capabilities.
 
-- Valide drivers/libraries no Django:
-  * MySQL/MariaDB: `mysqlclient` (mais performático) ou `PyMySQL`.
+- Validate the required Django drivers/libraries:
+  * MySQL/MariaDB: `mysqlclient` (better performance) or `PyMySQL`.
   * PostgreSQL: `psycopg2`.
-  * Garanta que as dependências sejam incluídas no `requirements.txt`.
+  * Make sure the dependencies are listed in `requirements.txt`.
 
-- Esboce o plano de migração:
-  1. Criar database vazio no alvo (`utf8mb4` no MySQL).
-  2. Atualizar `settings.DATABASES` (manter `CONN_MAX_AGE` padrão por ora).
-  3. Executar `python manage.py migrate`.
-  4. Carregar dados via `dumpdata/loaddata` ou ferramentas nativas (por exemplo, `sqlite3 db.sqlite3 .dump` + `mysql`).
-  5. Testar bateria de comandos (`profile_endpoints`, testes automatizados).
+- Draft the migration plan:
+  1. Create an empty database on the target platform (use `utf8mb4` for MySQL/MariaDB).
+  2. Update `settings.DATABASES` (keep the default `CONN_MAX_AGE` for now).
+  3. Run `python manage.py migrate`.
+  4. Load data via `dumpdata/loaddata` or native tooling (for example, `sqlite3 db.sqlite3 .dump | mysql ...`).
+  5. Execute the command suite (`profile_endpoints`, automated tests).
 
-## 5. Próximos passos após a Fase 1
+## 5. Next steps after Phase 1
 
-Com as métricas iniciais em mãos:
+With the baseline metrics collected:
 
-- Documente os resultados (guardar logs do profiling e do logger de Zabbix).
-- Use essas métricas como baseline para a Fase 2 (migração do banco/índices).
-- Assim que MySQL estiver operacional, repita o comando `profile_endpoints` e compare.
+- Document the results (retain profiling output and the Zabbix logger captures).
+- Use these metrics as the baseline for Phase 2 (database migration and indexing).
+- Once MySQL is operational, rerun `profile_endpoints` and compare the results.
 
-Esse checklist garante visibilidade sobre o estado atual antes de qualquer alteração estrutural, ajudando a medir os ganhos reais das fases seguintes.
+This checklist provides visibility into the current state before any structural change, helping measure the real gains achieved in later phases.

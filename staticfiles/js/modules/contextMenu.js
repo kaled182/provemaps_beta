@@ -153,7 +153,7 @@ export function updateContextMenuState({ hasActiveFiber, fiberMeta, pathLength }
         if (cableNameEl) {
             const editingSuffix = pathLength > 0 ? ' - EDITING' : '';
             const displayName = fiberMeta.name || `Cable #${fiberMeta.id ?? '?'}`;
-            cableNameEl.textContent = `📌 ${displayName}${editingSuffix}`;
+            cableNameEl.textContent = `${displayName}${editingSuffix}`;
         }
         if (reloadButtonEl && reloadTextEl) {
             reloadButtonEl.classList.remove('hidden');

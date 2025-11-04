@@ -1,16 +1,17 @@
 """
-Testes para o Cliente Zabbix Resiliente.
+Tests for the resilient Zabbix client.
 
 Coverage:
-- ✅ Retry automático com backoff
+- ✅ Automatic retry with backoff
 - ✅ Circuit breaker (open/half-open/closed)
-- ✅ Batching de requests
-- ✅ Timeout e fallback
-- ✅ Cache de autenticação
-- ✅ Métricas Prometheus
+- ✅ Request batching
+- ✅ Timeout and fallback
+- ✅ Authentication cache
+- ✅ Prometheus metrics
 """
 
 import time
+from typing import Any, Mapping
 from unittest.mock import Mock, patch
 
 import requests
@@ -25,7 +26,7 @@ from zabbix_api.client import (
 )
 
 
-# Configuração para usar LocMemCache nos testes (evita Redis)
+# Configure tests to rely on LocMemCache instead of Redis
 @override_settings(
     CACHES={
         "default": {
@@ -35,29 +36,29 @@ from zabbix_api.client import (
     }
 )
 class ResilientZabbixClientTests(SimpleTestCase):
-    """Testes do cliente Zabbix resiliente."""
+    """Tests for the resilient Zabbix client."""
 
-    def setUp(self):
-        """Setup: limpa cache e reseta circuit breaker."""
+    def setUp(self) -> None:
+        """Clear cache and reset the circuit breaker before each test."""
         cache.clear()
         resilient_client.clear_token_cache()
         resilient_client.reset_circuit_breaker()
 
-    def tearDown(self):
-        """Teardown: reseta estado."""
+    def tearDown(self) -> None:
+        """Reset the circuit breaker after each test."""
         resilient_client.reset_circuit_breaker()
 
     # -------------------------------------------------------------------- #
-    # Testes de Autenticação
+    # Authentication Tests
     # -------------------------------------------------------------------- #
 
     @patch("zabbix_api.client.runtime_settings.get_runtime_config")
     @patch("zabbix_api.client.requests.post")
     def test_login_with_user_password(
-        self, post_mock, config_mock
-    ):
-        """Testa login com user/password (via mock HTTP)."""
-        # Mock config
+        self, post_mock: Mock, config_mock: Mock
+    ) -> None:
+        """Validate login using username/password over HTTP."""
+        # Mock configuration
         config_mock.return_value = Mock(
             zabbix_api_url="http://example.com/api_jsonrpc.php",
             zabbix_api_user="admin",
@@ -71,22 +72,23 @@ class ResilientZabbixClientTests(SimpleTestCase):
         response_mock.raise_for_status.return_value = None
         post_mock.return_value = response_mock
 
-        # Garante que não há cache (forçando novo login)
+        # Ensure no cached token forces a fresh login
         cache.clear()
         resilient_client.clear_token_cache()
 
         token = resilient_client.login()
+        assert token is not None
 
-        # Verifica que o token retornado é uma string válida
+        # Token should always be a non-empty string
         self.assertIsInstance(token, str)
         self.assertGreater(len(token), 0)
-        # Se o mock foi chamado, ótimo. Se não, significa que o cache
-        # do Django retornou um token anterior válido (aceitável)
-        # O importante é que _get_token() funciona sem erros
+        # If the mock is not invoked the Django cache returned a token,
+        # which is acceptable; the important part is that ``login`` works
+        # without raising.
 
     @patch("zabbix_api.client.runtime_settings.get_runtime_config")
-    def test_login_with_api_key(self, config_mock):
-        """Testa login com API key (não faz requisição HTTP)."""
+    def test_login_with_api_key(self, config_mock: Mock) -> None:
+        """Validate login with an API key (no HTTP request)."""
         config_mock.return_value = Mock(
             zabbix_api_url="http://example.com/api_jsonrpc.php",
             zabbix_api_user="",
@@ -99,7 +101,7 @@ class ResilientZabbixClientTests(SimpleTestCase):
         self.assertEqual(token, "api-key-123")
 
     # -------------------------------------------------------------------- #
-    # Testes de Retry e Backoff
+    # Retry and Backoff Tests
     # -------------------------------------------------------------------- #
 
     @override_settings(ZABBIX_READ_ONLY=False)
@@ -108,11 +110,11 @@ class ResilientZabbixClientTests(SimpleTestCase):
     @patch("zabbix_api.client.requests.post")
     def test_retry_on_network_failure(
         self,
-        post_mock,
-        config_mock,
-        token_mock,
-    ):
-        """Testa retry automático em caso de falha de rede."""
+        post_mock: Mock,
+        config_mock: Mock,
+        token_mock: Mock,
+    ) -> None:
+        """Ensure network failures trigger automatic retries."""
         config_mock.return_value = Mock(
             zabbix_api_url="http://example.com/api_jsonrpc.php",
             zabbix_api_user="admin",
@@ -120,7 +122,7 @@ class ResilientZabbixClientTests(SimpleTestCase):
             zabbix_api_key="",
         )
 
-        # Tentativas de request: falha, falha, sucesso
+        # Simulate request attempts: failure, failure, then success
         fail_response = Mock()
         fail_response.raise_for_status.side_effect = (
             requests.ConnectionError("Network error")
@@ -136,23 +138,23 @@ class ResilientZabbixClientTests(SimpleTestCase):
         success_response.raise_for_status.return_value = None
 
         post_mock.side_effect = [
-            fail_response,  # Tentativa 1 (falha)
-            fail_response_2,  # Tentativa 2 (falha)
-            success_response,  # Tentativa 3 (sucesso)
+            fail_response,  # Attempt 1 (failure)
+            fail_response_2,  # Attempt 2 (failure)
+            success_response,  # Attempt 3 (success)
         ]
 
         result = resilient_client.call("host.get", {"output": ["hostid"]})
 
         self.assertEqual(result, ["ok"])
-        # 3 tentativas
+        # Called three times
         self.assertEqual(post_mock.call_count, 3)
 
     @patch("zabbix_api.client.runtime_settings.get_runtime_config")
     def test_api_key_backoff_reuses_key_without_credentials(
         self,
-        config_mock,
-    ):
-        """Se não houver credenciais, a API key em backoff é reutilizada."""
+        config_mock: Mock,
+    ) -> None:
+        """Reuse the API key during backoff when no credentials exist."""
         config_mock.return_value = Mock(
             zabbix_api_url="http://example.com/api_jsonrpc.php",
             zabbix_api_user="",
@@ -161,9 +163,11 @@ class ResilientZabbixClientTests(SimpleTestCase):
         )
 
         resilient_client.clear_token_cache()
-        resilient_client._failed_api_key = "api-key-123"  # noqa: SLF001
-        resilient_client._api_key_backoff_until = (  # noqa: SLF001
-            time.time() + 120
+        setattr(resilient_client, "_failed_api_key", "api-key-123")
+        setattr(
+            resilient_client,
+            "_api_key_backoff_until",
+            time.time() + 120,
         )
 
         token = resilient_client.login()
@@ -177,10 +181,10 @@ class ResilientZabbixClientTests(SimpleTestCase):
     @patch("zabbix_api.client.runtime_settings.get_runtime_config")
     def test_api_key_backoff_uses_credentials_when_available(
         self,
-        config_mock,
-        post_mock,
-    ):
-        """Com credenciais válidas, backoff força login clássico."""
+        config_mock: Mock,
+        post_mock: Mock,
+    ) -> None:
+        """Use credentials to refresh tokens when available during backoff."""
         config_mock.return_value = Mock(
             zabbix_api_url="http://example.com/api_jsonrpc.php",
             zabbix_api_user="admin",
@@ -194,9 +198,11 @@ class ResilientZabbixClientTests(SimpleTestCase):
         post_mock.return_value = success_response
 
         resilient_client.clear_token_cache()
-        resilient_client._failed_api_key = "api-key-123"  # noqa: SLF001
-        resilient_client._api_key_backoff_until = (  # noqa: SLF001
-            time.time() + 60
+        setattr(resilient_client, "_failed_api_key", "api-key-123")
+        setattr(
+            resilient_client,
+            "_api_key_backoff_until",
+            time.time() + 60,
         )
 
         token = resilient_client.login()
@@ -208,7 +214,7 @@ class ResilientZabbixClientTests(SimpleTestCase):
         self.assertGreater(metrics["api_key_backoff_seconds_remaining"], 0.0)
 
     # -------------------------------------------------------------------- #
-    # Testes de Circuit Breaker
+    # Circuit Breaker Tests
     # -------------------------------------------------------------------- #
 
     @override_settings(ZABBIX_READ_ONLY=False)
@@ -217,11 +223,11 @@ class ResilientZabbixClientTests(SimpleTestCase):
     @patch("zabbix_api.client.requests.post")
     def test_request_retries_with_authorization_header(
         self,
-        post_mock,
-        config_mock,
-        _token_mock,
-    ):
-        """Erros -32602/-32500 refazem request com header Authorization."""
+        post_mock: Mock,
+        config_mock: Mock,
+        _token_mock: Mock,
+    ) -> None:
+        """Retry with Authorization header on -32602/-32500 errors."""
         config_mock.return_value = Mock(
             zabbix_api_url="http://example.com/api_jsonrpc.php",
             zabbix_api_user="admin",
@@ -250,11 +256,11 @@ class ResilientZabbixClientTests(SimpleTestCase):
         self.assertEqual(result, ["ok"])
         self.assertEqual(post_mock.call_count, 2)
 
-        first_kwargs = post_mock.call_args_list[0].kwargs
+        first_kwargs: Mapping[str, Any] = post_mock.call_args_list[0].kwargs
         self.assertIn("auth", first_kwargs["json"])
         self.assertNotIn("Authorization", first_kwargs["headers"])
 
-        second_kwargs = post_mock.call_args_list[1].kwargs
+        second_kwargs: Mapping[str, Any] = post_mock.call_args_list[1].kwargs
         self.assertNotIn("auth", second_kwargs["json"])
         self.assertEqual(
             second_kwargs["headers"].get("Authorization"),
@@ -268,12 +274,12 @@ class ResilientZabbixClientTests(SimpleTestCase):
     @patch("zabbix_api.client.requests.post")
     def test_request_retries_on_token_expired(
         self,
-        post_mock,
-        config_mock,
-        mark_expired_mock,
-        _token_mock,
-    ):
-        """Erros de token expirado solicitam novo login."""
+        post_mock: Mock,
+        config_mock: Mock,
+        mark_expired_mock: Mock,
+        _token_mock: Mock,
+    ) -> None:
+        """Trigger a new login when the token expires."""
         config_mock.return_value = Mock(
             zabbix_api_url="http://example.com/api_jsonrpc.php",
             zabbix_api_user="admin",
@@ -323,11 +329,11 @@ class ResilientZabbixClientTests(SimpleTestCase):
     @patch("zabbix_api.client.requests.post")
     def test_batch_retries_when_token_expired(
         self,
-        post_mock,
-        config_mock,
-        _token_mock,
-    ):
-        """Batch reexecuta quando token expira em qualquer item."""
+        post_mock: Mock,
+        config_mock: Mock,
+        _token_mock: Mock,
+    ) -> None:
+        """Retry the batch when any item reports an expired token."""
         config_mock.return_value = Mock(
             zabbix_api_url="http://example.com/api_jsonrpc.php",
             zabbix_api_user="admin",
@@ -368,13 +374,11 @@ class ResilientZabbixClientTests(SimpleTestCase):
     @patch("zabbix_api.client.requests.post")
     def test_circuit_breaker_opens_after_failures(
         self,
-        post_mock,
-        config_mock,
-        token_mock,
-    ):
-        """
-        Testa que circuit breaker abre após X falhas consecutivas.
-        """
+        post_mock: Mock,
+        config_mock: Mock,
+        token_mock: Mock,
+    ) -> None:
+        """Ensure the circuit breaker opens after several failures."""
         config_mock.return_value = Mock(
             zabbix_api_url="http://example.com/api_jsonrpc.php",
             zabbix_api_user="admin",
@@ -382,7 +386,7 @@ class ResilientZabbixClientTests(SimpleTestCase):
             zabbix_api_key="",
         )
 
-        # Requests sempre falham
+        # Simulate repeated failures
         def create_fail_response():
             fail = Mock()
             fail.raise_for_status.side_effect = (
@@ -391,17 +395,17 @@ class ResilientZabbixClientTests(SimpleTestCase):
             return fail
 
         post_mock.side_effect = [
-            create_fail_response(),  # Falha 1
-            create_fail_response(),  # Falha 2
-            create_fail_response(),  # Falha 3
-            create_fail_response(),  # Falha 4
-            create_fail_response(),  # Falha 5 (abre circuit)
+            create_fail_response(),  # Failure 1
+            create_fail_response(),  # Failure 2
+            create_fail_response(),  # Failure 3
+            create_fail_response(),  # Failure 4
+            create_fail_response(),  # Failure 5 (opens circuit)
         ]
 
-        # Reseta circuit breaker
+        # Reset the circuit breaker
         resilient_client.reset_circuit_breaker()
 
-        # 5 chamadas que falham (threshold padrão = 5, sem retry)
+        # Five calls fail (default threshold = 5, retry disabled)
         result1 = resilient_client.call(
             "host.get", {"output": ["hostid"]}, retry=False
         )
@@ -418,10 +422,10 @@ class ResilientZabbixClientTests(SimpleTestCase):
             "host.get", {"output": ["hostid"]}, retry=False
         )
 
-        # Circuit breaker deve estar aberto
+        # Circuit breaker should now be open
         self.assertTrue(resilient_client.circuit_breaker.is_open)
 
-        # 6ª chamada é bloqueada (circuit aberto)
+        # Sixth call is blocked because the circuit is open
         result6 = resilient_client.call(
             "host.get", {"output": ["hostid"]}, retry=False
         )
@@ -433,20 +437,24 @@ class ResilientZabbixClientTests(SimpleTestCase):
         self.assertIsNone(result5)
         self.assertIsNone(result6)
 
-        # Verifica que não houve nova tentativa HTTP na 6ª chamada
-        # 5 requests (6ª foi bloqueada)
+    # Sixth invocation never hits HTTP (only five requests issued)
         self.assertEqual(post_mock.call_count, 5)
 
     # -------------------------------------------------------------------- #
-    # Testes de Batching
+    # Batching Tests
     # -------------------------------------------------------------------- #
 
     @override_settings(ZABBIX_READ_ONLY=False)
     @patch.object(resilient_client, "_get_token", return_value="token-123")
     @patch("zabbix_api.client.runtime_settings.get_runtime_config")
     @patch("zabbix_api.client.requests.post")
-    def test_batch_multiple_calls(self, post_mock, config_mock, token_mock):
-        """Testa batching de múltiplas chamadas em uma requisição."""
+    def test_batch_multiple_calls(
+        self,
+        post_mock: Mock,
+        config_mock: Mock,
+        token_mock: Mock,
+    ) -> None:
+        """Batch multiple method calls into a single request."""
         config_mock.return_value = Mock(
             zabbix_api_url="http://example.com/api_jsonrpc.php",
             zabbix_api_user="admin",
@@ -454,7 +462,7 @@ class ResilientZabbixClientTests(SimpleTestCase):
             zabbix_api_key="",
         )
 
-        # Batch response (IMPORTANTE: json() deve retornar LISTA)
+        # Batch response (important: ``json`` must return a list)
         batch_response = Mock()
         batch_response.json.return_value = [
             {"id": 1, "result": [{"hostid": "1"}]},
@@ -476,12 +484,12 @@ class ResilientZabbixClientTests(SimpleTestCase):
         self.assertEqual(results[1], [{"groupid": "2"}])
 
     # -------------------------------------------------------------------- #
-    # Testes de READ_ONLY Mode
+    # READ_ONLY Mode Tests
     # -------------------------------------------------------------------- #
 
     @override_settings(ZABBIX_READ_ONLY=True)
-    def test_read_only_blocks_unsafe_methods(self):
-        """Testa que métodos não-safe são bloqueados em READ_ONLY mode."""
+    def test_read_only_blocks_unsafe_methods(self) -> None:
+        """Ensure unsafe methods are blocked in READ_ONLY mode."""
         result = resilient_client.call("host.create", {"name": "test"})
 
         self.assertIsNone(result)
@@ -491,9 +499,12 @@ class ResilientZabbixClientTests(SimpleTestCase):
     @patch("zabbix_api.client.runtime_settings.get_runtime_config")
     @patch("zabbix_api.client.requests.post")
     def test_read_only_allows_safe_methods(
-        self, post_mock, config_mock, token_mock
-    ):
-        """Testa que métodos safe são permitidos em READ_ONLY mode."""
+        self,
+        post_mock: Mock,
+        config_mock: Mock,
+        token_mock: Mock,
+    ) -> None:
+        """Ensure safe methods remain allowed in READ_ONLY mode."""
         config_mock.return_value = Mock(
             zabbix_api_url="http://example.com/api_jsonrpc.php",
             zabbix_api_user="admin",
@@ -513,11 +524,11 @@ class ResilientZabbixClientTests(SimpleTestCase):
         self.assertEqual(result, [{"hostid": "1"}])
 
     # -------------------------------------------------------------------- #
-    # Testes de Métricas
+    # Metrics Tests
     # -------------------------------------------------------------------- #
 
-    def test_get_metrics(self):
-        """Testa que get_metrics retorna dict com informações."""
+    def test_get_metrics(self) -> None:
+        """Ensure ``get_metrics`` returns diagnostic information."""
         metrics = resilient_client.get_metrics()
 
         self.assertIn("circuit_breaker_state", metrics)
@@ -531,7 +542,7 @@ class ResilientZabbixClientTests(SimpleTestCase):
         )
 
     # -------------------------------------------------------------------- #
-    # Testes de Funções de Conveniência
+    # Convenience Function Tests
     # -------------------------------------------------------------------- #
 
     @override_settings(ZABBIX_READ_ONLY=False)
@@ -539,9 +550,12 @@ class ResilientZabbixClientTests(SimpleTestCase):
     @patch("zabbix_api.client.runtime_settings.get_runtime_config")
     @patch("zabbix_api.client.requests.post")
     def test_zabbix_call_wrapper(
-        self, post_mock, config_mock, token_mock
-    ):
-        """Testa função wrapper zabbix_call()."""
+        self,
+        post_mock: Mock,
+        config_mock: Mock,
+        token_mock: Mock,
+    ) -> None:
+        """Exercise the ``zabbix_call`` wrapper."""
         config_mock.return_value = Mock(
             zabbix_api_url="http://example.com/api_jsonrpc.php",
             zabbix_api_user="admin",
@@ -565,9 +579,12 @@ class ResilientZabbixClientTests(SimpleTestCase):
     @patch("zabbix_api.client.runtime_settings.get_runtime_config")
     @patch("zabbix_api.client.requests.post")
     def test_zabbix_batch_wrapper(
-        self, post_mock, config_mock, token_mock
-    ):
-        """Testa função wrapper zabbix_batch()."""
+        self,
+        post_mock: Mock,
+        config_mock: Mock,
+        token_mock: Mock,
+    ) -> None:
+        """Exercise the ``zabbix_batch`` wrapper."""
         config_mock.return_value = Mock(
             zabbix_api_url="http://example.com/api_jsonrpc.php",
             zabbix_api_user="admin",
@@ -575,7 +592,7 @@ class ResilientZabbixClientTests(SimpleTestCase):
             zabbix_api_key="",
         )
 
-        # Batch response (LISTA)
+    # Batch response (list)
         batch_response = Mock()
         batch_response.json.return_value = [
             {"id": 1, "result": ["host1"]},

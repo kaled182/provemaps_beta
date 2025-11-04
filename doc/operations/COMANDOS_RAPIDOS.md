@@ -1,88 +1,88 @@
-# ⚡ Comandos Rápidos - MapsProveFiber Dev
+# Quick Commands - MapsProveFiber Dev
 
-## 🚀 Startup Diário
+## Daily Startup
 
 ```powershell
-# 1. Navegar para o projeto
-cd D:\Gemini\Provemaps_GPT-Tier2\mapsprovefiber
+# 1. Change into the project folder
+cd D:\provemaps_beta
 
-# 2. Iniciar Redis (se parado)
-docker start redis-mapspro
+# 2. Start Redis (if stopped)
+docker compose up -d redis
 
-# 3. Iniciar Django
+# 3. Start Django
 python manage.py runserver 0.0.0.0:8000
 
-# 4. Abrir navegador
+# 4. Open the browser
 start http://localhost:8000
 ```
 
 ---
 
-## 🔴 Redis
+## Redis
 
 ```powershell
 # Status
-docker ps | findstr redis
+docker compose ps redis
 
-# Iniciar
-docker start redis-mapspro
+# Start
+docker compose up -d redis
 
-# Parar
-docker stop redis-mapspro
+# Stop
+docker compose stop redis
 
 # Logs
-docker logs redis-mapspro --tail 50
+docker compose logs redis --tail 50
 
-# CLI interativo
-docker exec -it redis-mapspro redis-cli
+# Interactive CLI
+docker compose exec redis redis-cli
 
-# Ver chaves
-docker exec redis-mapspro redis-cli KEYS "*"
+# List keys
+docker compose exec redis redis-cli KEYS "*"
 
-# Limpar cache
-docker exec redis-mapspro redis-cli FLUSHDB
+# Clear cache
+docker compose exec redis redis-cli FLUSHDB
 ```
 
 ---
 
-## 🐍 Django
+## Django
 
 ```powershell
-# Servidor desenvolvimento
+# Development server
 python manage.py runserver 0.0.0.0:8000
 
-# Migrações
+# Migrations
 python manage.py makemigrations
 python manage.py migrate
 
-# Shell interativo
+# Interactive shell
 python manage.py shell
 
-# Criar superuser
+# Create superuser
 python manage.py createsuperuser
 
-# Coletar static files
+# Collect static files
 python manage.py collectstatic --noinput
 
-# Ver rotas
+# Show routes
 python manage.py show_urls
 ```
 
 ---
 
-## ✅ Verificações Rápidas
+## Quick Checks
 
 ```powershell
 # Redis online?
-python -c "import redis; print('✅ OK' if redis.Redis().ping() else '❌ Offline')"
+python -c "import redis; print('OK' if redis.Redis().ping() else 'Offline')"
 
-# Django respondendo?
+# Django responding?
 Invoke-WebRequest http://localhost:8000/healthz
 
-# Cache funcionando?
-python manage.py shell -c "from django.core.cache import cache; cache.set('test', 'ok'); print('✅ Cache OK' if cache.get('test') == 'ok' else '❌ Cache falhou')"
+# Cache working?
+python manage.py shell -c "from django.core.cache import cache; cache.set('test', 'ok'); print('Cache OK' if cache.get('test') == 'ok' else 'Cache failed')"
 
-# Ver versões
+# Check versions
 python --version
 docker --version
 python -c "import django; print('Django:', django.get_version())"
@@ -90,34 +90,34 @@ python -c "import django; print('Django:', django.get_version())"
 
 ---
 
-## 🧪 Testes
+## Tests
 
 ```powershell
-# Todos os testes
+# Full test suite
 python -m pytest tests/ -v
 
-# Teste específico
+# Specific test
 python -m pytest tests/test_smoke.py -v
 
-# Com cobertura
+# With coverage
 python -m pytest --cov --cov-report=html
 ```
 
 ---
 
-## 🗄️ Banco de Dados
+## Database
 
 ```powershell
-# Shell do banco
+# Database shell
 python manage.py dbshell
 
-# Dump do banco
+# Dump database
 python manage.py dumpdata > backup.json
 
-# Carregar dump
+# Load dump
 python manage.py loaddata backup.json
 
-# Resetar banco (cuidado!)
+# Reset database (danger!)
 Remove-Item db.sqlite3
 python manage.py migrate
 python manage.py createsuperuser
@@ -125,99 +125,99 @@ python manage.py createsuperuser
 
 ---
 
-## 🐳 Docker
+## Docker
 
 ```powershell
-# Ver containers ativos
-docker ps
+# List running containers
+docker compose ps
 
-# Ver todos (incluindo parados)
-docker ps -a
+# List all containers (including stopped)
+docker compose ps --all
 
-# Parar todos
-docker stop $(docker ps -q)
+# Stop all running containers
+docker compose stop
 
-# Remover todos parados
+# Remove stopped containers
 docker container prune -f
 
-# Ver imagens
+# List images
 docker images
 
-# Limpar tudo (cuidado!)
+# Remove unused data (danger!)
 docker system prune -a
 ```
 
 ---
 
-## 📊 Monitoramento
+## Monitoring
 
 ```powershell
-# Métricas Prometheus
+# Prometheus metrics
 Invoke-WebRequest http://localhost:8000/metrics/metrics
 
 # Health checks
-Invoke-WebRequest http://localhost:8000/healthz        # Completo
+Invoke-WebRequest http://localhost:8000/healthz        # Full check
 Invoke-WebRequest http://localhost:8000/ready          # Readiness
 Invoke-WebRequest http://localhost:8000/live           # Liveness
 
 # Redis stats
-docker exec redis-mapspro redis-cli INFO stats
-docker exec redis-mapspro redis-cli INFO memory
-docker exec redis-mapspro redis-cli DBSIZE
+docker compose exec redis redis-cli INFO stats
+docker compose exec redis redis-cli INFO memory
+docker compose exec redis redis-cli DBSIZE
 ```
 
 ---
 
-## 🔧 Manutenção
+## Maintenance
 
 ```powershell
-# Limpar cache Python
+# Clear Python cache
 Remove-Item -Recurse -Force __pycache__
 Get-ChildItem -Recurse -Filter "*.pyc" | Remove-Item -Force
 
-# Limpar logs
+# Clear logs
 Remove-Item logs\*.log
 
-# Atualizar dependências
+# Upgrade dependencies
 pip install -r requirements.txt --upgrade
 
-# Ver pacotes desatualizados
+# Check outdated packages
 pip list --outdated
 ```
 
 ---
 
-## 🚨 Emergência
+## Emergency
 
 ```powershell
-# Parar Django (CTRL+C no terminal ou)
+# Stop Django (CTRL+C or use PowerShell)
 Get-Process python | Stop-Process -Force
 
-# Parar Redis
-docker stop redis-mapspro
+# Stop Redis
+docker compose stop redis
 
-# Reiniciar tudo
-docker restart redis-mapspro
+# Restart everything
+docker compose restart redis
 python manage.py runserver 0.0.0.0:8000
 
-# Porta 8000 ocupada? Ver o que está usando
+# Port 8000 busy? Inspect usage
 netstat -ano | findstr :8000
 
-# Matar processo (substitua PID)
-taskkill /PID <número> /F
+# Kill process (replace PID)
+taskkill /PID <number> /F
 ```
 
 ---
 
-## 📝 Logs
+## Logs
 
 ```powershell
-# Django logs (ver terminal rodando)
+# Django logs (check the running terminal)
 
 # Redis logs
-docker logs redis-mapspro --tail 100
+docker compose logs redis --tail 100
 
-# Filtrar logs Django
+# Filter Django logs
 Get-Content logs\application.log | Select-String "ERROR"
 Get-Content logs\application.log | Select-String "cache"
 Get-Content logs\application.log | Select-String "zabbix"
@@ -225,27 +225,27 @@ Get-Content logs\application.log | Select-String "zabbix"
 
 ---
 
-## 🔍 Debug
+## Debug
 
 ```powershell
-# Shell Django interativo
+# Interactive Django shell
 python manage.py shell
 
-# Dentro do shell:
+# Inside the shell:
 from django.core.cache import cache
 from zabbix_api.services.zabbix_service import *
 from django.contrib.auth.models import User
 
-# Ver configurações
+# Show settings diff
 python manage.py diffsettings
 
-# Ver SQL gerado
+# Show generated SQL
 python manage.py sqlmigrate zabbix_api 0009
 ```
 
 ---
 
-## 🌐 URLs Importantes
+## Important URLs
 
 - **Dashboard:** http://localhost:8000/maps_view/dashboard/
 - **Admin:** http://localhost:8000/admin/
@@ -257,13 +257,13 @@ python manage.py sqlmigrate zabbix_api 0009
 
 ---
 
-## 💡 Dicas
+## Tips
 
-### Alias úteis (adicionar no $PROFILE)
+### Useful aliases (add to $PROFILE)
 ```powershell
 function Start-MapsProDev {
-    cd D:\Gemini\Provemaps_GPT-Tier2\mapsprovefiber
-    docker start redis-mapspro
+    cd D:\provemaps_beta
+    docker compose up -d redis
     python manage.py runserver 0.0.0.0:8000
 }
 
@@ -273,26 +273,26 @@ function Test-MapsProHealth {
 }
 ```
 
-### Variáveis de ambiente
+### Environment variables
 ```powershell
-# Ver .env atual
+# Show current .env
 Get-Content .env
 
-# Setar temporariamente (sessão atual)
+# Set temporarily (current session)
 $env:DEBUG = "True"
 $env:REDIS_URL = "redis://localhost:6379/0"
 ```
 
 ### Performance
 ```powershell
-# Medir tempo de request
+# Measure request time
 Measure-Command { Invoke-WebRequest http://localhost:8000/zabbix_api/api/sites/ }
 
-# Ver conexões ativas
+# Show active connections
 netstat -ano | findstr :8000
 netstat -ano | findstr :6379
 ```
 
 ---
 
-**Salve este arquivo para referência rápida!** 📌
+Keep this file handy for quick reference.

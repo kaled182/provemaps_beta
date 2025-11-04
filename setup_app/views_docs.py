@@ -17,7 +17,7 @@ from .utils.markdown_loader import (
 
 
 def _meta_for(filename: str) -> dict:
-    """Coleta metadados simples do arquivo na pasta doc."""
+    """Collect simple metadata for a documentation file."""
     try:
         path = resolve_doc_path(filename)
     except ValueError:
@@ -37,12 +37,9 @@ def _meta_for(filename: str) -> dict:
 
 
 def docs_index(request):
-    """
-    Lista os arquivos .md disponíveis em /docs com metadados.
-    Usa os cartões (_doc_card.html).
-    """
+    """List available ``.md`` files in /docs along with metadata."""
     available = get_available_docs()  # dict {filename: {...}}
-    # Adapta estrutura para o template que já temos
+    # Adapt the structure to the expected template payload
     normalized: dict[str, dict[str, object]] = {}
     for name, meta in available.items():
         last_modified = meta.get("last_modified")
@@ -82,9 +79,7 @@ def docs_index(request):
 
 
 def docs_view(request, filename: str = "developer/README.md"):
-    """
-    Renderiza um Markdown específico em HTML.
-    """
+    """Render a specific Markdown document as HTML."""
     normalized_filename = normalize_requested_filename(filename)
 
     try:

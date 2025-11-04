@@ -7,7 +7,7 @@ The Fiber Route Builder has been refactored into ES6 modules to improve maintain
 
 ### Module Breakdown
 
-#### 1. `apiClient.js` (✅ Completed)
+#### 1. `apiClient.js` (Completed)
 **Purpose**: Centralized API communication layer.
 
 **Responsibilities**:
@@ -31,7 +31,7 @@ const cables = await fetchFibers();
 await updateFiber(cableId, { path: newPath });
 ```
 
-#### 2. `pathState.js` (✅ Completed)
+#### 2. `pathState.js` (Completed)
 **Purpose**: Manage coordinate path state and distance calculations.
 
 **Responsibilities**:
@@ -63,7 +63,7 @@ onPathChange(({ path, distance }) => {
 });
 ```
 
-#### 3. `mapCore.js` (✅ Completed)
+#### 3. `mapCore.js` (Completed)
 **Purpose**: Google Maps drawing and interaction primitives.
 
 **Responsibilities**:
@@ -98,7 +98,7 @@ onMapClick(({ lat, lng }) => {
 });
 ```
 
-#### 4. `contextMenu.js` (✅ Completed)
+#### 4. `contextMenu.js` (Completed)
 **Purpose**: Right-click context menu display and state management.
 
 **Responsibilities**:
@@ -125,9 +125,9 @@ onMapClick(({ lat, lng }) => {
 ```
 
 **Three Scenarios**:
-- **Scenario A (Empty)**: No cable, no points → Show "Import KML" + "Reload All"
-- **Scenario B (Creating)**: No cable, has points → Show "Save New Cable" + "Clear Points"
-- **Scenario C (Editing)**: Has cable → Show cable info + "Edit" + "Save Path" + "Delete"
+- **Scenario A (Empty)**: No cable, no points -> Show "Import KML" plus "Reload All"
+- **Scenario B (Creating)**: No cable, has points -> Show "Save New Cable" plus "Clear Points"
+- **Scenario C (Editing)**: Has cable -> Show cable info plus "Edit" plus "Save Path" plus "Delete"
 
 **Usage**:
 ```javascript
@@ -147,9 +147,9 @@ map.on('rightclick', (event) => {
 });
 ```
 
-### Next Steps (🚧 Planned)
+### Next Steps (Planned)
 
-#### 5. `modalEditor.js` (✅ Completed)
+#### 5. `modalEditor.js` (Completed)
 **Purpose**: Cable creation/editing modal form management.
 
 **Responsibilities**:
@@ -210,7 +210,7 @@ openModalForEdit({
 }, 15.3);
 ```
 
-### Next Steps (🚧 Planned)
+### Next Steps (Future Work)
 
 #### 6. `fiberService.js` (Planned)
 - High-level orchestration (load + draw cable)

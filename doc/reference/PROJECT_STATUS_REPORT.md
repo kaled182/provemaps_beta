@@ -1,190 +1,205 @@
-# 📊 Relatório de Status do Projeto MapsProveFiber
-**Data:** 1º de novembro de 2025  
+# 📊 Project Status Report - MapsProveFiber
+**Date:** November 4, 2025  
 **Branch:** inicial  
-**Revisão:** Pós-implementação Monitoramento Celery
+**Revision:** Post-Implementation Celery Monitoring
 
 ---
 
-## 🎯 Visão Geral Executiva
+## 🎯 Executive Overview
 
-### Estado Atual
-✅ **Base sólida estabelecida:** Django 5.2.7, ASGI/Channels, Celery 5.4.0, Redis, Docker, Prometheus  
-✅ **Observabilidade implementada:** Health endpoints, métricas Celery, alertas Prometheus  
-✅ **Segurança em evolução:** Guards, CSP-ready, settings segregados  
-⚠️ **Refatorações estruturais:** Separação de apps e modelos em progresso  
-✅ **Performance reforçada:** Cliente Zabbix resiliente + cache SWR em produção
-✅ **Readiness estável:** Timeout desativado fora da main thread (`HEALTHCHECK_FORCE_NO_TIMEOUT=true`)
-✅ **Qualidade validada:** Pytest completo executado dentro do stack Docker (207 testes)
+### Current State
+✅ **Solid foundation in place:** Django 5.2.7, ASGI/Channels, Celery 5.4.0, Redis, Docker, Prometheus  
+✅ **Observability delivered:** health endpoints, Celery metrics, Prometheus alerts  
+✅ **Security evolving:** guards, CSP-ready configuration, split settings  
+⚠️ **Structural refactors:** app and model separation in progress  
+✅ **Performance hardened:** resilient Zabbix client + SWR cache in production  
+✅ **Stable readiness:** timeout disabled outside the main thread (`HEALTHCHECK_FORCE_NO_TIMEOUT=true`)  
+✅ **Quality validated:** full pytest run executed inside the Docker stack (210 tests)
 
 ---
 
-## ✅ IMPLEMENTADO (Completo e Validado)
+## ✅ IMPLEMENTED (Complete and Validated)
 
-### 1. Observabilidade & Monitoramento Celery ✅ NOVO
-**Status:** 100% completo com testes passando
+### 1. Celery Observability & Monitoring ✅ NEW
+**Status:** 100% complete with passing tests
 
-#### Implementações:
-- ✅ **Endpoint `/celery/status`** com fallback resiliente (ping + stats)
-- ✅ **Cache de 5s** via `@cache_page(5)` para reduzir latência
-- ✅ **6 métricas Prometheus:**
-  - `celery_worker_available` (gauge)
-  - `celery_status_latency_ms` (gauge)
-  - `celery_worker_count` (gauge)
-  - `celery_active_tasks` (gauge)
-  - `celery_scheduled_tasks` (gauge)
-  - `celery_reserved_tasks` (gauge)
-- ✅ **Task periódica beat** (`update_celery_metrics_task`) a cada 30s
-- ✅ **4 variáveis de ambiente** documentadas:
-  - `CELERY_STATUS_TIMEOUT=6`
-  - `CELERY_PING_TIMEOUT=2`
-  - `CELERY_METRICS_ENABLED=true`
-  - `CELERY_METRICS_UPDATE_INTERVAL=30`
+#### Implementations:
+- ✅ **`/celery/status` endpoint** with resilient fallback (ping + stats)
+- ✅ **5-second cache** via `@cache_page(5)` to cut latency
+- ✅ **6 Prometheus metrics:**
+    - `celery_worker_available` (gauge)
+    - `celery_status_latency_ms` (gauge)
+    - `celery_worker_count` (gauge)
+    - `celery_active_tasks` (gauge)
+    - `celery_scheduled_tasks` (gauge)
+    - `celery_reserved_tasks` (gauge)
+- ✅ **Beat task** (`update_celery_metrics_task`) every 30s
+- ✅ **4 environment variables** documented:
+    - `CELERY_STATUS_TIMEOUT=6`
+    - `CELERY_PING_TIMEOUT=2`
+    - `CELERY_METRICS_ENABLED=true`
+    - `CELERY_METRICS_UPDATE_INTERVAL=30`
 
-#### Documentação:
-- ✅ `./CELERY_STATUS_ENDPOINT.md` — Guia completo (250+ linhas)
-- ✅ `./PROMETHEUS_ALERTS.md` — 5 alertas prontos + dashboard Grafana
-- ✅ `./CELERY_MONITORING_CHECKLIST.md` — Validação completa
-- ✅ `README.md` — Seção expandida com referências cruzadas
-- ✅ `.env.example` — Seção dedicada Celery
-- ✅ `docker-compose.yml` — Variáveis propagadas para todos os serviços
+#### Documentation:
+- ✅ `./CELERY_STATUS_ENDPOINT.md` — full guide (250+ lines)
+- ✅ `./PROMETHEUS_ALERTS.md` — 5 ready-to-use alerts + Grafana dashboard
+- ✅ `./CELERY_MONITORING_CHECKLIST.md` — complete validation
+- ✅ `README.md` — expanded section with cross references
+- ✅ `.env.example` — dedicated Celery section
+- ✅ `docker-compose.yml` — variables carried across services
 
-#### Testes:
-- ✅ `tests/test_celery_status_fallback.py` — Fallback resiliente
-- ✅ `tests/test_celery_metrics.py` — Atualização de métricas (2 testes)
-- ✅ **3/3 testes passando** (0.25s)
+#### Tests:
+- ✅ `tests/test_celery_status_fallback.py` — resilient fallback
+- ✅ `tests/test_celery_metrics.py` — metrics update (2 tests)
+- ✅ **3/3 tests passing** (0.25s)
 
 #### Scripts:
-- ✅ `scripts/check_celery.sh` — Monitoramento bash
-- ✅ `scripts/check_celery.ps1` — Monitoramento PowerShell
+- ✅ `scripts/check_celery.sh` — bash monitoring
+- ✅ `scripts/check_celery.ps1` — PowerShell monitoring
 
 ---
 
-### 2. Health Checks Robustos ✅
-**Arquivos:** `core/views_health.py`
+### 2. Robust Health Checks ✅
+**Files:** `core/views_health.py`
 
-- ✅ `/healthz` — Check completo (DB, cache, storage, métricas)
-- ✅ `/ready` — Readiness probe (DB connectivity)
-- ✅ `/live` — Liveness probe (processo vivo)
-- ✅ `/celery/status` — Status workers e filas
-- ✅ **Variáveis configuráveis:**
-  - `HEALTHCHECK_STRICT`, `HEALTHCHECK_IGNORE_CACHE`
-  - `HEALTHCHECK_DB_TIMEOUT`, `HEALTHCHECK_DISK_THRESHOLD_GB`
-  - `HEALTHCHECK_STORAGE`, `HEALTHCHECK_SYSTEM_METRICS`
-  - `HEALTHCHECK_DEBUG`
-    - `HEALTHCHECK_FORCE_NO_TIMEOUT` (novidade) — evita `SIGALRM` fora da main thread (Gunicorn/Uvicorn)
-- ✅ Logging defensivo ampliado: readiness agora registra exceções reais e avisa quando o timeout é pulado
+- ✅ `/healthz` — full check (DB, cache, storage, metrics)
+- ✅ `/ready` — readiness probe (DB connectivity)
+- ✅ `/live` — liveness probe (process alive)
+- ✅ `/celery/status` — worker and queue status
+- ✅ **Configurable variables:**
+    - `HEALTHCHECK_STRICT`, `HEALTHCHECK_IGNORE_CACHE`
+    - `HEALTHCHECK_DB_TIMEOUT`, `HEALTHCHECK_DISK_THRESHOLD_GB`
+    - `HEALTHCHECK_STORAGE`, `HEALTHCHECK_SYSTEM_METRICS`
+    - `HEALTHCHECK_DEBUG`
+        - `HEALTHCHECK_FORCE_NO_TIMEOUT` (new) — avoids `SIGALRM` outside the main thread (Gunicorn/Uvicorn)
+- ✅ Strengthened defensive logging: readiness now records real exceptions and flags when the timeout is skipped
 
 ---
 
-### 3. Segurança & Guards ✅
-**Status:** Implementado e documentado
+### 3. Security & Guards ✅
+**Status:** Implemented and documented
 
-- ✅ Guards de diagnóstico: `ENABLE_DIAGNOSTIC_ENDPOINTS` + `user.is_staff`
-- ✅ Headers de segurança: HSTS, cookies secure (prod), SSL redirect
-- ✅ Settings segregados: `base.py`, `dev.py`, `prod.py`, `test.py`
-- ✅ CSP-ready (pendente apenas remoção de CDN Tailwind)
-- ✅ Secrets management via `.env` (não versionado)
+- ✅ Diagnostic guards: `ENABLE_DIAGNOSTIC_ENDPOINTS` + `user.is_staff`
+- ✅ Security headers: HSTS, secure cookies (prod), SSL redirect
+- ✅ Segregated settings: `base.py`, `dev.py`, `prod.py`, `test.py`
+- ✅ CSP-ready (only Tailwind CDN removal pending)
+- ✅ Secrets management via `.env` (not versioned)
 
 ---
 
 ### 4. Docker & Deploy ✅
-**Arquivos:** `docker-compose.yml`, `dockerfile`, `docker-entrypoint.sh`
+**Files:** `docker-compose.yml`, `dockerfile`, `docker-entrypoint.sh`
 
 - ✅ Multi-service: web, celery, beat, redis, mariadb
-- ✅ Health checks em todos os serviços
-- ✅ Volumes para desenvolvimento (hot-reload)
-- ✅ Entrypoint com init automático (migrate, collectstatic)
-- ✅ Variáveis Celery propagadas
-- ✅ `HEALTHCHECK_DB_TIMEOUT=5` e `HEALTHCHECK_FORCE_NO_TIMEOUT=true` injetados no serviço `web`
-- ✅ Ports mapeados (8000:8000, 3307:3306, 6380:6379)
-- ✅ Script `sql/init.sql` garante criação do `test_app` e privilégios do usuário `app`
+- ✅ Health checks on every service
+- ✅ Development volumes (hot reload)
+- ✅ Entrypoint with automatic init (migrate, collectstatic)
+- ✅ Celery variables propagated
+- ✅ `HEALTHCHECK_DB_TIMEOUT=5` and `HEALTHCHECK_FORCE_NO_TIMEOUT=true` injected into the `web` service
+- ✅ Ports mapped (8000:8000, 3307:3306, 6380:6379)
+- ✅ `sql/init.sql` guarantees creation of `test_app` and grants for user `app`
 
 ---
 
-### 5. Documentação Web (setup_app/docs) ✅
-**Status:** Sistema completo implementado
+### 5. Web Documentation (setup_app/docs) ✅
+**Status:** Full system in place
 
-- ✅ Loader Markdown otimizado com hash + cache
-- ✅ Templates modernos com TOC, busca local, copy code
-- ✅ Favoritos e acessibilidade
-- ✅ Sem dependência de CDN (pronto para CSP estrita)
+- ✅ Markdown loader optimized with hashing + cache
+- ✅ Modern templates with TOC, local search, copy code
+- ✅ Favorites and accessibility baked in
+- ✅ No CDN dependency (ready for strict CSP)
 
 ---
 
-### 6. DX & Automação ✅
-**Arquivos:** `makefile`, `pyproject.toml`, `pytest.ini`
+### 6. DX & Automation ✅
+**Files:** `makefile`, `pyproject.toml`, `pytest.ini`
 
-- ✅ Makefile com comandos: `run`, `test`, `lint`, `fmt`, `migrate`
+- ✅ Makefile commands: `run`, `test`, `lint`, `fmt`, `migrate`
 - ✅ Pre-commit hooks (Black, Ruff, isort)
-- ✅ Pytest configurado com pytest-django
-- ✅ Scripts de packaging: `package-release.ps1`
-- ✅ Suíte completa (`pytest -q`) validada dentro do container `web` (207 testes)
+- ✅ Pytest configured with pytest-django
+- ✅ Packaging scripts: `package-release.ps1`
+- ✅ Full suite (`pytest -q`) validated inside the `web` container (207 tests)
 
-### 7. Inventário Zabbix ✅ NOVO
-**Status:** Comando, task Celery e testes atualizados
+### 7. Zabbix Inventory ✅ NEW
+**Status:** Command, Celery task, and tests refreshed
 
-#### Implementações:
-- ✅ `inventory/management/commands/sync_zabbix_inventory.py` com logging estruturado, estatísticas de sync e modo `--dry-run`
-- ✅ Saída padronizada em ASCII (adequada para lint de idioma)
-- ✅ Helpers de coordenadas e atualização inteligente de `Site`
-- ✅ Sincronização de `Port` via `update_or_create`
+#### Implementations:
+- ✅ `inventory/management/commands/sync_zabbix_inventory.py` with structured logging, sync statistics, and `--dry-run`
+- ✅ Output standardized in ASCII (passes language lint)
+- ✅ Coordinate helpers and smart `Site` updates
+- ✅ `Port` synchronization via `update_or_create`
 
-#### Automação:
-- ✅ Task Celery `inventory.tasks.sync_zabbix_inventory_task`
-- ✅ Agendamento diário no beat (`core/celery.py`) com parâmetros configuráveis
+#### Automation:
+- ✅ Celery task `inventory.tasks.sync_zabbix_inventory_task`
+- ✅ Daily beat schedule (`core/celery.py`) with configurable parameters
 
-#### Testes:
-- ✅ `tests/test_sync_inventory_command.py` — cobre cenários de criação/atualização
-- ✅ `tests/test_celery_schedule.py` — garante agendamento do beat
-
----
-
-### 8. Automação de Service Accounts ✅ NOVO
-**Status:** Stage 2 concluído (rotação automática + notificações)
-
-#### Implementações:
-- ✅ Novos campos nos modelos: `auto_rotate_days`, `notify_before_days`, `notification_webhook_url` e `last_notified_at`
-- ✅ Helper `ServiceAccount.get_active_token()` e cálculo de prazos (`get_rotation_deadline`, `get_notification_deadline`)
-- ✅ Serviço orquestrador em `service_accounts/services.py` com rotação automática, envio de webhooks e auditoria dedicada (`rotation_notice`)
-- ✅ Task Celery `service_accounts.enforce_rotation_policies_task` agendada a cada 1h (configurável) via beat
-- ✅ Admin expõe `last_notified_at` e mantém logging consistente
-
-#### Configuração:
-- ✅ Novas variáveis de ambiente em `.env.example` e `docker-compose.yml`:
-    - `SERVICE_ACCOUNT_ROTATION_INTERVAL_SECONDS`
-    - `SERVICE_ACCOUNT_WEBHOOK_CONNECT_TIMEOUT`
-    - `SERVICE_ACCOUNT_WEBHOOK_READ_TIMEOUT`
-- ✅ Eventos de webhook documentados (`service_account.rotation_warning`, `service_account.token_rotated`)
-
-#### Testes e validação:
-- ✅ `service_accounts/tests.py` expandido (7 cenários) garantindo rotação e aviso único
-- ✅ Execução manual da task via `python manage.py shell -c "from service_accounts.tasks import enforce_rotation_policies_task as t; print(t())"`
-- ✅ Migração `service_accounts.0003_auto_rotation_policy` aplicada localmente (`python manage.py migrate`)
+#### Tests:
+- ✅ `tests/test_sync_inventory_command.py` — covers create/update scenarios
+- ✅ `tests/test_celery_schedule.py` — guarantees beat schedule
 
 ---
 
-## ⚠️ PENDENTE (Priorizado e Detalhado)
+### 8. Service Account Automation ✅ NEW
+**Status:** Stage 2 delivered (automatic rotation + notifications)
 
-### 🔴 PRIORIDADE ALTA
+#### Implementations:
+- ✅ New model fields: `auto_rotate_days`, `notify_before_days`, `notification_webhook_url`, `last_notified_at`
+- ✅ Helper `ServiceAccount.get_active_token()` and deadline calculations (`get_rotation_deadline`, `get_notification_deadline`)
+- ✅ Orchestrator in `service_accounts/services.py` with automatic rotation, webhook dispatch, and dedicated audit trail (`rotation_notice`)
+- ✅ Celery task `service_accounts.enforce_rotation_policies_task` scheduled every hour (configurable) via beat
+- ✅ Admin exposes `last_notified_at` and keeps logging consistent
 
-#### 1. Separação de Modelos (Apps Coesos)
-**Impacto:** Alto — Reduz acoplamento, melhora manutenção  
-**Risco:** Médio — Requer cuidado com migrações
+#### Configuration:
+- ✅ New environment variables in `.env.example` and `docker-compose.yml`:
+        - `SERVICE_ACCOUNT_ROTATION_INTERVAL_SECONDS`
+        - `SERVICE_ACCOUNT_WEBHOOK_CONNECT_TIMEOUT`
+        - `SERVICE_ACCOUNT_WEBHOOK_READ_TIMEOUT`
+- ✅ Webhook events documented (`service_account.rotation_warning`, `service_account.token_rotated`)
 
-**Ações:**
+#### Tests and validation:
+- ✅ `service_accounts/tests.py` expanded (7 scenarios) to guarantee single-notice rotation
+- ✅ Manual task execution via `python manage.py shell -c "from service_accounts.tasks import enforce_rotation_policies_task as t; print(t())"`
+- ✅ Migration `service_accounts.0003_auto_rotation_policy` applied locally (`python manage.py migrate`)
+
+---
+
+### 9. Static Typing Hardening ✅ NEW
+**Status:** Targeted Pyright cleanup across `routes_builder` tests
+
+#### Implementations:
+- ✅ Added explicit fixture protocols and safe `Any` fallbacks for Django ORM objects in `routes_builder/tests`
+- ✅ Documented payload shapes and metadata casts to keep Pyright strict mode satisfied
+- ✅ Ensured Celery task wrappers expose typed `.run()` usage via explicit casts
+
+#### Verification:
+- ✅ `npx pyright routes_builder/tests` — no diagnostics reported
+- ✅ `pytest routes_builder/tests` — 46 tests passing in ~0.7s
+- ✅ `pytest` (full suite) — 210 tests passing in ~128s
+
+---
+
+## ⚠️ PENDING (Prioritized and Detailed)
+
+### 🔴 HIGH PRIORITY
+
+#### 1. Model Separation (Cohesive Apps)
+**Impact:** High — Reduces coupling, improves maintenance  
+**Risk:** Medium — Migration care required
+
+**Actions:**
 ```python
-# Criar apps
+# Create apps
 INSTALLED_APPS = [
     # ...
-    'inventory',  # ADICIONAR
-    'routes_builder',  # JÁ EXISTE
+    'inventory',  # ADD
+    'routes_builder',  # ALREADY EXISTS
 ]
 
 # inventory/models.py
 class Device(models.Model):
-    # ... campos
+    # ... fields
     class Meta:
-        db_table = 'zabbix_api_device'  # PRESERVAR TABELA
+        db_table = 'zabbix_api_device'  # PRESERVE TABLE
 
 class Port(models.Model):
     # ...
@@ -195,28 +210,28 @@ class Port(models.Model):
 class FiberCable(models.Model):
     # ...
     class Meta:
-        db_table = 'routes_builder_fibercable'  # JÁ CORRETO
+        db_table = 'routes_builder_fibercable'  # ALREADY CORRECT
 ```
 
 **Checklist:**
-- [x] Criar app `inventory` com `__init__.py`, `apps.py`, `admin.py`
-- [x] Mover modelos de `zabbix_api/models.py` → `inventory/models.py`
-- [x] Adicionar `Meta.db_table` para preservar nomes
-- [x] Ajustar todos os imports (`from inventory.models import Device`)
-- [x] Atualizar `admin.py` (ambos os apps)
-- [x] Executar `makemigrations` e validar (NÃO DEVE ter DropTable)
-- [x] Executar `migrate` (rodado via `docker compose run --rm web python manage.py migrate`)
-- [x] Rodar testes completos
+- [x] Create `inventory` app with `__init__.py`, `apps.py`, `admin.py`
+- [x] Move models from `zabbix_api/models.py` → `inventory/models.py`
+- [x] Add `Meta.db_table` to keep names
+- [x] Update all imports (`from inventory.models import Device`)
+- [x] Refresh `admin.py` (both apps)
+- [x] Run `makemigrations` and validate (should NOT DropTable)
+- [x] Run `migrate` (`docker compose run --rm web python manage.py migrate`)
+- [x] Execute full test suite
 
-**Arquivo de apoio:** Posso gerar script de migração completo.
+**Supporting file:** I can generate the full migration script.
 
 ---
 
-#### 2. Cliente Zabbix Resiliente (Retry/Timeout/Batching)
-**Impacto:** Alto — Reduz timeouts e falhas em cadeia  
-**Risco:** Baixo — Mudança isolada no client
+#### 2. Resilient Zabbix Client (Retry/Timeout/Batching)
+**Impact:** High — Reduces timeouts and cascading failures  
+**Risk:** Low — Change isolated to the client
 
-**Implementação:**
+**Implementation:**
 ```python
 # zabbix_api/client.py
 from requests.adapters import HTTPAdapter
@@ -241,7 +256,7 @@ class ZabbixClient:
         self.session.mount("https://", adapter)
     
     def call(self, method, params, timeout=(4, 10)):
-        """Timeout: (connect, read) em segundos"""
+        """Timeout: (connect, read) in seconds"""
         payload = {
             "jsonrpc": "2.0",
             "method": method,
@@ -258,7 +273,7 @@ class ZabbixClient:
         return resp.json()
     
     def batch_history_get(self, itemids, time_from, time_till):
-        """Batching: 1 chamada para N items"""
+        """Batching: 1 call for N items"""
         return self.call("history.get", {
             "itemids": itemids,
             "time_from": time_from,
@@ -269,33 +284,33 @@ class ZabbixClient:
 ```
 
 **Checklist:**
-- [x] Criar `zabbix_api/client.py` com classe `ZabbixClient`
-- [x] Implementar retry/backoff/timeout
-- [x] Adicionar batching para `history.get`, `item.get`
-- [x] Atualizar `zabbix_api/services.py` para usar o novo client
-- [x] Adicionar testes unitários com mocks
-- [x] Métricas Prometheus: `zabbix_request_latency_seconds`, `zabbix_request_failures_total`
+- [x] Create `zabbix_api/client.py` with `ZabbixClient`
+- [x] Implement retry/backoff/timeout
+- [x] Add batching for `history.get`, `item.get`
+- [x] Update `zabbix_api/services.py` to rely on the new client
+- [x] Add mocked unit tests
+- [x] Prometheus metrics: `zabbix_request_latency_seconds`, `zabbix_request_failures_total`
 
-**Arquivo de apoio:** Posso gerar client completo + testes.
+**Supporting file:** I can deliver the full client + tests.
 
 ---
 
-#### 3. Cache Stale-While-Revalidate (SWR)
-**Impacto:** Alto — Dashboard estável mesmo com Zabbix lento  
-**Risco:** Médio — Requer coordenação view + task
+#### 3. Stale-While-Revalidate (SWR) Cache
+**Impact:** High — Keeps the dashboard stable even when Zabbix is slow  
+**Risk:** Medium — Requires coordination between view and task
 
-**Arquitetura:**
+**Architecture:**
 ```
-View (/dashboard) → LEITURA do cache (TTL 5min)
-                 ↓ (se vazio/expirado)
-                 fallback pontual (timeout curto 3s)
+View (/dashboard) → CACHE READ (TTL 5min)
+                 ↓ (if empty/expired)
+                 targeted fallback (short timeout 3s)
                  
-Task Celery (beat 1min) → ESCRITA no cache
-                        → chama Zabbix (timeout longo 10s)
-                        → atualiza cache
+Celery task (beat 1min) → CACHE WRITE
+                        → calls Zabbix (long timeout 10s)
+                        → refreshes cache
 ```
 
-**Implementação:**
+**Implementation:**
 ```python
 # maps_view/services.py
 from django.core.cache import cache
@@ -303,8 +318,8 @@ import time
 
 def get_hosts_status_data(force_refresh=False):
     """
-    Retorna dados do cache. Se vazio, tenta buscar.
-    Task Celery atualiza periodicamente.
+    Return cached data. If empty, try to fetch.
+    Celery task refreshes periodically.
     """
     cache_key = "dashboard:hosts_status"
     
@@ -317,13 +332,13 @@ def get_hosts_status_data(force_refresh=False):
                 "stale": (time.time() - cached.get("timestamp", 0)) > 300
             }
     
-    # Fallback: busca pontual (timeout curto)
+    # Fallback: quick fetch (short timeout)
     try:
         data = _fetch_from_zabbix(timeout=3)
         cache.set(cache_key, data, timeout=600)  # 10min
         return data
     except Exception as e:
-        # Serve dados stale se existirem
+        # Serve stale data if available
         stale_data = cache.get(cache_key + ":stale")
         if stale_data:
             return {**stale_data, "stale": True, "error": str(e)}
@@ -333,230 +348,230 @@ def get_hosts_status_data(force_refresh=False):
 from celery import shared_task
 
 @shared_task
-def refresh_dashboard_cache():
-    """Task periódica (beat) para atualizar cache"""
+
+    """Recurring task (beat) to refresh the cache"""
     data = _fetch_from_zabbix(timeout=10)
     cache.set("dashboard:hosts_status", data, timeout=600)
     cache.set("dashboard:hosts_status:stale", data, timeout=3600)  # backup
 ```
 
 **Checklist:**
-- [x] Criar helper SWR (`maps_view/cache_swr.py`)
-- [x] Atualizar views para usar serviço
-- [x] Criar task `refresh_dashboard_cache`
-- [x] Agendar no beat (1min)
-- [x] Frontend: exibir banner "Dados de X min atrás" se stale
-- [x] Testes: mock cache + timeout
+- [x] Build SWR helper (`maps_view/cache_swr.py`)
+- [x] Update views to use the service
+- [x] Create task `refresh_dashboard_cache`
+- [x] Schedule via beat (1min)
+- [x] Frontend: display "Data from X minutes ago" banner when stale
+- [x] Tests: mock cache + timeout
 
-**Arquivo de apoio:** Posso gerar serviço + task + testes.
+**Supporting file:** I can produce the service + task + tests.
 
 ---
 
-### 🟡 PRIORIDADE MÉDIA
+### 🟡 MEDIUM PRIORITY
 
-#### 5. Padrão de Idioma (EN no código, PT-BR no UX)
-**Impacto:** Médio — Manutenção e colaboração  
-**Risco:** Baixo — Incremental e seguro
+#### 5. Language Standard (EN in code, PT-BR in UX)
+**Impact:** Medium — Maintenance and collaboration  
+**Risk:** Low — Incremental and safe
 
-**Estratégia:**
+**Strategy:**
 ```python
-# ANTES (inventory/models.py)
+# BEFORE (inventory/models.py)
 class Device(models.Model):
     nome = models.CharField(max_length=100)
 
-# DEPOIS
+# AFTER
 class Device(models.Model):
     name = models.CharField(max_length=100, db_column='nome')
-    #    ↑ Python em EN      ↑ preserva coluna DB
+    #    ↑ Python in EN      ↑ keeps DB column
 ```
 
 **Checklist:**
-- [ ] Listar campos PT em todos os modelos
-- [ ] Renomear em Python, adicionar `db_column=`
-- [ ] Atualizar forms, serializers, tests
-- [ ] Padronizar logs/comentários em EN
-- [x] Script `scripts/check_translations.py` (lint de idioma)
-- [ ] Migrações sem DropColumn
+- [ ] List PT fields across all models
+- [ ] Rename in Python, add `db_column=`
+- [ ] Update forms, serializers, tests
+- [ ] Standardize logs/comments in EN
+- [x] `scripts/check_translations.py` (language lint)
+- [ ] Migrations without DropColumn
 
 ---
 
 #### 6. Redis HA (High Availability)
-**Impacto:** Médio — Resiliência em produção  
-**Risco:** Baixo — Mudança de infra, não de código
+**Impact:** Medium — Production resilience  
+**Risk:** Low — Infrastructure change, not code
 
-**Ações:**
-- [ ] Documentar uso de Redis Sentinel ou gerenciado (AWS ElastiCache, Azure Cache)
-- [ ] Atualizar `REDIS_URL` para cluster endpoint
-- [ ] Testar failover: parar master, validar que app continua
-- [ ] Frontend: confirmar fallback WebSocket → polling
+**Actions:**
+- [ ] Document using Redis Sentinel or managed service (AWS ElastiCache, Azure Cache)
+- [ ] Update `REDIS_URL` to the cluster endpoint
+- [ ] Failover test: stop primary, confirm app stays up
+- [ ] Frontend: confirm WebSocket fallback → polling
 
 ---
 
-#### 7. CSP & Remoção de CDN Tailwind
-**Impacto:** Médio — Segurança supply-chain  
-**Risco:** Baixo — Build local já funciona
+#### 7. CSP & Tailwind CDN Removal
+**Impact:** Medium — Supply-chain security  
+**Risk:** Low — Local build already works
 
-**Ações:**
-- [ ] Configurar Vite/Rollup para build do Tailwind
-- [ ] Remover `<link>` CDN de todos os templates
-- [ ] Atualizar `base.html` com `{% static 'css/styles.css' %}`
-- [ ] Habilitar CSP estrita em `settings/prod.py`:
+**Actions:**
+- [ ] Configure Vite/Rollup for Tailwind build
+- [ ] Remove CDN `<link>` tags from all templates
+- [ ] Update `base.html` with `{% static 'css/styles.css' %}`
+- [ ] Enable strict CSP in `settings/prod.py`:
   ```python
   CSP_DEFAULT_SRC = ("'self'",)
   CSP_SCRIPT_SRC = ("'self'",)
   CSP_STYLE_SRC = ("'self'",)
   ```
-- [ ] Validar no navegador (sem violações CSP)
+- [ ] Validate in the browser (no CSP violations)
 
 ---
 
-### 🟢 PRIORIDADE BAIXA (Melhorias Futuras)
+### 🟢 LOW PRIORITY (Future Improvements)
 
-#### 8. Testes E2E (Playwright)
+#### 8. E2E Tests (Playwright)
 - [ ] Smoke test: login → dashboard → docs → routes
-- [ ] Validar fluxo Celery tasks (trigger + status)
+- [ ] Validate Celery task flow (trigger + status)
 
-#### 9. Métricas Prometheus Adicionais
+#### 9. Additional Prometheus Metrics
 - [ ] `zabbix_request_latency_seconds` (histogram)
 - [ ] `zabbix_request_failures_total` (counter)
 - [ ] `dashboard_snapshot_age_seconds` (gauge)
-- [ ] Dashboard Grafana com estas métricas
+- [ ] Grafana dashboard with these metrics
 
-#### 10. Documentação Windows (DEV-WINDOWS.md)
-- [ ] Guia passo-a-passo para setup no Windows
-- [ ] Script `dev-win.ps1` com comandos (venv, migrate, runserver, celery)
+#### 10. Windows Documentation (`DEV-WINDOWS.md`)
+- [ ] Step-by-step Windows setup guide
+- [ ] `dev-win.ps1` script with commands (venv, migrate, runserver, celery)
 
-#### 11. API REST Separada (DRF)
-- [ ] Separar APIs REST das views HTML
-- [ ] Implementar throttling e schema OpenAPI
+#### 11. Separate REST API (DRF)
+- [ ] Split REST APIs from HTML views
+- [ ] Implement throttling and OpenAPI schema
 
-#### 12. Pydantic/Dataclasses entre Apps
-- [ ] Contratos tipados para payloads (ex.: `HostSnapshot`, `FiberRouteResult`)
+#### 12. Pydantic/Dataclasses Across Apps
+- [ ] Typed contracts for payloads (e.g., `HostSnapshot`, `FiberRouteResult`)
 
 ---
 
-## 📊 Métricas de Progresso
+## 📊 Progress Metrics
 
-### Implementação Geral
+### Overall Implementation
 ```
-█████████████████████░░░░░░░░ 65% completo
+█████████████████████░░░░░░░░ 65% complete
 ```
 
-| Categoria | Status | % |
+| Category | Status | % |
 |-----------|--------|---|
-| Observabilidade & Monitoring | ✅ Completo | 100% |
-| Health Checks | ✅ Completo | 100% |
-| Segurança | ⚠️ Parcial | 70% |
-| Docker & Deploy | ✅ Completo | 95% |
-| Documentação | ✅ Completo | 90% |
-| Arquitetura & Apps | ⚠️ Parcial | 65% |
-| Performance Zabbix | ⚠️ Pendente | 30% |
-| Testes & QA | ⚠️ Parcial | 60% |
+| Observability & Monitoring | ✅ Complete | 100% |
+| Health Checks | ✅ Complete | 100% |
+| Security | ⚠️ Partial | 70% |
+| Docker & Deploy | ✅ Complete | 95% |
+| Documentation | ✅ Complete | 90% |
+| Architecture & Apps | ⚠️ Partial | 65% |
+| Zabbix Performance | ⚠️ Pending | 30% |
+| Testing & QA | ⚠️ Partial | 60% |
 
 ---
 
-## 🚀 Roadmap Executivo (Próximos 30 dias)
+## 🚀 Executive Roadmap (Next 30 Days)
 
-### Semana 1 (27 Out - 2 Nov)
-**Foco:** Estrutura de Apps + Cliente Zabbix
+### Week 1 (Oct 27 - Nov 2)
+**Focus:** App structure + Zabbix client
 
-- [x] Separar modelos (`inventory`, `routes_builder`)
-- [ ] Cliente Zabbix resiliente (retry/timeout/batching)
-- [ ] Testes unitários do client
+- [x] Separate models (`inventory`, `routes_builder`)
+- [ ] Resilient Zabbix client (retry/timeout/batching)
+- [ ] Client unit tests
 
-> **Status 1 Nov:** modelos migrados para `inventory`, imports atualizados e `zabbix_api/models.py` virou re-export. Falta integrar client resiliente e rodar `makemigrations`/`migrate` manualmente (confirmação interativa de rename).
+> **Status Nov 1:** models moved to `inventory`, imports updated, and `zabbix_api/models.py` now re-exports. Remaining work: integrate the resilient client and run `makemigrations`/`migrate` manually (interactive rename confirmation).
 
-### Semana 2 (3 Nov - 9 Nov)
-**Foco:** Cache SWR + Performance
+### Week 2 (Nov 3 - Nov 9)
+**Focus:** SWR cache + performance
 
-- [x] Implementar `maps_view/services.py` com SWR
-- [x] Task Celery `refresh_dashboard_cache`
-- [x] Agendar no beat (1min)
-- [x] Frontend: banner de staleness
+- [x] Implement `maps_view/services.py` with SWR
+- [x] Celery task `refresh_dashboard_cache`
+- [x] Schedule on beat (1min)
+- [x] Frontend: staleness banner
 
-### Semana 3 (10 Nov - 16 Nov)
-**Foco:** Sincronização + Idioma
+### Week 3 (Nov 10 - Nov 16)
+**Focus:** Synchronization + language
 
-- [x] Comando `sync_zabbix_inventory`
-- [x] Task diária no beat
-- [ ] Padronizar nomes EN (com `db_column`)
-- [x] Script `check_translations.py`
+- [x] `sync_zabbix_inventory` command
+- [x] Daily beat task
+- [ ] Standardize EN names (with `db_column`)
+- [x] `check_translations.py` script
 
-> **Atualização 1 Nov 2025:** Comando e task de sincronização prontos com logs estruturados e execução em beat; script de lint de idioma criado com bateria de testes, servindo como guardião para manter o código em inglês.
+> **Update Nov 1 2025:** Sync command and task ready with structured logs and beat execution; language lint script created with full test suite, acting as gatekeeper to keep code in English.
 
-### Semana 4 (17 Nov - 23 Nov)
-**Foco:** Segurança + Docs
+### Week 4 (Nov 17 - Nov 23)
+**Focus:** Security + docs
 
-- [ ] Remover CDN Tailwind (build local)
-- [ ] CSP estrita em prod
-- [ ] DEV-WINDOWS.md + `dev-win.ps1`
-- [ ] Métricas Prometheus adicionais
-
----
-
-## 🎯 Critérios de Sucesso
-
-### Curto Prazo (30 dias)
-- ✅ Apps coesos (`inventory`, `routes_builder`)
-- ✅ Dashboard estável com Zabbix lento (SWR)
-- ✅ Cliente Zabbix resiliente (retry/batching)
-- ✅ Sincronização diária de inventário
-- ✅ CSP estrita sem CDN
-
-### Médio Prazo (90 dias)
-- ✅ Cobertura de testes ≥ 75%
-- ✅ E2E com Playwright (smoke)
-- ✅ Dashboard Grafana com métricas Zabbix
-- ✅ Redis HA em produção
-- ✅ API REST separada (DRF)
-
-### Longo Prazo (6 meses)
-- ✅ Zero downtime em falhas do Zabbix
-- ✅ Onboarding dev < 15min (Windows/Linux/Mac)
-- ✅ Playbooks operacionais completos
-- ✅ Feature flags para releases graduais
+- [ ] Remove Tailwind CDN (local build)
+- [ ] Strict CSP in prod
+- [ ] `DEV-WINDOWS.md` + `dev-win.ps1`
+- [ ] Additional Prometheus metrics
 
 ---
 
-## 📁 Arquivos de Apoio Disponíveis
+## 🎯 Success Criteria
 
-Posso gerar imediatamente:
+### Short Term (30 days)
+- ✅ Cohesive apps (`inventory`, `routes_builder`)
+- ✅ Stable dashboard under slow Zabbix (SWR)
+- ✅ Resilient Zabbix client (retry/batching)
+- ✅ Daily inventory sync
+- ✅ Strict CSP without CDN
 
-1. ✅ **Cliente Zabbix resiliente** (`zabbix_api/client.py` + testes)
-2. ✅ **Serviço SWR** (`maps_view/services.py` + task + testes)
-3. ✅ **Comando sync** (`sync_zabbix_inventory.py` + task)
-4. ✅ **Script Windows** (`dev-win.ps1`)
-5. ✅ **Migração de modelos** (passo-a-passo + script)
-6. ✅ **Métricas Prometheus** (decorators + middleware)
-7. ✅ **CSP Config** (settings/prod.py snippet)
-8. ✅ **DEV-WINDOWS.md** (guia completo)
+### Medium Term (90 days)
+- ✅ Test coverage ≥ 75%
+- ✅ Playwright E2E smoke
+- ✅ Grafana dashboard with Zabbix metrics
+- ✅ Redis HA in production
+- ✅ Separate REST API (DRF)
 
-**Basta solicitar qual(is) arquivo(s) deseja primeiro!**
-
----
-
-## 🏁 Conclusão
-
-### ✅ Grandes Conquistas
-- Sistema de monitoramento Celery **production-ready**
-- Health checks robustos e documentados
-- Docker stack funcional e testada
-- Documentação extensiva (3 novos docs + README expandido)
-
-### ⚠️ Próximos Passos Críticos
-1. **Separação de modelos** (reduz acoplamento)
-2. **Cliente Zabbix resiliente** (previne falhas em cascata)
-3. **Cache SWR** (estabiliza UX)
-
-### 🎯 Meta Geral
-**Transformar MapsProveFiber em referência de aplicação Django enterprise-grade:**
-- 🔒 Segura
-- ⚡ Performática
-- 📊 Observável
-- 🧪 Testável
-- 📚 Bem documentada
+### Long Term (6 months)
+- ✅ Zero downtime during Zabbix outages
+- ✅ Developer onboarding < 15min (Windows/Linux/Mac)
+- ✅ Complete operational playbooks
+- ✅ Feature flags for gradual releases
 
 ---
 
-**Última atualização:** 1º de novembro de 2025  
-**Próxima revisão:** Após implementação Semana 2 (9 Nov 2025)
+## 📁 Supporting Files Available
+
+I can deliver immediately:
+
+1. ✅ **Resilient Zabbix client** (`zabbix_api/client.py` + tests)
+2. ✅ **SWR service** (`maps_view/services.py` + task + tests)
+3. ✅ **Sync command** (`sync_zabbix_inventory.py` + task)
+4. ✅ **Windows script** (`dev-win.ps1`)
+5. ✅ **Model migration** (step-by-step + script)
+6. ✅ **Prometheus metrics** (decorators + middleware)
+7. ✅ **CSP config** (snippet for `settings/prod.py`)
+8. ✅ **DEV-WINDOWS.md** (full guide)
+
+**Just let me know which file(s) you need first!**
+
+---
+
+## 🏁 Conclusion
+
+### ✅ Key Achievements
+- Celery monitoring system **production-ready**
+- Robust, documented health checks
+- Functional, tested Docker stack
+- Extensive documentation (3 new docs + expanded README)
+
+### ⚠️ Next Critical Steps
+1. **Model separation** (reduces coupling)
+2. **Resilient Zabbix client** (prevents cascading failures)
+3. **SWR cache** (stabilizes UX)
+
+### 🎯 Main Goal
+**Turn MapsProveFiber into a reference-grade Django enterprise application:**
+- 🔒 Secure
+- ⚡ Performant
+- 📊 Observable
+- 🧪 Testable
+- 📚 Well documented
+
+---
+
+**Last updated:** November 1, 2025  
+**Next review:** After Week 2 implementation (Nov 9, 2025)

@@ -14,10 +14,10 @@ This report tracks the cleanup of Portuguese-language strings across the project
 | Category | Files Pending | Notes |
 | --- | --- | --- |
 | Documentation & Guides | 0 | Monitoring for new or regenerated docs |
-| Backend Runtime & Config | 3 | Core services, commands, and settings with user-facing strings |
-| Frontend & Static Assets | 9 | Legacy JS backups and markdown checklists surfaced to users |
-| Tests & QA Assets | 11 | Test descriptions/assertions in Portuguese |
-| Tooling & Scripts | 11 | Shell/Python/PowerShell scripts shown to operators |
+| Backend Runtime & Config | 0 | Core services, commands, and settings with user-facing strings |
+| Frontend & Static Assets | 2 | Logo assets with embedded Portuguese text |
+| Tests & QA Assets | 0 | Test descriptions/assertions in Portuguese |
+| Tooling & Scripts | 0 | Shell/Python/PowerShell scripts shown to operators |
 | Vendor Bundles | 43 | Select2/XRegExp i18n, admin assets (kept as-is) |
 
 Completed files are tracked below; pending items remain highlighted per category.
@@ -67,6 +67,39 @@ Completed files are tracked below; pending items remain highlighted per category
 - `zabbix_api/management/commands/warm_optical_cache.py` — translated to English on 2025-11-04
 - `zabbix_api/services/zabbix_client.py` — translated to English on 2025-11-04
 - `zabbix_api/services/zabbix_service.py` — phase-one translation & cleanup completed on 2025-11-04
+- `zabbix_api/usecases/fibers.py` — runtime validations and comments translated on 2025-11-04
+- `zabbix_api/usecases/__init__.py` — module docstring translated to English on 2025-11-04
+- `tests/usecases/test_fibers.py` — assertions and fixtures translated to English on 2025-11-04
+- `tests/test_celery_status.py` — status endpoint smoke test translated to English on 2025-11-04
+- `tests/test_cache_swr.py` — SWR cache tests translated to English on 2025-11-04
+- `tests/test_celery_metrics.py` — Celery metrics tests translated to English on 2025-11-04
+- `tests/test_celery_status_fallback.py` — fallback status test translated to English on 2025-11-04
+- `tests/test_fiber_edit_persistence.py` — fiber edit persistence flow translated to English on 2025-11-04
+- `tests/test_resilient_zabbix_client.py` — resilient client scenarios translated to English on 2025-11-04
+- `tests/test_setup_docs_views.py` — documentation views smoke tests translated to English on 2025-11-04
+- `tests/test_smoke.py` — smoke assertions translated to English on 2025-11-04
+- `tests/test_zabbix_service.py` — service helper tests translated to English on 2025-11-04
+- `service_accounts/tests.py` — service account management tests translated to English on 2025-11-04
+- `tests/test_check_translations.py` — translation scanner tests confirmed in English on 2025-11-04
+- `zabbix_api/usecases/inventory.py` — inventory ingestion and port matching translated to English on 2025-11-04
+- `staticfiles/js/modules/BROWSER_TESTING_CHECKLIST.md` — browser QA checklist translated to English on 2025-11-04
+- `staticfiles/js/modules/INTEGRATION_COMPLETE.md` — integration summary verified in English on 2025-11-04
+- `staticfiles/js/modules/README.md` — module architecture notes translated to English on 2025-11-04
+- `routes_builder/static/js/fiber_route_builder.js.backup` — legacy bundle comments translated to English on 2025-11-04
+- `staticfiles/js/fiber_route_builder.js.backup` — static bundle comments translated to English on 2025-11-04
+- `.pre-commit-config.yaml` — developer tooling comments translated to English on 2025-11-04
+- `scripts/check_celery.ps1` — operator script output translated to English on 2025-11-04
+- `scripts/check_celery.sh` — operator health check translated to English on 2025-11-04
+- `scripts/check_port_columns.py` — diagnostics output translated to English on 2025-11-04
+- `scripts/deploy.sh` — deployment helper logs translated to English on 2025-11-04
+- `.dockerignore` — Docker build context comments translated to English on 2025-11-04
+- `scripts/diagnose_google_maps.py` — multi-layer diagnostic output translated to English on 2025-11-04
+- `scripts/package-release.ps1` — release packaging script translated to English on 2025-11-04
+- `scripts/setup_test_db_permissions.sql` — test DB permissions script translated to English on 2025-11-04
+- `scripts/update_imports.ps1` — import migration helper translated to English on 2025-11-04
+- `scripts/verify_asset_version.py` — asset version verifier translated to English on 2025-11-04
+- `staticfiles/admin/css/changelists.css` — replaced non-ASCII arrows with ASCII equivalents on 2025-11-04
+- `staticfiles/admin/js/urlify.js` — verified transliteration map (no Portuguese text) on 2025-11-04
 
 ## Detailed Status (Pending)
 
@@ -74,46 +107,12 @@ Completed files are tracked below; pending items remain highlighted per category
 - _None pending_
 
 ### Backend Runtime & Config
-- `zabbix_api/usecases/__init__.py`
-- `zabbix_api/usecases/fibers.py`
-- `zabbix_api/usecases/inventory.py`
-
-### Frontend & Static Assets
-- `routes_builder/static/js/fiber_route_builder.js.backup`
-- `staticfiles/js/fiber_route_builder.js.backup`
-- `staticfiles/js/modules/BROWSER_TESTING_CHECKLIST.md`
-- `staticfiles/js/modules/INTEGRATION_COMPLETE.md`
-- `staticfiles/js/modules/README.md`
-- `maps_view/static/img/logo.png` (embedded text)
-- `staticfiles/img/logo.png` (embedded text)
-- `staticfiles/admin/css/changelists.css` (Portuguese comments)
-- `staticfiles/admin/js/urlify.js` (Portuguese reference strings)
+- _None pending_
 
 ### Tests & QA Assets
-- `tests/test_cache_swr.py`
-- `tests/test_celery_metrics.py`
-- `tests/test_celery_status.py`
-- `tests/test_celery_status_fallback.py`
-- `tests/test_check_translations.py`
-- `tests/test_fiber_edit_persistence.py`
-- `tests/test_resilient_zabbix_client.py`
-- `tests/test_setup_docs_views.py`
-- `tests/test_smoke.py`
-- `tests/test_zabbix_service.py`
-- `service_accounts/tests/*` (if any Portuguese strings)
 
 ### Tooling & Scripts
-- `.dockerignore`
-- `.pre-commit-config.yaml`
-- `scripts/check_celery.ps1`
-- `scripts/check_celery.sh`
-- `scripts/check_port_columns.py`
-- `scripts/deploy.sh`
-- `scripts/diagnose_google_maps.py`
-- `scripts/package-release.ps1`
-- `scripts/setup_test_db_permissions.sql`
-- `scripts/update_imports.ps1`
-- `scripts/verify_asset_version.py`
+- _None pending_
 
 ### Vendor / Third-Party (Informational)
 - `staticfiles/admin/js/vendor/select2/i18n/*.js`
@@ -129,7 +128,5 @@ Completed files are tracked below; pending items remain highlighted per category
 
 ## Next Steps
 
-1. Translate high-visibility docs (`README.md`, quickstart guides) and update status to _Completed_.
-2. Address runtime-facing messages in `core/` and `zabbix_api/` modules.
-3. Update frontend markdowns/JS backups that users might access.
-4. Refresh this report after each translation pass, moving files to a **Completed** list as work finishes.
+1. Decide on remediation strategy for the remaining logo assets with embedded Portuguese text.
+2. Keep this report updated if new Portuguese content appears.

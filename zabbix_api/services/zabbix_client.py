@@ -33,23 +33,23 @@ client: ResilientZabbixClient = resilient_client
 
 
 def normalize_zabbix_url(url: str) -> str:
-    """Mantém compatibilidade com helper legado."""
+    """Keep compatibility with the legacy helper."""
     return resilient_client.normalize_url(url)
 
 
 def get_current_config() -> Tuple[str, Any]:
-    """Retorna URL normalizada e configuração runtime."""
+    """Return the normalized URL plus the runtime configuration."""
     cfg = resilient_client.get_current_config()
     return cfg.url, cfg
 
 
 def clear_token_cache() -> None:
-    """Limpa token armazenado (mantém API antiga)."""
+    """Clear the cached token while preserving legacy API behavior."""
     resilient_client.clear_token_cache()
 
 
 def zabbix_login() -> Optional[str]:
-    """Retorna token atual (API-compatível)."""
+    """Return the current token (legacy API compatibility)."""
     return resilient_client.login()
 
 
@@ -58,11 +58,11 @@ def zabbix_request(
     params: Optional[Dict[str, Any]] = None,
     retry_without_auth: bool = False,
 ) -> Optional[Any]:
-    """Wrapper fino para chamadas JSON-RPC usando o cliente resiliente."""
+    """Thin wrapper for JSON-RPC calls using the resilient client."""
     if retry_without_auth:
         logger.debug(
-            "retry_without_auth flag ignored; cliente resiliente já executa "
-            "fallback automático",
+            "retry_without_auth flag ignored; the resilient client already "
+            "performs the automatic fallback",
         )
     return resilient_client.call(method, params)
 
@@ -70,7 +70,7 @@ def zabbix_request(
 def zabbix_batch(
     calls: list[tuple[str, Optional[Dict[str, Any]]]]
 ) -> list[Optional[Any]]:
-    """Compat wrapper para batch (mantendo assinatura antiga)."""
+    """Compatibility wrapper for batch calls (legacy signature)."""
     return _zabbix_batch(calls)
 
 
@@ -78,5 +78,5 @@ def zabbix_call(
     method: str,
     params: Optional[Dict[str, Any]] = None,
 ) -> Optional[Any]:
-    """Compat wrapper para chamadas simples (assinatura legada)."""
+    """Compatibility wrapper for single calls (legacy signature)."""
     return _zabbix_call(method, params)
