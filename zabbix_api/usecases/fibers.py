@@ -21,15 +21,15 @@ logger = logging.getLogger(__name__)
 
 
 class FiberUseCaseError(Exception):
-    """Erro genérico de regra de negócio das fibras."""
+    """Generic business-rule error for fiber operations."""
 
 
 class FiberValidationError(FiberUseCaseError):
-    """Erro de validação de entrada."""
+    """Raised when incoming data fails validation."""
 
 
 class FiberNotFound(FiberUseCaseError):
-    """Cabo de fibra não localizado."""
+    """Raised when a fiber cable cannot be located."""
 
 
 @dataclass
@@ -49,7 +49,7 @@ def _get_port(port_id: str | int, *, with_site: bool = True) -> Port:
     try:
         return queryset.get(id=port_id)
     except Port.DoesNotExist as exc:
-        raise FiberValidationError("Porta não encontrada") from exc
+        raise FiberValidationError("Port not found") from exc
 
 
 def get_fiber_cable(cable_id: int) -> FiberCable:
@@ -59,7 +59,7 @@ def get_fiber_cable(cable_id: int) -> FiberCable:
             "destination_port__device__site",
         ).get(id=cable_id)
     except FiberCable.DoesNotExist as exc:
-        raise FiberNotFound("FiberCable nao encontrado") from exc
+        raise FiberNotFound("FiberCable not found") from exc
 
 
 def parse_kml_coordinates(kml_file) -> List[Dict[str, float]]:
@@ -67,7 +67,7 @@ def parse_kml_coordinates(kml_file) -> List[Dict[str, float]]:
         tree = ET.parse(kml_file)
         root = tree.getroot()
     except Exception as exc:
-        raise FiberValidationError(f"Erro ao processar KML: {exc}") from exc
+        raise FiberValidationError(f"Failed to process KML: {exc}") from exc
 
     ns = {"kml": "http://www.opengis.net/kml/2.2"}
     coords: List[Dict[str, float]] = []
@@ -87,9 +87,9 @@ def parse_kml_coordinates(kml_file) -> List[Dict[str, float]]:
             if -90.0 <= lat <= 90.0 and -180.0 <= lng <= 180.0:
                 coords.append({"lat": lat, "lng": lng})
     if not coords:
-        raise FiberValidationError("Nenhum ponto encontrado no KML")
+        raise FiberValidationError("No coordinates found in the KML payload")
     if len(coords) < 2:
-        raise FiberValidationError("Path precisa de pelo menos 2 pontos validos")
+        raise FiberValidationError("Path requires at least two valid points")
     return coords
 
 
@@ -103,22 +103,28 @@ def create_fiber_from_kml(
     single_port: bool = False,
 ) -> Dict[str, object]:
     if FiberCable.objects.filter(name__iexact=name).exists():
-        raise FiberValidationError("Ja existe um cabo com este nome")
+        raise FiberValidationError("A fiber with this name already exists")
 
     origin_port = _get_port(origin_port_id)
     dest_port = _get_port(dest_port_id)
 
     if str(origin_port.device_id) != str(origin_device_id):
-        raise FiberValidationError("Porta de origem nao pertence ao device selecionado")
+        raise FiberValidationError("Origin port does not belong to the selected device")
     if str(dest_port.device_id) != str(dest_device_id):
-        raise FiberValidationError("Porta de destino nao pertence ao device selecionado")
+        raise FiberValidationError(
+            "Destination port does not belong to the selected device"
+        )
     
-    # Validação de portas diferentes apenas se não for single port mode
+    # Only enforce distinct port checks when not in single-port mode
     if not single_port:
         if origin_port == dest_port:
-            raise FiberValidationError("Portas de origem e destino devem ser diferentes")
+            raise FiberValidationError(
+                "Origin and destination ports must be different"
+            )
         if origin_port.device_id == dest_port.device_id:
-            raise FiberValidationError("Devices de origem e destino devem ser diferentes")
+            raise FiberValidationError(
+                "Origin and destination devices must be different"
+            )
 
     coords = parse_kml_coordinates(kml_file)
 
@@ -201,7 +207,7 @@ def cable_value_mapping_status(cable: FiberCable, item_key_origin: Optional[str]
         if raw == "0":
             return "down"
         if raw is not None:
-            return f"Desconhecido ({raw})"
+            return f"unknown ({raw})"
         return "unknown"
 
     origin_status = interpret(raw_origin)
@@ -289,7 +295,7 @@ def update_fiber_path(cable: FiberCable, raw_path) -> Dict[str, object]:
     allow_empty = True
     sanitized = sanitize_path_points(raw_path, allow_empty=allow_empty)
     if sanitized and len(sanitized) < 2:
-        raise FiberValidationError("Path precisa de pelo menos 2 pontos validos")
+        raise FiberValidationError("Path requires at least two valid points")
 
     length_km = calculate_path_length(sanitized)
     cable.path_coordinates = sanitized
@@ -307,15 +313,13 @@ def update_fiber_metadata(
     origin_port_id: Optional[int] = None,
     dest_port_id: Optional[int] = None,
 ) -> Dict[str, object]:
-    """
-    Atualiza metadados de um cabo (nome, portas origem/destino).
-    """
+    """Update fiber metadata such as name and endpoint ports."""
     updated_fields = []
     
     if name is not None:
         name = name.strip()
         if not name:
-            raise FiberValidationError("Nome não pode ser vazio")
+            raise FiberValidationError("Name cannot be empty")
         cable.name = name
         updated_fields.append("name")
     
@@ -323,7 +327,9 @@ def update_fiber_metadata(
         try:
             origin_port = Port.objects.get(id=origin_port_id)
         except Port.DoesNotExist as exc:
-            raise FiberValidationError(f"Porta de origem {origin_port_id} não encontrada") from exc
+            raise FiberValidationError(
+                f"Origin port {origin_port_id} not found"
+            ) from exc
         cable.origin_port = origin_port
         updated_fields.append("origin_port")
     
@@ -331,7 +337,9 @@ def update_fiber_metadata(
         try:
             dest_port = Port.objects.get(id=dest_port_id)
         except Port.DoesNotExist as exc:
-            raise FiberValidationError(f"Porta de destino {dest_port_id} não encontrada") from exc
+            raise FiberValidationError(
+                f"Destination port {dest_port_id} not found"
+            ) from exc
         cable.destination_port = dest_port
         updated_fields.append("destination_port")
     
@@ -482,12 +490,18 @@ def create_manual_fiber(data: Dict[str, object]) -> Dict[str, object]:
     else:
         dest_port = _get_port(dest_port_id)
         if str(dest_port.device_id) != str(dest_device_id):
-            raise FiberValidationError("Destination port does not belong to the selected device")
+            raise FiberValidationError(
+                "Destination port does not belong to the selected device"
+            )
         if origin_port == dest_port:
-            raise FiberValidationError("Portas de origem e destino devem ser diferentes")
+            raise FiberValidationError(
+                "Origin and destination ports must be different"
+            )
 
     if str(origin_port.device_id) != str(origin_device_id):
-        raise FiberValidationError("Porta de origem nao pertence ao device selecionado")
+        raise FiberValidationError(
+            "Origin port does not belong to the selected device"
+        )
 
     raw_path = data.get("path") or []
     sanitized = sanitize_path_points(raw_path, allow_empty=False)
@@ -533,7 +547,7 @@ def update_cable_oper_status(cable_id: int) -> dict:
             "origin_port__device", "destination_port__device"
         ).get(id=cable_id)
     except FiberCable.DoesNotExist as exc:
-        raise FiberNotFound("FiberCable nao encontrado") from exc
+        raise FiberNotFound("FiberCable not found") from exc
 
     origin_port = cable.origin_port
     dest_port = cable.destination_port
