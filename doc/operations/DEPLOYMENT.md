@@ -1,121 +1,107 @@
-# 🚀 Deployment Guide — MapsProveFiber
+# Deployment Guide - MapsProveFiber
 
-Guia para implantar o **MapsProveFiber** em produção.
-
----
-
-## 🧩 Estrutura dos serviços
-
-| Serviço | Porta | Descrição |
-|----------|--------|------------|
-| web | 8000 | Django + Gunicorn |
-| celery | - | Worker de tarefas |
-| beat | - | Scheduler Celery |
-| redis | 6379 | Cache e filas (⚠️ SPOF - ver seção Redis HA) |
-| db | 3306 | MariaDB/MySQL |
+Instructions for deploying **MapsProveFiber** to production.
 
 ---
 
-## ⚠️ **CRITICAL: Redis High Availability**
+## Service Layout
 
-**Development uses a single Redis container, which is a Single Point of Failure (SPOF) in production.**
-
-### Recommended Solutions:
-
-#### **Option A: Managed Service (Recommended ✅)**
-Use cloud provider managed Redis with built-in HA:
-- **AWS ElastiCache for Redis**
-- **Google Cloud Memorystore**
-- **Azure Cache for Redis**
-
-**Setup:**
-1. Create managed Redis cluster with replication enabled
-2. Update `.env.production`:
-   ```bash
-   REDIS_URL=redis://prod-cluster.abc123.0001.use1.cache.amazonaws.com:6379/0
-   ```
-
-#### **Option B: Self-Managed Redis Sentinel**
-Deploy 3-node Sentinel cluster (1 master + 2 replicas)
-
-**Setup:**
-1. Update `.env.production`:
-   ```bash
-   REDIS_USE_SENTINEL=true
-   REDIS_SENTINELS=sentinel1:26379,sentinel2:26379,sentinel3:26379
-   REDIS_MASTER_NAME=mymaster
-   REDIS_PASSWORD=your-secure-password
-   ```
-2. Deploy using `docker-compose.prod.yml` (includes Sentinel containers)
-
-📖 **Full documentation:** [`doc/reference/REDIS_HIGH_AVAILABILITY.md`](../reference/REDIS_HIGH_AVAILABILITY.md)
+| Service | Port | Description |
+|---------|------|-------------|
+| web     | 8000 | Django with Gunicorn |
+| celery  | -    | Celery worker |
+| beat    | -    | Celery scheduler |
+| redis   | 6379 | Cache and queues (single point of failure in dev) |
+| db      | 3306 | MariaDB or MySQL |
 
 ---
 
-## ⚙️ Setup
+## Critical: Redis High Availability
 
-### 1. Configure Environment
-```bash
-# Copy example configuration
-cp .env.production.example .env.production
+Development runs a single Redis instance, which becomes a single point of failure in production. Use one of the following approaches for high availability.
 
-# Edit with your values
-nano .env.production
+### Option A: Managed Redis (preferred)
+Use a cloud managed service with replication, such as AWS ElastiCache, Google Cloud Memorystore, or Azure Cache for Redis.
 
-# ⚠️ REQUIRED: Set these variables
-# - SECRET_KEY (min 50 characters)
-# - ALLOWED_HOSTS
-# - DB_PASSWORD
-# - REDIS_URL (or Redis Sentinel config)
-# Optional tuning
-# - DASHBOARD_CACHE_REFRESH_INTERVAL=60
-#   Celery beat SWR refresh cadence
-# - INVENTORY_SYNC_INTERVAL_SECONDS=86400
-#   Celery beat diário para sync de inventário
+```
+REDIS_URL=redis://prod-cluster.example.cache.amazonaws.com:6379/0
 ```
 
-### 2. Build and Deploy
-```bash
-# Production deployment
+### Option B: Redis Sentinel
+Deploy a three-node Sentinel cluster (one primary, two replicas) and configure the application to discover the active primary.
+
+```
+REDIS_USE_SENTINEL=true
+REDIS_SENTINELS=sentinel1:26379,sentinel2:26379,sentinel3:26379
+REDIS_MASTER_NAME=mymaster
+REDIS_PASSWORD=your-secure-password
+```
+
+See `doc/reference/REDIS_HIGH_AVAILABILITY.md` for detailed guidance.
+
+---
+
+## Setup Steps
+
+### 1. Configure environment variables
+
+```
+cp .env.production.example .env.production
+nano .env.production
+```
+
+Required settings:
+- `SECRET_KEY` (at least 50 characters)
+- `ALLOWED_HOSTS`
+- Database credentials (`DB_PASSWORD`, host, name)
+- Redis configuration (`REDIS_URL` or Sentinel variables)
+
+Common tuning parameters:
+- `DASHBOARD_CACHE_REFRESH_INTERVAL=60`
+- `INVENTORY_SYNC_INTERVAL_SECONDS=86400`
+
+### 2. Build and deploy
+
+```
 docker compose -f docker-compose.prod.yml build
 docker compose -f docker-compose.prod.yml up -d
-
-# Check services
 docker compose -f docker-compose.prod.yml ps
 ```
 
-### 3. Run Migrations
-```bash
+### 3. Run migrations
+
+```
 docker compose -f docker-compose.prod.yml exec web python manage.py migrate
 ```
 
-### 4. Create Superuser
-```bash
+### 4. Create a superuser
+
+```
 docker compose -f docker-compose.prod.yml exec web python manage.py createsuperuser
 ```
 
-### 5. Collect Static Files
-```bash
+### 5. Collect static files
+
+```
 docker compose -f docker-compose.prod.yml exec web python manage.py collectstatic --noinput
 ```
 
 ---
 
-## 🌐 Health Checks
+## Health Checks
 
-| Endpoint | Description | Expected Response |
-|-----------|------------|-------------------|
-| `/health/` | Complete status | `200 OK` + JSON |
+| Endpoint | Purpose | Expected response |
+|----------|---------|-------------------|
+| `/health/` | Overall status | `200 OK` with JSON |
 | `/health/ready/` | Ready for traffic | `200 OK` |
 | `/health/live/` | Process alive | `200 OK` |
-| `/metrics/` | Prometheus metrics | `200 OK` + plaintext |
+| `/metrics/` | Prometheus metrics | `200 OK` with text |
 
-### Health Check Example
-```bash
-# Check all services
+Example:
+
+```
 curl http://localhost:8000/health/
 
-# Expected response
 {
   "status": "healthy",
   "database": "ok",
@@ -126,176 +112,144 @@ curl http://localhost:8000/health/
 
 ---
 
-## 🧱 Backup & Recovery
+## Backup and Recovery
 
-### Database Backup
-```bash
-# Create backup
+### Database
+
+```
 docker compose -f docker-compose.prod.yml exec db sh -c \
   'mysqldump -u root -p$MYSQL_ROOT_PASSWORD mapspro_db > /backups/db_$(date +%Y%m%d_%H%M%S).sql'
 
-# Restore backup
 docker compose -f docker-compose.prod.yml exec -T db sh -c \
   'mysql -u root -p$MYSQL_ROOT_PASSWORD mapspro_db < /backups/db_20250127_120000.sql'
 ```
 
-### Redis Backup (if using RDB persistence)
-```bash
-# Trigger save
-docker compose -f docker-compose.prod.yml exec redis redis-cli BGSAVE
+### Redis (RDB persistence)
 
-# Copy RDB file
+```
+docker compose -f docker-compose.prod.yml exec redis redis-cli BGSAVE
 docker cp redis:/data/dump.rdb ./backups/redis_$(date +%Y%m%d_%H%M%S).rdb
 ```
 
 ---
 
-## 🔄 Rollback
+## Rollback Procedures
 
-### Roll back to previous version
-```bash
-# 1. Checkout previous release
+### Deploy rollback
+
+```
 git checkout <previous-tag>
-
-# 2. Rebuild and deploy
 docker compose -f docker-compose.prod.yml up -d --build
-
-# 3. Run migrations (if needed - careful with reversals!)
 docker compose -f docker-compose.prod.yml exec web python manage.py migrate
-
-# 4. Verify health
 curl http://localhost:8000/health/
 ```
 
-### Emergency rollback (database included)
-```bash
-# 1. Stop services
-docker compose -f docker-compose.prod.yml down
+### Full rollback with database recovery
 
-# 2. Restore database backup
+```
+docker compose -f docker-compose.prod.yml down
 docker compose -f docker-compose.prod.yml up -d db
 docker compose -f docker-compose.prod.yml exec -T db sh -c \
   'mysql -u root -p$MYSQL_ROOT_PASSWORD mapspro_db < /backups/db_backup_before_deploy.sql'
-
-# 3. Checkout previous code
 git checkout <previous-tag>
-
-# 4. Rebuild and start
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 ---
 
-## � Monitoring
+## Monitoring
 
-### Container Logs
-```bash
-# All services
+### Container logs
+
+```
 docker compose -f docker-compose.prod.yml logs -f
-
-# Specific service
 docker compose -f docker-compose.prod.yml logs -f web
-
-# Last 100 lines
 docker compose -f docker-compose.prod.yml logs --tail=100 celery
 ```
 
-### Prometheus Metrics
-```bash
-# Scrape metrics
-curl http://localhost:8000/metrics/
+### Prometheus metrics
 
-# Key metrics to monitor:
-# - django_http_requests_latency_seconds (response time)
-# - django_db_query_duration_seconds (database performance)
-# - celery_task_total (task throughput)
-# - redis_connected_clients (connection pool usage)
+```
+curl http://localhost:8000/metrics/
+# Track metrics such as:
+# - django_http_requests_latency_seconds
+# - django_db_query_duration_seconds
+# - celery_task_total
+# - redis_connected_clients
 ```
 
 ---
 
-## 🚨 Troubleshooting
+## Troubleshooting
 
-### Service won't start
-```bash
-# Check logs
+### Service will not start
+
+```
 docker compose -f docker-compose.prod.yml logs <service-name>
-
-# Check container status
 docker compose -f docker-compose.prod.yml ps
-
-# Inspect container
 docker inspect <container-id>
 ```
 
-### Database connection issues
-```bash
-# Test database connection
-docker compose -f docker-compose.prod.yml exec web python manage.py dbshell
+### Database connectivity
 
-# Check database is running
+```
+docker compose -f docker-compose.prod.yml exec web python manage.py dbshell
 docker compose -f docker-compose.prod.yml exec db mysql -u root -p -e "SHOW DATABASES;"
 ```
 
-### Redis connection issues
-```bash
-# Test Redis connection
-docker compose -f docker-compose.prod.yml exec redis redis-cli PING
+### Redis connectivity
 
-# Check Redis info
+```
+docker compose -f docker-compose.prod.yml exec redis redis-cli PING
 docker compose -f docker-compose.prod.yml exec redis redis-cli INFO
 ```
 
-### Celery tasks not running
-```bash
-# Check Celery worker logs
+### Celery tasks idle
+
+```
 docker compose -f docker-compose.prod.yml logs celery
-
-# Inspect Celery worker status
 docker compose -f docker-compose.prod.yml exec celery celery -A core inspect active
-
-# Check beat scheduler
 docker compose -f docker-compose.prod.yml logs beat
 ```
 
 ---
 
-## 📋 Pre-Deployment Checklist
+## Pre-Deployment Checklist
 
-- [ ] ✅ SECRET_KEY is set and different from development
-- [ ] ✅ DEBUG=false in production settings
-- [ ] ✅ ALLOWED_HOSTS configured correctly
-- [ ] ✅ Redis HA solution deployed (ElastiCache/Sentinel)
-- [ ] ✅ Database backups automated
-- [ ] ✅ SSL/HTTPS configured (SECURE_SSL_REDIRECT=true)
-- [ ] ✅ CSRF_TRUSTED_ORIGINS includes production domain
-- [ ] ✅ Email SMTP configured
-- [ ] ✅ Sentry/error tracking configured (optional)
-- [ ] ✅ Health checks accessible
-- [ ] ✅ Prometheus metrics endpoint enabled
-- [ ] ✅ Static files collected (`collectstatic`)
-- [ ] ✅ Migrations applied
-- [ ] ✅ Superuser created
-
----
-
-## 📚 Additional Resources
-
-- [Redis High Availability Strategy](../reference/REDIS_HIGH_AVAILABILITY.md)
-- [Performance Optimization Phases](../reference/performance_phase6.md)
-- [Operations Checklist](../reference/operations_checklist.md)
+- [ ] SECRET_KEY is unique to production
+- [ ] DEBUG is set to false
+- [ ] ALLOWED_HOSTS includes the production domain
+- [ ] Redis HA (managed or Sentinel) is in place
+- [ ] Database backups are automated
+- [ ] HTTPS enforced (`SECURE_SSL_REDIRECT=true`)
+- [ ] CSRF_TRUSTED_ORIGINS includes production domain
+- [ ] SMTP configuration is complete
+- [ ] Error tracking (Sentry or similar) configured if required
+- [ ] Health endpoints reachable
+- [ ] Prometheus metrics enabled
+- [ ] Static files collected
+- [ ] Migrations applied
+- [ ] Superuser created
 
 ---
 
-## 🧰 Troubleshooting
+## Additional Resources
 
-| Problema | Solução |
-|-----------|----------|
-| DB não sobe | Verifique volume ou `.env` |
-| Celery parado | `docker compose restart celery beat` |
-| Health 503 | Verifique Redis/DB |
-| Static 404 | `python manage.py collectstatic --noinput` |
+- `doc/reference/REDIS_HIGH_AVAILABILITY.md`
+- `doc/reference/performance_phase6.md`
+- `doc/reference/operations_checklist.md`
 
 ---
 
-**MapsProveFiber — 2025**
+## Quick Fix Table
+
+| Issue | Remedy |
+|-------|--------|
+| Database container fails to start | Inspect volumes or `.env` credentials |
+| Celery stopped | `docker compose restart celery beat` |
+| Health endpoint returns 503 | Validate Redis and database status |
+| Static assets missing | `python manage.py collectstatic --noinput` |
+
+---
+
+MapsProveFiber - 2025

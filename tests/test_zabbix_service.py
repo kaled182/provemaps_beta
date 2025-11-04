@@ -10,12 +10,15 @@ from zabbix_api.services import zabbix_service
 
 
 class ZabbixServiceTests(SimpleTestCase):
-    def tearDown(self):
+    def tearDown(self) -> None:
         zabbix_service.clear_token_cache()
 
     @override_settings(ZABBIX_READ_ONLY=True)
     @patch("zabbix_api.client.requests.post")
-    def test_zabbix_request_blocks_write_operations(self, post_mock):
+    def test_zabbix_request_blocks_write_operations(
+        self,
+        post_mock: Mock,
+    ) -> None:
         result = zabbix_service.zabbix_request("host.create", {"name": "test"})
         self.assertIsNone(result)
         post_mock.assert_not_called()
@@ -29,10 +32,10 @@ class ZabbixServiceTests(SimpleTestCase):
     @patch("zabbix_api.client.requests.post")
     def test_zabbix_request_retries_without_auth_header(
         self,
-        post_mock,
-        current_config_mock,
-        token_mock,
-    ):
+        post_mock: Mock,
+        current_config_mock: Mock,
+        token_mock: Mock,
+    ) -> None:
         current_config_mock.return_value = SimpleNamespace(
             zabbix_api_url="http://example/api_jsonrpc.php",
             zabbix_api_user="admin",
@@ -55,7 +58,7 @@ class ZabbixServiceTests(SimpleTestCase):
         self.assertEqual(data, ["ok"])
         self.assertEqual(post_mock.call_count, 2)
 
-        # first call sem Authorization; segunda chamada usa header Bearer
+        # First call omits Authorization header; the second uses a Bearer token
         first_call_kwargs = post_mock.call_args_list[0].kwargs
         second_call_kwargs = post_mock.call_args_list[1].kwargs
 
@@ -67,7 +70,10 @@ class ZabbixServiceTests(SimpleTestCase):
         self.assertEqual(token_mock.call_count, 2)
 
     @patch("zabbix_api.services.zabbix_service.requests.get")
-    def test_get_geolocation_handles_request_exception(self, get_mock):
+    def test_get_geolocation_handles_request_exception(
+        self,
+        get_mock: Mock,
+    ) -> None:
         get_mock.side_effect = requests.RequestException("boom")
 
         data = zabbix_service.get_geolocation_from_ip("8.8.8.8")
@@ -76,7 +82,10 @@ class ZabbixServiceTests(SimpleTestCase):
         get_mock.assert_called_once()
 
     @patch("zabbix_api.services.zabbix_service.requests.get")
-    def test_get_geolocation_returns_payload_when_successful(self, get_mock):
+    def test_get_geolocation_returns_payload_when_successful(
+        self,
+        get_mock: Mock,
+    ) -> None:
         response = Mock()
         response.raise_for_status.return_value = None
         response.json.return_value = {
@@ -93,6 +102,7 @@ class ZabbixServiceTests(SimpleTestCase):
 
         payload = zabbix_service.get_geolocation_from_ip("8.8.4.4")
 
+        assert payload is not None
         self.assertEqual(payload["city"], "Goiânia")
         response.raise_for_status.assert_called_once()
         response.json.assert_called_once()
@@ -104,9 +114,9 @@ class ZabbixServiceTests(SimpleTestCase):
     )
     def test_check_host_connectivity_handles_timeout(
         self,
-        system_mock,
-        run_mock,
-    ):
+        _system_mock: Mock,
+        run_mock: Mock,
+    ) -> None:
         run_mock.side_effect = subprocess.TimeoutExpired(
             cmd=["ping"],
             timeout=5,
@@ -124,9 +134,9 @@ class ZabbixServiceTests(SimpleTestCase):
     )
     def test_check_host_connectivity_returns_true_for_success(
         self,
-        system_mock,
-        run_mock,
-    ):
+        _system_mock: Mock,
+        run_mock: Mock,
+    ) -> None:
         run_mock.return_value = SimpleNamespace(returncode=0)
 
         ok = zabbix_service.check_host_connectivity("10.0.0.1")

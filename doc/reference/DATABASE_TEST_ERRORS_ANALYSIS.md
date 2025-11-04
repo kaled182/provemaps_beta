@@ -1,14 +1,14 @@
-# Análise de Erros de Banco de Dados - Testes FASE 4
+# Database Error Analysis - Phase 4 Tests
 
-**Data:** 27 de Outubro de 2025  
-**Problema:** Testes falhando ao tentar conectar ao banco de dados  
-**Status:** 🔴 CRÍTICO - Bloqueia execução de testes
+**Date:** 27 October 2025  
+**Issue:** Test suite fails when connecting to the database  
+**Status:** Critical blocker for automated tests
 
 ---
 
-## 🔴 Erro Principal Observado
+## Primary Error Observed
 
-### Stack Trace Completo
+### Stack Trace
 ```python
 E   django.db.utils.OperationalError: (1045, "Access denied for user 'app'@'localhost' (using password: YES)")
 
@@ -33,28 +33,25 @@ E   pymysql.err.OperationalError: (1045, "Access denied for user 'app'@'localhos
 
 ---
 
-## 🔍 Análise Técnica do Erro
+## Technical Analysis
 
-### 1. O que está acontecendo?
+### 1. What happens during `pytest`?
 
-Quando executamos `pytest tests/`, o pytest-django:
+Running `pytest tests/` triggers the pytest-django integration, which follows this sequence:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│ 1. pytest inicia                                        │
-│ 2. pytest-django detecta Django instalado              │
-│ 3. pytest-django carrega DJANGO_SETTINGS_MODULE        │
-│ 4. Se não definido, usa padrão do ambiente            │
-│ 5. Tenta criar test database                          │
-│ 6. ❌ FALHA: Não consegue conectar ao MariaDB         │
-└─────────────────────────────────────────────────────────┘
+1. pytest starts
+2. pytest-django loads Django
+3. pytest-django reads DJANGO_SETTINGS_MODULE
+4. If the variable is missing, the environment default is used
+5. pytest-django tries to create the test database
+6. Failure: connection to MariaDB is rejected
 ```
 
-### 2. Por que está tentando MariaDB?
+### 2. Why is MariaDB involved?
 
-**Arquivo:** `settings/dev.py` (configuração padrão)
+File `settings/dev.py` defines the default database connection:
 ```python
-# Linha ~70
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
@@ -67,468 +64,326 @@ DATABASES = {
 }
 ```
 
-**O que acontece:**
-1. ✅ `pytest.ini` define: `DJANGO_SETTINGS_MODULE = settings.test`
-2. ❌ PowerShell sobrescreve com variável de ambiente do sistema
-3. ❌ pytest usa `settings.dev` ao invés de `settings.test`
-4. ❌ Tenta conectar MariaDB que não está rodando
+What actually happens:
+1. `pytest.ini` sets `DJANGO_SETTINGS_MODULE = settings.test`.
+2. The PowerShell session overrides that value with a system environment variable.
+3. pytest loads `settings.dev` instead of `settings.test`.
+4. The process attempts to connect to MariaDB, which is not running locally.
 
-### 3. Verificação do Ambiente
+### 3. Environment check
 
-**Comando executado:**
+Command executed (run from `D:\provemaps_beta` with the virtual environment active):
 ```powershell
-pytest tests/test_metrics.py tests/test_middleware.py -v
+& D:\provemaps_beta\venv\Scripts\python.exe -m pytest tests\test_metrics.py tests\test_middleware.py -v
 ```
 
-**Configuração detectada:**
+Console output excerpt:
 ```
-🧪 pytest configured for mapsprovefiber
-📁 Settings module: settings.dev  # ❌ ERRADO! Deveria ser settings.test
+pytest configured for mapsprovefiber
+Settings module: settings.dev  # wrong, should be settings.test
 ```
 
 ---
 
-## 🔧 Por que MariaDB não está disponível?
+## Why MariaDB is unavailable
 
-### Situação 1: MariaDB não está rodando
+### Scenario A: MariaDB server is not running
 ```powershell
-# Verificar se MariaDB está rodando
 Get-Process -Name mysqld -ErrorAction SilentlyContinue
-
-# Resultado esperado se não estiver rodando:
-# (Nenhuma saída)
+# No output means the process is not running locally.
 ```
 
-### Situação 2: Docker não está rodando
+### Scenario B: Docker stack is offline
 ```powershell
-# Verificar containers Docker
-docker ps
-
-# Se MariaDB está em Docker, procurar por:
-# CONTAINER ID   IMAGE          STATUS
-# xxxxxxxxxxxx   mariadb:10.x   Up X minutes
+docker compose ps
+# Expect the service 'db' (mariadb:11) in the list.
 ```
 
-### Situação 3: Credenciais incorretas
-```python
-# .env ou variável de ambiente
+### Scenario C: Credentials are invalid
+```text
 DB_USER=app
-DB_PASSWORD=<senha>  # ❌ Pode estar incorreta
+DB_PASSWORD=<secret>
 DB_HOST=localhost
 DB_PORT=3306
 ```
 
-**Erro MySQL 1045 significa:**
-- ✅ MariaDB está rodando
-- ✅ Consegue conectar ao servidor
-- ❌ Usuário/senha incorretos ou sem permissão
+MySQL error 1045 confirms that the server is reachable but the user or password is invalid or lacks permissions.
 
 ---
 
-## 📊 Comparação: MariaDB vs SQLite para Testes
+## MariaDB vs SQLite for Tests
 
-### Configuração Atual - MariaDB (settings/dev.py)
+### Current configuration (settings/dev.py)
 ```python
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',  # ❌ Requer MariaDB rodando
+        'ENGINE': 'django.db.backends.mysql',
         'NAME': 'mapspro_db',
         'USER': 'app',
-        'PASSWORD': env('DB_PASSWORD'),        # ❌ Requer senha correta
-        'HOST': 'localhost',                   # ❌ Requer servidor ativo
+        'PASSWORD': env('DB_PASSWORD'),
+        'HOST': 'localhost',
         'PORT': '3306',
     }
 }
 ```
 
-**Problemas:**
-- ❌ Requer MariaDB instalado ou Docker rodando
-- ❌ Requer credenciais válidas
-- ❌ Requer permissões para criar/dropar databases
-- ❌ Requer limpeza de dados entre testes
-- ❌ Testes lentos (~15-20s para 35 testes)
-- ❌ Dependência externa para rodar testes
+Issues with this setup:
+- Requires MariaDB installed locally or in Docker.
+- Depends on valid credentials with DDL permissions.
+- Slower test runs (15-20 seconds for 35 tests).
+- Harder to maintain in CI because the database must be provisioned.
 
-### Configuração Recomendada - SQLite (settings/test.py)
+### Recommended test configuration (settings/test.py)
 ```python
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',  # ✅ Não requer instalação
-        'NAME': ':memory:',                      # ✅ BD em memória
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': ':memory:',
     }
 }
 ```
 
-**Vantagens:**
-- ✅ Zero configuração externa
-- ✅ Zero credenciais necessárias
-- ✅ Isolamento automático
-- ✅ Limpeza automática (destruído após teste)
-- ✅ Testes rápidos (~0.8s para 35 testes)
-- ✅ Funciona em qualquer ambiente (CI/CD, local, etc.)
+Benefits:
+- No external services or credentials required.
+- In-memory database is created and destroyed automatically.
+- Fast execution (about 0.8 seconds for 35 tests).
+- Works the same way on developer machines and CI pipelines.
 
 ---
 
-## 🚨 Erros Específicos por Teste
+## Typical Failure Patterns
 
-### Teste com `@pytest.mark.django_db`
+### Tests decorated with `@pytest.mark.django_db`
 ```python
 @pytest.mark.django_db
 class TestMetricsInitialization:
     def test_init_metrics_sets_application_info(self):
-        # ❌ ERRO: Tenta criar test database antes de executar
         ...
 ```
 
-**O que acontece:**
-1. pytest vê decorator `@pytest.mark.django_db`
-2. Tenta criar database de teste
-3. Executa: `CREATE DATABASE test_mapspro_db`
-4. ❌ FALHA: Erro 1045 (Access denied)
+Flow:
+1. pytest detects the database marker.
+2. Django attempts to create the test database.
+3. The call `CREATE DATABASE test_mapspro_db` is executed.
+4. MariaDB rejects the request with error 1045.
 
-### Teste SEM decorator mas usando RequestFactory
+### Tests using `RequestFactory` without the marker
 ```python
 class TestRequestIDGeneration:
     def test_generates_uuid_when_no_header(self):
-        factory = RequestFactory()  # ❌ Django detecta e tenta DB
+        factory = RequestFactory()
         request = factory.get('/')
         ...
 ```
 
-**O que acontece:**
-1. Django detecta uso de `RequestFactory`
-2. pytest-django assume que precisa de DB
-3. Tenta setup de database
-4. ❌ FALHA: Erro 1045 (Access denied)
+RequestFactory accesses middleware and database-backed components, so pytest-django still attempts to initialize a database connection, producing the same error.
 
 ---
 
-## 🔍 Diagnóstico Passo a Passo
+## Step-by-Step Diagnostics
 
-### Passo 1: Verificar qual settings está sendo usado
+### Step 1: Confirm the settings module
 ```powershell
-# Executar pytest com verbose
-pytest tests/ -v 2>&1 | Select-String "Settings module"
-
-# Resultado CORRETO:
-# Settings module: settings.test
-
-# Resultado ERRADO (atual):
-# Settings module: settings.dev
+& D:\provemaps_beta\venv\Scripts\python.exe -m pytest tests/ -v 2>&1 | Select-String "Settings module"
+# Expected: Settings module: settings.test
+# Actual:   Settings module: settings.dev
 ```
 
-### Passo 2: Verificar MariaDB está rodando
+### Step 2: Confirm MariaDB availability
 ```powershell
-# Opção A: Docker
-docker ps | Select-String "mariadb"
-
-# Opção B: Serviço Windows
+docker compose ps | Select-String "db"
 Get-Service -Name "MariaDB*" -ErrorAction SilentlyContinue
-
-# Opção C: Processo
 Get-Process -Name "mysqld" -ErrorAction SilentlyContinue
 ```
 
-### Passo 3: Verificar credenciais do banco
+### Step 3: Inspect environment configuration
 ```powershell
-# Ver arquivo .env
 Get-Content .env | Select-String "DB_"
-
-# Resultado esperado:
-# DB_NAME=mapspro_db
-# DB_USER=app
-# DB_PASSWORD=<senha>
-# DB_HOST=localhost
-# DB_PORT=3306
 ```
 
-### Passo 4: Testar conexão manual
+### Step 4: Manual connection test
 ```powershell
-# Instalar mysql client (se não tiver)
-# pip install mysqlclient
-
-# Testar conexão Python
-python -c "import pymysql; conn = pymysql.connect(host='localhost', user='app', password='SENHA', database='mapspro_db'); print('✅ Conectado'); conn.close()"
-
-# Se falhar com erro 1045:
-# ❌ Credenciais incorretas ou usuário sem permissão
+& D:\provemaps_beta\venv\Scripts\python.exe -c "import pymysql; conn = pymysql.connect(host='localhost', user='app', password='SECRET', database='mapspro_db'); print('Connection OK'); conn.close()"
 ```
 
 ---
 
-## 💡 Soluções Disponíveis
+## Mitigation Options
 
-### ✅ SOLUÇÃO 1: Forçar SQLite (RECOMENDADO)
+### Option 1 (recommended): Force SQLite
 
-**Comando correto:**
 ```powershell
 $env:DJANGO_SETTINGS_MODULE='settings.test'
-pytest tests/ -v --cov=core --cov-report=html
+& D:\provemaps_beta\venv\Scripts\python.exe -m pytest tests/ -v --cov=core --cov-report=html
 ```
 
-**Resultado:**
+Sample output:
 ```
-🧪 pytest configured for mapsprovefiber
-📁 Settings module: settings.test  # ✅ CORRETO
-====================================== test session starts =======================================
+pytest configured for mapsprovefiber
+Settings module: settings.test
+==================================== test session starts ====================================
 collected 35 items
 
-tests/test_metrics.py::TestMetricsInitialization::... PASSED  [  2%]
+tests/test_metrics.py::TestMetricsInitialization::... PASSED
 ...
-========================== 20 passed, 15 failed in 0.83s ==================================
-# ✅ Roda com SQLite in-memory
-# ✅ Sem erro de conexão
-# ⚠️ 15 falhas são de assertivas, não de BD
+========================= 20 passed, 15 failed in 0.83s =========================
 ```
 
-**Por que funciona:**
-- ✅ Força uso de `settings.test`
-- ✅ SQLite não requer servidor externo
-- ✅ Database criado em memória
-- ✅ Destruído automaticamente após teste
+Those 15 failures are assertion issues unrelated to database connectivity.
+
+### Option 2 (not recommended): Run MariaDB for tests
+
+1. Start MariaDB with Docker:
+   ```yaml
+   version: '3.8'
+   services:
+     db_test:
+       image: mariadb:10.11
+       environment:
+         MYSQL_ROOT_PASSWORD: root_password
+         MYSQL_DATABASE: test_mapspro_db
+         MYSQL_USER: test_user
+         MYSQL_PASSWORD: test_password
+       ports:
+         - "3307:3306"
+   ```
+   ```powershell
+   docker compose up -d db_test
+   ```
+
+2. Create `settings/test_mariadb.py` with the credentials above.
+
+3. Execute:
+    ```powershell
+    $env:DJANGO_SETTINGS_MODULE='settings.test_mariadb'
+    & D:\provemaps_beta\venv\Scripts\python.exe -m pytest tests/ -v
+   ```
+
+Drawbacks: slower, higher maintenance, required infrastructure in CI.
 
 ---
 
-### ❌ SOLUÇÃO 2: Configurar MariaDB (NÃO RECOMENDADO)
+## Performance Snapshot
 
-**Passos necessários:**
+Benchmark: 35 unit tests (18 metrics, 17 middleware)
 
-#### A) Iniciar MariaDB via Docker
-```powershell
-# docker-compose.yml
-version: '3.8'
-services:
-  db_test:
-    image: mariadb:10.11
-    environment:
-      MYSQL_ROOT_PASSWORD: root_password
-      MYSQL_DATABASE: test_mapspro_db
-      MYSQL_USER: test_user
-      MYSQL_PASSWORD: test_password
-    ports:
-      - "3307:3306"  # Porta diferente para não conflitar
-```
-
-```powershell
-# Iniciar
-docker-compose up -d db_test
-```
-
-#### B) Criar settings de teste com MariaDB
-```python
-# settings/test_mariadb.py
-from .base import *
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'test_mapspro_db',
-        'USER': 'test_user',
-        'PASSWORD': 'test_password',
-        'HOST': 'localhost',
-        'PORT': '3307',
-        'TEST': {
-            'NAME': 'test_mapspro_db_test',  # DB temporário
-            'CHARSET': 'utf8mb4',
-        },
-    }
-}
-```
-
-#### C) Executar testes
-```powershell
-$env:DJANGO_SETTINGS_MODULE='settings.test_mariadb'
-pytest tests/ -v
-```
-
-**Problemas:**
-- ❌ Requer Docker rodando sempre
-- ❌ Testes 20x mais lentos
-- ❌ Requer configuração adicional
-- ❌ Mais complexo de manter
-- ❌ CI/CD mais difícil
+| Configuration       | Time     | Setup effort        | Isolation | CI/CD impact |
+|---------------------|----------|---------------------|-----------|--------------|
+| SQLite in-memory    | 0.83 sec | None                | Full      | Simple       |
+| MariaDB via Docker  | 15-20 s  | Docker plus config  | Partial   | Complex      |
+| MariaDB local install | 12-18 s | Manual install      | Partial   | Hard         |
 
 ---
 
-## 📊 Comparação de Performance
+## Recommended Approach
 
-### Teste Executado: 35 testes (18 metrics + 17 middleware)
+- **Unit tests:** use SQLite (`settings.test`).
+- **Integration or SQL-specific tests:** create dedicated suites that target MariaDB inside Docker.
 
-| Configuração | Tempo | Setup Required | Isolamento | CI/CD |
-|--------------|-------|----------------|------------|-------|
-| **SQLite in-memory** | **0.83s** | ✅ Zero | ✅ Total | ✅ Fácil |
-| MariaDB Docker | ~15-20s | ❌ Docker + config | ⚠️ Parcial | ⚠️ Complexo |
-| MariaDB Local | ~12-18s | ❌ Instalação + config | ⚠️ Parcial | ❌ Difícil |
-
----
-
-## 🎯 Recomendação Técnica
-
-### Para TESTES UNITÁRIOS → SQLite in-memory ✅
-
-**Razões:**
-1. **Velocidade:** 20x mais rápido
-2. **Isolamento:** Cada teste tem DB limpo
-3. **Portabilidade:** Funciona em qualquer ambiente
-4. **Simplicidade:** Zero configuração
-5. **Padrão:** Django, Rails, Laravel, etc.
-
-**Uso:**
+Example unit test command:
 ```powershell
-# Criar script: scripts/run_tests.ps1
 $env:DJANGO_SETTINGS_MODULE='settings.test'
-pytest tests/ --cov=core --cov-report=html
+& D:\provemaps_beta\venv\Scripts\python.exe -m pytest tests/ --cov=core --cov-report=html
 ```
 
-### Para TESTES DE INTEGRAÇÃO → MariaDB Docker ⚠️
-
-**Razões:**
-1. Validar SQL específico do MariaDB
-2. Testar constraints complexas
-3. Testar stored procedures (se houver)
-4. Validar deployment
-
-**Uso:**
+Example integration command:
 ```powershell
-# Testes de integração separados
 $env:DJANGO_SETTINGS_MODULE='settings.test_integration'
-pytest tests/integration/ --slow
+& D:\provemaps_beta\venv\Scripts\python.exe -m pytest tests/integration/ --slow
 ```
 
 ---
 
-## 🔧 Correção Imediata (5 minutos)
+## Quick Fix (five minutes)
 
-### Opção 1: Script PowerShell
+### PowerShell helper script
 ```powershell
-# Criar: scripts/run_tests.ps1
-#!/usr/bin/env pwsh
-
-Write-Host "🧪 Executando testes com SQLite..." -ForegroundColor Cyan
-
+# scripts/run_tests.ps1
+Write-Host "Running tests with SQLite..." -ForegroundColor Cyan
 $env:DJANGO_SETTINGS_MODULE = 'settings.test'
-
-pytest tests/ `
+& D:\provemaps_beta\venv\Scripts\python.exe -m pytest tests/ `
     --cov=core.metrics_custom `
     --cov=core.middleware.request_id `
     --cov-report=html `
     -v
-
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "✅ Testes executados" -ForegroundColor Green
+    Write-Host "Tests completed" -ForegroundColor Green
 } else {
-    Write-Host "⚠️ Alguns testes falharam" -ForegroundColor Yellow
+    Write-Host "Some tests failed" -ForegroundColor Yellow
 }
 ```
 
-**Usar:**
+Run it with:
 ```powershell
-.\scripts\run_tests.ps1
+./scripts/run_tests.ps1
 ```
 
-### Opção 2: Adicionar ao pytest.ini
+### pytest.ini enforcement
 ```ini
 [pytest]
 DJANGO_SETTINGS_MODULE = settings.test
-
-# Garantir que sempre usa settings.test
 addopts =
     -v
     --tb=short
-    --reuse-db  # Reutiliza DB SQLite entre execuções
+    --reuse-db
 ```
 
-### Opção 3: Variável de ambiente permanente
+### Persistent environment variable
+Append to `$PROFILE`:
 ```powershell
-# Adicionar ao perfil do PowerShell
-# Arquivo: $PROFILE (C:\Users\[User]\Documents\PowerShell\Microsoft.PowerShell_profile.ps1)
-
-# Adicionar linha:
 $env:DJANGO_SETTINGS_MODULE = 'settings.test'
 ```
 
 ---
 
-## 📋 Checklist de Verificação
+## Verification Checklist
 
-Antes de executar testes, verificar:
-
-- [ ] **SQLite está disponível?**
-  ```powershell
-  python -c "import sqlite3; print('✅ SQLite OK')"
-  ```
-
-- [ ] **settings.test está correto?**
+- SQLite available?
+```powershell
+& D:\provemaps_beta\venv\Scripts\python.exe -c "import sqlite3; print('SQLite OK')"
+```
+- `settings.test` uses SQLite?
   ```powershell
   Get-Content settings/test.py | Select-String "sqlite3"
-  # Deve mostrar: "ENGINE": "django.db.backends.sqlite3"
   ```
-
-- [ ] **Variável de ambiente está setada?**
+- Environment variable set?
   ```powershell
   $env:DJANGO_SETTINGS_MODULE
-  # Deve mostrar: settings.test
   ```
-
-- [ ] **pytest.ini está correto?**
+- `pytest.ini` consistent?
   ```powershell
   Get-Content pytest.ini | Select-String "DJANGO_SETTINGS_MODULE"
-  # Deve mostrar: DJANGO_SETTINGS_MODULE = settings.test
   ```
 
 ---
 
-## 🎯 Conclusão
+## Summary
 
-### ❌ Problema Atual
+Current problem:
 ```
-pytest tests/ 
-→ Usa settings.dev (MariaDB)
-→ MariaDB não está rodando
-→ Erro 1045 (Access denied)
-→ 0 testes executados
+& D:\provemaps_beta\venv\Scripts\python.exe -m pytest tests/
+-> Loads settings.dev (MariaDB)
+-> MariaDB is offline
+-> OperationalError 1045
+-> No tests executed
 ```
 
-### ✅ Solução Recomendada
+Recommended fix:
 ```
 $env:DJANGO_SETTINGS_MODULE='settings.test'
-pytest tests/
-→ Usa settings.test (SQLite)
-→ SQLite sempre disponível
-→ Sem erro de conexão
-→ 35 testes executados (20 passando, 15 com assertivas incorretas)
+& D:\provemaps_beta\venv\Scripts\python.exe -m pytest tests/
+-> Loads settings.test (SQLite)
+-> SQLite always available
+-> Connection succeeds
+-> 35 tests executed (15 still fail on assertions, not DB access)
 ```
-
-### 📊 Resultado Esperado
-```
-====================================== test session starts =======================================
-platform win32 -- Python 3.13.9, pytest-8.3.3, pluggy-1.6.0
-django: version: 5.2.7, settings: settings.test (from env)  ✅ CORRETO
-
-collected 35 items
-
-tests/test_metrics.py::... PASSED
-tests/test_middleware.py::... PASSED
-
----------- coverage: platform win32, python 3.13.9-final-0 -----------
-Name                            Stmts   Miss  Cover   Missing
--------------------------------------------------------------
-core/metrics_custom.py             31      1    97%   145
-core/middleware/request_id.py      30      0   100%
--------------------------------------------------------------
-TOTAL                              61      1    99%
-
-========================== 20 passed, 15 failed in 0.83s ==================================
-```
-
-**Os 15 testes que falham são por assertivas incorretas, NÃO por erro de banco de dados.**
 
 ---
 
-**Próximo Passo:** Corrigir as 15 assertivas incorretas para ter 35/35 testes passando.
+**Next step:** address the remaining 15 assertion failures to reach 35/35 passing tests.
 
 ---
 
-**Relatório gerado em:** 27/10/2025  
-**Autor:** GitHub Copilot  
-**Versão:** 1.0
+**Report generated on:** 27 October 2025  
+**Author:** GitHub Copilot  
+**Version:** 1.0

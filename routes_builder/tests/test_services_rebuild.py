@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any, Protocol, cast
 
 import pytest
 
@@ -10,8 +11,16 @@ from routes_builder import services
 from routes_builder.models import Route, RouteEvent, RouteSegment
 
 
+class PortFactory(Protocol):
+    def __call__(self, *, prefix: str = "port") -> Any:
+        ...
+
+
 @pytest.mark.django_db
-def test_rebuild_route_updates_state_and_metadata(route, port_factory):
+def test_rebuild_route_updates_state_and_metadata(
+    route: Route,
+    port_factory: PortFactory,
+) -> None:
     primary_segment = RouteSegment.objects.create(
         route=route,
         order=5,
@@ -33,7 +42,7 @@ def test_rebuild_route_updates_state_and_metadata(route, port_factory):
         force=True,
         options={"initiator": "unit-tests"},
     )
-    result = services.rebuild_route(context)
+    result: services.RouteBuildResult = services.rebuild_route(context)
 
     route.refresh_from_db()
     primary_segment.refresh_from_db()
@@ -44,13 +53,14 @@ def test_rebuild_route_updates_state_and_metadata(route, port_factory):
     assert result.segments_created == 2
     assert result.events_recorded == 1
 
-    metadata = route.metadata["last_build"]
+    metadata_container = cast(dict[str, Any], route.metadata)
+    metadata = cast(dict[str, Any], metadata_container["last_build"])
     assert metadata == result.metadata
     assert metadata["segment_count"] == 2
     assert metadata["force"] is True
     assert metadata["options"]["initiator"] == "unit-tests"
     assert metadata["reindexed_segments"] == 2
-    assert metadata["total_length_km"] == pytest.approx(4.0)
+    assert abs(float(metadata["total_length_km"]) - 4.0) < 1e-6
 
     assert route.length_km == Decimal("4.000")
     orders = list(
@@ -63,38 +73,42 @@ def test_rebuild_route_updates_state_and_metadata(route, port_factory):
     assert event is not None
     assert event.event_type == RouteEvent.EVENT_BUILD
     assert event.created_by == "unit-tests"
-    assert set(event.details["segment_ids"]) == {
+    event_details = cast(dict[str, Any], event.details)
+    assert set(event_details["segment_ids"]) == {
         primary_segment.id,
         second_segment.id,
     }
 
 
 @pytest.mark.django_db
-def test_rebuild_route_without_segments(port_factory):
-    origin = port_factory(prefix="solo-origin")
-    destination = port_factory(prefix="solo-destination")
+def test_rebuild_route_without_segments(port_factory: PortFactory) -> None:
+    origin: Any = port_factory(prefix="solo-origin")
+    destination: Any = port_factory(prefix="solo-destination")
     route = Route.objects.create(
         name="Orphan Route",
         origin_port=origin,
         destination_port=destination,
     )
 
-    result = services.rebuild_route(
+    result: services.RouteBuildResult = services.rebuild_route(
         services.RouteBuildContext(route_id=route.id)
     )
 
     route.refresh_from_db()
     assert result.segments_created == 0
     assert route.length_km is None
-    assert route.metadata["last_build"]["segment_count"] == 0
+    metadata_container = cast(dict[str, Any], route.metadata)
+    last_build = cast(dict[str, Any], metadata_container["last_build"])
+    assert last_build["segment_count"] == 0
     assert route.events.count() == 1
     event = route.events.first()
     assert event is not None
-    assert event.details["segment_ids"] == []
+    event_details = cast(dict[str, Any], event.details)
+    assert event_details["segment_ids"] == []
 
 
 @pytest.mark.django_db
-def test_rebuild_route_missing_route_raises():
+def test_rebuild_route_missing_route_raises() -> None:
     context = services.RouteBuildContext(route_id=999_999)
     with pytest.raises(services.RouteServiceError):
         services.rebuild_route(context)

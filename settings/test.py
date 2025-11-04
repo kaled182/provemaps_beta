@@ -1,22 +1,32 @@
-"""
-Settings para TESTES do mapsprovefiber.
-Usa MariaDB (Docker) para ambiente de teste próximo à produção.
+# pyright: reportConstantRedefinition=false
+
+"""Test configuration for mapsprovefiber.
+
+Uses MariaDB (Docker) to mirror production when requested, otherwise
+defaults to a lightweight SQLite database for pytest runs.
 """
 
-from .base import *  # noqa
+from typing import Any, Dict
 import os
 
+from .base import *  # noqa
+
+_BASE_DIR = globals()["BASE_DIR"]
+_INSTALLED_APPS = globals()["INSTALLED_APPS"]
+
 # -----------------------------------------------------
-# Configurações de Teste
+# Test configuration
 # -----------------------------------------------------
 DEBUG = False
 TESTING = True
-# Evita redirecionamentos HTTP->HTTPS em testes
+# Disable HTTPS redirect during test runs
 SECURE_SSL_REDIRECT = False
 
-# Banco de dados
-# - Por padrão usamos SQLite em disco para reduzir dependências externas durante o pytest.
-# - Defina TEST_DB_ENGINE=mysql para reutilizar o container MariaDB (docker-compose).
+# Database
+# - Default: on-disk SQLite to reduce external dependencies during pytest.
+# - Set TEST_DB_ENGINE=mysql to reuse the MariaDB container (docker-compose).
+DATABASES: Dict[str, Dict[str, Any]]
+
 if os.getenv("TEST_DB_ENGINE", "").lower() == "mysql":
     DATABASES = {
         "default": {
@@ -41,18 +51,18 @@ else:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "test_db.sqlite3",
+            "NAME": _BASE_DIR / "test_db.sqlite3",
         }
     }
     print("[TEST] Environment loaded - SQLite backend")
 
-# Hash mais rápido (evita lentidão com bcrypt/argon2)
+# Faster password hashing to avoid bcrypt/argon2 overhead during tests
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.MD5PasswordHasher",
 ]
 
-# Cache e sessões locais
-CACHES = {
+# Local cache and session storage
+CACHES: Dict[str, Dict[str, Any]] = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         "LOCATION": "test-cache",
@@ -60,20 +70,22 @@ CACHES = {
 }
 SESSION_ENGINE = "django.contrib.sessions.backends.cache"
 
-# E-mail capturado em memória (não enviado)
+# Capture outbound email in memory (nothing is sent)
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
-# Logging silencioso (não polui saída de pytest)
-LOGGING = {
+# Quiet logging so pytest output stays clean
+LOGGING: Dict[str, Any] = {
     "version": 1,
     "disable_existing_loggers": True,
     "handlers": {"null": {"class": "logging.NullHandler"}},
     "root": {"handlers": ["null"], "level": "CRITICAL"},
 }
 
-# Prometheus desativado em testes
-INSTALLED_APPS = [app for app in INSTALLED_APPS if app != "django_prometheus"]
+# Disable Prometheus during tests
+INSTALLED_APPS = [
+    app for app in _INSTALLED_APPS if app != "django_prometheus"
+]
 
-# Static & Media isolados
+# Keep static and media assets isolated per test run
 STATICFILES_STORAGE = "django.contrib.staticfiles.storage.StaticFilesStorage"
-MEDIA_ROOT = BASE_DIR / "test_media"
+MEDIA_ROOT = _BASE_DIR / "test_media"

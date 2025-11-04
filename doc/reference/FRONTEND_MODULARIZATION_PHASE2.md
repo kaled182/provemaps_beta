@@ -1,111 +1,109 @@
 # Frontend Modularization - Phase 2 Summary
 
-## ✅ Completed
+## Completed
 
-### New Modules Created:
-1. **`cableService.js`** (308 lines)
-   - `loadCableList()` - Load and populate cable dropdown
-   - `loadCableDetails(id)` - Fetch cable data
-   - `createCable(payload)` - Create new cable
-   - `updateCableData(id, payload)` - Update existing cable
-   - `deleteCable(id)` - Delete cable with confirmation
-   - `loadAllCablesForVisualization()` - Load all cables onto map
-   - `clearCablePolylines()` - Clear visualization
-   - `validateCablePayload()` - Form validation logic
+### New modules created
+1. **cableService.js** (308 lines)
+   - `loadCableList()` loads the cable dropdown.
+   - `loadCableDetails(id)` fetches cable data.
+   - `createCable(payload)` creates a cable.
+   - `updateCableData(id, payload)` updates an existing cable.
+   - `deleteCable(id)` deletes a cable with confirmation.
+   - `loadAllCablesForVisualization()` renders all cables on the map.
+   - `clearCablePolylines()` clears the current visualization.
+   - `validateCablePayload()` centralises form validation.
 
-2. **`uiHelpers.js`** (196 lines)
-   - `refreshPointsList()` - Render draggable points list
-   - `updateDistanceDisplay(km)` - Update distance text
-   - `updateSaveButtonState()` - Enable/disable save based on state
-   - `extractFormData()` - Get form values
-   - `showSuccessMessage()` / `showErrorMessage()` - User feedback
-   - `togglePanel()` - Panel visibility control
-   - `setFormSubmitting()` - Button loading state
-   - `updateCableSelect()` - Dropdown manipulation
-   - `getCookie()` - CSRF token retrieval
+2. **uiHelpers.js** (196 lines)
+   - `refreshPointsList()` renders the draggable points list.
+   - `updateDistanceDisplay(km)` updates distance text.
+   - `updateSaveButtonState()` enables or disables the save button based on state.
+   - `extractFormData()` gathers form values.
+   - `showSuccessMessage()` and `showErrorMessage()` provide user feedback.
+  - `togglePanel()` manages panel visibility.
+   - `setFormSubmitting()` toggles button loading state.
+   - `updateCableSelect()` updates dropdown choices.
+   - `getCookie()` returns the CSRF token.
 
-### Existing Modules (from Phase 1):
-3. **`apiClient.js`** (78 lines) - HTTP requests with CSRF
-4. **`pathState.js`** (111 lines) - Path coordinate management
-5. **`mapCore.js`** (159 lines) - Google Maps primitives
-6. **`contextMenu.js`** (196 lines) - Right-click menu
-7. **`modalEditor.js`** (381 lines) - Cable form modal
+### Existing modules from Phase 1
+3. **apiClient.js** (78 lines) - HTTP helpers with CSRF handling.
+4. **pathState.js** (111 lines) - path coordinate management.
+5. **mapCore.js** (159 lines) - Google Maps primitives.
+6. **contextMenu.js** (196 lines) - right-click menu support.
+7. **modalEditor.js** (381 lines) - cable form modal.
 
 ---
 
-## 🎯 Refactoring Goals
+## Refactoring goals
 
-### Before Modularization:
-- **`fiber_route_builder.js`**: ~754 lines (monolithic orchestrator)
-- Mixed concerns: API calls, UI updates, business logic, event handlers
+### Before modularisation
+- `fiber_route_builder.js`: about 754 lines acting as a monolithic orchestrator.
+- Mixed concerns: API calls, UI updates, business logic, event handlers.
 
-### After Modularization (Target):
-- **`fiber_route_builder.js`**: ~250-300 lines (thin orchestrator)
-- **Total modular code**: ~1,429 lines across 7 ES6 modules
+### After modularisation (target)
+- `fiber_route_builder.js`: 250-300 lines as a thin orchestrator.
+- Total modular code: roughly 1,429 lines across seven ES modules.
 - Clear separation of concerns:
-  - **Data Layer**: `apiClient.js`, `cableService.js`
-  - **State Management**: `pathState.js`
-  - **View Layer**: `mapCore.js`, `contextMenu.js`, `modalEditor.js`, `uiHelpers.js`
-  - **Controller**: `fiber_route_builder.js` (orchestrates modules)
+  - **Data layer**: `apiClient.js`, `cableService.js`.
+  - **State management**: `pathState.js`.
+  - **View layer**: `mapCore.js`, `contextMenu.js`, `modalEditor.js`, `uiHelpers.js`.
+  - **Controller**: `fiber_route_builder.js` orchestrates modules.
 
 ---
 
-## 📊 Impact Analysis
+## Impact analysis
 
-### Code Quality Improvements:
-- ✅ **Testability**: Each module can be unit tested in isolation
-- ✅ **Reusability**: Modules can be used in other pages/apps
-- ✅ **Maintainability**: Changes localized to specific modules
-- ✅ **Readability**: Clear API boundaries with JSDoc comments
-- ✅ **Debuggability**: Smaller files, easier to trace execution
+### Code quality improvements
+- Testability: modules can be unit tested in isolation.
+- Reusability: helpers are reusable across pages.
+- Maintainability: changes stay local to the owning module.
+- Readability: APIs documented with JSDoc boundaries.
+- Debuggability: smaller files simplify tracing.
 
-### Performance:
-- ✅ **Bundle Size**: ~1.4KB increase (negligible for HTTP/2)
-- ✅ **Loading**: Browser-native ES6 modules (no bundler needed)
-- ✅ **Caching**: Individual modules cache separately
-- ⚠️ **Initial Parse**: Slightly more files to parse (minimal impact)
+### Performance
+- Bundle size increases by about 1.4 KB (negligible over HTTP/2).
+- Loads as native ES6 modules (no bundler required).
+- Browser caches each module separately.
+- Initial parse cost is slightly higher due to more files, but the impact is minimal.
 
-### Developer Experience:
-- ✅ **Onboarding**: New devs can understand modules quickly
-- ✅ **Collaboration**: Multiple devs can work on different modules
-- ✅ **Refactoring**: Safe to change internal module logic
-- ✅ **Documentation**: JSDoc provides IDE autocomplete
+### Developer experience
+- Onboarding: developers can learn modules individually.
+- Collaboration: multiple developers can work in parallel.
+- Refactoring: module internals can change safely.
+- Documentation: JSDoc yields IDE autocomplete.
 
 ---
 
-## 🔄 Remaining Work
+## Remaining work
 
-### `fiber_route_builder.js` Refactoring:
-The main file should become a **thin orchestrator** that:
+### Refactor `fiber_route_builder.js`
+The main file should become a thin orchestrator:
 
-1. **Initialization** (~50 lines):
+1. **Initialisation** (~50 lines):
    ```javascript
    import * as Cable from './modules/cableService.js';
    import * as UI from './modules/uiHelpers.js';
-   // ... other imports
+   // Other imports
 
-   // Initialize modules
    initContextMenu();
    initModalEditor();
    initMap();
    ```
 
-2. **Event Handlers** (~100 lines):
+2. **Event handlers** (~100 lines):
    ```javascript
-   // Delegate to modules, minimal logic
    async function handleCreateCable() {
        const formData = UI.extractFormData();
        const path = getPath();
-       
-       const validation = Cable.validateCablePayload({...formData, path}, false);
+
+       const validation = Cable.validateCablePayload({ ...formData, path }, false);
        if (!validation.valid) {
            UI.showErrorMessage(validation.error);
            return;
        }
-       
+
        try {
            UI.setFormSubmitting(true);
-           await Cable.createCable({...formData, path});
+           await Cable.createCable({ ...formData, path });
            UI.showSuccessMessage('Cable created successfully');
            closeModal();
            await refreshVisualization();
@@ -117,10 +115,9 @@ The main file should become a **thin orchestrator** that:
    }
    ```
 
-3. **State Synchronization** (~50 lines):
+3. **State synchronisation** (~50 lines):
    ```javascript
-   // Listen to module events and sync state
-   onPathChange(({path, distance}) => {
+   onPathChange(({ path, distance }) => {
        UI.updateDistanceDisplay(distance);
        UI.refreshPointsList();
        redrawPolyline(path);
@@ -129,21 +126,20 @@ The main file should become a **thin orchestrator** that:
 
 4. **Wiring** (~100 lines):
    ```javascript
-   // Connect UI events to handlers
    document.getElementById('contextSaveNewCable')
        .addEventListener('click', handleCreateCable);
    ```
 
-### Estimated Reduction:
-- **Before**: 754 lines (100% in main file)
-- **After**: ~300 lines in main file (60% reduction)
-- **Extracted**: ~450 lines moved to modules
+Estimated reduction:
+- Before: 754 lines (100 percent inside the main file).
+- After: around 300 lines in the main file (about a 60 percent reduction).
+- Extracted: roughly 450 lines moved into modules.
 
 ---
 
-## 🧪 Testing Strategy
+## Testing strategy
 
-### Unit Tests (New):
+### Unit tests (proposed)
 ```javascript
 // tests/modules/cableService.test.js
 import { validateCablePayload } from '../routes_builder/static/js/modules/cableService.js';
@@ -156,13 +152,13 @@ describe('Cable Service', () => {
             origin_port_id: 2,
             dest_port_id: 3,
             single_port: false,
-            path: [{lat: 1, lng: 2}, {lat: 3, lng: 4}]
+            path: [{ lat: 1, lng: 2 }, { lat: 3, lng: 4 }],
         };
-        
+
         const result = validateCablePayload(payload, false);
         expect(result.valid).toBe(true);
     });
-    
+
     test('rejects missing name', () => {
         const payload = { name: '', /* ... */ };
         const result = validateCablePayload(payload);
@@ -172,100 +168,80 @@ describe('Cable Service', () => {
 });
 ```
 
-### Integration Tests (Existing):
-- Use Playwright/Cypress for E2E testing
-- Test complete workflows: create cable → edit → delete
+### Integration tests (existing)
+- Execute Playwright or Cypress workflows.
+- Validate create, edit, and delete flows end to end.
 
 ---
 
-## 📚 Documentation Updates Needed
+## Documentation updates required
 
-1. **`./frontend_architecture.md`** (NEW)
-   - Module dependency diagram
-   - Data flow explanation
-   - Adding new features guide
+1. `frontend_architecture.md` (new)
+   - Module dependency diagram.
+   - Data flow explanation.
+   - Guide for adding new features.
 
-2. **`routes_builder/static/js/README.md`** (UPDATE)
-   - Module descriptions
-   - API surface documentation
-   - Import examples
+2. `routes_builder/static/js/README.md` (update)
+   - Module descriptions.
+   - API surface documentation.
+   - Import examples.
 
-3. **`CONTRIBUTING.md`** (UPDATE)
-   - Frontend code standards
-   - Module creation guidelines
-   - Testing requirements
+3. `CONTRIBUTING.md` (update)
+   - Front-end code standards.
+   - Module creation guidelines.
+   - Testing requirements.
 
 ---
 
-## 🎓 Key Takeaways
+## Key takeaways
 
-### What Worked Well:
-- ✅ **ES6 Modules**: No bundler needed, works natively in modern browsers
-- ✅ **Progressive Refactoring**: Extracted modules incrementally without breaking features
-- ✅ **JSDoc**: Provides IDE autocomplete and inline documentation
-- ✅ **Clear Boundaries**: Each module has single responsibility
+### Wins
+- ES6 modules: no bundler overhead and native browser support.
+- Progressive refactoring: modules extracted without breaking the app.
+- JSDoc: assists with IDE autocomplete and inline docs.
+- Clear boundaries: each module owns a single responsibility.
 
-### Lessons Learned:
-- 📝 Larger refactorings need more planning (breaking changes)
-- 📝 Backup files before major changes
-- 📝 Test after each module extraction
-- 📝 Consider creating a migration guide for other developers
+### Lessons learned
+- Large refactors require deliberate planning to avoid breaking changes.
+- Back up files before major rewrites.
+- Test after each module extraction.
+- Provide migration guidance for other contributors.
 
-### Best Practices Established:
-1. **Module Structure**:
+### Best practices
+1. **Module skeleton**:
    ```
    /**
     * Module description
     * @module moduleName
     */
-   
-   // Private functions/vars
+
    let privateState = null;
-   
-   // Public exports
-   export function publicAPI() { }
+
+   export function publicAPI() {}
    ```
-
-2. **Error Handling**: All async functions throw errors up to caller
-3. **Naming**: Descriptive function names (verbNoun pattern)
-4. **Dependencies**: Import only what's needed, avoid circular deps
-
----
-
-## ✅ Checklist
-
-- [x] Created `cableService.js` module
-- [x] Created `uiHelpers.js` module
-- [x] Documented modularization benefits
-- [x] Created backup of main file
-- [ ] Complete `fiber_route_builder.js` refactoring (50% done)
-- [ ] Test all workflows in browser
-- [ ] Update documentation
-- [ ] Add unit tests for new modules
+2. **Error handling**: asynchronous functions throw and let callers decide how to react.
+3. **Naming**: prefer verbNoun patterns for clarity.
+4. **Dependencies**: import only what is required and avoid circular imports.
 
 ---
 
-## 🚀 Next Steps
+## Checklist
+- [x] Create `cableService.js`.
+- [x] Create `uiHelpers.js`.
+- [x] Document modularisation benefits.
+- [x] Back up the main file.
+- [ ] Finish `fiber_route_builder.js` refactor (roughly 50 percent complete).
+- [ ] Test all workflows in the browser.
+- [ ] Update documentation.
+- [ ] Add unit tests for new modules.
 
-1. **Complete Main File Refactoring** (~2 hours)
-   - Extract remaining inline logic to modules
-   - Reduce to thin orchestrator (~300 lines)
+---
 
-2. **Browser Testing** (~1 hour)
-   - Test create cable workflow
-   - Test edit cable workflow
-   - Test delete cable workflow
-   - Test context menu interactions
-   - Test cable visualization
+## Next steps
 
-3. **Documentation** (~30 min)
-   - Create `./frontend_architecture.md`
-   - Update module README files
+1. Finish the main file refactor (~2 hours).
+2. Perform browser testing (~1 hour).
+3. Produce the documentation updates (~30 minutes).
+4. Optional: configure Jest for ES modules and add unit tests (~2 hours).
 
-4. **Optional: Unit Tests** (~2 hours)
-   - Setup Jest for ES6 modules
-   - Write tests for `cableService.js`
-   - Write tests for `uiHelpers.js`
-   - Configure CI to run tests
-
-**Current Status**: Phase 2 is ~70% complete. Main orchestrator refactoring remains.
+Current status: Phase 2 is approximately 70 percent complete; the remaining work is the orchestrator refactor and supporting tests/documentation.

@@ -1,0 +1,29 @@
+{
+  "typeCheckingMode": "strict",
+  "reportPrivateUsage": "warning",
+  "plugins": [
+    {
+      "module": "pyright.plugins.django",
+      "config": {
+        "djangoSettingsModule": "settings.test"
+      }
+    }
+  ],
+  "venvPath": ".",
+  "venv": ".venv",
+  "include": [
+    "core",
+    "inventory",
+    "maps_view",
+    "routes_builder"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "staticfiles",
+    "media",
+    "legacy_backup",
+    "zabbix_api",
+    "setup_app",
+    "tests"
+  ]
+}

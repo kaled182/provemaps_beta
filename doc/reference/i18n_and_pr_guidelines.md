@@ -1,7 +1,7 @@
-# Internationalisation & PR Checklist
+# Internationalization and PR Checklist
 
-Status: Accepted – 2025-10-28  
-Applies to: Backend (Django), Frontend (Fiber Route Builder + Dashboard), Documentation
+Status: Accepted - 2025-10-28  
+Applies to: Backend (Django), Frontend (Fiber Route Builder and Dashboard), Documentation
 
 ---
 
@@ -39,9 +39,9 @@ Before opening a pull request, confirm:
 
 1. [ ] Strings, comments, and logs introduced in this PR are written in English.
 2. [ ] New user-facing strings are wrapped in the appropriate translation helper (`gettext`, `{% trans %}`, or JS translation layer).
-3. [ ] Tests were added/updated to cover the change (`pytest`, `npm test`, or manual QA steps documented).
-4. [ ] Documentation/ADR updates included when architecture or conventions change.
-5. [ ] `pre-commit` / lint commands were executed (`make lint`, `npm run lint` when applicable).
+3. [ ] Tests were added or updated to cover the change (`pytest`, `npm test`, or manual QA steps documented).
+4. [ ] Documentation or ADR updates included when architecture or conventions change.
+5. [ ] `pre-commit` or lint commands were executed (`make lint`, `npm run lint` when applicable).
 
 ## 6. Suggested Workflow
 

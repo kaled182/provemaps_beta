@@ -1,10 +1,4 @@
-"""
-URLs do app routes_builder.
-
-Estrutura:
-- /routes/fiber-route-builder/ → UI principal
-- /routes/tasks/* → Endpoints administrativos (staff only)
-"""
+"""URL definitions for the routes_builder app."""
 
 from django.urls import path, include
 from . import views
@@ -12,7 +6,7 @@ from . import views_tasks
 
 app_name = "routes_builder"
 
-# --- Padrão de URLs para tasks administrativas ---
+# --- Administrative task endpoints ---
 task_urlpatterns = [
     path(
         "build/",
@@ -52,13 +46,13 @@ task_urlpatterns = [
 ]
 
 urlpatterns = [
-    # --- UI Pública ---
+    # --- Public UI ---
     path(
         "fiber-route-builder/",
         views.fiber_route_builder_view,
         name="fiber_route_builder",
     ),
 
-    # --- API Administrativa (Tasks) ---
+    # --- Administrative API (tasks) ---
     path("tasks/", include((task_urlpatterns, "tasks"))),
 ]

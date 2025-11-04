@@ -1,4 +1,4 @@
-# pyproject.toml — configurações unificadas para mapsprovefiber
+# pyproject.toml - unified configuration for mapsprovefiber
 
 [build-system]
 requires = ["setuptools>=45.0", "wheel"]

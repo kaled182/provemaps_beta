@@ -1,19 +1,19 @@
-# Observabilidade e Health Checks — MapsProveFiber
+# Observability and Health Checks - MapsProveFiber
 
-## Endpoints de Saúde
-- `/healthz`: status geral (DB, cache, storage, métricas)
-- `/ready`: readiness probe (DB)
-- `/live`: liveness probe (processo ativo)
-- `/celery/status`: status dos workers Celery
+## Health endpoints
+- `/healthz`: overall status (DB, cache, storage, metrics)
+- `/ready`: readiness probe (database)
+- `/live`: liveness probe (process is alive)
+- `/celery/status`: Celery worker status
 
-## Métricas Prometheus
+## Prometheus metrics
 - Endpoint: `/metrics/`
-- Métricas customizadas: versionamento de assets, status de workers
+- Custom metrics: asset versioning, worker status
 
 ## Logs
-- Logs estruturados em `logs/application.log`
-- Rastreamento de queries lentas
+- Structured logs at `logs/application.log`
+- Slow query tracing
 
-## Dicas
-- Use Prometheus e Grafana para dashboards
-- Consulte [`../reference/prometheus_static_version.md`](../reference/prometheus_static_version.md) para detalhes de métricas customizadas
+## Tips
+- Use Prometheus and Grafana for dashboards (see `doc/reference/grafana/README.md`)
+- Review [`../reference/prometheus_static_version.md`](../reference/prometheus_static_version.md) for the custom metrics exported by the app

@@ -12,7 +12,8 @@
 
 - **Status:** Online
 - **Technology:** Docker Redis Alpine
-- **Container:** `redis-mapspro`
+- **Compose service name:** `redis`
+- **Default container:** `redis-1`
 - **Port:** 6379
 - **Auto restart:** Enabled (`unless-stopped`)
 
@@ -20,29 +21,29 @@
 
 ```powershell
 # Show status
-docker ps | findstr redis
+docker compose ps redis
 
 # Tail logs
-docker logs -f redis-mapspro
+docker compose logs -f redis
 
 # Stop temporarily
-docker stop redis-mapspro
+docker compose stop redis
 
 # Start again
-docker start redis-mapspro
+docker compose up -d redis
 
 # Restart
-docker restart redis-mapspro
+docker compose restart redis
 
 # Remove container (only if required)
-docker rm -f redis-mapspro
+docker compose rm -f redis
 ```
 
 ### Monitoring
 
 ```powershell
 # Connect to redis-cli
-docker exec -it redis-mapspro redis-cli
+docker compose exec redis redis-cli
 
 # Inside redis-cli:
 PING                  # Expect PONG
@@ -159,10 +160,10 @@ celery -A core beat -l info
 
 ```powershell
 # 1. Start Redis if not running
-docker start redis-mapspro
+docker compose up -d redis
 
 # 2. Check Redis
-docker ps | findstr redis
+docker compose ps redis
 
 # 3. Start Django
 cd D:\provemaps_beta
@@ -179,7 +180,7 @@ celery -A core beat -l info
 
 ```powershell
 # Redis online?
-docker ps | findstr redis
+docker compose ps redis
 
 # Django responding?
 curl http://localhost:8000/healthz
@@ -199,16 +200,16 @@ python -c "from django.core.cache import cache; cache.set('test', 'ok', 10); pri
 
 ### Redis Logs
 ```powershell
-docker logs redis-mapspro --tail 100 -f
+docker compose logs redis --tail 100 -f
 ```
 
 ### Docker Logs
 ```powershell
-# List all containers
-docker ps -a
+# List all services (including stopped)
+docker compose ps --all
 
 # Specific logs
-docker logs <container_id>
+docker compose logs <service>
 ```
 
 ---
@@ -233,13 +234,13 @@ Measure-Command { Invoke-WebRequest -Uri "http://localhost:8000/zabbix_api/api/s
 ### 3. Redis Persistence Test
 ```powershell
 # Set key
-docker exec redis-mapspro redis-cli SET test_key "Hello Redis"
+docker compose exec redis redis-cli SET test_key "Hello Redis"
 
 # Fetch key
-docker exec redis-mapspro redis-cli GET test_key
+docker compose exec redis redis-cli GET test_key
 
 # Delete key
-docker exec redis-mapspro redis-cli DEL test_key
+docker compose exec redis redis-cli DEL test_key
 ```
 
 ---
@@ -258,7 +259,7 @@ docker exec redis-mapspro redis-cli DEL test_key
 - [ ] Configure Celery beat
 - [ ] Add Google Maps API key
 - [ ] Configure Django Channels (WebSocket)
-- [ ] Enable local SSL/TLS (for https)
+- [ ] Enable local SSL/TLS (for HTTPS)
 - [ ] Configure automatic SQLite backups
 
 ### Production
@@ -282,10 +283,10 @@ netstat -ano | findstr :6379
 taskkill /PID <pid> /F
 
 # Remove old container
-docker rm -f redis-mapspro
+docker compose rm -f redis
 
 # Recreate
-docker run -d --name redis-mapspro -p 6379:6379 --restart unless-stopped redis:alpine
+docker compose up -d --force-recreate redis
 ```
 
 ### Django cannot connect to Redis
@@ -302,7 +303,7 @@ python -c "import redis; redis.Redis().ping()"
 ### Performance issues even with cache
 ```powershell
 # Check cache statistics
-docker exec redis-mapspro redis-cli INFO stats
+docker compose exec redis redis-cli INFO stats
 
 # Check hit rate
 # hits / (hits + misses) should stay above 70%

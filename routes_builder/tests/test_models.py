@@ -6,15 +6,26 @@ import pytest
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 
-from routes_builder.models import Route, RouteSegment
+from typing import Protocol
+
+from inventory.models import Port
+from routes_builder.models import Route, RouteEvent, RouteSegment
+
+
+class PortFactory(Protocol):
+    def __call__(self, *, prefix: str = "port") -> Port:
+        ...
 
 
 @pytest.mark.django_db
-def test_route_unique_name_constraint(route, port_factory):
+def test_route_unique_name_constraint(
+    route: Route,
+    port_factory: PortFactory,
+) -> None:
     """Routes should enforce unique names across the table."""
 
-    new_origin = port_factory(prefix="origin-dup")
-    new_destination = port_factory(prefix="destination-dup")
+    new_origin: Port = port_factory(prefix="origin-dup")
+    new_destination: Port = port_factory(prefix="destination-dup")
 
     with pytest.raises(IntegrityError):
         Route.objects.create(
@@ -25,7 +36,7 @@ def test_route_unique_name_constraint(route, port_factory):
 
 
 @pytest.mark.django_db
-def test_route_update_status_persists_and_falls_back(route):
+def test_route_update_status_persists_and_falls_back(route: Route) -> None:
     """update_status persists valid values and falls back for unknown ones."""
 
     route.update_status(Route.STATUS_ACTIVE)
@@ -38,7 +49,7 @@ def test_route_update_status_persists_and_falls_back(route):
 
 
 @pytest.mark.django_db
-def test_route_update_status_without_save(route):
+def test_route_update_status_without_save(route: Route) -> None:
     """update_status(save=False) mutates in-memory state only."""
 
     route.update_status(Route.STATUS_ACTIVE, save=False)
@@ -49,10 +60,12 @@ def test_route_update_status_without_save(route):
 
 
 @pytest.mark.django_db
-def test_route_clean_rejects_identical_ports(port_factory):
+def test_route_clean_rejects_identical_ports(
+    port_factory: PortFactory,
+) -> None:
     """Route validation prevents using the same port twice."""
 
-    port = port_factory(prefix="loop")
+    port: Port = port_factory(prefix="loop")
     candidate = Route(
         name="Loop Route",
         origin_port=port,
@@ -62,11 +75,16 @@ def test_route_clean_rejects_identical_ports(port_factory):
     with pytest.raises(ValidationError) as exc:
         candidate.full_clean()
 
-    assert "destination_port" in exc.value.error_dict
+    error_dict: dict[str, list[ValidationError]] | None = exc.value.error_dict
+    assert error_dict is not None
+    assert "destination_port" in error_dict
 
 
 @pytest.mark.django_db
-def test_route_segment_unique_order(route, port_factory):
+def test_route_segment_unique_order(
+    route: Route,
+    port_factory: PortFactory,
+) -> None:
     """Each route must keep segment ordering unique."""
 
     RouteSegment.objects.create(
@@ -86,7 +104,7 @@ def test_route_segment_unique_order(route, port_factory):
 
 
 @pytest.mark.django_db
-def test_route_segment_clean_rejects_same_endpoints(route):
+def test_route_segment_clean_rejects_same_endpoints(route: Route) -> None:
     """Segment validation rejects same from/to port combinations."""
 
     segment = RouteSegment(
@@ -99,11 +117,13 @@ def test_route_segment_clean_rejects_same_endpoints(route):
     with pytest.raises(ValidationError) as exc:
         segment.full_clean()
 
-    assert "to_port" in exc.value.error_dict
+    error_dict = exc.value.error_dict
+    assert error_dict is not None
+    assert "to_port" in error_dict
 
 
 @pytest.mark.django_db
-def test_route_event_fixture_persists(route_event):
+def test_route_event_fixture_persists(route_event: RouteEvent) -> None:
     """RouteEvent fixture should be properly persisted."""
 
     event = route_event

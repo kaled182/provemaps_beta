@@ -5,13 +5,16 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Mapping, Optional
+from decimal import Decimal, InvalidOperation
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Protocol, Sequence, Set, TypedDict, cast
 
-from django.db.models import Prefetch, Q
+from django.db.models import Prefetch, Q, QuerySet
 
 from inventory.models import Device, FiberCable, Port, Site
-from ..domain.optical import _fetch_port_optical_snapshot
+
+from ..domain.optical import fetch_port_optical_snapshot
 from ..services.zabbix_service import zabbix_request
 
 ZABBIX_REQUEST = zabbix_request
@@ -20,15 +23,151 @@ logger = logging.getLogger(__name__)
 
 
 class InventoryUseCaseError(Exception):
-    """Erro genérico para casos de uso de inventário."""
+    """Generic error raised by inventory use cases."""
 
 
 class InventoryValidationError(InventoryUseCaseError):
-    """Erro de validação de entrada."""
+    """Input validation error."""
 
 
 class InventoryNotFound(InventoryUseCaseError):
-    """Recurso solicitado não encontrado."""
+    """Requested resource not found."""
+
+
+class HostItem(TypedDict, total=False):
+    itemid: str
+    key_: str
+    name: str
+    interfaceid: str
+    lastvalue: str
+    units: str
+    snmpindex: str
+    value_type: str
+    _role: Optional[str]
+
+
+HostItemList = List[HostItem]
+
+
+class TrafficPoint(TypedDict):
+    timestamp: int
+    value: float
+
+
+class TrafficChannel(TypedDict):
+    history: List[TrafficPoint]
+    unit: str
+    configured: bool
+
+
+TrafficData = TypedDict(
+    "TrafficData",
+    {
+        "port_id": int,
+        "port_name": str,
+        "device_name": str,
+        "in": TrafficChannel,
+        "out": TrafficChannel,
+        "period": str,
+        "period_seconds": int,
+        "since": Optional[int],
+        "incremental": bool,
+        "generated_at": int,
+        "time_from": int,
+        "history_limit": int,
+    },
+    total=False,
+)
+
+
+def _new_str_set() -> Set[str]:
+    return set()
+
+
+@dataclass
+class PortRecord:
+    port: Port
+    created: bool
+    defaults: Dict[str, str]
+    updated_fields: Set[str] = field(default_factory=_new_str_set)
+    optical_snapshot: Optional[Dict[str, Any]] = None
+
+
+@dataclass
+class _PortEntry:
+    port: Port
+    record: PortRecord
+    lower: str
+    normalized: str
+    trimmed: str
+    normalized_trimmed: str
+
+
+class PortLike(Protocol):
+    id: int
+    name: str
+    device_id: int
+    device: Device
+    zabbix_item_key: Optional[str]
+    zabbix_itemid: Optional[str]
+    zabbix_interfaceid: Optional[str]
+    zabbix_item_id_traffic_in: Optional[str]
+    zabbix_item_id_traffic_out: Optional[str]
+    rx_power_item_key: Optional[str]
+    tx_power_item_key: Optional[str]
+    notes: str
+
+    def refresh_from_db(self) -> None:
+        ...
+
+
+class DeviceLike(Protocol):
+    id: int
+    name: str
+    zabbix_hostid: Optional[str]
+    site: Site
+    device_icon: Any
+
+    def save(self, *, update_fields: Iterable[str]) -> None:
+        ...
+
+
+class SiteLike(Protocol):
+    id: int
+    name: str
+    city: str
+    latitude: Optional[Decimal]
+    longitude: Optional[Decimal]
+    devices: Any
+
+
+def _port_map_key(port: Port) -> tuple[int, str]:
+    """Return the (device_id, lower_port_name) tuple for mapping operations."""
+    port_like = cast(PortLike, port)
+    return port_like.device_id, port_like.name.lower()
+
+
+
+def _coerce_host_items(raw_items: Any) -> HostItemList:
+    if not isinstance(raw_items, list):
+        return []
+    result: HostItemList = []
+    entries = cast(Sequence[object], raw_items)
+    for entry_obj in entries:
+        if isinstance(entry_obj, dict):
+            result.append(cast(HostItem, entry_obj))
+    return result
+
+
+def _coerce_dict_list(raw_items: Any) -> List[Dict[str, Any]]:
+    if not isinstance(raw_items, list):
+        return []
+    result: List[Dict[str, Any]] = []
+    entries = cast(Sequence[object], raw_items)
+    for entry in entries:
+        if isinstance(entry, dict):
+            result.append(cast(Dict[str, Any], entry))
+    return result
 
 
 def _normalize_identifier(value: str | None) -> str:
@@ -97,21 +236,15 @@ def _identify_item_role(key_lower: str, name_lower: str) -> str | None:
         ):
             return "optical_rx"
 
-        if name_lower:
-            if any(marker in name_lower for marker in tx_markers):
-                return "optical_tx"
-            if any(marker in name_lower for marker in rx_markers):
-                return "optical_rx"
-
     return None
 
 
-def _score_port_match(entry: Dict[str, Any], tokens: Iterable[str], combined_text: str, combined_normalized: str) -> int:
+def _score_port_match(entry: _PortEntry, tokens: Iterable[str], combined_text: str, combined_normalized: str) -> int:
     score = 0
-    port_lower = entry["lower"]
-    normalized = entry["normalized"]
-    trimmed = entry["trimmed"]
-    normalized_trimmed = entry["normalized_trimmed"]
+    port_lower = entry.lower
+    normalized = entry.normalized
+    trimmed = entry.trimmed
+    normalized_trimmed = entry.normalized_trimmed
 
     if port_lower and port_lower in combined_text:
         score = max(score, len(port_lower) + 60)
@@ -147,26 +280,32 @@ def _apply_port_updates(port: Port, updates: Dict[str, Any], updated_fields: set
 
 def get_device_ports(device_id: int) -> Dict[str, Any]:
     try:
-        device = Device.objects.get(id=device_id)
+        device: Device = Device.objects.get(id=device_id)
     except Device.DoesNotExist as exc:
-        raise InventoryNotFound("Device nao encontrado") from exc
+        raise InventoryNotFound("Device not found") from exc
 
-    ports = Port.objects.filter(device=device).select_related("device")
+    ports_qs: QuerySet[Port] = Port.objects.filter(device=device).select_related("device")
     ports_data: List[Dict[str, Any]] = []
 
-    for port in ports:
+    for port in ports_qs:
         cable_as_origin = FiberCable.objects.filter(origin_port=port).first()
         cable_as_dest = FiberCable.objects.filter(destination_port=port).first()
-        cable = cable_as_origin or cable_as_dest
+        fiber_cable = cable_as_origin or cable_as_dest
 
+        port_any = cast(Any, port)
+        fiber_any = cast(Any, fiber_cable) if fiber_cable else None
+
+        port_id = cast(int, getattr(port_any, "id", port_any.pk))
+        device_name = cast(str, getattr(getattr(port_any, "device", None), "name", ""))
+        fiber_cable_id = cast(Optional[int], getattr(fiber_any, "id", None) if fiber_any else None)
         ports_data.append(
             {
-                "id": port.id,
-                "name": port.name,
-                "device": port.device.name,
-                "fiber_cable_id": cable.id if cable else None,
-                "zabbix_item_key": port.zabbix_item_key,
-                "notes": port.notes,
+                "id": port_id,
+                "name": cast(str, getattr(port_any, "name", "")),
+                "device": device_name,
+                "fiber_cable_id": fiber_cable_id,
+                "zabbix_item_key": getattr(port_any, "zabbix_item_key", None),
+                "notes": getattr(port_any, "notes", None),
             }
         )
 
@@ -175,41 +314,49 @@ def get_device_ports(device_id: int) -> Dict[str, Any]:
 
 def get_device_ports_with_optical(device_id: int) -> Dict[str, Any]:
     try:
-        device = Device.objects.select_related("site").get(id=device_id)
+        device: Device = Device.objects.select_related("site").get(id=device_id)
     except Device.DoesNotExist as exc:
-        raise InventoryNotFound("Device nao encontrado") from exc
+        raise InventoryNotFound("Device not found") from exc
 
-    ports = Port.objects.filter(device=device).select_related("device")
-    cables = (
+    ports_qs: QuerySet[Port] = Port.objects.filter(device=device).select_related("device")
+    cables_qs: QuerySet[FiberCable] = (
         FiberCable.objects.filter(Q(origin_port__device=device) | Q(destination_port__device=device))
         .select_related("origin_port", "destination_port")
     )
 
     cable_origin_map: Dict[int, FiberCable] = {}
     cable_dest_map: Dict[int, FiberCable] = {}
-    for cable in cables:
-        cable_origin_map.setdefault(cable.origin_port_id, cable)
-        cable_dest_map.setdefault(cable.destination_port_id, cable)
+    for cable in cables_qs:
+        cable_any = cast(Any, cable)
+        origin_id = cast(Optional[int], getattr(cable_any, "origin_port_id", None))
+        if origin_id is not None:
+            cable_origin_map.setdefault(origin_id, cable)
+        dest_id = cast(Optional[int], getattr(cable_any, "destination_port_id", None))
+        if dest_id is not None:
+            cable_dest_map.setdefault(dest_id, cable)
 
     discovery_cache: Dict[Any, Any] = {}
     ports_with_optical: List[Dict[str, Any]] = []
 
-    for port in ports:
-        cable = cable_origin_map.get(port.id) or cable_dest_map.get(port.id)
-        optical_snapshot = _fetch_port_optical_snapshot(port, discovery_cache=discovery_cache)
+    for port in ports_qs:
+        port_any = cast(Any, port)
+        port_id = cast(int, getattr(port_any, "id", port_any.pk))
+        cable = cable_origin_map.get(port_id) or cable_dest_map.get(port_id)
+        optical_snapshot = fetch_port_optical_snapshot(port, discovery_cache=discovery_cache)
+        cable_any = cast(Any, cable) if cable else None
         ports_with_optical.append(
             {
-                "id": port.id,
-                "name": port.name,
-                "cable_id": cable.id if cable else None,
-                "cable_name": cable.name if cable else None,
+                "id": port_id,
+                "name": cast(str, getattr(port_any, "name", "")),
+                "cable_id": cast(Optional[int], getattr(cable_any, "id", None) if cable_any else None),
+                "cable_name": cast(Optional[str], getattr(cable_any, "name", None) if cable_any else None),
                 "optical": optical_snapshot,
             }
         )
 
     return {
-        "device_id": device.id,
-        "device_name": device.name,
+        "device_id": cast(int, getattr(cast(Any, device), "id", device.pk)),
+        "device_name": cast(str, getattr(cast(Any, device), "name", "")),
         "ports": ports_with_optical,
     }
 
@@ -218,15 +365,15 @@ def device_port_optical_status(port_id: int) -> Dict[str, Any]:
     try:
         port = Port.objects.select_related("device").get(id=port_id)
     except Port.DoesNotExist as exc:
-        raise InventoryNotFound("Porta nao encontrada") from exc
+        raise InventoryNotFound("Port not found") from exc
 
     hostid = (port.device.zabbix_hostid or "").strip()
     if not hostid:
-        raise InventoryValidationError("Device sem Zabbix Host ID")
+        raise InventoryValidationError("Device missing Zabbix Host ID")
 
-    optical_snapshot = _fetch_port_optical_snapshot(port)
+    optical_snapshot = fetch_port_optical_snapshot(port)
     return {
-        "port_id": port.id,
+        "port_id": port.pk,
         "port_name": port.name,
         "optical": optical_snapshot,
     }
@@ -235,7 +382,7 @@ def device_port_optical_status(port_id: int) -> Dict[str, Any]:
 def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
     hostid = payload.get("hostid") or payload.get("device_name")
     if not hostid:
-        raise InventoryValidationError("hostid obrigatorio")
+        raise InventoryValidationError("hostid is required")
 
     zabbix_data = ZABBIX_REQUEST(
         "host.get",
@@ -246,7 +393,7 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
         },
     )
     if not zabbix_data:
-        raise InventoryNotFound("Host nao encontrado no Zabbix")
+        raise InventoryNotFound("Host not found in Zabbix")
 
     host = zabbix_data[0]
     site_name = host.get("name") or host.get("host")
@@ -275,15 +422,15 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
     update_fields: List[str] = []
     if lat:
         try:
-            site.latitude = float(lat)
+            site.latitude = Decimal(lat)
             update_fields.append("latitude")
-        except Exception:
+        except (InvalidOperation, ValueError):
             pass
     if lon:
         try:
-            site.longitude = float(lon)
+            site.longitude = Decimal(lon)
             update_fields.append("longitude")
-        except Exception:
+        except (InvalidOperation, ValueError):
             pass
     if address:
         site.city = address
@@ -304,7 +451,7 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
         device.zabbix_hostid = str(hostid)
         device.save(update_fields=["zabbix_hostid"])
 
-    host_items = ZABBIX_REQUEST(
+    raw_host_items = ZABBIX_REQUEST(
         "item.get",
         {
             "output": ["itemid", "key_", "name", "interfaceid", "lastvalue", "units", "snmpindex"],
@@ -312,11 +459,12 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
             "filter": {"status": "0"},
             "limit": 2000,
         },
-    ) or []
+    )
+    host_items: HostItemList = _coerce_host_items(raw_host_items)
 
-    port_records: List[Dict[str, Any]] = []
-    primary_items: List[Dict[str, Any]] = []
-    legacy_primary_items: List[Dict[str, Any]] = []
+    port_records: List[PortRecord] = []
+    primary_items: HostItemList = []
+    legacy_primary_items: HostItemList = []
 
     for item in host_items:
         key = item.get("key_") or ""
@@ -329,7 +477,7 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
         elif role == "legacy_lastdown":
             legacy_primary_items.append(item)
 
-    creation_candidates = primary_items if primary_items else legacy_primary_items
+    creation_candidates: HostItemList = primary_items if primary_items else legacy_primary_items
     if not creation_candidates:
         creation_candidates = [
             item
@@ -337,7 +485,7 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
             if (item.get("key_") or "").lower().startswith(("ifoperstatus[", "lastdowntime["))
         ]
 
-    port_record_map: Dict[str, Dict[str, Any]] = {}
+    port_record_map: Dict[tuple[int, str], PortRecord] = {}
 
     for item in creation_candidates:
         key = item.get("key_") or ""
@@ -361,14 +509,9 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
             defaults=defaults,
         )
 
-        record = {
-            "port": port,
-            "created": port_created,
-            "updated_fields": set(),
-            "defaults": defaults,
-        }
+        record = PortRecord(port=port, created=port_created, defaults=defaults)
         port_records.append(record)
-        port_record_map[(port.device_id, port.name.lower())] = record
+        port_record_map[_port_map_key(port)] = record
 
     if not port_records:
         for item in host_items:
@@ -388,33 +531,28 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
                     "notes": item.get("name", ""),
                 },
             )
-            record = {
-                "port": port,
-                "created": False,
-                "updated_fields": set(),
-                "defaults": {},
-            }
+            record = PortRecord(port=port, created=False, defaults={})
             port_records.append(record)
-            port_record_map[(port.device_id, port.name.lower())] = record
+            port_record_map[_port_map_key(port)] = record
 
     created_summary = {"sites": int(site_created), "devices": int(created), "ports": 0}
 
-    port_entries: List[Dict[str, Any]] = []
+    port_entries: List[_PortEntry] = []
     for record in port_records:
-        port = record["port"]
+        port = record.port
         lower = port.name.lower()
         normalized = _normalize_identifier(lower)
         trimmed = lower[1:] if lower.startswith("x") else lower
         normalized_trimmed = normalized[1:] if normalized.startswith("x") else normalized
         port_entries.append(
-            {
-                "port": port,
-                "record": record,
-                "lower": lower,
-                "normalized": normalized,
-                "trimmed": trimmed,
-                "normalized_trimmed": normalized_trimmed,
-            }
+            _PortEntry(
+                port=port,
+                record=record,
+                lower=lower,
+                normalized=normalized,
+                trimmed=trimmed,
+                normalized_trimmed=normalized_trimmed,
+            )
         )
 
     for item in host_items:
@@ -429,7 +567,7 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
         combined_text = f"{key_lower} {name_lower}"
         combined_normalized = _normalize_identifier(combined_text)
 
-        best_entry = None
+        best_entry: Optional[_PortEntry] = None
         best_score = 0
         for entry in port_entries:
             score = _score_port_match(entry, tokens, combined_text, combined_normalized)
@@ -439,8 +577,8 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
         if not best_entry or best_score < 45:
             continue
 
-        port = best_entry["port"]
-        record = best_entry["record"]
+        port = best_entry.port
+        record = best_entry.record
         updates: Dict[str, Any] = {}
         iface_id = str(item.get("interfaceid") or "")
         if iface_id and iface_id != "0" and port.zabbix_interfaceid != iface_id:
@@ -472,16 +610,17 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
             if key and port.tx_power_item_key != key:
                 updates["tx_power_item_key"] = key
 
-        _apply_port_updates(port, updates, record["updated_fields"])
+        _apply_port_updates(port, updates, record.updated_fields)
 
     discovery_cache: Dict[Any, Any] = {}
     optical_snapshots: List[Dict[str, Any]] = []
     for record in port_records:
-        snapshot = _fetch_port_optical_snapshot(record["port"], discovery_cache=discovery_cache)
-        record["optical_snapshot"] = snapshot
+        port_like = cast(PortLike, record.port)
+        snapshot = fetch_port_optical_snapshot(record.port, discovery_cache=discovery_cache)
+        record.optical_snapshot = snapshot
         optical_snapshots.append(
             {
-                "port_id": record["port"].id,
+                "port_id": port_like.id,
                 "rx_key": snapshot.get("rx_key"),
                 "tx_key": snapshot.get("tx_key"),
                 "rx_dbm": snapshot.get("rx_dbm"),
@@ -492,35 +631,38 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
     ports_created_payload: List[Dict[str, Any]] = []
     ports_updated_payload: List[Dict[str, Any]] = []
     for record in port_records:
-        port = record["port"]
+        port = record.port
+        port_like = cast(PortLike, port)
         port.refresh_from_db()
         summary = {
-            "id": port.id,
-            "name": port.name,
-            "zabbix_item_key": port.zabbix_item_key,
-            "zabbix_itemid": port.zabbix_itemid,
-            "zabbix_interfaceid": port.zabbix_interfaceid,
-            "zabbix_item_id_traffic_in": port.zabbix_item_id_traffic_in,
-            "zabbix_item_id_traffic_out": port.zabbix_item_id_traffic_out,
-            "rx_power_item_key": port.rx_power_item_key,
-            "tx_power_item_key": port.tx_power_item_key,
-            "updated_fields": sorted(record["updated_fields"]) if record["updated_fields"] else [],
-            "optical_snapshot": record.get("optical_snapshot"),
+            "id": port_like.id,
+            "name": port_like.name,
+            "zabbix_item_key": port_like.zabbix_item_key,
+            "zabbix_itemid": port_like.zabbix_itemid,
+            "zabbix_interfaceid": port_like.zabbix_interfaceid,
+            "zabbix_item_id_traffic_in": port_like.zabbix_item_id_traffic_in,
+            "zabbix_item_id_traffic_out": port_like.zabbix_item_id_traffic_out,
+            "rx_power_item_key": port_like.rx_power_item_key,
+            "tx_power_item_key": port_like.tx_power_item_key,
+            "updated_fields": sorted(record.updated_fields) if record.updated_fields else [],
+            "optical_snapshot": record.optical_snapshot,
         }
-        if record["created"]:
+        if record.created:
             ports_created_payload.append(summary)
         elif summary["updated_fields"]:
             ports_updated_payload.append(summary)
 
     created_summary["ports"] = len(ports_created_payload)
 
+    device_like = cast(DeviceLike, device)
+
     return {
         "created": created_summary,
         "device": {
-            "id": device.id,
-            "name": device.name,
+            "id": device_like.id,
+            "name": device_like.name,
             "site": site.name,
-            "zabbix_hostid": device.zabbix_hostid,
+            "zabbix_hostid": device_like.zabbix_hostid,
         },
         "ports_created": ports_created_payload,
         "ports_updated": ports_updated_payload,
@@ -530,14 +672,15 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
 
 
 def discover_zabbix_hosts() -> Dict[str, Any]:
-    hosts = ZABBIX_REQUEST(
+    raw_hosts = ZABBIX_REQUEST(
         "host.get",
         {
             "output": ["hostid", "host", "name"],
             "selectInterfaces": ["interfaceid", "ip", "dns", "port", "type"],
         },
-    ) or []
-    results = []
+    )
+    hosts = _coerce_dict_list(raw_hosts)
+    results: List[Dict[str, Any]] = []
     for host in hosts:
         interfaces = host.get("interfaces", [])
         results.append(
@@ -602,6 +745,7 @@ def bulk_create_inventory(payload: Mapping[str, Any]) -> Dict[str, Any]:
         device = device_map.get((site_name, device_name))
         if not device:
             continue
+        device_like = cast(DeviceLike, device)
         port, was_created = Port.objects.get_or_create(
             device=device,
             name=port_data.get("name"),
@@ -613,13 +757,29 @@ def bulk_create_inventory(payload: Mapping[str, Any]) -> Dict[str, Any]:
         )
         if was_created:
             created["ports"] += 1
-        port_map[(device.id, port.name)] = port
+        port_like = cast(PortLike, port)
+        port_map[(device_like.id, port_like.name)] = port
 
     for fiber_data in fibers_payload:
-        origin_device = device_map.get((fiber_data.get("origin_site"), fiber_data.get("origin_device")))
-        dest_device = device_map.get((fiber_data.get("dest_site"), fiber_data.get("dest_device")))
-        origin_port = port_map.get((origin_device.id, fiber_data.get("origin_port"))) if origin_device else None
-        dest_port = port_map.get((dest_device.id, fiber_data.get("dest_port"))) if dest_device else None
+        origin_device_raw = device_map.get((fiber_data.get("origin_site"), fiber_data.get("origin_device")))
+        dest_device_raw = device_map.get((fiber_data.get("dest_site"), fiber_data.get("dest_device")))
+
+        origin_device = cast(Optional[DeviceLike], origin_device_raw) if origin_device_raw else None
+        dest_device = cast(Optional[DeviceLike], dest_device_raw) if dest_device_raw else None
+
+        origin_port_name = fiber_data.get("origin_port")
+        dest_port_name = fiber_data.get("dest_port")
+
+        origin_port = (
+            port_map.get((origin_device.id, origin_port_name))
+            if origin_device and isinstance(origin_port_name, str)
+            else None
+        )
+        dest_port = (
+            port_map.get((dest_device.id, dest_port_name))
+            if dest_device and isinstance(dest_port_name, str)
+            else None
+        )
         if not origin_port or not dest_port:
             continue
         _, was_created = FiberCable.objects.get_or_create(
@@ -642,46 +802,50 @@ def list_sites() -> Dict[str, Any]:
     sites_qs = Site.objects.prefetch_related(
         Prefetch("devices", queryset=Device.objects.only("id", "name", "zabbix_hostid", "site", "device_icon"))
     )
-    data = []
-    for site in sites_qs:
-        devices_payload = []
-        for device in site.devices.all():
+    data: List[Dict[str, Any]] = []
+    for site_obj in sites_qs:
+        site_like = cast(SiteLike, site_obj)
+        devices_payload: List[Dict[str, Any]] = []
+        device_iterable = cast(Iterable[Device], site_like.devices.all())
+        for device_obj in device_iterable:
+            device_like = cast(DeviceLike, device_obj)
+            icon_url: Optional[str]
             try:
-                icon_url = device.device_icon.url if device.device_icon else None
+                icon_url = cast(Optional[str], getattr(device_like.device_icon, "url", None)) if device_like.device_icon else None
             except Exception:
                 icon_url = None
 
             devices_payload.append(
                 {
-                    "id": device.id,
-                    "name": device.name,
-                    "zabbix_hostid": device.zabbix_hostid,
-                    "lat": float(site.latitude) if site.latitude else None,
-                    "lng": float(site.longitude) if site.longitude else None,
+                    "id": device_like.id,
+                    "name": device_like.name,
+                    "zabbix_hostid": device_like.zabbix_hostid,
+                    "lat": float(site_like.latitude) if site_like.latitude else None,
+                    "lng": float(site_like.longitude) if site_like.longitude else None,
                     "icon_url": icon_url,
                 }
             )
         data.append(
             {
-                "id": site.id,
-                "name": site.name,
-                "city": site.city,
-                "lat": float(site.latitude) if site.latitude else None,
-                "lng": float(site.longitude) if site.longitude else None,
+                "id": site_like.id,
+                "name": site_like.name,
+                "city": site_like.city,
+                "lat": float(site_like.latitude) if site_like.latitude else None,
+                "lng": float(site_like.longitude) if site_like.longitude else None,
                 "devices": devices_payload,
             }
         )
     return {"sites": data}
 
 
-def port_traffic_history(port_id: int, params: Mapping[str, str]) -> Dict[str, Any]:
+def port_traffic_history(port_id: int, params: Mapping[str, str]) -> TrafficData:
     try:
         port = Port.objects.select_related("device").get(id=port_id)
     except Port.DoesNotExist as exc:
-        raise InventoryNotFound("Porta nao encontrada") from exc
+        raise InventoryNotFound("Port not found") from exc
 
     if not port.device.zabbix_hostid:
-        raise InventoryValidationError("Device sem Zabbix Host ID configurado")
+        raise InventoryValidationError("Device missing Zabbix Host ID configuration")
 
     if not port.zabbix_item_id_traffic_in and not port.zabbix_item_id_traffic_out:
         raise InventoryValidationError(
@@ -738,35 +902,54 @@ def port_traffic_history(port_id: int, params: Mapping[str, str]) -> Dict[str, A
         default_limit = min(1500, max(300, int(seconds / 60) + 50))
     else:
         default_limit = min(5000, max(1000, int(seconds / 120) + 100))
-    try:
-        limit_override = int(params.get("limit")) if params.get("limit") else None
-        if limit_override and 50 <= limit_override <= 10000:
-            default_limit = limit_override
-    except ValueError:
-        pass
+
+    limit_override: Optional[int] = None
+    limit_raw = params.get("limit")
+    if limit_raw:
+        try:
+            limit_override = int(limit_raw)
+        except ValueError:
+            limit_override = None
+    if limit_override and 50 <= limit_override <= 10000:
+        default_limit = limit_override
     history_limit = default_limit
 
-    traffic_data = {
-        "port_id": port.id,
-        "port_name": port.name,
-        "device_name": port.device.name,
-        "in": {"history": [], "unit": "bps", "configured": bool(port.zabbix_item_id_traffic_in)},
-        "out": {"history": [], "unit": "bps", "configured": bool(port.zabbix_item_id_traffic_out)},
+    port_like = cast(PortLike, port)
+    device_like = cast(DeviceLike, port_like.device)
+
+    traffic_in_channel: TrafficChannel = {
+        "history": [],
+        "unit": "bps",
+        "configured": bool(port_like.zabbix_item_id_traffic_in),
+    }
+    traffic_out_channel: TrafficChannel = {
+        "history": [],
+        "unit": "bps",
+        "configured": bool(port_like.zabbix_item_id_traffic_out),
+    }
+
+    traffic_data: TrafficData = {
+        "port_id": port_like.id,
+        "port_name": port_like.name,
+        "device_name": device_like.name,
+        "in": traffic_in_channel,
+        "out": traffic_out_channel,
     }
 
     if port.zabbix_item_id_traffic_in:
         try:
-            item_info = ZABBIX_REQUEST(
+            item_info_raw = ZABBIX_REQUEST(
                 "item.get",
                 {
                     "output": ["itemid", "value_type", "units"],
                     "itemids": port.zabbix_item_id_traffic_in,
                 },
             )
+            item_info = _coerce_dict_list(item_info_raw)
             if item_info:
                 value_type = item_info[0].get("value_type", "3")
-                traffic_data["in"]["unit"] = item_info[0].get("units", "bps")
-                history_in = ZABBIX_REQUEST(
+                traffic_in_channel["unit"] = str(item_info[0].get("units", "bps"))
+                history_in_raw = ZABBIX_REQUEST(
                     "history.get",
                     {
                         "itemids": port.zabbix_item_id_traffic_in,
@@ -777,33 +960,35 @@ def port_traffic_history(port_id: int, params: Mapping[str, str]) -> Dict[str, A
                         "limit": history_limit,
                     },
                 )
+                history_in = _coerce_dict_list(history_in_raw)
                 if history_in:
                     for point in history_in:
                         try:
                             ts = int(point["clock"])
                             if since and ts <= since:
                                 continue
-                            traffic_data["in"]["history"].append(
+                            traffic_in_channel["history"].append(
                                 {"timestamp": ts, "value": float(point["value"])}
                             )
                         except (ValueError, KeyError):
                             continue
         except Exception as exc:
-            logger.error("Erro ao buscar traffic IN: %s", exc)
+            logger.error("Failed to retrieve traffic IN history: %s", exc)
 
     if port.zabbix_item_id_traffic_out:
         try:
-            item_info = ZABBIX_REQUEST(
+            item_info_raw = ZABBIX_REQUEST(
                 "item.get",
                 {
                     "output": ["itemid", "value_type", "units"],
                     "itemids": port.zabbix_item_id_traffic_out,
                 },
             )
+            item_info = _coerce_dict_list(item_info_raw)
             if item_info:
                 value_type = item_info[0].get("value_type", "3")
-                traffic_data["out"]["unit"] = item_info[0].get("units", "bps")
-                history_out = ZABBIX_REQUEST(
+                traffic_out_channel["unit"] = str(item_info[0].get("units", "bps"))
+                history_out_raw = ZABBIX_REQUEST(
                     "history.get",
                     {
                         "itemids": port.zabbix_item_id_traffic_out,
@@ -814,30 +999,27 @@ def port_traffic_history(port_id: int, params: Mapping[str, str]) -> Dict[str, A
                         "limit": history_limit,
                     },
                 )
+                history_out = _coerce_dict_list(history_out_raw)
                 if history_out:
                     for point in history_out:
                         try:
                             ts = int(point["clock"])
                             if since and ts <= since:
                                 continue
-                            traffic_data["out"]["history"].append(
+                            traffic_out_channel["history"].append(
                                 {"timestamp": ts, "value": float(point["value"])}
                             )
                         except (ValueError, KeyError):
                             continue
         except Exception as exc:
-            logger.error("Erro ao buscar traffic OUT: %s", exc)
+            logger.error("Failed to retrieve traffic OUT history: %s", exc)
 
-    traffic_data.update(
-        {
-            "period": raw_period,
-            "period_seconds": seconds,
-            "since": since if since_applied else None,
-            "incremental": since_applied,
-            "generated_at": now_ts,
-            "time_from": time_from,
-            "history_limit": history_limit,
-        }
-    )
+    traffic_data["period"] = raw_period
+    traffic_data["period_seconds"] = seconds
+    traffic_data["since"] = since if since_applied else None
+    traffic_data["incremental"] = since_applied
+    traffic_data["generated_at"] = now_ts
+    traffic_data["time_from"] = time_from
+    traffic_data["history_limit"] = history_limit
 
     return traffic_data

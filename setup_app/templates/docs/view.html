@@ -1,18 +1,18 @@
 {# setup_app/templates/docs/view.html #}
 {% extends "base_setup_dashboard.html" %}
 
-{% block title %}Documentação — {{ filename }}{% endblock %}
+{% block title %}Documentation - {{ filename }}{% endblock %}
 
 {% block content %}
 <div class="flex flex-col gap-4">
 
 {% if missing %}
   <div class="rounded-md border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800" role="alert">
-    <strong>Arquivo não encontrado:</strong> {{ filename }}
+    <strong>File not found:</strong> {{ filename }}
   </div>
 {% endif %}
 
-  <!-- Header com título + meta -->
+  <!-- Header with title and metadata -->
   <header class="flex items-start justify-between gap-4">
     <div class="min-w-0">
       <h1 id="doc-title" class="text-xl font-semibold text-gray-900 break-words">
@@ -20,20 +20,20 @@
       </h1>
       <p class="mt-1 text-sm text-gray-500 flex flex-wrap items-center gap-x-3 gap-y-1" aria-describedby="doc-meta">
         {% if size_kb %}
-          <span title="Tamanho do arquivo" class="inline-flex items-center gap-1" id="doc-size">
-            📦 {{ size_kb }} KB
+          <span title="File size" class="inline-flex items-center gap-1" id="doc-size">
+            Size: {{ size_kb }} KB
           </span>
         {% endif %}
         {% if modified_at %}
-          <span title="Última modificação" class="inline-flex items-center gap-1" id="doc-updated">
-            🕒 Atualizado {{ modified_at }}
+          <span title="Last updated" class="inline-flex items-center gap-1" id="doc-updated">
+            Updated {{ modified_at }}
           </span>
         {% endif %}
         {% if github_doc_url %}
           <a href="{{ github_doc_url }}" target="_blank" rel="noopener"
              class="text-blue-600 hover:underline inline-flex items-center gap-1"
-             aria-label="Ver {{ filename }} no GitHub em nova aba">
-            Ver no GitHub ↗
+             aria-label="View {{ filename }} on GitHub in a new tab">
+            View on GitHub ->
           </a>
         {% endif %}
       </p>
@@ -44,15 +44,15 @@
       </div>
     </div>
 
-    <!-- Busca global da página -->
+    <!-- Page-wide search -->
     <div class="hidden lg:block w-72">
-      <label for="doc-search" class="sr-only">Pesquisar nesta página</label>
+      <label for="doc-search" class="sr-only">Search within this page</label>
       <div class="relative">
         <input
           id="doc-search"
           type="search"
-          placeholder="Buscar nesta página…"
-          aria-label="Pesquisar seções da documentação"
+          placeholder="Search within this page..."
+          aria-label="Search documentation sections"
           class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         />
         <div class="pointer-events-none absolute right-2 top-2.5 text-gray-400 text-xs">/</div>
@@ -62,50 +62,50 @@
 
   <div class="flex gap-6">
     <!-- Sidebar / TOC -->
-    <aside class="hidden lg:block w-72 shrink-0" aria-label="Navegação do documento">
+    <aside class="hidden lg:block w-72 shrink-0" aria-label="Document navigation">
       <div class="sticky top-4 space-y-4">
 
         <!-- Breadcrumbs -->
         <nav class="text-sm text-gray-500" aria-label="Breadcrumb">
-          <a href="{% url 'setup_app:docs_index' %}" class="hover:underline">Documentação</a>
+          <a href="{% url 'setup_app:docs_index' %}" class="hover:underline">Documentation</a>
           <span class="mx-1">/</span>
           <span class="text-gray-700 font-medium break-all">{{ filename }}</span>
         </nav>
 
-        <!-- Filtro do TOC + colapso -->
+        <!-- TOC filter and collapse toggle -->
         <div>
           <div class="flex items-center justify-between gap-2 mb-2">
-            <h2 class="text-xs font-semibold tracking-wider text-gray-500 uppercase">Sumário</h2>
+            <h2 class="text-xs font-semibold tracking-wider text-gray-500 uppercase">Table of contents</h2>
             <button id="toc-toggle"
                     type="button"
                     class="text-xs rounded-md border border-gray-300 px-2 py-1 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     aria-expanded="true"
                     aria-controls="toc"
-                    title="Recolher/expandir sumário">
-              Recolher
+                    title="Collapse or expand the table of contents">
+              Collapse
             </button>
           </div>
-          <label for="toc-filter" class="sr-only">Filtrar sumário</label>
+          <label for="toc-filter" class="sr-only">Filter table of contents</label>
           <input
             id="toc-filter"
             type="search"
-            placeholder="Filtrar títulos…"
+            placeholder="Filter headings..."
             class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            aria-label="Filtrar títulos do sumário"
+            aria-label="Filter table of contents headings"
           />
         </div>
 
-        <!-- Sumário (TOC) -->
+        <!-- Table of contents -->
         <div>
-          <nav id="toc" class="space-y-1 text-sm" aria-label="Sumário da documentação" tabindex="0">
-            <!-- itens gerados via JS -->
+          <nav id="toc" class="space-y-1 text-sm" aria-label="Documentation table of contents" tabindex="0">
+            <!-- items generated via JS -->
           </nav>
         </div>
 
-        <!-- Outros documentos (opcional) -->
+        <!-- Other documents (optional) -->
         {% if available_docs %}
         <div class="pt-2 border-t border-gray-200">
-          <h3 class="text-xs font-semibold tracking-wider text-gray-500 uppercase mb-2">Outros documentos</h3>
+          <h3 class="text-xs font-semibold tracking-wider text-gray-500 uppercase mb-2">Other documents</h3>
           <ul class="space-y-1 text-sm" role="list">
             {% for name, meta in available_docs.items %}
               <li role="listitem">
@@ -121,20 +121,20 @@
         </div>
         {% endif %}
 
-        <!-- Expandir/Recolher <details> do conteúdo -->
+        <!-- Expand or collapse all document <details> -->
         <div class="pt-2 border-t border-gray-200">
           <div class="flex items-center gap-2">
             <button id="expand-all"
                     type="button"
                     class="text-xs rounded-md border border-gray-300 px-2 py-1 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    title="Expandir todos os colapsáveis no documento">
-              Expandir tudo
+                    title="Expand all collapsible sections in the document">
+              Expand all
             </button>
             <button id="collapse-all"
                     type="button"
                     class="text-xs rounded-md border border-gray-300 px-2 py-1 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    title="Recolher todos os colapsáveis no documento">
-              Recolher tudo
+                    title="Collapse all collapsible sections in the document">
+              Collapse all
             </button>
           </div>
         </div>
@@ -142,17 +142,17 @@
       </div>
     </aside>
 
-    <!-- Conteúdo -->
+    <!-- Content -->
     <section class="min-w-0 flex-1" aria-labelledby="doc-title">
-      <!-- Loading state (opcional) -->
+      <!-- Loading state (optional) -->
       <div id="loading-indicator" class="hidden" role="status" aria-live="polite">
         <div class="flex items-center justify-center py-8">
           <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" aria-hidden="true"></div>
-          <span class="ml-2 text-gray-600">Carregando documentação...</span>
+          <span class="ml-2 text-gray-600">Loading documentation...</span>
         </div>
       </div>
 
-      <!-- Artigo -->
+      <!-- Article -->
       <article id="doc-article" class="prose prose-blue max-w-none">
         {% autoescape off %}
           {{ content|safe }}
@@ -161,16 +161,16 @@
 
       <div class="mt-8">
         <a href="{% url 'setup_app:docs_index' %}" class="inline-flex items-center text-blue-600 hover:underline">
-          ← Voltar para lista de documentos
+          <- Back to document list
         </a>
       </div>
     </section>
   </div>
 </div>
 
-<!-- Scripts utilitários -->
+<!-- Utility scripts -->
 <script>
-  // ===== Barra de progresso de scroll =====
+  // ===== Scroll progress bar =====
   (function scrollProgress() {
     const bar = document.getElementById('scroll-progress');
     if (!bar) return;
@@ -187,7 +187,7 @@
     refresh();
   })();
 
-  // ===== Geração do TOC com IDs seguros e Scroll Spy =====
+  // ===== TOC generation with stable IDs and scroll spy =====
   (function buildTOC() {
     const article = document.getElementById('doc-article');
     const toc = document.getElementById('toc');
@@ -201,14 +201,14 @@
       .replace(/\s+/g, '-')
       .substring(0, 60);
 
-    // Coleta headings
+  // Collect headings
     const headings = Array.from(article.querySelectorAll('h1, h2, h3, h4'));
-    // IDs estáveis se faltarem
+  // Generate stable IDs if missing
     headings.forEach((h, idx) => {
       if (!h.id) h.id = slug(h.textContent) || `sec-${idx}`;
     });
 
-    // Renderiza TOC
+  // Render TOC
     const renderTOC = (filter = '') => {
       toc.innerHTML = '';
       const frag = document.createDocumentFragment();
@@ -237,7 +237,7 @@
       toc.appendChild(frag);
     };
 
-    // Persistência do filtro do TOC
+  // Persist TOC filter
     const filterInput = document.getElementById('toc-filter');
     const persistedTOCFilter = sessionStorage.getItem('toc-filter') || '';
     if (filterInput) {
@@ -254,7 +254,7 @@
     }
     renderTOC(persistedTOCFilter);
 
-    // Scroll spy
+  // Scroll spy
     const links = () => Array.from(toc.querySelectorAll('a'));
     const obs = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
@@ -270,7 +270,7 @@
 
     headings.forEach((h) => obs.observe(h));
 
-    // Acessibilidade: navegação por teclado no TOC
+  // Accessibility: keyboard navigation for the TOC
     toc.addEventListener('keydown', (e) => {
       const L = links();
       const idx = L.indexOf(document.activeElement);
@@ -287,19 +287,19 @@
       }
     });
 
-    // Colapsar/expandir TOC
+  // Collapse or expand TOC
     if (tocToggle) {
       let open = true;
       tocToggle.addEventListener('click', () => {
         open = !open;
         toc.classList.toggle('hidden', !open);
-        tocToggle.textContent = open ? 'Recolher' : 'Expandir';
+  tocToggle.textContent = open ? 'Collapse' : 'Expand';
         tocToggle.setAttribute('aria-expanded', String(open));
       });
     }
   })();
 
-  // ===== Busca local no conteúdo (com highlight leve) =====
+  // ===== Localized content search with lightweight highlighting =====
   (function searchable() {
     const input = document.getElementById('doc-search');
     const article = document.getElementById('doc-article');
@@ -337,7 +337,7 @@
       if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
-    // restaura busca
+  // Restore previous search
     input.value = sessionStorage.getItem('doc-search') || '';
 
     let t;
@@ -353,11 +353,11 @@
       t = setTimeout(run, 220);
     });
 
-    // roda ao abrir, se houver valor
+  // Run on load if there is a search value
     if (input.value) run();
   })();
 
-  // ===== "Copiar" nos blocos de código =====
+  // ===== Copy buttons for code blocks =====
   (function addCopyButtons() {
     const blocks = document.querySelectorAll('pre > code');
     blocks.forEach((code) => {
@@ -366,23 +366,23 @@
 
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.textContent = 'Copiar';
+  btn.textContent = 'Copy';
       btn.className = 'hidden group-hover:block absolute top-2 right-2 text-xs bg-gray-800 text-white rounded px-2 py-1 opacity-80 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500';
       btn.addEventListener('click', async () => {
         try {
           await navigator.clipboard.writeText(code.innerText);
-          btn.textContent = 'Copiado!';
-          setTimeout(() => (btn.textContent = 'Copiar'), 1200);
+          btn.textContent = 'Copied!';
+          setTimeout(() => (btn.textContent = 'Copy'), 1200);
         } catch (e) {
-          btn.textContent = 'Falhou :(';
-          setTimeout(() => (btn.textContent = 'Copiar'), 1200);
+          btn.textContent = 'Failed :(';
+          setTimeout(() => (btn.textContent = 'Copy'), 1200);
         }
       });
       pre.appendChild(btn);
     });
   })();
 
-  // ===== Expandir/Recolher todos os <details> do conteúdo =====
+  // ===== Expand or collapse all <details> elements within the content =====
   (function detailsToggles() {
     const expandAllBtn = document.getElementById('expand-all');
     const collapseAllBtn = document.getElementById('collapse-all');
@@ -398,7 +398,7 @@
     });
   })();
 
-  // ===== Ancoragem direta via hash =====
+  // ===== Direct anchoring via hash =====
   (function anchorOnLoad() {
     if (location.hash) {
       const target = document.getElementById(location.hash.slice(1));

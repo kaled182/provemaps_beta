@@ -174,13 +174,13 @@
 }
 
 #changelist-filter details > summary::before {
-    content: '→';
+    content: '>';
     font-weight: bold;
     color: var(--link-hover-color);
 }
 
 #changelist-filter details[open] > summary::before {
-    content: '↓';
+    content: 'v';
 }
 
 #changelist-filter ul {

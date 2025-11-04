@@ -7,7 +7,7 @@ RAW=$(curl -s -m "$TIMEOUT" -w "\n%{http_code}" "$URL" || true)
 HTTP_CODE=$(echo "$RAW" | tail -n1)
 BODY=$(echo "$RAW" | sed '$d')
 if [[ -z "$HTTP_CODE" ]]; then
-  echo "✗ Falha ao obter status (timeout ou erro de rede)"; exit 3
+  echo "ERROR: Failed to reach Celery status endpoint (timeout or network error)"; exit 3
 fi
 STATUS=$(echo "$BODY" | python - <<'PY'
 import sys, json
@@ -21,12 +21,12 @@ PY
 APP_STATUS=$(echo "$STATUS" | awk '{print $1}')
 WORKER_AVAILABLE=$(echo "$STATUS" | awk '{print $2}')
 if [[ "$HTTP_CODE" == "200" && "$APP_STATUS" == "ok" ]]; then
-  echo "✓ Celery OK"
+  echo "OK: Celery healthy"
   exit 0
 elif [[ "$WORKER_AVAILABLE" == "True" ]]; then
-  echo "⚠ Celery degradado (worker ativo, estatísticas indisponíveis)"
+  echo "WARN: Celery worker responding but statistics are unavailable"
   exit 1
 else
-  echo "✗ Celery indisponível (sem worker)"
+  echo "ERROR: Celery unavailable (no worker reporting)"
   exit 2
 fi

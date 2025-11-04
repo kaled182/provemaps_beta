@@ -32,7 +32,7 @@
 ## Path Drawing Tests (Scenario A: Empty State)
 1. [ ] Click map → **marker appears**
 2. [ ] Click again → **second marker appears**
-3. [ ] [ ] **Red polyline** connects markers
+3. [ ] **Red polyline** connects markers
 4. [ ] **Distance display** updates automatically
 5. [ ] **Point list** shows coordinates
 6. [ ] **Save button** enables (when ≥2 points)

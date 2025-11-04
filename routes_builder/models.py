@@ -2,10 +2,20 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from decimal import Decimal
+from typing import TYPE_CHECKING, Any, Optional
+
 from django.core.exceptions import ValidationError
 from django.db import models
 
 from inventory.models import Port
+
+if TYPE_CHECKING:
+    from django.db.models.manager import Manager
+
+    RouteSegmentManager = Manager["RouteSegment"]
+    RouteEventManager = Manager["RouteEvent"]
 
 
 class Route(models.Model):
@@ -22,57 +32,82 @@ class Route(models.Model):
         (STATUS_ARCHIVED, "Archived"),
     ]
 
-    name = models.CharField(max_length=150, unique=True)
-    description = models.TextField(blank=True)
-    origin_port = models.ForeignKey(
+    name: models.CharField[str, str] = models.CharField(
+        max_length=150,
+        unique=True,
+    )
+    description: models.TextField[str, str] = models.TextField(
+        blank=True,
+    )
+    origin_port: models.ForeignKey[Port, Port] = models.ForeignKey(
         Port,
         on_delete=models.PROTECT,
         related_name="routes_origin",
     )
-    destination_port = models.ForeignKey(
+    destination_port: models.ForeignKey[Port, Port] = models.ForeignKey(
         Port,
         on_delete=models.PROTECT,
         related_name="routes_destination",
     )
-    status = models.CharField(
+    status: models.CharField[str, str] = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
         default=STATUS_PLANNED,
     )
-    length_km = models.DecimalField(
+    length_km: models.DecimalField[Any, Decimal] = models.DecimalField(
         max_digits=7,
         decimal_places=3,
         null=True,
         blank=True,
         help_text="Total cable length in kilometers.",
     )
-    estimated_loss_db = models.DecimalField(
+    estimated_loss_db: models.DecimalField[Any, Decimal] = models.DecimalField(
         max_digits=5,
         decimal_places=2,
         null=True,
         blank=True,
         help_text="Expected optical loss in decibels.",
     )
-    measured_loss_db = models.DecimalField(
+    measured_loss_db: models.DecimalField[Any, Decimal] = models.DecimalField(
         max_digits=5,
         decimal_places=2,
         null=True,
         blank=True,
         help_text="Latest measured optical loss in decibels.",
     )
-    last_built_at = models.DateTimeField(null=True, blank=True)
-    last_built_by = models.CharField(max_length=150, blank=True)
-    import_source = models.CharField(
+    last_built_at: models.DateTimeField[Any, datetime] = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+    last_built_by: models.CharField[str, str] = models.CharField(
+        max_length=150,
+        blank=True,
+    )
+    import_source: models.CharField[str, str] = models.CharField(
         max_length=150,
         blank=True,
         help_text="Origin of the data import (KML file, planner, etc).",
     )
-    metadata = models.JSONField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    metadata: models.JSONField[Any, Any] = models.JSONField(
+        blank=True,
+        null=True,
+    )
+    created_at: models.DateTimeField[Any, datetime] = models.DateTimeField(
+        auto_now_add=True,
+    )
+    updated_at: models.DateTimeField[Any, datetime] = models.DateTimeField(
+        auto_now=True,
+    )
 
     class Meta:
         ordering = ["name"]
+
+    if TYPE_CHECKING:
+        id: int
+        origin_port_id: int
+        destination_port_id: int
+        segments: RouteSegmentManager
+        events: RouteEventManager
 
     def __str__(self) -> str:
         return self.name
@@ -108,58 +143,70 @@ class Route(models.Model):
 class RouteSegment(models.Model):
     """Segment of an optical route, optionally referencing inventory ports."""
 
-    route = models.ForeignKey(
+    route: models.ForeignKey[Route, Route] = models.ForeignKey(
         Route,
         on_delete=models.CASCADE,
         related_name="segments",
     )
-    order = models.PositiveIntegerField(
+    order: models.PositiveIntegerField[int, int] = models.PositiveIntegerField(
         help_text="Segment order within the route.",
     )
-    from_port = models.ForeignKey(
+    from_port: models.ForeignKey[Port, Port] = models.ForeignKey(
         Port,
         on_delete=models.PROTECT,
         related_name="segments_from",
         null=True,
         blank=True,
     )
-    to_port = models.ForeignKey(
+    to_port: models.ForeignKey[Port, Port] = models.ForeignKey(
         Port,
         on_delete=models.PROTECT,
         related_name="segments_to",
         null=True,
         blank=True,
     )
-    path_coordinates = models.JSONField(
+    path_coordinates: models.JSONField[Any, Any] = models.JSONField(
         blank=True,
         null=True,
         help_text='Array of {"lat": float, "lng": float} points.',
     )
-    length_km = models.DecimalField(
+    length_km: models.DecimalField[Any, Decimal] = models.DecimalField(
         max_digits=7,
         decimal_places=3,
         null=True,
         blank=True,
     )
-    estimated_loss_db = models.DecimalField(
+    estimated_loss_db: models.DecimalField[Any, Decimal] = models.DecimalField(
         max_digits=5,
         decimal_places=2,
         null=True,
         blank=True,
     )
-    measured_loss_db = models.DecimalField(
+    measured_loss_db: models.DecimalField[Any, Decimal] = models.DecimalField(
         max_digits=5,
         decimal_places=2,
         null=True,
         blank=True,
     )
-    metadata = models.JSONField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    metadata: models.JSONField[Any, Any] = models.JSONField(
+        blank=True,
+        null=True,
+    )
+    created_at: models.DateTimeField[Any, datetime] = models.DateTimeField(
+        auto_now_add=True,
+    )
+    updated_at: models.DateTimeField[Any, datetime] = models.DateTimeField(
+        auto_now=True,
+    )
 
     class Meta:
         ordering = ["route", "order"]
         unique_together = ("route", "order")
+
+    if TYPE_CHECKING:
+        id: int
+        from_port_id: Optional[int]
+        to_port_id: Optional[int]
 
     def __str__(self) -> str:
         return f"{self.route.name}#{self.order}"
@@ -197,16 +244,24 @@ class RouteEvent(models.Model):
         (EVENT_MEASUREMENT, "Measurement"),
     ]
 
-    route = models.ForeignKey(
+    route: models.ForeignKey[Route, Route] = models.ForeignKey(
         Route,
         on_delete=models.CASCADE,
         related_name="events",
     )
-    event_type = models.CharField(max_length=30, choices=EVENT_CHOICES)
-    message = models.TextField(blank=True)
-    details = models.JSONField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.CharField(
+    event_type: models.CharField[str, str] = models.CharField(
+        max_length=30,
+        choices=EVENT_CHOICES,
+    )
+    message: models.TextField[str, str] = models.TextField(blank=True)
+    details: models.JSONField[Any, Any] = models.JSONField(
+        blank=True,
+        null=True,
+    )
+    created_at: models.DateTimeField[Any, datetime] = models.DateTimeField(
+        auto_now_add=True,
+    )
+    created_by: models.CharField[str, str] = models.CharField(
         max_length=150,
         blank=True,
         help_text="Originator of the event (user, task, import).",
@@ -214,6 +269,10 @@ class RouteEvent(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+    if TYPE_CHECKING:
+        id: int
+        route_id: int
 
     def __str__(self) -> str:
         return f"{self.route.name} - {self.event_type}"

@@ -8,12 +8,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import platform
 import re
 import subprocess
 import time
-import hashlib
+
 import requests
 
 from typing import Any, Mapping, Sequence, cast
@@ -173,13 +174,13 @@ def get_host_performance_metrics(hostid: str) -> JsonList | None:
             or [],
         )
 
-    # Build a map itemid -> most recent value
+        # Build a map itemid -> most recent value
         for hist in hist_results:
             itemid = hist.get("itemid")
             if itemid and itemid not in history_map:
                 history_map[itemid] = {
                     "value": hist.get("value"),
-                    "clock": hist.get("clock")
+                    "clock": hist.get("clock"),
                 }
 
     # Step 4: enrich original items with historical values
@@ -327,7 +328,7 @@ def get_host_network_details(hostid: str) -> dict[str, Any] | None:
                     seen.add(iid)
                     items.append(it)
 
-    # Step 2: group items by ``value_type``
+        # Step 2: group items by ``value_type``
         items_by_type: dict[str, JsonList] = {}
         for it in items:
             value_type = it["value_type"]
@@ -335,7 +336,7 @@ def get_host_network_details(hostid: str) -> dict[str, Any] | None:
                 items_by_type[value_type] = []
             items_by_type[value_type].append(it)
 
-    # Step 3: run ``history.get`` per ``value_type``
+        # Step 3: run ``history.get`` per ``value_type``
         history_map: dict[str, JsonDict] = {}
         for value_type, typed_items in items_by_type.items():
             itemids = [it["itemid"] for it in typed_items]
@@ -362,12 +363,12 @@ def get_host_network_details(hostid: str) -> dict[str, Any] | None:
                     if itemid and itemid not in history_map:
                         history_map[itemid] = {
                             "value": hist.get("value"),
-                            "clock": hist.get("clock")
+                            "clock": hist.get("clock"),
                         }
             except Exception:
                 continue
 
-    # Step 4: build ``network_data`` using the lookup map
+        # Step 4: build ``network_data`` using the lookup map
         network_data: dict[str, JsonDict] = {}
         for it in items:
             hist_data = history_map.get(it["itemid"])

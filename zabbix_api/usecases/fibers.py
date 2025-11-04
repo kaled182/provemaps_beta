@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+# pyright: reportUnknownParameterType=false, reportUnknownArgumentType=false
+# pyright: reportUnknownVariableType=false, reportUnknownMemberType=false
+# pyright: reportMissingParameterType=false, reportMissingTypeArgument=false
+# pyright: reportPrivateUsage=false, reportAttributeAccessIssue=false
+
 import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple, cast
 
 from ..domain.geometry import calculate_path_length, sanitize_path_points
 from ..inventory_cache import invalidate_fiber_cache
 from ..models import FiberCable, FiberEvent, Port
-from ..domain.optical import _fetch_port_optical_snapshot
+from ..domain.optical import fetch_port_optical_snapshot
 from ..services.fiber_status import (
     combine_cable_status as combine_cable_status_service,
     evaluate_cable_status_for_cable,
@@ -21,15 +26,15 @@ logger = logging.getLogger(__name__)
 
 
 class FiberUseCaseError(Exception):
-    """Erro genérico de regra de negócio das fibras."""
+    """Generic business-rule error for fiber operations."""
 
 
 class FiberValidationError(FiberUseCaseError):
-    """Erro de validação de entrada."""
+    """Raised when incoming data fails validation."""
 
 
 class FiberNotFound(FiberUseCaseError):
-    """Cabo de fibra não localizado."""
+    """Raised when a fiber cable cannot be located."""
 
 
 @dataclass
@@ -42,6 +47,17 @@ class FiberLiveStatus:
     changed: bool
 
 
+def _port_payload(port: Port) -> Dict[str, object]:
+    device = port.device
+    site = getattr(device, "site", None)
+    return {
+        "id": port.id,
+        "name": port.name,
+        "device": device.name,
+        "site": site.name if site else None,
+    }
+
+
 def _get_port(port_id: str | int, *, with_site: bool = True) -> Port:
     queryset = Port.objects.all()
     if with_site:
@@ -49,7 +65,7 @@ def _get_port(port_id: str | int, *, with_site: bool = True) -> Port:
     try:
         return queryset.get(id=port_id)
     except Port.DoesNotExist as exc:
-        raise FiberValidationError("Porta não encontrada") from exc
+        raise FiberValidationError("Port not found") from exc
 
 
 def get_fiber_cable(cable_id: int) -> FiberCable:
@@ -59,7 +75,7 @@ def get_fiber_cable(cable_id: int) -> FiberCable:
             "destination_port__device__site",
         ).get(id=cable_id)
     except FiberCable.DoesNotExist as exc:
-        raise FiberNotFound("FiberCable nao encontrado") from exc
+        raise FiberNotFound("FiberCable not found") from exc
 
 
 def parse_kml_coordinates(kml_file) -> List[Dict[str, float]]:
@@ -67,7 +83,7 @@ def parse_kml_coordinates(kml_file) -> List[Dict[str, float]]:
         tree = ET.parse(kml_file)
         root = tree.getroot()
     except Exception as exc:
-        raise FiberValidationError(f"Erro ao processar KML: {exc}") from exc
+        raise FiberValidationError(f"Failed to process KML: {exc}") from exc
 
     ns = {"kml": "http://www.opengis.net/kml/2.2"}
     coords: List[Dict[str, float]] = []
@@ -87,9 +103,9 @@ def parse_kml_coordinates(kml_file) -> List[Dict[str, float]]:
             if -90.0 <= lat <= 90.0 and -180.0 <= lng <= 180.0:
                 coords.append({"lat": lat, "lng": lng})
     if not coords:
-        raise FiberValidationError("Nenhum ponto encontrado no KML")
+        raise FiberValidationError("No coordinates found in the KML payload")
     if len(coords) < 2:
-        raise FiberValidationError("Path precisa de pelo menos 2 pontos validos")
+        raise FiberValidationError("Path requires at least two valid points")
     return coords
 
 
@@ -103,22 +119,31 @@ def create_fiber_from_kml(
     single_port: bool = False,
 ) -> Dict[str, object]:
     if FiberCable.objects.filter(name__iexact=name).exists():
-        raise FiberValidationError("Ja existe um cabo com este nome")
+        raise FiberValidationError("A fiber with this name already exists")
 
-    origin_port = _get_port(origin_port_id)
+    origin_port_id_value = cast(str | int, origin_port_id)
+    origin_port = _get_port(origin_port_id_value)
     dest_port = _get_port(dest_port_id)
 
     if str(origin_port.device_id) != str(origin_device_id):
-        raise FiberValidationError("Porta de origem nao pertence ao device selecionado")
+        raise FiberValidationError(
+            "Origin port does not belong to the selected device"
+        )
     if str(dest_port.device_id) != str(dest_device_id):
-        raise FiberValidationError("Porta de destino nao pertence ao device selecionado")
+        raise FiberValidationError(
+            "Destination port does not belong to the selected device"
+        )
     
-    # Validação de portas diferentes apenas se não for single port mode
+    # Only enforce distinct port checks when not in single-port mode
     if not single_port:
         if origin_port == dest_port:
-            raise FiberValidationError("Portas de origem e destino devem ser diferentes")
+            raise FiberValidationError(
+                "Origin and destination ports must be different"
+            )
         if origin_port.device_id == dest_port.device_id:
-            raise FiberValidationError("Devices de origem e destino devem ser diferentes")
+            raise FiberValidationError(
+                "Origin and destination devices must be different"
+            )
 
     coords = parse_kml_coordinates(kml_file)
 
@@ -133,32 +158,59 @@ def create_fiber_from_kml(
     return fiber_to_payload(fiber, coords=coords)
 
 
-def fiber_to_payload(fiber: FiberCable, coords: Optional[Iterable[Dict[str, float]]] = None) -> Dict[str, object]:
+def fiber_to_payload(
+    fiber: FiberCable,
+    coords: Optional[Iterable[Dict[str, float]]] = None,
+) -> Dict[str, object]:
     origin_port = fiber.origin_port
     dest_port = fiber.destination_port
     return {
         "fiber_id": fiber.id,
         "name": fiber.name,
-        "points": len(list(coords)) if coords is not None else len(fiber.path_coordinates or []),
-        "path_coordinates": list(coords) if coords is not None else (fiber.path_coordinates or []),
+        "points": (
+            len(list(coords))
+            if coords is not None
+            else len(fiber.path_coordinates or [])
+        ),
+        "path_coordinates": (
+            list(coords)
+            if coords is not None
+            else (fiber.path_coordinates or [])
+        ),
         "origin_port": {
             "id": origin_port.id,
             "name": origin_port.name,
             "device": origin_port.device.name,
-            "site": origin_port.device.site.name if origin_port.device.site_id else None,
+            "site": (
+                origin_port.device.site.name
+                if origin_port.device.site_id
+                else None
+            ),
         },
         "destination_port": {
             "id": dest_port.id,
             "name": dest_port.name,
             "device": dest_port.device.name,
-            "site": dest_port.device.site.name if dest_port.device.site_id else None,
+            "site": (
+                dest_port.device.site.name
+                if dest_port.device.site_id
+                else None
+            ),
         },
     }
 
 
-def cable_value_mapping_status(cable: FiberCable, item_key_origin: Optional[str], item_key_dest: Optional[str]) -> Dict[str, object]:
+def cable_value_mapping_status(
+    cable: FiberCable,
+    item_key_origin: Optional[str],
+    item_key_dest: Optional[str],
+) -> Dict[str, object]:
     origin_key = item_key_origin or cable.origin_port.zabbix_item_key
-    destination_key = item_key_dest or cable.destination_port.zabbix_item_key or origin_key
+    destination_key = (
+        item_key_dest
+        or cable.destination_port.zabbix_item_key
+        or origin_key
+    )
 
     def fetch_value(hostid, key):
         if not (hostid and key):
@@ -192,8 +244,14 @@ def cable_value_mapping_status(cable: FiberCable, item_key_origin: Optional[str]
                 val = hist[0].get("value")
         return str(val) if val is not None else None
 
-    raw_origin = fetch_value(cable.origin_port.device.zabbix_hostid, origin_key)
-    raw_dest = fetch_value(cable.destination_port.device.zabbix_hostid, destination_key)
+    raw_origin = fetch_value(
+        cable.origin_port.device.zabbix_hostid,
+        origin_key,
+    )
+    raw_dest = fetch_value(
+        cable.destination_port.device.zabbix_hostid,
+        destination_key,
+    )
 
     def interpret(raw):
         if raw == "1":
@@ -201,14 +259,18 @@ def cable_value_mapping_status(cable: FiberCable, item_key_origin: Optional[str]
         if raw == "0":
             return "down"
         if raw is not None:
-            return f"Desconhecido ({raw})"
+            return f"unknown ({raw})"
         return "unknown"
 
     origin_status = interpret(raw_origin)
     dest_status = interpret(raw_dest)
     combined = combine_cable_status_service(
-        "up" if origin_status == "up" else ("down" if origin_status == "down" else "unknown"),
-        "up" if dest_status == "up" else ("down" if dest_status == "down" else "unknown"),
+        "up"
+        if origin_status == "up"
+        else ("down" if origin_status == "down" else "unknown"),
+        "up"
+        if dest_status == "up"
+        else ("down" if dest_status == "down" else "unknown"),
     )
     return {
         "cable_id": cable.id,
@@ -221,7 +283,10 @@ def cable_value_mapping_status(cable: FiberCable, item_key_origin: Optional[str]
 
 
 def list_fiber_cables() -> List[Dict[str, object]]:
-    cables = FiberCable.objects.select_related("origin_port__device__site", "destination_port__device__site")
+    cables = FiberCable.objects.select_related(
+        "origin_port__device__site",
+        "destination_port__device__site",
+    )
     payload = []
     for cable in cables:
         origin_site = cable.origin_port.device.site
@@ -231,20 +296,40 @@ def list_fiber_cables() -> List[Dict[str, object]]:
                 "id": cable.id,
                 "name": cable.name,
                 "status": cable.status,
-                "length_km": float(cable.length_km) if cable.length_km is not None else None,
+                "length_km": (
+                    float(cable.length_km)
+                    if cable.length_km is not None
+                    else None
+                ),
                 "origin": {
                     "site": origin_site.name if origin_site else None,
                     "city": origin_site.city if origin_site else None,
-                    "lat": float(origin_site.latitude) if origin_site and origin_site.latitude is not None else None,
-                    "lng": float(origin_site.longitude) if origin_site and origin_site.longitude is not None else None,
+                    "lat": (
+                        float(origin_site.latitude)
+                        if origin_site and origin_site.latitude is not None
+                        else None
+                    ),
+                    "lng": (
+                        float(origin_site.longitude)
+                        if origin_site and origin_site.longitude is not None
+                        else None
+                    ),
                     "device": cable.origin_port.device.name,
                     "port": cable.origin_port.name,
                 },
                 "destination": {
                     "site": dest_site.name if dest_site else None,
                     "city": dest_site.city if dest_site else None,
-                    "lat": float(dest_site.latitude) if dest_site and dest_site.latitude is not None else None,
-                    "lng": float(dest_site.longitude) if dest_site and dest_site.longitude is not None else None,
+                    "lat": (
+                        float(dest_site.latitude)
+                        if dest_site and dest_site.latitude is not None
+                        else None
+                    ),
+                    "lng": (
+                        float(dest_site.longitude)
+                        if dest_site and dest_site.longitude is not None
+                        else None
+                    ),
                     "device": cable.destination_port.device.name,
                     "port": cable.destination_port.name,
                 },
@@ -261,11 +346,21 @@ def fiber_detail_payload(cable: FiberCable) -> Dict[str, object]:
         "id": cable.id,
         "name": cable.name,
         "status": cable.status,
-        "length_km": float(cable.length_km) if cable.length_km is not None else None,
+        "length_km": (
+            float(cable.length_km) if cable.length_km is not None else None
+        ),
         "origin": {
             "site": origin_site.name if origin_site else None,
-            "lat": float(origin_site.latitude) if origin_site and origin_site.latitude is not None else None,
-            "lng": float(origin_site.longitude) if origin_site and origin_site.longitude is not None else None,
+            "lat": (
+                float(origin_site.latitude)
+                if origin_site and origin_site.latitude is not None
+                else None
+            ),
+            "lng": (
+                float(origin_site.longitude)
+                if origin_site and origin_site.longitude is not None
+                else None
+            ),
             "device": cable.origin_port.device.name,
             "device_id": cable.origin_port.device.id,
             "port": cable.origin_port.name,
@@ -273,8 +368,16 @@ def fiber_detail_payload(cable: FiberCable) -> Dict[str, object]:
         },
         "destination": {
             "site": dest_site.name if dest_site else None,
-            "lat": float(dest_site.latitude) if dest_site and dest_site.latitude is not None else None,
-            "lng": float(dest_site.longitude) if dest_site and dest_site.longitude is not None else None,
+            "lat": (
+                float(dest_site.latitude)
+                if dest_site and dest_site.latitude is not None
+                else None
+            ),
+            "lng": (
+                float(dest_site.longitude)
+                if dest_site and dest_site.longitude is not None
+                else None
+            ),
             "device": cable.destination_port.device.name,
             "device_id": cable.destination_port.device.id,
             "port": cable.destination_port.name,
@@ -289,7 +392,7 @@ def update_fiber_path(cable: FiberCable, raw_path) -> Dict[str, object]:
     allow_empty = True
     sanitized = sanitize_path_points(raw_path, allow_empty=allow_empty)
     if sanitized and len(sanitized) < 2:
-        raise FiberValidationError("Path precisa de pelo menos 2 pontos validos")
+        raise FiberValidationError("Path requires at least two valid points")
 
     length_km = calculate_path_length(sanitized)
     cable.path_coordinates = sanitized
@@ -299,23 +402,19 @@ def update_fiber_path(cable: FiberCable, raw_path) -> Dict[str, object]:
     return {"status": "ok", "length_km": length_km, "points": len(sanitized)}
 
 
-
-
 def update_fiber_metadata(
     cable: FiberCable,
     name: Optional[str] = None,
     origin_port_id: Optional[int] = None,
     dest_port_id: Optional[int] = None,
 ) -> Dict[str, object]:
-    """
-    Atualiza metadados de um cabo (nome, portas origem/destino).
-    """
+    """Update fiber metadata such as name and endpoint ports."""
     updated_fields = []
     
     if name is not None:
         name = name.strip()
         if not name:
-            raise FiberValidationError("Nome não pode ser vazio")
+            raise FiberValidationError("Name cannot be empty")
         cable.name = name
         updated_fields.append("name")
     
@@ -323,7 +422,9 @@ def update_fiber_metadata(
         try:
             origin_port = Port.objects.get(id=origin_port_id)
         except Port.DoesNotExist as exc:
-            raise FiberValidationError(f"Porta de origem {origin_port_id} não encontrada") from exc
+            raise FiberValidationError(
+                f"Origin port {origin_port_id} not found"
+            ) from exc
         cable.origin_port = origin_port
         updated_fields.append("origin_port")
     
@@ -331,7 +432,9 @@ def update_fiber_metadata(
         try:
             dest_port = Port.objects.get(id=dest_port_id)
         except Port.DoesNotExist as exc:
-            raise FiberValidationError(f"Porta de destino {dest_port_id} não encontrada") from exc
+            raise FiberValidationError(
+                f"Destination port {dest_port_id} not found"
+            ) from exc
         cable.destination_port = dest_port
         updated_fields.append("destination_port")
     
@@ -352,7 +455,12 @@ def delete_fiber(cable: FiberCable) -> None:
     invalidate_fiber_cache()
 
 
-def compute_live_status(cable: FiberCable, persist: bool, *, event_reason: str) -> FiberLiveStatus:
+def compute_live_status(
+    cable: FiberCable,
+    persist: bool,
+    *,
+    event_reason: str,
+) -> FiberLiveStatus:
     origin_dev = cable.origin_port.device
     dest_dev = cable.destination_port.device
 
@@ -391,7 +499,11 @@ def compute_live_status(cable: FiberCable, persist: bool, *, event_reason: str) 
     )
 
 
-def live_status_payload(cable: FiberCable, status: FiberLiveStatus, persist: bool) -> Dict[str, object]:
+def live_status_payload(
+    cable: FiberCable,
+    status: FiberLiveStatus,
+    persist: bool,
+) -> Dict[str, object]:
     return {
         "cable_id": cable.id,
         "name": cable.name,
@@ -406,11 +518,18 @@ def live_status_payload(cable: FiberCable, status: FiberLiveStatus, persist: boo
     }
 
 
-def bulk_live_status(cables: Iterable[FiberCable], persist: bool) -> Tuple[List[Dict[str, object]], int]:
+def bulk_live_status(
+    cables: Iterable[FiberCable],
+    persist: bool,
+) -> Tuple[List[Dict[str, object]], int]:
     results = []
     changed_any = 0
     for cable in cables:
-        status = compute_live_status(cable, persist=persist, event_reason="live-endpoint-bulk")
+        status = compute_live_status(
+            cable,
+            persist=persist,
+            event_reason="live-endpoint-bulk",
+        )
         if persist and status.changed:
             changed_any += 1
         results.append(
@@ -467,7 +586,8 @@ def create_manual_fiber(data: Dict[str, object]) -> Dict[str, object]:
     origin_port_id = data.get("origin_port_id")
     dest_device_id = data.get("dest_device_id")
     dest_port_id = data.get("dest_port_id")
-    single_port = str(data.get("single_port", "")).lower() in ("1", "true", "on", "yes")
+    single_port_flag = str(data.get("single_port", "")).lower()
+    single_port = single_port_flag in ("1", "true", "on", "yes")
 
     if single_port:
         dest_device_id = origin_device_id
@@ -476,18 +596,26 @@ def create_manual_fiber(data: Dict[str, object]) -> Dict[str, object]:
     if not (name and origin_device_id and origin_port_id and dest_port_id):
         raise FiberValidationError("Required fields are missing")
 
-    origin_port = _get_port(origin_port_id)
+    origin_port_id_value = cast(str | int, origin_port_id)
+    origin_port = _get_port(origin_port_id_value)
     if single_port:
         dest_port = origin_port
     else:
-        dest_port = _get_port(dest_port_id)
+        dest_port_id_value = cast(str | int, dest_port_id)
+        dest_port = _get_port(dest_port_id_value)
         if str(dest_port.device_id) != str(dest_device_id):
-            raise FiberValidationError("Destination port does not belong to the selected device")
+            raise FiberValidationError(
+                "Destination port does not belong to the selected device"
+            )
         if origin_port == dest_port:
-            raise FiberValidationError("Portas de origem e destino devem ser diferentes")
+            raise FiberValidationError(
+                "Origin and destination ports must be different"
+            )
 
     if str(origin_port.device_id) != str(origin_device_id):
-        raise FiberValidationError("Porta de origem nao pertence ao device selecionado")
+        raise FiberValidationError(
+            "Origin port does not belong to the selected device"
+        )
 
     raw_path = data.get("path") or []
     sanitized = sanitize_path_points(raw_path, allow_empty=False)
@@ -510,36 +638,32 @@ def create_manual_fiber(data: Dict[str, object]) -> Dict[str, object]:
             "name": fiber.name,
             "points": len(sanitized),
             "length_km": length_km,
-            "origin_port": {
-                "id": origin_port.id,
-                "name": origin_port.name,
-                "device": origin_port.device.name,
-                "site": origin_port.device.site.name if origin_port.device.site_id else None,
-            },
-            "destination_port": {
-                "id": dest_port.id,
-                "name": dest_port.name,
-                "device": dest_port.device.name,
-                "site": dest_port.device.site.name if dest_port.device.site_id else None,
-            },
+            "origin_port": _port_payload(origin_port),
+            "destination_port": _port_payload(dest_port),
             "single_port": single_port,
         },
     }
 
+
+
 def update_cable_oper_status(cable_id: int) -> dict:
-    """Fetches the operational status of a cable, updates it, and returns the details."""
+    """Return operational status metadata after refreshing a cable record."""
     try:
         cable = FiberCable.objects.select_related(
             "origin_port__device", "destination_port__device"
         ).get(id=cable_id)
     except FiberCable.DoesNotExist as exc:
-        raise FiberNotFound("FiberCable nao encontrado") from exc
+        raise FiberNotFound("FiberCable not found") from exc
 
     origin_port = cable.origin_port
     dest_port = cable.destination_port
 
-    status_origin, raw_origin, meta_origin = get_oper_status_from_port(origin_port)
-    status_dest, raw_dest, meta_dest = get_oper_status_from_port(dest_port)
+    status_origin, raw_origin, meta_origin = get_oper_status_from_port(
+        origin_port
+    )
+    status_dest, raw_dest, meta_dest = get_oper_status_from_port(
+        dest_port
+    )
 
     meta_origin["port_id"] = origin_port.id
     meta_origin["port_name"] = origin_port.name
@@ -549,8 +673,8 @@ def update_cable_oper_status(cable_id: int) -> dict:
     meta_dest["port_name"] = dest_port.name
     meta_dest["device_name"] = dest_port.device.name
 
-    origin_optical = _fetch_port_optical_snapshot(origin_port)
-    dest_optical = _fetch_port_optical_snapshot(dest_port)
+    origin_optical = fetch_port_optical_snapshot(origin_port)
+    dest_optical = fetch_port_optical_snapshot(dest_port)
 
     status = combine_cable_status_service(status_origin, status_dest)
     previous_status = cable.status

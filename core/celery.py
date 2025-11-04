@@ -1,10 +1,10 @@
 """
-Celery app do projeto mapsprovefiber.
+Celery application for the MapsProveFiber project.
 
-- Lê configurações do Django (namespace CELERY_)
-    e cai para env vars quando necessário.
-- Define filas/rotas para workloads diferentes (default, zabbix, maps).
-- Configura opções sensatas de desempenho e segurança.
+- Reads Django settings (namespace CELERY_) and falls back to
+    environment variables when needed.
+- Defines queues/routes for different workloads (default, zabbix, maps).
+- Applies sensible performance and safety defaults.
 """
 
 import os
@@ -13,23 +13,23 @@ from celery import Celery
 from kombu import Queue, Exchange
 
 # ---------------------------------------------------------------------
-# Bootstrap do Django settings
+# Django settings bootstrap
 # ---------------------------------------------------------------------
 os.environ.setdefault(
     "DJANGO_SETTINGS_MODULE",
     os.getenv("DJANGO_SETTINGS_MODULE", "settings.dev"),
 )
 
-# Nome lógico da app Celery (aparece em logs/monitoramento)
+# Logical Celery app name (appears in logs/monitoring)
 app = Celery("mapsprovefiber")
 
-# Carrega configurações do Django (usa prefixo CELERY_ nas settings)
+# Load Django configuration (uses CELERY_ prefix in settings)
 app.config_from_object("django.conf:settings", namespace="CELERY")
 
 # ---------------------------------------------------------------------
-# Fallbacks de broker/backend a partir de variáveis de ambiente
+# Broker/backend fallbacks derived from environment variables
 # ---------------------------------------------------------------------
-# Prioridade: CELERY_BROKER_URL -> REDIS_URL -> default local
+# Priority: CELERY_BROKER_URL -> REDIS_URL -> local default
 _broker_url = (
     os.getenv("CELERY_BROKER_URL")
     or os.getenv("REDIS_URL")
@@ -37,12 +37,12 @@ _broker_url = (
 )
 _result_backend = os.getenv("CELERY_RESULT_BACKEND") or _broker_url
 
-# Intervalo padrão (segundos) para refresh do dashboard via SWR
+# Default interval (seconds) for dashboard refresh via SWR
 _dashboard_refresh_interval = float(
     os.getenv("DASHBOARD_CACHE_REFRESH_INTERVAL", "60")
 )
 
-# Intervalo padrão (segundos) para sync de inventário do Zabbix
+# Default interval (seconds) for Zabbix inventory sync
 _inventory_sync_interval = float(
     os.getenv("INVENTORY_SYNC_INTERVAL_SECONDS", "86400")
 )
@@ -52,13 +52,13 @@ _service_account_rotation_interval = float(
 )
 
 # ---------------------------------------------------------------------
-# Opções padrão (podem ser sobrescritas via settings ou env)
+# Default options (overridable via settings or environment)
 # ---------------------------------------------------------------------
 app.conf.update(
     broker_url=_broker_url,
     result_backend=_result_backend,
 
-    # Serialização (evita pickle por segurança)
+    # Serialization (avoid pickle for safety)
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
@@ -67,8 +67,8 @@ app.conf.update(
     timezone=os.getenv("TIME_ZONE", "UTC"),
     enable_utc=True,
 
-    # Confiabilidade / desempenho
-    # evita perder tarefa se o worker cair durante execução
+    # Reliability / performance
+    # Avoid losing a task if the worker crashes mid-execution
     task_acks_late=True,
     worker_prefetch_multiplier=int(
         os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER", "1")
@@ -76,25 +76,25 @@ app.conf.update(
     worker_max_tasks_per_child=int(
         os.getenv("CELERY_WORKER_MAX_TASKS_PER_CHILD", "100")
     ),
-    # 5 min
+    # 5 minutes
     task_soft_time_limit=int(
         os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", "300")
     ),
-    # 10 min
+    # 10 minutes
     task_time_limit=int(os.getenv("CELERY_TASK_TIME_LIMIT", "600")),
-    # ex.: "10/s"
+    # Example: "10/s"
     task_default_rate_limit=os.getenv(
         "CELERY_TASK_DEFAULT_RATE_LIMIT", None
     ),
     broker_connection_retry_on_startup=True,
 
-    # Execução síncrona em testes (pode ser definida no env/test)
+    # Synchronous execution during tests (can be defined in env/test)
     task_always_eager=(
         os.getenv("CELERY_TASK_ALWAYS_EAGER", "false").lower() == "true"
     ),
     task_eager_propagates=True,
 
-    # Logging mais detalhado
+    # Verbose logging
     worker_log_format=os.getenv(
         "CELERY_WORKER_LOG_FORMAT",
         "[%(asctime)s: %(levelname)s/%(processName)s] %(message)s",
@@ -117,18 +117,18 @@ app.conf.update(
         'interval_max': 0.2,
     },
 
-    # Monitoring e observabilidade
+    # Monitoring and observability
     worker_send_task_events=True,
     task_send_sent_event=True,
     
-    # Result expiration (evita acumular resultados antigos)
-    result_expires=int(os.getenv("CELERY_RESULT_EXPIRES", "3600")),  # 1 hora
+    # Result expiration (avoid piling up stale records)
+    result_expires=int(os.getenv("CELERY_RESULT_EXPIRES", "3600")),  # 1 hour
 
-    # Dead letter queue para tarefas que falham repetidamente
+    # Dead letter queue behavior for repeatedly failing tasks
     task_reject_on_worker_lost=True,
     task_acks_on_failure_or_timeout=False,
     
-    # Beat schedule para tarefas periódicas
+    # Beat schedule for recurring tasks
     beat_schedule={
         "update-celery-metrics": {
             "task": "core.celery.update_celery_metrics_task",
@@ -156,7 +156,7 @@ app.conf.update(
 )
 
 # ---------------------------------------------------------------------
-# Filas e roteamento
+# Queues and routing
 # ---------------------------------------------------------------------
 _default_exchange_name = os.getenv("CELERY_DEFAULT_EXCHANGE", "mapsprovefiber")
 _default_exchange = Exchange(_default_exchange_name, type="direct")
@@ -171,54 +171,50 @@ app.conf.task_default_queue = os.getenv("CELERY_DEFAULT_QUEUE", "default")
 app.conf.task_default_exchange = _default_exchange_name
 app.conf.task_default_routing_key = app.conf.task_default_queue
 
-# Regras de roteamento por namespace de tarefa
+# Routing rules grouped by task namespace
 app.conf.task_routes = {
-    # Tarefas do app Zabbix (ex.: zabbix_api/tasks.py -> @shared_task)
+    # Tasks from the Zabbix app (e.g. zabbix_api/tasks.py -> @shared_task)
     "zabbix_api.tasks.*": {"queue": "zabbix", "routing_key": "zabbix"},
 
-    # Tarefas de rotas/fibra (ex.: routes_builder/tasks.py)
+    # Fiber/route tasks (e.g. routes_builder/tasks.py)
     "routes_builder.tasks.*": {"queue": "maps", "routing_key": "maps"},
 
-    # Tarefas de dashboard/maps view
+    # Dashboard/maps view tasks
     "maps_view.tasks.*": {"queue": "maps", "routing_key": "maps"},
 }
 
 # ---------------------------------------------------------------------
-# Descoberta automática de tasks nos apps instalados
+# Automatic task discovery across installed apps
 # ---------------------------------------------------------------------
 app.autodiscover_tasks()
 
 
 # ---------------------------------------------------------------------
-# Task simples para diagnóstico (útil em health checks de worker)
+# Simple diagnostic task (used by worker health checks)
 # ---------------------------------------------------------------------
 @app.task(bind=True)
 def ping(self):
-    """
-    Retorna 'pong' — pode ser chamada para sanity-check do worker.
-    """
+    """Return "pong"; handy for sanity-checking worker health."""
     return "pong"
 
 
 # ---------------------------------------------------------------------
-# Health check mais completo para workers
+# Comprehensive worker health check task
 # ---------------------------------------------------------------------
 @app.task(bind=True)
 def health_check(self):
-    """
-    Health check mais completo para workers
-    """
-    # Teste básico de funcionamento
+    """Run a set of lightweight diagnostics against the worker."""
+    # Basic functionality test
     basic_test = "pong"
     
-    # Teste de timestamp (verifica se o worker está processando)
+    # Timestamp check (confirms the worker is processing requests)
     timestamp = time.time()
     
-    # Teste opcional de conexão com broker
+    # Optional broker connectivity test
     broker_ok = True
     broker_error = None
     try:
-        # Tenta enviar uma mensagem de teste
+        # Try sending a minimal heartbeat message to the broker
         self.app.control.inspect().ping(timeout=2)
     except Exception as e:
         broker_ok = False
@@ -235,13 +231,11 @@ def health_check(self):
 
 
 # ---------------------------------------------------------------------
-# Task para estatísticas das filas (útil para dashboards)
+# Queue statistics task (feeds dashboards)
 # ---------------------------------------------------------------------
 @app.task(bind=True)
 def get_queue_stats(self):
-    """
-    Retorna estatísticas das filas (útil para dashboards)
-    """
+    """Return queue statistics for dashboard consumption."""
     try:
         inspector = self.app.control.inspect()
         stats = inspector.stats()
@@ -261,28 +255,24 @@ def get_queue_stats(self):
 
 
 # ---------------------------------------------------------------------
-# Task periódica para atualizar métricas Prometheus sem HTTP requests
+# Periodic task to refresh Prometheus metrics without HTTP requests
 # ---------------------------------------------------------------------
 @app.task(bind=True)
 def update_celery_metrics_task(self):
-    """
-    Task periódica para atualizar métricas Prometheus.
-    Configurada no beat schedule (30s por padrão).
-    Não faz scraping pesado - apenas chama ping + stats e atualiza gauges.
-    """
+    """Periodic Prometheus metrics refresh scheduled via Celery beat."""
     try:
-        # Importa lógica de métricas
+        # Import metrics helper
         from core.metrics_celery import update_metrics  # type: ignore
-        
-        # Coleta dados leves (similar ao endpoint mas sem HTTP overhead)
+
+        # Collect light data similar to the endpoint but without HTTP overhead
         payload: dict = {
             "timestamp": time.time(),
-            "latency_ms": 0,  # não aplicável em task interna
+            "latency_ms": 0,  # not applicable for an internal task
             "status": "degraded",
             "worker": {"available": False, "error": None, "stats": None},
         }
         
-        # Tenta ping
+        # Attempt ping
         ping_ok = False
         try:
             pong_res = ping.delay()  # type: ignore[attr-defined]
@@ -290,8 +280,8 @@ def update_celery_metrics_task(self):
             ping_ok = pong_val == "pong"
         except Exception as e:
             payload["worker"]["error"] = str(e)[:200]
-        
-        # Tenta stats se ping ok
+
+        # Attempt stats only if ping succeeds
         if ping_ok:
             payload["worker"]["available"] = True
             try:
@@ -301,9 +291,9 @@ def update_celery_metrics_task(self):
                     payload["worker"]["stats"] = stats
                     payload["status"] = "ok"
             except Exception:
-                pass  # ignora erro de stats, mantém available=True
-        
-        # Atualiza métricas
+                pass  # ignore stats errors, keep available=True flag
+
+        # Update metrics
         update_metrics(payload)
         return {"status": "updated", "worker_available": ping_ok}
     

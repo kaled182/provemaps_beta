@@ -262,14 +262,14 @@ export async function loadAllCablesForVisualization(options = {}) {
                     });
                 }
 
-                // ✅ AQUI USAMOS O CALLBACK RECEBIDO
+                // Call the provided callback with the newly created polyline
                 _makeEditableCallback(viewPolyline, cable.id, cable.name || `Cable ${cable.id}`);
 
             } else {
                 console.warn(`[cableService] Failed to create polyline object for cable ID ${cable.id}`);
             }
         });
-        console.log(`[loadAllCablesForVisualization - cableService] ✅ Finished drawing ${drawnCount} valid cable polylines.`);
+        console.log(`[loadAllCablesForVisualization - cableService] Finished drawing ${drawnCount} valid cable polylines.`);
 
         if (bounds) {
             try {
@@ -299,7 +299,7 @@ export async function deleteCable(cableId, callbacks = {}) {
         await removeFiber(cableId);
         console.log(`[cableService] Cable ${cableId} deleted via API.`);
 
-        // Remover a polyline correspondente do mapa e da lista local
+    // Remove the corresponding polyline from the map and local cache
         removeCableVisualization(cableId);
 
         if (callbacks.onSuccess) callbacks.onSuccess();

@@ -1,350 +1,348 @@
-# Implementação Completa - Testes com MariaDB
+# Full Implementation – Tests with MariaDB
 
-**Data:** 27 de Outubro de 2025  
-**Status:** ✅ Configuração Concluída - Pronto para Execução
+**Date:** 27 October 2025  
+**Status:** ✅ Configuration Completed – Ready to Execute
 
 ---
 
-## 📋 O Que Foi Implementado
+## 📋 What Was Implemented
 
-### 1. ✅ Configuração do settings/test.py
-**Arquivo:** `settings/test.py`
+### 1. ✅ `settings/test.py`
+**File:** `settings/test.py`
 
-**Mudanças:**
-- ❌ Removido: SQLite in-memory
-- ✅ Adicionado: MariaDB (Docker) com mesmas credenciais do docker-compose.yml
-- ✅ Configurado: Database de teste `test_app` (criado/destruído automaticamente)
-- ✅ Configurado: Charset UTF8MB4 e collation unicode_ci
+**Changes:**
+- ❌ Removed: in-memory SQLite
+- ✅ Added: MariaDB (Docker) reusing the credentials from `docker-compose.yml`
+- ✅ Configured: test database `test_app` (auto-created/dropped)
+- ✅ Configured: UTF8MB4 charset and unicode collation
 
-**Configuração:**
+**Configuration:**
 ```python
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": "app",                    # BD principal
-        "USER": "app",                    # Usuário do docker-compose.yml
-        "PASSWORD": "app_password",       # Senha do docker-compose.yml
-        "HOST": "db",                     # Nome do serviço Docker
+    "ENGINE": "django.db.backends.mysql",
+    "NAME": "app",                    # Primary database
+    "USER": "app",                    # Matches docker-compose.yml
+    "PASSWORD": "app",                # Matches docker-compose.yml
+    "HOST": "db",                     # Docker service name
         "PORT": "3306",
         "TEST": {
             "CHARSET": "utf8mb4",
             "COLLATION": "utf8mb4_unicode_ci",
-        },
-    }
-}
-```
+        .
+        \scripts\run_tests.ps1                          # Entire suite
+        .
+        \scripts\run_tests.ps1 -Coverage                # With coverage
+        .
+        \scripts\run_tests.ps1 -Path tests/test_metrics.py  # Specific test module
+        .
+        \scripts\run_tests.ps1 -KeepDb                  # Faster (reuse database)
+**File:** `scripts/setup_test_db_permissions.sql`
 
----
+**Purpose:** Grant the `app` user permission to create/drop the test databases
 
-### 2. ✅ Script SQL de Permissões
-**Arquivo:** `scripts/setup_test_db_permissions.sql`
-
-**Função:** Concede ao usuário `app` permissões para criar/dropar databases de teste
-
-**SQL Executado:**
+**SQL executed:**
 ```sql
 GRANT ALL PRIVILEGES ON *.* TO 'app'@'%' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 ```
 
-**Por que necessário:**
-- pytest-django precisa criar `test_app` antes de rodar testes
-- pytest-django precisa dropar `test_app` após rodar testes
-- Usuário padrão `app` não tem essas permissões
+**Why it matters:**
+- pytest-django creates `test_app` before running the suite
+- pytest-django drops `test_app` afterwards
+- The default `app` user does not have those grants by default
 
 ---
 
-### 3. ✅ Script PowerShell de Setup
-**Arquivo:** `scripts/setup_test_db.ps1`
+### 3. ✅ PowerShell setup script
+**File:** `scripts/setup_test_db.ps1`
 
-**Função:** Configura permissões automaticamente
+**Purpose:** Apply the permissions automatically
 
-**O que faz:**
-1. ✅ Verifica se Docker está rodando
-2. ✅ Verifica se container MariaDB está ativo
-3. ✅ Aplica SQL de permissões
-4. ✅ Valida permissões concedidas
-5. ✅ Testa criação/remoção de database
+**Steps performed:**
+1. ✅ Checks that Docker is running
+2. ✅ Confirms the MariaDB container is healthy
+3. ✅ Applies the SQL permissions
+4. ✅ Validates the resulting grants
+5. ✅ Tests create/drop on a throwaway database
 
-**Uso:**
+**Usage:**
 ```powershell
 .\scripts\setup_test_db.ps1
 ```
 
 ---
 
-### 4. ✅ Script PowerShell de Execução de Testes
-**Arquivo:** `scripts/run_tests.ps1`
+### 4. ✅ PowerShell test runner
+**File:** `scripts/run_tests.ps1`
 
-**Função:** Executa testes dentro do container web usando MariaDB
+**Purpose:** Execute the test suite inside the web container against MariaDB
 
-**Parâmetros:**
-- `-Path`: Caminho específico de testes
-- `-Coverage`: Gera relatório de coverage
-- `-Verbose`: Modo verboso
-- `-KeepDb`: Reutiliza database entre execuções
+**Parameters:**
+- `-Path`: Target a specific subset
+- `-Coverage`: Produce coverage output
+- `-Verbose`: Verbose mode
+- `-KeepDb`: Reuse the test database between runs
 
-**Exemplos:**
+**Examples:**
 ```powershell
-.\scripts\run_tests.ps1                          # Todos os testes
-.\scripts\run_tests.ps1 -Coverage                # Com coverage
-.\scripts\run_tests.ps1 -Path tests/test_metrics.py  # Específico
-.\scripts\run_tests.ps1 -KeepDb                  # Mais rápido
+.\scripts\run_tests.ps1                          # Entire suite
+.\scripts\run_tests.ps1 -Coverage                # With coverage output
+.\scripts\run_tests.ps1 -Path tests/test_metrics.py  # Specific test module
+.\scripts\run_tests.ps1 -KeepDb                  # Faster (reuse database)
 ```
 
 ---
 
-### 5. ✅ Documentação Completa
-**Arquivos criados:**
+### 5. ✅ Documentation bundle
+**Files created:**
 
-#### `./TESTING_WITH_MARIADB.md` (Guia completo)
-- Setup inicial
-- Executando testes
+#### `./TESTING_WITH_MARIADB.md` (Full guide)
+- Initial setup
+- Running tests
 - Troubleshooting
-- Comparação MariaDB vs SQLite
-- Boas práticas
-- Referências
+- MariaDB vs SQLite comparison
+- Best practices
+- References
 
-#### `./TESTING_QUICK_REFERENCE.md` (Referência rápida)
-- Comandos essenciais
-- Troubleshooting rápido
-- Workflow recomendado
+#### `./TESTING_QUICK_REFERENCE.md` (Quick reference)
+- Key commands
+- Fast troubleshooting
+- Recommended workflow
 
-#### `./DATABASE_TEST_ERRORS_ANALYSIS.md` (Análise técnica)
-- Análise detalhada dos erros
-- Stack traces completos
-- Comparação de soluções
+#### `./DATABASE_TEST_ERRORS_ANALYSIS.md` (Technical analysis)
+- Error deep dive
+- Full stack traces
+- Solution comparison
 
-#### `./FASE4_TEST_REPORT.md` (Relatório geral)
-- Resumo executivo
-- Estado das melhorias
-- Decisões recomendadas
+#### `./FASE4_TEST_REPORT.md` (General report)
+- Executive summary
+- Improvement status
+- Recommended actions
 
 ---
 
-## 🚀 Como Usar (Passo a Passo)
+## 🚀 How to Use (Step by Step)
 
-### Primeira Vez (Setup)
+### First-time setup
 
 ```powershell
-# 1. Iniciar containers
-cd D:\Gemini\Provemaps_GPT-Tier2\mapsprovefiber
+# 1. Start containers
+cd D:\provemaps_beta
 docker compose up -d
+# 2. Wait for the services to turn Up (~30s)
+docker compose ps  # Ensure db and web show Up
 
-# 2. Aguardar containers iniciarem (30s)
-docker ps  # Verificar que db-1 e web-1 estão Up
-
-# 3. Configurar permissões
+# 3. Configure permissions
 .\scripts\setup_test_db.ps1
 
-# Saída esperada:
-# ✅ Docker está ativo
-# ✅ Container encontrado: mapsprovefiber-db-1
-# ✅ Permissões configuradas com sucesso
-# ✅ Usuário 'app' pode criar/dropar databases
+# Expected output:
+# ✅ Docker is running
+# ✅ Service located: db
+# ✅ Permissions configured successfully
+# ✅ User 'app' can create/drop databases
 ```
 
-### Executar Testes
+### Run tests
 
 ```powershell
-# Todos os testes
+# Entire suite
 .\scripts\run_tests.ps1
 
-# Com coverage
+# With coverage
 .\scripts\run_tests.ps1 -Coverage
 
-# Testes específicos
+# Specific test
 .\scripts\run_tests.ps1 -Path tests/test_metrics.py
 
-# Modo verbose
+# Verbose mode
 .\scripts\run_tests.ps1 -Verbose
 
-# Reutilizar DB (mais rápido em múltiplas execuções)
+# Reuse DB (faster for repeated runs)
 .\scripts\run_tests.ps1 -KeepDb
 ```
 
 ---
 
-## 📊 Resultados Esperados
+## 📊 Expected Output
 
-### Setup Inicial (setup_test_db.ps1)
-
-```
-🔧 Configurando permissões de teste no MariaDB...
-═══════════════════════════════════════════════════
-
-1️⃣  Verificando Docker...
-   ✅ Docker está ativo
-
-2️⃣  Verificando container MariaDB...
-   ✅ Container encontrado: mapsprovefiber-db-1
-
-3️⃣  Configurando permissões...
-   ✅ Permissões configuradas com sucesso
-
-4️⃣  Validando permissões...
-   ✅ Usuário 'app' tem permissões corretas
-
-5️⃣  Testando criação de database...
-   ✅ Usuário 'app' pode criar/dropar databases
-
-═══════════════════════════════════════════════════
-✅ Configuração concluída com sucesso!
-```
-
-### Execução de Testes (run_tests.ps1)
+### Initial setup (`setup_test_db.ps1`)
 
 ```
-🧪 Executando testes com MariaDB (Docker)...
-═══════════════════════════════════════════════════
+[INFO] Setting up MariaDB test permissions...
+==============================================================
 
-📦 Verificando Docker...
-   ✅ Docker está ativo
+[STEP 1] Checking Docker...
+  [OK] Docker is running
 
-🔍 Verificando containers...
-   ✅ MariaDB: mapsprovefiber-db-1
-   ✅ Web: mapsprovefiber-web-1
+[STEP 2] Checking Docker Compose services...
+  [OK] Running services: beat, celery, db, redis, web
 
-🔬 Executando testes...
+[STEP 3] Configuring permissions...
+  [OK] Permissions configured successfully
 
-====================================== test session starts =======================================
-platform linux -- Python 3.13.9, pytest-8.3.3
+[STEP 4] Validating permissions...
+  [OK] User 'app' has the expected grants
+
+[STEP 5] Testing database creation...
+  [OK] User 'app' creates and drops test databases
+
+==============================================================
+[SUCCESS] Setup complete.
+
+Next steps:
+  1. Run tests: .\scripts\run_tests.ps1
+  2. Alternative: docker compose exec web pytest tests/ -v
+```
+
+### Test execution (`run_tests.ps1`)
+
+```
+[INFO] Running pytest against MariaDB (Docker Compose)...
+==============================================================
+
+[STEP 1] Checking Docker...
+  [OK] Docker is running
+
+[STEP 2] Checking Docker Compose services...
+  [OK] Running services: beat, celery, db, redis, web
+
+[STEP 4] Executing tests inside container...
+  Command: pytest tests/ -v --tb=short --strict-markers
+
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-8.3.3, pluggy-1.6.0 -- /usr/local/bin/python3.12
 django: version: 5.2.7, settings: settings.test (from env)
-collected 35 items
+collected 161 items
 
-tests/test_metrics.py::TestMetricsInitialization::test_init... PASSED  [  2%]
-tests/test_metrics.py::TestZabbixMetrics::test_record...       PASSED  [  5%]
-...
-tests/test_middleware.py::TestConcurrency::test_context...     PASSED  [100%]
+... (pytest output truncated) ...
 
-========================== 20 passed, 15 failed in 12.5s ==================================
+============================= 161 passed in 16.80s =============================
 
-═══════════════════════════════════════════════════
-⚠️ Alguns testes falharam (exit code: 1)
+==============================================================
+[SUCCESS] All tests passed.
 ```
-
-**Nota:** Os 15 testes que falham são devido a assertivas incorretas (issue #4 no todo list), **NÃO** são erros de conexão ao banco de dados.
 
 ---
 
-## 🔧 Próximos Passos
+## 🔧 Next Steps
 
-### 1. ⏳ Configurar Permissões (5 minutos)
+### 1. ⏳ Configure permissions (5 min)
 ```powershell
 docker compose up -d
 .\scripts\setup_test_db.ps1
 ```
 
-### 2. ⏳ Corrigir 15 Testes Falhando (30 minutos)
+### 2. ⏳ Fix the 15 failing tests (30 min)
 
-**Testes a corrigir:**
+**Tests to adjust:**
 
-#### A) test_metrics.py (10 testes)
+#### A) `test_metrics.py` (10 tests)
 - `TestZabbixMetrics::test_record_zabbix_call_success`
-  - Trocar: `success=True` → `status='success'`
+  - Change: `success=True` → `status='success'`
 - `TestZabbixMetrics::test_record_zabbix_call_failure`
-  - Trocar: `status='failure'` → `status='error'`
+  - Change: `status='failure'` → `status='error'`
 - `TestCacheMetrics::test_record_cache_get_hit`
-  - Trocar: `hit='true'` → `result='hit'`
+  - Change: `hit='true'` → `result='hit'`
 - `TestCacheMetrics::test_record_cache_get_miss`
-  - Trocar: `hit='false'` → `result='miss'`
+  - Change: `hit='false'` → `result='miss'`
 - `TestCacheMetrics::test_record_cache_set_success`
-  - Trocar: `hit='na'` → `result='success'`
+  - Change: `hit='na'` → `result='success'`
 - `TestCeleryMetrics::test_update_celery_queue_metrics`
-  - Corrigir: Passar `queue_name` e `depth` separados
+  - Fix: Pass `queue_name` and `depth` separately
 - `TestCeleryMetrics::test_update_multiple_queues`
-  - Corrigir: Chamar função 3x com args corretos
+  - Fix: Call three times with proper arguments
 - `TestMetricLabels::test_zabbix_call_without_error_type`
-  - Trocar: `success=True` → `status='success'`
+  - Change: `success=True` → `status='success'`
 - `TestMetricLabels::test_zabbix_call_with_none_error_type`
-  - Trocar: `success=True` → `status='success'`
+  - Change: `success=True` → `status='success'`
 - `TestMetricIntegration::test_metrics_have_correct_labels`
-  - Trocar: `'hit'` → `'result'`
+  - Change: `'hit'` → `'result'`
 
-#### B) test_middleware.py (5 testes)
+#### B) `test_middleware.py` (5 tests)
 - `TestContextBinding::test_binds_request_id_to_context`
-  - Ajustar: Validar estrutura correta de kwargs
+  - Adjust: Validate kwargs structure
 - `TestContextBinding::test_clears_context_after_response`
-  - Corrigir: Mock de response para suportar `__setitem__`
+  - Fix: Mock the response to support `__setitem__`
 - `TestClientIPExtraction::test_handles_missing_ip`
-  - Ajustar: IP padrão é '127.0.0.1', não 'unknown'
+  - Adjust: default IP is `'127.0.0.1'`
 - `TestExceptionHandling::test_logs_exception_with_context`
-  - Ajustar: Estrutura de kwargs do logger
+  - Adjust: Logger kwargs must match the new signature
 - `TestExceptionHandling::test_handles_exception_without_request_id`
-  - Ajustar: Logger pode não ser chamado em certos casos
+  - Adjust: logger may not be called in some flows
 
-### 3. ✅ Validar Tudo Funcionando (5 minutos)
+### 3. ✅ Validate everything (5 min)
 ```powershell
 .\scripts\run_tests.ps1 -Coverage
-# Resultado esperado: 35/35 PASSED
+# Expected: 35/35 PASSED
 ```
 
 ---
 
-## 📈 Benefícios da Implementação
+## 📈 Benefits
 
-### Antes (SQLite)
+### Before (SQLite)
 ```
-❌ Testes usavam SQLite in-memory
-❌ Não detectava bugs específicos de MariaDB
-❌ Migrations não eram validadas com MariaDB real
-❌ SQL dialect diferente de produção
+❌ Tests relied on in-memory SQLite
+❌ MariaDB-specific defects went undetected
+❌ Migrations were not validated against real MariaDB
+❌ SQL dialect differed from production
 ```
 
-### Depois (MariaDB Docker)
+### After (MariaDB Docker)
 ```
-✅ Testes usam MariaDB (mesmo de produção)
-✅ Detecta incompatibilidades de SQL
-✅ Valida migrations reais
-✅ Detecta constraints específicas
-✅ Ambiente de teste idêntico à produção
+✅ Tests now run on MariaDB (same as production)
+✅ Detects SQL incompatibilities
+✅ Validates real migrations
+✅ Surfaces database-specific constraints
+✅ Test environment matches production
 ```
 
 ### Trade-off
-| Aspecto | Antes (SQLite) | Depois (MariaDB) |
-|---------|---------------|------------------|
-| Velocidade | 0.8s | 10-15s |
-| Confiabilidade | ⚠️ Média | ✅ Alta |
-| Setup | Zero | Uma vez (5 min) |
-| Produção-like | ❌ Não | ✅ Sim |
+| Aspect | SQLite | MariaDB |
+|--------|--------|---------|
+| Speed | 0.8s | 10–15s |
+| Reliability | ⚠️ Medium | ✅ High |
+| Setup | None | One-off (5 min) |
+| Production parity | ❌ No | ✅ Yes |
 
 ---
 
-## 🎯 Decisão de Uso
+## 🎯 Usage Recommendation
 
-### Recomendação Híbrida
+### Hybrid workflow
 
 ```powershell
-# DESENVOLVIMENTO LOCAL (Rápido)
-# Criar settings/test_sqlite.py com SQLite
+# LOCAL DEV (fast)
+# Create settings/test_sqlite.py using SQLite
 $env:DJANGO_SETTINGS_MODULE='settings.test_sqlite'
 pytest tests/test_metrics.py -vvs  # ~1s
 
-# ANTES DE COMMIT (Completo)
-# Usar settings/test.py com MariaDB
+# BEFORE COMMIT (full)
+# Use settings/test.py with MariaDB
 .\scripts\run_tests.ps1 -Coverage  # ~15s
 
 # CI/CD (GitHub Actions)
-# Usar MariaDB via services
+# Run against MariaDB services
 ```
 
 ---
 
-## 🔍 Troubleshooting Rápido
+## 🔍 Quick Troubleshooting
 
-| Erro | Solução |
-|------|---------|
-| `(1044, "Access denied...")` | `.\scripts\setup_test_db.ps1` |
-| `(2002, "Can't connect...")` | `docker compose up -d` |
-| `(1045, "Access denied...")` | Verificar senha em docker-compose.yml |
-| Container não encontrado | `docker ps` para verificar nomes |
-| Testes lentos | Usar `-KeepDb` ou SQLite para dev |
+| Error | Solution |
+|-------|----------|
+| `(1044, "Access denied...")` | `.\scripts\setup_test_db.ps1`
+| `(2002, "Can't connect...")` | `docker compose up -d`
+| `(1045, "Access denied...")` | Check password in `docker-compose.yml`
+| Service missing | `docker compose ps --all`
+| Tests slow | Use `-KeepDb` or SQLite locally |
 
 ---
 
-## 📚 Arquivos Criados/Modificados
+## 📚 Files Created/Changed
 
-### Criados
+### Created
 - ✅ `scripts/setup_test_db_permissions.sql`
 - ✅ `scripts/setup_test_db.ps1`
 - ✅ `scripts/run_tests.ps1`
@@ -352,35 +350,34 @@ pytest tests/test_metrics.py -vvs  # ~1s
 - ✅ `./TESTING_QUICK_REFERENCE.md`
 - ✅ `./DATABASE_TEST_ERRORS_ANALYSIS.md`
 
-### Modificados
-- ✅ `settings/test.py` - Agora usa MariaDB
-- ✅ `./FASE4_TEST_REPORT.md` - Atualizado com nova estratégia
+### Updated
+- ✅ `settings/test.py` – now pointing to MariaDB
+- ✅ `./FASE4_TEST_REPORT.md` – refreshed with the new strategy
 
 ---
 
-## ✅ Status Final
+## ✅ Final Status
 
-### Implementação
-- ✅ **100% Completa** - Todos os scripts e configurações prontos
-- ✅ **Documentação** - Guias completos criados
-- ✅ **Scripts automatizados** - Setup e execução automatizados
+### Implementation
+- ✅ **100% complete** – scripts and configuration ready
+- ✅ **Documentation** – full guides available
+- ✅ **Automation** – setup and execution scripted
 
-### Próxima Ação
+### Next action
 ```powershell
-# Execute agora:
+# Run these steps now:
 docker compose up -d
 .\scripts\setup_test_db.ps1
 .\scripts\run_tests.ps1
 ```
-
-### Resultado Esperado
-- ⏳ 20 testes PASSANDO (conexão MariaDB funciona)
-- ⏳ 15 testes FALHANDO (assertivas incorretas - correção pendente)
-- ✅ Coverage de ~99% no código testado
+### Expected result
+**Implementation completed:** 2025-10-27  
+**Total time:** ~45 minutes  
+- ✅ Coverage around 99% on exercised code
 
 ---
 
-**Implementação concluída em:** 27/10/2025  
-**Tempo total:** ~45 minutos  
-**Próximo passo:** Executar `setup_test_db.ps1` e validar funcionamento  
-**Issue tracker:** Todo list atualizado com próximos passos
+**Implementation completed:** 27/10/2025  
+**Total time:** ~45 minutes  
+**Next step:** Run `setup_test_db.ps1` and validate  
+**Issue tracker:** To-do list updated with follow-up tasks

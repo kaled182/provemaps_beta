@@ -1,212 +1,207 @@
-# 🚀 Guia Rápido - Desenvolvimento Local
+# Local Development Quickstart
 
-## ✅ Configuração Completa
-
-### Credenciais de Acesso
-- **URL:** http://localhost:8000
+## Access Credentials
+- **App:** http://localhost:8000
 - **Admin:** http://localhost:8000/admin/
-- **Usuário:** `admin`
-- **Senha:** `admin123`
+- **User:** `admin`
+- **Password:** `admin123`
 
-> 💡 **Nota:** No Docker, o superuser é criado automaticamente no primeiro deploy.  
-> Para desenvolvimento local, execute: `python manage.py ensure_superuser`
+Note: When running in Docker the superuser is created automatically during the first deploy. For a local environment, run `python manage.py ensure_superuser` after the initial migration.
 
-### Banco de Dados
-- **Tipo:** SQLite (db.sqlite3)
-- **Sem necessidade de MySQL/MariaDB**
-
-### Cache/Redis
-- **Não é necessário** - health checks configurados para ignorar falhas
+## Default Services
+- **Database:** SQLite (`db.sqlite3`) - no MySQL or MariaDB required
+- **Cache:** Redis is optional; health checks ignore cache outages in development
 
 ---
 
-## 🔧 Comandos Úteis
+## Useful Commands
 
-### Servidor
+### Run the server
 ```powershell
-# Iniciar servidor
+# Start development server
 python manage.py runserver
 
-# Iniciar em porta específica
+# Start on a specific port
 python manage.py runserver 8080
 
-# Acessível na rede local
+# Expose to the local network
 python manage.py runserver 0.0.0.0:8000
 ```
 
-### Banco de Dados
+### Database tools
 ```powershell
-# Criar migrações
+# Create migrations
 python manage.py makemigrations
 
-# Aplicar migrações
+# Apply migrations
 python manage.py migrate
 
-# Criar superusuário padrão (admin/admin123)
+# Ensure default admin user (admin/admin123)
 python manage.py ensure_superuser
 
-# Criar superusuário customizado (interativo)
+# Interactive superuser creation
 python manage.py createsuperuser
 
-# Shell Django
+# Open Django shell
 python manage.py shell
 ```
 
-### Assets Estáticos
+### Static assets
 ```powershell
-# Coletar arquivos estáticos
+# Collect static files
 python manage.py collectstatic --noinput
 ```
 
-### Testes
+### Tests
 ```powershell
-# Rodar todos os testes
+# Run entire suite
 python -m pytest tests/ -v
 
-# Rodar testes específicos
+# Run a specific test file
 python -m pytest tests/test_smoke.py -v
 
-# Com cobertura
+# With coverage report
 python -m pytest --cov --cov-report=html
 ```
 
 ---
 
-## 🌐 Endpoints Importantes
+## Key Endpoints
 
-### Aplicação
-- **Dashboard:** http://localhost:8000/maps_view/dashboard/
-- **Setup:** http://localhost:8000/setup_app/
-- **Route Builder:** http://localhost:8000/routes_builder/
-- **Admin:** http://localhost:8000/admin/
+### Application
+- Dashboard: http://localhost:8000/maps_view/dashboard/
+- Setup: http://localhost:8000/setup_app/
+- Route Builder: http://localhost:8000/routes_builder/
+- Admin: http://localhost:8000/admin/
 
-### Health & Metrics
-- **Health (completo):** http://localhost:8000/healthz
-- **Readiness:** http://localhost:8000/ready
-- **Liveness:** http://localhost:8000/live
-- **Métricas Prometheus:** http://localhost:8000/metrics/metrics
+### Health and metrics
+- Full health: http://localhost:8000/healthz
+- Readiness: http://localhost:8000/ready
+- Liveness: http://localhost:8000/live
+- Prometheus metrics: http://localhost:8000/metrics/metrics
 
-### Documentação
-- **Docs Index:** http://localhost:8000/setup_app/docs/
-- **API Docs:** http://localhost:8000/setup_app/docs/reference-root/API_DOCUMENTATION.md/
+### Documentation
+- Docs index: http://localhost:8000/setup_app/docs/
+- API docs: http://localhost:8000/setup_app/docs/reference-root/API_DOCUMENTATION.md/
 
 ---
 
-## 🔍 Verificações Rápidas
+## Quick Checks
 
-### Health Check (modo não-estrito)
+### Health check (non strict)
 ```powershell
 # PowerShell
 Invoke-WebRequest http://localhost:8000/healthz | Select-Object StatusCode, Content
 
-# Ou via navegador
-# http://localhost:8000/healthz
+# Or use a browser
+
 ```
 
-### Métricas
+### Metrics
 ```powershell
 Invoke-WebRequest http://localhost:8000/metrics/metrics
 ```
 
 ---
 
-## ⚙️ Configuração Atual (.env)
+## Current .env Defaults
 
-### Características
-- ✅ **DEBUG:** True (erros detalhados)
-- ✅ **SQLite:** Banco local sem configuração
-- ✅ **Health checks relaxados:** Ignora falhas de cache/Redis
-- ✅ **Cache-safe:** Código tolera Redis offline gracefully
-- ✅ **Sem dependências externas:** Roda standalone
+### Characteristics
+- DEBUG set to True for verbose errors
+- SQLite configured by default
+- Relaxed health checks ignore Redis outages
+- Cache-safe: application tolerates Redis being offline
+- No external dependencies required
 
-### Comportamento do Cache (Redis Offline)
-Quando Redis não está disponível (modo desenvolvimento):
-- ✅ **Degradação graceful:** Aplicação continua funcionando sem cache
-- ✅ **Logs debug:** Mensagens de cache offline em nível DEBUG
-- ✅ **Sem erros:** Não gera HTTP 500, apenas opera sem cache
-- ⚠️ **Performance reduzida:** Sem cache, consultas diretas ao Zabbix (mais lento)
+### Redis offline behavior
+When Redis is unavailable in development:
+- Application falls back gracefully and keeps running
+- Debug logs mention the offline cache state
+- No HTTP 500 responses are raised because of cache errors
+- Overall performance is slower because calls hit Zabbix directly
 
-### Modificar Configuração
-Edite `.env` para ajustar:
+### Adjusting settings
+Update `.env` if you need different behavior:
 ```bash
-DEBUG=True                          # Modo desenvolvimento
-HEALTHCHECK_STRICT=false           # Modo relaxado
-HEALTHCHECK_IGNORE_CACHE=true      # Ignora Redis offline
-ENABLE_DIAGNOSTIC_ENDPOINTS=false  # Desabilita ping/telnet
+DEBUG=True
+HEALTHCHECK_STRICT=false
+HEALTHCHECK_IGNORE_CACHE=true
+ENABLE_DIAGNOSTIC_ENDPOINTS=false
 ```
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
-### Porta já em uso
+### Port already in use
 ```powershell
-# Usar outra porta
+# Pick a different port
 python manage.py runserver 8080
 ```
 
-### Resetar banco de dados
+### Reset the database
 ```powershell
-# Apagar banco SQLite
+# Delete the SQLite file
 Remove-Item db.sqlite3
 
-# Recriar
+# Recreate schema and user
 python manage.py migrate
 python manage.py createsuperuser
 ```
 
-### Limpar cache de templates
+### Clear template cache
 ```powershell
-# Reiniciar servidor (CTRL+C e rodar novamente)
+# Restart the server (CTRL+C, then run again)
 python manage.py runserver
 ```
 
-### Redis Offline (Normal em Dev)
-**Sintoma:** Mensagens `[DEBUG] Cache offline (Redis indisponível)`
+### Redis offline (expected in development)
+Symptom: log message `[DEBUG] Cache offline (Redis unavailable)`
 
-**Solução:** Isso é **normal** em desenvolvimento! A aplicação funciona sem Redis.
-- ✅ Endpoints retornam HTTP 200
-- ⚠️ Performance reduzida (sem cache)
-- ℹ️ Para melhor performance, instale Redis (opcional):
+Resolution: this is expected while developing. The app keeps working:
+- Endpoints still return HTTP 200
+- Performance is reduced without cache
+- Optional: install Redis for faster responses
   ```powershell
-  # Windows: baixar de https://github.com/microsoftarchive/redis/releases
-  # Ou usar Docker
-  docker run -d -p 6379:6379 redis:alpine
+  # Windows installer: https://github.com/microsoftarchive/redis/releases
+  # Or, from the project directory, start the default Docker service
+  docker compose up -d redis
   ```
 
-Ver detalhes completos em: [`doc/reference/REDIS_GRACEFUL_DEGRADATION.md`](../reference/REDIS_GRACEFUL_DEGRADATION.md)
+See more details in `doc/reference/REDIS_GRACEFUL_DEGRADATION.md`.
 
 ---
 
-## 📚 Próximos Passos
+## Next Steps
 
-1. **Explorar Dashboard:** http://localhost:8000/maps_view/dashboard/
-2. **Configurar Zabbix (opcional):** Edite `.env` com credenciais
-3. **Testar Health Endpoints:** Veja status do sistema
-4. **Acessar Documentação:** http://localhost:8000/setup_app/docs/
-
----
-
-## 🎯 Features Disponíveis (sem configuração adicional)
-
-- ✅ Interface administrativa Django
-- ✅ Dashboard de visualização
-- ✅ Health checks operacionais
-- ✅ Métricas Prometheus
-- ✅ Sistema de documentação
-- ✅ Route builder (sem dados de rota por enquanto)
-
-**Para features completas (Zabbix, Maps):** Configure variáveis no `.env`
+1. Explore the dashboard: http://localhost:8000/maps_view/dashboard/
+2. Configure Zabbix credentials in `.env` (optional)
+3. Exercise the health endpoints
+4. Browse the documentation site: http://localhost:8000/setup_app/docs/
 
 ---
 
-## 📝 Notas
+## Available Features Without Extra Configuration
 
-- **Produção:** Use `.env.prod.backup` como referência
-- **Testes:** Suite passa com 46/52 testes (88.5%)
-- **Performance:** Modo dev tem observabilidade reduzida
-- **Segurança:** `SECRET_KEY` é placeholder - mude em produção
+- Django admin interface
+- Visualization dashboard
+- Health check endpoints
+- Prometheus metrics
+- Documentation site
+- Route builder (ships without sample route data)
+
+For complete features such as Zabbix and Google Maps layers, provide the required environment variables in `.env`.
 
 ---
 
-**Desenvolvido com Django 5.2.7 + Python 3.13**
+## Notes
+
+- For production, use `.env.prod.backup` as the baseline
+- Current automated tests: 46 of 52 passing (88.5 percent)
+- Development mode runs with limited observability tooling
+- The default `SECRET_KEY` value is a placeholder; replace it for production deployments
+
+---
+
+Built with Django 5.2.7 and Python 3.13
+- **Performance:** Development mode exposes limited observability

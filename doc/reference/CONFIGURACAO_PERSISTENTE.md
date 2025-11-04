@@ -1,210 +1,187 @@
-# Configuração Persistente - Guia de Uso
+# Persistent Configuration Guide
 
-## 📋 Visão Geral
+## Overview
 
-O sistema agora salva as configurações do Zabbix e Google Maps **diretamente no banco de dados**, garantindo que elas persistam após reiniciar os containers Docker.
+The application now stores the Zabbix and Google Maps configuration directly in the database, so settings persist after Docker containers restart.
 
-## ✅ Como Funciona
+## How It Works
 
-### 1. **Prioridade de Configurações**
+### Configuration Resolution Order
 
-O sistema busca configurações na seguinte ordem:
+At runtime the system resolves values in the following order:
 
-1. **Variáveis de ambiente** (docker-compose.yml ou .env)
-2. **Banco de dados** (tabela `setup_app_firsttimesetup`)
-3. **Valores default** (vazios)
+1. Environment variables (docker-compose.yml or .env)
+2. Database table `setup_app_firsttimesetup`
+3. Default empty values
 
-### 2. **Primeiro Acesso**
+### First-Time Setup Flow
 
-Na primeira vez que você acessar o sistema:
+1. Open http://localhost:8000/setup_app/config/
+2. Fill in the form values:
+  - Zabbix API URL, for example: `http://your-zabbix-host:8080/api_jsonrpc.php`
+  - Zabbix user or Zabbix API key
+  - Zabbix password if you authenticate with user and password
+  - Google Maps API key
+3. Click "Save"
+4. The data is written to the database immediately
+5. No restart is required; changes take effect instantly
 
-1. Acesse: http://localhost:8000/setup_app/config/
-2. Preencha o formulário com suas configurações:
-   - **Zabbix API URL**: Ex: `http://seu-servidor-zabbix:8080/api_jsonrpc.php`
-   - **Zabbix User** ou **Zabbix API Key**
-   - **Zabbix Password** (se usar usuário/senha)
-   - **Google Maps API Key**
-3. Clique em **"Save"**
-4. As configurações são salvas no banco de dados **imediatamente**
-5. **Não precisa reiniciar** - as mudanças são aplicadas instantaneamente
+### After Restarting Containers
 
-### 3. **Após Reiniciar**
+When you run `docker compose restart`:
 
-Quando você reiniciar os containers (`docker-compose restart`):
+- The configuration from the database is loaded automatically
+- The map and Zabbix integrations come up with the stored values
+- You do not need to re-enter data through the form
 
-- ✅ As configurações do banco de dados são carregadas automaticamente
-- ✅ O mapa e a API do Zabbix funcionam com os dados salvos
-- ✅ Não precisa preencher novamente
+## Code Changes
+```powershell
+docker compose exec web python manage.py shell -c "from setup_app.models import FirstTimeSetup; config = FirstTimeSetup.objects.filter(configured=True).first(); print(f'Zabbix URL: {config.zabbix_url}' if config else 'No configuration')"
+```
+1. `setup_app/services/config_loader.py`
+  - Loads configuration directly from the database
+  - Applies a five minute cache window for performance
+  - Uses raw SQL to avoid circular imports
 
-## 🔧 Arquivos Modificados
+2. `setup_app/runtime_settings.py`
+```powershell
+docker compose exec web python manage.py shell -c "from setup_app.services import runtime_settings; config = runtime_settings.get_runtime_config(); print(f'Zabbix: {config.zabbix_api_url}')"
+```
+### Updated Files
 
-### Novos Arquivos
+1. `setup_app/views.py` (function `manage_environment()`)
+  - Persists values to both the `.env` file for local development and the `FirstTimeSetup` table for Docker or production
+  - Clears the cache after saving
+  - Updates the success message to "Configuration saved successfully. Changes are now active!"
+```powershell
+docker compose exec web python manage.py shell -c "from setup_app.services import runtime_settings; runtime_settings.reload_config(); print('Cache cleared')"
+```
+  - Fixes an "unbound variable" error during startup
 
-1. **`setup_app/services/config_loader.py`**
-   - Carrega configurações do banco de dados
-   - Cache de 5 minutos para performance
-   - SQL direto para evitar import circular
+## Database Structure
 
-2. **`setup_app/runtime_settings.py`** (já existia, documentado)
-   - Wrapper para acessar configurações com fallback
-   - Integrado com Django settings
-
-### Arquivos Alterados
-
-1. **`setup_app/views.py`** - função `manage_environment()`
-   - Agora salva em 2 lugares:
-     - Arquivo `.env` (para desenvolvimento local)
-     - Banco de dados `FirstTimeSetup` (para Docker/produção)
-   - Limpa cache após salvar
-   - Mensagem de sucesso atualizada: "Configuration saved successfully. Changes are now active!"
-
-2. **`docker-entrypoint.sh`**
-   - Adicionado default para `INIT_ENSURE_SUPERUSER=${INIT_ENSURE_SUPERUSER:-false}`
-   - Corrigido erro de "unbound variable"
-
-## 📊 Estrutura do Banco
-
-### Tabela: `setup_app_firsttimesetup`
+Table `setup_app_firsttimesetup`:
 
 ```sql
 CREATE TABLE setup_app_firsttimesetup (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    company_name VARCHAR(255),
-    logo VARCHAR(100) NULL,
-    zabbix_url VARCHAR(255),
-    auth_type VARCHAR(10),  -- 'token' ou 'login'
-    zabbix_api_key VARCHAR(512) NULL,  -- criptografado
-    zabbix_user VARCHAR(512) NULL,     -- criptografado
-    zabbix_password VARCHAR(512) NULL, -- criptografado
-    maps_api_key VARCHAR(512) NULL,    -- criptografado
-    unique_licence VARCHAR(512) NULL,
-    configured BOOLEAN DEFAULT FALSE,
-    configured_at DATETIME
+   id INT AUTO_INCREMENT PRIMARY KEY,
+   company_name VARCHAR(255),
+   logo VARCHAR(100) NULL,
+   zabbix_url VARCHAR(255),
+   auth_type VARCHAR(10),  -- 'token' or 'login'
+   zabbix_api_key VARCHAR(512) NULL,
+   zabbix_user VARCHAR(512) NULL,
+   zabbix_password VARCHAR(512) NULL,
+   maps_api_key VARCHAR(512) NULL,
+   unique_licence VARCHAR(512) NULL,
+   configured BOOLEAN DEFAULT FALSE,
+   configured_at DATETIME
 );
+- Credentials and API keys use the Fernet-based `EncryptedCharField`
+- Configuration results are cached for five minutes to reduce database reads
+- Environment variable fallback remains available and safe
+
+## Test and Verification Commands
+
+Check whether a configuration entry exists:
+
+```powershell
+docker compose exec web python manage.py shell -c "from setup_app.models import FirstTimeSetup; config = FirstTimeSetup.objects.filter(configured=True).first(); print(f'Zabbix URL: {config.zabbix_url}' if config else 'No configuration')"
 ```
 
-## 🔐 Segurança
+Inspect the runtime configuration object:
 
-- ✅ Senhas e chaves API são criptografadas com Fernet (campo `EncryptedCharField`)
-- ✅ Cache de configuração por 5 minutos (reduz queries ao banco)
-- ✅ Fallback seguro para variáveis de ambiente
-
-## 🧪 Testes
-
-### Verificar se há configurações salvas:
-
-```bash
-docker exec mapsprovefiber-web-1 python manage.py shell -c \
-  "from setup_app.models import FirstTimeSetup; \
-   config = FirstTimeSetup.objects.filter(configured=True).first(); \
-   print(f'Zabbix URL: {config.zabbix_url}' if config else 'Nenhuma configuração')"
+```powershell
+docker compose exec web python manage.py shell -c "from setup_app.services import runtime_settings; config = runtime_settings.get_runtime_config(); print(f'Zabbix: {config.zabbix_api_url}')"
 ```
 
-### Verificar configuração em runtime:
+Clear the runtime cache manually:
 
-```bash
-docker exec mapsprovefiber-web-1 python manage.py shell -c \
-  "from setup_app.services import runtime_settings; \
-   config = runtime_settings.get_runtime_config(); \
-   print(f'Zabbix: {config.zabbix_api_url}')"
+```powershell
+docker compose exec web python manage.py shell -c "from setup_app.services import runtime_settings; runtime_settings.reload_config(); print('Cache cleared')"
 ```
 
-### Limpar cache manualmente:
+## Daily Usage
 
-```bash
-docker exec mapsprovefiber-web-1 python manage.py shell -c \
-  "from setup_app.services import runtime_settings; \
-   runtime_settings.reload_config(); \
-   print('Cache limpo!')"
+### Update Settings
+
+1. Navigate to http://localhost:8000/setup_app/config/
+2. Adjust the values you need
+3. Click "Save"
+4. Changes apply immediately without restarting services
+
+### Production Deployment
+
+Because the configuration lives in the database:
+
+1. Take a backup of the MariaDB database
+2. The configuration is preserved with the backup
+3. Restore the database on the new environment
+4. The setup form loads the stored values automatically
+
+## Additional Notes
+
+- The cache layer is cleared as part of the save workflow
+- Updating the Zabbix credentials invalidates the previous token
+- Diagnostic flags are refreshed when settings change
+- The feature works in Docker and local development environments
+
+## Troubleshooting
+
+### Configuration Missing After Restart
+
+```powershell
+# 1. Check whether rows exist in the table
+docker compose exec web python manage.py shell -c "from setup_app.models import FirstTimeSetup; print(FirstTimeSetup.objects.all().count())"
+
+# 2. If the count is zero, re-enter data at /setup_app/config/
 ```
 
-## 🚀 Uso Diário
+### Cache Not Clearing
 
-### Alterar Configurações
-
-1. Acesse http://localhost:8000/setup_app/config/
-2. Faça as mudanças desejadas
-3. Clique em "Save"
-4. **Pronto!** Não precisa reiniciar
-
-### Deploy em Produção
-
-As configurações são **persistentes no banco de dados**. Ao fazer deploy:
-
-1. Faça backup do banco de dados MariaDB
-2. As configurações vão junto com o backup
-3. Restaure o banco na nova instância
-4. As configurações estarão disponíveis automaticamente
-
-## 📝 Notas
-
-- O cache é limpo automaticamente após salvar configurações
-- O token do Zabbix é invalidado ao alterar credenciais
-- A flag de diagnósticos também é recarregada
-- Sistema compatível com Docker e desenvolvimento local
-
-## ⚠️ Troubleshooting
-
-### Configurações não aparecem após reiniciar
-
-```bash
-# 1. Verificar se foram salvas no banco
-docker exec mapsprovefiber-web-1 python manage.py shell -c \
-  "from setup_app.models import FirstTimeSetup; print(FirstTimeSetup.objects.all().count())"
-
-# 2. Se retornar 0, preencha novamente em /setup_app/config/
+```powershell
+# Clear it manually
+docker compose exec web python manage.py shell -c "from django.core.cache import cache; cache.clear(); print('Redis cache cleared')"
 ```
 
-### Cache não está sendo limpo
+### Map Fails To Load After Saving Settings
 
-```bash
-# Limpar manualmente
-docker exec mapsprovefiber-web-1 python manage.py shell -c \
-  "from django.core.cache import cache; cache.clear(); print('Cache Redis limpo')"
+```powershell
+# 1. Inspect the logs
+docker compose logs web --tail 50
+
+# 2. Test the Zabbix connection
+docker compose exec web python manage.py shell -c "from zabbix_api.services.zabbix_client import ZabbixClient; client = ZabbixClient(); result = client.login(); print(f'Login OK: {bool(result)}')"
 ```
 
-### Mapa não carrega após configurar
+## Next Steps
 
-```bash
-# 1. Verificar logs
-docker logs mapsprovefiber-web-1 --tail 50
+You can now:
 
-# 2. Testar conexão com Zabbix
-docker exec mapsprovefiber-web-1 python manage.py shell -c \
-  "from zabbix_api.services.zabbix_client import ZabbixClient; \
-   client = ZabbixClient(); \
-   result = client.login(); \
-   print(f'Login OK: {bool(result)}')"
-```
-
-## 🎯 Próximos Passos
-
-Agora você pode:
-
-1. ✅ Preencher as configurações em http://localhost:8000/setup_app/config/
-2. ✅ Acessar o mapa em http://localhost:8000/maps_view/dashboard/
-3. ✅ As configurações vão persistir após `docker-compose restart`
-4. ✅ Não precisa editar docker-compose.yml manualmente
+1. Complete the configuration at http://localhost:8000/setup_app/config/
+2. Open the map at http://localhost:8000/maps_view/dashboard/
+3. Restart containers with `docker compose restart` without losing settings
+4. Avoid manual edits to docker-compose.yml for credentials management
 
 ---
 
-**Status**: ✅ Sistema pronto para uso!
+Status: system ready for use.
 
-## 🔄 Automa��o de rein�cio de servi�os
+## Service Restart Automation
 
-- Utilize `SERVICE_RESTART_COMMANDS` para executar comandos imediatos ap�s salvar credenciais pelo painel ou via `sync_env_from_setup`.
-- Inclua todos os servi�os relevantes (por exemplo: web, celery, beat) na mesma linha separados por ponto e v�rgula.
-- Em ambientes Docker, defina no `.env`:
+- Use the `SERVICE_RESTART_COMMANDS` setting to run immediate commands after saving credentials from the admin form or via `sync_env_from_setup`.
+- List every relevant service (for example: web, celery, beat) on a single line separated by semicolons.
+- In Docker-based environments configure the `.env` file as follows:
 
   ```
   SERVICE_RESTART_COMMANDS="docker compose restart web; docker compose restart celery; docker compose restart beat"
   ```
 
-- Para systemd/supervisord, liste os comandos equivalentes, por exemplo:
+- For systemd or supervisord environments list the equivalent commands, for example:
 
   ```
-  SERVICE_RESTART_COMMANDS="systemctl restart mapsprovefiber-web; systemctl restart mapsprovefiber-worker; systemctl restart mapsprovefiber-beat"
+  SERVICE_RESTART_COMMANDS="systemctl restart provemaps-beta-web; systemctl restart provemaps-beta-worker; systemctl restart provemaps-beta-beat"
   ```
 
-- O campo aparece em **Setup → Manage Environment** e aceita m�ltiplos comandos separados por `;`. Falhas de execu��o s�o registradas nos logs do aplicativo.
+- The field is available in Setup -> Manage Environment and accepts multiple commands separated by `;`. Failures are logged by the application.
 

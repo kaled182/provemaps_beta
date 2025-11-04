@@ -17,8 +17,12 @@ from typing import (
     Iterable,
     Mapping,
     MutableMapping,
+    NotRequired,
     Optional,
+    Required,
     Sequence,
+    TypedDict,
+    cast,
 )
 
 from django.core.cache import cache
@@ -35,6 +39,31 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Data containers
 # =============================================================================
+
+
+class SegmentPayload(TypedDict, total=False):
+    order: int
+    from_port_id: int | None
+    to_port_id: int | None
+    path_coordinates: Sequence[Mapping[str, float]] | None
+    length_km: Decimal | float | str | None
+    estimated_loss_db: Decimal | float | str | None
+    measured_loss_db: Decimal | float | str | None
+    metadata: Mapping[str, Any] | None
+
+
+class RouteImportPayload(TypedDict, total=False):
+    name: Required[str]
+    origin_port_id: Required[int]
+    destination_port_id: Required[int]
+    id: NotRequired[int]
+    status: NotRequired[str]
+    description: NotRequired[str]
+    import_source: NotRequired[str]
+    metadata: NotRequired[Mapping[str, Any]]
+    options: NotRequired[Mapping[str, Any]]
+    segments: NotRequired[Sequence[SegmentPayload]]
+
 
 @dataclass(frozen=True)
 class RouteBuildContext:
@@ -235,7 +264,7 @@ def rebuild_routes_batch(
 
 
 def import_route_from_payload(
-    payload: Mapping[str, Any],
+    payload: Mapping[str, Any] | RouteImportPayload,
     *,
     created_by: str,
 ) -> RouteBuildResult:
@@ -247,29 +276,49 @@ def import_route_from_payload(
     - Return a ``RouteBuildResult`` describing the final state.
     """
 
-    if not isinstance(payload, Mapping):
+    if not isinstance(  # pyright: ignore[reportUnnecessaryIsInstance]
+        payload,
+        Mapping,
+    ):
         raise RouteServiceError("Payload must be a mapping.")
+
+    typed_payload = cast(RouteImportPayload, payload)
 
     required_fields = ["name", "origin_port_id", "destination_port_id"]
     for field in required_fields:
-        if field not in payload:
+        if field not in typed_payload:
             raise RouteServiceError(f"Missing required payload field: {field}")
 
-    origin_port = _get_port(payload.get("origin_port_id"))
-    destination_port = _get_port(payload.get("destination_port_id"))
+    origin_port = _get_port(typed_payload.get("origin_port_id"))
+    destination_port = _get_port(typed_payload.get("destination_port_id"))
 
-    status = payload.get("status", Route.STATUS_PLANNED)
-    description = payload.get("description", "")
-    import_source = payload.get("import_source", "json")
-    metadata_in_payload = payload.get("metadata")
-    options_payload = payload.get("options") or {}
-    segments_payload = payload.get("segments") or []
+    if origin_port is None or destination_port is None:
+        raise RouteServiceError("Origin and destination ports must resolve.")
+
+    status = typed_payload.get("status", Route.STATUS_PLANNED)
+    description = typed_payload.get("description", "")
+    import_source = typed_payload.get("import_source", "json")
+    metadata_in_payload = typed_payload.get("metadata")
+
+    raw_options = typed_payload.get("options")
+    options_payload: Mapping[str, Any]
+    if raw_options is None:
+        options_payload = {}
+    else:
+        options_payload = raw_options
+
+    raw_segments = typed_payload.get("segments")
+    segments_payload: Sequence[SegmentPayload]
+    if raw_segments is None:
+        segments_payload = ()
+    else:
+        segments_payload = raw_segments
 
     route: Optional[Route] = None
     created = False
 
     with transaction.atomic():
-        route_id = payload.get("id")
+        route_id = typed_payload.get("id")
         if route_id:
             try:
                 route = (
@@ -277,14 +326,14 @@ def import_route_from_payload(
                     .select_related("origin_port", "destination_port")
                     .get(pk=route_id)
                 )
-                route.name = payload["name"]
+                route.name = typed_payload["name"]
             except Route.DoesNotExist as exc:
                 raise RouteServiceError(
                     f"Route {route_id} could not be found for import."
                 ) from exc
         else:
             route, created = Route.objects.select_for_update().get_or_create(
-                name=payload["name"],
+                name=typed_payload["name"],
                 defaults={
                     "origin_port": origin_port,
                     "destination_port": destination_port,

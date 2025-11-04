@@ -1,14 +1,14 @@
-# Guia Rápido — Desenvolvimento Local
+# Quickstart - Local Development
 
-## Acesso
+## Access
 - URL: http://localhost:8000
 - Admin: http://localhost:8000/admin/
-- Usuário: admin / Senha: admin123
+- User: admin / Password: admin123
 
-## Banco de Dados
-- SQLite (db.sqlite3) para desenvolvimento local
+## Database
+- SQLite (`db.sqlite3`) for local development
 
-## Comandos úteis
+## Useful commands
 ```powershell
 python manage.py runserver
 python manage.py makemigrations

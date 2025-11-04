@@ -1,84 +1,83 @@
-# Guia de Testes com MariaDB no Docker
+# MariaDB Testing Guide (Docker)
 
-**Data:** 27 de Outubro de 2025  
-**Objetivo:** Executar testes pytest usando MariaDB (Docker) ao invés de SQLite
+**Date:** 27 October 2025  
+**Goal:** Run pytest against MariaDB (Docker) instead of SQLite
 
 ---
 
-## 🎯 Por que MariaDB para Testes?
+## 🎯 Why run tests against MariaDB?
 
-### ✅ Vantagens
-- **Ambiente próximo à produção:** Mesma engine de BD, mesmo dialeto SQL
-- **Validação de constraints:** Testa constraints específicas do MariaDB
-- **Detecção de incompatibilidades:** Descobre bugs que SQLite não detectaria
-- **Testa migrations reais:** Valida migrations com MariaDB
+### ✅ Advantages
+- **Production parity:** Same engine and SQL dialect as production.
+- **Constraint validation:** Exercises MariaDB-specific constraints.
+- **Incompatibility detection:** Catches bugs SQLite would miss.
+- **Real migrations:** Validates migrations under MariaDB.
 
 ### ⚠️ Trade-offs
-- **Mais lento:** 10-15x mais lento que SQLite (0.8s → 10-15s)
-- **Requer Docker:** Containers devem estar rodando
-- **Setup inicial:** Requer configuração de permissões
+- **Slower:** roughly 10–15× slower than SQLite (0.8s → 10–15s).
+- **Docker required:** containers must be up.
+- **Initial setup:** permissions must be granted once.
 
 ---
 
-## 🚀 Setup Inicial (Uma vez)
+## 🚀 Initial Setup (one time)
 
-### 1. Iniciar Containers Docker
+### 1. Start Docker containers
 
 ```powershell
-# Na raiz do projeto
+# From the project root
 docker compose up -d
 
-# Verificar que estão rodando
-docker ps
-# Deve mostrar: mapsprovefiber-db-1 e mapsprovefiber-web-1
+# Confirm they are running
+docker compose ps
 ```
 
-### 2. Configurar Permissões do Banco
+### 2. Grant database permissions
 
 ```powershell
-# Executar script automatizado
+# Run the automated script
 .\scripts\setup_test_db.ps1
 ```
 
-**O que o script faz:**
-1. ✅ Verifica se containers estão rodando
-2. ✅ Concede permissões CREATE/DROP DATABASE ao usuário `app`
-3. ✅ Testa criação/remoção de database
-4. ✅ Valida que tudo está configurado
+**What the script does:**
+1. ✅ Checks that containers are running.
+2. ✅ Grants `CREATE/DROP DATABASE` to user `app`.
+3. ✅ Exercises database create/drop.
+4. ✅ Verifies everything is configured.
 
-**Saída esperada:**
+**Expected output:**
 ```
-🔧 Configurando permissões de teste no MariaDB...
+🔧 Configuring MariaDB test permissions...
 ═══════════════════════════════════════════════════
 
-1️⃣  Verificando Docker...
-   ✅ Docker está ativo
+1️⃣  Checking Docker...
+   ✅ Docker is running
 
-2️⃣  Verificando container MariaDB...
-   ✅ Container encontrado: mapsprovefiber-db-1
+2️⃣  Checking MariaDB container...
+   ✅ Service located: db
 
-3️⃣  Configurando permissões...
-   ✅ Permissões configuradas com sucesso
+3️⃣  Configuring permissions...
+   ✅ Permissions applied successfully
 
-4️⃣  Validando permissões...
-   ✅ Usuário 'app' tem permissões corretas
+4️⃣  Validating permissions...
+   ✅ User 'app' holds the right grants
 
-5️⃣  Testando criação de database...
-   ✅ Usuário 'app' pode criar/dropar databases
+5️⃣  Testing database creation...
+   ✅ User 'app' can create/drop databases
 
 ═══════════════════════════════════════════════════
-✅ Configuração concluída com sucesso!
+✅ Setup finished successfully!
 ```
 
-### 3. (Alternativa Manual) Configurar Permissões Manualmente
+### 3. Manual alternative: grant permissions yourself
 
-Se preferir fazer manualmente:
+If you prefer to do it manually:
 
 ```powershell
-# Entrar no container MariaDB como root
-docker exec -it mapsprovefiber-db-1 mariadb -u root -padmin
+# Connect to the MariaDB service as root
+docker compose exec db mariadb -u root -proot
 
-# Executar SQL
+# Run the SQL
 GRANT ALL PRIVILEGES ON *.* TO 'app'@'%' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 EXIT;
@@ -86,44 +85,44 @@ EXIT;
 
 ---
 
-## 🧪 Executando Testes
+## 🧪 Running Tests
 
-### Opção 1: Script Automatizado (Recomendado)
+### Option 1: automated script (recommended)
 
 ```powershell
-# Todos os testes
+# All tests
 .\scripts\run_tests.ps1
 
-# Testes específicos
+# Specific tests
 .\scripts\run_tests.ps1 -Path tests/test_metrics.py
 
-# Com coverage
+# With coverage
 .\scripts\run_tests.ps1 -Coverage
 
-# Modo verbose
+# Verbose mode
 .\scripts\run_tests.ps1 -Verbose
 
-# Reutilizar database (mais rápido em múltiplas execuções)
+# Reuse database (faster for multiple runs)
 .\scripts\run_tests.ps1 -KeepDb
 ```
 
-### Opção 2: Comando Docker Direto
+### Option 2: direct Docker command
 
 ```powershell
-# Executar pytest dentro do container
-docker exec -it mapsprovefiber-web-1 bash -c "DJANGO_SETTINGS_MODULE=settings.test pytest tests/ -v"
+# Run pytest inside the container
+docker compose exec web bash -lc "DJANGO_SETTINGS_MODULE=settings.test pytest tests/ -v"
 
-# Com coverage
-docker exec -it mapsprovefiber-web-1 bash -c "DJANGO_SETTINGS_MODULE=settings.test pytest tests/ -v --cov=core --cov-report=html"
+# With coverage
+docker compose exec web bash -lc "DJANGO_SETTINGS_MODULE=settings.test pytest tests/ -v --cov=core --cov-report=html"
 ```
 
-### Opção 3: Dentro do Container (Shell Interativo)
+### Option 3: attach to the container (interactive shell)
 
 ```powershell
-# Entrar no container
-docker exec -it mapsprovefiber-web-1 bash
+# Enter the container
+docker compose exec web bash
 
-# Dentro do container
+# Inside the container
 export DJANGO_SETTINGS_MODULE=settings.test
 pytest tests/ -v
 pytest tests/test_metrics.py::TestMetricsInitialization::test_init_metrics_sets_application_info -vvs
@@ -132,25 +131,25 @@ exit
 
 ---
 
-## 📊 Estrutura de Testes
+## 📊 Test Structure
 
-### Database de Testes
+### Test databases
 
-**Banco de dados principal:** `app`  
-**Banco de dados de teste:** `test_app` (criado/destruído automaticamente)
+**Primary database:** `app`  
+**Test database:** `test_app` (auto-created and dropped)
 
 ```python
 # settings/test.py
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
-        "NAME": "app",  # BD principal
+        "NAME": "app",  # Primary DB
         "USER": "app",
-        "PASSWORD": "app_password",
-        "HOST": "db",  # Nome do serviço no docker-compose.yml
+        "PASSWORD": "app",
+        "HOST": "db",  # Service name in docker-compose.yml
         "PORT": "3306",
         "TEST": {
-            # pytest-django cria automaticamente 'test_app'
+            # pytest-django auto-creates 'test_app'
             "CHARSET": "utf8mb4",
             "COLLATION": "utf8mb4_unicode_ci",
         },
@@ -158,139 +157,139 @@ DATABASES = {
 }
 ```
 
-### Ciclo de Vida do Database de Teste
+### Test database lifecycle
 
 ```
-pytest inicia
+pytest starts
    ↓
-Conecta ao MariaDB (host='db', database='app')
+Connects to MariaDB (host='db', database='app')
    ↓
-Cria 'test_app' (DROP IF EXISTS + CREATE)
+Creates 'test_app' (DROP IF EXISTS + CREATE)
    ↓
-Executa migrations em 'test_app'
+Runs migrations on 'test_app'
    ↓
-Executa testes
+Executes tests
    ↓
-Destrói 'test_app' (DROP DATABASE)
+Drops 'test_app' (DROP DATABASE)
    ↓
-pytest finaliza
+pytest exits
 ```
 
 ---
 
 ## 🔍 Troubleshooting
 
-### Erro: Access denied (1044)
+### Error: Access denied (1044)
 
 ```
 E   django.db.utils.OperationalError: (1044, "Access denied for user 'app'@'%' to database 'test_app'")
 ```
 
-**Causa:** Usuário `app` não tem permissão para criar databases.
+**Cause:** user `app` cannot create databases.
 
-**Solução:**
+**Fix:**
 ```powershell
 .\scripts\setup_test_db.ps1
 ```
 
 ---
 
-### Erro: Can't connect to MySQL server (2002)
+### Error: Can't connect to MySQL server (2002)
 
 ```
 E   django.db.utils.OperationalError: (2002, "Can't connect to server on 'db' (115)")
 ```
 
-**Causa:** Container MariaDB não está rodando.
+**Cause:** MariaDB container is not running.
 
-**Solução:**
+**Fix:**
 ```powershell
 docker compose up -d
-docker ps  # Verificar que db-1 está Up
+docker compose ps  # Ensure the db service is Up
 ```
 
 ---
 
-### Erro: Access denied (1045)
+### Error: Access denied (1045)
 
 ```
 E   pymysql.err.OperationalError: (1045, "Access denied for user 'app'@'%' (using password: YES)")
 ```
 
-**Causa:** Senha incorreta.
+**Cause:** Incorrect password.
 
-**Solução:** Verificar variáveis de ambiente no docker-compose.yml
+**Fix:** check environment variables in `docker-compose.yml`
 ```yaml
 environment:
-  - DB_PASSWORD=app_password  # Deve ser a mesma em settings/test.py
+   - DB_PASSWORD=app  # Must match settings/test.py
 ```
 
 ---
 
-### Testes muito lentos
+### Tests feel slow
 
-**Causa:** MariaDB é mais lento que SQLite.
+**Cause:** MariaDB is slower than SQLite.
 
-**Soluções:**
+**Options:**
 
-1. **Usar `--reuse-db`** (não destrói DB entre execuções):
+1. **Use `--reuse-db`** (keeps the database between runs):
 ```powershell
 .\scripts\run_tests.ps1 -KeepDb
 ```
 
-2. **Executar apenas testes modificados:**
+2. **Run only the tests you changed:**
 ```powershell
 .\scripts\run_tests.ps1 -Path tests/test_metrics.py
 ```
 
-3. **Para desenvolvimento rápido, use SQLite:**
+3. **For fast dev loops, switch to SQLite:**
 ```powershell
-# Criar settings/test_sqlite.py (cópia do antigo test.py)
+# Create settings/test_sqlite.py (copy of the old test.py)
 $env:DJANGO_SETTINGS_MODULE='settings.test_sqlite'
 pytest tests/
 ```
 
 ---
 
-## 📈 Comparação: MariaDB vs SQLite
+## 📈 Comparison: MariaDB vs SQLite
 
-| Aspecto | MariaDB (Docker) | SQLite (in-memory) |
-|---------|------------------|-------------------|
-| **Velocidade** | ~10-15s (35 testes) | ~0.8s (35 testes) |
-| **Setup** | Docker + permissões | Zero config |
-| **Produção-like** | ✅ Idêntico | ⚠️ Diferente |
-| **CI/CD** | ⚠️ Requer Docker | ✅ Simples |
-| **Isolamento** | ✅ Bom (test_app) | ✅ Perfeito (:memory:) |
-| **Uso** | ✅ Testes de integração | ✅ Testes unitários rápidos |
+| Aspect | MariaDB (Docker) | SQLite (in-memory) |
+|--------|------------------|--------------------|
+| **Speed** | ~10–15s (35 tests) | ~0.8s (35 tests) |
+| **Setup** | Docker + grants | Zero config |
+| **Production parity** | ✅ Identical | ⚠️ Different |
+| **CI/CD** | ⚠️ Requires Docker | ✅ Simple |
+| **Isolation** | ✅ Good (`test_app`) | ✅ Perfect (`:memory:`) |
+| **Best use** | ✅ Integration tests | ✅ Fast unit tests |
 
-### Recomendação Híbrida
+### Hybrid recommendation
 
 ```powershell
-# Desenvolvimento local (rápido)
+# Local development (fast)
 $env:DJANGO_SETTINGS_MODULE='settings.test_sqlite'
 pytest tests/
 
-# Antes de commit (validação completa)
+# Pre-commit (full validation)
 .\scripts\run_tests.ps1 -Coverage
 
 # CI/CD (GitHub Actions)
-# Usar MariaDB via services
+# Use MariaDB via services
 ```
 
 ---
 
-## 🎯 Boas Práticas
+## 🎯 Best Practices
 
-### 1. Separar Testes por Tipo
+### 1. Separate tests by type
 
 ```
 tests/
-├── unit/              # Rápidos, sem BD (use SQLite)
-├── integration/       # Lentos, com BD (use MariaDB)
-└── e2e/              # Muito lentos (Selenium, etc.)
+├── unit/              # Fast, no DB (use SQLite)
+├── integration/       # Slower, hits DB (use MariaDB)
+└── e2e/               # Very slow (Selenium, etc.)
 ```
 
-### 2. Usar Fixtures Eficientes
+### 2. Use efficient fixtures
 
 ```python
 # conftest.py
@@ -298,27 +297,27 @@ import pytest
 
 @pytest.fixture(scope="session")
 def django_db_setup():
-    """Configuração do BD uma vez por sessão."""
+    """Set up the database once per session."""
     pass
 
 @pytest.fixture
 def sample_device(db):
-    """Fixture reutilizável para criar dispositivo."""
+    """Reusable helper to create a device."""
     from inventory.models import Device
     return Device.objects.create(name="Test Device")
 ```
 
-### 3. Usar Transações
+### 3. Use transactions
 
 ```python
 @pytest.mark.django_db(transaction=True)
 def test_with_transaction():
-    # Cada teste roda em uma transação isolada
-    # Rollback automático após o teste
-    pass
+   # Each test runs in an isolated transaction
+   # Automatic rollback after the test
+   pass
 ```
 
-### 4. Mockar Chamadas Externas
+### 4. Mock external calls
 
 ```python
 from unittest.mock import patch
@@ -326,12 +325,12 @@ from unittest.mock import patch
 @patch('zabbix_api.client.ZabbixAPIClient.request')
 def test_zabbix_integration(mock_request):
     mock_request.return_value = {"result": []}
-    # Teste não faz chamada real à API Zabbix
+   # Test avoids real calls to the Zabbix API
 ```
 
 ---
 
-## 📚 Referências
+## 📚 References
 
 - [pytest-django Documentation](https://pytest-django.readthedocs.io/)
 - [Django Test Database](https://docs.djangoproject.com/en/5.0/topics/testing/overview/#the-test-database)
@@ -339,6 +338,6 @@ def test_zabbix_integration(mock_request):
 
 ---
 
-**Criado em:** 27/10/2025  
-**Autor:** GitHub Copilot  
-**Versão:** 2.0 - MariaDB Integration
+**Created on:** 27/10/2025  
+**Author:** GitHub Copilot  
+**Version:** 2.0 – MariaDB Integration
