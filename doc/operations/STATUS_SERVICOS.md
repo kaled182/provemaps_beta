@@ -1,202 +1,201 @@
-# ✅ Status de Serviços - MapsProveFiber
+# Service Status - MapsProveFiber
 
-## 🎯 Resumo Executivo
+## Executive Summary
 
-**Data:** 25/10/2025 23:34  
-**Ambiente:** Desenvolvimento Local (Windows)  
-**Status Geral:** ✅ Todos os serviços operacionais  
+- **Date:** 2025-10-25 23:34
+- **Environment:** Local development (Windows)
+- **Overall Status:** All services operational
 
 ---
 
-## 🔴 Redis (Cache/Session)
+## Redis (cache and session)
 
-**Status:** ✅ Online e funcionando  
-**Tecnologia:** Docker + Redis Alpine  
-**Container:** `redis-mapspro`  
-**Porta:** 6379  
-**Auto-restart:** Habilitado (`unless-stopped`)  
+- **Status:** Online
+- **Technology:** Docker Redis Alpine
+- **Container:** `redis-mapspro`
+- **Port:** 6379
+- **Auto restart:** Enabled (`unless-stopped`)
 
-### Comandos Úteis
+### Useful commands
 
 ```powershell
-# Ver status
+# Show status
 docker ps | findstr redis
 
-# Logs em tempo real
+# Tail logs
 docker logs -f redis-mapspro
 
-# Parar temporariamente
+# Stop temporarily
 docker stop redis-mapspro
 
-# Iniciar novamente
+# Start again
 docker start redis-mapspro
 
-# Reiniciar
+# Restart
 docker restart redis-mapspro
 
-# Remover (só se necessário)
+# Remove container (only if required)
 docker rm -f redis-mapspro
 ```
 
-### Monitoramento
+### Monitoring
 
 ```powershell
-# Conectar ao Redis CLI
+# Connect to redis-cli
 docker exec -it redis-mapspro redis-cli
 
-# Dentro do redis-cli:
-PING                  # Deve retornar: PONG
-DBSIZE                # Número de chaves em cache
-INFO stats            # Estatísticas de operações
-INFO memory           # Uso de memória
-KEYS mapspro:*        # Ver chaves da aplicação (só em dev!)
-MONITOR               # Ver comandos em tempo real (CTRL+C para sair)
-CLIENT LIST           # Ver conexões ativas
+# Inside redis-cli:
+PING                  # Expect PONG
+DBSIZE                # Number of keys in cache
+INFO stats            # Operation statistics
+INFO memory           # Memory usage
+KEYS mapspro:*        # Inspect application keys (dev only)
+MONITOR               # Live commands (CTRL+C to exit)
+CLIENT LIST           # Active connections
 ```
 
-### Verificação Python
+### Python verification
 
 ```powershell
-python -c "import redis; r = redis.Redis(host='localhost', port=6379); print('✅ Redis:', 'Online' if r.ping() else 'Offline')"
+python -c "import redis; r = redis.Redis(host='localhost', port=6379); print('Redis:', 'Online' if r.ping() else 'Offline')"
 ```
 
-**Resultado esperado:** `✅ Redis: Online`
+Expected output: `Redis: Online`
 
 ---
 
-## 🐍 Django Application Server
+## Django application server
 
-**Status:** ✅ Rodando em background  
-**URL:** http://localhost:8000  
-**Porta:** 8000  
-**Terminal ID:** `28271102-c51f-4d6b-afa3-62e6590f538d`  
+- **Status:** Running in background
+- **URL:** http://localhost:8000
+- **Port:** 8000
+- **Terminal ID:** `28271102-c51f-4d6b-afa3-62e6590f538d`
 
-### Endpoints Principais
+### Key endpoints
 
-- **Dashboard:** http://localhost:8000/maps_view/dashboard/
-- **Admin:** http://localhost:8000/admin/ (admin / admin123)
-- **Health Check:** http://localhost:8000/healthz
-- **Metrics:** http://localhost:8000/metrics/metrics
-- **Zabbix Lookup:** http://localhost:8000/zabbix/lookup/
-- **Docs:** http://localhost:8000/setup_app/docs/
+- Dashboard: http://localhost:8000/maps_view/dashboard/
+- Admin: http://localhost:8000/admin/
+- Health: http://localhost:8000/healthz
+- Metrics: http://localhost:8000/metrics/metrics
+- Zabbix Lookup: http://localhost:8000/zabbix/lookup/
+- Docs: http://localhost:8000/setup_app/docs/
 
-### Comportamento Observado
+### Observed behavior
 
-✅ **Sem mensagens de cache offline** - Redis funcionando perfeitamente  
-✅ **Requests HTTP 200** - Todos os endpoints respondendo  
-✅ **Cache ativo** - Dados sendo armazenados e recuperados do Redis  
-⚠️ **WebSocket 404** - Channels não configurado (normal, não é crítico)
+- No offline cache warnings (Redis healthy)
+- HTTP 200 responses across endpoints
+- Cache layer active (Redis storing and returning values)
+- WebSocket 404 expected (Channels not configured; non-critical)
 
 ### Performance
 
-- **Primeira request:** ~600-900ms (sem cache, consulta Zabbix)
-- **Requests subsequentes:** **Esperado <50ms** (com cache hit)
-- **Consultas Zabbix:** Sendo cached automaticamente
+- Initial request: about 600 to 900 ms (uncached, direct Zabbix call)
+- Subsequent requests: expected under 50 ms (cache hit)
+- Zabbix queries cached automatically
 
 ---
 
-## 🗄️ SQLite Database
+## SQLite database
 
-**Status:** ✅ Operacional  
-**Arquivo:** `d:\Gemini\Provemaps_GPT-Tier2\mapsprovefiber\db.sqlite3`  
-**Tamanho:** ~1.5 MB (aprox.)  
-**Migrations:** Todas aplicadas (0003, 0009)  
+- **Status:** Operational
+- **File:** `d:\provemaps_beta\db.sqlite3`
+- **Size:** roughly 1.5 MB
+- **Migrations:** Applied (0003, 0009)
 
-### Dados Cadastrados
+### Seed data
 
-- ✅ Superusuário: `admin` / `admin123`
-- ✅ Device models
-- ✅ Fiber cables
-- ✅ Ports (38+)
-- ✅ Sites (2+)
+- Superuser `admin` / `admin123`
+- Device models
+- Fiber cables
+- Ports (38 plus)
+- Sites (2 plus)
 
 ---
 
-## 🔧 Serviços Opcionais (Não Configurados)
+## Optional services (not configured)
 
-### ⚪ Celery Worker
-**Status:** ❌ Não rodando  
-**Necessário para:** Tarefas assíncronas (build de rotas, processamento batch)  
-**Como iniciar:**
+### Celery worker
+- **Status:** Not running
+- **Purpose:** Asynchronous tasks (route building, batch work)
+- **Start:**
 ```powershell
 celery -A core worker -l info --pool=solo
 ```
 
-### ⚪ Celery Beat
-**Status:** ❌ Não rodando  
-**Necessário para:** Tarefas agendadas/periódicas  
-**Como iniciar:**
+### Celery beat
+- **Status:** Not running
+- **Purpose:** Periodic tasks
+- **Start:**
 ```powershell
 celery -A core beat -l info
 ```
 
-### ⚪ Django Channels (WebSocket)
-**Status:** ❌ Não configurado  
-**Necessário para:** Real-time dashboard updates  
-**Requer:** Daphne ou Uvicorn + Redis como channel layer
+### Django Channels (WebSocket)
+- **Status:** Not configured
+- **Purpose:** Real-time dashboard updates
+- **Requires:** Daphne or Uvicorn plus Redis channel layer
 
 ---
 
-## 📊 Status de Integração Externa
+## External integrations
 
 ### Zabbix API
-**Status:** ✅ Conectando  
-**URL:** Configurado no .env (ZABBIX_API_URL)  
-**Auth:** Token válido  
-**Latência:** ~600-900ms por requisição  
-
-**Observação:** Todas as chamadas ao Zabbix estão sendo cached no Redis, reduzindo drasticamente a carga.
+- **Status:** Reachable
+- **URL:** Provided in `.env` via `ZABBIX_API_URL`
+- **Auth:** Token valid
+- **Latency:** About 600 to 900 ms per request
+- **Note:** All Zabbix responses are cached in Redis to reduce load
 
 ### Google Maps API
-**Status:** ⚪ Não configurado  
-**Requer:** GOOGLE_MAPS_API_KEY no .env  
-**Impacto:** Mapas podem não renderizar corretamente  
+- **Status:** Not configured
+- **Requires:** `GOOGLE_MAPS_API_KEY` in `.env`
+- **Impact:** Maps may not render correctly
 
 ---
 
-## 🚀 Como Iniciar Todos os Serviços
+## Starting all services
 
-### Startup Completo
+### Full startup
 
 ```powershell
-# 1. Iniciar Redis (se não estiver rodando)
+# 1. Start Redis if not running
 docker start redis-mapspro
 
-# 2. Verificar Redis
+# 2. Check Redis
 docker ps | findstr redis
 
-# 3. Iniciar Django
-cd D:\Gemini\Provemaps_GPT-Tier2\mapsprovefiber
+# 3. Start Django
+cd D:\provemaps_beta
 python manage.py runserver 0.0.0.0:8000
 
-# 4. (Opcional) Celery Worker em outro terminal
+# 4. Optional Celery worker
 celery -A core worker -l info --pool=solo
 
-# 5. (Opcional) Celery Beat em outro terminal
+# 5. Optional Celery beat
 celery -A core beat -l info
 ```
 
-### Verificação Rápida
+### Quick verification
 
 ```powershell
 # Redis online?
 docker ps | findstr redis
 
-# Django respondendo?
+# Django responding?
 curl http://localhost:8000/healthz
 
-# Cache funcionando?
-python -c "from django.core.cache import cache; cache.set('test', 'ok', 10); print('✅ Cache:', cache.get('test'))"
+# Cache responding?
+python -c "from django.core.cache import cache; cache.set('test', 'ok', 10); print('Cache:', cache.get('test'))"
 ```
 
 ---
 
-## 🔍 Logs e Debugging
+## Logs and debugging
 
 ### Django Logs
-**Localização:** Terminal rodando `manage.py runserver`  
-**Nível:** DEBUG (configurado no .env)  
-**Filtrar cache:** `findstr "cache" logs\application.log`
+**Location:** Terminal running `manage.py runserver`  
+**Level:** DEBUG (set in .env)  
+**Filter cache:** `findstr "cache" logs\application.log`
 
 ### Redis Logs
 ```powershell
@@ -205,121 +204,121 @@ docker logs redis-mapspro --tail 100 -f
 
 ### Docker Logs
 ```powershell
-# Ver logs de todos os containers
+# List all containers
 docker ps -a
 
-# Logs específicos
+# Specific logs
 docker logs <container_id>
 ```
 
 ---
 
-## 🎯 Testes de Validação
+## Validation tests
 
 ### 1. Health Check
 ```powershell
 Invoke-WebRequest -Uri "http://localhost:8000/healthz"
 ```
-**Esperado:** Status 200, JSON com `"status": "ok"`
+**Expected:** HTTP 200 and JSON with `"status": "ok"`
 
 ### 2. Cache Hit Test
 ```powershell
-# Primeira chamada (cold cache, ~800ms)
+# First call (cold cache, about 800 ms)
 Measure-Command { Invoke-WebRequest -Uri "http://localhost:8000/zabbix_api/api/sites/" }
 
-# Segunda chamada (cache hit, esperado <50ms)
+# Second call (cache hit, expected under 50 ms)
 Measure-Command { Invoke-WebRequest -Uri "http://localhost:8000/zabbix_api/api/sites/" }
 ```
 
 ### 3. Redis Persistence Test
 ```powershell
-# Setar chave
+# Set key
 docker exec redis-mapspro redis-cli SET test_key "Hello Redis"
 
-# Recuperar chave
+# Fetch key
 docker exec redis-mapspro redis-cli GET test_key
 
-# Limpar
+# Delete key
 docker exec redis-mapspro redis-cli DEL test_key
 ```
 
 ---
 
-## 📝 Próximos Passos
+## Next steps
 
-### Essenciais ✅
-- [x] Redis configurado e rodando
-- [x] Django com cache ativo
-- [x] Banco SQLite operacional
-- [x] Superuser criado
-- [x] Static files coletados
+### Essentials
+- [x] Redis configured and running
+- [x] Django with cache enabled
+- [x] SQLite database operational
+- [x] Superuser created
+- [x] Static files collected
 
-### Opcionais 📋
-- [ ] Configurar Celery Worker
-- [ ] Configurar Celery Beat
-- [ ] Adicionar Google Maps API Key
-- [ ] Configurar Django Channels (WebSocket)
-- [ ] Habilitar SSL/TLS local (para https)
-- [ ] Configurar backup automático do SQLite
+### Optional
+- [ ] Configure Celery worker
+- [ ] Configure Celery beat
+- [ ] Add Google Maps API key
+- [ ] Configure Django Channels (WebSocket)
+- [ ] Enable local SSL/TLS (for https)
+- [ ] Configure automatic SQLite backups
 
-### Produção 🚀
-- [ ] Migrar SQLite → MySQL/PostgreSQL
-- [ ] Configurar Gunicorn/Uvicorn
+### Production
+- [ ] Migrate SQLite to MySQL or PostgreSQL
+- [ ] Configure Gunicorn or Uvicorn
 - [ ] Nginx reverse proxy
 - [ ] SSL certificates (Let's Encrypt)
-- [ ] Redis persistence (RDB+AOF)
-- [ ] Monitoring (Prometheus + Grafana)
+- [ ] Redis persistence (RDB plus AOF)
+- [ ] Monitoring (Prometheus and Grafana)
 
 ---
 
-## 🆘 Troubleshooting
+## Troubleshooting
 
-### Redis não inicia
+### Redis does not start
 ```powershell
-# Verificar se porta está em uso
+# Check if port is in use
 netstat -ano | findstr :6379
 
-# Matar processo (se necessário)
-taskkill /PID <número> /F
+# Kill process if required
+taskkill /PID <pid> /F
 
-# Remover container antigo
+# Remove old container
 docker rm -f redis-mapspro
 
-# Recriar
+# Recreate
 docker run -d --name redis-mapspro -p 6379:6379 --restart unless-stopped redis:alpine
 ```
 
-### Django não conecta ao Redis
+### Django cannot connect to Redis
 ```powershell
-# Verificar REDIS_URL no .env
+# Check REDIS_URL in .env
 cat .env | findstr REDIS_URL
 
-# Deve ser: redis://127.0.0.1:6379/0 ou redis://localhost:6379/0
+# Should be redis://127.0.0.1:6379/0 or redis://localhost:6379/0
 
-# Testar conexão Python
+# Test Python connection
 python -c "import redis; redis.Redis().ping()"
 ```
 
-### Performance ruim mesmo com cache
+### Performance issues even with cache
 ```powershell
-# Ver estatísticas de cache
+# Check cache statistics
 docker exec redis-mapspro redis-cli INFO stats
 
-# Verificar hit rate
-# hits / (hits + misses) deve ser > 70%
+# Check hit rate
+# hits / (hits + misses) should stay above 70%
 ```
 
 ---
 
-## 📞 Contato & Suporte
+## Support
 
-**Documentação:** Ver [`doc/reference/SETUP_REDIS_WINDOWS.md`](../reference/SETUP_REDIS_WINDOWS.md) para detalhes completos  
-**Redis Issues:** https://github.com/redis/redis/issues  
-**Django Cache:** https://docs.djangoproject.com/en/5.2/topics/cache/  
+**Documentation:** See [`doc/reference/SETUP_REDIS_WINDOWS.md`](../reference/SETUP_REDIS_WINDOWS.md) for full details  
+**Redis issues:** https://github.com/redis/redis/issues  
+**Django cache:** https://docs.djangoproject.com/en/5.2/topics/cache/  
 
 ---
 
-**Última Atualização:** 25/10/2025 23:34  
-**Responsável:** DevOps Team  
-**Ambiente:** Desenvolvimento Local Windows  
-**Status:** ✅ Todos os serviços essenciais operacionais
+**Last update:** 2025-10-25 23:34  
+**Owner:** DevOps Team  
+**Environment:** Windows local development  
+**Status:** All essential services operational
