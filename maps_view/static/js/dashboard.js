@@ -966,6 +966,16 @@ async function loadData() {
         const cableUl = document.getElementById('cableList');
         if (cableUl) {
             cableUl.innerHTML = '';
+
+            // Remove stale polylines from previous loads to avoid polling old IDs
+            Object.values(cablePolylines).forEach((polyline) => {
+                if (polyline && typeof polyline.setMap === 'function') {
+                    polyline.setMap(null);
+                }
+            });
+            cablePolylines = {};
+            cableDataCache = {};
+
             cables.forEach((cable) => {
                 cableDataCache[cable.id] = cable;
                 const polyline = drawCable(cable);
