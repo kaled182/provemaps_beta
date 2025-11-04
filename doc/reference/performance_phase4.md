@@ -1,32 +1,33 @@
-# Fase 4 – Tarefas assíncronas e pré-aquecimento de cache
+# Phase 4 - Asynchronous Tasks and Cache Warming
 
-## 1. Celery configurado
-- Adicionadas dependências (`celery==5.4.0`) e criado `core/celery.py` com autodiscovery de tasks.
-- `core/__init__.py` expõe `celery_app` para que `celery -A core worker -l info` funcione.
-- Ajustes em `core/settings.py`:
-  - `CELERY_BROKER_URL` e `CELERY_RESULT_BACKEND` apontam para o Redis (`redis://127.0.0.1:6379/0`).
-  - Serializadores e fila padrão definidos para JSON (`mapspro_default`).
+## 1. Celery configuration
+- Added dependencies (`celery==5.4.0`) and created `core/celery.py` with task autodiscovery.
+- `core/__init__.py` exposes `celery_app`, enabling `& D:\provemaps_beta\venv\Scripts\celery.exe -A core worker -l info` on Windows.
+- Updated `core/settings.py`:
+  - `CELERY_BROKER_URL` and `CELERY_RESULT_BACKEND` point to Redis (`redis://127.0.0.1:6379/0`).
+  - Default queue and serializers configured for JSON (`mapspro_default`).
 
-## 2. Tarefas de pré-aquecimento (`zabbix_api/tasks.py`)
-- `warm_port_optical_cache(port_id)` – revalida e grava no cache o snapshot RX/TX da porta.
-- `warm_device_ports(device_id)` – percorre todas as portas do dispositivo.
-- `warm_all_optical_snapshots()` – enfileira `warm_port_optical_cache` para todas as portas monitoradas.
+## 2. Cache warming tasks (`zabbix_api/tasks.py`)
+- `warm_port_optical_cache(port_id)`: refreshes and stores the RX/TX snapshot for a port.
+- `warm_device_ports(device_id)`: iterates over every port on a device.
+- `warm_all_optical_snapshots()`: enqueues `warm_port_optical_cache` for all monitored ports.
 
-## 3. Comando de gerenciamento
+## 3. Management command
+```powershell
+& D:\provemaps_beta\venv\Scripts\python.exe manage.py warm_optical_cache `
+  [--device-id <id>] [--async]
 ```
-python manage.py warm_optical_cache [--device-id=<id>] [--async]
-```
-- Sem `--async` executa inline (bom para pré-aquecer manualmente após o deploy).
-- Com `--async` envia as tarefas para o Celery (`warm_port_optical_cache.delay`).
-- Exemplo de uso: `python manage.py warm_optical_cache --async` + `celery -A core worker -l info`.
+- Without `--async`, runs inline (useful for manual warming after deployment).
+- With `--async`, dispatches work to Celery (`warm_port_optical_cache.delay`).
+- Example: `& D:\provemaps_beta\venv\Scripts\python.exe manage.py warm_optical_cache --async` while `& D:\provemaps_beta\venv\Scripts\celery.exe -A core worker -l info` is running.
 
-## 4. Resultados pós-aquecimento + Redis
-- Após executar `warm_optical_cache` e manter o Redis ativo, o profiling indicou:
-  - `port-optical-status`: média ~286 ms / p95 ~1.420 ms (queda adicional na média em relação à fase anterior graças ao cache populado).
-  - Demais endpoints mantiveram média <10 ms.
-- Rodar o aquecimento periodicamente (via Celery beat ou cron) mantém o cache preenchido e evita que usuários paguem a primeira consulta cara.
+## 4. Post-warming results (with Redis)
+- After running `warm_optical_cache` and keeping Redis active:
+  - `port-optical-status`: average ~286 ms / p95 ~1,420 ms (further drop in average compared with the previous phase thanks to the pre-populated cache).
+  - Other endpoints remain below 10 ms on average.
+- Schedule the warming periodically (Celery beat or cron) to keep the cache ready and avoid cold-start penalties for users.
 
-## 5. Próximos passos sugeridos
-- Configurar um scheduler (Celery Beat/cron) para chamar `warm_all_optical_snapshots` a cada X minutos.
-- Monitorar o worker e o Redis (métricas, `redis-cli monitor`).
-- Evoluir `port-optical-status` para usar batch de `itemids` se os picos continuarem elevados.
+## 5. Suggested next steps
+- Configure a scheduler (Celery beat or cron) to trigger `warm_all_optical_snapshots` at regular intervals.
+- Monitor Celery workers and Redis usage (metrics, `docker compose exec redis redis-cli monitor`).
+- Consider batching `itemids` for the `port-optical-status` endpoint if latency spikes persist.

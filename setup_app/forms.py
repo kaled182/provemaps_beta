@@ -91,8 +91,9 @@ class EnvConfigForm(forms.Form):
         required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
         help_text=(
-            "Comandos executados após salvar as credenciais. "
-            "Separe múltiplos comandos com ';'. Ex.: docker compose restart web; docker compose restart worker"
+            "Commands executed after saving credentials. "
+            "Separate multiple commands with ';'. Example: "
+            "docker compose restart web; docker compose restart worker"
         ),
     )
     enable_diagnostics = forms.BooleanField(
@@ -109,10 +110,14 @@ class EnvConfigForm(forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         base_class = (
-            "rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none "
-            "focus:ring focus:ring-blue-500/20 w-full"
+            "rounded-lg border border-gray-300 px-3 py-2 text-sm "
+            "focus:border-blue-500 focus:outline-none focus:ring "
+            "focus:ring-blue-500/20 w-full"
         )
-        checkbox_class = "h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+        checkbox_class = (
+            "h-4 w-4 text-blue-600 rounded border-gray-300 "
+            "focus:ring-blue-500"
+        )
         for field in self.fields.values():
             if isinstance(field.widget, forms.CheckboxInput):
                 field.widget.attrs.setdefault("class", checkbox_class)

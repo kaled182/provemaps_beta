@@ -1,51 +1,67 @@
-"""
-Settings base para o projeto mapsprovefiber.
-- Não específica de ambiente (dev/prod); overrides vão em settings.dev / settings.prod.
-- Mantém defaults seguros e neutros; sem dependência obrigatória de Redis.
+"""Base settings for the mapsprovefiber project.
+
+- Environment agnostic; overrides live in ``settings.dev`` and
+    ``settings.prod``.
+- Keeps safe defaults without requiring Redis to be available.
 """
 
 import os
 from pathlib import Path
+from typing import Any, Dict
 
 # -----------------------------------------------------
-# Paths / núcleo
+# Paths / core
 # -----------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent
-SECRET_KEY = os.getenv("SECRET_KEY")
+_secret_key = os.getenv("SECRET_KEY")
 
-if not SECRET_KEY:
+if not _secret_key:
     settings_module = os.getenv("DJANGO_SETTINGS_MODULE", "")
-    # Permite chave insegura automática em ambientes de teste e desenvolvimento
+    # Allow insecure keys automatically in test and development contexts
     if settings_module.endswith(".test"):
-        SECRET_KEY = "test-only-insecure-key"
+        _secret_key = "test-only-insecure-key"
     elif settings_module.endswith(".dev"):
-        SECRET_KEY = "dev-only-insecure-key-for-development"
+        _secret_key = "dev-only-insecure-key-for-development"
     elif os.getenv("DEBUG", "False").lower() == "true":
-        SECRET_KEY = "dev-only-insecure-key-for-development"
+        _secret_key = "dev-only-insecure-key-for-development"
     else:
         raise ValueError("SECRET_KEY must be set in production")
 
+SECRET_KEY = _secret_key or ""
+
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
-ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+    if host.strip()
+]
 
 ZABBIX_API_URL = os.getenv("ZABBIX_API_URL", "")
 ZABBIX_API_USER = os.getenv("ZABBIX_API_USER", "")
 ZABBIX_API_PASSWORD = os.getenv("ZABBIX_API_PASSWORD", "")
 ZABBIX_API_KEY = os.getenv("ZABBIX_API_KEY", "")
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
-ENABLE_DIAGNOSTIC_ENDPOINTS = os.getenv("ENABLE_DIAGNOSTIC_ENDPOINTS", "False").lower() == "true"
+ENABLE_DIAGNOSTIC_ENDPOINTS = (
+    os.getenv("ENABLE_DIAGNOSTIC_ENDPOINTS", "False").lower() == "true"
+)
 SERVICE_RESTART_COMMANDS = os.getenv(
     "SERVICE_RESTART_COMMANDS",
     "",
 )
 
-FERNET_KEYS = [key.strip() for key in os.getenv("FERNET_KEYS", "").split(",") if key.strip()]
-if not FERNET_KEYS:
+fernet_keys = [
+    key.strip()
+    for key in os.getenv("FERNET_KEYS", "").split(",")
+    if key.strip()
+]
+if not fernet_keys:
     single_fernet = os.getenv("FERNET_KEY")
     if single_fernet:
-        FERNET_KEYS = [single_fernet]
-if not FERNET_KEYS:
-    FERNET_KEYS = [SECRET_KEY]
+        fernet_keys = [single_fernet]
+if not fernet_keys:
+    fernet_keys = [SECRET_KEY]
+
+FERNET_KEYS = fernet_keys
 
 # Security defaults
 SECURE_BROWSER_XSS_FILTER = True
@@ -57,10 +73,14 @@ CSRF_TRUSTED_ORIGINS = [
     if origin.strip()
 ]
 
-# Segurança adicional apenas quando não está em DEBUG
+# Extra security toggles when DEBUG is disabled
 if not DEBUG:
-    SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "True").lower() == "true"
-    SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "31536000"))  # 1 ano
+    SECURE_SSL_REDIRECT = (
+        os.getenv("SECURE_SSL_REDIRECT", "True").lower() == "true"
+    )
+    SECURE_HSTS_SECONDS = int(
+        os.getenv("SECURE_HSTS_SECONDS", "31536000")
+    )  # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SESSION_COOKIE_SECURE = True
@@ -78,17 +98,17 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 
-    # Observabilidade
+    # Observability
     "django_prometheus",
 
     # Realtime / WebSockets
     "channels",
 
-    # Apps do projeto
+    # Project apps
     "core.apps.CoreConfig",
     "maps_view",
     "service_accounts.apps.ServiceAccountsConfig",
-    # Inventário de rede (modelos migrados de zabbix_api)
+    # Network inventory (models migrated from zabbix_api)
     "inventory",
     "routes_builder",
     "setup_app",
@@ -114,24 +134,26 @@ WSGI_APPLICATION = "core.wsgi.application"
 ASGI_APPLICATION = "core.asgi.application"
 
 # -----------------------------------------------------
-# Database (MySQL/MariaDB com fallbacks) — otimizado
+# Database (MySQL/MariaDB with fallbacks) - optimized
 # -----------------------------------------------------
-DB_OPTIONS = {
+DB_OPTIONS: Dict[str, Any] = {
     "charset": "utf8mb4",
     "init_command": "SET sql_mode='STRICT_ALL_TABLES'",
     "connect_timeout": 10,
 }
 
-# Pool opcional (quando disponível via driver)
+# Optional pool settings when supported by the driver
 if os.getenv("DB_USE_CONNECTION_POOL", "false").lower() == "true":
-    DB_OPTIONS.update({
-        "pool_size": int(os.getenv("DB_POOL_SIZE", "10")),
-        "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "20")),
-        "pool_pre_ping": True,
-        "pool_recycle": 300,
-    })
+    DB_OPTIONS.update(
+        {
+            "pool_size": int(os.getenv("DB_POOL_SIZE", "10")),
+            "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "20")),
+            "pool_pre_ping": True,
+            "pool_recycle": 300,
+        }
+    )
 
-DATABASES = {
+DATABASES: Dict[str, Dict[str, Any]] = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
         "NAME": os.getenv("DB_NAME", "app"),
@@ -141,17 +163,20 @@ DATABASES = {
         "PORT": os.getenv("DB_PORT", "3306"),
         "OPTIONS": DB_OPTIONS,
         "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "0")),
-        "ATOMIC_REQUESTS": os.getenv("DB_ATOMIC_REQUESTS", "false").lower() == "true",
+        "ATOMIC_REQUESTS": (
+            os.getenv("DB_ATOMIC_REQUESTS", "false").lower() == "true"
+        ),
     }
 }
 
 # -----------------------------------------------------
-# Cache (Redis se disponível; senão fallback robusto)
+# Cache (Redis when available; otherwise resilient fallbacks)
 # -----------------------------------------------------
 REDIS_URL = os.getenv("REDIS_URL", "").strip()
 
-def get_cache_config():
-    """Retorna configuração de cache baseada na disponibilidade do Redis."""
+
+def get_cache_config() -> Dict[str, Dict[str, Any]]:
+    """Return cache settings based on Redis availability."""
     if REDIS_URL:
         return {
             "default": {
@@ -159,53 +184,65 @@ def get_cache_config():
                 "LOCATION": REDIS_URL,
                 "OPTIONS": {
                     "CLIENT_CLASS": "django_redis.client.DefaultClient",
-                    "COMPRESSOR": "django_redis.compressors.zlib.ZlibCompressor",
+                    "COMPRESSOR": (
+                        "django_redis.compressors.zlib.ZlibCompressor"
+                    ),
                     "SOCKET_CONNECT_TIMEOUT": 5,
                     "SOCKET_TIMEOUT": 5,
                     "RETRY_ON_TIMEOUT": True,
-                    "MAX_CONNECTIONS": int(os.getenv("REDIS_MAX_CONNECTIONS", "100")),
+                    "MAX_CONNECTIONS": int(
+                        os.getenv("REDIS_MAX_CONNECTIONS", "100")
+                    ),
                 },
                 "KEY_PREFIX": "mapsprovefiber",
                 "VERSION": 1,
             }
         }
-    else:
-        # Em produção sem Redis, usa filebased; em dev, locmem
-        if not DEBUG:
-            return {
-                "default": {
-                    "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
-                    "LOCATION": "/tmp/django_cache",
-                    "TIMEOUT": 300,
-                    "OPTIONS": {"MAX_ENTRIES": 1000},
-                }
+    # Production without Redis uses file-based cache; dev falls back to locmem
+    if not DEBUG:
+        return {
+            "default": {
+                "BACKEND": (
+                    "django.core.cache.backends.filebased.FileBasedCache"
+                ),
+                "LOCATION": "/tmp/django_cache",
+                "TIMEOUT": 300,
+                "OPTIONS": {"MAX_ENTRIES": 1000},
             }
-        else:
-            return {
-                "default": {
-                    "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-                    "LOCATION": "mapsprovefiber-local",
-                }
-            }
+        }
+
+    return {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "mapsprovefiber-local",
+        }
+    }
+
 
 CACHES = get_cache_config()
 
-# Sessões
+# Sessions
 if REDIS_URL:
-    SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+    session_engine = "django.contrib.sessions.backends.cache"
     SESSION_CACHE_ALIAS = "default"
-    SESSION_COOKIE_AGE = int(os.getenv("SESSION_COOKIE_AGE", "1209600"))  # 2 semanas
+    SESSION_COOKIE_AGE = int(
+        os.getenv("SESSION_COOKIE_AGE", "1209600")
+    )  # 2 weeks
 else:
-    SESSION_ENGINE = "django.contrib.sessions.backends.db"
+    session_engine = "django.contrib.sessions.backends.db"
+
+SESSION_ENGINE = session_engine
 
 # -----------------------------------------------------
 # ASGI / Channels (WebSockets)
 # -----------------------------------------------------
-CHANNEL_LAYER_URL = os.getenv("CHANNEL_LAYER_URL", os.getenv("REDIS_URL", "")).strip()
+CHANNEL_LAYER_URL = os.getenv(
+    "CHANNEL_LAYER_URL", os.getenv("REDIS_URL", "")
+).strip()
 CHANNEL_PREFIX = os.getenv("CHANNEL_REDIS_PREFIX", "mapsprovefiber")
 
 if CHANNEL_LAYER_URL.startswith(("redis://", "rediss://")):
-    CHANNEL_LAYERS = {
+    channel_layers: Dict[str, Dict[str, Any]] = {
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",
             "CONFIG": {
@@ -215,14 +252,16 @@ if CHANNEL_LAYER_URL.startswith(("redis://", "rediss://")):
         }
     }
 else:
-    CHANNEL_LAYERS = {
+    channel_layers = {
         "default": {
             "BACKEND": "channels.layers.InMemoryChannelLayer",
         }
     }
 
+CHANNEL_LAYERS = channel_layers
+
 # -----------------------------------------------------
-# Internacionalização / TZ
+# Internationalization / timezone
 # -----------------------------------------------------
 LANGUAGE_CODE = os.getenv("LANGUAGE_CODE", "pt-br")
 TIME_ZONE = os.getenv("TIME_ZONE", "America/Belem")
@@ -230,7 +269,7 @@ USE_I18N = True
 USE_TZ = True
 
 # -----------------------------------------------------
-# Arquivos estáticos / mídia
+# Static and media files
 # -----------------------------------------------------
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
@@ -238,13 +277,13 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# Versão para cache bust (sobreposta em dev/prod via env STATIC_ASSET_VERSION)
+# Cache-busting version (overridden via STATIC_ASSET_VERSION in env)
 STATIC_ASSET_VERSION = os.getenv("STATIC_ASSET_VERSION", "20251026.1")
 
 # -----------------------------------------------------
-# Templates (com cache em produção)
+# Templates (cache enabled in production)
 # -----------------------------------------------------
-TEMPLATES = [
+TEMPLATES: list[Dict[str, Any]] = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [BASE_DIR / "templates"],
@@ -262,30 +301,38 @@ TEMPLATES = [
 ]
 
 if not DEBUG:
-    # Ativa template caching em produção (ajuste realizado somente em settings/prod.py)
-    # Mantemos APP_DIRS=True aqui e delegamos loaders para o arquivo de produção.
+    # Enable template caching in production (fine-tuned in settings/prod.py)
+    # Keep APP_DIRS=True here and delegate loaders to the production file.
     pass
 
 # -----------------------------------------------------
-# Health Check Configuration
+# Health check configuration
 # -----------------------------------------------------
-HEALTHCHECK_CONFIG = {
-    "DISK_THRESHOLD_GB": float(os.getenv("HEALTHCHECK_DISK_THRESHOLD_GB", "1.0")),
+HEALTHCHECK_CONFIG: Dict[str, Any] = {
+    "DISK_THRESHOLD_GB": float(
+        os.getenv("HEALTHCHECK_DISK_THRESHOLD_GB", "1.0")
+    ),
     "DB_TIMEOUT": int(os.getenv("HEALTHCHECK_DB_TIMEOUT", "5")),
-    "ENABLE_STORAGE_CHECK": os.getenv("HEALTHCHECK_STORAGE", "true").lower() == "true",
-    "ENABLE_SYSTEM_METRICS": os.getenv("HEALTHCHECK_SYSTEM_METRICS", "false").lower() == "true",
+    "ENABLE_STORAGE_CHECK": (
+        os.getenv("HEALTHCHECK_STORAGE", "true").lower() == "true"
+    ),
+    "ENABLE_SYSTEM_METRICS": (
+        os.getenv("HEALTHCHECK_SYSTEM_METRICS", "false").lower() == "true"
+    ),
     "DEBUG": os.getenv("HEALTHCHECK_DEBUG", "false").lower() == "true",
 }
 
 # -----------------------------------------------------
-# Logging (com rotação opcional)
+# Logging (optional rotation support)
 # -----------------------------------------------------
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-LOG_FORMAT = os.getenv("LOG_FORMAT", "verbose")  # "simple" ou "verbose"
+LOG_FORMAT = os.getenv("LOG_FORMAT", "verbose")  # "simple" or "verbose"
 
 FORMATTERS = {
     "verbose": {
-        "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
+        "format": (
+            "{levelname} {asctime} {module} {process:d} {thread:d} {message}"
+        ),
         "style": "{",
     },
     "simple": {
@@ -294,24 +341,24 @@ FORMATTERS = {
     },
 }
 
-HANDLERS = {
+HANDLERS: Dict[str, Dict[str, Any]] = {
     "console": {
         "class": "logging.StreamHandler",
         "formatter": LOG_FORMAT,
     },
 }
 
-# File handler opcional (somente produção, se habilitado)
+# Optional file handler (production only when enabled)
 if not DEBUG and os.getenv("ENABLE_FILE_LOGGING", "false").lower() == "true":
     HANDLERS["file"] = {
         "class": "logging.handlers.RotatingFileHandler",
         "filename": os.getenv("LOG_FILE", "/var/log/django/app.log"),
-        "maxBytes": int(os.getenv("LOG_MAX_BYTES", "10485760")),  # 10MB
+        "maxBytes": int(os.getenv("LOG_MAX_BYTES", "10485760")),  # 10 MB
         "backupCount": int(os.getenv("LOG_BACKUP_COUNT", "5")),
         "formatter": LOG_FORMAT,
     }
 
-LOGGING = {
+LOGGING: Dict[str, Any] = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": FORMATTERS,
@@ -334,7 +381,7 @@ LOGGING = {
     },
 }
 
-# Log detalhado de queries (opcional)
+# Optional detailed query logging
 if os.getenv("ENABLE_DB_QUERY_LOG", "false").lower() == "true":
     LOGGING["loggers"]["django.db.backends"] = {
         "level": "DEBUG",
@@ -343,19 +390,33 @@ if os.getenv("ENABLE_DB_QUERY_LOG", "false").lower() == "true":
     }
 
 # -----------------------------------------------------
-# Monitoring (Sentry - opcional)
+# Monitoring (Sentry - optional)
 # -----------------------------------------------------
 SENTRY_DSN = os.getenv("SENTRY_DSN", "")
 if SENTRY_DSN:
-    import sentry_sdk
-    from sentry_sdk.integrations.django import DjangoIntegration
-    from sentry_sdk.integrations.celery import CeleryIntegration
+    try:
+        import sentry_sdk  # type: ignore
+        import sentry_sdk.integrations.celery as sentry_celery  # type: ignore
+        import sentry_sdk.integrations.django as sentry_django  # type: ignore
 
-    sentry_sdk.init(
-        dsn=SENTRY_DSN,
-        integrations=[DjangoIntegration(), CeleryIntegration()],
-        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
-        profiles_sample_rate=float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.0")),
-        environment=os.getenv("SENTRY_ENVIRONMENT", "development"),
-        debug=DEBUG,
-    )
+        django_integration_cls = getattr(sentry_django, "DjangoIntegration")
+        celery_integration_cls = getattr(sentry_celery, "CeleryIntegration")
+
+        sentry_sdk.init(  # type: ignore[no-untyped-call]
+            dsn=SENTRY_DSN,
+            integrations=[
+                django_integration_cls(),
+                celery_integration_cls(),
+            ],
+            traces_sample_rate=float(
+                os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")
+            ),
+            profiles_sample_rate=float(
+                os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.0")
+            ),
+            environment=os.getenv("SENTRY_ENVIRONMENT", "development"),
+            debug=DEBUG,
+        )
+    except ImportError:
+        # Sentry is optional; skip initialization if it's not installed
+        pass

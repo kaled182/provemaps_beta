@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import itertools
 import uuid
+from typing import Any, Protocol
 
 import pytest
 
@@ -15,8 +16,14 @@ _PORT_COUNTER = itertools.count()
 _ROUTE_COUNTER = itertools.count()
 
 
+class PortFactory(Protocol):
+    def __call__(self, *, prefix: str = "port") -> Port:
+        """Build and persist a fresh port instance."""
+        ...
+
+
 @pytest.fixture
-def port_factory(db):
+def port_factory(db: Any) -> PortFactory:
     """Create inventory ports with unique device/site combos."""
 
     def factory(*, prefix: str = "port") -> Port:
@@ -35,7 +42,7 @@ def port_factory(db):
 
 
 @pytest.fixture
-def route(port_factory: pytest.FixtureRequest) -> Route:
+def route(port_factory: PortFactory) -> Route:
     """Persisted route ready for tests."""
 
     origin = port_factory(prefix="origin")
@@ -49,7 +56,7 @@ def route(port_factory: pytest.FixtureRequest) -> Route:
 
 
 @pytest.fixture
-def route_segment(route: Route, port_factory) -> RouteSegment:
+def route_segment(route: Route, port_factory: PortFactory) -> RouteSegment:
     """Persisted segment linked to the base route."""
 
     return RouteSegment.objects.create(

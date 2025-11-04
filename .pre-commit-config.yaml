@@ -1,35 +1,35 @@
-# .pre-commit-config.yaml — qualidade e segurança para o mapsprovefiber
-# Instalação:
+# .pre-commit-config.yaml — code quality and safety for MapsProveFiber
+# Installation:
 #   pip install pre-commit
 #   pre-commit install
-# Execução manual:
+# Manual execution:
 #   pre-commit run --all-files
 
 repos:
-  # Formatador
+  # Formatter
   - repo: https://github.com/psf/black
     rev: 24.8.0
     hooks:
       - id: black
         args: ["--line-length=100"]
 
-  # Linter ultrarrápido (com falha se algo foi auto-corrigido)
+  # Ultra-fast linter (fails if a file required auto-fixes)
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.6.9
     hooks:
       - id: ruff
         args: ["--fix", "--exit-non-zero-on-fix"]
-        # Para também checar templates Django (opcional):
+  # Optional: also lint Django templates
         # args: ["--fix", "--exit-non-zero-on-fix", "--extend-select", "DJ"]
 
-  # Organização de imports
+  # Import ordering
   - repo: https://github.com/pycqa/isort
     rev: 5.13.2
     hooks:
       - id: isort
         args: ["--profile=black", "--line-length=100"]
 
-  # Hooks utilitários e de segurança genéricos
+  # Generic utility and safety hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:
@@ -45,26 +45,26 @@ repos:
       - id: check-added-large-files
         args: ['--maxkb=500']
 
-  # Lint para Dockerfile (hadolint)
+  # Dockerfile lint (hadolint)
   - repo: https://github.com/hadolint/hadolint
     rev: v2.12.0
     hooks:
       - id: hadolint-docker
 
-  # Lint para shell scripts (bash/sh)
+  # Shell script lint (bash/sh)
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.10.0.1
     hooks:
       - id: shellcheck
 
-  # (Opcional) Detector de segredos — habilitar quando quiser
+  # Optional: secret scanner — enable when needed
   # - repo: https://github.com/Yelp/detect-secrets
   #   rev: v1.5.0
   #   hooks:
   #     - id: detect-secrets
   #       args: ["--baseline", ".secrets.baseline"]
 
-  # (Opcional) Validação/format de templates Django
+  # Optional: validation/formatting for Django templates
   # - repo: https://github.com/mattsb42-meta/django-template-hooks
   #   rev: v1.0.0
   #   hooks:

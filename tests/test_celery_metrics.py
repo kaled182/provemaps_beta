@@ -6,18 +6,18 @@ class DummyGauge:
     def __init__(self) -> None:
         self.value: Any = None
 
-    def set(self, v: Any) -> None:  # noqa: D401 - método simples
+    def set(self, v: Any) -> None:  # noqa: D401 - simple setter
         self.value = v
 
 
 def test_update_metrics_gauges(monkeypatch: Any) -> None:
-    """Valida que update_metrics atualiza todos os gauges com payload válido.
+    """Validate that update_metrics refreshes all gauges for a valid payload.
 
-    Usa dummies para evitar dependências de estado global do prometheus_client.
+    Dummy gauges avoid relying on the global prometheus_client state.
     """
     from core import metrics_celery as mc
 
-    # Força habilitação, substitui gauges por dummies
+    # Force metrics on and replace gauges with dummies
     monkeypatch.setattr(mc, "METRICS_ENABLED", True)
     g_available = DummyGauge()
     g_latency = DummyGauge()
@@ -77,5 +77,5 @@ def test_update_metrics_disabled(monkeypatch: Any) -> None:
     }
     mc.update_metrics(payload)
 
-    # Não atualizado porque métricas desabilitadas
+    # Gauge remains untouched because metrics are disabled
     assert g_available.value is None

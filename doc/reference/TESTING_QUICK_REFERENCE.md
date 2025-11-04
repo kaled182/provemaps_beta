@@ -1,69 +1,69 @@
-# Quick Reference - Testes com MariaDB
+# Quick Reference – Testing with MariaDB
 
-## 🚀 Setup Inicial (Uma vez)
+## 🚀 Initial Setup (one time)
 
 ```powershell
-# 1. Iniciar Docker
+# 1. Start Docker
 docker compose up -d
 
-# 2. Configurar permissões
+# 2. Grant permissions
 .\scripts\setup_test_db.ps1
 ```
 
 ---
 
-## 🧪 Executar Testes
+## 🧪 Run Tests
 
-### Modo Rápido
+### Fast mode
 ```powershell
 .\scripts\run_tests.ps1
 ```
 
-### Com Coverage
+### With coverage
 ```powershell
 .\scripts\run_tests.ps1 -Coverage
 ```
 
-### Teste Específico
+### Specific test
 ```powershell
 .\scripts\run_tests.ps1 -Path tests/test_metrics.py
 ```
 
-### Reutilizar DB (mais rápido)
+### Reuse database (faster)
 ```powershell
 .\scripts\run_tests.ps1 -KeepDb
 ```
 
 ---
 
-## 🔧 Comandos Úteis
+## 🔧 Useful Commands
 
-### Ver containers rodando
+### Check running containers
 ```powershell
-docker ps
+docker compose ps
 ```
 
-### Logs do MariaDB
+### MariaDB logs
 ```powershell
-docker logs mapsprovefiber-db-1 --tail 100 -f
+docker compose logs db --tail 100 -f
 ```
 
-### Logs do Web
+### Web service logs
 ```powershell
-docker logs mapsprovefiber-web-1 --tail 100 -f
+docker compose logs web --tail 100 -f
 ```
 
-### Entrar no container web
+### Enter the web container
 ```powershell
-docker exec -it mapsprovefiber-web-1 bash
+docker compose exec web bash
 ```
 
-### Acessar MariaDB interativo
+### Access MariaDB interactively
 ```powershell
-docker exec -it mapsprovefiber-db-1 mariadb -u app -papp_password app
+docker compose exec db mariadb -u app -papp app
 ```
 
-### Ver databases
+### List databases
 ```sql
 SHOW DATABASES;
 SHOW TABLES FROM test_app;
@@ -73,18 +73,18 @@ SHOW TABLES FROM test_app;
 
 ## 🔍 Troubleshooting
 
-### Erro 1044 (Access denied)
+### Error 1044 (Access denied)
 ```powershell
 .\scripts\setup_test_db.ps1
 ```
 
-### Erro 2002 (Can't connect)
+### Error 2002 (Can't connect)
 ```powershell
 docker compose up -d
-docker ps  # Verificar que db-1 está Up
+docker compose ps  # Ensure the db service is Up
 ```
 
-### Limpar tudo e recomeçar
+### Reset everything
 ```powershell
 docker compose down -v  # Remove volumes
 docker compose up -d
@@ -96,27 +96,27 @@ docker compose up -d
 
 ## 📊 Performance
 
-| Comando | Tempo Estimado |
+| Command | Estimated Time |
 |---------|----------------|
-| `setup_test_db.ps1` | ~5s (uma vez) |
-| `run_tests.ps1` (35 testes) | ~10-15s |
-| `run_tests.ps1 -KeepDb` | ~8-10s |
-| `run_tests.ps1 -Path test_metrics.py` | ~3-5s |
+| `setup_test_db.ps1` | ~5s (one time) |
+| `run_tests.ps1` (35 tests) | ~10–15s |
+| `run_tests.ps1 -KeepDb` | ~8–10s |
+| `run_tests.ps1 -Path test_metrics.py` | ~3–5s |
 
 ---
 
-## 🎯 Workflow Recomendado
+## 🎯 Recommended Workflow
 
-### Desenvolvimento Local (Rápido)
+### Local development (fast)
 ```powershell
-# Use SQLite para iteração rápida
+# Use SQLite for quick iteration
 $env:DJANGO_SETTINGS_MODULE='settings.test_sqlite'
 pytest tests/test_metrics.py -vvs
 ```
 
-### Antes de Commit (Completo)
+### Before commit (full run)
 ```powershell
-# Valide com MariaDB
+# Validate with MariaDB
 .\scripts\run_tests.ps1 -Coverage
 ```
 
@@ -130,9 +130,9 @@ services:
       MYSQL_ROOT_PASSWORD: admin
       MYSQL_DATABASE: app
       MYSQL_USER: app
-      MYSQL_PASSWORD: app_password
+      MYSQL_PASSWORD: app
 ```
 
 ---
 
-**Documentação completa:** `./TESTING_WITH_MARIADB.md`
+**Full documentation:** `./TESTING_WITH_MARIADB.md`

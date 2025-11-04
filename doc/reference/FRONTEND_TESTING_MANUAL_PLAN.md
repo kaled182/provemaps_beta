@@ -1,436 +1,437 @@
-# 🧪 Plano de Teste Manual - Frontend Modularizado
 
-**Data:** 27 de Outubro de 2025  
-**Objetivo:** Validar que a refatoração modular do `fiber_route_builder.js` não introduziu regressões  
-**Escopo:** Todos os workflows de criação, edição, exclusão e visualização de cabos
+# Manual Test Plan - Modular Frontend
 
----
-
-## 📋 Pré-requisitos
-
-### Ambiente
-- [ ] Docker containers rodando (`docker ps`)
-- [ ] Django web server acessível em http://localhost:8000
-- [ ] MariaDB com dados de teste
-- [ ] Redis cache funcional
-- [ ] Usuário autenticado no sistema
-
-### Dados de Teste Necessários
-- [ ] Pelo menos 2 Sites cadastrados
-- [ ] Pelo menos 3 Devices cadastrados
-- [ ] Google Maps API Key configurada (se aplicável)
+Date: 27 October 2025
+Goal: Validate that the modular refactor of `fiber_route_builder.js` introduced no regressions
+Scope: All workflows for cable creation, editing, deletion, and visualization
 
 ---
 
-## 🗺️ Cenários de Teste
+## Prerequisites
 
-### 1️⃣ Inicialização do Mapa
+### Environment
+- [ ] Docker services running (`docker compose ps`)
+- [ ] Django web server available at http://localhost:8000
+- [ ] MariaDB seeded with test data
+- [ ] Redis cache operational
+- [ ] User authenticated in the system
 
-**Objetivo:** Validar que o mapa carrega corretamente com módulos ES6
-
-#### Passos:
-1. Acessar http://localhost:8000/routes/builder/
-2. Aguardar carregamento completo da página
-3. Verificar console do navegador (F12)
-
-#### Critérios de Sucesso:
-- [ ] **Mapa renderizado:** Leaflet map visível com tiles carregados
-- [ ] **Sem erros JS:** Console sem erros de import/export
-- [ ] **Módulos carregados:** Verificar via DevTools > Network > JS files
-  - [ ] `apiClient.js` carregado
-  - [ ] `mapCore.js` carregado
-  - [ ] `contextMenu.js` carregado
-  - [ ] `modalEditor.js` carregado
-  - [ ] `cableService.js` carregado
-  - [ ] `pathState.js` carregado
-  - [ ] `uiHelpers.js` carregado
-- [ ] **Botões visíveis:** "Novo Cabo", "Salvar", "Cancelar"
-- [ ] **Sidebar funcional:** Panel lateral com lista de cabos (se houver)
-
-#### Notas de Teste:
-```
-Data/Hora: _________________
-Navegador: _________________
-Resultado: ☐ PASS  ☐ FAIL
-Observações:
-_________________________________
-_________________________________
-```
+### Required Test Data
+- [ ] At least two Sites registered
+- [ ] At least three Devices registered
+- [ ] Google Maps API key configured (when applicable)
 
 ---
 
-### 2️⃣ Criar Novo Cabo (Workflow Completo)
+## Test Scenarios
 
-**Objetivo:** Validar criação de cabo do início ao fim
+### Scenario 1: Map Initialization
 
-#### Passos:
-1. Clicar no botão "Novo Cabo" ou equivalente
-2. Verificar se o cursor muda para modo desenho (crosshair)
-3. Clicar em 3-5 pontos no mapa para desenhar a rota
-4. Clicar com botão direito ou duplo-clique para finalizar
-5. Preencher modal com dados:
-   - Nome do cabo: `TESTE_CABO_001`
-   - Tipo: Selecionar da dropdown
-   - Distância: (auto-calculada)
-   - Observações: `Teste de modularização`
-6. Clicar em "Salvar"
-7. Aguardar confirmação
+Goal: Ensure the map loads correctly with ES6 modules.
 
-#### Critérios de Sucesso:
-- [ ] **Modo desenho ativado:** Cursor muda para crosshair
-- [ ] **Polyline renderizada:** Linha aparece no mapa conforme cliques
-- [ ] **Cores corretas:** Linha com cor padrão definida
-- [ ] **Modal abre:** Form de edição aparece após finalizar desenho
-- [ ] **Campos preenchidos:** Distância auto-calculada corretamente
-- [ ] **Validação funciona:** Campos obrigatórios validados
-- [ ] **POST successful:** Request 201 Created no Network tab
-- [ ] **Cabo salvo:** Aparece na lista de cabos
-- [ ] **Notificação exibida:** Toast/alert de sucesso
-- [ ] **Estado limpo:** Modo desenho desativado após salvar
+#### Steps
+1. Open http://localhost:8000/routes/builder/
+2. Wait for the page to finish loading
+3. Inspect the browser console (F12)
 
-#### Notas de Teste:
+#### Success Criteria
+- [ ] Map renders: Leaflet map visible with tiles loaded
+- [ ] No JavaScript errors: Console free of import or export errors
+- [ ] Modules load correctly: verify in DevTools > Network > JS files
+  - [ ] `apiClient.js` loaded
+  - [ ] `mapCore.js` loaded
+  - [ ] `contextMenu.js` loaded
+  - [ ] `modalEditor.js` loaded
+  - [ ] `cableService.js` loaded
+  - [ ] `pathState.js` loaded
+  - [ ] `uiHelpers.js` loaded
+- [ ] Core buttons visible: "New Cable", "Save", "Cancel"
+- [ ] Sidebar functional: list of cables displayed when available
+
+#### Test Notes
 ```
-Data/Hora: _________________
-ID do cabo criado: _________
-Resultado: ☐ PASS  ☐ FAIL
-Observações:
+Date/Time: _________________
+Browser: ___________________
+Result: [ ] PASS  [ ] FAIL
+Notes:
 _________________________________
 _________________________________
 ```
 
 ---
 
-### 3️⃣ Visualizar Cabos Existentes
+### Scenario 2: Create New Cable (Full Workflow)
 
-**Objetivo:** Validar renderização de cabos salvos no BD
+Goal: Validate end-to-end cable creation.
 
-#### Passos:
-1. Recarregar a página
-2. Aguardar carregamento dos cabos existentes
-3. Verificar lista de cabos na sidebar
-4. Clicar em diferentes cabos na lista
+#### Steps
+1. Click the "New Cable" button or equivalent control
+2. Confirm the cursor switches to drawing mode (crosshair)
+3. Click three to five points on the map to draw the route
+4. Right-click or double-click to finish the path
+5. Complete the modal form:
+   - Cable name: `TEST_CABLE_001`
+   - Type: select from the dropdown
+   - Distance: auto-calculated
+   - Notes: `Modularization test`
+6. Click "Save"
+7. Wait for the confirmation message
 
-#### Critérios de Sucesso:
-- [ ] **Cabos carregados:** GET /api/cables/ retorna 200
-- [ ] **Polylines renderizadas:** Todas as rotas aparecem no mapa
-- [ ] **Cores distintas:** Cada tipo de cabo com cor diferente
-- [ ] **Hover funciona:** Tooltip aparece ao passar mouse
-- [ ] **Click funciona:** Cabo selecionado ao clicar
-- [ ] **Zoom to cable:** Mapa centraliza no cabo selecionado
-- [ ] **Detalhes visíveis:** Informações do cabo aparecem (nome, distância, tipo)
-- [ ] **Performance:** Carregamento < 2s para 50 cabos
+#### Success Criteria
+- [ ] Drawing mode activates: cursor changes to crosshair
+- [ ] Polyline rendered: line appears on the map following the clicks
+- [ ] Correct styling: line uses the expected default color
+- [ ] Modal opens: edit form appears after finishing the drawing
+- [ ] Fields populated: distance auto-calculated accurately
+- [ ] Validation behaves: required fields enforced
+- [ ] POST request succeeds: 201 Created visible in the Network tab
+- [ ] Cable stored: entry appears in the cable list
+- [ ] Notification displayed: success toast or alert shown
+- [ ] State reset: drawing mode disabled after saving
 
-#### Notas de Teste:
+#### Test Notes
 ```
-Data/Hora: _________________
-Quantidade de cabos: _______
-Resultado: ☐ PASS  ☐ FAIL
-Observações:
+Date/Time: _________________
+ID of created cable: _______
+Result: [ ] PASS  [ ] FAIL
+Notes:
 _________________________________
 _________________________________
 ```
 
 ---
 
-### 4️⃣ Editar Cabo Existente
+### Scenario 3: View Existing Cables
 
-**Objetivo:** Validar edição de propriedades e geometria
+Goal: Confirm previously saved cables render correctly.
 
-#### Passos:
-1. Selecionar um cabo na lista ou clicar no mapa
-2. Clicar em "Editar" ou botão direito > "Editar"
-3. **Editar Propriedades:**
-   - Alterar nome para `TESTE_CABO_001_EDITADO`
-   - Alterar tipo de cabo
-   - Adicionar observação
-4. **Editar Geometria:**
-   - Ativar modo edição de vértices
-   - Arrastar um vértice para nova posição
-   - Adicionar novo vértice no meio da linha
-   - Remover um vértice existente
-5. Clicar em "Salvar Alterações"
-6. Verificar atualização no mapa e BD
+#### Steps
+1. Reload the page
+2. Wait for existing cables to load
+3. Review the cable list in the sidebar
+4. Click multiple cables in the list
 
-#### Critérios de Sucesso:
-- [ ] **Modal abre:** Form de edição com dados pre-populados
-- [ ] **Dados carregados:** Todos os campos com valores corretos
-- [ ] **Edição de vértices:** Arrastar funciona suavemente
-- [ ] **Adicionar vértice:** Novo ponto inserido corretamente
-- [ ] **Remover vértice:** Ponto removido sem quebrar linha
-- [ ] **Distância recalculada:** Valor atualizado após mudanças geométricas
-- [ ] **PUT successful:** Request 200 OK no Network tab
-- [ ] **Mapa atualizado:** Polyline reflete mudanças imediatamente
-- [ ] **Lista atualizada:** Nome e dados atualizados na sidebar
-- [ ] **Sem duplicação:** Apenas um cabo, não dois
+#### Success Criteria
+- [ ] Cables fetched: GET /api/cables/ returns 200
+- [ ] Polylines rendered: all routes visible on the map
+- [ ] Distinct colors: each cable type uses its designated color
+- [ ] Hover works: tooltip shown on mouseover
+- [ ] Click works: cable highlighted when selected
+- [ ] Zoom to cable: map recenters on the chosen cable
+- [ ] Details visible: name, distance, and type presented
+- [ ] Performance: load completes under two seconds for 50 cables
 
-#### Notas de Teste:
+#### Test Notes
 ```
-Data/Hora: _________________
-Cabo editado (ID): _________
-Resultado: ☐ PASS  ☐ FAIL
-Observações:
+Date/Time: _________________
+Number of cables: __________
+Result: [ ] PASS  [ ] FAIL
+Notes:
 _________________________________
 _________________________________
 ```
 
 ---
 
-### 5️⃣ Deletar Cabo
+### Scenario 4: Edit Existing Cable
 
-**Objetivo:** Validar exclusão com confirmação
+Goal: Validate property and geometry editing.
 
-#### Passos:
-1. Selecionar cabo `TESTE_CABO_001_EDITADO`
-2. Clicar em "Deletar" ou botão direito > "Deletar"
-3. Verificar modal de confirmação
-4. Clicar em "Sim, deletar"
-5. Aguardar confirmação
-6. Recarregar página para validar persistência
+#### Steps
+1. Select a cable from the list or click it on the map
+2. Click "Edit" or use the right-click menu > "Edit"
+3. Edit properties:
+   - Change the name to `TEST_CABLE_001_EDITED`
+   - Change the cable type
+   - Add a note
+4. Edit geometry:
+   - Enable vertex edit mode
+   - Drag a vertex to a new position
+   - Add a vertex mid-line
+   - Remove an existing vertex
+5. Click "Save Changes"
+6. Verify updates on the map and in the database
 
-#### Critérios de Sucesso:
-- [ ] **Modal de confirmação:** Pergunta "Tem certeza?"
-- [ ] **Dados exibidos:** Nome e detalhes do cabo no modal
-- [ ] **Cancelar funciona:** Fechar modal sem deletar
-- [ ] **DELETE successful:** Request 204 No Content no Network tab
-- [ ] **Polyline removida:** Cabo desaparece do mapa
-- [ ] **Lista atualizada:** Cabo removido da sidebar
-- [ ] **Notificação exibida:** Toast de sucesso
-- [ ] **Persistido:** Após reload, cabo não reaparece
+#### Success Criteria
+- [ ] Modal opens: edit form pre-populated with data
+- [ ] Data accurate: fields show the correct values
+- [ ] Vertex editing works: drag operations are smooth
+- [ ] Add vertex works: new point inserted correctly
+- [ ] Remove vertex works: line remains intact
+- [ ] Distance recalculated: updated after geometry changes
+- [ ] PUT request succeeds: 200 OK visible in the Network tab
+- [ ] Map updated: polyline reflects the new shape immediately
+- [ ] List updated: sidebar shows the new name and details
+- [ ] No duplicates: only one cable instance remains
 
-#### Notas de Teste:
+#### Test Notes
 ```
-Data/Hora: _________________
-Cabo deletado (ID): ________
-Resultado: ☐ PASS  ☐ FAIL
-Observações:
+Date/Time: _________________
+Edited cable ID: ___________
+Result: [ ] PASS  [ ] FAIL
+Notes:
 _________________________________
 _________________________________
 ```
 
 ---
 
-### 6️⃣ Menu de Contexto (Botão Direito)
+### Scenario 5: Delete Cable
 
-**Objetivo:** Validar menu contextual em cabos e mapa
+Goal: Validate the deletion flow with confirmation.
 
-#### Passos:
-1. **Menu no Cabo:**
-   - Clicar botão direito em uma polyline
-   - Verificar opções: Editar, Deletar, Ver Detalhes, etc.
-   - Clicar em "Ver Detalhes"
-2. **Menu no Mapa:**
-   - Clicar botão direito em área vazia
-   - Verificar opções: Novo Cabo, Centralizar Mapa, etc.
-3. **Fechar menu:** Clicar fora ou pressionar ESC
+#### Steps
+1. Select cable `TEST_CABLE_001_EDITED`
+2. Click "Delete" or use the right-click menu > "Delete"
+3. Confirm the modal appears
+4. Click "Yes, delete"
+5. Wait for the confirmation message
+6. Reload the page to confirm persistence
 
-#### Critérios de Sucesso:
-- [ ] **Menu aparece:** Popup contextual visível
-- [ ] **Posição correta:** Menu próximo ao cursor
-- [ ] **Opções corretas:** Ações relevantes ao contexto
-- [ ] **Ícones visíveis:** Cada ação com ícone apropriado
-- [ ] **Hover funciona:** Itens destacados ao passar mouse
-- [ ] **Click funciona:** Ação executada ao clicar
-- [ ] **Fechar funciona:** ESC ou click fora fecha menu
-- [ ] **Sem sobreposição:** Menu não fica cortado pela tela
+#### Success Criteria
+- [ ] Confirmation modal: prompt asks "Are you sure?"
+- [ ] Data shown: modal displays cable name and details
+- [ ] Cancel works: closing the modal does not delete
+- [ ] DELETE request succeeds: 204 No Content in the Network tab
+- [ ] Polyline removed: cable disappears from the map
+- [ ] List updated: cable removed from the sidebar
+- [ ] Notification displayed: success toast shown
+- [ ] Persistence confirmed: cable does not return after reload
 
-#### Notas de Teste:
+#### Test Notes
 ```
-Data/Hora: _________________
-Resultado: ☐ PASS  ☐ FAIL
-Observações:
+Date/Time: _________________
+Deleted cable ID: _________
+Result: [ ] PASS  [ ] FAIL
+Notes:
 _________________________________
 _________________________________
 ```
 
 ---
 
-### 7️⃣ Filtros e Busca
+### Scenario 6: Context Menu (Right Click)
 
-**Objetivo:** Validar funcionalidades de filtro (se existirem)
+Goal: Validate context menus for cables and the map.
 
-#### Passos:
-1. Usar filtro por tipo de cabo (dropdown)
-2. Usar busca por nome (input text)
-3. Filtrar por distância (range slider)
-4. Limpar todos os filtros
+#### Steps
+1. Menu on a cable:
+   - Right-click a polyline
+   - Check options such as Edit, Delete, View Details
+   - Click "View Details"
+2. Menu on the map:
+   - Right-click an empty area
+   - Check options such as New Cable, Center Map
+3. Close the menu by clicking elsewhere or pressing ESC
 
-#### Critérios de Sucesso:
-- [ ] **Filtro tipo:** Apenas cabos do tipo selecionado visíveis
-- [ ] **Busca nome:** Resultados filtrados em tempo real
-- [ ] **Filtro distância:** Cabos fora do range ocultados
-- [ ] **Limpar filtros:** Todos os cabos reaparecem
-- [ ] **Performance:** Filtro instantâneo (< 100ms)
-- [ ] **Contador atualizado:** "Mostrando X de Y cabos"
+#### Success Criteria
+- [ ] Menu appears: context popup visible
+- [ ] Position correct: menu anchored near the cursor
+- [ ] Options relevant: actions match the context
+- [ ] Icons visible: each action shows the correct icon
+- [ ] Hover works: items highlight on mouseover
+- [ ] Click works: selected action executes
+- [ ] Close works: ESC or outside click hides the menu
+- [ ] No clipping: menu fully visible within the viewport
 
-#### Notas de Teste:
+#### Test Notes
 ```
-Data/Hora: _________________
-Resultado: ☐ PASS  ☐ FAIL
-Observações:
+Date/Time: _________________
+Result: [ ] PASS  [ ] FAIL
+Notes:
 _________________________________
 _________________________________
 ```
 
 ---
 
-### 8️⃣ Interações do Mapa
+### Scenario 7: Filters and Search
 
-**Objetivo:** Validar controles Leaflet básicos
+Goal: Validate filtering features when present.
 
-#### Passos:
-1. Zoom in/out com botões
-2. Zoom in/out com scroll do mouse
-3. Pan (arrastar) o mapa
-4. Usar layers control (se existir)
-5. Usar fullscreen (se existir)
+#### Steps
+1. Filter by cable type (dropdown)
+2. Search by name (text input)
+3. Filter by distance (range slider)
+4. Clear all filters
 
-#### Critérios de Sucesso:
-- [ ] **Zoom botões:** + e - funcionam
-- [ ] **Zoom scroll:** Roda do mouse funciona
-- [ ] **Pan suave:** Arrastar sem lag
-- [ ] **Layers:** Trocar entre Street/Satellite/Terrain
-- [ ] **Fullscreen:** Expande e colapsa corretamente
-- [ ] **Bounds preservados:** Estado do mapa mantido
+#### Success Criteria
+- [ ] Type filter: only cables of the selected type remain visible
+- [ ] Name search: results filter in real time
+- [ ] Distance filter: cables outside the range are hidden
+- [ ] Clear filters: all cables return
+- [ ] Performance: filtering responds within 100 ms
+- [ ] Counter updated: "Showing X of Y cables"
 
-#### Notas de Teste:
+#### Test Notes
 ```
-Data/Hora: _________________
-Resultado: ☐ PASS  ☐ FAIL
-Observações:
+Date/Time: _________________
+Result: [ ] PASS  [ ] FAIL
+Notes:
 _________________________________
 _________________________________
 ```
 
 ---
 
-### 9️⃣ Erros e Edge Cases
+### Scenario 8: Map Interactions
 
-**Objetivo:** Validar tratamento de erros
+Goal: Validate core Leaflet controls.
 
-#### Passos:
-1. **Criar cabo sem nome:** Tentar salvar form vazio
-2. **Editar cabo inexistente:** Manipular URL para ID inválido
-3. **Deletar durante edição:** Deletar cabo em outra aba enquanto edita
-4. **Rede offline:** Desconectar internet e tentar salvar
-5. **Request duplicado:** Double-click rápido em "Salvar"
+#### Steps
+1. Zoom in and out with the buttons
+2. Zoom in and out with the mouse scroll wheel
+3. Pan the map by dragging
+4. Use the layers control (if available)
+5. Use fullscreen mode (if available)
 
-#### Critérios de Sucesso:
-- [ ] **Validação frontend:** Mensagens de erro claras
-- [ ] **404 tratado:** Mensagem "Cabo não encontrado"
-- [ ] **Conflito tratado:** Detecção de mudanças concorrentes
-- [ ] **Offline detectado:** Mensagem "Sem conexão"
-- [ ] **Loading state:** Botão desabilitado durante request
-- [ ] **Sem crash:** Aplicação permanece funcional
-- [ ] **Rollback automático:** Estado inconsistente revertido
+#### Success Criteria
+- [ ] Zoom buttons: plus and minus respond
+- [ ] Scroll zoom: mouse wheel works
+- [ ] Smooth panning: drag without lag
+- [ ] Layers: switch between Street, Satellite, Terrain
+- [ ] Fullscreen: toggles correctly
+- [ ] Bounds preserved: map state maintained
 
-#### Notas de Teste:
+#### Test Notes
 ```
-Data/Hora: _________________
-Resultado: ☐ PASS  ☐ FAIL
-Observações:
+Date/Time: _________________
+Result: [ ] PASS  [ ] FAIL
+Notes:
 _________________________________
 _________________________________
 ```
 
 ---
 
-### 🔟 Performance e Responsividade
+### Scenario 9: Errors and Edge Cases
 
-**Objetivo:** Validar performance com carga
+Goal: Validate error handling paths.
 
-#### Passos:
-1. Criar 20 cabos rapidamente
-2. Selecionar vários cabos em sequência
-3. Fazer zoom in/out rápido várias vezes
-4. Testar em mobile/tablet (DevTools responsive mode)
+#### Steps
+1. Create cable without a name: attempt to save an empty form
+2. Edit a missing cable: tamper with the URL to use an invalid ID
+3. Delete while editing: delete the cable in another tab while the modal is open
+4. Network offline: disable connectivity and attempt to save
+5. Duplicate request: double-click the "Save" button quickly
 
-#### Critérios de Sucesso:
-- [ ] **Renderização rápida:** 20 cabos < 1s
-- [ ] **Sem lag:** Seleção instantânea
-- [ ] **Zoom suave:** Sem stuttering
-- [ ] **Mobile ok:** Touch funciona, botões acessíveis
-- [ ] **Memory ok:** Sem memory leaks (DevTools Performance tab)
+#### Success Criteria
+- [ ] Frontend validation: clear error messages displayed
+- [ ] 404 handled: "Cable not found" presented
+- [ ] Conflict handled: concurrent changes detected
+- [ ] Offline detected: "No connection" message shown
+- [ ] Loading state: button disabled during the request
+- [ ] No crash: application remains stable
+- [ ] Automatic rollback: inconsistent state reverted
 
-#### Notas de Teste:
+#### Test Notes
 ```
-Data/Hora: _________________
-Resultado: ☐ PASS  ☐ FAIL
-Observações:
+Date/Time: _________________
+Result: [ ] PASS  [ ] FAIL
+Notes:
 _________________________________
 _________________________________
 ```
 
 ---
 
-## 📊 Matriz de Compatibilidade
+### Scenario 10: Performance and Responsiveness
 
-Testar em múltiplos navegadores:
+Goal: Validate performance under load.
 
-| Cenário | Chrome | Firefox | Edge | Safari | Mobile |
-|---------|--------|---------|------|--------|--------|
-| 1. Inicialização | ☐ | ☐ | ☐ | ☐ | ☐ |
-| 2. Criar Cabo | ☐ | ☐ | ☐ | ☐ | ☐ |
-| 3. Visualizar | ☐ | ☐ | ☐ | ☐ | ☐ |
-| 4. Editar | ☐ | ☐ | ☐ | ☐ | ☐ |
-| 5. Deletar | ☐ | ☐ | ☐ | ☐ | ☐ |
-| 6. Menu Contexto | ☐ | ☐ | ☐ | ☐ | ☐ |
-| 7. Filtros | ☐ | ☐ | ☐ | ☐ | ☐ |
-| 8. Interações Mapa | ☐ | ☐ | ☐ | ☐ | ☐ |
-| 9. Erros | ☐ | ☐ | ☐ | ☐ | ☐ |
-| 10. Performance | ☐ | ☐ | ☐ | ☐ | ☐ |
+#### Steps
+1. Create 20 cables quickly
+2. Select multiple cables in succession
+3. Perform rapid zoom in and zoom out several times
+4. Test in mobile or tablet view (DevTools responsive mode)
 
----
+#### Success Criteria
+- [ ] Fast rendering: 20 cables render in under one second
+- [ ] No lag: selection responds immediately
+- [ ] Smooth zoom: no stuttering
+- [ ] Mobile ready: touch interactions work and buttons remain accessible
+- [ ] Memory healthy: no apparent leaks (DevTools Performance tab)
 
-## 🐛 Registro de Bugs
-
-| ID | Cenário | Descrição | Severidade | Status |
-|----|---------|-----------|------------|--------|
-| BUG-001 | | | ☐ Crítico ☐ Alto ☐ Médio ☐ Baixo | ☐ Aberto ☐ Resolvido |
-| BUG-002 | | | ☐ Crítico ☐ Alto ☐ Médio ☐ Baixo | ☐ Aberto ☐ Resolvido |
-| BUG-003 | | | ☐ Crítico ☐ Alto ☐ Médio ☐ Baixo | ☐ Aberto ☐ Resolvido |
-
-**Severidade:**
-- **Crítico:** Aplicação não funciona, perda de dados
-- **Alto:** Feature principal quebrada, workaround difícil
-- **Médio:** Feature secundária quebrada, workaround existe
-- **Baixo:** Cosmético, UX ruim mas funciona
+#### Test Notes
+```
+Date/Time: _________________
+Result: [ ] PASS  [ ] FAIL
+Notes:
+_________________________________
+_________________________________
+```
 
 ---
 
-## ✅ Critérios de Aceitação Final
+## Compatibility Matrix
 
-Para considerar a refatoração **APROVADA**:
+Test across multiple browsers.
 
-- [ ] **Todos os 10 cenários PASSARAM** em pelo menos 1 navegador
-- [ ] **Zero bugs críticos** encontrados
-- [ ] **< 2 bugs altos** encontrados
-- [ ] **Performance aceitável** (< 2s para operações principais)
-- [ ] **Console sem erros** (exceto warnings aceitáveis)
-- [ ] **Compatibilidade:** Chrome + Firefox funcionando
-- [ ] **Mobile básico:** Touch e navegação ok
+| Scenario | Chrome | Firefox | Edge | Safari | Mobile |
+| --- | --- | --- | --- | --- | --- |
+| 1. Initialization | [ ] | [ ] | [ ] | [ ] | [ ] |
+| 2. Create Cable | [ ] | [ ] | [ ] | [ ] | [ ] |
+| 3. View | [ ] | [ ] | [ ] | [ ] | [ ] |
+| 4. Edit | [ ] | [ ] | [ ] | [ ] | [ ] |
+| 5. Delete | [ ] | [ ] | [ ] | [ ] | [ ] |
+| 6. Context Menu | [ ] | [ ] | [ ] | [ ] | [ ] |
+| 7. Filters | [ ] | [ ] | [ ] | [ ] | [ ] |
+| 8. Map Interactions | [ ] | [ ] | [ ] | [ ] | [ ] |
+| 9. Errors | [ ] | [ ] | [ ] | [ ] | [ ] |
+| 10. Performance | [ ] | [ ] | [ ] | [ ] | [ ] |
 
 ---
 
-## 📝 Relatório de Execução
+## Bug Log
 
-**Testador:** _________________________  
-**Data início:** ______________________  
-**Data fim:** ________________________  
-**Duração total:** ___________________  
+| ID | Scenario | Description | Severity | Status |
+| --- | --- | --- | --- | --- |
+| BUG-001 | | | [ ] Critical [ ] High [ ] Medium [ ] Low | [ ] Open [ ] Resolved |
+| BUG-002 | | | [ ] Critical [ ] High [ ] Medium [ ] Low | [ ] Open [ ] Resolved |
+| BUG-003 | | | [ ] Critical [ ] High [ ] Medium [ ] Low | [ ] Open [ ] Resolved |
 
-**Resumo:**
-- Cenários executados: ____/10
-- Cenários PASS: ____
-- Cenários FAIL: ____
-- Bugs encontrados: ____
-- Bugs críticos: ____
+Severity definitions:
+- Critical: application unavailable or data loss
+- High: primary feature broken, no practical workaround
+- Medium: secondary feature affected, workaround available
+- Low: cosmetic issue or minor UX concern
 
-**Decisão Final:**
-☐ **APROVADO** - Refatoração sem regressões  
-☐ **APROVADO COM RESSALVAS** - Bugs menores a corrigir  
-☐ **REPROVADO** - Regressões críticas encontradas
+---
 
-**Observações Gerais:**
+## Final Acceptance Criteria
+
+The refactor is approved when:
+
+- [ ] All ten scenarios pass in at least one browser
+- [ ] Zero critical bugs remain
+- [ ] Fewer than two high severity bugs remain
+- [ ] Performance acceptable (under two seconds for primary actions)
+- [ ] Console free of errors (benign warnings allowed)
+- [ ] Compatibility confirmed on Chrome and Firefox
+- [ ] Basic mobile usage validated (touch and navigation work)
+
+---
+
+## Execution Report
+
+Tester: _________________________
+Start date: _____________________
+End date: _______________________
+Total duration: _________________
+
+Summary:
+- Scenarios executed: ____/10
+- Scenarios passing: ____
+- Scenarios failing: ____
+- Bugs found: ____
+- Critical bugs: ____
+
+Final decision:
+[ ] APPROVED - refactor with no regressions
+[ ] APPROVED WITH CONDITIONS - minor bugs to fix
+[ ] REJECTED - critical regressions found
+
+General notes:
 ```
 ______________________________________________
 ______________________________________________
@@ -440,13 +441,13 @@ ______________________________________________
 
 ---
 
-**Próximos Passos:**
-1. Se APROVADO: Merge para branch main
-2. Se REPROVADO: Corrigir bugs e re-testar
-3. Documentar lições aprendidas
-4. Criar testes automatizados (Jest/Playwright) para os cenários críticos
+Next steps:
+1. If approved: merge into the main branch
+2. If rejected: fix bugs and rerun the manual plan
+3. Document lessons learned
+4. Add automated tests (Jest or Playwright) for the critical scenarios
 
 ---
 
-*Documento gerado em 27/10/2025*  
-*Baseado na refatoração modular ES6 do fiber_route_builder.js*
+Document generated on 27 October 2025
+Based on the ES6 modular refactor of `fiber_route_builder.js`

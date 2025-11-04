@@ -40,6 +40,11 @@ urlpatterns: list[Any] = [
         'accounts/',
         include('django.contrib.auth.urls'),
     ),
+    path(
+        'metrics',
+        RedirectView.as_view(url='/metrics/metrics', permanent=False),
+        name='metrics_root_redirect',
+    ),
     path('metrics/', include('django_prometheus.urls')),
 
     # Apps

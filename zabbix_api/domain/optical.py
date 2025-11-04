@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from ..models import Port
 from ..services.fiber_status import fetch_interface_status_advanced
@@ -15,19 +15,23 @@ __all__ = [
     "_score_optical_candidate",
     "_discover_optical_keys_by_portname",
     "_fetch_port_optical_snapshot",
+    "fetch_port_optical_snapshot",
 ]
 
 
 def _safe_float(value: Any) -> Optional[float]:
-    """Converte um valor potencialmente inválido para float, retornando None em caso de erro."""
+    """Convert values to float, returning None when conversion fails."""
     try:
         return float(value)
     except (TypeError, ValueError):
         return None
 
 
-def _fetch_item_value(hostid: Any, key: str | None) -> Tuple[Optional[float], Optional[Any], Optional[Dict[str, Any]]]:
-    """Retorna (valor_float, raw, item_dict) para um item do Zabbix."""
+def _fetch_item_value(
+    hostid: Any,
+    key: str | None,
+) -> Tuple[Optional[float], Optional[Any], Optional[Dict[str, Any]]]:
+    """Return ``(float_value, raw_value, item_dict)`` for a Zabbix item."""
     if not (hostid and key):
         return None, None, None
 
@@ -37,10 +41,16 @@ def _fetch_item_value(hostid: Any, key: str | None) -> Tuple[Optional[float], Op
         "filter": {"key_": key},
         "limit": 1,
     }
-    items = zabbix_request("item.get", params) or []
+    items = cast(
+        List[Dict[str, Any]],
+        zabbix_request("item.get", params) or [],
+    )
     if not items:
         params.pop("hostids", None)
-        items = zabbix_request("item.get", params) or []
+        items = cast(
+            List[Dict[str, Any]],
+            zabbix_request("item.get", params) or [],
+        )
         if not items:
             return None, None, None
 
@@ -49,17 +59,21 @@ def _fetch_item_value(hostid: Any, key: str | None) -> Tuple[Optional[float], Op
     value = _safe_float(raw)
     if value is None:
         try:
-            history = zabbix_request(
-                "history.get",
-                {
-                    "itemids": [str(item["itemid"])],
-                    "history": int(item.get("value_type", 0)),
-                    "sortfield": "clock",
-                    "sortorder": "DESC",
-                    "limit": 1,
-                },
-            ) or []
-        except Exception:  # pragma: no cover - fallback defensivo
+            history = cast(
+                List[Dict[str, Any]],
+                zabbix_request(
+                    "history.get",
+                    {
+                        "itemids": [str(item["itemid"])],
+                        "history": int(item.get("value_type", 0)),
+                        "sortfield": "clock",
+                        "sortorder": "DESC",
+                        "limit": 1,
+                    },
+                )
+                or [],
+            )
+        except Exception:  # pragma: no cover - defensive fallback
             history = []
         if history:
             raw = history[0].get("value")
@@ -68,8 +82,13 @@ def _fetch_item_value(hostid: Any, key: str | None) -> Tuple[Optional[float], Op
 
 
 def _score_optical_candidate(item: Dict[str, Any], kind: str) -> int:
-    """Aplica heurística simples para classificar itens RX/TX de potência óptica."""
-    text = f"{(item.get('key_') or '').lower()} {(item.get('name') or '').lower()}"
+    """Apply a basic heuristic to score RX/TX optical power items."""
+    text = " ".join(
+        [
+            (item.get("key_") or "").lower(),
+            (item.get("name") or "").lower(),
+        ]
+    )
     units = (item.get("units") or "").lower()
     score = 0
 
@@ -91,24 +110,32 @@ def _score_optical_candidate(item: Dict[str, Any], kind: str) -> int:
         if "rx" in text:
             score -= 1
 
-    if any(word in text for word in ("threshold", "alarm", "bias", "temperature", "fault")):
+    if any(
+        word in text
+        for word in ("threshold", "alarm", "bias", "temperature", "fault")
+    ):
         score -= 3
     return score
 
 
 def _discover_optical_keys_by_portname(
-    hostid: Any, port_name: str | None, cache: Optional[Dict[Tuple[str, str], Dict[str, Optional[str]]]] = None
+    hostid: Any,
+    port_name: str | None,
+    cache: Optional[
+        Dict[Tuple[str, Optional[str]], Dict[str, Optional[str]]]
+    ] = None,
 ) -> Dict[str, Optional[str]]:
+    """Discover optical power items using the port name as fallback.
+
+    This is used when ``interfaceid`` is missing. Returns
+    ``{"rx": key, "tx": key}`` with ``None`` when nothing is found.
     """
-    Procura itens de potência óptica usando o nome da porta (fallback quando interfaceid não está disponível).
-    Retorna dict {'rx': key_or_none, 'tx': key_or_none}.
-    """
-    cache_key = (str(hostid), port_name)
+    cache_key: Tuple[str, Optional[str]] = (str(hostid), port_name)
     if cache is not None and cache_key in cache:
         return cache[cache_key]
 
     if not (hostid and port_name):
-        result = {"rx": None, "tx": None}
+        result: Dict[str, Optional[str]] = {"rx": None, "tx": None}
         if cache is not None:
             cache[cache_key] = result
         return result
@@ -120,9 +147,9 @@ def _discover_optical_keys_by_portname(
             if compact and compact not in search_terms:
                 search_terms.append(compact)
 
-    candidates = []
+    candidates: list[Dict[str, Any]] = []
     for term in search_terms:
-        query = {
+        query: Dict[str, Any] = {
             "output": ["itemid", "key_", "name", "lastvalue", "units"],
             "hostids": [str(hostid)],
             "filter": {"status": "0"},
@@ -130,7 +157,10 @@ def _discover_optical_keys_by_portname(
             "searchByAny": True,
             "limit": 200,
         }
-        items = zabbix_request("item.get", query) or []
+        items = cast(
+            List[Dict[str, Any]],
+            zabbix_request("item.get", query) or [],
+        )
         candidates.extend(items)
         if items:
             break
@@ -145,7 +175,10 @@ def _discover_optical_keys_by_portname(
                 "searchByAny": True,
                 "limit": 200,
             }
-            items = zabbix_request("item.get", query) or []
+            items = cast(
+                List[Dict[str, Any]],
+                zabbix_request("item.get", query) or [],
+            )
             candidates.extend(items)
             if items:
                 break
@@ -166,25 +199,55 @@ def _discover_optical_keys_by_portname(
             best_tx = tx_score
             tx_key = key if tx_score > 0 else tx_key
 
-    result = {"rx": rx_key, "tx": tx_key}
+    result: Dict[str, Optional[str]] = {"rx": rx_key, "tx": tx_key}
     if cache is not None:
         cache[cache_key] = result
     return result
 
 
-def _fetch_port_optical_snapshot(
-    port: Port | None, discovery_cache: Optional[Dict[Tuple[str, str], Dict[str, Optional[str]]]] = None, persist_keys: bool = True
+def fetch_port_optical_snapshot(
+    port: Port,
+    *,
+    discovery_cache: Optional[Dict[Any, Any]] | None = None,
+    persist_keys: bool = True,
 ) -> Dict[str, Any]:
+    """Public wrapper for ``_fetch_port_optical_snapshot``.
+
+    Exposed to avoid importing the private helper from downstream modules while
+    keeping the original implementation intact. Delegates all parameters to the
+    internal function.
     """
-    Obtém snapshot de potência óptica (RX/TX) para uma porta.
-    - Usa chaves configuradas no modelo, com fallback para descoberta automática.
-    - Persiste chaves descobertas (se `persist_keys` for True).
-    Retorna dict com valores numéricos (dBm) e metadados.
+
+    return _fetch_port_optical_snapshot(
+        port,
+        discovery_cache=discovery_cache,
+        persist_keys=persist_keys,
+    )
+
+
+def _fetch_port_optical_snapshot(
+    port: Port | None,
+    discovery_cache: Optional[
+        Dict[Tuple[str, Optional[str]], Dict[str, Optional[str]]]
+    ] = None,
+    persist_keys: bool = True,
+) -> Dict[str, Any]:
+    """Load an optical power (RX/TX) snapshot for a port.
+
+    - Prefer item keys already configured on the model, otherwise fall back to
+      automatic discovery.
+    - Persist newly discovered keys when ``persist_keys`` is ``True``.
+
+    Returns a mapping with numeric values (dBm) plus metadata.
     """
-    if port is None or port.device is None:
+    if port is None:
         return {"rx_dbm": None, "tx_dbm": None, "rx_raw": None, "tx_raw": None}
 
-    hostid = (port.device.zabbix_hostid or "").strip()
+    device = getattr(port, "device", None)
+    if device is None:
+        return {"rx_dbm": None, "tx_dbm": None, "rx_raw": None, "tx_raw": None}
+
+    hostid = (getattr(device, "zabbix_hostid", "") or "").strip()
     if not hostid:
         return {"rx_dbm": None, "tx_dbm": None, "rx_raw": None, "tx_raw": None}
 
@@ -202,8 +265,12 @@ def _fetch_port_optical_snapshot(
             rx_key=rx_key or None,
             tx_key=tx_key or None,
         )
-    except Exception as exc:  # pragma: no cover - log defensivo
-        logger.debug("Erro ao consultar status óptico da porta %s: %s", port.id, exc)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.debug(
+            "Failed to fetch optical status for port %s: %s",
+            getattr(port, "pk", None),
+            exc,
+        )
         status_meta = {}
 
     original_rx_key = rx_key
@@ -221,7 +288,11 @@ def _fetch_port_optical_snapshot(
             break
 
     if (not rx_key or not tx_key) and port.name:
-        discovered = _discover_optical_keys_by_portname(hostid, port.name, cache=discovery_cache)
+        discovered = _discover_optical_keys_by_portname(
+            hostid,
+            port.name,
+            cache=discovery_cache,
+        )
         rx_key = rx_key or (discovered.get("rx") or "")
         tx_key = tx_key or (discovered.get("tx") or "")
         if discovered.get("rx") or discovered.get("tx"):

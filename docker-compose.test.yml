@@ -1,11 +1,11 @@
 version: "3.9"
 
 services:
-  # Serviço principal de testes
+  # Primary test service
   tests:
     build:
       context: .
-      # Reutiliza cache do build principal (opcional)
+      # Reuse the main image build cache (optional)
       cache_from:
         - web:latest
     entrypoint: ["/docker-entrypoint.sh"]
@@ -15,19 +15,19 @@ services:
       export DJANGO_SETTINGS_MODULE=$${DJANGO_SETTINGS_MODULE:-settings.test}
       export PYTHONPATH=/app
       
-      echo '🎯 Ambiente: '$$DJANGO_SETTINGS_MODULE
+      echo '🎯 Environment: '$$DJANGO_SETTINGS_MODULE
       echo '🐍 Python: '$(python --version)
       echo '📦 Django: '$(python -c \"import django; print(django.get_version())\")
       
-      # Executa testes com configurações específicas
+      # Run tests with the appropriate configuration
       if [ \"$$CI\" = \"true\" ]; then
-        echo '🏗️  Modo CI detectado'
+        echo '🏗️  CI mode detected'
         pytest -v --junitxml=reports/junit.xml \
                --cov-report=xml:reports/coverage.xml \
                --cov-report=term-missing \
                --tb=short
       else
-        echo '💻 Modo desenvolvimento'
+        echo '💻 Development mode'
         pytest -v --cov --cov-report=html:reports/coverage \
                --cov-report=term-missing \
                --tb=short \
@@ -37,36 +37,36 @@ services:
     env_file:
       - ./.env.test
     environment:
-      # Configurações de ambiente
+      # Environment settings
       TESTING: "true"
       CI: "$${CI:-false}"
       PYTHONUNBUFFERED: "1"
       PYTHONDONTWRITEBYTECODE: "1"
-      # Database (pode ser sobrescrito)
+      # Database (override as needed)
       DB_ENGINE: "$${DB_ENGINE:-sqlite}"
       DB_NAME: "$${DB_NAME:-:memory:}"
       # Cache
       REDIS_URL: "$${REDIS_URL:-}"
-    # Dependências opcionais para testes de integração
+    # Optional dependencies for integration tests
     depends_on:
       db-test:
         condition: service_healthy
       redis-test:
         condition: service_healthy
     volumes:
-      # Desenvolvimento: código fonte
+      # Development: source code
       - .:/app
-      # Entrypoint (necessário pois não copiamos no Dockerfile)
+      # Entrypoint (required because it is not copied in the Dockerfile)
       - ./docker-entrypoint.sh:/docker-entrypoint.sh:ro
-      # Relatórios
+      # Reports
       - ./reports:/app/reports
-      # Cache do pytest (opcional)
+      # Pytest cache (optional)
       - pytest-cache:/app/.pytest_cache
     working_dir: /app
-    # Healthcheck desnecessário para job de testes
+    # Healthcheck unnecessary for a test job
     healthcheck:
       disable: true
-    # Configurações de recursos
+    # Resource configuration
     deploy:
       resources:
         limits:
@@ -74,7 +74,7 @@ services:
         reservations:
           memory: 512M
 
-  # Serviços de suporte para testes que precisam de dependências reais
+  # Support services for tests that need real dependencies
   db-test:
     image: mariadb:11
     environment:
@@ -95,19 +95,19 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
-    # Performance: usa tmpfs para dados temporários
+    # Performance: use tmpfs for temporary data
     tmpfs:
       - /var/lib/mysql:rw,noexec,nosuid,size=512m
     ports:
-      - "3307:3306"  # Porta alternativa para evitar conflitos
+      - "3307:3306"  # Alternate port to avoid conflicts
 
   redis-test:
     image: redis:7-alpine
     command: >
       redis-server
-      --save ""           # Não persiste em disco
-      --appendonly no     # Desabilita AOF
-      --maxmemory 128mb   # Limite de memória
+      --save ""           # Do not persist to disk
+      --appendonly no     # Disable AOF
+      --maxmemory 128mb   # Memory limit
       --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -117,7 +117,7 @@ services:
     tmpfs:
       - /data:rw,noexec,nosuid,size=128m
     ports:
-      - "6380:6379"  # Porta alternativa
+      - "6380:6379"  # Alternate port
 
 volumes:
   pytest-cache:

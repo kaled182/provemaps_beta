@@ -1,22 +1,22 @@
-# Comandos Rápidos — MapsProveFiber
+# Quick Commands - MapsProveFiber
 
-## Startup Diário
+## Daily startup
 ```powershell
-cd D:\Gemini\Provemaps_GPT-Tier2\mapsprovefiber
-docker start redis-mapspro
+cd D:\provemaps_beta
+docker compose up -d redis
 python manage.py runserver 0.0.0.0:8000
 start http://localhost:8000
 ```
 
 ## Redis
 ```powershell
-docker ps | findstr redis
-docker start redis-mapspro
-docker stop redis-mapspro
-docker logs redis-mapspro --tail 50
-docker exec -it redis-mapspro redis-cli
-docker exec redis-mapspro redis-cli KEYS "*"
-docker exec redis-mapspro redis-cli FLUSHDB
+docker compose ps redis
+docker compose up -d redis
+docker compose stop redis
+docker compose logs redis --tail 50
+docker compose exec redis redis-cli
+docker compose exec redis redis-cli KEYS "*"
+docker compose exec redis redis-cli FLUSHDB
 ```
 
 ## Django

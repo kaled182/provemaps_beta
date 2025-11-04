@@ -1,62 +1,62 @@
-# 🔒 Security Policy — MapsProveFiber
+# Security Policy - MapsProveFiber
 
-Este documento define as diretrizes de segurança e reporte de vulnerabilidades do projeto **MapsProveFiber**.
-
----
-
-## 🧠 Política Geral
-
-- Todo código é revisado antes de merge.
-- Senhas, chaves e tokens **nunca** devem ser commitados.
-- Use `.env.prod.template` para variáveis sensíveis.
-- Toda comunicação em produção deve usar **HTTPS + HSTS**.
+This document outlines the security guidelines and vulnerability reporting process for **MapsProveFiber**.
 
 ---
 
-## 🧱 Princípios de Segurança
+## General policy
 
-### Configurações
-- `DEBUG=False` em produção
-- `SECURE_SSL_REDIRECT=True`
-- `SESSION_COOKIE_SECURE=True`
-- `CSRF_COOKIE_SECURE=True`
-- `ALLOWED_HOSTS` definido explicitamente
-- `SENTRY_DSN` ativo
-
-### Senhas e Segredos
-- Gere `SECRET_KEY` seguro
-- Use Secret Manager
-- `.env.prod` privado
-
-### Acesso e Auditoria
-- Staff com 2FA
-- Logs sem IPs sensíveis
-- Auditoria via `setup_app`
+- Every change must be reviewed before merge.
+- Passwords, keys, and tokens must never be committed to the repository.
+- Use `.env.prod.template` as the source of sensitive variables.
+- All production communication must enforce **HTTPS + HSTS**.
 
 ---
 
-## 🚨 Reportar Vulnerabilidades
+## Security principles
 
-1. **Não abra um issue público.**
-2. Envie para **security@mapsprovefiber.com**
-3. Inclua:
-   - Descrição
-   - Reprodução
-   - Impacto
+### Configuration
+- Ensure `DEBUG=False` in production.
+- Enable `SECURE_SSL_REDIRECT=True`.
+- Configure `SESSION_COOKIE_SECURE=True`.
+- Configure `CSRF_COOKIE_SECURE=True`.
+- Maintain an explicit `ALLOWED_HOSTS` list.
+- Keep `SENTRY_DSN` active for error capture.
 
-Resposta média: 72h úteis.
+### Secrets
+- Generate a strong `SECRET_KEY` for each environment.
+- Store secrets in a managed secret vault.
+- Keep `.env.prod` private and off source control.
+
+### Access and auditing
+- Enforce two-factor authentication for staff.
+- Avoid logging sensitive IP information.
+- Use the `setup_app` audit utilities.
 
 ---
 
-## 🧩 Dependências
+## Vulnerability disclosure
+
+1. **Do not open a public issue.**
+2. Send the report to **security@mapsprovefiber.com**.
+3. Include the following information:
+   - Description
+   - Reproduction steps
+   - Impact assessment
+
+Average response time: 72 business hours.
+
+---
+
+## Dependencies
 - `django>=5.2`
 - `celery>=5.4`
 - `django-redis`
 - `psutil`
 
-Verificações semanais via `pip-audit` e `safety`.
+Run weekly checks with `pip-audit` and `safety`.
 
 ---
 
-## 🧾 Última revisão
-> Outubro/2025
+## Last review
+> October 2025

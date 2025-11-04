@@ -1,10 +1,11 @@
+# pyright: reportMissingTypeStubs=false
 """
-Views para enfileirar tasks do routes_builder com segurança.
+Secure task enqueue views for routes_builder.
 
-- Protegido por autenticação: @login_required + @user_passes_test(is_staff)
-- Safelist de IPs via env ADMIN_IP_SAFELIST="1.2.3.4,10.0.0.0/8"
-- Rate limiting simples por usuário/ação (cache)
-- Entrada/saída em JSON
+- Authentication enforced: @login_required + @user_passes_test(is_staff)
+- IP safelist via ADMIN_IP_SAFELIST="1.2.3.4,10.0.0.0/8"
+- Basic per-user rate limiting handled by cache
+- JSON input/output for all endpoints
 - Endpoints:
     POST /routes_builder/tasks/build
     POST /routes_builder/tasks/batch
@@ -20,7 +21,8 @@ import ipaddress
 import json
 import logging
 import os
-from typing import List
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any, Dict, List, Optional, Protocol, cast
 
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.cache import cache
@@ -31,8 +33,7 @@ from django.http import (
 )
 from django.views.decorators.http import require_POST
 
-from celery.result import AsyncResult
-
+from celery.result import AsyncResult as CeleryAsyncResult
 from .tasks import (
     build_route,
     build_routes_batch,
@@ -40,6 +41,8 @@ from .tasks import (
     import_route_from_payload,
     invalidate_route_cache,
 )
+
+AsyncResult = CeleryAsyncResult
 
 logger = logging.getLogger(__name__)
 
@@ -56,13 +59,7 @@ def _parse_ip_safelist() -> List[str]:
 
 
 def _is_ip_allowed(request: HttpRequest) -> bool:
-    """
-        Safelist por IP. Aceita entradas como:
-            - "203.0.113.10"
-            - "10.0.0.0/8"
-        Se ADMIN_IP_SAFELIST não estiver definida, acesso é liberado, assumindo
-        ambiente interno.
-    """
+    """Validate the requester IP against ADMIN_IP_SAFELIST entries."""
     safelist = _parse_ip_safelist()
     if not safelist:
         return True
@@ -91,32 +88,48 @@ def _is_ip_allowed(request: HttpRequest) -> bool:
     return False
 
 
-def _require_ip_allowlist(request: HttpRequest):
+def _require_ip_allowlist(request: HttpRequest) -> Optional[JsonResponse]:
     if not _is_ip_allowed(request):
         return JsonResponse({"detail": "Forbidden by IP safelist"}, status=403)
     return None
 
 
-def _get_json_body(request: HttpRequest):
+def _get_json_body(request: HttpRequest) -> Optional[Mapping[str, Any]]:
     try:
-        return json.loads(request.body.decode("utf-8") or "{}")
+        data = json.loads(request.body.decode("utf-8") or "{}")
     except json.JSONDecodeError:
         return None
+    if isinstance(data, Mapping):
+        return cast(Mapping[str, Any], data)
+    return None
 
 
-def _as_list(value) -> List[int]:
+def _as_list(value: object) -> List[int]:
     if value is None:
         return []
-    if isinstance(value, (list, tuple)):
-        return list(value)
-    return [value]
+    if isinstance(value, Iterable) and not isinstance(value, (str, bytes)):
+        items: List[int] = []
+        for item in cast(Iterable[object], value):
+            if isinstance(item, int):
+                items.append(item)
+        return items
+    if isinstance(value, int):
+        return [value]
+    return []
 
 
 # -------------------------- Rate Limiting -------------------------------
 
 def _rate_limit_key(request: HttpRequest, action: str) -> str:
-    user_id = request.user.id if request.user.is_authenticated else "anonymous"
-    return f"rate_limit:{action}:{user_id}"
+    if request.user.is_authenticated:
+        user_pk = getattr(request.user, "pk", None)
+        if user_pk is not None:
+            user_identifier = str(user_pk)
+        else:
+            user_identifier = request.user.get_username() or "anonymous"
+    else:
+        user_identifier = "anonymous"
+    return f"rate_limit:{action}:{user_identifier}"
 
 
 def _check_rate_limit(
@@ -126,19 +139,16 @@ def _check_rate_limit(
     limit: int = 10,
     window: int = 60,
 ) -> bool:
-    """
-    Rate limiting simples baseado em cache.
-    limit: máximo de requisições por janela
-    window: segundos
-    """
+    """Simple cache-based rate limiting helper."""
     key = _rate_limit_key(request, action)
     try:
         current = cache.get(key, 0)
-        if current >= limit:
+        current_count = int(current) if isinstance(current, int) else 0
+        if current_count >= limit:
             return False
-        cache.set(key, current + 1, timeout=window)
+        cache.set(key, current_count + 1, timeout=window)
     except Exception:
-        # Se Redis estiver offline, permite a requisição (fail-open em dev)
+        # Fail open if the cache backend is not available
         pass
     return True
 
@@ -151,9 +161,15 @@ def _client_ip(request: HttpRequest) -> str:
     return request.META.get("REMOTE_ADDR", "unknown")
 
 
-def _log_operation(request: HttpRequest, action: str, **kwargs):
+def _log_operation(
+    request: HttpRequest,
+    action: str,
+    **kwargs: Any,
+) -> None:
     user = (
-        request.user.username if request.user.is_authenticated else "anonymous"
+        request.user.get_username()
+        if request.user.is_authenticated
+        else "anonymous"
     )
     logger.info(
         "Admin operation: user=%s ip=%s action=%s %s",
@@ -164,12 +180,44 @@ def _log_operation(request: HttpRequest, action: str, **kwargs):
     )
 
 
+def _is_staff_user(user: Any) -> bool:
+    return bool(getattr(user, "is_staff", False))
+
+
+class _SupportsApplyAsync(Protocol):
+    def apply_async(
+        self,
+        *,
+        args: Optional[Sequence[Any]] = ...,
+        kwargs: Optional[Dict[str, Any]] = ...,
+    ) -> AsyncResult:
+        ...
+
+
+def _apply_async(
+    task: _SupportsApplyAsync,
+    *,
+    args: Optional[Sequence[Any]] = None,
+    kwargs: Optional[Dict[str, Any]] = None,
+) -> AsyncResult:
+    return task.apply_async(args=args, kwargs=kwargs)
+
+
+def _task_id(result: AsyncResult) -> str:
+    value = getattr(result, "id", None)
+    if isinstance(value, str):
+        return value
+    if value is None:
+        return ""
+    return str(value)
+
+
 # =============================================================================
 # Views
 # =============================================================================
 
 @login_required
-@user_passes_test(lambda u: u.is_staff)
+@user_passes_test(_is_staff_user)
 @require_POST
 def enqueue_build_route(request: HttpRequest):
     """
@@ -189,7 +237,7 @@ def enqueue_build_route(request: HttpRequest):
         "enqueue_build_route",
         limit=20,
         window=60,
-    ):  # 20/min por usuário
+    ):  # 20 per minute per user
         return JsonResponse({"error": "Rate limit exceeded"}, status=429)
 
     body = _get_json_body(request)
@@ -201,9 +249,14 @@ def enqueue_build_route(request: HttpRequest):
         return HttpResponseBadRequest("route_id must be a positive integer")
 
     force = bool(body.get("force", False))
-    options = body.get("options") or {}
+    options_raw = body.get("options")
+    options: Dict[str, Any] = (
+        dict(cast(Mapping[str, Any], options_raw))
+        if isinstance(options_raw, Mapping)
+        else {}
+    )
 
-    # Validação opcional de existência do objeto
+    # Optional object existence validation
     try:
         from .models import Route
 
@@ -213,11 +266,12 @@ def enqueue_build_route(request: HttpRequest):
                 status=404,
             )
     except Exception:
-        # Se o model não estiver disponível por qualquer razão, seguimos
+        # If the model import fails for any reason we allow the call to proceed
         pass
 
     try:
-        res = build_route.apply_async(
+        res = _apply_async(
+            cast(_SupportsApplyAsync, build_route),
             args=[route_id],
             kwargs={"force": force, "options": options},
         )
@@ -231,7 +285,7 @@ def enqueue_build_route(request: HttpRequest):
             {
                 "status": "enqueued",
                 "task": "routes_builder.tasks.build_route",
-                "task_id": res.id,
+                "task_id": _task_id(res),
                 "route_id": route_id,
                 "queue": getattr(res, "queue", "maps"),
             },
@@ -243,7 +297,7 @@ def enqueue_build_route(request: HttpRequest):
 
 
 @login_required
-@user_passes_test(lambda u: u.is_staff)
+@user_passes_test(_is_staff_user)
 @require_POST
 def enqueue_build_routes_batch(request: HttpRequest):
     """
@@ -270,9 +324,7 @@ def enqueue_build_routes_batch(request: HttpRequest):
         return HttpResponseBadRequest("Invalid JSON")
 
     route_ids = _as_list(body.get("route_ids"))
-    if not route_ids or not all(
-        isinstance(route_id, int) and route_id > 0 for route_id in route_ids
-    ):
+    if not route_ids or any(route_id <= 0 for route_id in route_ids):
         return HttpResponseBadRequest(
             "route_ids must be a list of positive integers"
         )
@@ -280,8 +332,9 @@ def enqueue_build_routes_batch(request: HttpRequest):
     force = bool(body.get("force", False))
 
     try:
-        res = build_routes_batch.apply_async(
-            kwargs={"route_ids": route_ids, "force": force}
+        res = _apply_async(
+            cast(_SupportsApplyAsync, build_routes_batch),
+            kwargs={"route_ids": route_ids, "force": force},
         )
         _log_operation(
             request,
@@ -293,7 +346,7 @@ def enqueue_build_routes_batch(request: HttpRequest):
             {
                 "status": "enqueued",
                 "task": "routes_builder.tasks.build_routes_batch",
-                "task_id": res.id,
+                "task_id": _task_id(res),
                 "route_ids": route_ids,
                 "queue": getattr(res, "queue", "maps"),
             },
@@ -305,10 +358,10 @@ def enqueue_build_routes_batch(request: HttpRequest):
 
 
 @login_required
-@user_passes_test(lambda u: u.is_staff)
+@user_passes_test(_is_staff_user)
 @require_POST
 def enqueue_import_route(request: HttpRequest):
-    """Enfileira importação/atualização de rota por payload JSON."""
+    """Enqueue a route import/update task using a JSON payload."""
 
     deny = _require_ip_allowlist(request)
     if deny:
@@ -326,19 +379,23 @@ def enqueue_import_route(request: HttpRequest):
     if body is None:
         return HttpResponseBadRequest("Invalid JSON")
 
-    payload = body.get("payload")
-    if not isinstance(payload, dict):
+    payload_raw = body.get("payload")
+    if not isinstance(payload_raw, Mapping):
         return HttpResponseBadRequest("payload must be an object")
+    payload: Dict[str, Any] = dict(cast(Mapping[str, Any], payload_raw))
 
+    created_by_raw = body.get("created_by")
     created_by = (
-        body.get("created_by")
-        or request.user.username
-        or "routes_builder"
+        created_by_raw
+        if isinstance(created_by_raw, str) and created_by_raw
+        else request.user.get_username() or "routes_builder"
     )
 
     try:
-        res = import_route_from_payload.apply_async(
-            args=[payload], kwargs={"created_by": created_by}
+        res = _apply_async(
+            cast(_SupportsApplyAsync, import_route_from_payload),
+            args=[payload],
+            kwargs={"created_by": created_by},
         )
         _log_operation(
             request,
@@ -350,7 +407,7 @@ def enqueue_import_route(request: HttpRequest):
             {
                 "status": "enqueued",
                 "task": "routes_builder.tasks.import_route_from_payload",
-                "task_id": res.id,
+                "task_id": _task_id(res),
                 "queue": getattr(res, "queue", "maps"),
                 "created_by": created_by,
             },
@@ -362,7 +419,7 @@ def enqueue_import_route(request: HttpRequest):
 
 
 @login_required
-@user_passes_test(lambda u: u.is_staff)
+@user_passes_test(_is_staff_user)
 @require_POST
 def enqueue_invalidate_route_cache(request: HttpRequest):
     """
@@ -392,7 +449,10 @@ def enqueue_invalidate_route_cache(request: HttpRequest):
         return HttpResponseBadRequest("route_id must be a positive integer")
 
     try:
-        res = invalidate_route_cache.apply_async(args=[route_id])
+        res = _apply_async(
+            cast(_SupportsApplyAsync, invalidate_route_cache),
+            args=[route_id],
+        )
         _log_operation(
             request,
             "enqueue_invalidate_route_cache",
@@ -402,7 +462,7 @@ def enqueue_invalidate_route_cache(request: HttpRequest):
             {
                 "status": "enqueued",
                 "task": "routes_builder.tasks.invalidate_route_cache",
-                "task_id": res.id,
+                "task_id": _task_id(res),
                 "route_id": route_id,
                 "queue": getattr(res, "queue", "maps"),
             },
@@ -418,10 +478,10 @@ def enqueue_invalidate_route_cache(request: HttpRequest):
 
 
 @login_required
-@user_passes_test(lambda u: u.is_staff)
+@user_passes_test(_is_staff_user)
 @require_POST
 def enqueue_health_check(request: HttpRequest):
-    """Enfileira o health check do routes_builder."""
+    """Enqueue the routes_builder health check task."""
     deny = _require_ip_allowlist(request)
     if deny:
         return deny
@@ -435,13 +495,15 @@ def enqueue_health_check(request: HttpRequest):
         return JsonResponse({"error": "Rate limit exceeded"}, status=429)
 
     try:
-        res = health_check_routes_builder.apply_async()
+        res = _apply_async(
+            cast(_SupportsApplyAsync, health_check_routes_builder),
+        )
         _log_operation(request, "enqueue_health_check")
         return JsonResponse(
             {
                 "status": "enqueued",
                 "task": "routes_builder.tasks.health_check_routes_builder",
-                "task_id": res.id,
+                "task_id": _task_id(res),
                 "queue": getattr(res, "queue", "maps"),
             },
             status=202,
@@ -452,30 +514,43 @@ def enqueue_health_check(request: HttpRequest):
 
 
 @login_required
-@user_passes_test(lambda u: u.is_staff)
+@user_passes_test(_is_staff_user)
 def task_status(request: HttpRequest, task_id: str):
-    """
-    Consulta status de uma task Celery específica.
+    """Return the status of a given Celery task.
+
     GET /routes_builder/tasks/status/<task_id>
     """
-    # IP safelist mesmo em GET
+    # Apply IP safelist even for GET requests
     deny = _require_ip_allowlist(request)
     if deny:
         return deny
 
     try:
         result = AsyncResult(task_id)
-        response_data = {
+        status_value = getattr(result, "status", "PENDING")
+        status_str = (
+            status_value
+            if isinstance(status_value, str)
+            else str(status_value)
+        )
+        response_data: Dict[str, Any] = {
             "task_id": task_id,
-            "status": result.status,
+            "status": status_str,
             "ready": result.ready(),
         }
         if result.ready():
             if result.successful():
-                response_data["result"] = result.result
+                response_payload: Any = getattr(result, "result", None)
+                response_data["result"] = response_payload
             else:
-                response_data["error"] = str(result.result)
-                response_data["traceback"] = result.traceback
+                error_payload: Any = getattr(result, "result", None)
+                response_data["error"] = str(error_payload)
+                traceback_payload = getattr(result, "traceback", None)
+                response_data["traceback"] = (
+                    str(traceback_payload)
+                    if traceback_payload is not None
+                    else None
+                )
         return JsonResponse(response_data)
     except Exception as exc:
         logger.error("Failed to fetch task status %s: %s", task_id, exc)
@@ -486,20 +561,18 @@ def task_status(request: HttpRequest, task_id: str):
 
 
 @login_required
-@user_passes_test(lambda u: u.is_staff)
+@user_passes_test(_is_staff_user)
 @require_POST
 def enqueue_bulk_operations(request: HttpRequest):
-    """
-    Enfileira múltiplas operações em uma única requisição.
+    """Enqueue multiple operations in a single request.
 
-    Body JSON:
-    {
-      "operations": [
-        {"action": "build", "route_id": 123, "force": true, "options": {...}},
-        {"action": "invalidate", "route_id": 123},
-        {"action": "build", "route_id": 456}
-      ]
-    }
+    Body JSON example:
+        {
+            "operations": [
+                {"action": "build", "route_id": 123, "force": true},
+                {"action": "invalidate", "route_id": 123}
+            ]
+        }
     """
     deny = _require_ip_allowlist(request)
     if deny:
@@ -517,16 +590,18 @@ def enqueue_bulk_operations(request: HttpRequest):
     if body is None:
         return HttpResponseBadRequest("Invalid JSON")
 
-    operations = body.get("operations", [])
-    if not isinstance(operations, list):
+    operations_raw = body.get("operations")
+    if not isinstance(operations_raw, list):
         return HttpResponseBadRequest("operations must be a list")
+    operations_raw_list = cast(List[Any], operations_raw)
+    operations: List[Mapping[str, Any]] = []
+    for entry in operations_raw_list:
+        if isinstance(entry, Mapping):
+            operations.append(cast(Mapping[str, Any], entry))
 
-    results = []
+    results: List[Dict[str, Any]] = []
 
     for op in operations:
-        if not isinstance(op, dict):
-            continue
-
         action = op.get("action")
         route_id = op.get("route_id")
 
@@ -543,8 +618,15 @@ def enqueue_bulk_operations(request: HttpRequest):
                     )
                     continue
                 force = bool(op.get("force", False))
-                options = op.get("options", {})
-                res = build_route.apply_async(
+                options_raw = op.get("options")
+                options_mapping = (
+                    cast(Mapping[str, Any], options_raw)
+                    if isinstance(options_raw, Mapping)
+                    else None
+                )
+                options = dict(options_mapping) if options_mapping else {}
+                res = _apply_async(
+                    cast(_SupportsApplyAsync, build_route),
                     args=[route_id],
                     kwargs={"force": force, "options": options},
                 )
@@ -552,7 +634,7 @@ def enqueue_bulk_operations(request: HttpRequest):
                     {
                         "action": "build",
                         "route_id": route_id,
-                        "task_id": res.id,
+                        "task_id": _task_id(res),
                         "status": "enqueued",
                     }
                 )
@@ -568,19 +650,22 @@ def enqueue_bulk_operations(request: HttpRequest):
                         }
                     )
                     continue
-                res = invalidate_route_cache.apply_async(args=[route_id])
+                res = _apply_async(
+                    cast(_SupportsApplyAsync, invalidate_route_cache),
+                    args=[route_id],
+                )
                 results.append(
                     {
                         "action": "invalidate",
                         "route_id": route_id,
-                        "task_id": res.id,
+                        "task_id": _task_id(res),
                         "status": "enqueued",
                     }
                 )
 
             elif action == "import":
-                payload = op.get("payload")
-                if not isinstance(payload, dict):
+                payload_raw = op.get("payload")
+                if not isinstance(payload_raw, Mapping):
                     results.append(
                         {
                             "action": action,
@@ -589,20 +674,22 @@ def enqueue_bulk_operations(request: HttpRequest):
                         }
                     )
                     continue
+                payload = dict(cast(Mapping[str, Any], payload_raw))
 
                 created_by = (
                     op.get("created_by")
-                    or request.user.username
+                    or request.user.get_username()
                     or "routes_builder"
                 )
-                res = import_route_from_payload.apply_async(
+                res = _apply_async(
+                    cast(_SupportsApplyAsync, import_route_from_payload),
                     args=[payload],
                     kwargs={"created_by": created_by},
                 )
                 results.append(
                     {
                         "action": "import",
-                        "task_id": res.id,
+                        "task_id": _task_id(res),
                         "status": "enqueued",
                         "created_by": created_by,
                         "payload_name": payload.get("name"),

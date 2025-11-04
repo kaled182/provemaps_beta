@@ -1,181 +1,181 @@
-# Changelog - 25/10/2025: Redis Graceful Degradation
+# Changelog – 2025-10-25: Redis Graceful Degradation
 
-## 🎯 Resumo Executivo
+## 🎯 Executive Summary
 
-**Problema:** Aplicação gerava HTTP 500 quando Redis estava offline  
-**Solução:** Implementado degradação graceful - app funciona sem Redis com logs DEBUG  
-**Impacto:** ✅ Desenvolvimento local sem dependências + resiliência em produção  
+**Problem:** The application returned HTTP 500 when Redis was offline  
+**Solution:** Implement graceful degradation – the app works without Redis and logs at DEBUG  
+**Impact:** ✅ Local development without hard dependency + production resiliency  
 
 ---
 
-## 🔧 Mudanças Técnicas
+## 🔧 Technical Changes
 
-### Arquivos Modificados
+### Modified Files
 
 #### 1. `zabbix_api/services/zabbix_service.py`
-**Adicionado:**
-- `safe_cache_get(key, default=None)` - Wrapper seguro para cache.get()
-- `safe_cache_set(key, value, timeout=None)` - Wrapper seguro para cache.set()
-- `safe_cache_delete(key)` - Wrapper seguro para cache.delete()
+**Added:**
+- `safe_cache_get(key, default=None)` – Safe wrapper for cache.get()
+- `safe_cache_set(key, value, timeout=None)` – Safe wrapper for cache.set()
+- `safe_cache_delete(key)` – Safe wrapper for cache.delete()
 
-**Substituído:** 10 pontos de acesso ao cache:
-- `search_hosts()` - 2x (get + set)
-- `get_host_interfaces()` - 2x (get + set)
-- `search_hosts_by_name_ip()` - 2x (get + set)
-- `get_host_interfaces_detailed()` - 2x (get + set)
-- `test_host_connectivity()` - 2x (get + set)
+**Replaced:** 10 cache access points:
+- `search_hosts()` – 2x (get + set)
+- `get_host_interfaces()` – 2x (get + set)
+- `search_hosts_by_name_ip()` – 2x (get + set)
+- `get_host_interfaces_detailed()` – 2x (get + set)
+- `test_host_connectivity()` – 2x (get + set)
 
 #### 2. `zabbix_api/inventory_cache.py`
-**Modificado:**
-- `invalidate_fiber_cache()` - Wrapped com try/except para ignorar Redis offline
+**Changed:**
+- `invalidate_fiber_cache()` – Wrapped in try/except to ignore offline Redis
 
 #### 3. `routes_builder/views_tasks.py`
-**Modificado:**
-- `_check_rate_limit()` - Wrapped com try/except (fail-open quando Redis offline)
+**Changed:**
+- `_check_rate_limit()` – Wrapped in try/except (fail-open when Redis is offline)
 
 ---
 
-## 📊 Antes vs Depois
+## 📊 Before vs After
 
-| Aspecto | ❌ Antes | ✅ Depois |
+| Aspect | ❌ Before | ✅ After |
 |---------|---------|----------|
 | **Redis offline** | HTTP 500 | HTTP 200 |
-| **Logs** | [ERROR] + stack trace | [DEBUG] mensagem curta |
-| **Dev experience** | Precisa Redis rodando | Funciona standalone |
-| **Produção** | Falha total se Redis cai | Degradação graceful |
-| **Performance** | N/A (quebra) | Reduzida mas funcional |
+| **Logs** | [ERROR] + stack trace | [DEBUG] short message |
+| **Dev experience** | Requires Redis running | Works standalone |
+| **Production** | Total failure if Redis goes down | Graceful degradation |
+| **Performance** | N/A (broken) | Reduced but functional |
 
 ---
 
-## 🧪 Validação
+## 🧪 Validation
 
-### Teste Manual Executado
+### Manual test executed
 ```powershell
-# Servidor rodando SEM Redis
+# Server running WITHOUT Redis
 curl http://localhost:8000/zabbix_api/lookup/hosts/?groupids=22
 ```
 
 **Resultado:**
 ```
-[DEBUG] zabbix_api.services.zabbix_service: Cache offline (Redis indisponível), continuando sem cache: ConnectionError
+[DEBUG] zabbix_api.services.zabbix_service: Cache offline (Redis unavailable), continuing without cache: ConnectionError
 HTTP/1.1 200 OK
 ```
 
-✅ **Sucesso:** Endpoint retorna 200, aplicação continua funcionando
+✅ **Success:** Endpoint returns 200, application keeps working
 
-### Endpoints Testados
-- ✅ `/zabbix/lookup/` - Interface de busca (200 OK)
-- ✅ `/zabbix_api/lookup/hosts/?groupids=22` - API lookup (200 OK)
-- ✅ `/maps_view/dashboard/` - Dashboard (200 OK)
-- ✅ `/zabbix_api/api/fibers/` - API fibers (200 OK)
+### Endpoints tested
+- ✅ `/zabbix/lookup/` – Lookup interface (200 OK)
+- ✅ `/zabbix_api/lookup/hosts/?groupids=22` – Lookup API (200 OK)
+- ✅ `/maps_view/dashboard/` – Dashboard (200 OK)
+- ✅ `/zabbix_api/api/fibers/` – Fibers API (200 OK)
 
 ---
 
-## 📝 Documentação Criada
+## 📝 Documentation created
 
 1. **`doc/reference/REDIS_GRACEFUL_DEGRADATION.md`**
-   - Problema detalhado
-   - Solução implementada
-   - Comparação antes/depois
-   - Testes de validação
-   - Configurações
+    - Detailed problem statement
+    - Implemented solution
+    - Before/after comparison
+    - Validation tests
+    - Configuration notes
 
-2. **`QUICKSTART_LOCAL.md` (atualizado)**
-   - Seção sobre comportamento do cache
-   - Troubleshooting para Redis offline
-   - Referência ao documento detalhado
+2. **`QUICKSTART_LOCAL.md` (updated)**
+    - Section describing cache behavior
+    - Troubleshooting for offline Redis
+    - Cross-reference to the detailed document
 
 ---
 
-## 🎓 Padrões Aplicados
+## 🎓 Patterns applied
 
 ### 1. Graceful Degradation
-**Conceito:** Sistema continua funcionando (com funcionalidade reduzida) quando componente falha
+**Concept:** The system keeps working (with reduced functionality) when a component fails
 
-**Implementação:**
+**Implementation:**
 ```python
 def safe_cache_get(key, default=None):
     try:
         return cache.get(key, default=default)
     except Exception:
-        logger.debug("Cache offline, continuando sem cache")
-        return default  # ← Degradação: sem cache, mas funciona
+        logger.debug("Cache offline, continuing without cache")
+        return default  # ← Degraded: no cache, but still works
 ```
 
 ### 2. Fail-Open (Rate Limiting)
-**Conceito:** Quando sistema de segurança falha, permite acesso (ao invés de bloquear tudo)
+**Concept:** If the safety mechanism fails, allow access (instead of blocking everything)
 
-**Implementação:**
+**Implementation:**
 ```python
 def _check_rate_limit(request, action, limit=10, window=60):
     try:
         # ... verificação de rate limiting com Redis ...
     except Exception:
-        # Redis offline: permite requisição (fail-open)
+        # Redis offline: allow the request (fail-open)
         pass
     return True
 ```
 
 ### 3. Defensive Logging
-**Conceito:** Logs devem refletir severidade real (DEBUG para situações esperadas, ERROR para problemas)
+**Concept:** Logs should reflect the real severity (DEBUG for expected scenarios, ERROR for actual problems)
 
-**Implementação:**
+**Implementation:**
 ```python
-# ❌ Antes: logger.error("Redis connection failed")
-# ✅ Depois: logger.debug("Cache offline (esperado em dev)")
+# ❌ Before: logger.error("Redis connection failed")
+# ✅ After: logger.debug("Cache offline (expected in dev)")
 ```
 
 ---
 
-## 🚀 Próximos Passos
+## 🚀 Next Steps
 
-### Implementados Hoje ✅
-- [x] Wrappers seguros de cache
-- [x] Substituição em zabbix_api/services/
-- [x] Tratamento em inventory_cache
+### Delivered today ✅
+- [x] Safe cache wrappers
+- [x] Replacement inside `zabbix_api/services/`
+- [x] Handling in `inventory_cache`
 - [x] Rate limiting fail-open
-- [x] Documentação completa
-- [x] Testes manuais
+- [x] Full documentation
+- [x] Manual tests
 
-### Sugestões Futuras 📋
-- [ ] Adicionar testes automatizados `test_cache_graceful_degradation.py`
-- [ ] Métricas Prometheus para cache hit/miss rate
-- [ ] Fallback para django.core.cache.backends.locmem (cache em memória)
-- [ ] Health check específico para Redis (non-critical)
-- [ ] Circuit breaker pattern para Redis connection pool
-
----
-
-## 🔍 Contexto Adicional
-
-### Por que isso aconteceu?
-O código original assumia que Redis estaria sempre disponível, seguindo padrão comum em produção. Porém, para desenvolvimento local, isso cria friction desnecessário.
-
-### Por que não usar cache em memória?
-Cache em memória (locmem) foi considerado, mas:
-- ✅ Degradação graceful é mais simples
-- ✅ Mais próximo do comportamento de produção (sem cache vs com cache)
-- ✅ Evidencia dependências reais (força pensar em performance sem cache)
-
-### Impacto em Produção
-**Positivo:** Se Redis cair momentaneamente, aplicação continua funcionando (degraded mode)  
-**Neutro:** Performance reduzida até Redis voltar  
-**Negativo:** Sem rate limiting (risco de abuso), mas melhor que app down  
+### Future suggestions 📋
+- [ ] Add automated tests `test_cache_graceful_degradation.py`
+- [ ] Prometheus metrics for cache hit/miss rate
+- [ ] Fallback to `django.core.cache.backends.locmem` (in-memory cache)
+- [ ] Non-critical Redis health check
+- [ ] Circuit breaker pattern for the Redis connection pool
 
 ---
 
-## 📞 Contato
+## 🔍 Additional Context
 
-**Issues relacionadas:** #N/A (correção proativa)  
+### Why did this happen?
+The original code assumed Redis would always be available, which is common in production. However, for local development that creates unnecessary friction.
+
+### Why not use in-memory cache?
+In-memory cache (locmem) was considered, but:
+- ✅ Graceful degradation is simpler
+- ✅ Closer to the production behavior (no cache vs cache)
+- ✅ Highlights real dependencies (forces us to consider performance without cache)
+
+### Production impact
+**Positive:** If Redis goes down momentarily, the application keeps working (degraded mode)  
+**Neutral:** Reduced performance until Redis comes back  
+**Negative:** No rate limiting (risk of abuse), but still better than a full outage  
+
+---
+
+## 📞 Contact
+
+**Related issues:** #N/A (proactive fix)  
 **Pull Request:** TBD  
-**Autor:** DevOps + Backend Team  
-**Data:** 25/10/2025  
+**Author:** DevOps + Backend Team  
+**Date:** 2025-10-25  
 
 ---
 
-**Ambiente Testado:**
+**Test environment:**
 - OS: Windows 11
 - Python: 3.13
 - Django: 5.2.7
-- Redis: N/A (offline intencionalmente)
-- Banco: SQLite (desenvolvimento)
+- Redis: N/A (intentionally offline)
+- Database: SQLite (development)

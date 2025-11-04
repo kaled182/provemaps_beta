@@ -1,52 +1,51 @@
-# Operações – Django Maps
+# Operations Checklist - Django Maps
 
-Resumo rápido para administrar o ambiente em produção ou homologação.
+Quick reference to manage the production or staging environment.
 
-## Serviços obrigatórios
-- **Django / ASGI** (python manage.py runserver em dev / Daphne, Gunicorn+Uvicorn ou similar em producao).
-- **MariaDB/MySQL** (mapspro_db) - configure backup (mysqldump).
-- **Redis** - broker/result backend para Celery e Channels.
-- **Camada Channels** - defina CHANNEL_LAYER_URL apontando para sua instancia Redis em producao (fallback in-memory somente para desenvolvimento).
-- **Celery worker e beat** (celery -A core worker -l info + celery -A core beat -l info) para tarefas assincronas e transmissao em tempo real. No Windows acrescente --pool=solo.
+## Required services
+- **Django / ASGI** (`& D:\provemaps_beta\venv\Scripts\python.exe manage.py runserver` for dev, Daphne or Gunicorn+Uvicorn in production).
+- **MariaDB/MySQL** (`mapspro_db`) - configure backups via `mysqldump`.
+- **Redis** - broker and result backend for Celery and Channels.
+- **Channels layer** - set `CHANNEL_LAYER_URL` to the production Redis instance (in-memory fallback only for development).
+- **Celery worker and beat** (`& D:\provemaps_beta\venv\Scripts\celery.exe -A core worker -l info` and `& D:\provemaps_beta\venv\Scripts\celery.exe -A core beat -l info`) for async tasks and real-time updates. On Windows add `--pool=solo`.
 
+## Monitoring
+- **Prometheus `/metrics/metrics`** - exposes roughly 200 metrics for Django, Celery, Redis, and the database.
+- **Health checks** - `/healthz` (full), `/ready` (readiness), `/live` (liveness).
+- **HTML dashboard** - `/maps_view/metrics/` for quick searches.
+- **Logs** - `logs/application.log` managed by `RotatingFileHandler` (five files of 5 MB each).
+- **Slow queries** - `& D:\provemaps_beta\venv\Scripts\python.exe manage.py show_slow_queries --limit 10` using `MYSQL_SLOW_LOG_PATH` or a manual `--path`.
 
-## Monitoramento
-- **Prometheus /metrics/metrics** – expõe ~200 métricas de Django, Celery, Redis e banco.
-- **Health Checks** – `/healthz` (completo), `/ready` (readiness), `/live` (liveness).
-- **Dashboard HTML** – `/maps_view/metrics/` facilita buscas rápidas.
-- **Logs** – `logs/application.log` com `RotatingFileHandler` (5 × 5 MB).
-- **Slow queries** – `python manage.py show_slow_queries --limit 10` lendo `MYSQL_SLOW_LOG_PATH` ou `--path` manual.
+### Health check endpoints
 
-### Health Check Endpoints
+| Endpoint | Purpose | Status code |
+|----------|---------|-------------|
+| `/healthz` | Full check (DB, cache, storage, system metrics) | 200 (ok), 503 (degraded) |
+| `/ready` | Readiness probe (database connectivity) | 200 (ready), 503 (not ready) |
+| `/live` | Liveness probe (Django process running) | 200 (alive) |
 
-| Endpoint | Finalidade | Status Code |
-|----------|------------|-------------|
-| `/healthz` | Verificação completa (DB, cache, storage, métricas de sistema) | 200 (ok), 503 (degraded) |
-| `/ready` | Readiness probe (conectividade DB apenas) | 200 (ready), 503 (not ready) |
-| `/live` | Liveness probe (processo Django ativo) | 200 (alive) |
+**Environment variables:**
 
-**Configuração via variáveis de ambiente:**
+```powershell
+# Strict mode (default): any failure returns 503
+$env:HEALTHCHECK_STRICT = 'true'
 
-```bash
-# Modo estrito (padrão): falha em qualquer check resulta em 503
-HEALTHCHECK_STRICT=true
+# Ignore cache failures (useful for dev without Redis)
+$env:HEALTHCHECK_IGNORE_CACHE = 'false'
 
-# Ignorar falhas de cache (útil em dev sem Redis)
-HEALTHCHECK_IGNORE_CACHE=false
+# Database timeout in seconds (Unix/Linux, default 5s)
+$env:HEALTHCHECK_DB_TIMEOUT = '5'
 
-# Timeout para verificação de DB (Unix/Linux, padrão 5s)
-HEALTHCHECK_DB_TIMEOUT=5
+# Disk space threshold (default 1 GB)
+$env:HEALTHCHECK_DISK_THRESHOLD_GB = '1.0'
 
-# Limiar de espaço em disco (padrão 1 GB)
-HEALTHCHECK_DISK_THRESHOLD_GB=1.0
-
-# Controle de checks opcionais
-HEALTHCHECK_STORAGE=true
-HEALTHCHECK_SYSTEM_METRICS=false  # CPU/memória no payload
-HEALTHCHECK_DEBUG=false           # força log mesmo quando ok
+# Optional checks
+$env:HEALTHCHECK_STORAGE = 'true'
+$env:HEALTHCHECK_SYSTEM_METRICS = 'false'  # CPU and memory in the payload
+$env:HEALTHCHECK_DEBUG = 'false'           # force logging even when ok
 ```
 
-**Uso em Kubernetes/Docker:**
+**Kubernetes or Docker usage:**
 
 ```yaml
 livenessProbe:
@@ -64,35 +63,37 @@ readinessProbe:
   periodSeconds: 5
 ```
 
-**Desenvolvimento sem Redis:**
-```bash
-HEALTHCHECK_IGNORE_CACHE=true python manage.py runserver
+**Development without Redis:**
+
+```powershell
+$env:HEALTHCHECK_IGNORE_CACHE = 'true'
+& D:\provemaps_beta\venv\Scripts\python.exe manage.py runserver
 ```
 
-## Fluxos principais
-- **Setup inicial**: `/setup_app/first_time/` (usa `FERNET_KEY`). Depois `Quick Actions` → `Configure System` para rotinas.
-- **Importar KML**: botão “Import KML” no route builder. Modal aceita monitoração porta única.
-- **Salvar rota manual**: desenhe no mapa, clique “Save” e preencha dispositivos/portas. Dropdown é limpo após cada criação.
+## Main workflows
+- **Initial setup**: visit `/setup_app/first_time/` (requires `FERNET_KEY`) then run `Quick Actions -> Configure System` for recurring routines.
+- **Import KML**: use the "Import KML" button in the route builder. The modal supports single-port monitoring.
+- **Save manual route**: draw on the map, click "Save", and fill device/port data. The dropdown resets after each creation.
 
-## Checklist de deploy
-1. Copiar `.env.example` → `.env`, gerar `FERNET_KEY` (`python manage.py generate_fernet_key --write`).
-2. `python manage.py migrate` + `collectstatic`.
-3. Criar superusuário (`createsuperuser`).
-4. Configurar `DEBUG=False`, `ALLOWED_HOSTS`, TLS/CSRF.
-5. Subir Celery worker e Celery beat (necessarios para tarefas agendadas e realtime).
-6. Integrar Prometheus/Grafana ao `/metrics/`.
-7. Revisar rotinas de backup (`mysqldump`, cópia do `.env` e do pacote gerado pelo script `scripts/package-release.ps1`).
+## Deployment checklist
+1. Copy `.env.example` to `.env`, then generate `FERNET_KEY` with `& D:\provemaps_beta\venv\Scripts\python.exe manage.py generate_fernet_key --write`.
+2. Run `& D:\provemaps_beta\venv\Scripts\python.exe manage.py migrate` and `& D:\provemaps_beta\venv\Scripts\python.exe manage.py collectstatic`.
+3. Create a superuser (`& D:\provemaps_beta\venv\Scripts\python.exe manage.py createsuperuser`).
+4. Configure `DEBUG=False`, `ALLOWED_HOSTS`, and TLS/CSRF settings.
+5. Start Celery worker and beat (required for scheduled and real-time tasks).
+6. Integrate Prometheus and Grafana with `/metrics/`.
+7. Review backup routines (`mysqldump`, copy of `.env`, and the package produced by `scripts/package-release.ps1`).
 
-## Rotinas de manutenção
-- Verificar diariamente `/metrics/` ou painel Grafana.
-- Rotacionar e coletar `logs/application.log` (já há rotação local).
-- Rodar `python manage.py show_slow_queries` após janelas de manutenção do banco.
-- Atualizar dependências com `pip install -r requirements.txt --upgrade` em ambiente controlado.
+## Maintenance routines
+- Review `/metrics/` or the Grafana dashboard daily.
+- Rotate and collect `logs/application.log` (local rotation already configured).
+- Run `& D:\provemaps_beta\venv\Scripts\python.exe manage.py show_slow_queries` after database maintenance windows.
+- Update dependencies with `& D:\provemaps_beta\venv\Scripts\python.exe -m pip install -r requirements.txt --upgrade` in a controlled environment.
 
-## Referências rápidas
-- `README.md` – visão geral + onboarding.
-- `API_DOCUMENTATION.md` – endpoints legados.
-- `./performance_phase*.md` – evolução de performance/observabilidade.
-- `./performance_phase6.md` – highlights atuais de observabilidade.
+## Quick references
+- `README.md` - project overview and onboarding.
+- `API_DOCUMENTATION.md` - legacy endpoints.
+- `./performance_phase*.md` - performance and observability evolution.
+- `./performance_phase6.md` - current observability highlights.
 
-Manter este checklist atualizado ajuda a operar o Django Maps com previsibilidade em ambientes reais. Contributions são bem-vindas!
+Keep this checklist current to operate Django Maps predictably in real environments. Contributions are welcome.

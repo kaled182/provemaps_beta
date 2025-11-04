@@ -1,7 +1,8 @@
 """
-Camada de orquestração que encapsula regras de negócio reutilizáveis.
+Orchestration layer that wraps reusable business rules.
 
-Os módulos dentro de `zabbix_api.usecases` devem evitar lidar com HttpRequest
-Diretamente, retornando dados brutos ou lançando exceções específicas.
+Modules inside `zabbix_api.usecases` should avoid dealing with `HttpRequest`
+directly; they should return raw data structures or raise specific
+exceptions.
 """
 

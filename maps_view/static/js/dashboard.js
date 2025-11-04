@@ -259,7 +259,7 @@ function renderHostCard(host) {
     const statusClass = host.status_class || '';
     const color = host.color || STATUS_COLORS.unknown;
     const name = escapeHtml(host.name || 'Unknown host');
-    const site = escapeHtml(host.site || '—');
+    const site = escapeHtml(host.site || 'N/A');
     const badgeText = escapeHtml(host.available_text || 'Unknown');
     const hostId = escapeHtml(host.hostid || '');
     const truncatedHostId = truncateText(hostId, 10);
@@ -372,7 +372,7 @@ function initRealtimeUpdates(forceFallbackPath = false) {
         return;
     }
 
-    // Não mostra "connecting" - vai direto tentar conectar
+    // Skip the intermediate "connecting" message; attempt connection immediately
     const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const chosenPath = forceFallbackPath ? DASHBOARD_WS_PATHS[wsPathCursor % DASHBOARD_WS_PATHS.length] : currentWsPath();
     const wsUrl = `${scheme}://${window.location.host}${chosenPath}`;
@@ -460,7 +460,7 @@ function initRealtimeUpdates(forceFallbackPath = false) {
 
 document.addEventListener('DOMContentLoaded', () => {
     cacheRealtimeElements();
-    // Não mostra "connecting" inicial - deixa vazio até conectar ou falhar
+    // Keep the realtime banner empty until we connect or fail
 
     if (currentSummarySnapshot) {
         updateSummary(currentSummarySnapshot);
@@ -489,7 +489,7 @@ async function fetchJSON(url) {
 
     if (!response.ok) {
         const body = await response.text();
-        throw new Error(`Request failed: ${response.status} ${response.statusText} – ${body || 'empty response'}`);
+    throw new Error(`Request failed: ${response.status} ${response.statusText} - ${body || 'empty response'}`);
     }
 
     return response.json();
@@ -1057,10 +1057,6 @@ async function refreshCableStatusValueMapped() {
 function startStatusPolling() {
     refreshCableStatusValueMapped();
     setInterval(refreshCableStatusValueMapped, 180000); // 3 minutes
-}
-
-function pingHost(ip) {
-
 }
 
 // Expose helpers for integration/testing environments

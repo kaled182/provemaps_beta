@@ -183,7 +183,7 @@ map.on('rightclick', (event) => {
 
 **Features**:
 - **Single-port mode**: Auto-syncs destination device with origin, disables port selection
-- **Port loading**: Async loading with loading states ("Carregando...", "Selecione...")
+- **Port loading**: Async loading with loading states ("Loading...", "Select...")
 - **Retry logic**: Ensures ports are loaded before setting selected value
 - **Animation**: Tailwind CSS opacity and scale transitions
 - **Auto-focus**: Focuses name input when modal opens

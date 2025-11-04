@@ -30,13 +30,13 @@ $items = Get-ChildItem -Force | Where-Object {
 }
 
 if (-not $items) {
-    throw "Nenhum arquivo elegível encontrado para empacotamento."
+    throw "No eligible files found for packaging."
 }
 
-Write-Host "Gerando pacote em $destination ..."
+Write-Host "Creating package at $destination ..."
 Compress-Archive -Path $items.FullName -DestinationPath $destination -CompressionLevel Optimal -Force
 
-Write-Host "Pacote criado com sucesso:"
+Write-Host "Package created successfully:"
 Write-Host "  $destination"
 Write-Host ""
-Write-Host "Lembrete: faça backup do banco (mysqldump) e das variáveis sensíveis (.env, FERNET_KEY) separadamente."
+Write-Host "Reminder: Back up the database (mysqldump) and sensitive variables (.env, FERNET_KEY) separately."

@@ -1,8 +1,4 @@
-"""
-Runtime settings override.
-Permite sobrescrever configurações do Django em runtime
-baseado nos dados salvos no banco de dados.
-"""
+"""Helpers to override Django settings at runtime using persisted values."""
 from __future__ import annotations
 
 import functools
@@ -15,61 +11,54 @@ from .services.config_loader import get_config_value, get_runtime_config
 
 @functools.lru_cache(maxsize=1)
 def _get_cached_config():
-    """Cache da configuração em runtime."""
+    """Return the cached runtime configuration snapshot."""
     return get_runtime_config()
 
 
 class RuntimeSettings:
-    """
-    Wrapper para acessar configurações com fallback para banco de dados.
-    """
+    """Map Django settings with a fallback to the database layer."""
 
     def __getattr__(self, name: str) -> Any:
-        """
-        Busca configuração com prioridade:
-        1. Django settings (variáveis de ambiente)
-        2. Banco de dados (FirstTimeSetup)
-        3. None
-        """
-        # Primeiro tenta pegar do Django settings
+        """Return a configuration value honoring the precedence order."""
+        # First try to read from Django settings (environment variables)
         django_value = getattr(django_settings, name, None)
         if django_value:
             return django_value
 
-        # Se não tem no Django settings, busca do banco
+        # If not defined in Django settings, fall back to the database
         runtime_config = _get_cached_config()
         return runtime_config.get(name)
 
     def reload_config(self):
-        """Limpa cache e força recarregamento."""
+        """Clear the local cache so the next call fetches fresh data."""
         _get_cached_config.cache_clear()
 
 
-# Instância global para uso em todo o projeto
+# Global instance available across the project
 runtime_settings = RuntimeSettings()
 
 
-# Funções auxiliares para acessar configurações específicas
+# Helper shortcuts for specific configuration values
 def get_zabbix_url() -> str:
-    """Obtém URL do Zabbix."""
+    """Return the configured Zabbix base URL."""
     return get_config_value('ZABBIX_API_URL', '')
 
 
 def get_zabbix_api_key() -> str:
-    """Obtém API Key do Zabbix (se auth_type='token')."""
+    """Return the Zabbix API key (when ``auth_type='token'``)."""
     return get_config_value('ZABBIX_API_KEY', '')
 
 
 def get_zabbix_user() -> str:
-    """Obtém usuário do Zabbix (se auth_type='login')."""
+    """Return the Zabbix username (when ``auth_type='login'``)."""
     return get_config_value('ZABBIX_API_USER', '')
 
 
 def get_zabbix_password() -> str:
-    """Obtém senha do Zabbix (se auth_type='login')."""
+    """Return the Zabbix password (when ``auth_type='login'``)."""
     return get_config_value('ZABBIX_API_PASSWORD', '')
 
 
 def get_google_maps_api_key() -> str:
-    """Obtém API Key do Google Maps."""
+    """Return the Google Maps API key."""
     return get_config_value('GOOGLE_MAPS_API_KEY', '')
