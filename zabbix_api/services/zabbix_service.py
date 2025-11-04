@@ -1,8 +1,13 @@
 ﻿# zabbix_api/services/zabbix_service.py
-# Servi?o de integra??o Zabbix (JSON-RPC) + utilit?rios de lookup (Fase 1)
-# Mant?m comportamento existente, adiciona buscas de host/porta com cache curto.
+# Zabbix integration service (JSON-RPC) plus lookup helpers (phase 1)
+# Preserves behaviour while adding short-lived host/port cache lookups.
+# pyright: reportUnknownParameterType=false, reportUnknownArgumentType=false
+# pyright: reportUnknownVariableType=false, reportUnknownMemberType=false
+# pyright: reportMissingParameterType=false, reportMissingTypeArgument=false
+# pyright: reportUnusedFunction=false
 
-import json
+from __future__ import annotations
+
 import logging
 import platform
 import re
@@ -11,9 +16,11 @@ import time
 import hashlib
 import requests
 
+from typing import Any, Mapping, Sequence, cast
+
 from django.conf import settings
 from django.core.cache import cache
-from django.http import JsonResponse
+from django.http import HttpRequest, JsonResponse
 
 from .zabbix_client import (
     READ_ONLY_SAFE_METHODS,
@@ -26,88 +33,108 @@ from .zabbix_client import (
 
 logger = logging.getLogger(__name__)
 
+JsonDict = dict[str, Any]
+JsonList = list[JsonDict]
 
-# Utilit?rio de cache seguro para desenvolvimento local
+__all__ = [
+    "READ_ONLY_SAFE_METHODS",
+    "clear_token_cache",
+    "_normalize_zabbix_url",
+    "zabbix_login",
+    "zabbix_request",
+]
+
+
+# Safe cache utility for local development
 # -----------------------------------------------------------------------------
-def safe_cache_get(key, default=None):
-    """
-    Wrapper seguro para cache.get() que ignora falhas de conex?o Redis.
-    Retorna None se Redis estiver offline (modo desenvolvimento).
-    """
+def safe_cache_get(key: str, default: Any | None = None) -> Any | None:
+    """Return cache value while ignoring Redis connectivity failures."""
     try:
         return cache.get(key, default=default)
     except Exception as exc:
         logger.debug(
-            "Cache offline (Redis indispon?vel), continuando sem cache: %s",
+            "Cache offline (Redis unavailable); using default: %s",
             exc.__class__.__name__,
         )
         return default
 
 
-def safe_cache_set(key, value, timeout=None):
-    """
-    Wrapper seguro para cache.set() que ignora falhas de conex?o Redis.
-    N?o faz nada se Redis estiver offline (modo desenvolvimento).
-    """
+def safe_cache_set(key: str, value: Any, timeout: int | None = None) -> None:
+    """Store value while ignoring Redis connectivity failures."""
     try:
         cache.set(key, value, timeout=timeout)
     except Exception as exc:
         logger.debug(
-            "Cache offline (Redis indispon?vel), n?o armazenando: %s",
+            "Cache offline (Redis unavailable); store skipped: %s",
             exc.__class__.__name__,
         )
 
 
-def safe_cache_delete(key):
-    """
-    Wrapper seguro para cache.delete() que ignora falhas de conex?o Redis.
-    N?o faz nada se Redis estiver offline (modo desenvolvimento).
-    """
+def safe_cache_delete(key: str) -> None:
+    """Delete value while ignoring Redis connectivity failures."""
     try:
         cache.delete(key)
     except Exception as exc:
         logger.debug(
-            "Cache offline (Redis indispon?vel), n?o deletando: %s",
+            "Cache offline (Redis unavailable); delete skipped: %s",
             exc.__class__.__name__,
         )
 
 
 def _current_zabbix_config():
-    """
-    Wrapper mantido por compatibilidade com testes e chamadas existentes.
-    """
+    """Compatibility wrapper used by legacy tests and call sites."""
     return _client_current_config()
 
-# Utilit?rios / Relat?rios (mantidos)
+# Utility helpers / reports (kept for compatibility)
 # -----------------------------------------------------------------------------
 
-def get_host_performance_metrics(hostid):
-    """
-    Obtém métricas de performance básicas de um host.
-    
-    OTIMIZADO: Usa batching para evitar N+1 queries.
-    Faz uma única chamada history.get com todos os itemids.
-    
-    Observação: Zabbix 'search' não aceita lista; para evitar erro,
-    fazemos múltiplas consultas por termos e unimos os resultados.
-    """
-    terms = ["system.cpu", "vm.memory", "vfs.fs", "net.if", "disk", "memory", "cpu"]
-    seen = set()
-    items = []
 
-    # Step 1: Coletar todos os items (múltiplas buscas necessárias)
+def get_host_performance_metrics(hostid: str) -> JsonList | None:
+    """Return basic host performance metrics gathered from related items.
+
+    Optimized to avoid N+1 requests by batching ``history.get`` calls per
+    item ``value_type``.
+
+    Notes
+    -----
+    Zabbix ``search`` does not accept lists, so we perform multiple lookups
+    by well-known prefixes and merge the results.
+    """
+    terms = [
+        "system.cpu",
+        "vm.memory",
+        "vfs.fs",
+        "net.if",
+        "disk",
+        "memory",
+        "cpu",
+    ]
+    seen: set[str] = set()
+    items: JsonList = []
+
+    # Step 1: collect candidate items (multiple searches required)
     for term in terms:
-        res = zabbix_request(
-            "item.get",
-            {
-                "output": ["itemid", "name", "key_", "units", "value_type"],
-                "hostids": hostid,
-                "search": {"key_": term},
-                "searchWildcardsEnabled": True,
-                "filter": {"status": 0},
-                "limit": 200,
-            },
-        ) or []
+        res: JsonList = cast(
+            JsonList,
+            zabbix_request(
+                "item.get",
+                {
+                    "output": [
+                        "itemid",
+                        "name",
+                        "key_",
+                        "units",
+                        "value_type",
+                    ],
+                    "hostids": hostid,
+                    "search": {"key_": term},
+                    "searchWildcardsEnabled": True,
+                    "filter": {"status": 0},
+                    "limit": 200,
+                },
+            )
+            or [],
+        )
         for it in res:
             iid = it.get("itemid")
             if iid and iid not in seen:
@@ -117,32 +144,36 @@ def get_host_performance_metrics(hostid):
     if not items:
         return None
 
-    # Step 2: BATCHING - Coletar todos os itemids e fazer UMA chamada history.get
-    # Agrupar por value_type para fazer chamadas mais eficientes
-    items_by_type = {}
+    # Step 2: collect all ``itemids`` and perform a single ``history.get``
+    # call per ``value_type`` to reduce API chatter
+    items_by_type: dict[str, JsonList] = {}
     for it in items:
         value_type = it["value_type"]
         if value_type not in items_by_type:
             items_by_type[value_type] = []
         items_by_type[value_type].append(it)
 
-    # Step 3: Fazer uma chamada history.get por value_type (muito melhor que N chamadas)
-    history_map = {}
+    # Step 3: run ``history.get`` by ``value_type`` (far fewer calls)
+    history_map: dict[str, JsonDict] = {}
     for value_type, typed_items in items_by_type.items():
-        itemids = [it["itemid"] for it in typed_items]
-        
-        hist_results = zabbix_request(
-            "history.get",
-            {
-                "itemids": itemids,
-                "history": value_type,
-                "sortfield": "clock",
-                "sortorder": "DESC",
-                "limit": len(itemids),  # Pega o valor mais recente de cada item
-            },
-        ) or []
-        
-        # Criar mapa itemid -> último valor
+        itemids = [str(it["itemid"]) for it in typed_items]
+
+        hist_results: JsonList = cast(
+            JsonList,
+            zabbix_request(
+                "history.get",
+                {
+                    "itemids": itemids,
+                    "history": value_type,
+                    "sortfield": "clock",
+                    "sortorder": "DESC",
+                    "limit": len(itemids),
+                },
+            )
+            or [],
+        )
+
+    # Build a map itemid -> most recent value
         for hist in hist_results:
             itemid = hist.get("itemid")
             if itemid and itemid not in history_map:
@@ -151,51 +182,72 @@ def get_host_performance_metrics(hostid):
                     "clock": hist.get("clock")
                 }
 
-    # Step 4: Enriquecer items com valores históricos
-    latest = []
+    # Step 4: enrich original items with historical values
+    latest: JsonList = []
     for it in items:
         hist_data = history_map.get(it["itemid"])
         if hist_data:
             it["latest_value"] = hist_data["value"]
             it["latest_timestamp"] = hist_data["clock"]
         latest.append(it)
-    
+
     return latest
 
 
-def get_host_problems(hostid):
-    """Obt?m problemas recentes de um host."""
-    return zabbix_request(
-        "problem.get",
-        {
-            "output": ["eventid", "objectid", "name", "severity", "clock", "acknowledged"],
-            "hostids": hostid,
-            "recent": True,
-            "sortfield": ["eventid"],
-            "sortorder": "DESC",
-        },
+def get_host_problems(hostid: str) -> JsonList | None:
+    """Return recent problems for a given host."""
+    return cast(
+        JsonList | None,
+        zabbix_request(
+            "problem.get",
+            {
+                "output": [
+                    "eventid",
+                    "objectid",
+                    "name",
+                    "severity",
+                    "clock",
+                    "acknowledged",
+                ],
+                "hostids": hostid,
+                "recent": True,
+                "sortfield": ["eventid"],
+                "sortorder": "DESC",
+            },
+        ),
     )
 
 
-def format_host_data(host_data):
-    """Formata dados de host de forma amig?vel."""
+def format_host_data(
+    host_data: Sequence[Mapping[str, Any]] | None,
+) -> JsonList | None:
+    """Return human-friendly host data payload."""
     if not host_data:
         return None
 
-    status_map = {"0": "Monitorado", "1": "N?o monitorado"}
-    available_map = {"0": "Desconhecido", "1": "Dispon?vel", "2": "Indispon?vel"}
+    status_map = {"0": "Monitored", "1": "Not monitored"}
+    available_map = {"0": "Unknown", "1": "Available", "2": "Unavailable"}
 
-    formatted = []
+    formatted: JsonList = []
     for h in host_data:
         formatted.append(
             {
                 "hostid": h.get("hostid"),
                 "host": h.get("host"),
                 "name": h.get("name", h.get("host")),
-                "status": {"code": h.get("status", "0"), "description": status_map.get(h.get("status", "0"), "Desconhecido")},
+                "status": {
+                    "code": h.get("status", "0"),
+                    "description": status_map.get(
+                        h.get("status", "0"),
+                        "Unknown",
+                    ),
+                },
                 "available": {
                     "code": h.get("available", "0"),
-                    "description": available_map.get(h.get("available", "0"), "Desconhecido"),
+                    "description": available_map.get(
+                        h.get("available", "0"),
+                        "Unknown",
+                    ),
                 },
                 "error": h.get("error", ""),
                 "groups": h.get("groups", []),
@@ -207,78 +259,104 @@ def format_host_data(host_data):
     return formatted
 
 
-def get_host_network_details(hostid):
-    """
-    Informações de rede + últimos valores relevantes + problemas do host.
-    
-    OTIMIZADO: Usa batching para evitar N+1 queries.
-    Faz uma única chamada history.get com todos os itemids.
+def get_host_network_details(hostid: str) -> dict[str, Any] | None:
+    """Return network info, recent values, and problems for the host.
+
+    Optimized to batch ``history.get`` calls per ``value_type`` to avoid N+1
+    patterns and reduce API chatter.
     """
     try:
-        host_info = zabbix_request(
-            "host.get",
-            {
-                "output": ["hostid", "host", "name", "status", "available"],
-                "hostids": hostid,
-                "selectInterfaces": "extend",
-                "selectInventory": "extend",
-                "selectMacros": ["macro", "value"],
-            },
+        host_info = cast(
+            JsonList | None,
+            zabbix_request(
+                "host.get",
+                {
+                    "output": [
+                        "hostid",
+                        "host",
+                        "name",
+                        "status",
+                        "available",
+                    ],
+                    "hostids": hostid,
+                    "selectInterfaces": "extend",
+                    "selectInventory": "extend",
+                    "selectMacros": ["macro", "value"],
+                },
+            ),
         )
         if not host_info:
             return None
 
         host = host_info[0]
-        
-        # Step 1: Coleta itens de rede comuns com múltiplas buscas seguras
-        terms = ["net.if", "agent.ping", "icmpping", "system.uptime"]
-        items = []
-        seen = set()
+
+        # Step 1: collect common network items using multiple safe lookups
+        terms = [
+            "net.if",
+            "agent.ping",
+            "icmpping",
+            "system.uptime",
+        ]
+        items: JsonList = []
+        seen: set[str] = set()
         for term in terms:
-            res = zabbix_request(
-                "item.get",
-                {
-                    "output": ["itemid", "name", "key_", "units", "value_type"],
-                    "hostids": hostid,
-                    "search": {"key_": term},
-                    "searchWildcardsEnabled": True,
-                    "filter": {"status": "0"},
-                    "limit": 200,
-                },
-            ) or []
+            res: JsonList = cast(
+                JsonList,
+                zabbix_request(
+                    "item.get",
+                    {
+                        "output": [
+                            "itemid",
+                            "name",
+                            "key_",
+                            "units",
+                            "value_type",
+                        ],
+                        "hostids": hostid,
+                        "search": {"key_": term},
+                        "searchWildcardsEnabled": True,
+                        "filter": {"status": "0"},
+                        "limit": 200,
+                    },
+                )
+                or [],
+            )
             for it in res:
                 iid = it.get("itemid")
                 if iid and iid not in seen:
                     seen.add(iid)
                     items.append(it)
 
-        # Step 2: BATCHING - Agrupar items por value_type
-        items_by_type = {}
+    # Step 2: group items by ``value_type``
+        items_by_type: dict[str, JsonList] = {}
         for it in items:
             value_type = it["value_type"]
             if value_type not in items_by_type:
                 items_by_type[value_type] = []
             items_by_type[value_type].append(it)
 
-        # Step 3: Fazer uma chamada history.get por value_type
-        # (em vez de N chamadas individuais)
-        history_map = {}
+    # Step 3: run ``history.get`` per ``value_type``
+        history_map: dict[str, JsonDict] = {}
         for value_type, typed_items in items_by_type.items():
             itemids = [it["itemid"] for it in typed_items]
-            
+
             try:
-                hist_results = zabbix_request(
-                    "history.get",
-                    {
-                        "itemids": itemids,
-                        "history": value_type,
-                        "sortfield": "clock",
-                        "sortorder": "DESC",
-                        "limit": len(itemids),
-                    },
-                ) or []
-                
-                # Criar mapa itemid -> último valor
+                hist_results: JsonList = cast(
+                    JsonList,
+                    zabbix_request(
+                        "history.get",
+                        {
+                            "itemids": itemids,
+                            "history": value_type,
+                            "sortfield": "clock",
+                            "sortorder": "DESC",
+                            "limit": len(itemids),
+                        },
+                    )
+                    or [],
+                )
+
+                # Build a map itemid -> last known value
                 for hist in hist_results:
                     itemid = hist.get("itemid")
                     if itemid and itemid not in history_map:
@@ -289,49 +367,56 @@ def get_host_network_details(hostid):
             except Exception:
                 continue
 
-        # Step 4: Construir network_data usando o mapa
-        network_data = {}
+    # Step 4: build ``network_data`` using the lookup map
+        network_data: dict[str, JsonDict] = {}
         for it in items:
             hist_data = history_map.get(it["itemid"])
             if hist_data:
                 network_data[it["key_"]] = {
                     "name": it["name"],
                     "value": hist_data["value"],
-                    "timestamp": hist_data["clock"]
+                    "timestamp": hist_data["clock"],
                 }
 
-        # Step 5: Buscar problemas (única chamada)
-        problems = zabbix_request(
-            "problem.get",
-            {
-                "output": ["eventid", "name", "severity", "clock"],
-                "hostids": hostid,
-                "recent": True
-            }
-        ) or []
+        # Step 5: fetch recent problems (single call)
+        problems: JsonList = cast(
+            JsonList,
+            zabbix_request(
+                "problem.get",
+                {
+                    "output": ["eventid", "name", "severity", "clock"],
+                    "hostids": hostid,
+                    "recent": True,
+                },
+            )
+            or [],
+        )
 
         return {
             "host_info": host,
             "network_data": network_data,
-            "problems": problems
+            "problems": problems,
         }
     except Exception:
         return None
 
 
 def get_geolocation_from_ip(ip_address: str):
-    """Geolocalização simples via IP-API (apenas utilitário)."""
+    """Return lightweight geolocation information via the IP-API service."""
     try:
-        response = requests.get(f"http://ip-api.com/json/{ip_address}", timeout=5)
+        response = requests.get(
+            f"http://ip-api.com/json/{ip_address}",
+            timeout=5,
+        )
         response.raise_for_status()
     except requests.RequestException as exc:
-        logger.debug("Falha ao consultar IP-API para %s: %s", ip_address, exc)
+        logger.debug("IP-API request failed for %s: %s", ip_address, exc)
         return None
 
     try:
         data = response.json()
     except ValueError as exc:
-        logger.debug("Resposta inválida da IP-API para %s: %s", ip_address, exc)
+        logger.debug("Invalid IP-API response for %s: %s", ip_address, exc)
         return None
 
     if data.get("status") != "success":
@@ -349,9 +434,7 @@ def get_geolocation_from_ip(ip_address: str):
 
 
 def check_host_connectivity(ip_address: str) -> bool:
-    """
-    Verifica conectividade básica (ping) de forma compatível com Windows/Linux/macOS.
-    """
+    """Ping a host in a cross-platform manner (Windows, Linux, macOS)."""
     system = platform.system().lower()
     if system == "windows":
         cmd = ["ping", "-n", "1", "-w", "3000", ip_address]
@@ -361,49 +444,75 @@ def check_host_connectivity(ip_address: str) -> bool:
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
     except subprocess.TimeoutExpired as exc:
-        logger.debug("Ping expirou para %s: %s", ip_address, exc)
+        logger.debug("Ping timeout for %s: %s", ip_address, exc)
         return False
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
-        logger.debug("Falha ao executar ping para %s: %s", ip_address, exc)
+        logger.debug("Ping execution failed for %s: %s", ip_address, exc)
         return False
 
     return result.returncode == 0
 
 
-def extract_mac_address_from_items(network_data: dict):
-    """Extrai poss?veis MACs de um dicion?rio de itens."""
-    macs = []
+def extract_mac_address_from_items(
+    network_data: Mapping[str, Mapping[str, Any]] | None,
+) -> JsonList:
+    """Return candidate MAC addresses found within item keys/values."""
+    macs: JsonList = []
     for key, data in (network_data or {}).items():
         if "mac" in key.lower() or "hwaddr" in key.lower():
-            macs.append({"interface": data.get("name"), "mac": data.get("value")})
+            macs.append(
+                {
+                    "interface": data.get("name"),
+                    "mac": data.get("value"),
+                }
+            )
     return macs
 
 
 # -----------------------------------------------------------------------------
-# Views utilit?rias existentes (mantidas)
+# Existing utility views (kept for compatibility)
 # -----------------------------------------------------------------------------
 
-def get_interfaces(request):
-    """
-    Lista as interfaces (hostinterface.get) de um host espec?fico.
-    Espera: ?hostid=10105
+def get_interfaces(request: HttpRequest) -> JsonResponse:
+    """List interfaces for a given host using ``hostinterface.get``.
+
+    Expected query: ``?hostid=10105``
     """
     hostid = request.GET.get("hostid")
     if not hostid:
-        return JsonResponse({"error": "Par?metro 'hostid' ? obrigat?rio."}, status=400)
+        return JsonResponse(
+            {"error": "Parameter 'hostid' is required."},
+            status=400,
+        )
 
-    res = zabbix_request(
-        "hostinterface.get",
-        {"output": ["interfaceid", "hostid", "ip", "port", "type", "main"], "hostids": hostid},
+    res = cast(
+        JsonList | None,
+        zabbix_request(
+            "hostinterface.get",
+            {
+                "output": [
+                    "interfaceid",
+                    "hostid",
+                    "ip",
+                    "port",
+                    "type",
+                    "main",
+                ],
+                "hostids": hostid,
+            },
+        ),
     )
     if res is None:
-        return JsonResponse({"error": "Falha ao consultar o Zabbix."}, status=502)
+        return JsonResponse(
+            {"error": "Failed to query Zabbix."},
+            status=502,
+        )
 
     return JsonResponse({"interfaces": res}, safe=False)
 
 
 def translate_interface_status(value: str) -> str:
-    """Traduz ifOperStatus num?rico em texto leg?vel."""
+    """Translate numeric ``ifOperStatus`` values into human-friendly text."""
     return {
         "1": "UP",
         "2": "DOWN",
@@ -416,9 +525,9 @@ def translate_interface_status(value: str) -> str:
 
 
 def port_itemid_status(request, itemid):
-    """
-    Retorna status de um item (porta) por itemid.
-    Ex.: /status/52638/
+    """Return status information for a port item (``itemid``).
+
+    Example: ``/status/52638/``
     """
     try:
         result = zabbix_request(
@@ -440,15 +549,21 @@ def port_itemid_status(request, itemid):
             },
         )
         if result is None:
-            return JsonResponse({"error": "Falha na chamada ao Zabbix (item.get)."}, status=502)
+            return JsonResponse(
+                {"error": "Zabbix request failed (item.get)."},
+                status=502,
+            )
         if not result:
-            return JsonResponse({"error": f"Nenhum item encontrado com itemid={itemid}."}, status=404)
+            return JsonResponse(
+                {"error": f"No item found with itemid={itemid}."},
+                status=404,
+            )
 
         item = result[0]
         lastvalue = item.get("lastvalue", "")
         status_text = translate_interface_status(str(lastvalue))
 
-        # Tentativa extra se o mapeamento ficar UNKNOWN
+        # Fallback when the value map returns UNKNOWN
         if status_text == "UNKNOWN":
             retry = zabbix_request(
                 "item.get",
@@ -487,12 +602,11 @@ def port_itemid_status(request, itemid):
                 "units": item.get("units"),
             }
         )
-    except Exception as e:
-        return JsonResponse({"error": f"Erro inesperado: {e}"}, status=500)
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        return JsonResponse({"error": f"Unexpected error: {exc}"}, status=500)
 
 
-# -----------------------------------------------------------------------------
-# LOOKUP ? Fase 1 / Passo 1: buscas de host e interfaces com cache curto
+# Lookup Helpers (phase 1) -- short-lived cache for host/interface lookups
 # -----------------------------------------------------------------------------
 
 ZABBIX_LOOKUP_CACHE_TTL = getattr(settings, "ZABBIX_LOOKUP_CACHE_TTL", 30)
@@ -504,12 +618,12 @@ AVAILABILITY_STATE_LABELS = {
 }
 
 
-def _extract_host_availability(host: dict, interfaces: list | None = None) -> dict:
-    """
-    Retorna dicionario com canal (agent/snmp/ipmi/jmx),
-    valor (0/1/2), rotulo e mensagem de erro (quando existir).
-    Preferencia: SNMP -> Agent -> IPMI -> JMX.
-    """
+def _extract_host_availability(
+    host: Mapping[str, Any],
+    interfaces: Sequence[Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Return availability metadata preferring SNMP, Agent, IPMI, then JMX."""
+
     channels = [
         ("snmp", host.get("snmp_available"), host.get("snmp_error")),
         ("agent", host.get("available"), host.get("error")),
@@ -520,7 +634,10 @@ def _extract_host_availability(host: dict, interfaces: list | None = None) -> di
         if value in (None, "", "null", "None"):
             continue
         value_str = str(value)
-        label_key, human = AVAILABILITY_STATE_LABELS.get(value_str, ("unknown", "Unknown"))
+        label_key, human = AVAILABILITY_STATE_LABELS.get(
+            value_str,
+            ("unknown", "Unknown"),
+        )
         return {
             "channel": channel,
             "value": value_str,
@@ -528,6 +645,7 @@ def _extract_host_availability(host: dict, interfaces: list | None = None) -> di
             "label": human,
             "error": err,
         }
+
     availability = {
         "channel": None,
         "value": None,
@@ -535,9 +653,16 @@ def _extract_host_availability(host: dict, interfaces: list | None = None) -> di
         "label": "Unknown",
         "error": None,
     }
-    iface_list = interfaces if interfaces is not None else (host.get("interfaces") or [])
+    iface_list = (
+        interfaces
+        if interfaces is not None
+        else (host.get("interfaces") or [])
+    )
     if availability["value"] in (None, "", "null", "None") and iface_list:
-        primary_iface = next((i for i in iface_list if str(i.get("main")) == "1"), None)
+        primary_iface = next(
+            (i for i in iface_list if str(i.get("main")) == "1"),
+            None,
+        )
         candidate_ifaces = [primary_iface] if primary_iface else []
         if not candidate_ifaces:
             candidate_ifaces = iface_list[:1]
@@ -557,7 +682,10 @@ def _extract_host_availability(host: dict, interfaces: list | None = None) -> di
                     "error": None,
                 }
                 break
+
     return availability
+
+
 _IP_RE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
 
 
@@ -568,12 +696,9 @@ def _primary_ip(interfaces):
     return (main_if or interfaces[0]).get("ip")
 
 
-
 def fetch_host_availability(hostid: str) -> dict:
-    """
-    Consulta o Zabbix e retorna disponibilidade agregada do host,
-    incluindo interfaces e canal utilizado.
-    """
+    """Return host availability data including interface metadata."""
+
     params = {
         "hostids": [str(hostid)],
         "output": [
@@ -590,7 +715,14 @@ def fetch_host_availability(hostid: str) -> dict:
             "jmx_available",
             "jmx_error",
         ],
-        "selectInterfaces": ["interfaceid", "ip", "dns", "main", "available", "port"],
+        "selectInterfaces": [
+            "interfaceid",
+            "ip",
+            "dns",
+            "main",
+            "available",
+            "port",
+        ],
         "limit": 1,
     }
     hosts = zabbix_request("host.get", params=params) or []
@@ -613,21 +745,29 @@ def fetch_host_availability(hostid: str) -> dict:
     interfaces = []
     primary = None
     for iface in raw_interfaces:
+        available_value = iface.get("available")
         payload = {
             "interfaceid": str(iface.get("interfaceid")),
             "ip": iface.get("ip"),
             "dns": iface.get("dns"),
             "port": iface.get("port"),
             "main": str(iface.get("main") or "0"),
-            "available": str(iface.get("available")) if iface.get("available") is not None else None,
+            "available": (
+                str(available_value) if available_value is not None else None
+            ),
         }
         interfaces.append(payload)
         if payload["main"] == "1":
             primary = payload
     if not primary and interfaces:
         primary = interfaces[0]
+
     availability = _extract_host_availability(host, raw_interfaces)
-    if availability["state"] == "unknown" and primary and primary.get("available") in {"1", "2"}:
+    if (
+        availability["state"] == "unknown"
+        and primary
+        and primary.get("available") in {"1", "2"}
+    ):
         availability = {
             "channel": "device",
             "value": primary["available"],
@@ -646,20 +786,22 @@ def fetch_host_availability(hostid: str) -> dict:
     }
 
 
-
 def _cache_key(prefix, **parts):
-    # Usa hash est?vel (md5) para chaves de cache consistentes entre processos
+    """Return a stable cache key (md5) that works across processes."""
+
     raw = "&".join(f"{k}={parts[k]}" for k in sorted(parts.keys()))
     return f"zbx:{prefix}:{hashlib.md5(raw.encode('utf-8')).hexdigest()}"
 
 
 def search_hosts(query=None, groupids=None, limit=20):
-    """
-    Busca hosts no Zabbix (host.get) com filtros leves.
-    Retorna lista normalizada: [{id, name, host, ip, available, status, error}]
-    """
+    """Search hosts via ``host.get`` applying light filters and caching."""
+
     q = (query or "").strip()
-    gids = ",".join(groupids) if isinstance(groupids, (list, tuple)) else (groupids or "")
+    gids = (
+        ",".join(groupids)
+        if isinstance(groupids, (list, tuple))
+        else (groupids or "")
+    )
     key = _cache_key("search_hosts", q=q, gids=gids, limit=int(limit))
     cached = safe_cache_get(key)
     if cached is not None:
@@ -680,7 +822,14 @@ def search_hosts(query=None, groupids=None, limit=20):
             "jmx_available",
             "jmx_error",
         ],
-        "selectInterfaces": ["interfaceid", "ip", "dns", "main", "port", "available"],
+        "selectInterfaces": [
+            "interfaceid",
+            "ip",
+            "dns",
+            "main",
+            "port",
+            "available",
+        ],
         "limit": int(limit),
     }
     if gids:
@@ -692,10 +841,18 @@ def search_hosts(query=None, groupids=None, limit=20):
 
     result = zabbix_request("host.get", params=params)
 
-    # Busca por IP via hostinterface.get se necess?rio
+    # Fallback: search by IP via ``hostinterface.get`` when required
     if q and _IP_RE.match(q) and not result:
         if_params = {
-            "output": ["interfaceid", "hostid", "ip", "dns", "main", "port", "available"],
+            "output": [
+                "interfaceid",
+                "hostid",
+                "ip",
+                "dns",
+                "main",
+                "port",
+                "available",
+            ],
             "filter": {"ip": q},
             "limit": 50,
         }
@@ -706,21 +863,8 @@ def search_hosts(query=None, groupids=None, limit=20):
                 "host.get",
                 {
                     "hostids": hostids,
-                    "output": [
-                        "hostid",
-                        "host",
-                        "name",
-                        "available",
-                        "status",
-                        "error",
-                        "snmp_available",
-                        "snmp_error",
-                        "ipmi_available",
-                        "ipmi_error",
-                        "jmx_available",
-                        "jmx_error",
-                    ],
-                    "selectInterfaces": ["interfaceid", "ip", "dns", "main", "port", "available"],
+                    "output": params["output"],
+                    "selectInterfaces": params["selectInterfaces"],
                     "limit": int(limit),
                 },
             )
@@ -736,27 +880,41 @@ def search_hosts(query=None, groupids=None, limit=20):
                 "name": h.get("name"),
                 "ip": _primary_ip(interfaces),
                 "available": availability["value"],
-            "status": h.get("status"),
-            "error": h.get("error"),
-            "availability": availability,
-        }
-    )
+                "status": h.get("status"),
+                "error": h.get("error"),
+                "availability": availability,
+            }
+        )
 
     safe_cache_set(key, normalized, ZABBIX_LOOKUP_CACHE_TTL)
     return normalized
+
+
 def get_host_interfaces(hostid, only_main: bool = False, limit: int = 200):
-    """
-    Lista interfaces de um host. Retorna:
-    [{interfaceid, ip, dns, main, port, available, type, useip}]
-    """
+    """Return host interfaces, optionally filtered to the primary one."""
+
     hostid = str(hostid)
-    key = _cache_key("host_if", hostid=hostid, main=int(bool(only_main)), limit=int(limit))
+    key = _cache_key(
+        "host_if",
+        hostid=hostid,
+        main=int(bool(only_main)),
+        limit=int(limit),
+    )
     cached = safe_cache_get(key)
     if cached is not None:
         return cached
 
     params = {
-        "output": ["interfaceid", "ip", "dns", "main", "port", "available", "type", "useip"],
+        "output": [
+            "interfaceid",
+            "ip",
+            "dns",
+            "main",
+            "port",
+            "available",
+            "type",
+            "useip",
+        ],
         "hostids": [hostid],
         "limit": int(limit),
     }
@@ -774,23 +932,29 @@ def get_host_interfaces(hostid, only_main: bool = False, limit: int = 200):
                 "main": int(i.get("main") or 0),
                 "port": str(i.get("port") or ""),
                 "available": int(i.get("available") or 0),
-            "type": int(i.get("type") or 0),
-            "useip": int(i.get("useip") or 1),
-        }
-    )
+                "type": int(i.get("type") or 0),
+                "useip": int(i.get("useip") or 1),
+            }
+        )
 
     safe_cache_set(key, out, ZABBIX_LOOKUP_CACHE_TTL)
     return out
+
+
 # -----------------------------------------------------------------------------
-# LOOKUP ? Fase 1: fun??es auxiliares opcionais (seguras)
+# Lookup helpers (phase 1) -- optional safe helpers
 # -----------------------------------------------------------------------------
 
+
 def search_hosts_by_name_ip(query: str, groupids=None, limit: int = 20):
-    """
-    Busca hosts por nome ou IP com dados enriquecidos (grupos/descrição).
-    Implementada com chamadas válidas ao Zabbix (sem 'search' com lista).
-    """
-    cache_key = _cache_key("host_search_ext", q=query or "", gids=str(groupids or ""), limit=int(limit))
+    """Search hosts (name or IP) enriching with groups and interface data."""
+
+    cache_key = _cache_key(
+        "host_search_ext",
+        q=query or "",
+        gids=str(groupids or ""),
+        limit=int(limit),
+    )
     cached = safe_cache_get(cache_key)
     if cached is not None:
         return cached
@@ -812,14 +976,21 @@ def search_hosts_by_name_ip(query: str, groupids=None, limit: int = 20):
     ]
     params = {
         "output": base_output,
-        "selectInterfaces": ["interfaceid", "ip", "dns", "main", "port", "available"],
+        "selectInterfaces": [
+            "interfaceid",
+            "ip",
+            "dns",
+            "main",
+            "port",
+            "available",
+        ],
         "selectGroups": ["groupid", "name"],
         "limit": int(limit),
     }
     if groupids:
         params["groupids"] = groupids
 
-    # 1) tenta por nome
+    # 1) Try by name with wildcards
     if query and not _IP_RE.match(query):
         p = dict(params)
         p["search"] = {"name": query}
@@ -828,11 +999,15 @@ def search_hosts_by_name_ip(query: str, groupids=None, limit: int = 20):
     else:
         hosts = []
 
-    # 2) se não achou e parecer IP, resolve via hostinterface.get
-    if (not hosts) and query and _IP_RE.match(query):
+    # 2) If no match and looks like an IP, resolve via hostinterface.get
+    if not hosts and query and _IP_RE.match(query):
         ifaces = zabbix_request(
             "hostinterface.get",
-            {"output": ["interfaceid", "hostid", "ip", "dns", "main"], "filter": {"ip": query}, "limit": int(limit)},
+            {
+                "output": ["interfaceid", "hostid", "ip", "dns", "main"],
+                "filter": {"ip": query},
+                "limit": int(limit),
+            },
         ) or []
         if ifaces:
             host_ids = list({i["hostid"] for i in ifaces})
@@ -841,8 +1016,8 @@ def search_hosts_by_name_ip(query: str, groupids=None, limit: int = 20):
                 {
                     "hostids": host_ids,
                     "output": base_output,
-                    "selectInterfaces": ["interfaceid", "ip", "dns", "main", "port", "available"],
-                    "selectGroups": ["groupid", "name"],
+                    "selectInterfaces": params["selectInterfaces"],
+                    "selectGroups": params["selectGroups"],
                 },
             ) or []
 
@@ -873,11 +1048,13 @@ def search_hosts_by_name_ip(query: str, groupids=None, limit: int = 20):
 
 
 def get_host_interfaces_detailed(hostid: str, include_snmp_info: bool = False):
-    """
-    Interfaces do host com dados b?sicos. Por padr?o N?O tenta SNMP,
-    pois 'hostinterface.port' N?O ? ifIndex e n?o ? seguro inferir.
-    """
-    cache_key = _cache_key("host_if_detailed", hostid=str(hostid), snmp=int(bool(include_snmp_info)))
+    """Return host interfaces, optionally enriching with SNMP metadata."""
+
+    cache_key = _cache_key(
+        "host_if_detailed",
+        hostid=str(hostid),
+        snmp=int(bool(include_snmp_info)),
+    )
     cached = safe_cache_get(cache_key)
     if cached is not None:
         return cached
@@ -885,7 +1062,17 @@ def get_host_interfaces_detailed(hostid: str, include_snmp_info: bool = False):
     interfaces = zabbix_request(
         "hostinterface.get",
         {
-            "output": ["interfaceid", "hostid", "ip", "dns", "port", "type", "main", "available", "useip"],
+            "output": [
+                "interfaceid",
+                "hostid",
+                "ip",
+                "dns",
+                "port",
+                "type",
+                "main",
+                "available",
+                "useip",
+            ],
             "hostids": [str(hostid)],
             "limit": 200,
         },
@@ -901,39 +1088,58 @@ def get_host_interfaces_detailed(hostid: str, include_snmp_info: bool = False):
                 "dns": i.get("dns", ""),
                 "port": i.get("port", ""),
                 "type": i.get("type", "1"),
-            "main": i.get("main", "0"),
-            "available": i.get("available", "0"),
-            "useip": i.get("useip", "1"),
-            "snmp_data": {},  # intencionalmente vazio nesta fase
-        }
-    )
+                "main": i.get("main", "0"),
+                "available": i.get("available", "0"),
+                "useip": i.get("useip", "1"),
+                "snmp_data": {},  # intentionally empty in this phase
+            }
+        )
 
     safe_cache_set(cache_key, detailed, ZABBIX_LOOKUP_CACHE_TTL)
     return detailed
-def get_interface_snmp_details(interfaceid: str, snmpindex: str = None):
-    """
-    Detalhes SNMP de uma interface.
-    Para ser correto, requer 'snmpindex' (ifIndex). Se n?o fornecido, retorna apenas metadados b?sicos.
-    """
-    # 1) Metadados b?sicos da hostinterface
+
+
+def get_interface_snmp_details(interfaceid: str, snmpindex: str | None = None):
+    """Return SNMP details for an interface if a valid ifIndex is provided."""
+
+    # 1) Fetch hostinterface metadata first
     iface = zabbix_request(
         "hostinterface.get",
-        {"output": ["interfaceid", "hostid", "ip", "dns", "port", "type", "main", "available"], "interfaceids": [str(interfaceid)]},
+        {
+            "output": [
+                "interfaceid",
+                "hostid",
+                "ip",
+                "dns",
+                "port",
+                "type",
+                "main",
+                "available",
+            ],
+            "interfaceids": [str(interfaceid)],
+        },
     )
     if not iface:
         return None
 
     info = {"interface": iface[0], "snmp_data": {}}
 
-    # 2) Sem snmpindex, n?o tentamos buscar itens SNMP (evita erros)
+    # 2) Without an ifIndex we only return the raw interface metadata
     if not snmpindex:
         return info
 
-    # 3) Busca itens do host com sufixo .{snmpindex} e filtra no Python (modelo seguro)
+    # 3) Retrieve host items matching the suffix .{snmpindex}
     items = zabbix_request(
         "item.get",
         {
-            "output": ["itemid", "name", "key_", "lastvalue", "units", "lastclock"],
+            "output": [
+                "itemid",
+                "name",
+                "key_",
+                "lastvalue",
+                "units",
+                "lastclock",
+            ],
             "hostids": [str(info["interface"]["hostid"])],
             "search": {"key_": f".{snmpindex}"},
             "searchWildcardsEnabled": True,
@@ -966,9 +1172,8 @@ def get_interface_snmp_details(interfaceid: str, snmpindex: str = None):
 
 
 def test_host_connectivity(hostid: str):
-    """
-    Testa conectividade de um host (disponibilidade Zabbix + ping opcional).
-    """
+    """Return Zabbix availability with optional ping reachability."""
+
     cache_key = _cache_key("host_connectivity", hostid=str(hostid))
     cached = safe_cache_get(cache_key)
     if cached is not None:
@@ -985,11 +1190,14 @@ def test_host_connectivity(hostid: str):
     )
 
     if not host_data:
-        return {"status": "error", "message": "Host n?o encontrado"}
+        return {"status": "error", "message": "Host not found"}
 
     host = host_data[0]
     interfaces = host.get("interfaces", []) or []
-    primary = next((i for i in interfaces if str(i.get("main")) == "1"), interfaces[0] if interfaces else None)
+    primary = next(
+        (i for i in interfaces if str(i.get("main")) == "1"),
+        interfaces[0] if interfaces else None,
+    )
 
     result = {
         "hostid": hostid,
@@ -1000,12 +1208,16 @@ def test_host_connectivity(hostid: str):
         "primary_interface": primary,
     }
 
-    # ping opcional
+    # Optional ping test to validate reachability
     if primary and primary.get("ip"):
-        ip = primary["ip"]
-        result["ping_test"] = {"ip": ip, "reachable": check_host_connectivity(ip), "timestamp": time.time()}
+        ip_addr = primary["ip"]
+        result["ping_test"] = {
+            "ip": ip_addr,
+            "reachable": check_host_connectivity(ip_addr),
+            "timestamp": time.time(),
+        }
 
-    safe_cache_set(cache_key, result, 60)  # curto
+    safe_cache_set(cache_key, result, 60)
     return result
 
 
