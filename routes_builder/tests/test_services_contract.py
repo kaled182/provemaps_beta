@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 import inspect
+from typing import Any
 
 import pytest
 
 from routes_builder import services
 
 
-def _callable_signature(obj):
+def _callable_signature(obj: Any) -> inspect.Signature:
     return inspect.signature(obj)
 
 
-def test_rebuild_route_signature_and_placeholder():
+def test_rebuild_route_signature_and_placeholder() -> None:
     sig = _callable_signature(services.rebuild_route)
     assert list(sig.parameters) == ["context"], (
         "rebuild_route expects a context parameter"
@@ -23,7 +24,7 @@ def test_rebuild_route_signature_and_placeholder():
         services.rebuild_route(context)
 
 
-def test_rebuild_routes_batch_signature_and_placeholder():
+def test_rebuild_routes_batch_signature_and_placeholder() -> None:
     sig = _callable_signature(services.rebuild_routes_batch)
     assert list(sig.parameters) == ["contexts"], (
         "rebuild_routes_batch expects an iterable of contexts"
@@ -34,7 +35,7 @@ def test_rebuild_routes_batch_signature_and_placeholder():
     assert result.failures == (1,)
 
 
-def test_import_route_from_payload_signature_and_placeholder():
+def test_import_route_from_payload_signature_and_placeholder() -> None:
     sig = _callable_signature(services.import_route_from_payload)
     params = list(sig.parameters)
     assert params == ["payload", "created_by"], (
@@ -44,13 +45,13 @@ def test_import_route_from_payload_signature_and_placeholder():
         services.import_route_from_payload({}, created_by="tests")
 
 
-def test_invalidate_route_cache_placeholder():
+def test_invalidate_route_cache_placeholder() -> None:
     assert services.invalidate_route_cache(1) is None
 
 
 @pytest.mark.django_db
-def test_health_summary_returns_expected_structure():
-    summary = services.health_summary()
+def test_health_summary_returns_expected_structure() -> None:
+    summary: dict[str, Any] = services.health_summary()
     assert summary["routes"] >= 0
     assert summary["segments"] >= 0
     assert summary["events"] >= 0

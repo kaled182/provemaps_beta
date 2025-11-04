@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from typing import Any, Iterable, cast
+
 import pytest
 
 from routes_builder import services
+from routes_builder.models import Route
 from routes_builder.tasks import (
     build_route,
     build_routes_batch,
@@ -15,12 +18,14 @@ from routes_builder.tasks import (
 
 
 @pytest.mark.django_db
-def test_build_route_task_success(monkeypatch, route):
-    metadata = {"segment_count": 0}
+def test_build_route_task_success(monkeypatch: Any, route: Route) -> None:
+    metadata: dict[str, Any] = {"segment_count": 0}
 
-    captured_context = {}
+    captured_context: dict[str, Any] = {}
 
-    def fake_rebuild(context):
+    def fake_rebuild(
+        context: services.RouteBuildContext,
+    ) -> services.RouteBuildResult:
         captured_context["context"] = context
         return services.RouteBuildResult(
             route_id=route.id,
@@ -32,7 +37,7 @@ def test_build_route_task_success(monkeypatch, route):
 
     monkeypatch.setattr(services, "rebuild_route", fake_rebuild)
 
-    result = build_route.run(
+    result = cast(Any, build_route).run(
         route_id=route.id,
         force=True,
         options={"initiator": "tests"},
@@ -54,13 +59,16 @@ def test_build_route_task_success(monkeypatch, route):
 
 
 @pytest.mark.django_db
-def test_build_route_task_handles_service_error(monkeypatch):
-    def fake_rebuild(context):  # noqa: ARG001 - context used implicitly
+def test_build_route_task_handles_service_error(monkeypatch: Any) -> None:
+    def fake_rebuild(
+        context: services.RouteBuildContext,
+    ) -> services.RouteBuildResult:
+        # context used implicitly to match signature
         raise services.RouteServiceError("route missing")
 
     monkeypatch.setattr(services, "rebuild_route", fake_rebuild)
 
-    result = build_route.run(route_id=999)
+    result = cast(Any, build_route).run(route_id=999)
 
     assert result["status"] == "error"
     assert result["route_id"] == 999
@@ -68,7 +76,7 @@ def test_build_route_task_handles_service_error(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_build_routes_batch_task(monkeypatch, route):
+def test_build_routes_batch_task(monkeypatch: Any, route: Route) -> None:
     second_result = services.RouteBuildResult(
         route_id=route.id + 1,
         status=services.Route.STATUS_ACTIVE,
@@ -84,9 +92,11 @@ def test_build_routes_batch_task(monkeypatch, route):
         metadata={"segment_count": 1},
     )
 
-    captured_contexts = {}
+    captured_contexts: dict[str, Any] = {}
 
-    def fake_batch(contexts):
+    def fake_batch(
+        contexts: Iterable[services.RouteBuildContext],
+    ) -> services.BatchBuildResult:
         contexts_list = list(contexts)
         captured_contexts["contexts"] = contexts_list
         return services.BatchBuildResult(
@@ -96,7 +106,7 @@ def test_build_routes_batch_task(monkeypatch, route):
 
     monkeypatch.setattr(services, "rebuild_routes_batch", fake_batch)
 
-    result = build_routes_batch.run(
+    result = cast(Any, build_routes_batch).run(
         route_ids=[route.id, route.id + 1],
         force=True,
         options={"initiator": "tests"},
@@ -113,11 +123,13 @@ def test_build_routes_batch_task(monkeypatch, route):
 
 
 @pytest.mark.django_db
-def test_import_route_task_success(monkeypatch, route):
-    payload = {"id": route.id, "name": route.name}
-    metadata = {"segment_count": 1}
+def test_import_route_task_success(monkeypatch: Any, route: Route) -> None:
+    payload: dict[str, Any] = {"id": route.id, "name": route.name}
+    metadata: dict[str, Any] = {"segment_count": 1}
 
-    def fake_import(data, *, created_by):
+    def fake_import(
+        data: dict[str, Any], *, created_by: str
+    ) -> services.RouteBuildResult:
         assert data is payload
         assert created_by == "tests"
         return services.RouteBuildResult(
@@ -130,7 +142,9 @@ def test_import_route_task_success(monkeypatch, route):
 
     monkeypatch.setattr(services, "import_route_from_payload", fake_import)
 
-    result = import_route_from_payload.run(payload, created_by="tests")
+    result = cast(Any, import_route_from_payload).run(
+        payload, created_by="tests"
+    )
 
     assert result["status"] == "success"
     assert result["route_id"] == route.id
@@ -139,41 +153,49 @@ def test_import_route_task_success(monkeypatch, route):
 
 
 @pytest.mark.django_db
-def test_import_route_task_error(monkeypatch):
-    def fake_import(payload, *, created_by):  # noqa: ARG001 - for coverage
+def test_import_route_task_error(monkeypatch: Any) -> None:
+    def fake_import(
+        payload: dict[str, Any], *, created_by: str
+    ) -> services.RouteBuildResult:
+        # For coverage depth we just simulate the error path
         raise services.RouteServiceError("invalid payload")
 
     monkeypatch.setattr(services, "import_route_from_payload", fake_import)
 
-    result = import_route_from_payload.run({"name": "fail"})
+    result = cast(Any, import_route_from_payload).run({"name": "fail"})
 
     assert result["status"] == "error"
     assert "invalid payload" in result["message"]
 
 
-def test_invalidate_route_cache_task(monkeypatch):
-    called = {}
+def test_invalidate_route_cache_task(monkeypatch: Any) -> None:
+    called: dict[str, Any] = {}
 
-    def fake_invalidate(route_id):
+    def fake_invalidate(route_id: int) -> None:
         called["route_id"] = route_id
 
     monkeypatch.setattr(services, "invalidate_route_cache", fake_invalidate)
 
-    result = invalidate_route_cache.run(77)
+    result = cast(Any, invalidate_route_cache).run(77)
 
     assert called["route_id"] == 77
     assert result == {"status": "success", "route_id": 77}
 
 
 @pytest.mark.django_db
-def test_health_check_task(monkeypatch):
-    summary = {"routes": 1, "segments": 2, "events": 3, "recent_events": []}
+def test_health_check_task(monkeypatch: Any) -> None:
+    summary: dict[str, Any] = {
+        "routes": 1,
+        "segments": 2,
+        "events": 3,
+        "recent_events": [],
+    }
 
-    def fake_summary():
+    def fake_summary() -> dict[str, Any]:
         return summary
 
     monkeypatch.setattr(services, "health_summary", fake_summary)
 
-    result = health_check_routes_builder.run()
+    result = cast(Any, health_check_routes_builder).run()
 
     assert result == {"status": "success", "summary": summary}

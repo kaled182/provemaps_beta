@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any, Protocol, cast
 
 import pytest
 from django.core.cache import cache
@@ -11,10 +12,16 @@ from routes_builder import services
 from routes_builder.models import Route, RouteEvent, RouteSegment
 
 
+class PortFactory(Protocol):
+    def __call__(self, *, prefix: str = "port") -> Any:
+        ...
+
+
 @pytest.mark.django_db
 def test_rebuild_routes_batch_handles_success_and_failures(
-    route, port_factory
-):
+    route: Route,
+    port_factory: PortFactory,
+) -> None:
     second_route = Route.objects.create(
         name="Batch Route Two",
         origin_port=port_factory(prefix="batch-origin"),
@@ -28,13 +35,13 @@ def test_rebuild_routes_batch_handles_success_and_failures(
         length_km=Decimal("3.200"),
     )
 
-    contexts = [
+    contexts: list[services.RouteBuildContext] = [
         services.RouteBuildContext(route_id=route.id),
         services.RouteBuildContext(route_id=second_route.id, force=True),
         services.RouteBuildContext(route_id=999_999),
     ]
 
-    result = services.rebuild_routes_batch(contexts)
+    result: services.BatchBuildResult = services.rebuild_routes_batch(contexts)
 
     assert len(result.processed) == 2
     assert result.failures == (999_999,)
@@ -62,12 +69,14 @@ def test_rebuild_routes_batch_handles_success_and_failures(
 
 
 @pytest.mark.django_db
-def test_import_route_from_payload_creates_full_structure(port_factory):
-    origin = port_factory(prefix="imp-origin")
-    mid = port_factory(prefix="imp-mid")
-    destination = port_factory(prefix="imp-dest")
+def test_import_route_from_payload_creates_full_structure(
+    port_factory: PortFactory,
+) -> None:
+    origin: Any = port_factory(prefix="imp-origin")
+    mid: Any = port_factory(prefix="imp-mid")
+    destination: Any = port_factory(prefix="imp-dest")
 
-    payload = {
+    payload: dict[str, Any] = {
         "name": "Imported Route",
         "description": "Generated via JSON",
         "origin_port_id": origin.id,
@@ -89,7 +98,9 @@ def test_import_route_from_payload_creates_full_structure(port_factory):
         ],
     }
 
-    result = services.import_route_from_payload(payload, created_by="importer")
+    result: services.RouteBuildResult = services.import_route_from_payload(
+        payload, created_by="importer"
+    )
 
     route = Route.objects.get(name="Imported Route")
     route.refresh_from_db()
@@ -105,19 +116,25 @@ def test_import_route_from_payload_creates_full_structure(port_factory):
     assert orders == [1, 2]
     assert route.length_km == Decimal("4.000")
 
+    route_metadata = cast(dict[str, Any], route.metadata)
+    result_metadata = cast(dict[str, Any], result.metadata)
+
     assert result.events_recorded == 2
     assert result.segments_created == 2
-    assert result.metadata["import"]["segments_supplied"] == 2
-    assert route.metadata["last_import"]["created_by"] == "importer"
-    assert route.metadata["source"] == "planner"
+    assert result_metadata["import"]["segments_supplied"] == 2
+    assert route_metadata["last_import"]["created_by"] == "importer"
+    assert route_metadata["source"] == "planner"
 
 
 @pytest.mark.django_db
-def test_import_route_updates_existing_route(route, port_factory):
-    new_mid = port_factory(prefix="upd-mid")
-    new_dest = port_factory(prefix="upd-dest")
+def test_import_route_updates_existing_route(
+    route: Route,
+    port_factory: PortFactory,
+) -> None:
+    new_mid: Any = port_factory(prefix="upd-mid")
+    new_dest: Any = port_factory(prefix="upd-dest")
 
-    payload = {
+    payload: dict[str, Any] = {
         "id": route.id,
         "name": route.name,
         "origin_port_id": route.origin_port_id,
@@ -135,20 +152,23 @@ def test_import_route_updates_existing_route(route, port_factory):
     result = services.import_route_from_payload(payload, created_by="updater")
 
     route.refresh_from_db()
+    route_metadata = cast(dict[str, Any], route.metadata)
+    result_metadata = cast(dict[str, Any], result.metadata)
 
     assert route.destination_port_id == new_dest.id
     assert route.segments.count() == 1
-    assert route.metadata["tag"] == "updated"
-    assert route.metadata["last_import"]["segments_supplied"] == 1
+    assert route_metadata["tag"] == "updated"
+    assert route_metadata["last_import"]["segments_supplied"] == 1
+    assert result_metadata["import"]["segments_supplied"] == 1
     assert result.segments_created == 1
     assert result.events_recorded == 2
 
 
 @pytest.mark.django_db
-def test_import_route_invalid_port_raises(port_factory):
-    origin = port_factory(prefix="invalid-origin")
+def test_import_route_invalid_port_raises(port_factory: PortFactory) -> None:
+    origin: Any = port_factory(prefix="invalid-origin")
 
-    payload = {
+    payload: dict[str, Any] = {
         "name": "Invalid Route",
         "origin_port_id": origin.id,
         "destination_port_id": 9_999_999,
@@ -158,7 +178,7 @@ def test_import_route_invalid_port_raises(port_factory):
         services.import_route_from_payload(payload, created_by="tester")
 
 
-def test_invalidate_route_cache_clears_expected_keys():
+def test_invalidate_route_cache_clears_expected_keys() -> None:
     route_id = 42
     keys = [
         services.CACHE_KEY_ROUTE.format(route_id=route_id),
@@ -177,8 +197,11 @@ def test_invalidate_route_cache_clears_expected_keys():
 
 
 @pytest.mark.django_db
-def test_health_summary_includes_recent_events(route_event, route_segment):
-    summary = services.health_summary()
+def test_health_summary_includes_recent_events(
+    route_event: RouteEvent,
+    route_segment: RouteSegment,
+) -> None:
+    summary: dict[str, Any] = services.health_summary()
 
     assert summary["routes"] >= 1
     assert summary["segments"] >= 1
