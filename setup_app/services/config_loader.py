@@ -1,8 +1,4 @@
-"""
-Runtime configuration loader.
-Carrega configurações do banco de dados (FirstTimeSetup)
-e as disponibiliza em runtime.
-"""
+"""Runtime configuration loader fed by the ``FirstTimeSetup`` table."""
 from __future__ import annotations
 
 import os
@@ -18,19 +14,16 @@ _CONFIG_CACHE_TTL = 300  # 5 minutos
 
 
 def get_runtime_config() -> Dict[str, str]:
-    """
-    Obtém a configuração em runtime do cache ou banco de dados.
-    Retorna um dicionário com as configurações da aplicação.
-    """
-    # Tenta buscar do cache primeiro
+    """Return the runtime configuration from cache or the database."""
+    # Prefer the cached snapshot
     cached = cache.get(_CONFIG_CACHE_KEY)
     if cached is not None:
         return cached
 
-    # Se não está no cache, busca do banco
+    # Fallback to the database if it is not cached
     config = _load_from_database()
     
-    # Armazena no cache
+    # Store the refreshed payload in cache
     if config:
         cache.set(_CONFIG_CACHE_KEY, config, _CONFIG_CACHE_TTL)
     
@@ -38,9 +31,7 @@ def get_runtime_config() -> Dict[str, str]:
 
 
 def _load_from_database() -> Dict[str, str]:
-    """
-    Carrega configurações do banco de dados.
-    """
+    """Fetch the most recent configuration row from the database."""
     config = {}
     record = (
         FirstTimeSetup.objects.filter(configured=True)
@@ -82,33 +73,24 @@ def _load_from_database() -> Dict[str, str]:
 
 
 def clear_runtime_config_cache():
-    """
-    Limpa o cache de configuração em runtime.
-    Útil após salvar novas configurações.
-    """
+    """Invalidate the runtime configuration cache entry."""
     cache.delete(_CONFIG_CACHE_KEY)
 
 
 def get_config_value(key: str, default: str = "") -> str:
-    """
-    Obtém um valor de configuração específico.
-    Prioridade: variável de ambiente > banco de dados > default
-    """
-    # Primeiro verifica variável de ambiente
+    """Return a specific config value honoring the precedence chain."""
+    # 1. Environment variables
     env_value = os.getenv(key)
     if env_value:
         return env_value
     
-    # Se não tem na env, busca do banco
+    # 2. Database-backed runtime config
     runtime_config = get_runtime_config()
     return runtime_config.get(key, default)
 
 
 def is_first_time_setup_needed() -> bool:
-    """
-    Verifica se é necessário fazer o primeiro setup.
-    Retorna True se ainda não foi configurado.
-    """
+    """Check whether the initial setup still needs to run."""
     try:
         with connection.cursor() as cursor:
             cursor.execute("""

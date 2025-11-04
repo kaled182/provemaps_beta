@@ -1,20 +1,20 @@
-# Documentação do MapsProveFiber (Desenvolvedores)
+# MapsProveFiber Documentation (Developers)
 
-Esta pasta reúne os principais guias para desenvolvedores:
+This folder gathers the main guides for developers:
 
-- [DOCKER_SETUP.md](./DOCKER_SETUP.md): Guia completo para rodar o projeto via Docker
-- [QUICKSTART_LOCAL.md](./QUICKSTART_LOCAL.md): Guia rápido para desenvolvimento local
-- [COMANDOS_RAPIDOS.md](./COMANDOS_RAPIDOS.md): Comandos essenciais para o dia a dia
-- [OBSERVABILITY.md](./OBSERVABILITY.md): Endpoints de saúde e métricas Prometheus
+- [DOCKER_SETUP.md](./DOCKER_SETUP.md): Complete guide to run the project with Docker
+- [QUICKSTART_LOCAL.md](./QUICKSTART_LOCAL.md): Quick start for local development
+- [COMANDOS_RAPIDOS.md](./COMANDOS_RAPIDOS.md): Day-to-day command reference
+- [OBSERVABILITY.md](./OBSERVABILITY.md): Health endpoints and Prometheus metrics
 
-## Testes e Qualidade Contínua
-- Para uma checagem rápida local, execute `pytest --maxfail=1 -q`.
-- Para coletar cobertura, utilize `pytest --cov --cov-report=term-missing`.
-- O pipeline GitHub Actions (`.github/workflows/tests.yml`) executa `pytest --cov` em pull requests e aplica `--cov-fail-under=45`.
-- Falhas no CI devem ser tratadas antes do merge; alinhe evoluções de cobertura com a equipe ao ajustar o limite.
+## Tests and Continuous Quality
+- For a quick local smoke run, execute `pytest --maxfail=1 -q`.
+- For coverage, run `coverage run -m pytest` followed by `coverage report --show-missing`.
+- The GitHub Actions pipeline (`.github/workflows/tests.yml`) executes the same commands and fails if `coverage report` drops below 45% (`--fail-under=45`).
+- Resolve CI failures before merging; coordinate any threshold changes with the team.
 
-## Outros tópicos importantes
-- Segurança: Uso de .env, chaves Fernet, recomendações OWASP (veja [`../security/SECURITY.md`](../security/SECURITY.md))
-- Redis em produção: [`../reference/REDIS_HIGH_AVAILABILITY.md`](../reference/REDIS_HIGH_AVAILABILITY.md)
+## Additional topics
+- Security: .env usage, Fernet keys, OWASP recommendations (see [`../security/SECURITY.md`](../security/SECURITY.md))
+- Redis in production: [`../reference/REDIS_HIGH_AVAILABILITY.md`](../reference/REDIS_HIGH_AVAILABILITY.md)
 
-Consulte sempre este diretório para informações atualizadas e padronizadas.
+Refer to this directory for the latest standardized information.

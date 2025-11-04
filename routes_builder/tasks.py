@@ -3,13 +3,35 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Iterable, Optional
-
-from celery import shared_task
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Optional,
+    TypeVar,
+)
 
 from routes_builder import services
 
 logger = logging.getLogger(__name__)
+
+
+if TYPE_CHECKING:
+    from typing import Protocol
+
+    class CeleryTask(Protocol):
+        request: Any
+
+    FuncT = TypeVar("FuncT", bound=Callable[..., Any])
+
+    def shared_task(*args: Any, **kwargs: Any) -> Callable[[FuncT], FuncT]:
+        ...
+else:  # pragma: no cover - import for runtime execution only
+    from celery import shared_task
+
+    CeleryTask = Any
 
 
 # =============================================================================
@@ -18,14 +40,14 @@ logger = logging.getLogger(__name__)
 
 @shared_task(bind=True, name="routes_builder.build_route")
 def build_route(
-    self,
+    self: CeleryTask,
     route_id: int,
     force: bool = False,
     options: Optional[Dict[str, Any]] = None,
-):
-    """Construir ou reconstruir uma rota individual usando o service layer."""
+) -> dict[str, Any]:
+    """Build or rebuild a single route via the service layer."""
 
-    logger.info("Task build_route iniciada para route_id=%s", route_id)
+    logger.info("Task build_route started for route_id=%s", route_id)
     payload_options = dict(options or {})
 
     context = services.RouteBuildContext(
@@ -45,14 +67,14 @@ def build_route(
             "metadata": result.metadata,
         }
         logger.info(
-            "Task build_route concluída para route_id=%s status=%s",
+            "Task build_route finished for route_id=%s status=%s",
             route_id,
             result.status,
         )
         return response
     except services.RouteServiceError as exc:
         logger.warning(
-            "Task build_route falhou para route_id=%s: %s",
+            "Task build_route failed for route_id=%s: %s",
             route_id,
             exc,
         )
@@ -65,16 +87,16 @@ def build_route(
 
 @shared_task(bind=True, name="routes_builder.build_routes_batch")
 def build_routes_batch(
-    self,
+    self: CeleryTask,
     route_ids: Iterable[int],
     force: bool = False,
     options: Optional[Dict[str, Any]] = None,
-):
-    """Processa múltiplas rotas, delegando ao serviço de batch rebuild."""
+) -> dict[str, Any]:
+    """Process multiple routes by delegating to the batch rebuild service."""
 
     route_ids_list = list(route_ids)
     logger.info(
-        "Task build_routes_batch iniciada para %d rotas", len(route_ids_list)
+        "Task build_routes_batch started for %d routes", len(route_ids_list)
     )
 
     shared_options = dict(options or {})
@@ -107,7 +129,7 @@ def build_routes_batch(
     }
 
     logger.info(
-        "Task build_routes_batch concluída processed=%d failures=%d",
+        "Task build_routes_batch finished processed=%d failures=%d",
         len(processed_payload),
         len(result.failures),
     )
@@ -116,11 +138,11 @@ def build_routes_batch(
 
 
 @shared_task(bind=True, name="routes_builder.invalidate_route_cache")
-def invalidate_route_cache(self, route_id: int):
-    """Invalidar caches associados à rota informada."""
+def invalidate_route_cache(self: CeleryTask, route_id: int) -> dict[str, Any]:
+    """Invalidate cached data associated with a given route."""
 
     logger.info(
-        "Task invalidate_route_cache iniciada para route_id=%s", route_id
+        "Task invalidate_route_cache started for route_id=%s", route_id
     )
     services.invalidate_route_cache(route_id)
     return {
@@ -131,14 +153,14 @@ def invalidate_route_cache(self, route_id: int):
 
 @shared_task(bind=True, name="routes_builder.import_route_from_payload")
 def import_route_from_payload(
-    self,
-    payload: Dict[str, Any],
+    self: CeleryTask,
+    payload: Dict[str, Any] | services.RouteImportPayload,
     created_by: str = "routes_builder.task",
-):
-    """Importar ou atualizar uma rota a partir de um payload JSON-like."""
+) -> dict[str, Any]:
+    """Import or update a route using a JSON-like payload."""
 
     logger.info(
-        "Task import_route_from_payload iniciada created_by=%s", created_by
+        "Task import_route_from_payload started created_by=%s", created_by
     )
 
     try:
@@ -155,9 +177,7 @@ def import_route_from_payload(
             "metadata": result.metadata,
         }
     except services.RouteServiceError as exc:
-        logger.warning(
-            "Task import_route_from_payload falhou: %s", exc
-        )
+        logger.warning("Task import_route_from_payload failed: %s", exc)
         return {
             "status": "error",
             "message": str(exc),
@@ -165,12 +185,9 @@ def import_route_from_payload(
 
 
 @shared_task(bind=True, name="routes_builder.health_check")
-def health_check_routes_builder(self):
-    """
-    Health check do sistema de rotas.
-    Útil para verificar se worker/fila estão funcionando.
-    """
-    logger.info("Task health_check_routes_builder executada")
+def health_check_routes_builder(self: CeleryTask) -> dict[str, Any]:
+    """Light-weight health check for the routes worker/queue."""
+    logger.info("Task health_check_routes_builder executed")
     summary = services.health_summary()
     return {
         "status": "success",

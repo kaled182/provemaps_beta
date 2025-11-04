@@ -1,149 +1,149 @@
-# Redis Graceful Degradation - Desenvolvimento Local
+# Redis Graceful Degradation – Local Development
 
-## 🎯 Objetivo
+## 🎯 Goal
 
-Permitir que a aplicação funcione **sem Redis** em ambiente de desenvolvimento, degradando gracefully para operação sem cache ao invés de gerar erros HTTP 500.
+Allow the application to run **without Redis** in the development environment, gracefully degrading to a cache-less mode instead of throwing HTTP 500 errors.
 
 ---
 
-## 🐛 Problema Original
+## 🐛 Original Problem
 
-### Sintoma
+### Symptom
 ```
-[ERROR] zabbix_api.views: Erro no endpoint lookup_hosts: Error 10061 connecting to 127.0.0.1:6379
-redis.exceptions.ConnectionError: Error 10061 connecting to 127.0.0.1:6379. 
-Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente.
+[ERROR] zabbix_api.views: Error in lookup_hosts endpoint: Error 10061 connecting to 127.0.0.1:6379
+redis.exceptions.ConnectionError: Error 10061 connecting to 127.0.0.1:6379.
+No connection could be made because the target machine actively refused it.
 [ERROR] django.server: "GET /zabbix_api/lookup/hosts/?groupids=22 HTTP/1.1" 500 37
 ```
 
-### Causa Raiz
-O código usava `cache.get()` e `cache.set()` diretamente sem tratamento de exceções, causando:
-- ❌ HTTP 500 (Internal Server Error) quando Redis offline
-- ❌ Stack traces longos nos logs de erro
-- ❌ Experiência ruim de desenvolvimento (precisa ter Redis rodando)
+### Root Cause
+The code invoked `cache.get()` and `cache.set()` without exception handling, which led to:
+- ❌ HTTP 500 (Internal Server Error) whenever Redis was offline
+- ❌ Long stack traces cluttering the error logs
+- ❌ Poor developer experience (Redis had to be running locally)
 
 ---
 
-## ✅ Solução Implementada
+## ✅ Implemented Solution
 
-### 1. Cache Wrappers Seguros
+### 1. Safe cache wrappers
 
-Criados 3 helpers em `zabbix_api/services/zabbix_service.py`:
+Three helpers were created in `zabbix_api/services/zabbix_service.py`:
 
 ```python
 def safe_cache_get(key, default=None):
-    """Wrapper seguro para cache.get() que ignora falhas de conexão Redis."""
+    """Safe wrapper around cache.get() that ignores Redis connection failures."""
     try:
         return cache.get(key, default=default)
     except Exception as exc:
         logger.debug(
-            "Cache offline (Redis indisponível), continuando sem cache: %s",
+            "Cache offline (Redis unavailable), continuing without cache: %s",
             exc.__class__.__name__,
         )
         return default
 
 def safe_cache_set(key, value, timeout=None):
-    """Wrapper seguro para cache.set() que ignora falhas de conexão Redis."""
+    """Safe wrapper around cache.set() that ignores Redis connection failures."""
     try:
         cache.set(key, value, timeout=timeout)
     except Exception as exc:
         logger.debug(
-            "Cache offline (Redis indisponível), não armazenando: %s",
+            "Cache offline (Redis unavailable), not storing value: %s",
             exc.__class__.__name__,
         )
 
 def safe_cache_delete(key):
-    """Wrapper seguro para cache.delete() que ignora falhas de conexão Redis."""
+    """Safe wrapper around cache.delete() that ignores Redis connection failures."""
     try:
         cache.delete(key)
     except Exception as exc:
         logger.debug(
-            "Cache offline (Redis indisponível), não deletando: %s",
+            "Cache offline (Redis unavailable), not deleting: %s",
             exc.__class__.__name__,
         )
 ```
 
-### 2. Substituições Aplicadas
+### 2. Replacements applied
 
 #### zabbix_api/services/zabbix_service.py
-- ✅ `search_hosts()` - linha ~585
-- ✅ `search_hosts()` cache set - linha ~666
-- ✅ `get_host_interfaces()` - linha ~677
-- ✅ `get_host_interfaces()` cache set - linha ~705
-- ✅ `search_hosts_by_name_ip()` - linha ~719
-- ✅ `search_hosts_by_name_ip()` cache set - linha ~796
-- ✅ `get_host_interfaces_detailed()` - linha ~806
-- ✅ `get_host_interfaces_detailed()` cache set - linha ~836
-- ✅ `test_host_connectivity()` - linha ~900
-- ✅ `test_host_connectivity()` cache set - linha ~935
+- ✅ `search_hosts()` – line ~585
+- ✅ `search_hosts()` cache set – line ~666
+- ✅ `get_host_interfaces()` – line ~677
+- ✅ `get_host_interfaces()` cache set – line ~705
+- ✅ `search_hosts_by_name_ip()` – line ~719
+- ✅ `search_hosts_by_name_ip()` cache set – line ~796
+- ✅ `get_host_interfaces_detailed()` – line ~806
+- ✅ `get_host_interfaces_detailed()` cache set – line ~836
+- ✅ `test_host_connectivity()` – line ~900
+- ✅ `test_host_connectivity()` cache set – line ~935
 
-Total: **10 substituições** em `zabbix_service.py`
+Total: **10 replacements** in `zabbix_service.py`
 
 #### zabbix_api/inventory_cache.py
-- ✅ `invalidate_fiber_cache()` - Wrapped com try/except
+- ✅ `invalidate_fiber_cache()` – wrapped with try/except
 
 #### routes_builder/views_tasks.py
-- ✅ `_check_rate_limit()` - Wrapped com try/except (fail-open)
+- ✅ `_check_rate_limit()` – wrapped with try/except (fail-open)
 
 ---
 
-## 🎭 Comportamento Atual
+## 🎭 Current Behavior
 
-### Com Redis Online
+### With Redis online
 ```
-[DEBUG] zabbix_api.services: Cache HIT para search_hosts:q=test...
-→ Performance otimizada, resultados instantâneos
-```
-
-### Com Redis Offline
-```
-[DEBUG] zabbix_api.services: Cache offline (Redis indisponível), continuando sem cache: ConnectionError
-→ Aplicação continua funcionando, consulta direto o Zabbix (mais lento, mas funcional)
+[DEBUG] zabbix_api.services: Cache HIT for search_hosts:q=test...
+→ Optimized performance, instant results
 ```
 
-### Comparação
+### With Redis offline
+```
+[DEBUG] zabbix_api.services: Cache offline (Redis unavailable), continuing without cache: ConnectionError
+→ Application keeps working, falls back to direct Zabbix queries (slower but functional)
+```
 
-| Aspecto | Antes (com erro) | Depois (graceful) |
+### Comparison
+
+| Aspect | Before (error) | After (graceful) |
 |---------|------------------|-------------------|
-| **HTTP Status** | 500 (erro) | 200 (sucesso) |
-| **Logs** | [ERROR] com stack trace | [DEBUG] mensagem curta |
-| **Performance** | N/A (quebra) | Sem cache, direto no Zabbix |
-| **Dev Experience** | ❌ Precisa Redis | ✅ Funciona standalone |
+| **HTTP Status** | 500 (error) | 200 (success) |
+| **Logs** | [ERROR] with stack trace | [DEBUG] short message |
+| **Performance** | N/A (crash) | No cache, direct to Zabbix |
+| **Dev Experience** | ❌ Redis required | ✅ Works standalone |
 
 ---
 
-## 📊 Impacto
+## 📊 Impact
 
-### Arquivos Modificados
-- `zabbix_api/services/zabbix_service.py` - 10 pontos de cache
-- `zabbix_api/inventory_cache.py` - 1 ponto de cache
-- `routes_builder/views_tasks.py` - 1 ponto de rate limiting
+### Files touched
+- `zabbix_api/services/zabbix_service.py` – 10 cache calls
+- `zabbix_api/inventory_cache.py` – 1 cache call
+- `routes_builder/views_tasks.py` – 1 rate-limiting hook
 
-### Benefícios
-- ✅ **Desenvolvimento mais fácil:** Não precisa instalar/configurar Redis localmente
-- ✅ **Resiliência:** Aplicação tolera falhas temporárias de Redis em produção
-- ✅ **Logs limpos:** Nível DEBUG ao invés de ERROR para situações esperadas
-- ✅ **Fail-open:** Rate limiting permite requisições se Redis estiver offline
+### Benefits
+- ✅ **Easier development:** no need to install/configure Redis locally
+- ✅ **Resilience:** app tolerates temporary Redis failures in production
+- ✅ **Clean logs:** DEBUG instead of ERROR for expected situations
+- ✅ **Fail-open:** rate limiting keeps responding if Redis is offline
 
 ### Trade-offs
-- ⚠️ **Performance reduzida:** Sem cache, todas as consultas vão direto ao Zabbix
-- ⚠️ **Rate limiting desabilitado:** Se Redis offline, rate limiting não funciona (fail-open)
-- ℹ️ **Uso de memória:** Sem cache, pode haver mais carga no Zabbix
+- ⚠️ **Reduced performance:** without cache, every call hits Zabbix
+- ⚠️ **Rate limiting disabled:** when Redis is offline, rate limiting is fail-open
+- ℹ️ **Resource usage:** more load on Zabbix without caching
 
 ---
 
-## 🔧 Configuração
+## 🔧 Configuration
 
-### Desenvolvimento Local (.env)
+### Local development (`.env`)
 ```bash
-# Cache opcional - funciona sem Redis
+# Optional cache – works without Redis
 HEALTHCHECK_IGNORE_CACHE=true
 DEBUG=True
 ```
 
-### Produção (.env)
+### Production (`.env`)
 ```bash
-# Redis deve estar sempre disponível em produção
+# Redis must remain available in production
 REDIS_URL=redis://localhost:6379/0
 HEALTHCHECK_IGNORE_CACHE=false
 DEBUG=False
@@ -151,45 +151,45 @@ DEBUG=False
 
 ---
 
-## ✅ Validação
+## ✅ Validation
 
-### Teste Manual
-1. **Sem Redis rodando:**
+### Manual test
+1. **With Redis stopped:**
    ```powershell
-   # Certifique-se que Redis NÃO está rodando
+    # Ensure Redis is NOT running
    curl http://localhost:8000/zabbix_api/lookup/hosts/?groupids=22
    ```
-   - ✅ Deve retornar HTTP 200 (não 500)
-   - ✅ Logs mostram [DEBUG], não [ERROR]
+    - ✅ Should return HTTP 200 (not 500)
+    - ✅ Logs show [DEBUG], not [ERROR]
 
-2. **Com Redis rodando:**
+2. **With Redis running:**
    ```powershell
-   # Inicie Redis
+    # Start Redis
    redis-server
    
-   # Teste o endpoint
+    # Call the endpoint
    curl http://localhost:8000/zabbix_api/lookup/hosts/?groupids=22
    ```
-   - ✅ Deve retornar HTTP 200
-   - ✅ Segunda chamada deve ser mais rápida (cache hit)
+    - ✅ Should return HTTP 200
+    - ✅ Second call should be faster (cache hit)
 
-### Teste Automatizado
+### Automated test
 ```python
 # tests/test_cache_graceful_degradation.py
 def test_zabbix_lookup_without_redis(mocker):
-    """Endpoint deve funcionar mesmo com Redis offline"""
-    # Mock cache.get para lançar ConnectionError
+    """Endpoint must keep working even when Redis is offline."""
+    # Mock cache.get to raise ConnectionError
     mocker.patch('django.core.cache.cache.get', side_effect=ConnectionError)
     
     response = client.get('/zabbix_api/lookup/hosts/?groupids=22')
     
-    # Não deve retornar erro
+    # Must not return an error
     assert response.status_code == 200
 ```
 
 ---
 
-## 📚 Referências
+## 📚 References
 
 - Django Cache Framework: https://docs.djangoproject.com/en/5.2/topics/cache/
 - Redis Exception Handling: https://redis-py.readthedocs.io/en/stable/exceptions.html
@@ -197,15 +197,15 @@ def test_zabbix_lookup_without_redis(mocker):
 
 ---
 
-## 🚀 Próximos Passos (Opcional)
+## 🚀 Next Steps (Optional)
 
-- [ ] Adicionar métricas Prometheus para cache hit/miss rate
-- [ ] Implementar fallback cache em memória (django.core.cache.backends.locmem)
-- [ ] Configurar timeout curto no Redis para evitar bloqueios longos
-- [ ] Adicionar health check específico para Redis (não-crítico)
+- [ ] Add Prometheus metrics for cache hit/miss rate
+- [ ] Implement an in-memory fallback cache (`django.core.cache.backends.locmem`)
+- [ ] Configure a short Redis timeout to avoid long stalls
+- [ ] Add a non-critical Redis-specific health check
 
 ---
 
-**Desenvolvido:** 25/10/2025  
-**Responsável:** DevOps + Backend Team  
-**Status:** ✅ Implementado e Validado
+**Developed:** 25/10/2025  
+**Owners:** DevOps + Backend Team  
+**Status:** ✅ Implemented and validated

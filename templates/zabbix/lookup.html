@@ -183,7 +183,7 @@
     const prefix = "DEVICE";
 
     if (!value) {
-      return `<span ${tooltip} class="${baseClass} border-gray-200 bg-gray-100 text-gray-600"><span class="text-base leading-none">&#9679;</span>${prefix}  ${label}</span>`;
+      return `<span ${tooltip} class="${baseClass} border-gray-200 bg-gray-100 text-gray-600"><span class="text-base leading-none">&#9679;</span>${prefix} - ${label}</span>`;
     }
 
     let classes = "border-gray-200 bg-gray-100 text-gray-600";
@@ -193,7 +193,7 @@
       classes = "border-red-200 bg-red-100 text-red-700";
     }
 
-    return `<span ${tooltip} class="${baseClass} ${classes}"><span class="text-base leading-none">&#9679;</span>${prefix}  ${label}</span>`;
+  return `<span ${tooltip} class="${baseClass} ${classes}"><span class="text-base leading-none">&#9679;</span>${prefix} - ${label}</span>`;
   }
 
 

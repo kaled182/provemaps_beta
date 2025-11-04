@@ -1,58 +1,73 @@
-"""
-Settings de DESENVOLVIMENTO para o mapsprovefiber.
-Herdam de settings.base e aplicam apenas overrides seguros para Dev.
+# pyright: reportConstantRedefinition=false
+
+"""Development configuration for mapsprovefiber.
+
+Inherits from ``settings.base`` and applies development-safe overrides.
 """
 
 import os
+from importlib import import_module
+from typing import Any, Callable, Dict, TYPE_CHECKING
+
 from .base import *  # noqa
 
-# -----------------------------------------------------
-# Núcleo
-# -----------------------------------------------------
-DEBUG = True
+if TYPE_CHECKING:  # pragma: no cover - assists type checkers only
+    from .base import (
+        BASE_DIR,
+        DATABASES,
+        INSTALLED_APPS,
+        LOGGING,
+        MIDDLEWARE,
+        TEMPLATES,
+    )
 
-# Hosts de desenvolvimento (inclui Docker/compose)
-ALLOWED_HOSTS = [
+# -----------------------------------------------------
+# Core
+# -----------------------------------------------------
+DEBUG = True  # type: ignore[assignment]
+
+# Development hosts (includes Docker/Compose)
+ALLOWED_HOSTS = [  # type: ignore[assignment]
     "localhost",
-    "127.0.0.1", 
+    "127.0.0.1",
     "0.0.0.0",
-    "web",                    # nome do serviço no docker-compose
-    "host.docker.internal",   # para acessar host do Docker
+    "web",                    # docker-compose service name
+    "host.docker.internal",   # allows the Docker host to reach the app
 ]
 
-# CSRF em dev 
-CSRF_TRUSTED_ORIGINS = [
+# CSRF in development
+CSRF_TRUSTED_ORIGINS = [  # type: ignore[assignment]
     "http://localhost:8000",
     "http://127.0.0.1:8000",
     "http://0.0.0.0:8000",
     "http://web:8000",
 ]
 
-# Email sai no console
+# Email is printed to the console
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 # -----------------------------------------------------
 # Database (Dev optimizations)
 # -----------------------------------------------------
-# Conexões curtas para desenvolvimento
+# Short-lived connections for development
 DATABASES["default"]["CONN_MAX_AGE"] = 0
 DATABASES["default"]["OPTIONS"].update({
     "connect_timeout": 3,
 })
 
-# Fallback para SQLite se especificado
+# Fallback to SQLite when explicitly requested
 if os.getenv("DB_ENGINE") == "sqlite":
     DATABASES["default"] = {
-        "ENGINE": "django.db.backends.sqlite3", 
+        "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
     }
 
 # -----------------------------------------------------
 # Logging (Dev-friendly)
 # -----------------------------------------------------
-LOG_LEVEL = "DEBUG"
+LOG_LEVEL = "DEBUG"  # type: ignore[assignment]
 
-# Configura logging para desenvolvimento
+# Logging tuned for development
 LOGGING["formatters"]["verbose"] = {
     "format": "{levelname} {asctime} {module} {message}",
     "style": "{",
@@ -61,61 +76,74 @@ LOGGING["formatters"]["verbose"] = {
 LOGGING["root"]["level"] = LOG_LEVEL
 LOGGING["loggers"]["django"]["level"] = "INFO"
 LOGGING["loggers"]["django.db.backends"] = {
-    "level": "INFO",  # Mude para DEBUG para ver queries SQL
+    "level": "INFO",  # Change to DEBUG to inspect SQL queries
     "handlers": ["console"],
     "propagate": False,
 }
 
 # -----------------------------------------------------
-# Debug Toolbar (Auto-configure)
+# Debug Toolbar (auto-configure)
 # -----------------------------------------------------
 try:
-    import debug_toolbar  # noqa
-    INSTALLED_APPS += ["debug_toolbar"]
-    MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
-    DEBUG_TOOLBAR_CONFIG = {"SHOW_TOOLBAR_CALLBACK": lambda request: True}
+    import_module("debug_toolbar")
+    INSTALLED_APPS.append("debug_toolbar")
+    MIDDLEWARE.insert(
+        0,
+        "debug_toolbar.middleware.DebugToolbarMiddleware",
+    )
+    DEBUG_TOOLBAR_CONFIG: Dict[str, Callable[[Any], bool]] = {
+        "SHOW_TOOLBAR_CALLBACK": lambda request: True,
+    }
     INTERNAL_IPS = ["127.0.0.1", "localhost", "0.0.0.0", "172.16.0.0/12"]
-    print("[DEBUG_TOOLBAR] Django Debug Toolbar habilitado")
+    print("[DEBUG_TOOLBAR] Django Debug Toolbar enabled")
 except ImportError:
-    print("[INFO] Django Debug Toolbar nao instalado")
+    print("[INFO] Django Debug Toolbar not installed")
 except Exception as e:
-    print(f"[WARN] Erro ao configurar Debug Toolbar: {e}")
+    print(f"[WARN] Error configuring Debug Toolbar: {e}")
 
 
 # -----------------------------------------------------
 # Development-specific
 # -----------------------------------------------------
 
-# Static files em dev (Manifest para gerar hash por conteúdo)
-STATICFILES_STORAGE = "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"
+# Static files in development (Manifest to hash by content)
+STATICFILES_STORAGE = (
+    "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"
+)
 
 import time as _time  # noqa: E402
 import subprocess  # noqa: E402
 
-def _git_sha():
-    """Retorna SHA curto do commit atual ou 'nosha' se indisponível."""
+
+def _git_sha() -> str:
+    """Return the short git SHA for the current commit, or ``nosha``."""
     try:
-        sha = subprocess.check_output([
-            "git", "rev-parse", "--short", "HEAD"
-        ], cwd=BASE_DIR).decode().strip()
+        sha = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=BASE_DIR,
+        ).decode().strip()
         if sha:
             return sha
     except Exception:
         return "nosha"
     return "nosha"
 
-# sha-timestamp para cache bust e rastreabilidade
-STATIC_ASSET_VERSION = f"{_git_sha()}-{_time.strftime('%Y%m%d%H%M%S')}"
+
+# sha-timestamp for cache busting and traceability
+
+STATIC_ASSET_VERSION = (
+    f"{_git_sha()}-{_time.strftime('%Y%m%d%H%M%S')}"
+)
 print(f"[STATIC_VERSION] STATIC_ASSET_VERSION={STATIC_ASSET_VERSION}")
 
-# Middleware no-cache para rotas sensíveis
-MIDDLEWARE.append('core.middleware.no_cache_dev.NoCacheDevMiddleware')
+# No-cache middleware for sensitive routes
+MIDDLEWARE.append("core.middleware.no_cache_dev.NoCacheDevMiddleware")
 
 # Security relaxations for development
 if DEBUG:
-    SECURE_SSL_REDIRECT = False
-    SESSION_COOKIE_SECURE = False  
-    CSRF_COOKIE_SECURE = False
+    SECURE_SSL_REDIRECT = False  # type: ignore[assignment]
+    SESSION_COOKIE_SECURE = False  # type: ignore[assignment]
+    CSRF_COOKIE_SECURE = False  # type: ignore[assignment]
     
     # Template debugging
     TEMPLATES[0]["OPTIONS"]["debug"] = True
@@ -124,11 +152,11 @@ if DEBUG:
 # Development Tools (Optional)
 # -----------------------------------------------------
 
-# Django Extensions (se instalado)
+# Django Extensions (when installed)
 try:
-    import django_extensions  # noqa
-    INSTALLED_APPS += ["django_extensions"]
-    print("[DJANGO_EXTENSIONS] Habilitado")
+    import_module("django_extensions")
+    INSTALLED_APPS.append("django_extensions")
+    print("[DJANGO_EXTENSIONS] Enabled")
 except ImportError:
     pass
 
@@ -136,4 +164,4 @@ except ImportError:
 SHELL_PLUS = "ipython"
 SHELL_PLUS_PRINT_SQL = True
 
-print(f"[DEV] Ambiente de DESENVOLVIMENTO carregado - DEBUG={DEBUG}")
+print(f"[DEV] Development environment loaded - DEBUG={DEBUG}")

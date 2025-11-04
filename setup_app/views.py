@@ -144,7 +144,7 @@ def manage_environment(request):
         if form.is_valid():
             cleaned = form.cleaned_data
 
-            # 1. Salva no arquivo .env (para desenvolvimento local)
+            # Step 1: write the .env file for local development
             payload = {
                 "SECRET_KEY": cleaned["secret_key"],
                 "DEBUG": "True" if cleaned["debug"] else "False",
@@ -168,14 +168,15 @@ def manage_environment(request):
             env_manager.write_values(payload)
             os.environ["SERVICE_RESTART_COMMANDS"] = cleaned["service_restart_commands"]
 
-            # 2. Salva no banco de dados (para Docker/produção)
+            # Step 2: persist the configuration to the database
+            # (used by Docker/production deployments)
             from .models import FirstTimeSetup
             from .services.config_loader import clear_runtime_config_cache
 
-            # Determina auth_type baseado nos campos preenchidos
+            # Determine auth_type based on the provided fields
             auth_type = "token" if cleaned["zabbix_api_key"] else "login"
 
-            # Atualiza ou cria configuração
+            # Upsert the configuration row in the database
             api_key = (
                 cleaned["zabbix_api_key"] if auth_type == "token" else None
             )
@@ -207,7 +208,7 @@ def manage_environment(request):
                 }
             )
 
-            # Limpa cache de configuração
+            # Clear runtime caches so new values propagate immediately
             clear_runtime_config_cache()
             runtime_settings.reload_config()
 
@@ -238,7 +239,9 @@ def manage_environment(request):
                 ),
                 "allowed_hosts": current_values.get("ALLOWED_HOSTS", ""),
                 "enable_diagnostics": (
-                    current_values.get("ENABLE_DIAGNOSTIC_ENDPOINTS", "").lower()
+                    current_values.get(
+                        "ENABLE_DIAGNOSTIC_ENDPOINTS", ""
+                    ).lower()
                     == "true"
                 ),
                 "db_host": current_values.get("DB_HOST", ""),
@@ -247,7 +250,9 @@ def manage_environment(request):
                 "db_user": current_values.get("DB_USER", ""),
                 "db_password": current_values.get("DB_PASSWORD", ""),
                 "redis_url": current_values.get("REDIS_URL", ""),
-                "service_restart_commands": current_values.get("SERVICE_RESTART_COMMANDS", "")
+                "service_restart_commands": current_values.get(
+                    "SERVICE_RESTART_COMMANDS", ""
+                )
                 or DEFAULT_SERVICE_RESTART_COMMANDS,
             }
         )

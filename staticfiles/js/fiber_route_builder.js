@@ -178,11 +178,11 @@ function clearMapAndResetState() {
 
 /**
  * Setup path change callback - handles UI updates when path changes
- * INCLUI DEBUG PARA O ERRO distance()
+ * Includes debug logging for the distance() issue
  */
 onPathChange(({ path, distance }) => {
-    // 🕵️‍♂️ DEBUGGING: Verifica o tipo e valor de 'distance' logo na entrada
-    console.log('[DEBUG onPathChange] Received distance - Type:', typeof distance, 'Value:', distance);
+     // DEBUG: verify the type and value of "distance" on entry
+     console.log('[DEBUG onPathChange] Received distance - Type:', typeof distance, 'Value:', distance);
     if (currentFiberMeta) {
         currentFiberMeta.path = path.map((point) => ({ ...point }));
     }
@@ -781,7 +781,7 @@ function handleSaveClick() {
         return;
     }
     if (getPath().length < 2) {
-        showErrorMessage('Adicione pelo menos dois pontos ao mapa antes de salvar a rota.');
+        showErrorMessage('Add at least two points to the map before saving the route.');
         return;
     }
     openManualSaveModal();
@@ -1023,7 +1023,7 @@ document.addEventListener('fiber:single-port-toggle', (event) => {
 document.addEventListener('fiber:cable-created', async (event) => {
     const fiberId = event.detail?.fiberId;
     
-    // Limpar o mapa e resetar estado
+    // Clear the map and reset application state
     clearMapAndResetState();
     
     // Reload cable list

@@ -1,46 +1,52 @@
-# Endpoint de Status do Celery
+# Celery Status Endpoint
 
-## Visão Geral
+## Overview
 
-O endpoint `/celery/status` fornece informações em tempo real sobre o estado dos workers Celery e estatísticas das filas de tarefas.
+The `/celery/status` endpoint reports the real-time state of Celery workers and queue statistics.
 
-## Informações Técnicas
+## Technical Summary
 
 - **URL**: `/celery/status`
-- **Método**: `GET`
-- **Autenticação**: Não requerida (pode ser adicionada posteriormente)
+- **Method**: `GET`
+- **Authentication**: Not required by default (can be added later)
 - **View**: `core.views_health.celery_status`
-- **Timeout padrão**: 3 segundos (configurável via `CELERY_STATUS_TIMEOUT`)
+- **Default timeout**: 3 seconds (configurable via `CELERY_STATUS_TIMEOUT`)
 
-## Configuração
+## Configuration
 
-```bash
-# Opcional: ajustar timeout no .env
-CELERY_STATUS_TIMEOUT=5  # segundos
+```text
+# Optional timeout override in .env
+CELERY_STATUS_TIMEOUT=5  # seconds
 ```
 
-## Comportamento
+## Behaviour
 
-O endpoint dispara a task `get_queue_stats` definida em `core/celery.py` e aguarda o resultado. Se nenhum worker estiver disponível ou o timeout for atingido, retorna status `degraded` (HTTP 503).
+The view triggers the Celery task `get_queue_stats` defined in `core/celery.py` and waits for a response. If no worker is available or the timeout expires the endpoint returns a `degraded` status with HTTP 503.
 
-### Mecanismo de Resiliência (Fallback)
+### Resilience Strategy (Fallback)
 
-Após ajustes recentes, o endpoint implementa uma estratégia em duas fases para reduzir falsos negativos:
+To reduce false negatives the endpoint performs two sequential checks:
 
-1. `ping.delay()` (task leve) é executado primeiro com um timeout curto (`CELERY_PING_TIMEOUT`, padrão 2s). Se responder `"pong"`, o worker é considerado **available**.
-2. Só então tenta coletar estatísticas detalhadas via `get_queue_stats.delay()` usando `CELERY_STATUS_TIMEOUT` (padrão 3s, recomendável 5–8s em produção). Se esta segunda etapa falhar por timeout/erro, o status global é `degraded` porém `worker.available` permanece `true`.
+1. Run `ping.delay()` with a short timeout (`CELERY_PING_TIMEOUT`, default 2 seconds). A `pong` response marks the worker as available.
+2. Request detailed statistics via `get_queue_stats.delay()` using `CELERY_STATUS_TIMEOUT` (default 3 seconds, recommended 5 to 8 in production). If this step times out or fails the overall status becomes `degraded`, but `worker.available` remains `true`.
 
-Benefícios:
-- Evita marcar todo o cluster como indisponível quando apenas a inspeção de filas está lenta.
-- Gera sinal mais útil para escalonadores: `503` indica degradação (talvez sobrecarga), mas diferencia cenário sem workers vs. atraso em métricas.
+Benefits:
+- Avoids reporting a full outage when only queue inspection is slow.
+- Provides better signals for orchestrators: HTTP 503 still indicates degradation but distinguishes missing workers from slow metrics.
 
-Variáveis suportadas:
-```bash
-CELERY_STATUS_TIMEOUT=6      # Timeout da coleta de estatísticas
-CELERY_PING_TIMEOUT=2        # Timeout do ping leve
+Environment variables (`.env` file):
+```text
+CELERY_STATUS_TIMEOUT=6      # statistics timeout
+CELERY_PING_TIMEOUT=2        # lightweight ping timeout
 ```
 
-Exemplo de resposta degradada com ping OK e estatísticas com timeout:
+Environment variables (PowerShell):
+```powershell
+$env:CELERY_STATUS_TIMEOUT = '6'      # statistics timeout
+$env:CELERY_PING_TIMEOUT = '2'        # lightweight ping timeout
+```
+
+Example degraded response (ping succeeded but stats timed out):
 ```json
 {
   "timestamp": 1730000000.123,
@@ -54,7 +60,7 @@ Exemplo de resposta degradada com ping OK e estatísticas com timeout:
 }
 ```
 
-Exemplo de resposta saudável:
+Example healthy response:
 ```json
 {
   "timestamp": 1730000101.456,
@@ -74,16 +80,16 @@ Exemplo de resposta saudável:
 }
 ```
 
-### Fluxo de Execução
+### Execution Flow
 
-1. Cliente acessa `/celery/status`
-2. View dispara task `get_queue_stats.delay()`
-3. Aguarda resultado com timeout configurado
-4. Retorna JSON com status e estatísticas
+1. Client calls `/celery/status`.
+2. View dispatches `get_queue_stats.delay()` (after a preceding ping check).
+3. Await the configured timeout.
+4. Return JSON with the status and statistics.
 
-## Respostas
+## Response Examples
 
-### Cenário 1: Worker Ativo e Operacional
+### Scenario 1: Worker Available
 
 **HTTP Status**: `200 OK`
 
@@ -112,7 +118,7 @@ Exemplo de resposta saudável:
 }
 ```
 
-### Cenário 2: Worker Indisponível
+### Scenario 2: Worker Unavailable
 
 **HTTP Status**: `503 Service Unavailable`
 
@@ -129,7 +135,7 @@ Exemplo de resposta saudável:
 }
 ```
 
-### Cenário 3: Erro de Importação
+### Scenario 3: Import Error
 
 **HTTP Status**: `503 Service Unavailable`
 
@@ -146,62 +152,68 @@ Exemplo de resposta saudável:
 }
 ```
 
-## Campos da Resposta
+## Response Fields
 
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| `timestamp` | float | Unix timestamp da requisição |
-| `latency_ms` | float | Tempo de resposta em milissegundos |
-| `status` | string | `"ok"` ou `"degraded"` |
-| `worker.available` | boolean | Worker respondeu dentro do timeout |
-| `worker.error` | string\|null | Mensagem de erro (se houver) |
-| `worker.stats` | object\|null | Estatísticas detalhadas das filas |
+| Field | Type | Description |
+|-------|------|-------------|
+| `timestamp` | float | Unix timestamp of the response |
+| `latency_ms` | float | Total response time in milliseconds |
+| `status` | string | Either `"ok"` or `"degraded"` |
+| `worker.available` | boolean | Worker responded within the timeout |
+| `worker.error` | string or null | Error message when available |
+| `worker.stats` | object or null | Detailed queue statistics |
 
-### Estrutura de `worker.stats`
+### `worker.stats` Structure
 
-Quando disponível, contém:
+When populated the payload contains:
 
-- **workers**: Lista de workers ativos
-- **active_tasks**: Tarefas em execução por worker
-- **scheduled_tasks**: Tarefas agendadas (ETA)
-- **reserved_tasks**: Tarefas reservadas mas não iniciadas
-- **timestamp**: Timestamp da coleta
+- `workers`: list of active worker names
+- `active_tasks`: tasks currently executing per worker
+- `scheduled_tasks`: tasks scheduled for future execution
+- `reserved_tasks`: tasks reserved but not yet started
+- `timestamp`: inspection timestamp
 
-## Uso em Monitoramento
+## Monitoring Guidance
 
-### Prometheus/Grafana
+### Prometheus and Grafana
 
 ```yaml
 # prometheus.yml
 scrape_configs:
-  - job_name: 'celery-status'
-    metrics_path: '/metrics'
+  - job_name: "celery-status"
+    metrics_path: "/metrics"
     static_configs:
-      - targets: ['app:8000']
+      - targets: ["app:8000"]
 ```
 
-#### Métricas Exportadas
+#### Exported Metrics
 
-O endpoint `/celery/status` atualiza métricas Prometheus (Gauges) definidas em `core/metrics_celery.py`. A coleta das métricas é exposta normalmente pelo endpoint global `/metrics` (via `prometheus_client` / `django-prometheus`). A atualização ocorre a cada requisição ao `/celery/status`. Para scraping direto das métricas use somente `/metrics`.
+Calling `/celery/status` updates the Prometheus gauges defined in `core/metrics_celery.py`. The gauges are exposed through the global `/metrics` endpoint provided by `django-prometheus`. Prefer scraping `/metrics` directly instead of `/celery/status`.
 
-Variável de controle:
+Control flag (`.env` file):
 
-```bash
-CELERY_METRICS_ENABLED=true  # desabilite com 'false' para não atualizar gauges
+```text
+CELERY_METRICS_ENABLED=true
 ```
 
-Gauges disponíveis:
+Control flag (PowerShell):
 
-| Nome | Descrição |
-|------|-----------|
-| `celery_worker_available` | 1 se o ping ao worker respondeu, 0 caso contrário |
-| `celery_status_latency_ms` | Latência da última chamada a `/celery/status` em ms |
-| `celery_worker_count` | Quantidade de workers respondendo à inspeção |
-| `celery_active_tasks` | Soma de tarefas ativas em todos os workers |
-| `celery_scheduled_tasks` | Soma de tarefas agendadas (ETA) |
-| `celery_reserved_tasks` | Soma de tarefas reservadas |
+```powershell
+$env:CELERY_METRICS_ENABLED = 'true'  # set to false to skip gauge updates
+```
 
-Exemplo de scrape parcial (`/metrics`):
+Available gauges:
+
+| Metric | Description |
+|--------|-------------|
+| `celery_worker_available` | 1 if the ping call succeeded, else 0 |
+| `celery_status_latency_ms` | Latency of the last `/celery/status` request in ms |
+| `celery_worker_count` | Number of workers responding to inspection |
+| `celery_active_tasks` | Total active tasks across all workers |
+| `celery_scheduled_tasks` | Total scheduled (ETA) tasks |
+| `celery_reserved_tasks` | Total reserved tasks |
+
+Sample `/metrics` excerpt:
 
 ```
 celery_worker_available 1
@@ -212,12 +224,12 @@ celery_scheduled_tasks 0
 celery_reserved_tasks 0
 ```
 
-Boas práticas:
-- Combine com dashboard Grafana: painel de disponibilidade + latência.
-- Adicione alertas: `celery_worker_available == 0` por 3m ou `increase(celery_status_latency_ms[5m]) > 5000`.
-- Para reduzir sobrecarga, cachear resposta do endpoint ou usar uma task periódica futura para atualizar métricas sem chamadas externas.
+Recommended practices:
+- Pair with a Grafana dashboard to visualise availability and latency.
+- Alert when `celery_worker_available == 0` for three minutes or when `increase(celery_status_latency_ms[5m]) > 5000`.
+- If traffic is high, rely on the periodic task to refresh metrics and keep `/celery/status` cached.
 
-### Healthcheck Docker
+### Docker Health Check
 
 ```yaml
 # docker-compose.yml
@@ -228,7 +240,7 @@ healthcheck:
   retries: 3
 ```
 
-### Script de Monitoramento
+### Bash Monitoring Script
 
 ```bash
 #!/bin/bash
@@ -239,146 +251,126 @@ HTTP_CODE="${RESPONSE: -3}"
 BODY="${RESPONSE:0:-3}"
 
 if [ "$HTTP_CODE" -eq 200 ]; then
-  echo "✓ Celery OK"
+  echo "Celery OK"
   exit 0
 else
-  echo "✗ Celery Degraded: $BODY"
+  echo "Celery degraded: $BODY"
   exit 1
 fi
 ```
 
-### Script de Monitoramento (PowerShell)
+### PowerShell Monitoring Script
 
-Para ambientes Windows / execução via Agendador:
 ```powershell
 # check_celery.ps1
 $Url = "http://localhost:8000/celery/status"
 $Response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 8
 $Json = $Response.Content | ConvertFrom-Json
 if ($Response.StatusCode -eq 200 -and $Json.status -eq 'ok') {
-  Write-Host "✓ Celery OK (latency=$($Json.latency_ms)ms workers=$($Json.worker.stats.workers.Count))"
+  Write-Host "Celery OK (latency=$($Json.latency_ms)ms workers=$($Json.worker.stats.workers.Count))"
   exit 0
 } elseif ($Json.worker.available -eq $true) {
-  Write-Host "⚠ Celery Degradado (worker ativo, stats indisponíveis)"; exit 1
+  Write-Host "Celery degraded (worker reachable, stats unavailable)"; exit 1
 } else {
-  Write-Host "✗ Celery Indisponível (sem worker)"; exit 2
+  Write-Host "Celery unavailable (no worker)"; exit 2
 }
 ```
 
-## Testes
+## Tests
 
-Teste unitário localizado em `tests/test_celery_status.py`.
+Unit tests live in `tests/test_celery_status.py`.
 
-```bash
-# Executar teste
-pytest tests/test_celery_status.py -v
-
-# Com cobertura
-pytest tests/test_celery_status.py --cov=core.views_health --cov-report=term
+```powershell
+& D:/provemaps_beta/venv/Scripts/python.exe -m pytest tests/test_celery_status.py -v
+& D:/provemaps_beta/venv/Scripts/python.exe -m pytest tests/test_celery_status.py --cov=core.views_health --cov-report=term
 ```
 
 ## Management Command
 
-Complementarmente, existe o comando `celery_health` para verificações manuais:
+The `celery_health` management command provides manual checks:
 
-```bash
-# Teste básico
+```powershell
 python manage.py celery_health
-
-# Com saída JSON formatada
 python manage.py celery_health --pretty
-
-# Timeout customizado
 python manage.py celery_health --timeout 10
 ```
 
 ## Troubleshooting
 
-### Problema: Sempre retorna 503
+### Always Returns 503
 
-**Causa**: Workers não estão rodando ou não conseguem se conectar ao broker.
+**Cause**: Workers are down or cannot connect to the broker.
 
-**Solução**:
-```bash
-# Verificar Redis
+**Resolution**:
+```powershell
 docker compose logs redis
-
-# Verificar worker Celery
 docker compose logs celery
-
-# Testar conectividade manual
 docker compose exec celery celery -A core.celery_app inspect ping
 ```
 
-### Problema: Timeout muito curto
+### Timeout Too Aggressive
 
-**Causa**: Workers lentos ou sobrecarregados.
+**Cause**: Workers are slow or under heavy load.
 
-**Solução**:
-```bash
-# Aumentar timeout (em .env ou environment)
-CELERY_STATUS_TIMEOUT=10
-
-# Reiniciar serviços
+**Resolution**:
+```powershell
+$env:CELERY_STATUS_TIMEOUT = '10'
 docker compose restart web
 ```
 
-### Problema: ImportError em produção
+### ImportError In Production
 
-**Causa**: Dependências não instaladas no container.
+**Cause**: Missing dependencies inside the container.
 
-**Solução**:
-```bash
-# Rebuild com dependências
+**Resolution**:
+```powershell
 docker compose build --no-cache web celery beat
 docker compose up -d
 ```
 
-## Segurança
+## Security Considerations
 
-Por padrão, o endpoint não requer autenticação. Para ambientes de produção, considere:
+The endpoint is unauthenticated by default. In production environments consider:
 
-1. **Adicionar decorador de autenticação**:
+1. Adding authentication:
 ```python
 from django.contrib.auth.decorators import login_required
 
 @login_required
 def celery_status(request: HttpRequest):
-    # ...
+    ...
 ```
 
-2. **Rate limiting**:
+2. Adding caching or throttling:
 ```python
 from django.views.decorators.cache import cache_page
 
-@cache_page(10)  # cache por 10 segundos
+@cache_page(10)  # cache for 10 seconds
 def celery_status(request: HttpRequest):
-    # ...
+    ...
 ```
 
-3. **IP whitelist** (via middleware ou nginx/proxy reverso)
+3. Restricting access by IP at the proxy or middleware level.
 
-## Integração com Outros Endpoints
+## Relationship To Other Health Checks
 
-Este endpoint complementa os health checks existentes:
-
-- `/healthz` - Comprehensive health (DB, cache, storage)
-- `/ready` - Readiness probe (DB connectivity)
-- `/live` - Liveness probe (processo vivo)
-- `/celery/status` - Status específico dos workers Celery
+- `/healthz` reports database, cache, and storage health.
+- `/ready` verifies readiness (database connectivity).
+- `/live` reports process liveness.
+- `/celery/status` focuses on Celery worker availability.
 
 ## Changelog
 
-### 2025-10-26
-- ✨ Endpoint inicial implementado
-- ✅ Testes unitários adicionados
-- 📝 Documentação criada
-- 📊 Métricas Prometheus integradas ao endpoint (`update_metrics`)
-- ⚡ Cache de 5s adicionado ao endpoint para reduzir latência
-- 🔄 Task periódica do beat (`update_celery_metrics_task`) para atualizar métricas a cada 30s
-- 🚨 Guia de alertas Prometheus criado (`./PROMETHEUS_ALERTS.md`)
+### 26 Oct 2025
+- Initial endpoint implementation
+- Added unit tests
+- Published documentation
+- Integrated Prometheus metrics via `update_metrics`
+- Added a five second cache layer to reduce latency
+- Introduced the `update_celery_metrics_task` periodic beat task
+- Published alert guidance in `PROMETHEUS_ALERTS.md`
 
 ---
 
-**Autor**: Sistema de desenvolvimento automatizado  
-**Última atualização**: 26 de outubro de 2025
+**Author**: Automated development system  
+**Last updated**: 26 October 2025

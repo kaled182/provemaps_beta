@@ -1,12 +1,12 @@
-# Makefile — atalhos para desenvolvimento e manutenção do mapsprovefiber
-# Dica: execute apenas `make` para ver a ajuda.
+# Makefile - shortcuts for developing and maintaining mapsprovefiber
+# Tip: run just `make` to see the help output.
 
 PY := python
 MANAGE := $(PY) manage.py
 DJANGO_SETTINGS_MODULE ?= settings.dev
 export DJANGO_SETTINGS_MODULE
 
-# Endpoints locais de saúde (ajuste se necessário)
+# Local health endpoints (adjust as needed)
 HEALTH_URL ?= http://localhost:8000/healthz
 READY_URL  ?= http://localhost:8000/ready
 LIVE_URL   ?= http://localhost:8000/live
@@ -14,89 +14,89 @@ LIVE_URL   ?= http://localhost:8000/live
 .DEFAULT_GOAL := help
 
 .PHONY: help
-help:  ## Mostra esta ajuda
-	@echo "Uso: make [target]"
+help:  ## Show this help menu
+	@echo "Usage: make [target]"
 	@echo ""
 	@echo "Targets:"
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_.-]+:.*?## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 ### ---------------------------
-### Django (desenvolvimento)
+### Django (development)
 ### ---------------------------
 
 .PHONY: run
-run:  ## Roda o servidor Django em 0.0.0.0:8000
+run:  ## Run Django development server on 0.0.0.0:8000
 	$(MANAGE) runserver 0.0.0.0:8000
 
 .PHONY: migrate
-migrate:  ## Aplica migrações
+migrate:  ## Apply migrations
 	$(MANAGE) migrate
 
 .PHONY: makemigrations
-makemigrations:  ## Gera migrações
+makemigrations:  ## Generate migrations
 	$(MANAGE) makemigrations
 
 .PHONY: superuser
-superuser:  ## Cria superusuário (interativo)
+superuser:  ## Create superuser (interactive)
 	$(MANAGE) createsuperuser
 
 .PHONY: collectstatic
-collectstatic:  ## Coleta arquivos estáticos
+collectstatic:  ## Collect static files
 	$(MANAGE) collectstatic --noinput
 
 .PHONY: shell
-shell:  ## Abre Django shell
+shell:  ## Open Django shell
 	$(MANAGE) shell
 
 ### ---------------------------
-### Dependências & limpeza
+### Dependencies & cleanup
 ### ---------------------------
 
 .PHONY: requirements
-requirements:  ## Instala dependências do projeto
+requirements:  ## Install project dependencies
 	pip install -r requirements.txt
 
 .PHONY: clean
-clean:  ## Remove caches e artefatos temporários
+clean:  ## Remove caches and temporary artifacts
 	find . -name "*.pyc" -delete
 	find . -name "__pycache__" -delete
 	rm -rf .pytest_cache .coverage htmlcov
 
-# Requer django-extensions para reset_db (opcional)
+# Requires django-extensions for reset_db (optional)
 .PHONY: resetdb
-resetdb:  ## Reseta o banco (CUIDADO: apaga dados!)
+resetdb:  ## Reset database (WARNING: deletes data!)
 	-$(MANAGE) reset_db --noinput
 	$(MANAGE) migrate
 	-$(MANAGE) createsuperuser --noinput --username admin --email admin@localhost
 
 ### ---------------------------
-### Testes e qualidade
+### Tests & quality
 ### ---------------------------
 
 .PHONY: test
-test:  ## Roda testes rapidamente (pytest -q)
+test:  ## Run tests quickly (pytest -q)
 	pytest -q
 
 .PHONY: test-verbose
-test-verbose:  ## Roda testes com output detalhado
+test-verbose:  ## Run tests with verbose output
 	pytest -v
 
 .PHONY: test-coverage
-test-coverage:  ## Roda testes com cobertura + HTML
+test-coverage:  ## Run tests with coverage and HTML report
 	pytest --cov --cov-report=html
 
 .PHONY: test-specific
-test-specific:  ## Roda testes específicos. Uso: make test-specific path=core/tests/test_views.py
+test-specific:  ## Run specific tests e.g. make test-specific path=core/tests/test_views.py
 	pytest -v $(path)
 
 .PHONY: lint
-lint:  ## Checa formatação/estilo (ruff/black/isort)
+lint:  ## Check formatting/style (ruff/black/isort)
 	ruff check .
 	black --check .
 	isort --check-only .
 
 .PHONY: fmt
-fmt:  ## Formata código (ruff --fix / black / isort)
+fmt:  ## Format code (ruff --fix / black / isort)
 	ruff check . --fix
 	black .
 	isort .
@@ -106,23 +106,23 @@ fmt:  ## Formata código (ruff --fix / black / isort)
 ### ---------------------------
 
 .PHONY: up
-up:  ## Sobe stack via docker compose (arquivo padrão ./docker-compose.yml)
+up:  ## Bring stack up via docker compose (default ./docker-compose.yml)
 	docker compose up -d
 
 .PHONY: down
-down:  ## Derruba stack docker compose
+down:  ## Tear down docker compose stack
 	docker compose down
 
 .PHONY: logs
-logs:  ## Mostra logs dos containers (follow)
+logs:  ## Tail container logs
 	docker compose logs -f
 
 .PHONY: build
-build:  ## Constrói as imagens
+build:  ## Build images
 	docker compose build
 
 .PHONY: restart
-restart:  ## Reinicia os serviços
+restart:  ## Restart services
 	docker compose restart
 
 ### ---------------------------
@@ -130,29 +130,29 @@ restart:  ## Reinicia os serviços
 ### ---------------------------
 
 .PHONY: health
-health:  ## Verifica saúde da aplicação (/healthz)
+health:  ## Check application health (/healthz)
 	curl -fsS "$(HEALTH_URL)" >/dev/null
 
 .PHONY: ready
-ready:  ## Verifica readiness (/ready)
+ready:  ## Check readiness (/ready)
 	curl -fsS "$(READY_URL)" >/dev/null
 
 .PHONY: live
-live:  ## Verifica liveness (/live)
+live:  ## Check liveness (/live)
 	curl -fsS "$(LIVE_URL)" >/dev/null
 
 ### ---------------------------
-### Produção (helpers)
+### Production helpers
 ### ---------------------------
 
 .PHONY: prod-migrate
-prod-migrate:  ## Aplica migrações com settings de produção
+prod-migrate:  ## Apply migrations with production settings
 	DJANGO_SETTINGS_MODULE=settings.prod $(MANAGE) migrate
 
 .PHONY: prod-collectstatic
-prod-collectstatic:  ## Collectstatic com settings de produção
+prod-collectstatic:  ## Run collectstatic with production settings
 	DJANGO_SETTINGS_MODULE=settings.prod $(MANAGE) collectstatic --noinput
 
 .PHONY: deploy
-deploy:  ## Executa o deploy (scripts/deploy.sh)
+deploy:  ## Run deployment script (scripts/deploy.sh)
 	./scripts/deploy.sh

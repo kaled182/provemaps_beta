@@ -27,13 +27,13 @@
       </a>
     </h3>
 
-    {# MELHORIA: Botão favorito com estados mais claros #}
+  {# Improvement: favorite button with clearer states #}
     <button
       class="favorite-btn p-1 text-gray-400 hover:text-yellow-500 focus:outline-none focus:ring-2 focus:ring-yellow-500 rounded transition-colors duration-200 group/favorite"
       data-filename="{{ name }}"
-      aria-label="Adicionar aos favoritos"
+  aria-label="Add to favorites"
       aria-pressed="false"
-      title="Favoritar este documento"
+  title="Mark this document as favorite"
       type="button"
     >
       <svg class="w-4 h-4 transition-all duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -43,7 +43,7 @@
     </button>
   </header>
 
-  {# MELHORIA: Filename com ID único para acessibilidade #}
+  {# Improvement: filename with unique accessibility ID #}
   <p 
     id="doc-filename-{{ name|slugify }}"
     class="mt-1 text-xs text-gray-500 truncate font-mono"
@@ -52,19 +52,19 @@
     {{ name }}
   </p>
 
-  {# MELHORIA: Resumo com fallback mais informativo #}
+  {# Improvement: summary with a clearer fallback #}
   {% if item_summary %}
     <p class="mt-3 text-sm text-gray-700 line-clamp-2 leading-relaxed">
       {{ item_summary }}
     </p>
   {% else %}
     <p class="mt-3 text-sm text-gray-400 italic leading-relaxed">
-      Nenhum resumo disponível para este documento.
+      No summary is available for this document.
     </p>
   {% endif %}
 
-  {# MELHORIA: Container de metadados com melhor organização #}
-  <div class="mt-3 flex flex-wrap gap-2" role="list" aria-label="Categorias e tags">
+  {# Improvement: better organized metadata container #}
+  <div class="mt-3 flex flex-wrap gap-2" role="list" aria-label="Categories and tags">
     {% if item_category %}
       <span 
         class="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700 border border-gray-200"
@@ -77,7 +77,7 @@
       </span>
     {% endif %}
 
-    {# MELHORIA: Tags com contador acessível #}
+    {# Improvement: tags with accessible counter #}
     {% if item_tag_list %}
       <div class="flex flex-wrap gap-1" role="list" aria-label="Tags">
         {% for tag in item_tag_list %}
@@ -97,12 +97,12 @@
     {% endif %}
   </div>
 
-  {# MELHORIA: Metadados com ícones semânticos e tooltips #}
-  <div class="mt-4 flex flex-wrap items-center gap-4 text-xs text-gray-500" role="list" aria-label="Informações do documento">
+  {# Improvement: metadata with semantic icons and tooltips #}
+  <div class="mt-4 flex flex-wrap items-center gap-4 text-xs text-gray-500" role="list" aria-label="Document information">
     {% if item_size %}
       <span 
         class="inline-flex items-center gap-1"
-        title="Tamanho do arquivo"
+        title="File size"
       >
         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
@@ -114,7 +114,7 @@
     {% if item_modified %}
       <span 
         class="inline-flex items-center gap-1"
-        title="Última modificação"
+        title="Last updated"
       >
         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -126,7 +126,7 @@
     {% if item_views %}
       <span 
         class="inline-flex items-center gap-1"
-        title="Visualizações"
+        title="Views"
       >
         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
@@ -136,15 +136,15 @@
       </span>
     {% endif %}
 
-    {# MELHORIA: Link GitHub com melhor acessibilidade #}
+    {# Improvement: GitHub link with better accessibility #}
     {% if item_github %}
       <a
         href="{{ item_github }}"
         target="_blank"
         rel="noopener noreferrer nofollow"
         class="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 hover:underline transition-colors"
-        title="Abrir documento no GitHub (nova aba)"
-        aria-label="Abrir {{ item_title|default:name }} no GitHub"
+        title="Open document on GitHub (new tab)"
+        aria-label="Open {{ item_title|default:name }} on GitHub"
       >
         <svg class="w-3 h-3" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">
           <path d="M8 0C3.58 0 0 3.65 0 8.16c0 3.61 2.29 6.67 5.47 7.75.4.08.55-.18.55-.39 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.5-2.69-.96-.09-.24-.48-.97-.82-1.17-.28-.15-.68-.52-.01-.53.63-.01 1.08.59 1.23.83.72 1.22 1.87.88 2.33.67.07-.53.28-.88.51-1.09-1.78-.21-3.64-.92-3.64-4.08 0-.9.31-1.64.82-2.22-.08-.2-.36-1.02.08-2.12 0 0 .67-.22 2.2.85.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.08 2.2-.85 2.2-.85.44 1.1.16 1.92.08 2.12.51.58.82 1.32.82 2.22 0 3.17-1.87 3.86-3.65 4.07.29.26.54.77.54 1.56 0 1.12-.01 2.02-.01 2.29 0 .22.15.48.55.39A8.02 8.02 0 0016 8.16C16 3.65 12.42 0 8 0Z"/>
@@ -154,14 +154,14 @@
     {% endif %}
   </div>
 
-  {# MELHORIA: Ação principal com destaque visual #}
+  {# Improvement: primary action with visual emphasis #}
   <div class="mt-4 flex items-center gap-3 pt-3 border-t border-gray-100">
     <a 
       href="{% url 'setup_app:docs_view' name %}" 
       class="inline-flex items-center text-indigo-600 hover:text-indigo-800 hover:underline font-medium text-sm transition-colors group/link"
-      aria-label="Abrir documento: {{ item_title|default:name }}"
+      aria-label="Open document: {{ item_title|default:name }}"
     >
-      Abrir documento
+      Open document
       <svg class="w-4 h-4 ml-1 transition-transform group-hover/link:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
       </svg>

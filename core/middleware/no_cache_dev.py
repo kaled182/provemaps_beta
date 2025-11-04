@@ -1,21 +1,34 @@
+"""Middleware used in development to prevent caching of dynamic pages."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
 from django.conf import settings
+from django.http import HttpRequest, HttpResponse
 
 
 class NoCacheDevMiddleware:
-    """Força cabeçalhos de no-cache em páginas sensíveis quando DEBUG=True."""
+    """Force no-cache headers on sensitive pages when DEBUG is enabled."""
 
-    TARGET_PREFIXES = (
-        '/routes_builder/',
-        '/static/js/fiber_route_builder',
+    TARGET_PREFIXES: tuple[str, ...] = (
+        "/routes_builder/",
+        "/static/js/fiber_route_builder",
     )
 
-    def __init__(self, get_response):
+    def __init__(
+        self,
+        get_response: Callable[[HttpRequest], HttpResponse],
+    ) -> None:
         self.get_response = get_response
 
-    def __call__(self, request):
+    def __call__(self, request: HttpRequest) -> HttpResponse:
         response = self.get_response(request)
-        if settings.DEBUG and any(request.path.startswith(p) for p in self.TARGET_PREFIXES):
-            response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-            response.headers['Pragma'] = 'no-cache'
-            response.headers['Expires'] = '0'
+        if settings.DEBUG and any(
+            request.path.startswith(prefix) for prefix in self.TARGET_PREFIXES
+        ):
+            response["Cache-Control"] = (
+                "no-store, no-cache, must-revalidate, max-age=0"
+            )
+            response["Pragma"] = "no-cache"
+            response["Expires"] = "0"
         return response

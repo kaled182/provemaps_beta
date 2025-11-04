@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# docker-entrypoint.sh — inicializações leves antes do comando final
-# Objetivo:
-#  - Esperar DB/Redis (se definidos) antes de iniciar web/celery/beat
-#  - Opcionalmente rodar migrações/coleta de estáticos via flags
+# docker-entrypoint.sh - lightweight initialization before the main command
+# Goals:
+#  - Wait for DB/Redis (when configured) before starting web/celery/beat
+#  - Optionally run migrations or collectstatic via flags
 #
-# Uso (exemplos no docker-compose.yml):
+# Usage (see docker-compose.yml for examples):
 #   ENTRYPOINT ["/docker-entrypoint.sh"]
 #   CMD ["gunicorn", "core.asgi:application", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000"]
 #
-# Variáveis/flags de conveniência (todas opcionais):
-#   WAIT_FOR_DB=true|false           # aguardar DB (default: true se DB_HOST setado)
-#   WAIT_FOR_REDIS=true|false        # aguardar Redis (default: true se REDIS_URL setado)
-#   INIT_MIGRATE=true|false          # rodar manage.py migrate antes de subir (default: false)
-#   INIT_COLLECTSTATIC=true|false    # rodar manage.py collectstatic --noinput (default: false)
-#   MIGRATE_TIMEOUT=300              # timeout do migrate (segundos)
-#   COLLECTSTATIC_TIMEOUT=120        # timeout do collectstatic (segundos)
+# Convenience variables/flags (all optional):
+#   WAIT_FOR_DB=true|false           # wait for DB (default: true when DB_HOST is set)
+#   WAIT_FOR_REDIS=true|false        # wait for Redis (default: true when REDIS_URL is set)
+#   INIT_MIGRATE=true|false          # run manage.py migrate before starting (default: false)
+#   INIT_COLLECTSTATIC=true|false    # run manage.py collectstatic --noinput (default: false)
+#   MIGRATE_TIMEOUT=300              # migrate timeout (seconds)
+#   COLLECTSTATIC_TIMEOUT=120        # collectstatic timeout (seconds)
 
 set -Eeuo pipefail
 
@@ -44,12 +44,12 @@ if [[ -z "${WAIT_FOR_REDIS}" ]]; then
 fi
 
 print_startup_info() {
-  log "=== Inicialização do Container ==="
+  log "=== Container Startup ==="
   log "App: $(python -c "import django; print(django.get_version())" 2>/dev/null || echo "N/A")"
   log "Python: $(python --version 2>/dev/null || echo "N/A")"
-  log "Settings: ${DJANGO_SETTINGS_MODULE:-Não definido}"
-  log "DB: ${DB_HOST:-Não definido}:${DB_PORT:-N/A}"
-  log "Redis: ${REDIS_URL:-Não definido}"
+  log "Settings: ${DJANGO_SETTINGS_MODULE:-Not set}"
+  log "DB: ${DB_HOST:-Not set}:${DB_PORT:-N/A}"
+  log "Redis: ${REDIS_URL:-Not set}"
   log "Flags: WAIT_FOR_DB=${WAIT_FOR_DB}, WAIT_FOR_REDIS=${WAIT_FOR_REDIS}"
   log "Init: MIGRATE=${INIT_MIGRATE}, COLLECTSTATIC=${INIT_COLLECTSTATIC}"
   log "=================================="
@@ -58,15 +58,15 @@ print_startup_info() {
 wait_host_port() {
   local host="${1:-}" port="${2:-}" name="${3:-srv}" retries="${4:-120}"
   if [[ -z "$host" || -z "$port" ]]; then return 0; fi
-  log "Aguardando ${name} em ${host}:${port} (timeout ~${retries}s)"
+  log "Waiting for ${name} at ${host}:${port} (timeout ~${retries}s)"
   
   for ((i=1; i<=retries; i++)); do
     if command -v nc >/dev/null 2>&1; then
       if nc -z -w 1 "$host" "$port" >/dev/null 2>&1; then 
-        ok "${name} disponível após ${i}s"; return 0; 
+        ok "${name} available after ${i}s"; return 0; 
       fi
     else
-      # Python fallback robusto
+      # Robust Python fallback
       if python -c "
 import socket, sys
 try:
@@ -78,13 +78,13 @@ try:
 except Exception:
     sys.exit(1)
 " >/dev/null 2>&1; then
-        ok "${name} disponível após ${i}s"; return 0
+        ok "${name} available after ${i}s"; return 0
       fi
     fi
     sleep 1
   done
   
-  warn "Timeout ao aguardar ${name} após ${retries}s — seguindo assim mesmo"
+  warn "Timed out waiting for ${name} after ${retries}s - continuing"
   return 0
 }
 
@@ -97,7 +97,7 @@ parse_redis_url() {
   local rport="${port_part%%/*}"
   
   if [[ -z "$rhost" || -z "$rport" ]] || ! [[ "$rport" =~ ^[0-9]+$ ]]; then
-    warn "REDIS_URL malformada: $rurl - usando padrões"
+    warn "Malformed REDIS_URL: $rurl - falling back to defaults"
     echo "redis 6379"
     return 1
   fi
@@ -114,50 +114,50 @@ run_manage() {
 
 maybe_migrate() {
   if [[ "${INIT_MIGRATE}" == "true" ]]; then
-    log "Executando migrações (timeout ${MIGRATE_TIMEOUT}s)"
+    log "Running migrations (timeout ${MIGRATE_TIMEOUT}s)"
     if command -v timeout >/dev/null 2>&1; then
       timeout "${MIGRATE_TIMEOUT}" env PYTHONUNBUFFERED=1 DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-settings.dev}" \
         python manage.py migrate --noinput
     else
       run_manage migrate --noinput
     fi
-    ok "Migrações aplicadas"
+    ok "Migrations applied"
   fi
 }
 
 maybe_collectstatic() {
   if [[ "${INIT_COLLECTSTATIC}" == "true" ]]; then
-    log "Executando collectstatic (timeout ${COLLECTSTATIC_TIMEOUT}s)"
+    log "Running collectstatic (timeout ${COLLECTSTATIC_TIMEOUT}s)"
     if command -v timeout >/dev/null 2>&1; then
       timeout "${COLLECTSTATIC_TIMEOUT}" env PYTHONUNBUFFERED=1 DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-settings.dev}" \
         python manage.py collectstatic --noinput
     else
       run_manage collectstatic --noinput
     fi
-    ok "Collectstatic concluído"
+    ok "Collectstatic completed"
   fi
 }
 
 maybe_ensure_superuser() {
   if [[ "${INIT_ENSURE_SUPERUSER:-false}" == "true" ]]; then
-    log "Garantindo superuser padrão..."
+    log "Ensuring default superuser..."
     run_manage ensure_superuser
   fi
 }
 
 setup_signal_handlers() {
-  trap 'log "Recebido sinal de interrupção..."; exit 0' SIGINT SIGTERM
+  trap 'log "Received interrupt signal..."; exit 0' SIGINT SIGTERM
 }
 
 check_dependencies() {
   if [[ $# -eq 0 ]]; then
-    err "Nenhum comando especificado para execução"
+    err "No command specified for execution"
     return 1
   fi
   
   local main_cmd="$1"
   if ! command -v "$main_cmd" >/dev/null 2>&1; then
-    err "Comando não encontrado: $main_cmd"
+    err "Command not found: $main_cmd"
     return 1
   fi
   
@@ -168,10 +168,10 @@ main() {
   setup_signal_handlers
   print_startup_info
   
-  # Verifica dependências
+  # Check dependencies
   check_dependencies "$@" || exit 1
   
-  # Aguarda serviços dependentes
+  # Wait for dependent services
   if [[ "${WAIT_FOR_DB}" == "true" ]]; then
     wait_host_port "${DB_HOST:-}" "${DB_PORT:-}" "DB" 120
   fi
@@ -188,21 +188,21 @@ main() {
     fi
   fi
 
-  # Inicializações opcionais
+  # Optional initialization steps
   maybe_migrate
   maybe_collectstatic
   maybe_ensure_superuser
 
-  # Limpar PID file do Celery Beat se o comando for celery beat
+  # Clean the Celery Beat PID file when the command invokes celery beat
   if [[ "$*" == *"celery"* && "$*" == *"beat"* ]]; then
     local pidfile="/tmp/celerybeat.pid"
     if [[ -f "$pidfile" ]]; then
-      warn "Removendo PID file antigo: $pidfile"
+      warn "Removing stale PID file: $pidfile"
       rm -f "$pidfile"
     fi
   fi
 
-  log "Iniciando processo: $*"
+  log "Starting process: $*"
   exec "$@"
 }
 

@@ -1,35 +1,37 @@
-"""
-Teste end-to-end para persistência de edição de cabos de fibra.
-"""
+"""End-to-end tests for fiber cable edit persistence."""
+
+from typing import Any, Dict
+
 import pytest
-from django.test import Client
 from django.contrib.auth.models import User
+from django.test import Client
+
 from inventory.models import Device, FiberCable, Port, Site
 
 
 @pytest.mark.django_db
 class TestFiberEditPersistence:
-    """Testa se edições de cabo persistem corretamente."""
+    """Verify that fiber cable edits persist correctly."""
 
     @pytest.fixture
-    def authenticated_client(self):
-        """Cliente autenticado."""
+    def authenticated_client(self) -> Client:
+        """Return an authenticated Django test client."""
         client = Client()
-        user = User.objects.create_user(username='testuser', password='testpass')
+        User.objects.create_user(username='testuser', password='testpass')
         client.login(username='testuser', password='testpass')
         return client
 
     @pytest.fixture
-    def test_cable(self):
-        """Cria um cabo de teste com portas."""
-        # Criar site
+    def test_cable(self) -> Dict[str, Any]:
+        """Create a test cable and related ports."""
+        # Create site
         site = Site.objects.create(
             name="Test Site",
             latitude=-16.6869,
             longitude=-49.2648
         )
 
-        # Criar dispositivos
+        # Create devices
         device1 = Device.objects.create(
             name="Device A",
             site=site,
@@ -39,7 +41,7 @@ class TestFiberEditPersistence:
             site=site,
         )
 
-        # Criar portas
+        # Create ports
         port_origin = Port.objects.create(
             device=device1,
             name="eth0/1",
@@ -53,7 +55,7 @@ class TestFiberEditPersistence:
             name="eth0/3",
         )
 
-        # Criar cabo
+        # Create cable
         cable = FiberCable.objects.create(
             name="Test Cable",
             origin_port=port_origin,
@@ -73,30 +75,37 @@ class TestFiberEditPersistence:
             'device2': device2,
         }
 
-    def test_fiber_metadata_persistence(self, authenticated_client, test_cable):
-        """
-        Testa o fluxo completo de edição:
-        1. GET cable details
-        2. PUT com novos metadados
-        3. GET novamente para verificar persistência
-        """
+    def test_fiber_metadata_persistence(
+        self,
+        authenticated_client: Client,
+        test_cable: Dict[str, Any],
+    ) -> None:
+        """Run full GET/PUT/GET flow to confirm persistence."""
         cable = test_cable['cable']
         port_new = test_cable['port_dest_new']
 
-        # 1. GET inicial - verificar dados atuais
-        response = authenticated_client.get(f'/zabbix_api/api/fiber/{cable.id}/')
+        # Step 1: initial GET to inspect current data
+        response = authenticated_client.get(
+            f'/zabbix_api/api/fiber/{cable.id}/'
+        )
         assert response.status_code == 200
         data = response.json()
-        
-        assert data['name'] == 'Test Cable'
-        assert data['origin']['port_id'] == test_cable['port_origin'].id
-        assert data['destination']['port_id'] == test_cable['port_dest_old'].id
 
-        # 2. PUT - atualizar metadados
-        update_payload = {
+        assert data['name'] == 'Test Cable'
+        assert (
+            data['origin']['port_id']
+            == test_cable['port_origin'].id
+        )
+        assert (
+            data['destination']['port_id']
+            == test_cable['port_dest_old'].id
+        )
+
+        # Step 2: PUT with new metadata
+        update_payload: Dict[str, Any] = {
             'name': 'Updated Cable Name',
             'origin_port_id': test_cable['port_origin'].id,
-            'dest_port_id': port_new.id,  # Mudando porta de destino
+            'dest_port_id': port_new.id,  # Change destination port
             'path': [
                 {"lat": -16.6869, "lng": -49.2648},
                 {"lat": -16.6900, "lng": -49.2700},
@@ -112,32 +121,44 @@ class TestFiberEditPersistence:
         assert response.status_code == 200
         update_data = response.json()
 
-        # Verificar resposta do PUT
+        # Validate PUT response
         assert update_data['name'] == 'Updated Cable Name'
         assert update_data['destination']['port_id'] == port_new.id
 
-        # 3. GET após update - verificar persistência
-        response = authenticated_client.get(f'/zabbix_api/api/fiber/{cable.id}/')
+        # Step 3: GET after update to ensure persistence
+        response = authenticated_client.get(
+            f'/zabbix_api/api/fiber/{cable.id}/'
+        )
         assert response.status_code == 200
         final_data = response.json()
 
-        # Validações finais
-        assert final_data['name'] == 'Updated Cable Name', "Nome não persistiu"
-        assert final_data['origin']['port_id'] == test_cable['port_origin'].id, "Porta de origem mudou"
-        assert final_data['destination']['port_id'] == port_new.id, "Porta de destino não persistiu"
-        assert len(final_data['path']) == 3, "Path não persistiu"
+        # Final validations
+        assert (
+            final_data['name'] == 'Updated Cable Name'
+        ), "Name did not persist"
+        assert (
+            final_data['origin']['port_id'] == test_cable['port_origin'].id
+        ), "Origin port changed"
+        assert (
+            final_data['destination']['port_id'] == port_new.id
+        ), "Destination port did not persist"
+        assert len(final_data['path']) == 3, "Path did not persist"
 
-        # 4. Verificar no banco diretamente
+        # Step 4: confirm directly in the database
         cable.refresh_from_db()
         assert cable.name == 'Updated Cable Name'
         assert cable.destination_port_id == port_new.id
 
-    def test_partial_update_only_destination(self, authenticated_client, test_cable):
-        """Testa atualização apenas da porta de destino."""
+    def test_partial_update_only_destination(
+        self,
+        authenticated_client: Client,
+        test_cable: Dict[str, Any],
+    ) -> None:
+        """Ensure updating only the destination port succeeds."""
         cable = test_cable['cable']
         port_new = test_cable['port_dest_new']
 
-        # Atualizar apenas destination_port
+        # Update only the destination port
         response = authenticated_client.put(
             f'/zabbix_api/api/fiber/{cable.id}/',
             data={'dest_port_id': port_new.id},
@@ -145,18 +166,22 @@ class TestFiberEditPersistence:
         )
         assert response.status_code == 200
 
-        # Verificar persistência
+        # Validate persistence
         cable.refresh_from_db()
         assert cable.destination_port_id == port_new.id
-        assert cable.name == 'Test Cable'  # Nome não deve mudar
+        assert cable.name == 'Test Cable'  # Name must stay the same
 
-    def test_update_preserves_other_fields(self, authenticated_client, test_cable):
-        """Testa que campos não enviados no PUT são preservados."""
+    def test_update_preserves_other_fields(
+        self,
+        authenticated_client: Client,
+        test_cable: Dict[str, Any],
+    ) -> None:
+        """Ensure fields omitted from the PUT remain untouched."""
         cable = test_cable['cable']
         original_origin = cable.origin_port_id
         original_path = cable.path_coordinates
 
-        # Atualizar apenas o nome
+        # Update only the name
         response = authenticated_client.put(
             f'/zabbix_api/api/fiber/{cable.id}/',
             data={'name': 'Only Name Changed'},
@@ -164,7 +189,7 @@ class TestFiberEditPersistence:
         )
         assert response.status_code == 200
 
-        # Verificar que outros campos não mudaram
+        # Ensure other fields remain unchanged
         cable.refresh_from_db()
         assert cable.name == 'Only Name Changed'
         assert cable.origin_port_id == original_origin

@@ -1,16 +1,16 @@
-# Docker Setup Guide — MapsProveFiber
+# Docker Setup Guide - MapsProveFiber
 
-Este guia descreve, passo a passo, como preparar, iniciar e manter o ambiente Docker oficial do MapsProveFiber.
+This guide walks through the official Docker environment for MapsProveFiber, from preparation to ongoing maintenance.
 
 ---
 
-## 1. Pré-requisitos
+## 1. Prerequisites
 - Docker Engine 24+
 - Docker Compose Plugin 2.20+
-- Git (para clonar o repositório)
-- Acesso à internet para download das imagens base
+- Git (to clone the repository)
+- Internet access to download base images
 
-Confirme as versões:
+Confirm the versions:
 ```powershell
 docker --version
 docker compose version
@@ -18,102 +18,102 @@ docker compose version
 
 ---
 
-## 2. Clonagem e Estrutura
+## 2. Clone the repository
 ```powershell
 git clone https://github.com/kaled182/provemaps_beta.git
-cd mapsprovefiber
+cd provemaps_beta
 ```
 
-Os principais serviços definidos em `docker-compose.yml`:
-- **web** — Django + Gunicorn/Uvicorn (porta 8000)
-- **celery** — Worker de tarefas assíncronas
-- **beat** — Agendador Celery (tarefas periódicas)
-- **redis** — Broker e cache
-- **db** — MariaDB com volume persistente
+Key services defined in `docker-compose.yml`:
+- **web** - Django with Gunicorn/Uvicorn (port 8000)
+- **celery** - Asynchronous task worker
+- **beat** - Celery scheduler (periodic tasks)
+- **redis** - Broker and cache
+- **db** - MariaDB with a persistent volume
 
 ---
 
-## 3. Configurar Variáveis
-Crie o arquivo `.env` a partir do template e ajuste valores mínimos:
+## 3. Configure environment variables
+Create the `.env` file from the template and adjust the minimum values:
 ```powershell
 Copy-Item .env.example .env
 
-# Edite com seu editor favorito
+# Edit with your preferred editor
 notepad .env
 ```
 
-Valores recomendados para o stack Docker padrão:
+Recommended values for the default Docker stack:
 ```env
 DJANGO_SETTINGS_MODULE=settings.dev
 DB_HOST=db
 DB_USER=app
 DB_PASSWORD=app
 REDIS_URL=redis://redis:6379/1
-# Intervalo de refresh do dashboard (segundos, padrão=60)
+# Dashboard refresh interval (seconds, default=60)
 DASHBOARD_CACHE_REFRESH_INTERVAL=60
-# Intervalo do sync de inventário (segundos, padrão=86400)
+# Inventory sync interval (seconds, default=86400)
 INVENTORY_SYNC_INTERVAL_SECONDS=86400
-# Intervalo de rotação automática (segundos, padrão=3600)
+# Automatic rotation interval (seconds, default=3600)
 SERVICE_ACCOUNT_ROTATION_INTERVAL_SECONDS=3600
-# Timeouts para webhook de aviso (segundos)
+# Webhook timeout configuration (seconds)
 SERVICE_ACCOUNT_WEBHOOK_CONNECT_TIMEOUT=3
 SERVICE_ACCOUNT_WEBHOOK_READ_TIMEOUT=5
 ```
 
-Com esses valores a tarefa periódica `service_accounts.enforce_rotation_policies_task`
-roda a cada hora e dispara avisos pelos webhooks configurados nas contas de
-serviço. Ajuste os timeouts conforme o SLA do endpoint de destino.
+With these values the periodic task `service_accounts.enforce_rotation_policies_task`
+runs every hour and sends alerts through the webhooks configured on the
+service accounts. Adjust the timeout values to match the destination endpoint SLA.
 
-> Gere uma chave Fernet após o primeiro `up` com `docker compose exec web python manage.py generate_fernet_key --write` e armazene com segurança.
+> Generate a Fernet key after the first `up` with `docker compose exec web python manage.py generate_fernet_key --write` and store it securely.
 
 ---
 
-## 4. Primeira Execução
+## 4. First run
 ```powershell
 docker compose up --build
 ```
 
-O `docker-entrypoint.sh` executa automaticamente:
-1. Espera por Redis e MariaDB
-2. Aplica migrações Django
-3. Coleta arquivos estáticos (`collectstatic`)
-4. Inicia Gunicorn/Uvicorn
+`docker-entrypoint.sh` automatically:
+1. Waits for Redis and MariaDB
+2. Applies Django migrations
+3. Collects static files (`collectstatic`)
+4. Starts Gunicorn/Uvicorn
 
-Após a subida:
-- Aplicação: http://localhost:8000/
+After the stack is up:
+- Application: http://localhost:8000/
 - Admin: http://localhost:8000/admin/
-- Health check geral: http://localhost:8000/healthz
+- General health check: http://localhost:8000/healthz
 
 ---
 
-## 5. Tarefas Pós-Deploy
-- Criar superusuário (caso não exista):
+## 5. Post-deploy tasks
+- Create a superuser (if missing):
 	```powershell
 	docker compose exec web python manage.py ensure_superuser
 	```
-- Popular dados iniciais (opcional): execute comandos de carga ou fixtures via `docker compose exec web`.
-- Validar estado dos workers Celery em `/celery/status`.
+- Seed initial data (optional): run load scripts or fixtures via `docker compose exec web`.
+- Validate Celery workers at `/celery/status`.
 
 ---
 
-## 6. Comandos Essenciais
-| Ação | Comando |
+## 6. Essential commands
+| Action | Command |
 |------|---------|
-| Ver status dos containers | `docker compose ps` |
-| Ver logs em tempo real | `docker compose logs -f web` |
+| Check container status | `docker compose ps` |
+| Tail logs | `docker compose logs -f web` |
 | Shell Django | `docker compose exec web python manage.py shell` |
-| Aplicar migrações | `docker compose exec web python manage.py migrate` |
-| Atualizar dependências Python | `docker compose exec web pip install -r requirements.txt` |
-| Reiniciar apenas o worker Celery | `docker compose restart celery` |
+| Apply migrations | `docker compose exec web python manage.py migrate` |
+| Update Python dependencies | `docker compose exec web pip install -r requirements.txt` |
+| Restart only the Celery worker | `docker compose restart celery` |
 
 ---
 
 ## 7. Troubleshooting
-- **Container não sobe:** verifique `.env`, portas ocupadas (`netstat -ano | findstr 8000`) e permissões de volume.
-- **Erro de banco:** confira logs `docker compose logs db` e credenciais (`DB_*`).
-- **Redis indisponível:** verifique `docker compose logs redis`; em ambientes Windows, revise [`doc/reference/SETUP_REDIS_WINDOWS.md`](../reference/SETUP_REDIS_WINDOWS.md).
-- **Assets ausentes:** rode `docker compose exec web python manage.py collectstatic --noinput`.
-- **Limpar stack:**
+- **Container will not start:** review `.env`, occupied ports (`netstat -ano | findstr 8000`), and volume permissions.
+- **Database errors:** inspect `docker compose logs db` and the `DB_*` credentials.
+- **Redis unavailable:** inspect `docker compose logs redis`; on Windows hosts read [`doc/reference/SETUP_REDIS_WINDOWS.md`](../reference/SETUP_REDIS_WINDOWS.md).
+- **Missing assets:** run `docker compose exec web python manage.py collectstatic --noinput`.
+- **Reset the stack:**
 	```powershell
 	docker compose down -v  # remove containers e volumes
 	docker compose up --build
@@ -121,7 +121,7 @@ Após a subida:
 
 ---
 
-## 8. Próximos Passos
-- Ajuste configurações de produção seguindo [`doc/operations/DEPLOYMENT.md`](../operations/DEPLOYMENT.md).
-- Configure observabilidade e alertas: [`doc/reference/prometheus_static_version.md`](../reference/prometheus_static_version.md) e [`doc/reference/PROMETHEUS_ALERTS.md`](../reference/PROMETHEUS_ALERTS.md).
-- Revise a estratégia de Redis HA antes de ir para produção: [`doc/reference/REDIS_HIGH_AVAILABILITY.md`](../reference/REDIS_HIGH_AVAILABILITY.md).
+## 8. Next steps
+- Adjust production settings using [`doc/operations/DEPLOYMENT.md`](../operations/DEPLOYMENT.md).
+- Set up observability and alerts: [`doc/reference/prometheus_static_version.md`](../reference/prometheus_static_version.md) and [`doc/reference/PROMETHEUS_ALERTS.md`](../reference/PROMETHEUS_ALERTS.md).
+- Review the Redis HA strategy before going live: [`doc/reference/REDIS_HIGH_AVAILABILITY.md`](../reference/REDIS_HIGH_AVAILABILITY.md).

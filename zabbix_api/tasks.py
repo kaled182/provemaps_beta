@@ -1,7 +1,7 @@
 from celery import shared_task
 
 from inventory.models import Port
-from .domain.optical import _fetch_port_optical_snapshot
+from .domain.optical import fetch_port_optical_snapshot
 
 
 @shared_task(queue="mapspro_default")
@@ -14,7 +14,7 @@ def warm_port_optical_cache(port_id: int):
     )
     if not port:
         return
-    _fetch_port_optical_snapshot(port, discovery_cache={}, persist_keys=False)
+    fetch_port_optical_snapshot(port, discovery_cache={}, persist_keys=False)
 
 
 @shared_task(queue="mapspro_default")
@@ -25,7 +25,7 @@ def warm_device_ports(device_id: int):
         .filter(device_id=device_id)
     )
     for port in ports:
-        _fetch_port_optical_snapshot(port, discovery_cache={}, persist_keys=False)
+        fetch_port_optical_snapshot(port, discovery_cache={}, persist_keys=False)
 
 
 @shared_task(queue="mapspro_default")
