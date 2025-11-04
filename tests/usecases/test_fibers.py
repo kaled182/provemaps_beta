@@ -149,7 +149,7 @@ class CreateFiberFromKMLTests(TestCase):
                 dest_port_id=self.port_b.id,
                 kml_file=invalid_kml_file
             )
-        self.assertIn("Erro ao processar KML", str(context.exception))
+        self.assertIn("Failed to process KML", str(context.exception))
 
     def test_raises_validation_error_for_kml_with_no_coordinates(self):
         """Tests that a validation error is raised for a KML file with no coordinate data."""
@@ -174,7 +174,10 @@ class CreateFiberFromKMLTests(TestCase):
                 dest_port_id=self.port_b.id,
                 kml_file=kml_file
             )
-        self.assertIn("Nenhum ponto encontrado no KML", str(context.exception))
+        self.assertIn(
+            "No coordinates found in the KML payload",
+            str(context.exception),
+        )
 
 
 class DeleteFiberTests(TestCase):

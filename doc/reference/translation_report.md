@@ -14,7 +14,7 @@ This report tracks the cleanup of Portuguese-language strings across the project
 | Category | Files Pending | Notes |
 | --- | --- | --- |
 | Documentation & Guides | 0 | Monitoring for new or regenerated docs |
-| Backend Runtime & Config | 3 | Core services, commands, and settings with user-facing strings |
+| Backend Runtime & Config | 2 | Core services, commands, and settings with user-facing strings |
 | Frontend & Static Assets | 9 | Legacy JS backups and markdown checklists surfaced to users |
 | Tests & QA Assets | 11 | Test descriptions/assertions in Portuguese |
 | Tooling & Scripts | 11 | Shell/Python/PowerShell scripts shown to operators |
@@ -67,6 +67,7 @@ Completed files are tracked below; pending items remain highlighted per category
 - `zabbix_api/management/commands/warm_optical_cache.py` — translated to English on 2025-11-04
 - `zabbix_api/services/zabbix_client.py` — translated to English on 2025-11-04
 - `zabbix_api/services/zabbix_service.py` — phase-one translation & cleanup completed on 2025-11-04
+- `zabbix_api/usecases/fibers.py` — runtime validations and comments translated on 2025-11-04
 
 ## Detailed Status (Pending)
 
@@ -75,7 +76,6 @@ Completed files are tracked below; pending items remain highlighted per category
 
 ### Backend Runtime & Config
 - `zabbix_api/usecases/__init__.py`
-- `zabbix_api/usecases/fibers.py`
 - `zabbix_api/usecases/inventory.py`
 
 ### Frontend & Static Assets
@@ -129,7 +129,7 @@ Completed files are tracked below; pending items remain highlighted per category
 
 ## Next Steps
 
-1. Translate high-visibility docs (`README.md`, quickstart guides) and update status to _Completed_.
-2. Address runtime-facing messages in `core/` and `zabbix_api/` modules.
-3. Update frontend markdowns/JS backups that users might access.
+1. Finish translating remaining `zabbix_api/usecases` modules and verify tests.
+2. Address pending frontend markdowns/JS backups surfaced to users.
+3. Continue auditing tests and operator scripts for Portuguese strings.
 4. Refresh this report after each translation pass, moving files to a **Completed** list as work finishes.
