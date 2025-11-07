@@ -110,8 +110,9 @@ INSTALLED_APPS = [
     "service_accounts.apps.ServiceAccountsConfig",
     # Network inventory (models and routes consolidated in inventory)
     "inventory",
-    # Legacy app -temporarily reactivated during Phase 4 testing (2025-11-07)
-    # All models migrated to inventory app via migrations 0003 and 0002
+    # Zombie app - kept only for migration compatibility (2025-11-07)
+    # All models migrated to inventory. Routes/models/views inactive.
+    # Required for pytest test database creation via migrations.
     "routes_builder",
     "setup_app",
     # Modular apps (Phase 0 scaffolding)
