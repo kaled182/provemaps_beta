@@ -72,7 +72,7 @@ class Route(models.Model):
 
     class Meta:
         ordering = ["name"]
-        db_table = "routes_builder_route"
+        db_table = "inventory_route"
 
     if TYPE_CHECKING:
         origin_port_id: int
@@ -164,7 +164,7 @@ class RouteSegment(models.Model):
     class Meta:
         ordering = ["route", "order"]
         unique_together = ("route", "order")
-        db_table = "routes_builder_routesegment"
+        db_table = "inventory_routesegment"
 
     if TYPE_CHECKING:
         from_port_id: int | None
@@ -226,7 +226,7 @@ class RouteEvent(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
-        db_table = "routes_builder_routeevent"
+        db_table = "inventory_routeevent"
 
     def __str__(self) -> str:
         return f"{self.route.name} - {self.event_type}"
