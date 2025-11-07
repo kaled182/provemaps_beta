@@ -9,34 +9,53 @@
 
 ---
 
-## 🎉 Atualização — 2025-01-07 — **FASE 4 CONCLUÍDA!**
+## 🎉 Atualização — 2025-11-07 — **FASE 4 CONCLUÍDA!**
 
-### ✅ Conclusões da Fase 4 (Limpeza de Código Legado)
+### ✅ Conclusões da Fase 4 (Limpeza de Código Legado + Table Renaming)
 
-**Status Geral**: 🟢 **80% COMPLETO** (Phases 0-3 ✅, Phase 4 ✅, Phase 5 ⏳)
+**Status Geral**: 🟢 **90% COMPLETO** (Phases 0-4 ✅, Phase 5 ⏳)
 
 #### Removido com Sucesso
 - ✅ **Diretório `zabbix_api/`** deletado completamente
   - Shims, models, views, URLs, tests — tudo migrado para `inventory/` e `integrations/zabbix/`
 - ✅ **Rotas duplicadas** em `core/urls.py` eliminadas (`urls.W005` warning resolvido)
-- ✅ **Testes de compatibilidade legados** removidos (200→199 testes, 99.5% passando)
+- ✅ **Testes de compatibilidade legados** removidos (200→199 testes, 100% passando)
+
+#### Renomeação de Tabelas (Migration 0004)
+- ✅ **Tabelas renomeadas** para alinhar com model ownership:
+  - `routes_builder_route` → `inventory_route`
+  - `routes_builder_routesegment` → `inventory_routesegment`
+  - `routes_builder_routeevent` → `inventory_routeevent`
+- ✅ **Migration 0004** usa SQL condicional (suporta SQLite, MySQL, PostgreSQL)
+- ✅ **Models atualizados** com `db_table = "inventory_*"`
+
+#### Zombie App Pattern
+- ✅ **`routes_builder`** mantido em INSTALLED_APPS para compatibilidade de migrations
+  - App completamente inativo (sem URLs, views, admin)
+  - Models delegam para `inventory.models_routes`
+  - Requerido para pytest criar test databases via migration chain
+  - Previne erros "no such table" em fresh databases
 
 #### Configurações Atualizadas
-- ✅ `pytest.ini` — testpaths agora inclui `inventory/tests`, `monitoring/tests`
+- ✅ `pytest.ini` — testpaths inclui `inventory/tests`, `monitoring/tests`
 - ✅ `pyrightconfig.json` — Type checking para estrutura modular
+- ✅ `scripts/run_tests.ps1` — Coverage atualizado (inventory + monitoring)
+- ✅ `scripts/validate_migration_staging.py` — Validações para inventory_* tables
 - ✅ `.github/workflows/daily-inventory-tests.yml` — CI testando novos módulos
-- ✅ `settings/base.py` — `routes_builder` mantido com nota sobre dependência de migração
 
 #### Validações Realizadas
-- ✅ **Suite de testes**: 199/199 passando (116.37s)
+- ✅ **Suite de testes**: **199/199 passando** (116.15s) 🎉
 - ✅ **System check**: `python manage.py check` → 0 issues
-- ✅ **Migração em staging**: 14/14 validações ✅ (script `validate_migration_staging.py`)
-- ✅ **Frontend**: 100% migrado para `/api/v1/inventory/*` (9 arquivos JS)
+- ✅ **Migração em staging**: Migration 0004 aplicada com sucesso
+- ✅ **Frontend**: 100% migrado para `/api/v1/inventory/*`
 
-#### Bloqueio Conhecido
-- ⚠️ **`routes_builder`** não pode ser removido ainda
-  - **Razão**: Migração `inventory.0003_route_models_relocation` depende de `routes_builder.0001`
-  - **Solução**: Aguardar aplicação em produção OU refatorar migração para remover dependência
+#### Migration Flow Completo
+```
+routes_builder.0001 (creates tables) 
+→ inventory.0003 (relocates models via ContentType)
+→ inventory.0004 (renames tables routes_builder_* → inventory_*)
+→ routes_builder.0002 (fake migration)
+```
 
 ### 📊 Progresso das Fases
 
@@ -46,14 +65,15 @@
 | **1** | ✅ 100% | Cliente Zabbix isolado em `integrations/zabbix/` | ✅ |
 | **2** | ✅ 100% | Monitoramento consolidado (`monitoring/usecases.py`, tasks) | 6 testes ✅ |
 | **3** | ✅ 100% | Inventário modularizado (APIs, frontend migrado) | 14 testes ✅ |
-| **4** | ✅ 95% | Código legado removido (`zabbix_api` deletado) | 199 testes ✅ |
-| **5** | ⏳ 30% | Documentação final e validação de produção | Pendente |
+| **4** | ✅ 100% | Código legado removido + tabelas renomeadas | **199 testes ✅** |
+| **5** | ⏳ 40% | Documentação final e validação de produção | Pendente |
 
 ### 📚 Próximos Passos (Fase 5)
-1. ⏳ Atualizar `README.md` (remover referências a `zabbix_api`)
-2. ⏳ Atualizar `doc/reference-root/API_DOCUMENTATION.md` (marcar endpoints legados)
-3. ⏳ Smoke test manual completo (dashboard, routes, dispositivos, health checks)
-4. ⏳ Preparar comunicação de breaking changes para equipe
+1. ✅ Atualizar scripts (`validate_migration_staging.py`, `run_tests.ps1`)
+2. ⏳ Atualizar `README.md` (arquitetura modular, breaking changes)
+3. ⏳ Atualizar `doc/reference-root/API_DOCUMENTATION.md` (marcar endpoints legados)
+4. ⏳ Smoke test manual completo (dashboard, routes, dispositivos, health checks)
+5. ⏳ Preparar deployment guide com instruções de migração 0004
 
 ---
 
