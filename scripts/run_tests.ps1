@@ -77,7 +77,8 @@ if ($Verbose) {
 }
 
 if ($Coverage) {
-    $pytestCmd += " --cov=core --cov=maps_view --cov=routes_builder --cov=inventory"
+    # Phase 4: routes_builder é zombie app, coverage em inventory/monitoring
+    $pytestCmd += " --cov=core --cov=maps_view --cov=inventory --cov=monitoring"
     $pytestCmd += " --cov-report=term-missing --cov-report=html"
 }
 

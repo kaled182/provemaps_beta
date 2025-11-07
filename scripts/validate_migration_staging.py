@@ -115,7 +115,12 @@ def check_model_tables() -> dict:
     """Verifica se as tabelas dos modelos existem."""
     print_header("4. Verificando Tabelas no Banco")
     
-    tables = ['routes_builder_route', 'routes_builder_routesegment', 'routes_builder_routeevent']
+    # Phase 4: Tabelas foram renomeadas para inventory_*
+    tables = [
+        'inventory_route',
+        'inventory_routesegment',
+        'inventory_routeevent',
+    ]
     results = {}
     
     with connection.cursor() as cursor:

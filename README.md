@@ -20,10 +20,10 @@ The solution ships with native observability (Prometheus, structured logging, qu
 Key Django apps:
 - `core`: settings, root URLs, metrics, middleware
 - `maps_view`: network dashboard and visualizations
-- `routes_builder`: optical routes, KML import, metadata _(legacy - migration in progress)_
 - `inventory`: authoritative models (Site, Device, Port, Route) + REST APIs at `/api/v1/inventory/`
 - `monitoring`: health checks, combined status from inventory + Zabbix
 - `integrations/zabbix`: resilient Zabbix API client (retry, circuit breaker, Prometheus metrics)
+- `routes_builder`: _(zombie app - kept for migration compatibility only)_
 - `setup_app`: secure credential management and configuration
 
 ---
