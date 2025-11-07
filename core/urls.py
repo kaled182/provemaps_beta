@@ -48,9 +48,11 @@ urlpatterns: list[Any] = [
     path('metrics/', include('django_prometheus.urls')),
 
     # Apps
-    path('zabbix_api/', include('zabbix_api.urls')),
     path('maps_view/', include('maps_view.urls')),
+    path('', include('monitoring.urls')),
+    path('api/v1/inventory/', include('inventory.urls_api')),
     path('setup_app/', include('setup_app.urls')),
+    # Legacy app - kept for migration dependencies (Phase 4)
     path('routes_builder/', include('routes_builder.urls')),
 
     # HTML page for Zabbix lookup (rendered via core/views.py)

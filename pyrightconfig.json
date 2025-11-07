@@ -1,29 +1,26 @@
 {
   "typeCheckingMode": "strict",
   "reportPrivateUsage": "warning",
-  "plugins": [
-    {
-      "module": "pyright.plugins.django",
-      "config": {
-        "djangoSettingsModule": "settings.test"
-      }
-    }
-  ],
+  "reportMissingTypeStubs": false,
   "venvPath": ".",
-  "venv": ".venv",
+  "venv": "venv",
   "include": [
-    "core",
-    "inventory",
-    "maps_view",
-    "routes_builder"
+    "inventory/api",
+    "inventory/models_routes.py",
+    "inventory/tests",
+    "inventory/usecases",
+    "inventory/services",
+    "monitoring/usecases.py",
+    "monitoring/tests",
+    "integrations/zabbix"
   ],
   "exclude": [
     "**/__pycache__",
     "staticfiles",
     "media",
     "legacy_backup",
-    "zabbix_api",
     "setup_app",
-    "tests"
+    "tests",
+    "routes_builder"
   ]
 }

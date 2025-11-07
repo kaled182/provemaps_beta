@@ -7,13 +7,11 @@ Business logic is delegated to the services layer.
 
 import logging
 
-from django.shortcuts import render
 from django.conf import settings
-from setup_app.services import runtime_settings
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
-from django.views.decorators.http import require_GET
+from django.shortcuts import render
 from prometheus_client import REGISTRY, generate_latest
+from setup_app.services import runtime_settings
 
 from .services import get_hosts_status_data
 from .realtime.events import build_dashboard_payload
@@ -54,54 +52,26 @@ def dashboard_view(request):
         "timestamp": cache_result.get("timestamp"),
         "cache_hit": cache_result.get("cache_hit", False),
     }
-    
-    return render(request, 'dashboard.html', {
-        'GOOGLE_MAPS_API_KEY': runtime_settings.get_runtime_config().google_maps_api_key or getattr(settings, 'GOOGLE_MAPS_API_KEY', ''),
-        **context
-    })
+
+    google_maps_key = (
+        runtime_settings.get_runtime_config().google_maps_api_key
+        or getattr(settings, 'GOOGLE_MAPS_API_KEY', '')
+    )
+
+    return render(
+        request,
+        'dashboard.html',
+        {
+            'GOOGLE_MAPS_API_KEY': google_maps_key,
+            **context,
+        },
+    )
 
 
 # Mantido para compatibilidade (se usado em outros lugares)
 def dashboard_with_hosts_status():
     """Compatibility alias kept for legacy imports."""
     return get_hosts_status_data()
-
-
-@login_required
-@require_GET
-def api_zabbix_hosts_status(request):
-    """
-    JSON API mirroring the dashboard data served via the SWR cache.
-
-    The payload contains cache metadata such as ``is_stale`` and ``timestamp``.
-    """
-    from maps_view.cache_swr import get_dashboard_cached
-    from maps_view.tasks import refresh_dashboard_cache_task
-
-    # Retrieve data following the SWR pattern
-    cache_result = get_dashboard_cached(
-        fetch_fn=get_hosts_status_data,
-        async_task=refresh_dashboard_cache_task.delay,
-    )
-
-    data = cache_result["data"]
-
-    if not data['hosts_status']:
-        return JsonResponse(
-            {'error': 'No devices configured with Zabbix'},
-            status=404
-        )
-
-    return JsonResponse({
-        'total': data['hosts_summary']['total'],
-        'hosts': data['hosts_status'],
-        'summary': data['hosts_summary'],
-        'cache_metadata': {
-            'is_stale': cache_result.get("is_stale", False),
-            'timestamp': cache_result.get("timestamp"),
-            'cache_hit': cache_result.get("cache_hit", False),
-        }
-    })
 
 
 @login_required

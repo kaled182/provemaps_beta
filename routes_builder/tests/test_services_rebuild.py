@@ -1,3 +1,5 @@
+# pyright: reportGeneralTypeIssues=false
+
 """Tests covering the rebuild_route service implementation."""
 
 from __future__ import annotations
@@ -6,9 +8,21 @@ from decimal import Decimal
 from typing import Any, Protocol, cast
 
 import pytest
+from django.apps import apps
 
-from routes_builder import services
-from routes_builder.models import Route, RouteEvent, RouteSegment
+from inventory import routes as services
+
+RouteModel = RouteEventModel = RouteSegmentModel = Any
+
+Route = cast("type[RouteModel]", apps.get_model("inventory", "Route"))
+RouteEvent = cast(
+    "type[RouteEventModel]",
+    apps.get_model("inventory", "RouteEvent"),
+)
+RouteSegment = cast(
+    "type[RouteSegmentModel]",
+    apps.get_model("inventory", "RouteSegment"),
+)
 
 
 class PortFactory(Protocol):
@@ -18,7 +32,7 @@ class PortFactory(Protocol):
 
 @pytest.mark.django_db
 def test_rebuild_route_updates_state_and_metadata(
-    route: Route,
+    route: RouteModel,
     port_factory: PortFactory,
 ) -> None:
     primary_segment = RouteSegment.objects.create(

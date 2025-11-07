@@ -12,7 +12,7 @@ from django.urls import reverse
 from setup_app.models import FirstTimeSetup
 from setup_app.services import runtime_settings
 from setup_app.utils import env_manager
-from zabbix_api.guards import reload_diagnostics_flag_cache
+from integrations.zabbix.guards import reload_diagnostics_flag_cache
 
 
 class RuntimeSettingsTests(TestCase):
@@ -157,27 +157,33 @@ class DiagnosticsEndpointsTests(TestCase):
         reload_diagnostics_flag_cache()
 
     def test_requires_authentication(self):
-        response = self.client.get(reverse("zabbix_api:api_test_ping"))
+        response = self.client.get(reverse("inventory-api:diagnostics-ping"))
         self.assertEqual(response.status_code, 302)
 
     def test_requires_toggle(self):
         self.client.force_login(self.staff)
-        response = self.client.get(reverse("zabbix_api:api_test_ping"), {"ip": "127.0.0.1"})
+        response = self.client.get(
+            reverse("inventory-api:diagnostics-ping"),
+            {"ip": "127.0.0.1"},
+        )
         self.assertEqual(response.status_code, 403)
 
     def test_allows_when_enabled(self):
         env_manager.write_values({"ENABLE_DIAGNOSTIC_ENDPOINTS": "True"})
         runtime_settings.reload_config()
         self.client.force_login(self.staff)
-        with patch("zabbix_api.diagnostics.subprocess.run") as mock_run, patch(
-            "zabbix_api.diagnostics.platform.system", return_value="linux"
+        with patch("inventory.api.devices.subprocess.run") as mock_run, patch(
+            "inventory.api.devices.platform.system", return_value="linux"
         ):
             mock_run.return_value = MagicMock(
                 returncode=0,
                 stdout="1 packets transmitted, 1 received, 0% packet loss\n"
                 "rtt min/avg/max/mdev = 0.1/0.1/0.1/0.0 ms",
             )
-            response = self.client.get(reverse("zabbix_api:api_test_ping"), {"ip": "127.0.0.1"})
+            response = self.client.get(
+                reverse("inventory-api:diagnostics-ping"),
+                {"ip": "127.0.0.1"},
+            )
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["status"], "success")
 

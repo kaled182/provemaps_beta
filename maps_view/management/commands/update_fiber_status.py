@@ -1,12 +1,14 @@
+# pyright: reportMissingParameterType=false, reportUnknownMemberType=false
+# pyright: reportUnknownArgumentType=false, reportUnknownVariableType=false
+# pyright: reportGeneralTypeIssues=false, reportAttributeAccessIssue=false
+
 import json
 import os
 import time
 from contextlib import contextmanager
 from django.core.management.base import BaseCommand
-from maps_view.models import FiberCable, FiberEvent
-from maps_view.services.fiber_status import (
-    evaluate_cable_status_for_cable,
-)
+from inventory.models import FiberCable, FiberEvent
+from inventory.services.fiber_status import evaluate_cable_status_for_cable
 
 LOCK_FILE = "/tmp/update_fiber_status.lock"
 LOCK_STALE_SECONDS = 60 * 10  # 10 minutes

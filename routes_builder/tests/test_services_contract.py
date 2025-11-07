@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any
+from typing import Any, Mapping
 
 import pytest
 
-from routes_builder import services
+from inventory import routes as services
 
 
 def _callable_signature(obj: Any) -> inspect.Signature:
@@ -51,7 +51,7 @@ def test_invalidate_route_cache_placeholder() -> None:
 
 @pytest.mark.django_db
 def test_health_summary_returns_expected_structure() -> None:
-    summary: dict[str, Any] = services.health_summary()
+    summary: Mapping[str, Any] = services.health_summary()
     assert summary["routes"] >= 0
     assert summary["segments"] >= 0
     assert summary["events"] >= 0

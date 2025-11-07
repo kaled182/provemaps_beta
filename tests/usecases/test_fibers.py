@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 
 from inventory.models import Device, FiberCable, Port, Site
-from zabbix_api.usecases.fibers import (
+from inventory.usecases.fibers import (
     FiberValidationError,
     create_fiber_from_kml,
     create_manual_fiber,
@@ -56,7 +56,7 @@ class CreateManualFiberTests(TestCase):
         self.port_a_id: int = cast(int, self.port_a.pk)
         self.port_b_id: int = cast(int, self.port_b.pk)
 
-    @patch("zabbix_api.usecases.fibers.invalidate_fiber_cache")
+    @patch("inventory.usecases.fibers.invalidate_fiber_cache")
     def test_create_fiber_successfully(
         self,
         mock_invalidate_cache: MagicMock,
@@ -115,7 +115,7 @@ class CreateManualFiberTests(TestCase):
 
         self.assertIn("Required fields are missing", str(context.exception))
 
-    @patch("zabbix_api.usecases.fibers.invalidate_fiber_cache")
+    @patch("inventory.usecases.fibers.invalidate_fiber_cache")
     def test_create_single_port_fiber_successfully(
         self,
         mock_invalidate_cache: MagicMock,
@@ -188,7 +188,7 @@ class CreateFiberFromKMLTests(TestCase):
             "        </kml>\n"
         )
 
-    @patch("zabbix_api.usecases.fibers.invalidate_fiber_cache")
+    @patch("inventory.usecases.fibers.invalidate_fiber_cache")
     def test_create_from_valid_kml(
         self,
         mock_invalidate_cache: MagicMock,
@@ -276,7 +276,7 @@ class DeleteFiberTests(TestCase):
             destination_port=port2,
         )
 
-    @patch("zabbix_api.usecases.fibers.invalidate_fiber_cache")
+    @patch("inventory.usecases.fibers.invalidate_fiber_cache")
     def test_delete_fiber_successfully(
         self,
         mock_invalidate_cache: MagicMock,

@@ -1,69 +1,28 @@
-"""Tests for maps_view Celery tasks."""
+"""Compatibility tests ensuring maps_view.tasks shims remain intact."""
 
-from unittest.mock import patch
-
-from django.core.cache import cache
-from django.test import override_settings
-
-from maps_view.tasks import refresh_dashboard_cache_task
-
-
-@override_settings(
-    CACHES={
-        "default": {
-            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-            "LOCATION": "test-maps-view-tasks",
-        }
-    }
+from monitoring.tasks import (
+    broadcast_dashboard_snapshot as monitoring_broadcast_task,
+    refresh_dashboard_cache_task as monitoring_refresh_task,
 )
-def test_refresh_dashboard_cache_task_updates_cache():
-    """Ensure the SWR cache gets populated on refresh."""
-    cache.clear()
-
-    fresh_payload = {
-        "hosts_status": [
-            {"device_id": 1, "hostid": "101", "available": "1"}
-        ],
-        "hosts_summary": {"total": 1, "available": 1, "unavailable": 0},
-    }
-
-    with patch(
-        "maps_view.tasks.get_hosts_status_data", return_value=fresh_payload
-    ) as mock_fetch:
-        result = refresh_dashboard_cache_task()
-
-    assert mock_fetch.called
-    assert result["success"] is True
-    assert result["hosts_count"] == 1
-
-    # Cache data is stored under dashboard key
-    # (set_cached_data writes raw payload)
-    cached = cache.get("dashboard:hosts_status")
-    assert cached == fresh_payload
-
-    timestamp = cache.get("dashboard:hosts_status:timestamp")
-    assert isinstance(timestamp, float)
-
-
-@override_settings(
-    CACHES={
-        "default": {
-            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-            "LOCATION": "test-maps-view-tasks-errors",
-        }
-    }
+from monitoring.usecases import (
+    get_hosts_status_data as monitoring_hosts_status,
 )
-def test_refresh_dashboard_cache_task_handles_errors():
-    """Task should capture exceptions and return error payload."""
-    cache.clear()
 
-    with patch(
-        "maps_view.tasks.get_hosts_status_data",
-        side_effect=RuntimeError("boom"),
-    ) as mock_fetch:
-        result = refresh_dashboard_cache_task()
+from maps_view.tasks import (
+    broadcast_dashboard_snapshot as maps_broadcast_task,
+    get_hosts_status_data as maps_get_hosts_status,
+    refresh_dashboard_cache_task as maps_refresh_task,
+)
 
-    assert mock_fetch.called
-    assert result["success"] is False
-    assert "error" in result
-    assert cache.get("dashboard:hosts_status") is None
+
+def test_maps_view_tasks_reexport_monitoring_tasks():
+    """maps_view.tasks should re-export the monitoring Celery tasks."""
+
+    assert maps_refresh_task is monitoring_refresh_task
+    assert maps_broadcast_task is monitoring_broadcast_task
+
+
+def test_maps_view_get_hosts_status_data_alias():
+    """get_hosts_status_data remains available for legacy callers."""
+
+    assert maps_get_hosts_status is monitoring_hosts_status

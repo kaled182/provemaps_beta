@@ -180,7 +180,7 @@ def zabbix_mock(monkeypatch: pytest.MonkeyPatch) -> Any:
 
     # Tolerate missing module in environments without the dependency
     monkeypatch.setattr(
-        "zabbix_api.client.ZabbixClient._call",
+        "integrations.zabbix.client.resilient_client.call",
         mock_zabbix_call,
         raising=False,
     )
@@ -200,7 +200,7 @@ def zabbix_authenticated_mock(
         return zabbix_mock(*args, **kwargs)
 
     monkeypatch.setattr(
-        "zabbix_api.client.ZabbixClient._call",
+        "integrations.zabbix.client.resilient_client.call",
         mock_auth_call,
         raising=False,
     )

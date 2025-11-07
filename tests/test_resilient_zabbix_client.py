@@ -11,19 +11,27 @@ Coverage:
 """
 
 import time
+from collections.abc import Iterator
 from typing import Any, Mapping
 from unittest.mock import Mock, patch
 
+import pytest
 import requests
 from django.core.cache import cache
 from django.test import SimpleTestCase, override_settings
 
-from zabbix_api.client import (
+from integrations.zabbix.client import (
     CircuitState,
     resilient_client,
     zabbix_batch,
     zabbix_call,
 )
+
+
+@pytest.fixture(autouse=True)
+def enable_db_access_for_all_tests() -> Iterator[None]:
+    """Override project-wide DB fixture to avoid DB setup."""
+    yield
 
 
 # Configure tests to rely on LocMemCache instead of Redis
@@ -52,8 +60,8 @@ class ResilientZabbixClientTests(SimpleTestCase):
     # Authentication Tests
     # -------------------------------------------------------------------- #
 
-    @patch("zabbix_api.client.runtime_settings.get_runtime_config")
-    @patch("zabbix_api.client.requests.post")
+    @patch("integrations.zabbix.client.runtime_settings.get_runtime_config")
+    @patch("integrations.zabbix.client.requests.post")
     def test_login_with_user_password(
         self, post_mock: Mock, config_mock: Mock
     ) -> None:
@@ -86,7 +94,7 @@ class ResilientZabbixClientTests(SimpleTestCase):
         # which is acceptable; the important part is that ``login`` works
         # without raising.
 
-    @patch("zabbix_api.client.runtime_settings.get_runtime_config")
+    @patch("integrations.zabbix.client.runtime_settings.get_runtime_config")
     def test_login_with_api_key(self, config_mock: Mock) -> None:
         """Validate login with an API key (no HTTP request)."""
         config_mock.return_value = Mock(
@@ -106,8 +114,8 @@ class ResilientZabbixClientTests(SimpleTestCase):
 
     @override_settings(ZABBIX_READ_ONLY=False)
     @patch.object(resilient_client, "_get_token", return_value="token-123")
-    @patch("zabbix_api.client.runtime_settings.get_runtime_config")
-    @patch("zabbix_api.client.requests.post")
+    @patch("integrations.zabbix.client.runtime_settings.get_runtime_config")
+    @patch("integrations.zabbix.client.requests.post")
     def test_retry_on_network_failure(
         self,
         post_mock: Mock,
@@ -149,7 +157,7 @@ class ResilientZabbixClientTests(SimpleTestCase):
         # Called three times
         self.assertEqual(post_mock.call_count, 3)
 
-    @patch("zabbix_api.client.runtime_settings.get_runtime_config")
+    @patch("integrations.zabbix.client.runtime_settings.get_runtime_config")
     def test_api_key_backoff_reuses_key_without_credentials(
         self,
         config_mock: Mock,
@@ -177,8 +185,8 @@ class ResilientZabbixClientTests(SimpleTestCase):
         self.assertIsNone(metrics["failed_api_key"])
         self.assertEqual(metrics["api_key_backoff_seconds_remaining"], 0.0)
 
-    @patch("zabbix_api.client.requests.post")
-    @patch("zabbix_api.client.runtime_settings.get_runtime_config")
+    @patch("integrations.zabbix.client.requests.post")
+    @patch("integrations.zabbix.client.runtime_settings.get_runtime_config")
     def test_api_key_backoff_uses_credentials_when_available(
         self,
         config_mock: Mock,
@@ -219,8 +227,8 @@ class ResilientZabbixClientTests(SimpleTestCase):
 
     @override_settings(ZABBIX_READ_ONLY=False)
     @patch.object(resilient_client, "_get_token", return_value="token-123")
-    @patch("zabbix_api.client.runtime_settings.get_runtime_config")
-    @patch("zabbix_api.client.requests.post")
+    @patch("integrations.zabbix.client.runtime_settings.get_runtime_config")
+    @patch("integrations.zabbix.client.requests.post")
     def test_request_retries_with_authorization_header(
         self,
         post_mock: Mock,
@@ -270,8 +278,8 @@ class ResilientZabbixClientTests(SimpleTestCase):
     @override_settings(ZABBIX_READ_ONLY=False)
     @patch.object(resilient_client, "_get_token", return_value="token-123")
     @patch.object(resilient_client, "_mark_token_as_expired")
-    @patch("zabbix_api.client.runtime_settings.get_runtime_config")
-    @patch("zabbix_api.client.requests.post")
+    @patch("integrations.zabbix.client.runtime_settings.get_runtime_config")
+    @patch("integrations.zabbix.client.requests.post")
     def test_request_retries_on_token_expired(
         self,
         post_mock: Mock,
@@ -325,8 +333,8 @@ class ResilientZabbixClientTests(SimpleTestCase):
 
     @override_settings(ZABBIX_READ_ONLY=False)
     @patch.object(resilient_client, "_get_token", return_value="token-123")
-    @patch("zabbix_api.client.runtime_settings.get_runtime_config")
-    @patch("zabbix_api.client.requests.post")
+    @patch("integrations.zabbix.client.runtime_settings.get_runtime_config")
+    @patch("integrations.zabbix.client.requests.post")
     def test_batch_retries_when_token_expired(
         self,
         post_mock: Mock,
@@ -370,8 +378,8 @@ class ResilientZabbixClientTests(SimpleTestCase):
 
     @override_settings(ZABBIX_READ_ONLY=False)
     @patch.object(resilient_client, "_get_token", return_value="token-123")
-    @patch("zabbix_api.client.runtime_settings.get_runtime_config")
-    @patch("zabbix_api.client.requests.post")
+    @patch("integrations.zabbix.client.runtime_settings.get_runtime_config")
+    @patch("integrations.zabbix.client.requests.post")
     def test_circuit_breaker_opens_after_failures(
         self,
         post_mock: Mock,
@@ -446,8 +454,8 @@ class ResilientZabbixClientTests(SimpleTestCase):
 
     @override_settings(ZABBIX_READ_ONLY=False)
     @patch.object(resilient_client, "_get_token", return_value="token-123")
-    @patch("zabbix_api.client.runtime_settings.get_runtime_config")
-    @patch("zabbix_api.client.requests.post")
+    @patch("integrations.zabbix.client.runtime_settings.get_runtime_config")
+    @patch("integrations.zabbix.client.requests.post")
     def test_batch_multiple_calls(
         self,
         post_mock: Mock,
@@ -496,8 +504,8 @@ class ResilientZabbixClientTests(SimpleTestCase):
 
     @override_settings(ZABBIX_READ_ONLY=True)
     @patch.object(resilient_client, "_get_token", return_value="token-123")
-    @patch("zabbix_api.client.runtime_settings.get_runtime_config")
-    @patch("zabbix_api.client.requests.post")
+    @patch("integrations.zabbix.client.runtime_settings.get_runtime_config")
+    @patch("integrations.zabbix.client.requests.post")
     def test_read_only_allows_safe_methods(
         self,
         post_mock: Mock,
@@ -547,8 +555,8 @@ class ResilientZabbixClientTests(SimpleTestCase):
 
     @override_settings(ZABBIX_READ_ONLY=False)
     @patch.object(resilient_client, "_get_token", return_value="token-123")
-    @patch("zabbix_api.client.runtime_settings.get_runtime_config")
-    @patch("zabbix_api.client.requests.post")
+    @patch("integrations.zabbix.client.runtime_settings.get_runtime_config")
+    @patch("integrations.zabbix.client.requests.post")
     def test_zabbix_call_wrapper(
         self,
         post_mock: Mock,
@@ -576,8 +584,8 @@ class ResilientZabbixClientTests(SimpleTestCase):
 
     @override_settings(ZABBIX_READ_ONLY=False)
     @patch.object(resilient_client, "_get_token", return_value="token-123")
-    @patch("zabbix_api.client.runtime_settings.get_runtime_config")
-    @patch("zabbix_api.client.requests.post")
+    @patch("integrations.zabbix.client.runtime_settings.get_runtime_config")
+    @patch("integrations.zabbix.client.requests.post")
     def test_zabbix_batch_wrapper(
         self,
         post_mock: Mock,
