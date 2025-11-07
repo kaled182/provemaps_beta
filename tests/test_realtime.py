@@ -140,8 +140,18 @@ class DashboardRealtimeTests(TestCase):
         }
         self.client.force_login(user)
 
-        with patch("maps_view.views.get_hosts_status_data", return_value=sample):
-            response = self.client.get(reverse("maps_view:api_hosts_status"))
+        cache_result = {
+            "data": sample,
+            "is_stale": False,
+            "timestamp": None,
+            "cache_hit": True,
+        }
+
+        with patch(
+            "monitoring.views.get_dashboard_cached",
+            return_value=cache_result,
+        ):
+            response = self.client.get(reverse("monitoring:api_hosts_status"))
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()

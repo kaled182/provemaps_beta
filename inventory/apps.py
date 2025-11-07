@@ -11,4 +11,11 @@ class InventoryConfig(AppConfig):
         Initialize app-specific configurations.
         Import signals or perform startup tasks here if needed.
         """
-        pass
+        # Ensure route-related models register under the inventory app.
+        try:
+            import importlib
+
+            importlib.import_module("inventory.models_routes")
+        except ImportError:
+            # The module may be absent in certain stripped-down runtimes.
+            return

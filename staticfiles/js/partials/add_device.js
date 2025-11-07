@@ -25,7 +25,7 @@ document.getElementById('addDeviceForm').addEventListener('submit', async (event
   const hostId = formData.get('device_name');
 
   try {
-    const response = await fetch('/zabbix_api/api/add-device-from-zabbix/', {
+  const response = await fetch('/api/v1/inventory/devices/add-from-zabbix/', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

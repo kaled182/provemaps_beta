@@ -1,7 +1,7 @@
 import json
 from django.core.management.base import BaseCommand
 from maps_view.models import Port
-from zabbix_api.services.zabbix_service import zabbix_request
+from integrations.zabbix.zabbix_service import zabbix_request
 
 CANDIDATE_STATUS_PATTERNS = [
     'ifoperstatus', 'ifadminstatus', 'net.if.status', 'if.status', 'ifoper', 'link.status'

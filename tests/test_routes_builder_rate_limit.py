@@ -1,53 +1,39 @@
 import json
+from collections.abc import Iterator
 from types import SimpleNamespace
+from typing import Any, Dict, List
 
 import pytest
 from django.urls import reverse
 
 
 @pytest.fixture
-def staff_client(client, admin_user):
+def staff_client(client: Any, admin_user: Any) -> Any:
     client.force_login(admin_user)
     return client
 
 
 @pytest.fixture(autouse=True)
-def patch_celery(monkeypatch):
+def patch_celery(monkeypatch: Any) -> Iterator[None]:
     """Prevent Celery from trying to enqueue real tasks during tests."""
     fake_result = SimpleNamespace(id="fake-task-id", queue="maps")
 
-    def fake_async(*args, **kwargs):
+    def fake_async(*args: Any, **kwargs: Any) -> SimpleNamespace:
         return fake_result
 
     monkeypatch.setattr(
-        "routes_builder.views_tasks.build_route.apply_async",
-        fake_async,
-        raising=False,
-    )
-    monkeypatch.setattr(
-        "routes_builder.views_tasks.invalidate_route_cache.apply_async",
-        fake_async,
-        raising=False,
-    )
-    monkeypatch.setattr(
-        "routes_builder.views_tasks.build_routes_batch.apply_async",
-        fake_async,
-        raising=False,
-    )
-    monkeypatch.setattr(
-        "routes_builder.views_tasks.import_route_from_payload.apply_async",
-        fake_async,
-        raising=False,
-    )
-    monkeypatch.setattr(
-        "routes_builder.views_tasks.health_check_routes_builder.apply_async",
+        "inventory.api.routes.apply_async",
         fake_async,
         raising=False,
     )
     yield
 
 
-def _bulk_payload(route_id=101, *, action="build"):
+def _bulk_payload(
+    route_id: int = 101,
+    *,
+    action: str = "build",
+) -> Dict[str, List[Dict[str, Any]]]:
     return {
         "operations": [
             {
@@ -60,9 +46,9 @@ def _bulk_payload(route_id=101, *, action="build"):
     }
 
 
-def test_enqueue_bulk_operations_rate_limit(staff_client):
+def test_enqueue_bulk_operations_rate_limit(staff_client: Any) -> None:
     """After 10 requests in the window, the endpoint must return HTTP 429."""
-    url = reverse("routes_builder:tasks:enqueue_bulk_operations")
+    url = reverse("inventory-api:routes-bulk")
     body = json.dumps(_bulk_payload())
 
     for _ in range(10):
@@ -83,9 +69,9 @@ def test_enqueue_bulk_operations_rate_limit(staff_client):
     assert response.json()["error"] == "Rate limit exceeded"
 
 
-def test_enqueue_bulk_operations_mixed_actions(staff_client):
+def test_enqueue_bulk_operations_mixed_actions(staff_client: Any) -> None:
     """Ensure build/invalidate actions are queued and reported correctly."""
-    url = reverse("routes_builder:tasks:enqueue_bulk_operations")
+    url = reverse("inventory-api:routes-bulk")
     body = json.dumps(
         {
             "operations": [
@@ -130,8 +116,8 @@ def test_enqueue_bulk_operations_mixed_actions(staff_client):
     assert "task_id" in results["import"]
 
 
-def test_enqueue_import_route_requires_payload(staff_client):
-    url = reverse("routes_builder:tasks:enqueue_import_route")
+def test_enqueue_import_route_requires_payload(staff_client: Any) -> None:
+    url = reverse("inventory-api:routes-import")
     response = staff_client.post(
         url,
         data="{}",
@@ -141,8 +127,8 @@ def test_enqueue_import_route_requires_payload(staff_client):
     assert response.content
 
 
-def test_enqueue_import_route_success(staff_client):
-    url = reverse("routes_builder:tasks:enqueue_import_route")
+def test_enqueue_import_route_success(staff_client: Any) -> None:
+    url = reverse("inventory-api:routes-import")
     body = json.dumps(
         {
             "payload": {

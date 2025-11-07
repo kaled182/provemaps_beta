@@ -39,7 +39,7 @@ from typing import Any
 from django.core.management.base import BaseCommand, CommandParser
 
 from inventory.models import Device, Port, Site
-from zabbix_api.services.zabbix_service import zabbix_request
+from integrations.zabbix.zabbix_service import zabbix_request
 
 logger = logging.getLogger(__name__)
 

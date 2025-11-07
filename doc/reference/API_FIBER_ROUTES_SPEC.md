@@ -4,7 +4,7 @@
 
 ### 1. List Cables
 ```
-GET /zabbix_api/api/fibers/
+GET /api/v1/inventory/fibers/
 ```
 Response example:
 ```json
@@ -22,7 +22,7 @@ Response example:
 
 ### 2. Cable Details
 ```
-GET /zabbix_api/api/fiber/<cable_id>/
+GET /api/v1/inventory/fibers/<cable_id>/
 ```
 Response example:
 ```json
@@ -60,7 +60,7 @@ Response example:
 
 ### 3. Update Cable Path
 ```
-PUT /zabbix_api/api/fiber/<cable_id>/
+PUT /api/v1/inventory/fibers/<cable_id>/
 Content-Type: application/json
 ```
 Request example:
@@ -84,7 +84,7 @@ Response example:
 
 ### 4. Create Cable Manually
 ```
-POST /zabbix_api/api/fibers/manual-create/
+POST /api/v1/inventory/fibers/manual-create/
 Content-Type: application/json
 ```
 Request example:
@@ -116,13 +116,13 @@ Response example:
 
 ### 5. Delete Cable
 ```
-DELETE /zabbix_api/api/fiber/<cable_id>/
+DELETE /api/v1/inventory/fibers/<cable_id>/
 ```
 Response: HTTP 204 No Content
 
 ### 6. Import Cable From KML
 ```
-POST /zabbix_api/api/fibers/import-kml/
+POST /api/v1/inventory/fibers/import-kml/
 Content-Type: multipart/form-data
 ```
 Form fields:
@@ -157,7 +157,7 @@ Response example:
 
 ### Internal Conversion
 The backend maps between the API shape and the stored JSON:
-- `inventory_fibers.py` line 158 reads `path = body.get("path")`
+- `inventory/api/fibers.py` reads `payload = json.loads(request.body or "{}")` and delegates to `inventory.usecases.fibers.update_fiber_path`.
 - `usecases/fibers.py` line 288 assigns `cable.path_coordinates = sanitized`
 - `usecases/fibers.py` line 257 returns `"path": cable.path_coordinates`
 

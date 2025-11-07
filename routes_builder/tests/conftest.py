@@ -1,15 +1,29 @@
+# pyright: reportGeneralTypeIssues=false
+
 """Fixtures dedicated to the routes_builder app tests."""
 
 from __future__ import annotations
 
 import itertools
 import uuid
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 import pytest
 
+from django.apps import apps
 from inventory.models import Device, Port, Site
-from routes_builder.models import Route, RouteEvent, RouteSegment
+
+RouteModel = RouteEventModel = RouteSegmentModel = Any
+
+Route = cast("type[RouteModel]", apps.get_model("inventory", "Route"))
+RouteEvent = cast(
+    "type[RouteEventModel]",
+    apps.get_model("inventory", "RouteEvent"),
+)
+RouteSegment = cast(
+    "type[RouteSegmentModel]",
+    apps.get_model("inventory", "RouteSegment"),
+)
 
 
 _PORT_COUNTER = itertools.count()
@@ -42,7 +56,7 @@ def port_factory(db: Any) -> PortFactory:
 
 
 @pytest.fixture
-def route(port_factory: PortFactory) -> Route:
+def route(port_factory: PortFactory) -> RouteModel:
     """Persisted route ready for tests."""
 
     origin = port_factory(prefix="origin")
@@ -56,7 +70,10 @@ def route(port_factory: PortFactory) -> Route:
 
 
 @pytest.fixture
-def route_segment(route: Route, port_factory: PortFactory) -> RouteSegment:
+def route_segment(
+    route: RouteModel,
+    port_factory: PortFactory,
+) -> RouteSegmentModel:
     """Persisted segment linked to the base route."""
 
     return RouteSegment.objects.create(
@@ -68,7 +85,7 @@ def route_segment(route: Route, port_factory: PortFactory) -> RouteSegment:
 
 
 @pytest.fixture
-def route_event(route: Route) -> RouteEvent:
+def route_event(route: RouteModel) -> RouteEventModel:
     """Persisted event associated with the base route."""
 
     return RouteEvent.objects.create(

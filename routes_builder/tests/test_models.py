@@ -1,15 +1,29 @@
+# pyright: reportGeneralTypeIssues=false
+
 """Unit tests for routes_builder domain models."""
 
 from __future__ import annotations
 
 import pytest
+from django.apps import apps
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 from inventory.models import Port
-from routes_builder.models import Route, RouteEvent, RouteSegment
+
+RouteModel = RouteEventModel = RouteSegmentModel = Any
+
+Route = cast("type[RouteModel]", apps.get_model("inventory", "Route"))
+RouteEvent = cast(
+    "type[RouteEventModel]",
+    apps.get_model("inventory", "RouteEvent"),
+)
+RouteSegment = cast(
+    "type[RouteSegmentModel]",
+    apps.get_model("inventory", "RouteSegment"),
+)
 
 
 class PortFactory(Protocol):
@@ -19,7 +33,7 @@ class PortFactory(Protocol):
 
 @pytest.mark.django_db
 def test_route_unique_name_constraint(
-    route: Route,
+    route: RouteModel,
     port_factory: PortFactory,
 ) -> None:
     """Routes should enforce unique names across the table."""
@@ -36,7 +50,9 @@ def test_route_unique_name_constraint(
 
 
 @pytest.mark.django_db
-def test_route_update_status_persists_and_falls_back(route: Route) -> None:
+def test_route_update_status_persists_and_falls_back(
+    route: RouteModel,
+) -> None:
     """update_status persists valid values and falls back for unknown ones."""
 
     route.update_status(Route.STATUS_ACTIVE)
@@ -49,7 +65,7 @@ def test_route_update_status_persists_and_falls_back(route: Route) -> None:
 
 
 @pytest.mark.django_db
-def test_route_update_status_without_save(route: Route) -> None:
+def test_route_update_status_without_save(route: RouteModel) -> None:
     """update_status(save=False) mutates in-memory state only."""
 
     route.update_status(Route.STATUS_ACTIVE, save=False)
@@ -82,7 +98,7 @@ def test_route_clean_rejects_identical_ports(
 
 @pytest.mark.django_db
 def test_route_segment_unique_order(
-    route: Route,
+    route: RouteModel,
     port_factory: PortFactory,
 ) -> None:
     """Each route must keep segment ordering unique."""
@@ -104,7 +120,7 @@ def test_route_segment_unique_order(
 
 
 @pytest.mark.django_db
-def test_route_segment_clean_rejects_same_endpoints(route: Route) -> None:
+def test_route_segment_clean_rejects_same_endpoints(route: RouteModel) -> None:
     """Segment validation rejects same from/to port combinations."""
 
     segment = RouteSegment(
@@ -123,7 +139,7 @@ def test_route_segment_clean_rejects_same_endpoints(route: Route) -> None:
 
 
 @pytest.mark.django_db
-def test_route_event_fixture_persists(route_event: RouteEvent) -> None:
+def test_route_event_fixture_persists(route_event: RouteEventModel) -> None:
     """RouteEvent fixture should be properly persisted."""
 
     event = route_event

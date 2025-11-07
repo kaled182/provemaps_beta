@@ -12,6 +12,7 @@ This directory gathers deep-dive documentation covering architecture, advanced o
 - **Historical reports**: [`PROJECT_STATUS_REPORT.md`](./PROJECT_STATUS_REPORT.md), [`FINAL_CONSOLIDATED_REPORT.md`](./FINAL_CONSOLIDATED_REPORT.md), [`FASE4_SUCCESS_REPORT.md`](./FASE4_SUCCESS_REPORT.md)
 - **App-specific guides**:
   - [`maps_view/`](./maps_view/) - dashboard and map integration guides
+  - [`monitoring_dashboard_flow.md`](./monitoring_dashboard_flow.md) - SWR sequence and API ownership
   - [`modules/`](./modules/) - legacy documentation for fiber builder JS modules
 
 ## How to use

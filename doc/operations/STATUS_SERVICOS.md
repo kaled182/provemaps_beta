@@ -225,10 +225,10 @@ Invoke-WebRequest -Uri "http://localhost:8000/healthz"
 ### 2. Cache Hit Test
 ```powershell
 # First call (cold cache, about 800 ms)
-Measure-Command { Invoke-WebRequest -Uri "http://localhost:8000/zabbix_api/api/sites/" }
+Measure-Command { Invoke-WebRequest -Uri "http://localhost:8000/api/v1/inventory/sites/" }
 
 # Second call (cache hit, expected under 50 ms)
-Measure-Command { Invoke-WebRequest -Uri "http://localhost:8000/zabbix_api/api/sites/" }
+Measure-Command { Invoke-WebRequest -Uri "http://localhost:8000/api/v1/inventory/sites/" }
 ```
 
 ### 3. Redis Persistence Test

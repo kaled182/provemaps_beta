@@ -13,10 +13,6 @@
       </p>
     </div>
     <div class="flex flex-wrap gap-3">
-      <a href="{% url 'routes_builder:fiber_route_builder' %}"
-         class="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-        Route Builder
-      </a>
       <a href="{% url 'maps_view:dashboard_view' %}"
          class="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
         Dashboard
@@ -126,6 +122,7 @@
 <script>
   const csrfToken = "{{ csrf_token }}";
   const API = "/zabbix_api";
+  const INVENTORY_API = "/api/v1/inventory";
   const $ = (selector) => document.querySelector(selector);
 
   const hostsEl = $("#hosts");
@@ -508,21 +505,25 @@
   $("#btnPing").addEventListener("click", () => {
     const ip = $("#testHost").value.trim();
     if (!ip) return;
-    showTest(`${API}/api/test/ping/?ip=${encodeURIComponent(ip)}&count=1`);
+    showTest(`${INVENTORY_API}/diagnostics/ping/?ip=${encodeURIComponent(ip)}&count=1`);
   });
 
   $("#btnTelnet").addEventListener("click", () => {
     const ip = $("#testHost").value.trim();
     const port = $("#testPort").value.trim() || "23";
     if (!ip) return;
-    showTest(`${API}/api/test/telnet/?ip=${encodeURIComponent(ip)}&port=${encodeURIComponent(port)}`);
+    showTest(
+      `${INVENTORY_API}/diagnostics/telnet/?ip=${encodeURIComponent(ip)}&port=${encodeURIComponent(port)}`
+    );
   });
 
   $("#btnPingTelnet").addEventListener("click", () => {
     const ip = $("#testHost").value.trim();
     const port = $("#testPort").value.trim() || "23";
     if (!ip) return;
-    showTest(`${API}/api/test/ping_telnet/?ip=${encodeURIComponent(ip)}&port=${encodeURIComponent(port)}`);
+    showTest(
+      `${INVENTORY_API}/diagnostics/ping-telnet/?ip=${encodeURIComponent(ip)}&port=${encodeURIComponent(port)}`
+    );
   });
 </script>
 {% endblock %}

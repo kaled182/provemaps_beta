@@ -1,12 +1,20 @@
+from collections.abc import Iterator
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import pytest
 import requests
 import subprocess
 
 from django.test import SimpleTestCase, override_settings
 
-from zabbix_api.services import zabbix_service
+from integrations.zabbix import zabbix_service
+
+
+@pytest.fixture(autouse=True)
+def enable_db_access_for_all_tests() -> Iterator[None]:
+    """Override project-wide DB fixture to keep tests DB-free."""
+    yield
 
 
 class ZabbixServiceTests(SimpleTestCase):
@@ -14,7 +22,7 @@ class ZabbixServiceTests(SimpleTestCase):
         zabbix_service.clear_token_cache()
 
     @override_settings(ZABBIX_READ_ONLY=True)
-    @patch("zabbix_api.client.requests.post")
+    @patch("integrations.zabbix.client.requests.post")
     def test_zabbix_request_blocks_write_operations(
         self,
         post_mock: Mock,
@@ -25,11 +33,11 @@ class ZabbixServiceTests(SimpleTestCase):
 
     @override_settings(ZABBIX_READ_ONLY=False)
     @patch(
-        "zabbix_api.client.resilient_client._get_token",
+        "integrations.zabbix.client.resilient_client._get_token",
         return_value="token-123",
     )
-    @patch("zabbix_api.client.runtime_settings.get_runtime_config")
-    @patch("zabbix_api.client.requests.post")
+    @patch("integrations.zabbix.client.runtime_settings.get_runtime_config")
+    @patch("integrations.zabbix.client.requests.post")
     def test_zabbix_request_retries_without_auth_header(
         self,
         post_mock: Mock,
@@ -69,7 +77,7 @@ class ZabbixServiceTests(SimpleTestCase):
         )
         self.assertEqual(token_mock.call_count, 2)
 
-    @patch("zabbix_api.services.zabbix_service.requests.get")
+    @patch("integrations.zabbix.zabbix_service.requests.get")
     def test_get_geolocation_handles_request_exception(
         self,
         get_mock: Mock,
@@ -81,7 +89,7 @@ class ZabbixServiceTests(SimpleTestCase):
         self.assertIsNone(data)
         get_mock.assert_called_once()
 
-    @patch("zabbix_api.services.zabbix_service.requests.get")
+    @patch("integrations.zabbix.zabbix_service.requests.get")
     def test_get_geolocation_returns_payload_when_successful(
         self,
         get_mock: Mock,
@@ -107,9 +115,9 @@ class ZabbixServiceTests(SimpleTestCase):
         response.raise_for_status.assert_called_once()
         response.json.assert_called_once()
 
-    @patch("zabbix_api.services.zabbix_service.subprocess.run")
+    @patch("integrations.zabbix.zabbix_service.subprocess.run")
     @patch(
-        "zabbix_api.services.zabbix_service.platform.system",
+        "integrations.zabbix.zabbix_service.platform.system",
         return_value="Linux",
     )
     def test_check_host_connectivity_handles_timeout(
@@ -127,9 +135,9 @@ class ZabbixServiceTests(SimpleTestCase):
         self.assertFalse(ok)
         run_mock.assert_called_once()
 
-    @patch("zabbix_api.services.zabbix_service.subprocess.run")
+    @patch("integrations.zabbix.zabbix_service.subprocess.run")
     @patch(
-        "zabbix_api.services.zabbix_service.platform.system",
+        "integrations.zabbix.zabbix_service.platform.system",
         return_value="Linux",
     )
     def test_check_host_connectivity_returns_true_for_success(

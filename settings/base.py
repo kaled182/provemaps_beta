@@ -108,11 +108,16 @@ INSTALLED_APPS = [
     "core.apps.CoreConfig",
     "maps_view",
     "service_accounts.apps.ServiceAccountsConfig",
-    # Network inventory (models migrated from zabbix_api)
+    # Network inventory (models and routes consolidated in inventory)
     "inventory",
+    # Legacy app -temporarily reactivated during Phase 4 testing (2025-11-07)
+    # All models migrated to inventory app via migrations 0003 and 0002
     "routes_builder",
     "setup_app",
-    "zabbix_api",
+    # Modular apps (Phase 0 scaffolding)
+    "monitoring",
+    "gpon",
+    "dwdm",
 ]
 
 MIDDLEWARE = [
