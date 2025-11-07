@@ -1,8 +1,11 @@
 import statistics
 import time
+from argparse import ArgumentParser
+from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError
 from django.test import Client
+from django.urls import reverse
 
 from inventory.models import Device, FiberCable, Port
 
@@ -13,7 +16,7 @@ class Command(BaseCommand):
         " metrics."
     )
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: ArgumentParser) -> None:
         parser.add_argument(
             "--username",
             required=True,
@@ -31,7 +34,7 @@ class Command(BaseCommand):
             help="Number of requests to perform per endpoint (default: 5).",
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args: Any, **options: Any) -> None:
         username = options["username"]
         password = options["password"]
         runs = options["runs"]
@@ -45,39 +48,64 @@ class Command(BaseCommand):
             )
 
         # Select representative examples for each endpoint type
-        device = Device.objects.order_by("id").first()
-        port = Port.objects.order_by("id").first()
-        cable = FiberCable.objects.order_by("id").first()
+        device: Device | None = Device.objects.order_by("id").first()
+        port: Port | None = Port.objects.order_by("id").first()
+        cable: FiberCable | None = FiberCable.objects.order_by("id").first()
 
-        endpoints = [
-            ("fibers", "get", "/zabbix_api/api/fibers/", None),
-            ("sites", "get", "/zabbix_api/api/sites/", None),
+        endpoints: list[tuple[str, str, str, dict[str, Any] | None]] = [
+            (
+                "fibers",
+                "get",
+                reverse("inventory-api:fibers"),
+                None,
+            ),
+            (
+                "sites",
+                "get",
+                reverse("inventory-api:sites"),
+                None,
+            ),
         ]
 
         if device:
+            assert device is not None
+            device_id = int(device.pk)
             endpoints.append(
                 (
                     "device-ports",
                     "get",
-                    f"/zabbix_api/api/device-ports/{device.id}/",
+                    reverse(
+                        "inventory-api:device-ports",
+                        args=[device_id],
+                    ),
                     None,
                 )
             )
         if port:
+            assert port is not None
+            port_id = int(port.pk)
             endpoints.append(
                 (
                     "port-optical-status",
                     "get",
-                    f"/zabbix_api/api/port-optical-status/{port.id}/",
+                    reverse(
+                        "inventory-api:port-optical-status",
+                        args=[port_id],
+                    ),
                     None,
                 )
             )
         if cable:
+            assert cable is not None
+            cable_id = int(cable.pk)
             endpoints.append(
                 (
                     "fiber-detail",
                     "get",
-                    f"/zabbix_api/api/fiber/{cable.id}/",
+                    reverse(
+                        "inventory-api:fiber-detail",
+                        args=[cable_id],
+                    ),
                     None,
                 )
             )
@@ -93,8 +121,8 @@ class Command(BaseCommand):
         self.stdout.write("-" * len(header))
 
         for name, method, path, payload in endpoints:
-            durations = []
-            last_status = None
+            durations: list[float] = []
+            last_status: int | None = None
 
             for _ in range(runs):
                 start = time.perf_counter()

@@ -2,9 +2,12 @@
 
 from typing import Any, Dict
 
+import json
+
 import pytest
 from django.contrib.auth.models import User
 from django.test import Client
+from django.urls import reverse
 
 from inventory.models import Device, FiberCable, Port, Site
 
@@ -17,7 +20,11 @@ class TestFiberEditPersistence:
     def authenticated_client(self) -> Client:
         """Return an authenticated Django test client."""
         client = Client()
-        User.objects.create_user(username='testuser', password='testpass')
+        User.objects.create_user(
+            username="testuser",
+            password="testpass",
+            is_staff=True,
+        )
         client.login(username='testuser', password='testpass')
         return client
 
@@ -85,9 +92,8 @@ class TestFiberEditPersistence:
         port_new = test_cable['port_dest_new']
 
         # Step 1: initial GET to inspect current data
-        response = authenticated_client.get(
-            f'/zabbix_api/api/fiber/{cable.id}/'
-        )
+        detail_url = reverse("inventory-api:fiber-detail", args=[cable.id])
+        response = authenticated_client.get(detail_url)
         assert response.status_code == 200
         data = response.json()
 
@@ -114,9 +120,9 @@ class TestFiberEditPersistence:
         }
 
         response = authenticated_client.put(
-            f'/zabbix_api/api/fiber/{cable.id}/',
-            data=update_payload,
-            content_type='application/json'
+            detail_url,
+            data=json.dumps(update_payload),
+            content_type="application/json",
         )
         assert response.status_code == 200
         update_data = response.json()
@@ -126,9 +132,7 @@ class TestFiberEditPersistence:
         assert update_data['destination']['port_id'] == port_new.id
 
         # Step 3: GET after update to ensure persistence
-        response = authenticated_client.get(
-            f'/zabbix_api/api/fiber/{cable.id}/'
-        )
+        response = authenticated_client.get(detail_url)
         assert response.status_code == 200
         final_data = response.json()
 
@@ -157,12 +161,13 @@ class TestFiberEditPersistence:
         """Ensure updating only the destination port succeeds."""
         cable = test_cable['cable']
         port_new = test_cable['port_dest_new']
+        detail_url = reverse("inventory-api:fiber-detail", args=[cable.id])
 
         # Update only the destination port
         response = authenticated_client.put(
-            f'/zabbix_api/api/fiber/{cable.id}/',
-            data={'dest_port_id': port_new.id},
-            content_type='application/json'
+            detail_url,
+            data=json.dumps({"dest_port_id": port_new.id}),
+            content_type="application/json",
         )
         assert response.status_code == 200
 
@@ -180,12 +185,13 @@ class TestFiberEditPersistence:
         cable = test_cable['cable']
         original_origin = cable.origin_port_id
         original_path = cable.path_coordinates
+        detail_url = reverse("inventory-api:fiber-detail", args=[cable.id])
 
         # Update only the name
         response = authenticated_client.put(
-            f'/zabbix_api/api/fiber/{cable.id}/',
-            data={'name': 'Only Name Changed'},
-            content_type='application/json'
+            detail_url,
+            data=json.dumps({"name": "Only Name Changed"}),
+            content_type="application/json",
         )
         assert response.status_code == 200
 

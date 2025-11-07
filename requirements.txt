@@ -25,6 +25,7 @@ django-prometheus==2.4.1
 django-redis==6.0.0
 django-stubs==5.1.1
 django-stubs-ext==5.1.1
+djangorestframework-stubs==3.15.0
 gunicorn==23.0.0
 hyperlink==21.0.0
 idna==3.10
@@ -59,6 +60,7 @@ Twisted==25.5.0
 txaio==25.9.2
 typing_extensions==4.15.0
 types-PyYAML==6.0.12.20240917
+types-requests==2.32.0.20241016
 tzdata==2025.2
 urllib3==2.5.0
 vine==5.1.0

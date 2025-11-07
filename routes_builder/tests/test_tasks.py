@@ -6,9 +6,9 @@ from typing import Any, Iterable, cast
 
 import pytest
 
-from routes_builder import services
-from routes_builder.models import Route
-from routes_builder.tasks import (
+from inventory import routes as services
+from inventory.models_routes import Route
+from inventory.routes.tasks import (
     build_route,
     build_routes_batch,
     health_check_routes_builder,
@@ -29,7 +29,7 @@ def test_build_route_task_success(monkeypatch: Any, route: Route) -> None:
         captured_context["context"] = context
         return services.RouteBuildResult(
             route_id=route.id,
-            status=services.Route.STATUS_ACTIVE,
+            status=Route.STATUS_ACTIVE,
             segments_created=0,
             events_recorded=1,
             metadata=metadata,
@@ -51,7 +51,7 @@ def test_build_route_task_success(monkeypatch: Any, route: Route) -> None:
     assert result == {
         "status": "success",
         "route_id": route.id,
-        "route_status": services.Route.STATUS_ACTIVE,
+        "route_status": Route.STATUS_ACTIVE,
         "segments_created": 0,
         "events_recorded": 1,
         "metadata": metadata,
@@ -79,14 +79,14 @@ def test_build_route_task_handles_service_error(monkeypatch: Any) -> None:
 def test_build_routes_batch_task(monkeypatch: Any, route: Route) -> None:
     second_result = services.RouteBuildResult(
         route_id=route.id + 1,
-        status=services.Route.STATUS_ACTIVE,
+        status=Route.STATUS_ACTIVE,
         segments_created=2,
         events_recorded=1,
         metadata={"segment_count": 2},
     )
     first_result = services.RouteBuildResult(
         route_id=route.id,
-        status=services.Route.STATUS_ACTIVE,
+        status=Route.STATUS_ACTIVE,
         segments_created=1,
         events_recorded=1,
         metadata={"segment_count": 1},
@@ -134,7 +134,7 @@ def test_import_route_task_success(monkeypatch: Any, route: Route) -> None:
         assert created_by == "tests"
         return services.RouteBuildResult(
             route_id=route.id,
-            status=services.Route.STATUS_ACTIVE,
+            status=Route.STATUS_ACTIVE,
             segments_created=1,
             events_recorded=2,
             metadata=metadata,

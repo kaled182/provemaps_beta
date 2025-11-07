@@ -168,7 +168,7 @@ class TrafficChartManager {
 
             // ---- Busca na API ----
             if (!payload) {
-                let endpoint = `/zabbix_api/api/port-traffic-history/${portId}/?period=${period}h`;
+                let endpoint = `/api/v1/inventory/ports/${portId}/traffic/?period=${period}h`;
                 
                 // Adiciona parameter incremental se available
                 if (lastTimestamp) {

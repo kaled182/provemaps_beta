@@ -1,3 +1,8 @@
+# pyright: reportGeneralTypeIssues=false
+# pyright: reportUnknownMemberType=false
+# pyright: reportUnknownVariableType=false
+# pyright: reportUnknownArgumentType=false
+
 """
 Celery application for the MapsProveFiber project.
 
@@ -9,8 +14,11 @@ Celery application for the MapsProveFiber project.
 
 import os
 import time
-from celery import Celery
-from kombu import Queue, Exchange
+from typing import Any, Dict
+
+from celery import Celery  # type: ignore[import-not-found]
+from celery.app.task import Task  # type: ignore[import-not-found]
+from kombu import Queue, Exchange  # type: ignore[import-not-found]
 
 # ---------------------------------------------------------------------
 # Django settings bootstrap
@@ -36,6 +44,7 @@ _broker_url = (
     or "redis://localhost:6379/1"
 )
 _result_backend = os.getenv("CELERY_RESULT_BACKEND") or _broker_url
+_default_queue = os.getenv("CELERY_DEFAULT_QUEUE", "default")
 
 # Default interval (seconds) for dashboard refresh via SWR
 _dashboard_refresh_interval = float(
@@ -138,7 +147,7 @@ app.conf.update(
             "options": {"queue": "default"},
         },
         "refresh-dashboard-cache": {
-            "task": "maps_view.tasks.refresh_dashboard_cache_task",
+            "task": "monitoring.tasks.refresh_dashboard_cache_task",
             "schedule": _dashboard_refresh_interval,
             "options": {"queue": "maps"},
         },
@@ -161,26 +170,29 @@ app.conf.update(
 _default_exchange_name = os.getenv("CELERY_DEFAULT_EXCHANGE", "mapsprovefiber")
 _default_exchange = Exchange(_default_exchange_name, type="direct")
 
+app.conf.update(
+    task_default_queue=_default_queue,
+    task_default_exchange=_default_exchange_name,
+    task_default_routing_key=_default_queue,
+)
+
 app.conf.task_queues = (
     Queue("default", _default_exchange, routing_key="default"),
     Queue("zabbix", _default_exchange, routing_key="zabbix"),
     Queue("maps", _default_exchange, routing_key="maps"),
 )
 
-app.conf.task_default_queue = os.getenv("CELERY_DEFAULT_QUEUE", "default")
-app.conf.task_default_exchange = _default_exchange_name
-app.conf.task_default_routing_key = app.conf.task_default_queue
-
 # Routing rules grouped by task namespace
 app.conf.task_routes = {
-    # Tasks from the Zabbix app (e.g. zabbix_api/tasks.py -> @shared_task)
-    "zabbix_api.tasks.*": {"queue": "zabbix", "routing_key": "zabbix"},
+    # Inventory warmers live in inventory.tasks but still use the zabbix queue
+    "inventory.tasks.warm_*": {"queue": "zabbix", "routing_key": "zabbix"},
 
-    # Fiber/route tasks (e.g. routes_builder/tasks.py)
-    "routes_builder.tasks.*": {"queue": "maps", "routing_key": "maps"},
+    # Fiber/route domain tasks exposed via inventory namespace
+    "inventory.routes.tasks.*": {"queue": "maps", "routing_key": "maps"},
 
-    # Dashboard/maps view tasks
+    # Dashboard/maps view tasks (legacy shim) + monitoring tasks (new location)
     "maps_view.tasks.*": {"queue": "maps", "routing_key": "maps"},
+    "monitoring.tasks.*": {"queue": "maps", "routing_key": "maps"},
 }
 
 # ---------------------------------------------------------------------
@@ -193,7 +205,7 @@ app.autodiscover_tasks()
 # Simple diagnostic task (used by worker health checks)
 # ---------------------------------------------------------------------
 @app.task(bind=True)
-def ping(self):
+def ping(self: Task) -> str:
     """Return "pong"; handy for sanity-checking worker health."""
     return "pong"
 
@@ -202,7 +214,7 @@ def ping(self):
 # Comprehensive worker health check task
 # ---------------------------------------------------------------------
 @app.task(bind=True)
-def health_check(self):
+def health_check(self: Task) -> Dict[str, Any]:
     """Run a set of lightweight diagnostics against the worker."""
     # Basic functionality test
     basic_test = "pong"
@@ -234,7 +246,7 @@ def health_check(self):
 # Queue statistics task (feeds dashboards)
 # ---------------------------------------------------------------------
 @app.task(bind=True)
-def get_queue_stats(self):
+def get_queue_stats(self: Task) -> Dict[str, Any]:
     """Return queue statistics for dashboard consumption."""
     try:
         inspector = self.app.control.inspect()

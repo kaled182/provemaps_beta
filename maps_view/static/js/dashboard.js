@@ -165,7 +165,7 @@ function clearFallbackTimer() {
 
 async function fetchHostsSnapshot() {
     try {
-        const snapshotResponse = await fetchJSON('/maps_view/api/hosts-status/');
+    const snapshotResponse = await fetchJSON('/api/v1/monitoring/hosts/status/');
         if (!snapshotResponse) {
             return;
         }
@@ -483,7 +483,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function fetchJSON(url) {
     const response = await fetch(url, {
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        },
         credentials: 'same-origin'
     });
 
@@ -872,7 +875,7 @@ async function addDeviceMarker(dev, siteName, siteCity) {
 
         try {
             // Use optimized endpoint that already returns ports with optical readings
-            const portsResp = await fetch(`/zabbix_api/api/device-ports-optical/${dev.id}/`);
+            const portsResp = await fetch(`/api/v1/inventory/devices/${dev.id}/ports/optical/`);
 
             if (portsResp.ok) {
                 const portsData = await portsResp.json();
@@ -940,8 +943,8 @@ async function addDeviceMarker(dev, siteName, siteCity) {
 async function loadData() {
     try {
         const [cablesResp, sitesResp] = await Promise.all([
-            fetchJSON('/zabbix_api/api/fibers/'),
-            fetchJSON('/zabbix_api/api/sites/')
+            fetchJSON('/api/v1/inventory/fibers/'),
+            fetchJSON('/api/v1/inventory/sites/')
         ]);
 
         // Devices per site
@@ -998,70 +1001,104 @@ async function loadData() {
     }
 }
 
+function normalizeOpticalValue(rawValue) {
+    if (rawValue === null || rawValue === undefined) {
+        return null;
+    }
+    const numeric = Number(rawValue);
+    return Number.isFinite(numeric) ? numeric : null;
+}
+
+function applyCableStatusUpdate(cid, payload) {
+    const cableId = String(cid);
+    const poly = cablePolylines[cableId];
+    const resolvedStatus = payload.status || payload.combined_status || payload.stored_status || 'unknown';
+
+    if (poly) {
+        poly.setOptions({
+            strokeColor: STATUS_COLORS[resolvedStatus] || STATUS_COLORS.unknown,
+        });
+
+        const cachedCable = cableDataCache[cableId];
+        if (cachedCable) {
+            cachedCable.status = resolvedStatus;
+            cachedCable.origin_optical = payload.origin_optical || null;
+            cachedCable.destination_optical = payload.destination_optical || null;
+            cachedCable.origin_status = payload.origin_status;
+            cachedCable.destination_status = payload.destination_status;
+            cachedCable.origin_raw = payload.origin_raw;
+            cachedCable.destination_raw = payload.destination_raw;
+            cachedCable.origin_meta = payload.origin_meta;
+            cachedCable.destination_meta = payload.destination_meta;
+
+            if (poly._infoWindow) {
+                poly._infoWindow.setContent(buildCableInfoContent(cachedCable));
+                if (typeof attachTrafficButtonListeners === 'function') {
+                    attachTrafficButtonListeners();
+                }
+            }
+        }
+    }
+
+    const listItem = document.getElementById(`cable-li-${cableId}`);
+    if (listItem) {
+        const dot = listItem.querySelector('.status-dot');
+        if (dot) {
+            dot.style.background = STATUS_COLORS[resolvedStatus] || STATUS_COLORS.unknown;
+        }
+
+        const originOpt = payload.origin_optical || {};
+        const destOpt = payload.destination_optical || {};
+
+        const originRx = normalizeOpticalValue(originOpt.rx_dbm);
+        const originTx = normalizeOpticalValue(originOpt.tx_dbm);
+        const destRx = normalizeOpticalValue(destOpt.rx_dbm);
+        const destTx = normalizeOpticalValue(destOpt.tx_dbm);
+
+        if (originRx !== null || originTx !== null || destRx !== null || destTx !== null) {
+            const format = (val) => (val !== null ? val.toFixed(2) : 'N/A');
+            listItem.title = `Status: ${resolvedStatus}\n` +
+                `Origin - RX: ${format(originRx)} dBm | TX: ${format(originTx)} dBm\n` +
+                `Destination - RX: ${format(destRx)} dBm | TX: ${format(destTx)} dBm`;
+        } else if (payload.origin_raw || payload.destination_raw) {
+            listItem.title = `Status: ${resolvedStatus}\n` +
+                `Origin raw: ${payload.origin_raw ?? 'N/A'}\n` +
+                `Destination raw: ${payload.destination_raw ?? 'N/A'}`;
+        } else if (payload.raw_value) {
+            listItem.title = `Zabbix value: ${payload.raw_value}`;
+        } else {
+            listItem.title = `Status: ${resolvedStatus}`;
+        }
+    }
+}
+
 async function refreshCableStatusValueMapped() {
     const ids = Object.keys(cablePolylines);
+    if (!ids.length) {
+        return;
+    }
 
-    await Promise.all(ids.map(async (cid) => {
-        try {
-            const resp = await fetch(`/zabbix_api/api/update-cable-oper-status/${cid}/`, {
-                method: 'GET',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                credentials: 'same-origin',
-            });
+    const params = new URLSearchParams();
+    params.set('ids', ids.join(','));
 
-            if (!resp.ok) return;
-            const data = await resp.json();
+    try {
+        const payload = await fetchJSON(`/api/v1/inventory/fibers/oper-status/?${params.toString()}`);
+        const results = Array.isArray(payload?.results) ? payload.results : [];
+        const statusById = new Map(results.map((entry) => [String(entry.cable_id), entry]));
 
-            const poly = cablePolylines[cid];
-            const status = data.status || 'unknown';
-
-            if (poly) {
-                poly.setOptions({ strokeColor: STATUS_COLORS[status] || STATUS_COLORS.unknown });
-
-                // Update cached cable data with optical power information
-                const cachedCable = cableDataCache[cid];
-                if (cachedCable) {
-                    cachedCable.status = status;
-                    cachedCable.origin_optical = data.origin_optical;
-                    cachedCable.destination_optical = data.destination_optical;
-
-                    // Refresh the InfoWindow content if present
-                    if (poly._infoWindow) {
-                        poly._infoWindow.setContent(buildCableInfoContent(cachedCable));
-                        if (typeof attachTrafficButtonListeners === 'function') {
-                            attachTrafficButtonListeners();
-                        }
-                    }
-                }
+        ids.forEach((cid) => {
+            const statusPayload = statusById.get(String(cid));
+            if (statusPayload) {
+                applyCableStatusUpdate(cid, statusPayload);
             }
+        });
 
-            const li = document.getElementById('cable-li-' + cid);
-            if (li) {
-                const dot = li.querySelector('.status-dot');
-                if (dot) dot.style.background = STATUS_COLORS[status] || STATUS_COLORS.unknown;
-
-                // Update tooltip with optical power information
-                if (data.origin_optical || data.destination_optical) {
-                    const originRx = data.origin_optical?.rx_dbm;
-                    const originTx = data.origin_optical?.tx_dbm;
-                    const destRx = data.destination_optical?.rx_dbm;
-                    const destTx = data.destination_optical?.tx_dbm;
-
-                    li.title = `Status: ${status}\n` +
-                        `Origin - RX: ${originRx !== null ? originRx.toFixed(2) : 'N/A'} dBm | TX: ${originTx !== null ? originTx.toFixed(2) : 'N/A'} dBm\n` +
-                        `Destination - RX: ${destRx !== null ? destRx.toFixed(2) : 'N/A'} dBm | TX: ${destTx !== null ? destTx.toFixed(2) : 'N/A'} dBm`;
-                } else if (status.startsWith('unknown') || status === 'unknown') {
-                    li.title = `Zabbix value: ${data.raw_value || 'N/A'}`;
-                } else {
-                    li.title = `Status: ${status}`;
-                }
-            }
-        } catch (e) {
-            console.error('Error updating cable status:', e);
+        if (Array.isArray(payload?.missing_ids) && payload.missing_ids.length) {
+            console.warn('Fiber status not found for ids:', payload.missing_ids);
         }
-    }));
+    } catch (e) {
+        console.error('Error updating cable status:', e);
+    }
 }
 
 function startStatusPolling() {

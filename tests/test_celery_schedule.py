@@ -9,7 +9,7 @@ def test_dashboard_cache_refresh_scheduled():
     schedule = app.conf.beat_schedule
     assert "refresh-dashboard-cache" in schedule
     entry = schedule["refresh-dashboard-cache"]
-    assert entry["task"] == "maps_view.tasks.refresh_dashboard_cache_task"
+    assert entry["task"] == "monitoring.tasks.refresh_dashboard_cache_task"
 
 
 def test_inventory_sync_scheduled():

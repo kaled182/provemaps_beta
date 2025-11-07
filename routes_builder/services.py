@@ -30,7 +30,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from inventory.models import Port
-from routes_builder.models import Route, RouteEvent, RouteSegment
+from inventory.models_routes import Route, RouteEvent, RouteSegment
 
 
 logger = logging.getLogger(__name__)

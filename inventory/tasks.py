@@ -6,12 +6,20 @@ Background tasks for inventory synchronization and maintenance.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
-from celery import shared_task
+from celery import shared_task  # type: ignore[import-not-found]
 from django.core.management import call_command
 
+from inventory.domain import optical as optical_domain
+from inventory.models import Port
+
 logger = logging.getLogger(__name__)
+
+fetch_port_optical_snapshot = getattr(
+    optical_domain,
+    "fetch_port_optical_snapshot",
+)
 
 
 @shared_task(
@@ -21,7 +29,7 @@ logger = logging.getLogger(__name__)
     default_retry_delay=300,  # 5 minutes
 )
 def sync_zabbix_inventory_task(
-    self,
+    self: Any,
     limit: int | None = None,
     host_filter: str | None = None,
     update_only: bool = False
@@ -65,12 +73,15 @@ def sync_zabbix_inventory_task(
         sys.stdout = captured_output = StringIO()
 
         try:
-            call_command("sync_zabbix_inventory", *command_args, **command_kwargs)
+            call_command(
+                "sync_zabbix_inventory",
+                *command_args,
+                **command_kwargs,
+            )
             output = captured_output.getvalue()
         finally:
             sys.stdout = old_stdout
-
-        logger.info(f"Zabbix inventory sync completed successfully")
+        logger.info("Zabbix inventory sync completed successfully")
 
         return {
             "success": True,
@@ -122,3 +133,58 @@ def cleanup_orphaned_ports_task() -> dict[str, int]:
 
     logger.info(f"Orphaned ports cleanup completed: {result}")
     return result
+
+
+@shared_task(name="inventory.tasks.warm_port_optical_cache")
+def warm_port_optical_cache(port_id: int) -> None:
+    """Refresh the cached optical snapshot for a single port."""
+    port = (
+        Port.objects.select_related("device")
+        .only(
+            "id",
+            "device_id",
+            "device__zabbix_hostid",
+            "rx_power_item_key",
+            "tx_power_item_key",
+        )
+        .filter(id=port_id)
+        .first()
+    )
+    if not port:
+        return
+
+    fetch_port_optical_snapshot(
+        port,
+        discovery_cache={},
+        persist_keys=False,
+    )
+
+
+@shared_task(name="inventory.tasks.warm_device_ports")
+def warm_device_ports(device_id: int) -> None:
+    """Warm optical snapshots for every port belonging to a device."""
+    ports = (
+        Port.objects.select_related("device")
+        .only(
+            "id",
+            "device_id",
+            "device__zabbix_hostid",
+            "rx_power_item_key",
+            "tx_power_item_key",
+        )
+        .filter(device_id=device_id)
+    )
+    for port in ports:
+        fetch_port_optical_snapshot(
+            port,
+            discovery_cache={},
+            persist_keys=False,
+        )
+
+
+@shared_task(name="inventory.tasks.warm_all_optical_snapshots")
+def warm_all_optical_snapshots() -> None:
+    """Queue optical cache refresh for every monitored port."""
+    port_ids = list(Port.objects.values_list("id", flat=True))
+    for port_id in port_ids:
+        cast(Any, warm_port_optical_cache).delay(int(port_id))

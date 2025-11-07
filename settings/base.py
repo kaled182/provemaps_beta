@@ -108,11 +108,17 @@ INSTALLED_APPS = [
     "core.apps.CoreConfig",
     "maps_view",
     "service_accounts.apps.ServiceAccountsConfig",
-    # Network inventory (models migrated from zabbix_api)
+    # Network inventory (models and routes consolidated in inventory)
     "inventory",
+    # Zombie app - kept only for migration compatibility (2025-11-07)
+    # All models migrated to inventory. Routes/models/views inactive.
+    # Required for pytest test database creation via migrations.
     "routes_builder",
     "setup_app",
-    "zabbix_api",
+    # Modular apps (Phase 0 scaffolding)
+    "monitoring",
+    "gpon",
+    "dwdm",
 ]
 
 MIDDLEWARE = [

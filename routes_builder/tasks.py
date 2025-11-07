@@ -13,7 +13,7 @@ from typing import (
     TypeVar,
 )
 
-from routes_builder import services
+from inventory import routes as services
 
 logger = logging.getLogger(__name__)
 
