@@ -1,3 +1,5 @@
+# pyright: reportGeneralTypeIssues=false
+
 """Tests for batch rebuild, JSON import, and cache invalidation services."""
 
 from __future__ import annotations
@@ -6,10 +8,22 @@ from decimal import Decimal
 from typing import Any, Protocol, cast
 
 import pytest
+from django.apps import apps
 from django.core.cache import cache
 
-from routes_builder import services
-from routes_builder.models import Route, RouteEvent, RouteSegment
+from inventory import routes as services
+
+RouteModel = RouteEventModel = RouteSegmentModel = Any
+
+Route = cast("type[RouteModel]", apps.get_model("inventory", "Route"))
+RouteEvent = cast(
+    "type[RouteEventModel]",
+    apps.get_model("inventory", "RouteEvent"),
+)
+RouteSegment = cast(
+    "type[RouteSegmentModel]",
+    apps.get_model("inventory", "RouteSegment"),
+)
 
 
 class PortFactory(Protocol):
@@ -19,7 +33,7 @@ class PortFactory(Protocol):
 
 @pytest.mark.django_db
 def test_rebuild_routes_batch_handles_success_and_failures(
-    route: Route,
+    route: RouteModel,
     port_factory: PortFactory,
 ) -> None:
     second_route = Route.objects.create(
@@ -128,7 +142,7 @@ def test_import_route_from_payload_creates_full_structure(
 
 @pytest.mark.django_db
 def test_import_route_updates_existing_route(
-    route: Route,
+    route: RouteModel,
     port_factory: PortFactory,
 ) -> None:
     new_mid: Any = port_factory(prefix="upd-mid")

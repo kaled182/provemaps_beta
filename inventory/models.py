@@ -6,6 +6,9 @@ database table names using Meta.db_table to avoid data migration issues.
 """
 from __future__ import annotations
 
+from importlib import import_module
+from typing import TYPE_CHECKING, Any, cast
+
 from django.db import models
 from django.utils import timezone
 
@@ -17,8 +20,18 @@ class Site(models.Model):
     """
     name = models.CharField(max_length=120, unique=True)
     city = models.CharField(max_length=120, blank=True)
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+    )
+    longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+    )
     description = models.TextField(blank=True)
 
     class Meta:
@@ -34,19 +47,36 @@ class Device(models.Model):
     Network device (router, switch, OLT, etc.) at a site.
     Original table: zabbix_api_device
     """
-    site = models.ForeignKey(Site, related_name="devices", on_delete=models.CASCADE)
-    device_icon = models.ImageField(upload_to="img/device_icons/", null=True, blank=True)
+    site = models.ForeignKey(
+        Site,
+        related_name="devices",
+        on_delete=models.CASCADE,
+    )
+    device_icon = models.ImageField(
+        upload_to="img/device_icons/",
+        null=True,
+        blank=True,
+    )
     name = models.CharField(max_length=120)
     vendor = models.CharField(max_length=120, blank=True)
     model = models.CharField(max_length=120, blank=True)
-    zabbix_hostid = models.CharField(max_length=32, blank=True, help_text="hostid inside Zabbix")
+    zabbix_hostid = models.CharField(
+        max_length=32,
+        blank=True,
+        help_text="hostid inside Zabbix",
+    )
     uptime_item_key = models.CharField(
-        max_length=255, blank=True, help_text="Zabbix item key for uptime (e.g. system.uptime)"
+        max_length=255,
+        blank=True,
+        help_text="Zabbix item key for uptime (e.g. system.uptime)",
     )
     cpu_usage_item_key = models.CharField(
         max_length=255,
         blank=True,
-        help_text="Zabbix item key for CPU usage (e.g. system.cpu.util[,user])",
+        help_text=(
+            "Zabbix item key for CPU usage "
+            "(e.g. system.cpu.util[,user])"
+        ),
     )
 
     class Meta:
@@ -57,13 +87,20 @@ class Device(models.Model):
     def __str__(self) -> str:
         return f"{self.site.name} - {self.name}" if self.site_id else self.name
 
+    if TYPE_CHECKING:
+        site_id: int | None
+
 
 class Port(models.Model):
     """
     Network port/interface on a device.
     Original table: zabbix_api_port
     """
-    device = models.ForeignKey(Device, related_name="ports", on_delete=models.CASCADE)
+    device = models.ForeignKey(
+        Device,
+        related_name="ports",
+        on_delete=models.CASCADE,
+    )
     name = models.CharField(max_length=64)
     zabbix_item_key = models.CharField(
         max_length=255,
@@ -198,3 +235,22 @@ class FiberEvent(models.Model):
             f"{self.fiber.name} {self.previous_status}->{self.new_status} "
             f"@ {self.timestamp:%Y-%m-%d %H:%M:%S}"
         )
+
+
+# Route models now live in inventory.models_routes. Import them dynamically to
+# expose the public API while avoiding circular imports during Django startup.
+if TYPE_CHECKING:
+    from .models_routes import Route as RouteModel
+    from .models_routes import RouteEvent as RouteEventModel
+    from .models_routes import RouteSegment as RouteSegmentModel
+else:  # pragma: no cover - runtime only typing fallbacks
+    RouteModel = RouteEventModel = RouteSegmentModel = Any
+
+_routes = import_module("inventory.models_routes")
+
+Route = cast("type[RouteModel]", getattr(_routes, "Route"))
+RouteEvent = cast("type[RouteEventModel]", getattr(_routes, "RouteEvent"))
+RouteSegment = cast(
+    "type[RouteSegmentModel]",
+    getattr(_routes, "RouteSegment"),
+)

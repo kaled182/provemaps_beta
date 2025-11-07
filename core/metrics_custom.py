@@ -13,16 +13,16 @@ from typing import Optional
 from prometheus_client import Counter, Gauge, Histogram, Info
 
 
-# Zabbix API Metrics
-zabbix_api_latency = Histogram(
-    'zabbix_api_latency_seconds',
+# Zabbix integration metrics
+zabbix_client_latency = Histogram(
+    'integrations_zabbix_latency_seconds',
     'Latency of Zabbix API calls in seconds',
     labelnames=['endpoint', 'status'],
     buckets=[0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0]
 )
 
-zabbix_api_calls_total = Counter(
-    'zabbix_api_calls_total',
+zabbix_client_calls_total = Counter(
+    'integrations_zabbix_calls_total',
     'Total number of Zabbix API calls',
     labelnames=['endpoint', 'status', 'error_type']
 )
@@ -99,10 +99,10 @@ def record_zabbix_call(
 ):
     """Record a Zabbix API call."""
     status = 'success' if success else 'error'
-    zabbix_api_latency.labels(
+    zabbix_client_latency.labels(
         endpoint=endpoint, status=status
     ).observe(duration)
-    zabbix_api_calls_total.labels(
+    zabbix_client_calls_total.labels(
         endpoint=endpoint,
         status=status,
         error_type=error_type or 'none'

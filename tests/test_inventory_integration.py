@@ -29,14 +29,6 @@ class InventoryModelsImportTests(SimpleTestCase):
         except ImportError as e:
             self.fail(f"Failed to import inventory models: {e}")
 
-    def test_zabbix_api_models_reexport_inventory(self):
-        """Legacy import path should re-export inventory models."""
-        from zabbix_api import models as legacy_models
-
-        self.assertIs(legacy_models.Site, Site)
-        self.assertIs(legacy_models.Device, Device)
-        self.assertIs(legacy_models.Port, Port)
-
     def test_models_use_correct_db_tables(self):
         """Verify models use preserved database table names."""
         self.assertEqual(Site._meta.db_table, "zabbix_api_site")

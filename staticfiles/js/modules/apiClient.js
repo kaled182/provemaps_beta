@@ -5,7 +5,7 @@
 //  - Abstract fetch & CSRF details
 //  - Keep responses as-is (caller shapes UI)
 
-const API_BASE = '/zabbix_api/api';
+const API_BASE = '/api/v1/inventory';
 
 function getCookie(name) {
   const value = `; ${document.cookie}`;
@@ -58,7 +58,7 @@ export async function fetchFibers() {
 
 // Fiber detail
 export async function fetchFiber(id) {
-  return await request(`/fiber/${id}/`);
+  return await request(`/fibers/${id}/`);
 }
 
 // Manual create fiber (includes endpoints + path)
@@ -71,7 +71,7 @@ export async function createFiberManual(payload) {
 
 // Update entire fiber (metadata or path combined)
 export async function updateFiber(id, payload) {
-  return await request(`/fiber/${id}/`, {
+  return await request(`/fibers/${id}/`, {
     method: 'PUT',
     body: JSON.stringify(payload),
   });
@@ -79,13 +79,13 @@ export async function updateFiber(id, payload) {
 
 // Delete fiber
 export async function removeFiber(id) {
-  await request(`/fiber/${id}/`, { method: 'DELETE', skipJson: true });
+  await request(`/fibers/${id}/`, { method: 'DELETE', skipJson: true });
   return true;
 }
 
 // Device ports
 export async function fetchDevicePorts(deviceId) {
-  return await request(`/device-ports/${deviceId}/`);
+  return await request(`/devices/${deviceId}/ports/`);
 }
 
 export { getCookie }; // Optional export if caller still uses directly

@@ -58,15 +58,15 @@ Completed files are tracked below; pending items remain highlighted per category
 - `settings/dev.py` — development overrides translated to English on 2025-11-03
 - `settings/prod.py` — production overrides translated to English on 2025-11-03
 - `settings/test.py` — test overrides translated to English on 2025-11-03
-- `zabbix_api/client.py` — resilient API client translated to English on 2025-11-03
-- `zabbix_api/decorators.py` — API decorators translated to English on 2025-11-03
+- `integrations/zabbix/client.py` — resilient API client translated to English on 2025-11-03
+- `integrations/zabbix/decorators.py` — API decorators translated to English on 2025-11-03
 - `zabbix_api/domain/geometry.py` — geometry utilities translated to English on 2025-11-03
 - `zabbix_api/domain/optical.py` — optical power helpers translated to English on 2025-11-03
 - `zabbix_api/inventory.py` — inventory endpoints translated to English on 2025-11-03
 - `zabbix_api/management/commands/show_slow_queries.py` — translated to English on 2025-11-04
 - `zabbix_api/management/commands/warm_optical_cache.py` — translated to English on 2025-11-04
-- `zabbix_api/services/zabbix_client.py` — translated to English on 2025-11-04
-- `zabbix_api/services/zabbix_service.py` — phase-one translation & cleanup completed on 2025-11-04
+- `integrations/zabbix/zabbix_client.py` — translated to English on 2025-11-04
+- `integrations/zabbix/zabbix_service.py` — phase-one translation & cleanup completed on 2025-11-04
 - `zabbix_api/usecases/fibers.py` — runtime validations and comments translated on 2025-11-04
 - `zabbix_api/usecases/__init__.py` — module docstring translated to English on 2025-11-04
 - `tests/usecases/test_fibers.py` — assertions and fixtures translated to English on 2025-11-04

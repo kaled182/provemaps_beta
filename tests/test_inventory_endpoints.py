@@ -24,12 +24,15 @@ class PortTrafficHistoryAPITests(TestCase):
         )
 
     def test_returns_400_when_port_missing_traffic_items(self):
-        url = reverse("zabbix_api:api_port_traffic_history", args=[self.port.id])
+        url = reverse(
+            "inventory-api:port-traffic-history",
+            args=[self.port.id],
+        )
         response = self.client.get(url)
         self.assertEqual(response.status_code, 400)
         self.assertIn("traffic items", response.json()["error"])
 
-    @patch("zabbix_api.usecases.inventory.ZABBIX_REQUEST")
+    @patch("inventory.usecases.devices.ZABBIX_REQUEST")
     def test_returns_history_payload(self, request_mock):
         self.port.zabbix_item_id_traffic_in = "111"
         self.port.zabbix_item_id_traffic_out = "222"
@@ -58,7 +61,10 @@ class PortTrafficHistoryAPITests(TestCase):
 
         request_mock.side_effect = fake_zabbix_request
 
-        url = reverse("zabbix_api:api_port_traffic_history", args=[self.port.id])
+        url = reverse(
+            "inventory-api:port-traffic-history",
+            args=[self.port.id],
+        )
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -80,14 +86,24 @@ class ManualFiberCreationTests(TestCase):
             model="C9500",
             zabbix_hostid="2001",
         )
-        self.origin_port = Port.objects.create(device=self.device, name="Gi1/0/1")
-        self.dest_port = Port.objects.create(device=self.device, name="Gi1/0/2")
-        user = get_user_model().objects.create_user("staff", password="pass", is_staff=True)
+        self.origin_port = Port.objects.create(
+            device=self.device,
+            name="Gi1/0/1",
+        )
+        self.dest_port = Port.objects.create(
+            device=self.device,
+            name="Gi1/0/2",
+        )
+        user = get_user_model().objects.create_user(
+            "staff",
+            password="pass",
+            is_staff=True,
+        )
         self.client.force_login(user)
 
-    @patch("zabbix_api.inventory.staff_guard", return_value=None)
+    @patch("inventory.api.fibers.staff_guard", return_value=None)
     def test_create_manual_fiber_for_same_device(self, guard_mock):
-        url = reverse("zabbix_api:api_create_manual_fiber")
+        url = reverse("inventory-api:fibers-manual-create")
         payload = {
             "name": "Manual Backbone",
             "origin_device_id": str(self.device.id),
@@ -101,7 +117,11 @@ class ManualFiberCreationTests(TestCase):
             ],
         }
 
-        response = self.client.post(url, data=json.dumps(payload), content_type="application/json")
+        response = self.client.post(
+            url,
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn("fiber_id", data)
@@ -112,9 +132,9 @@ class ManualFiberCreationTests(TestCase):
         self.assertEqual(len(fiber.path_coordinates), 3)
         self.assertGreater(float(data["length_km"]), 0.0)
 
-    @patch("zabbix_api.inventory.staff_guard", return_value=None)
+    @patch("inventory.api.fibers.staff_guard", return_value=None)
     def test_create_manual_fiber_single_port(self, guard_mock):
-        url = reverse("zabbix_api:api_create_manual_fiber")
+        url = reverse("inventory-api:fibers-manual-create")
         payload = {
             "name": "Local Loop",
             "origin_device_id": str(self.device.id),
@@ -128,7 +148,11 @@ class ManualFiberCreationTests(TestCase):
             ],
         }
 
-        response = self.client.post(url, data=json.dumps(payload), content_type="application/json")
+        response = self.client.post(
+            url,
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
         self.assertEqual(response.status_code, 200)
         data = response.json()
 

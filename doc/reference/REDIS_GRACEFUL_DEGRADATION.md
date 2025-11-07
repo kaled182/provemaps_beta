@@ -16,6 +16,8 @@ No connection could be made because the target machine actively refused it.
 [ERROR] django.server: "GET /zabbix_api/lookup/hosts/?groupids=22 HTTP/1.1" 500 37
 ```
 
+> Observação: os endpoints de `lookup` ainda residem em `/zabbix_api/` até concluirmos a migração dos autocompletes; demais recursos já usam `/api/v1/inventory/`.
+
 ### Root Cause
 The code invoked `cache.get()` and `cache.set()` without exception handling, which led to:
 - ❌ HTTP 500 (Internal Server Error) whenever Redis was offline
@@ -28,7 +30,7 @@ The code invoked `cache.get()` and `cache.set()` without exception handling, whi
 
 ### 1. Safe cache wrappers
 
-Three helpers were created in `zabbix_api/services/zabbix_service.py`:
+Three helpers were created in `integrations/zabbix/zabbix_service.py`:
 
 ```python
 def safe_cache_get(key, default=None):
@@ -65,7 +67,7 @@ def safe_cache_delete(key):
 
 ### 2. Replacements applied
 
-#### zabbix_api/services/zabbix_service.py
+#### integrations/zabbix/zabbix_service.py
 - ✅ `search_hosts()` – line ~585
 - ✅ `search_hosts()` cache set – line ~666
 - ✅ `get_host_interfaces()` – line ~677
@@ -91,13 +93,13 @@ Total: **10 replacements** in `zabbix_service.py`
 
 ### With Redis online
 ```
-[DEBUG] zabbix_api.services: Cache HIT for search_hosts:q=test...
+[DEBUG] integrations.zabbix.zabbix_service: Cache HIT for search_hosts:q=test...
 → Optimized performance, instant results
 ```
 
 ### With Redis offline
 ```
-[DEBUG] zabbix_api.services: Cache offline (Redis unavailable), continuing without cache: ConnectionError
+[DEBUG] integrations.zabbix.zabbix_service: Cache offline (Redis unavailable), continuing without cache: ConnectionError
 → Application keeps working, falls back to direct Zabbix queries (slower but functional)
 ```
 
@@ -115,7 +117,7 @@ Total: **10 replacements** in `zabbix_service.py`
 ## 📊 Impact
 
 ### Files touched
-- `zabbix_api/services/zabbix_service.py` – 10 cache calls
+- `integrations/zabbix/zabbix_service.py` – 10 cache calls
 - `zabbix_api/inventory_cache.py` – 1 cache call
 - `routes_builder/views_tasks.py` – 1 rate-limiting hook
 

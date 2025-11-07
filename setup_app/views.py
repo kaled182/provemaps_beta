@@ -7,7 +7,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.shortcuts import redirect, render
 
-from zabbix_api.guards import reload_diagnostics_flag_cache
+from integrations.zabbix.guards import reload_diagnostics_flag_cache
 
 from .forms import EnvConfigForm, FirstTimeSetupForm
 from .models import FirstTimeSetup
@@ -89,7 +89,7 @@ def first_time_setup(request):
             env_payload["SERVICE_RESTART_COMMANDS"] = commands
             env_manager.write_values(env_payload)
             runtime_settings.reload_config()
-            from zabbix_api.services.zabbix_service import clear_token_cache
+            from integrations.zabbix.zabbix_service import clear_token_cache
 
             clear_token_cache()
             reload_diagnostics_flag_cache()
@@ -212,7 +212,7 @@ def manage_environment(request):
             clear_runtime_config_cache()
             runtime_settings.reload_config()
 
-            from zabbix_api.services.zabbix_service import clear_token_cache
+            from integrations.zabbix.zabbix_service import clear_token_cache
 
             clear_token_cache()
             reload_diagnostics_flag_cache()

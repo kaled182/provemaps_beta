@@ -11,6 +11,7 @@ from typing import Any, Tuple
 import pytest
 from django.contrib.auth.models import User
 from django.test import Client
+from django.urls import reverse
 
 from inventory.models import Device, FiberCable, Port, Site
 
@@ -108,11 +109,11 @@ class TestFiberCableAPI:
 
     def test_list_cables_empty(self, authenticated_client: Any) -> None:
         """Testa listagem de cabos quando não há cabos"""
-        response = authenticated_client.get('/zabbix_api/api/fibers/')
+        url = reverse("inventory-api:fibers")
+        response = authenticated_client.get(url)
         assert response.status_code == 200
         data = response.json()
-        assert 'fibers' in data or 'cables' in data
-        cables = data.get('fibers', data.get('cables', []))
+        cables = data.get('cables', data.get('fibers', []))
         assert isinstance(cables, list)
 
     def test_list_cables_with_data(
@@ -121,10 +122,11 @@ class TestFiberCableAPI:
         sample_cable: Any,
     ) -> None:
         """Testa listagem de cabos quando há dados"""
-        response = authenticated_client.get('/zabbix_api/api/fibers/')
+        url = reverse("inventory-api:fibers")
+        response = authenticated_client.get(url)
         assert response.status_code == 200
         data = response.json()
-        cables = data.get('fibers', data.get('cables', []))
+        cables = data.get('cables', data.get('fibers', []))
         assert len(cables) >= 1
         
         # Valida estrutura do cabo
@@ -139,7 +141,7 @@ class TestFiberCableAPI:
         sample_cable: Any,
     ) -> None:
         """Testa obter detalhes de um cabo específico"""
-        url = f'/zabbix_api/api/fiber/{sample_cable.id}/'
+        url = reverse("inventory-api:fiber-detail", args=[sample_cable.id])
         response = authenticated_client.get(url)
         assert response.status_code == 200
         data = response.json()
@@ -152,7 +154,9 @@ class TestFiberCableAPI:
 
     def test_get_cable_not_found(self, authenticated_client: Any) -> None:
         """Testa obter cabo inexistente"""
-        response = authenticated_client.get('/zabbix_api/api/fiber/99999/')
+        response = authenticated_client.get(
+            reverse("inventory-api:fiber-detail", args=[99999])
+        )
         assert response.status_code == 404
 
     def test_create_cable_manual(
@@ -175,7 +179,7 @@ class TestFiberCableAPI:
         }
         
         response = authenticated_client.post(
-            '/zabbix_api/api/fibers/manual-create/',
+            reverse("inventory-api:fibers-manual-create"),
             data=json.dumps(payload),
             content_type='application/json'
         )
@@ -205,7 +209,7 @@ class TestFiberCableAPI:
         
         payload: dict[str, Any] = {'path': new_path}
         
-        url = f'/zabbix_api/api/fiber/{sample_cable.id}/'
+        url = reverse("inventory-api:fiber-detail", args=[sample_cable.id])
         response = authenticated_client.put(
             url,
             data=json.dumps(payload),
@@ -232,7 +236,7 @@ class TestFiberCableAPI:
             'name': 'Cabo Atualizado',
         }
         
-        url = f'/zabbix_api/api/fiber/{sample_cable.id}/'
+        url = reverse("inventory-api:fiber-detail", args=[sample_cable.id])
         response = authenticated_client.put(
             url,
             data=json.dumps(payload),
@@ -252,8 +256,7 @@ class TestFiberCableAPI:
     ) -> None:
         """Testa deleção de cabo"""
         cable_id = sample_cable.id
-        
-        url = f'/zabbix_api/api/fiber/{cable_id}/'
+        url = reverse("inventory-api:fiber-detail", args=[cable_id])
         response = authenticated_client.delete(url)
         assert response.status_code in [200, 204]
         
@@ -263,7 +266,7 @@ class TestFiberCableAPI:
     def test_delete_cable_not_found(self, authenticated_client: Any) -> None:
         """Testa deleção de cabo inexistente"""
         response = authenticated_client.delete(
-            '/zabbix_api/api/fiber/99999/'
+            reverse("inventory-api:fiber-detail", args=[99999])
         )
         assert response.status_code == 404
 
@@ -278,7 +281,9 @@ class TestFiberCableVisualization:
         sample_cable: Any,
     ) -> None:
         """Testa endpoint de listagem de todos os cabos"""
-        response = authenticated_client.get('/zabbix_api/api/fibers/')
+        response = authenticated_client.get(
+            reverse("inventory-api:fibers")
+        )
         
         assert response.status_code == 200
         data = response.json()
@@ -349,7 +354,7 @@ class TestFiberCableEdgeCases:
         }
         
         response = authenticated_client.post(
-            '/zabbix_api/api/fibers/manual-create/',
+            reverse("inventory-api:fibers-manual-create"),
             data=json.dumps(payload),
             content_type='application/json'
         )
@@ -383,7 +388,7 @@ class TestFiberCableEdgeCases:
         }
         
         response = authenticated_client.post(
-            '/zabbix_api/api/fibers/manual-create/',
+            reverse("inventory-api:fibers-manual-create"),
             data=json.dumps(payload),
             content_type='application/json'
         )
@@ -400,7 +405,7 @@ class TestFiberCableEdgeCases:
         """Testa atualização com path vazio"""
         payload: dict[str, Any] = {'path': []}
         
-        url = f'/zabbix_api/api/fiber/{sample_cable.id}/'
+        url = reverse("inventory-api:fiber-detail", args=[sample_cable.id])
         response = authenticated_client.put(
             url,
             data=json.dumps(payload),
@@ -418,7 +423,7 @@ class TestFiberCablePermissions:
     def test_list_cables_unauthenticated(self) -> None:
         """Testa listagem de cabos sem autenticação"""
         client = Client()
-        response = client.get('/zabbix_api/api/fibers/')
+        response = client.get(reverse("inventory-api:fibers"))
         
         # Pode redirecionar para login ou retornar 401/403
         assert response.status_code in [302, 401, 403, 200]
@@ -441,7 +446,7 @@ class TestFiberCablePermissions:
         }
         
         response = client.post(
-            '/zabbix_api/api/fibers/manual-create/',
+            reverse("inventory-api:fibers-manual-create"),
             data=json.dumps(payload),
             content_type='application/json'
         )

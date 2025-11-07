@@ -1,0 +1,46 @@
+name: Daily Inventory Regression
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  targeted-pytest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m venv venv
+          venv/bin/python -m pip install --upgrade pip
+          venv/bin/pip install -r requirements.txt
+
+      - name: Install node dependencies
+        run: npm ci
+
+      - name: Run Pyright inventory shim checks
+        env:
+          PYTHONPATH: "${{ github.workspace }}"
+        run: npx pyright
+
+      - name: Run targeted inventory regressions
+        env:
+          PYTHONPATH: "${{ github.workspace }}"
+        run: |
+          venv/bin/pytest inventory/tests/ tests/usecases/ tests/test_inventory_endpoints.py -q

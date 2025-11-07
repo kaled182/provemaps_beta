@@ -19,32 +19,53 @@ The solution ships with native observability (Prometheus, structured logging, qu
 
 Key Django apps:
 - `core`: settings, root URLs, metrics, middleware
-- `maps_view`: network dashboard and visualisations
-- `routes_builder`: optical routes, KML import, metadata
-- `inventory`: models (Site, Device, Port) and synchronisation
+- `maps_view`: network dashboard and visualizations
+- `inventory`: authoritative models (Site, Device, Port, Route) + REST APIs at `/api/v1/inventory/`
+- `monitoring`: health checks, combined status from inventory + Zabbix
+- `integrations/zabbix`: resilient Zabbix API client (retry, circuit breaker, Prometheus metrics)
+- `routes_builder`: _(zombie app - kept for migration compatibility only)_
 - `setup_app`: secure credential management and configuration
-- `zabbix_api`: resilient integration with the Zabbix API
 
 ---
 
-## Documentation Map
-All documentation lives under [`doc/`](./doc/). Use the guides below as starting points:
+## Documentation (v2.0.0)
+Nova documentação reorganizada em uma estrutura limpa. Índice principal: [`doc/README.md`](./doc/README.md) ou interface web em `/setup_app/docs/`.
 
-- **Quickstart:** [`doc/getting-started/`](./doc/getting-started/) — local onboarding and Docker tutorial
-- **Developer Guide:** [`doc/developer/`](./doc/developer/) — daily commands, setup, observability
-- **Operations & Deploy:** [`doc/operations/`](./doc/operations/) — procedures, service status, production guides
-- **Processes & Contribution:** [`doc/process/`](./doc/process/) — roles, contribution flow, governance
-- **Security & Compliance:** [`doc/security/`](./doc/security/) — secrets recommendations, OWASP notes, controls
-- **Releases & History:** [`doc/releases/`](./doc/releases/) — changelogs and reports
-- **Technical References:** [`doc/reference/`](./doc/reference/) — ADRs, test plans, infra guides, Redis HA, metrics
-- **API & Specs:** [`doc/reference-root/`](./doc/reference-root/) — public API documentation
+### Estrutura Atual
 
-> For external dependencies and legacy notes check `doc/reference/` (subfolders `maps_view/` and `modules/`).
+| Categoria | Pasta | Conteúdo Principal | Acesso Web |
+|-----------|-------|--------------------|------------|
+| Getting Started | `doc/getting-started/` | QUICKSTART (unificado), Troubleshooting | `/setup_app/docs/getting-started/QUICKSTART.md` |
+| Guias (Dev & Ops) | `doc/guides/` | DEVELOPMENT, TESTING, DOCKER, OBSERVABILITY | `/setup_app/docs/guides/DEVELOPMENT.md` |
+| Arquitetura | `doc/architecture/` | OVERVIEW, MODULES, DATA_FLOW, ADR | `/setup_app/docs/architecture/OVERVIEW.md` |
+| API | `doc/api/` | ENDPOINTS, AUTHENTICATION, EXAMPLES | `/setup_app/docs/api/ENDPOINTS.md` |
+| Operações | `doc/operations/` | DEPLOYMENT, MONITORING, TROUBLESHOOTING | `/setup_app/docs/operations/DEPLOYMENT.md` |
+| Releases | `doc/releases/` | CHANGELOG, BREAKING_CHANGES, v2.0.0 | `/setup_app/docs/releases/README.md` |
+| Contribuição | `doc/contributing/` | CODE_STYLE, PR_GUIDELINES, TESTING_STANDARDS | `/setup_app/docs/contributing/README.md` |
+| Segurança (legado mantido) | `doc/security/` | SECURITY.md, práticas | `/setup_app/docs/security/SECURITY.md` |
+
+### Acesso Rápido
+- Índice Web: `http://localhost:8000/setup_app/docs/`
+- Quebra de mudanças v2.0.0: [`doc/releases/v2.0.0/BREAKING_CHANGES_v2.0.0.md`](./doc/releases/v2.0.0/BREAKING_CHANGES_v2.0.0.md)
+- Arquitetura: [`doc/architecture/OVERVIEW.md`](./doc/architecture/OVERVIEW.md)
+- Deploy: [`doc/operations/DEPLOYMENT.md`](./doc/operations/DEPLOYMENT.md)
+- API: [`doc/api/ENDPOINTS.md`](./doc/api/ENDPOINTS.md)
+- Contribuir: [`doc/contributing/README.md`](./doc/contributing/README.md)
+
+### O que foi Removido
+Pastas e relatórios antigos (performance phases, debug reports, módulos legados) foram eliminados para reduzir ruído. Referências antigas nesta página que apontavam para `doc/developer/`, `doc/reference/`, `doc/reference-root/` e relatórios históricos agora estão obsoletas.
+
+### Próximos Ajustes
+- Consolidar QUICKSTART_LOCAL + TUTORIAL_DOCKER em um único `QUICKSTART.md`
+- Unificar checklist de deployment dentro de `DEPLOYMENT.md`
+- Preencher placeholders: MODULES.md, DATA_FLOW.md, ENDPOINTS.md completo
+
+> Para navegação centralizada use o índice: [`doc/README.md`](./doc/README.md) ou o menu "Docs" na aplicação web.
 
 ---
 
 ## Getting Started
-1. Read the local onboarding guide: [`doc/getting-started/QUICKSTART_LOCAL.md`](./doc/getting-started/QUICKSTART_LOCAL.md)
+1. Ler o guia unificado: [`doc/getting-started/QUICKSTART.md`](./doc/getting-started/QUICKSTART.md)
 2. Configure Docker using: [`doc/developer/DOCKER_SETUP.md`](./doc/developer/DOCKER_SETUP.md)
 3. Run `docker compose up` (or `make run`) after adjusting `.env`
 4. Visit `http://localhost:8000` and confirm the health checks at `/healthz`

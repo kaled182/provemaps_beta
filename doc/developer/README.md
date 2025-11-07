@@ -2,8 +2,8 @@
 
 This folder gathers the main guides for developers:
 
-- [DOCKER_SETUP.md](./DOCKER_SETUP.md): Complete guide to run the project with Docker
-- [QUICKSTART_LOCAL.md](./QUICKSTART_LOCAL.md): Quick start for local development
+- [DOCKER_SETUP.md](./DOCKER_SETUP.md): Complete guide to run the project with Docker (detalhes avançados além do quickstart)
+- [../getting-started/QUICKSTART.md](../getting-started/QUICKSTART.md): Guia unificado (local + Docker) — substitui QUICKSTART_LOCAL.md
 - [COMANDOS_RAPIDOS.md](./COMANDOS_RAPIDOS.md): Day-to-day command reference
 - [OBSERVABILITY.md](./OBSERVABILITY.md): Health endpoints and Prometheus metrics
 

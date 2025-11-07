@@ -322,9 +322,9 @@ def test_with_transaction():
 ```python
 from unittest.mock import patch
 
-@patch('zabbix_api.client.ZabbixAPIClient.request')
-def test_zabbix_integration(mock_request):
-    mock_request.return_value = {"result": []}
+@patch('integrations.zabbix.client.requests.post')
+def test_zabbix_integration(mock_post):
+   mock_post.return_value.json.return_value = {"result": []}
    # Test avoids real calls to the Zabbix API
 ```
 
