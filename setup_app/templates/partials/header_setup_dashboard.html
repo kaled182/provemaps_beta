@@ -29,12 +29,14 @@
               Dashboard
             </a>
           </li>
+          {% comment %}routes_builder disabled - app kept for migration chain only
           <li>
             <a href="{% url 'routes_builder:fiber_route_builder' %}"
               class="px-2 py-2 rounded-md transition-colors duration-200 {% if current == 'fiber_route_builder' %}bg-white/20 text-white{% else %}text-gray-100 hover:text-white hover:bg-white/10{% endif %}">
               Route Builder
             </a>
           </li>
+          {% endcomment %}
           <li>
             <a href="{% url 'setup_app:docs_index' %}"
                class="px-2 py-2 rounded-md transition-colors duration-200 {% if current == 'docs_index' or current == 'docs_view' %}bg-white/20 text-white{% else %}text-gray-100 hover:text-white hover:bg-white/10{% endif %}">
