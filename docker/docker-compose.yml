@@ -14,7 +14,7 @@
     ports:
       - "8000:8000"
     env_file:
-      - .env
+      - ../.env
     working_dir: /app/backend
     environment:
       DJANGO_SETTINGS_MODULE: settings.dev
@@ -65,7 +65,7 @@
     command: celery -A core.celery_app worker -Q default -l info -c 4
     entrypoint: ["/docker-entrypoint.sh"]
     env_file:
-      - .env
+      - ../.env
     working_dir: /app/backend
     environment:
       DJANGO_SETTINGS_MODULE: settings.dev
@@ -111,7 +111,7 @@
     command: celery -A core.celery_app beat -l info --pidfile=/tmp/celerybeat.pid
     entrypoint: ["/docker-entrypoint.sh"]
     env_file:
-      - .env
+      - ../.env
     working_dir: /app/backend
     environment:
       DJANGO_SETTINGS_MODULE: settings.dev
