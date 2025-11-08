@@ -25,22 +25,24 @@ jobs:
           python-version: "3.13"
           cache: "pip"
 
-      - name: Install dependencies
+      - name: Install backend dependencies
         run: |
           python -m venv venv
           venv/bin/python -m pip install --upgrade pip
-          venv/bin/pip install -r requirements.txt
+          venv/bin/pip install -r backend/requirements.txt
 
       - name: Install node dependencies
         run: npm ci
 
       - name: Run Pyright inventory shim checks
         env:
-          PYTHONPATH: "${{ github.workspace }}"
+          PYTHONPATH: "${{ github.workspace }}/backend"
+        working-directory: backend
         run: npx pyright
 
       - name: Run targeted inventory regressions
         env:
-          PYTHONPATH: "${{ github.workspace }}"
+          PYTHONPATH: "${{ github.workspace }}/backend"
+        working-directory: backend
         run: |
-          venv/bin/pytest inventory/tests/ tests/usecases/ tests/test_inventory_endpoints.py -q
+          ../venv/bin/pytest inventory/tests/ tests/usecases/ tests/test_inventory_endpoints.py -q

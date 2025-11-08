@@ -1,6 +1,8 @@
 ﻿services:
   web:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/dockerfile
     command: >
       gunicorn core.asgi:application
       -k uvicorn.workers.UvicornWorker
@@ -13,9 +15,11 @@
       - "8000:8000"
     env_file:
       - .env
+    working_dir: /app/backend
     environment:
       DJANGO_SETTINGS_MODULE: settings.dev
       SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
+      PYTHONPATH: /app/backend
       DB_HOST: db
       DB_PORT: "3306"
       DB_NAME: app
@@ -48,19 +52,25 @@
       start_period: 40s
     restart: unless-stopped
     volumes:
-      - ./docker-entrypoint.sh:/docker-entrypoint.sh:ro
-      - .:/app
-      - ./logs:/app/logs
+      - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - ../backend:/app/backend
+      - ../frontend:/app/frontend
+      - ../database:/app/database
+      - ../logs:/app/backend/logs
 
   celery:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/dockerfile
     command: celery -A core.celery_app worker -Q default -l info -c 4
     entrypoint: ["/docker-entrypoint.sh"]
     env_file:
       - .env
+    working_dir: /app/backend
     environment:
       DJANGO_SETTINGS_MODULE: settings.dev
       SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
+      PYTHONPATH: /app/backend
       DB_HOST: db
       DB_PORT: "3306"
       DB_NAME: app
@@ -88,19 +98,25 @@
       start_period: 30s
     restart: unless-stopped
     volumes:
-      - ./docker-entrypoint.sh:/docker-entrypoint.sh:ro
-      - .:/app
-      - ./logs:/app/logs
+      - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - ../backend:/app/backend
+      - ../frontend:/app/frontend
+      - ../database:/app/database
+      - ../logs:/app/backend/logs
 
   beat:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/dockerfile
     command: celery -A core.celery_app beat -l info --pidfile=/tmp/celerybeat.pid
     entrypoint: ["/docker-entrypoint.sh"]
     env_file:
       - .env
+    working_dir: /app/backend
     environment:
       DJANGO_SETTINGS_MODULE: settings.dev
       SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
+      PYTHONPATH: /app/backend
       DB_HOST: db
       DB_PORT: "3306"
       DB_NAME: app
@@ -127,9 +143,11 @@
       retries: 3
     restart: unless-stopped
     volumes:
-      - ./docker-entrypoint.sh:/docker-entrypoint.sh:ro
-      - .:/app
-      - ./logs:/app/logs
+      - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - ../backend:/app/backend
+      - ../frontend:/app/frontend
+      - ../database:/app/database
+      - ../logs:/app/backend/logs
 
   redis:
     image: redis:7-alpine
