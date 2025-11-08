@@ -11,6 +11,8 @@ class CoreConfig(AppConfig):
         # Import here to avoid AppRegistryNotReady
         from core.metrics_static_version import init_static_version_metric
         from core.metrics_custom import init_metrics
+        from core.metrics_feature_flags import collect_feature_flags
 
         init_static_version_metric()
         init_metrics()
+        collect_feature_flags()

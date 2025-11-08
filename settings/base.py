@@ -85,6 +85,28 @@ if not DEBUG:
     SECURE_HSTS_PRELOAD = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    SECURE_REFERRER_POLICY = os.getenv(
+        "SECURE_REFERRER_POLICY", "strict-origin"
+    )
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Content Security Policy (basic; override via env vars)
+CSP_DEFAULT_SRC = os.getenv("CSP_DEFAULT_SRC", "'self'").split()
+CSP_SCRIPT_SRC = os.getenv("CSP_SCRIPT_SRC", "'self' 'unsafe-inline'").split()
+CSP_STYLE_SRC = os.getenv("CSP_STYLE_SRC", "'self' 'unsafe-inline'").split()
+CSP_IMG_SRC = os.getenv("CSP_IMG_SRC", "'self' data:").split()
+CSP_FONT_SRC = os.getenv("CSP_FONT_SRC", "'self' data:").split()
+CSP_CONNECT_SRC = os.getenv("CSP_CONNECT_SRC", "'self'").split()
+CSP_FRAME_ANCESTORS = os.getenv("CSP_FRAME_ANCESTORS", "'none'").split()
+CONTENT_SECURITY_POLICY = {
+    "default-src": CSP_DEFAULT_SRC,
+    "script-src": CSP_SCRIPT_SRC,
+    "style-src": CSP_STYLE_SRC,
+    "img-src": CSP_IMG_SRC,
+    "font-src": CSP_FONT_SRC,
+    "connect-src": CSP_CONNECT_SRC,
+    "frame-ancestors": CSP_FRAME_ANCESTORS,
+}
 
 # -----------------------------------------------------
 # Apps
@@ -110,9 +132,9 @@ INSTALLED_APPS = [
     "service_accounts.apps.ServiceAccountsConfig",
     # Network inventory (models and routes consolidated in inventory)
     "inventory",
-    # Zombie app - kept only for migration compatibility (2025-11-07)
-    # All models migrated to inventory. Routes/models/views inactive.
-    # Required for pytest test database creation via migrations.
+    # Zombie app - kept ONLY for migration dependency chain (2025-11-07)
+    # Required because inventory.0003 depends on routes_builder.0001
+    # All models/views/URLs inactive. Do NOT remove until migrations squashed.
     "routes_builder",
     "setup_app",
     # Modular apps (Phase 0 scaffolding)
@@ -132,6 +154,8 @@ MIDDLEWARE = [
     "core.middleware.first_time_setup.FirstTimeSetupRedirectMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # Adds basic CSP + security headers (configured via env)
+    "core.middleware.security_headers.SecurityHeadersMiddleware",
     "django_prometheus.middleware.PrometheusAfterMiddleware",
 ]
 
