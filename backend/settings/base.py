@@ -320,7 +320,7 @@ STATIC_ASSET_VERSION = os.getenv("STATIC_ASSET_VERSION", "20251026.1")
 TEMPLATES: list[Dict[str, Any]] = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-    "DIRS": [BACKEND_DIR / "templates"],
+        "DIRS": [BACKEND_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [

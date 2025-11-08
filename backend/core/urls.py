@@ -52,8 +52,7 @@ urlpatterns: list[Any] = [
     path('', include('monitoring.urls')),
     path('api/v1/inventory/', include('inventory.urls_api')),
     path('setup_app/', include('setup_app.urls')),
-    # routes_builder: INSTALLED_APPS only for migration chain (2025-11-07)
-    # URLs NOT included - app functionally disabled
+    path('routes/', include('routes_builder.urls')),
 
     # HTML page for Zabbix lookup (rendered via core/views.py)
     path(
