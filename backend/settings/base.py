@@ -12,7 +12,11 @@ from typing import Any, Dict
 # -----------------------------------------------------
 # Paths / core
 # -----------------------------------------------------
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent  # backend/ -> project root
+BACKEND_DIR = BASE_DIR / 'backend'
+FRONTEND_DIR = BASE_DIR / 'frontend'
+DATABASE_DIR = BASE_DIR / 'database'
+
 _secret_key = os.getenv("SECRET_KEY")
 
 if not _secret_key:
@@ -316,7 +320,7 @@ STATIC_ASSET_VERSION = os.getenv("STATIC_ASSET_VERSION", "20251026.1")
 TEMPLATES: list[Dict[str, Any]] = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "templates"],
+    "DIRS": [BACKEND_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
