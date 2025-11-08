@@ -16,18 +16,13 @@ class InventoryModelsImportTests(SimpleTestCase):
 
     def test_can_import_all_models_from_inventory(self):
         """Verify all models can be imported from inventory app."""
-        try:
-            from inventory.models import (
-                Device,
-                FiberCable,
-                FiberEvent,
-                Port,
-                Site,
-            )
-            # If we get here, imports worked
-            self.assertTrue(True)
-        except ImportError as e:
-            self.fail(f"Failed to import inventory models: {e}")
+        # Models already imported at module level (line 11)
+        # This test ensures those imports don't raise ImportError
+        self.assertIsNotNone(Device)
+        self.assertIsNotNone(FiberCable)
+        self.assertIsNotNone(FiberEvent)
+        self.assertIsNotNone(Port)
+        self.assertIsNotNone(Site)
 
     def test_models_use_correct_db_tables(self):
         """Verify models use preserved database table names."""
