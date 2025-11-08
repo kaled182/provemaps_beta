@@ -78,10 +78,8 @@ RUN pip install --no-index --find-links=/wheels -r requirements.txt && \
     rm -rf /wheels /root/.cache
 
 # Copy backend application source only (frontend handled separately)
+# Note: backend/ already includes manage.py after folder restructure
 COPY backend/ /app/backend/
-
-# Copy root manage.py into backend for CLI commands (runserver, migrate, etc.)
-COPY manage.py /app/backend/manage.py
 
 # (Optional) copy frontend static assets if already built (placeholder)
 RUN mkdir -p /app/frontend/staticfiles
