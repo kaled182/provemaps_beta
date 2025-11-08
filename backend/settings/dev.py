@@ -14,6 +14,9 @@ from .base import *  # noqa
 if TYPE_CHECKING:  # pragma: no cover - assists type checkers only
     from .base import (
         BASE_DIR,
+        BACKEND_DIR,
+        FRONTEND_DIR,
+        DATABASE_DIR,
         DATABASES,
         INSTALLED_APPS,
         LOGGING,
@@ -59,7 +62,7 @@ DATABASES["default"]["OPTIONS"].update({
 if os.getenv("DB_ENGINE") == "sqlite":
     DATABASES["default"] = {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "NAME": DATABASE_DIR / "db.sqlite3",
     }
 
 # -----------------------------------------------------
