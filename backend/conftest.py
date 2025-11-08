@@ -5,6 +5,7 @@ Includes shared fixtures and Django test configuration.
 
 import importlib
 import os
+import sys
 import tempfile
 import pytest
 from collections.abc import Iterator
@@ -12,14 +13,30 @@ from typing import Any
 from django.conf import settings
 from django.test import override_settings
 from django.core.cache import cache
+import django
+
+# Prevent pytest from attempting to collect a binary/text artifact file
+collect_ignore = ["test_errors.txt"]
 
 
 def pytest_configure() -> None:
-    """Project-specific pytest configuration."""
-    # Ensure tests run under the explicit testing flag
-    settings.TESTING = True
+    """Project-specific pytest configuration.
+    Ensures Django settings are loaded before touching the settings object.
+    Needed after repo re-structure to avoid ImproperlyConfigured errors.
+    """
+    # Default to test settings if not provided (CI may override)
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "settings.test")
+    # Ensure project root is on sys.path for importing 'settings'
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
 
-    # Additional test configuration
+    # Initialize Django if not yet configured
+    if not settings.configured:
+        django.setup()
+
+    # Flag test mode
+    settings.TESTING = True
     if not getattr(settings, "TEST_CONFIGURED", False):
         settings.TEST_CONFIGURED = True
 
