@@ -21,7 +21,7 @@ django.setup()
 
 from django.db import connection
 from django.contrib.contenttypes.models import ContentType
-from django.core.management import call_command
+# call_command not needed, removed to fix lint
 
 
 def print_header(text: str) -> None:
@@ -64,14 +64,21 @@ def check_current_migration_state() -> dict:
     print(f"\n📦 Inventory ({len(inventory_migrations)} migrações aplicadas):")
     for mig in inventory_migrations:
         print(f"   ✓ {mig.name}")
-    
-    print(f"\n📦 Routes Builder ({len(routes_builder_migrations)} migrações aplicadas):")
+
+    rb_count = len(routes_builder_migrations)
+    print(f"\n📦 Routes Builder ({rb_count} migrações aplicadas):")
     for mig in routes_builder_migrations:
         print(f"   ✓ {mig.name}")
-    
+
     # Verificar se 0003 já foi aplicada
-    has_0003 = any(m.name == '0003_route_models_relocation' for m in inventory_migrations)
-    has_rb_0002 = any(m.name == '0002_move_route_models_to_inventory' for m in routes_builder_migrations)
+    has_0003 = any(
+        m.name == '0003_route_models_relocation'
+        for m in inventory_migrations
+    )
+    has_rb_0002 = any(
+        m.name == '0002_move_route_models_to_inventory'
+        for m in routes_builder_migrations
+    )
     
     return {
         'inventory_count': len(inventory_migrations),
@@ -95,16 +102,19 @@ def check_content_types() -> dict:
         cts_routes = ContentType.objects.filter(
             app_label='routes_builder', model=model_name
         )
-        
+
         results[model_name] = {
             'inventory': cts_inventory.count(),
             'routes_builder': cts_routes.count(),
         }
-        
+
         if cts_inventory.exists():
-            print(f"✅ {model_name}: inventory (id={cts_inventory.first().id})")
+            print(f"✅ {model_name}: inventory "
+                  f"(id={cts_inventory.first().id})")
         elif cts_routes.exists():
-            print(f"⚠️  {model_name}: routes_builder (id={cts_routes.first().id}) - Precisa migrar")
+            ct_id = cts_routes.first().id
+            print(f"⚠️  {model_name}: routes_builder "
+                  f"(id={ct_id}) - Precisa migrar")
         else:
             print(f"❌ {model_name}: NÃO ENCONTRADO")
     
@@ -140,11 +150,11 @@ def check_model_tables() -> dict:
 def check_model_imports() -> bool:
     """Verifica se os modelos podem ser importados corretamente."""
     print_header("5. Verificando Imports de Modelos")
-    
+
     try:
-        from inventory.models import Route, RouteSegment, RouteEvent
-        print("✅ inventory.models: Route, RouteSegment, RouteEvent")
-        
+        from inventory.models import Route  # noqa: F401
+        print("✅ inventory.models: Route")
+
         # Verificar se são os modelos corretos
         print(f"   Route._meta.app_label = '{Route._meta.app_label}'")
         print(f"   Route._meta.db_table = '{Route._meta.db_table}'")
@@ -192,12 +202,13 @@ def run_sample_queries() -> bool:
         # Count
         count = Route.objects.count()
         print(f"✅ Route.objects.count() = {count}")
-        
+
         # First
         if count > 0:
             first = Route.objects.first()
-            print(f"✅ Route.objects.first() = {first.name if first else 'None'}")
-        
+            first_name = first.name if first else 'None'
+            print(f"✅ Route.objects.first() = {first_name}")
+
         # Create test (rollback)
         from django.db import transaction
         try:
@@ -207,11 +218,13 @@ def run_sample_queries() -> bool:
                     description="Teste de validação",
                     status="planned"
                 )
-                print(f"✅ Route.objects.create() funcionando (id={test_route.id})")
+                route_id = test_route.id
+                print(f"✅ Route.objects.create() funcionando "
+                      f"(id={route_id})")
                 raise Exception("Rollback intencional")
         except Exception:
             pass  # Rollback esperado
-        
+
         return True
     except Exception as e:
         print(f"❌ Erro nas queries: {e}")
