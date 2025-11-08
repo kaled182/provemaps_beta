@@ -881,7 +881,94 @@ Siga os passos abaixo para garantir que seu ambiente local está compatível com
 
 ---
 
-> **Status Final:** Fase 5 100% completa. Documentação, scripts e auditorias finalizados. Pronto para abertura de PR.
+> **Status Final:** Fase 5 100% completa. Documentação, scripts e auditorias finalizados. **PR aberto aguardando merge.**
+
+---
+
+# 🚀 Próxima Etapa: Fase 6 — Reorganização de Estrutura
+
+**Status:** 📋 Planejado (aguardando merge da Fase 5)  
+**Branch prevista:** `refactor/folder-structure`  
+**Duração estimada:** 3 dias úteis  
+**Documentação:** `ROADMAP_NEXT_STEPS.md`
+
+## Objetivo
+
+Reorganizar estrutura do projeto separando:
+- `backend/` — Django apps + Python code
+- `frontend/` — Static assets + package.json + futura integração Vue 3
+- `database/` — db.sqlite3 + SQL scripts
+- `docker/` — Docker files (dockerfile, docker-compose.yml, etc.)
+
+## Benefícios
+
+- ✅ Estrutura profissional e escalável
+- ✅ Facilita onboarding de novos desenvolvedores
+- ✅ Prepara projeto para Vue 3 migration (Fase 7)
+- ✅ Separação clara de responsabilidades
+- ✅ Alinhamento com best practices (12-Factor App)
+
+## Cronograma
+
+### Dia 1: Backend Migration
+- Criar estrutura de diretórios
+- Mover Django apps para `backend/`
+- Atualizar `settings/base.py` (BASE_DIR, DATABASES, STATIC_ROOT)
+- Testar: `python backend/manage.py check`
+
+### Dia 2: Frontend + Database + Docker
+- Mover `package.json`, `babel.config.js` para `frontend/`
+- Mover `db.sqlite3`, `sql/` para `database/`
+- Reescrever `dockerfile` e `docker-compose.yml`
+- Testar build Docker
+
+### Dia 3: Scripts + CI/CD + Validação
+- Atualizar 10 scripts (PowerShell + Bash)
+- Ajustar GitHub Actions workflows
+- Smoke tests completos
+- PR criado para review
+
+## Scripts Automatizados
+
+- ✅ `scripts/reorganize_folders.ps1` — Script automatizado de reorganização
+- ✅ `ROADMAP_NEXT_STEPS.md` — Documentação completa do roadmap
+
+## Como Iniciar (após merge)
+
+```powershell
+# 1. Atualizar branch inicial
+git checkout inicial
+git pull origin inicial
+
+# 2. Criar tag v2.0.0
+git tag -a v2.0.0 -m "Release v2.0.0 - Phase 5 Complete"
+git push origin v2.0.0
+
+# 3. Criar branch de reorganização
+git checkout -b refactor/folder-structure
+
+# 4. Executar script de reorganização
+.\scripts\reorganize_folders.ps1
+
+# 5. Testar e commitar
+cd backend
+python manage.py check
+pytest -q
+cd ..
+git add .
+git commit -m "refactor: reorganize project structure (backend/frontend/database)"
+git push origin refactor/folder-structure
+```
+
+## Documentação Relacionada
+
+- `ROADMAP_NEXT_STEPS.md` — Roadmap completo Fase 6 + Fase 7 (Vue 3)
+- `ANALYSIS_FOLDER_RESTRUCTURE.md` — Análise de impacto detalhada
+- `scripts/reorganize_folders.ps1` — Script automatizado
+
+---
+
+> **Aguardando:** Merge do PR Fase 5 para iniciar Fase 6 imediatamente.
 
 # Checklist de Revisão para Merge — Fase 5
 
