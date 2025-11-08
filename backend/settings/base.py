@@ -95,12 +95,37 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Content Security Policy (basic; override via env vars)
+# Allow trusted CDNs for Chart.js, Tailwind CSS, and Google Maps API
 CSP_DEFAULT_SRC = os.getenv("CSP_DEFAULT_SRC", "'self'").split()
-CSP_SCRIPT_SRC = os.getenv("CSP_SCRIPT_SRC", "'self' 'unsafe-inline'").split()
-CSP_STYLE_SRC = os.getenv("CSP_STYLE_SRC", "'self' 'unsafe-inline'").split()
-CSP_IMG_SRC = os.getenv("CSP_IMG_SRC", "'self' data:").split()
-CSP_FONT_SRC = os.getenv("CSP_FONT_SRC", "'self' data:").split()
-CSP_CONNECT_SRC = os.getenv("CSP_CONNECT_SRC", "'self'").split()
+CSP_SCRIPT_SRC = os.getenv(
+    "CSP_SCRIPT_SRC",
+    "'self' 'unsafe-inline' 'unsafe-eval' "
+    "https://cdn.jsdelivr.net "
+    "https://cdn.tailwindcss.com "
+    "https://maps.googleapis.com",
+).split()
+CSP_STYLE_SRC = os.getenv(
+    "CSP_STYLE_SRC",
+    "'self' 'unsafe-inline' "
+    "https://cdn.tailwindcss.com "
+    "https://fonts.googleapis.com",
+).split()
+CSP_IMG_SRC = os.getenv(
+    "CSP_IMG_SRC",
+    "'self' data: "
+    "https://maps.googleapis.com "
+    "https://maps.gstatic.com "
+    "https://*.googleapis.com "
+    "https://*.gstatic.com",
+).split()
+CSP_FONT_SRC = os.getenv(
+    "CSP_FONT_SRC",
+    "'self' data: https://fonts.gstatic.com",
+).split()
+CSP_CONNECT_SRC = os.getenv(
+    "CSP_CONNECT_SRC",
+    "'self' https://maps.googleapis.com",
+).split()
 CSP_FRAME_ANCESTORS = os.getenv("CSP_FRAME_ANCESTORS", "'none'").split()
 CONTENT_SECURITY_POLICY = {
     "default-src": CSP_DEFAULT_SRC,
