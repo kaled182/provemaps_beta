@@ -20,7 +20,11 @@ def handle_api_errors(func: _F) -> _F:
             return func(*args, **kwargs)
         except Exception as exc:  # pragma: no cover - protective guardrail
             logger.exception("Endpoint %s failed: %s", func.__name__, exc)
-            return JsonResponse({"error": "Internal server error"}, status=500)
+            detail = str(exc).strip()
+            payload = {"error": "Internal server error"}
+            if detail:
+                payload["detail"] = detail
+            return JsonResponse(payload, status=500)
 
     return cast(_F, wrapper)
 
