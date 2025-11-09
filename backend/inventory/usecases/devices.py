@@ -28,6 +28,7 @@ from typing import (
 
 from django.core.cache import cache
 from django.db.models import Prefetch, Q, QuerySet
+from django.utils.text import slugify
 
 from inventory.domain.optical import (
     fetch_port_optical_snapshot,
@@ -180,35 +181,13 @@ def _coerce_host_items(raw_items: Any) -> HostItemList:
     return result
 
 
-def _resolve_host_inventory(
-    hostid: str,
-    host: Mapping[str, Any],
-) -> Optional[Dict[str, Any]]:
-    """Return the host inventory record if available.
-
-    Some Zabbix configurations return an empty list when the host inventory
-    feature is disabled. We normalise that to ``None`` so callers can surface
-    a clear validation error instead of hitting ``.get`` on a list.
-    """
+def _resolve_host_inventory(host: Mapping[str, Any]) -> Dict[str, Any]:
+    """Return the host inventory record or an empty dict when absent."""
 
     inventory = host.get("inventory")
     if isinstance(inventory, dict):
         return cast(Dict[str, Any], inventory)
-
-    extra_data = ZABBIX_REQUEST(
-        "host.get",
-        {
-            "output": ["hostid"],
-            "hostids": hostid,
-            "selectInventory": "extend",
-        },
-    )
-    if extra_data:
-        candidate = extra_data[0].get("inventory")
-        if isinstance(candidate, dict):
-            return cast(Dict[str, Any], candidate)
-
-    return None
+    return {}
 
 
 def _coerce_dict_list(raw_items: Any) -> List[Dict[str, Any]]:
@@ -742,51 +721,137 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
         raise InventoryNotFound("Host not found in Zabbix")
 
     host = zabbix_data[0]
-    site_name = host.get("name") or host.get("host")
+    inventory = _resolve_host_inventory(host)
 
-    inventory = _resolve_host_inventory(str(hostid), host)
-    if inventory is None:
-        raise InventoryValidationError(
-            "Host inventory data is missing in Zabbix. Enable host inventory "
-            "and populate the fields before importing."
-        )
+    def _clean(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value.strip()
+        return str(value).strip()
 
-    lat: Optional[str] = inventory.get("location_lat")
-    lon: Optional[str] = inventory.get("location_lon")
-    address: Optional[str] = inventory.get("site_address") or inventory.get("location")
-
-    site, site_created = Site.objects.get_or_create(name=site_name)
-    update_fields: List[str] = []
-    if lat:
+    def _to_decimal(value: str) -> Optional[Decimal]:
+        if not value:
+            return None
         try:
-            site.latitude = Decimal(lat)
-            update_fields.append("latitude")
+            return Decimal(value)
         except (InvalidOperation, ValueError):
-            pass
-    if lon:
-        try:
-            site.longitude = Decimal(lon)
-            update_fields.append("longitude")
-        except (InvalidOperation, ValueError):
-            pass
-    if address:
-        site.city = address
-        update_fields.append("city")
-    if update_fields:
-        site.save(update_fields=update_fields)
+            return None
 
-    device, created = Device.objects.get_or_create(
-        site=site,
-        name=host.get("host"),
-        defaults={
-            "vendor": "",
-            "model": "",
-            "zabbix_hostid": hostid,
-        },
+    site_display_name = (
+        _clean(inventory.get("location"))
+        or _clean(inventory.get("site_location"))
+        or _clean(inventory.get("site_city"))
+        or _clean(host.get("name"))
+        or _clean(host.get("host"))
+        or f"Zabbix Host {hostid}"
     )
-    if not created and (not device.zabbix_hostid or str(device.zabbix_hostid) != str(hostid)):
-        device.zabbix_hostid = str(hostid)
-        device.save(update_fields=["zabbix_hostid"])
+    site_state = _clean(inventory.get("site_state"))
+    site_country = _clean(inventory.get("site_country"))
+
+    slug_source = "-".join(
+        part for part in [site_display_name, site_state, site_country] if part
+    )
+    slug_candidate = slugify(slug_source) or slugify(site_display_name) or f"site-{hostid}"
+
+    host_primary_name = _clean(host.get("host"))
+    fallback_host_name = _clean(host.get("name"))
+    desired_device_name = (
+        host_primary_name
+        or fallback_host_name
+        or site_display_name
+        or f"Zabbix Host {hostid}"
+    )
+
+    hostid_str = str(hostid)
+    existing_device = (
+        Device.objects.select_related("site")
+        .filter(zabbix_hostid=hostid_str)
+        .first()
+    )
+
+    address_payload = {
+        "display_name": site_display_name,
+        "address_line1": _clean(inventory.get("site_address_a")),
+        "address_line2": _clean(inventory.get("site_address_b")),
+        "address_line3": _clean(inventory.get("site_address_c")),
+        "city": _clean(inventory.get("site_city")),
+        "state": site_state,
+        "postal_code": _clean(inventory.get("site_zip")),
+        "country": site_country,
+        "rack_location": _clean(inventory.get("site_location")),
+    }
+
+    lat_decimal = _to_decimal(_clean(inventory.get("location_lat")))
+    lon_decimal = _to_decimal(_clean(inventory.get("location_lon")))
+
+    site = existing_device.site if existing_device else None
+    if site is None:
+        site = Site.objects.filter(display_name__iexact=site_display_name).first()
+    if site is None:
+        site = Site.objects.filter(slug=slug_candidate).first()
+    site_created = False
+    if site is None:
+        site = Site(**address_payload)
+        site.slug = slug_candidate
+        if lat_decimal is not None:
+            site.latitude = lat_decimal
+        if lon_decimal is not None:
+            site.longitude = lon_decimal
+        site.save()
+        site_created = True
+    else:
+        update_fields: List[str] = []
+        for field, value in address_payload.items():
+            if value and getattr(site, field) != value:
+                setattr(site, field, value)
+                update_fields.append(field)
+        if lat_decimal is not None and site.latitude != lat_decimal:
+            site.latitude = lat_decimal
+            update_fields.append("latitude")
+        if lon_decimal is not None and site.longitude != lon_decimal:
+            site.longitude = lon_decimal
+            update_fields.append("longitude")
+        if slug_candidate and site.slug != slug_candidate:
+            site.slug = slug_candidate
+            update_fields.append("slug")
+        if update_fields:
+            site.save(update_fields=update_fields)
+
+    device_created = False
+    if existing_device:
+        device = existing_device
+        update_fields: List[str] = []
+        if device.site_id != getattr(site, "pk", None):
+            device.site = site
+            update_fields.append("site")
+        if desired_device_name and device.name != desired_device_name:
+            device.name = desired_device_name
+            update_fields.append("name")
+        if not device.zabbix_hostid or str(device.zabbix_hostid) != hostid_str:
+            device.zabbix_hostid = hostid_str
+            update_fields.append("zabbix_hostid")
+        if update_fields:
+            device.save(update_fields=update_fields)
+    else:
+        device, device_created = Device.objects.get_or_create(
+            site=site,
+            name=desired_device_name,
+            defaults={
+                "vendor": "",
+                "model": "",
+                "zabbix_hostid": hostid_str,
+            },
+        )
+        if (
+            not device_created
+            and (
+                not device.zabbix_hostid
+                or str(device.zabbix_hostid) != hostid_str
+            )
+        ):
+            device.zabbix_hostid = hostid_str
+            device.save(update_fields=["zabbix_hostid"])
 
     raw_host_items = ZABBIX_REQUEST(
         "item.get",
@@ -872,7 +937,11 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
             port_records.append(record)
             port_record_map[_port_map_key(port)] = record
 
-    created_summary = {"sites": int(site_created), "devices": int(created), "ports": 0}
+    created_summary = {
+        "sites": int(site_created),
+        "devices": int(device_created),
+        "ports": 0,
+    }
 
     port_entries: List[_PortEntry] = []
     for record in port_records:
@@ -1016,7 +1085,7 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
         "device": {
             "id": device_like.id,
             "name": device_like.name,
-            "site": site.name,
+            "site": site.display_name,
             "zabbix_hostid": device_like.zabbix_hostid,
         },
         "ports_created": ports_created_payload,
@@ -1055,29 +1124,99 @@ def bulk_create_inventory(payload: Mapping[str, Any]) -> Dict[str, Any]:
     fibers_payload = payload.get("fibers", [])
 
     created = {"sites": 0, "devices": 0, "ports": 0, "fibers": 0}
-    site_map = {s.name: s for s in Site.objects.all()}
+    site_map: Dict[str, Site] = {}
     device_map: Dict[tuple[str, str], Device] = {}
 
+    def _register_site(site_obj: Site) -> None:
+        keys = {site_obj.display_name, site_obj.slug}
+        for key in keys:
+            if key:
+                site_map[str(key).strip()] = site_obj
+
+    for existing_site in Site.objects.all():
+        _register_site(existing_site)
+
     for site_data in sites_payload:
-        name = site_data.get("name")
-        if not name:
+        raw_name = site_data.get("display_name") or site_data.get("name")
+        if not raw_name:
             continue
-        site, was_created = Site.objects.get_or_create(
-            name=name,
-            defaults={
-                "city": site_data.get("city", ""),
-                "latitude": site_data.get("lat"),
-                "longitude": site_data.get("lng"),
-                "description": site_data.get("description", ""),
-            },
+        display_name = str(raw_name).strip()
+        state_value = str(site_data.get("state") or "").strip()
+        country_value = str(site_data.get("country") or "").strip()
+        slug_source = "-".join(
+            part for part in [display_name, state_value, country_value] if part
         )
+        slug_candidate = slugify(slug_source) or slugify(display_name) or None
+
+        site = Site.objects.filter(display_name__iexact=display_name).first()
+        was_created = False
+        if site is None:
+            site = Site(
+                display_name=display_name,
+                address_line1=str(site_data.get("address_line1") or site_data.get("address") or "").strip(),
+                address_line2=str(site_data.get("address_line2") or "").strip(),
+                address_line3=str(site_data.get("address_line3") or "").strip(),
+                city=str(site_data.get("city") or "").strip(),
+                state=state_value,
+                postal_code=str(site_data.get("postal_code") or site_data.get("zip") or "").strip(),
+                country=country_value,
+                rack_location=str(site_data.get("rack_location") or "").strip(),
+                description=str(site_data.get("description") or "").strip(),
+            )
+            if slug_candidate:
+                site.slug = slug_candidate
+
+            lat_value = site_data.get("lat")
+            lon_value = site_data.get("lng")
+            try:
+                if lat_value is not None:
+                    site.latitude = Decimal(str(lat_value))
+            except (InvalidOperation, ValueError):  # pragma: no cover - defensive
+                pass
+            try:
+                if lon_value is not None:
+                    site.longitude = Decimal(str(lon_value))
+            except (InvalidOperation, ValueError):  # pragma: no cover
+                pass
+            site.save()
+            was_created = True
+        else:
+            update_fields: List[str] = []
+            field_mapping: Dict[str, Any] = {
+                "address_line1": site_data.get("address_line1") or site_data.get("address") or "",
+                "address_line2": site_data.get("address_line2") or "",
+                "address_line3": site_data.get("address_line3") or "",
+                "city": site_data.get("city") or "",
+                "state": state_value,
+                "postal_code": site_data.get("postal_code") or site_data.get("zip") or "",
+                "country": country_value,
+                "rack_location": site_data.get("rack_location") or "",
+                "description": site_data.get("description") or site.description,
+            }
+            for field, raw in field_mapping.items():
+                value = str(raw).strip()
+                if value and getattr(site, field) != value:
+                    setattr(site, field, value)
+                    update_fields.append(field)
+            if slug_candidate and site.slug != slug_candidate:
+                site.slug = slug_candidate
+                update_fields.append("slug")
+            if update_fields:
+                site.save(update_fields=update_fields)
         if was_created:
             created["sites"] += 1
-        site_map[site.name] = site
+        _register_site(site)
 
     for device_data in devices_payload:
-        site_name = device_data.get("site")
+        site_name = str(device_data.get("site") or "").strip()
         site = site_map.get(site_name)
+        if not site:
+            site = (
+                Site.objects.filter(display_name__iexact=site_name).first()
+                or Site.objects.filter(slug=slugify(site_name)).first()
+            )
+            if site:
+                _register_site(site)
         if not site:
             continue
         device, was_created = Device.objects.get_or_create(
@@ -1091,11 +1230,13 @@ def bulk_create_inventory(payload: Mapping[str, Any]) -> Dict[str, Any]:
         )
         if was_created:
             created["devices"] += 1
-        device_map[(site.name, device.name)] = device
+        for key in {site.display_name, site.slug}:
+            if key:
+                device_map[(str(key).strip(), device.name)] = device
 
     port_map: Dict[tuple[int, str], Port] = {}
     for port_data in ports_payload:
-        site_name = port_data.get("site")
+        site_name = str(port_data.get("site") or "").strip()
         device_name = port_data.get("device")
         device = device_map.get((site_name, device_name))
         if not device:
@@ -1116,8 +1257,12 @@ def bulk_create_inventory(payload: Mapping[str, Any]) -> Dict[str, Any]:
         port_map[(device_like.id, port_like.name)] = port
 
     for fiber_data in fibers_payload:
-        origin_device_raw = device_map.get((fiber_data.get("origin_site"), fiber_data.get("origin_device")))
-        dest_device_raw = device_map.get((fiber_data.get("dest_site"), fiber_data.get("dest_device")))
+        origin_device_raw = device_map.get(
+            (str(fiber_data.get("origin_site") or "").strip(), fiber_data.get("origin_device"))
+        )
+        dest_device_raw = device_map.get(
+            (str(fiber_data.get("dest_site") or "").strip(), fiber_data.get("dest_device"))
+        )
 
         origin_device = cast(Optional[DeviceLike], origin_device_raw) if origin_device_raw else None
         dest_device = cast(Optional[DeviceLike], dest_device_raw) if dest_device_raw else None
