@@ -53,6 +53,9 @@ urlpatterns: list[Any] = [
     path('api/v1/inventory/', include('inventory.urls_api')),
     path('setup_app/', include('setup_app.urls')),
     path('routes/', include('routes_builder.urls')),
+    
+    # Zabbix API proxy (legacy endpoints)
+    path('zabbix_api/', include('core.urls_zabbix_proxy')),
 
     # HTML page for Zabbix lookup (rendered via core/views.py)
     path(
