@@ -258,7 +258,8 @@ class Command(BaseCommand):
 
         if not dry_run:
             site, site_created, site_updated = self._get_or_create_site(
-                host, site_name
+                host,
+                site_name,
             )
             if site_created:
                 stats["sites_created"] += 1
@@ -274,7 +275,10 @@ class Command(BaseCommand):
                     )
         else:
             # Dry run - check if site exists
-            site = Site.objects.filter(name=site_name).first()
+            normalized_name = (site_name or "").strip() or "Unknown Site"
+            site = Site.objects.filter(
+                display_name=normalized_name,
+            ).first()
             if not site:
                 stats["sites_created"] += 1
                 if verbose:
@@ -367,12 +371,14 @@ class Command(BaseCommand):
         """Get or create a Site record (returns created/updated flags)."""
         latitude, longitude = self._parse_coordinates(host)
 
+        normalized_name = (site_name or "").strip() or "Unknown Site"
+
         site, created = Site.objects.get_or_create(
-            name=site_name,
+            display_name=normalized_name,
             defaults={
                 "latitude": latitude,
                 "longitude": longitude,
-            }
+            },
         )
 
         updated = False

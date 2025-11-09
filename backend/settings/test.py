@@ -89,3 +89,14 @@ INSTALLED_APPS = [
 # Keep static and media assets isolated per test run
 STATICFILES_STORAGE = "django.contrib.staticfiles.storage.StaticFilesStorage"
 MEDIA_ROOT = _BASE_DIR / "test_media"
+
+# Celery executes tasks synchronously during tests to avoid broker dependency
+os.environ.setdefault("CELERY_BROKER_URL", "memory://")
+os.environ.setdefault("CELERY_RESULT_BACKEND", "cache+memory://")
+os.environ.setdefault("CELERY_TASK_ALWAYS_EAGER", "true")
+os.environ.setdefault("CELERY_TASK_EAGER_PROPAGATES", "true")
+
+CELERY_BROKER_URL = "memory://"
+CELERY_RESULT_BACKEND = "cache+memory://"
+CELERY_TASK_ALWAYS_EAGER = True
+CELERY_TASK_EAGER_PROPAGATES = True
