@@ -2,7 +2,8 @@
 # Tip: run just `make` to see the help output.
 
 PY := python
-MANAGE := $(PY) manage.py
+BACKEND_DIR := backend
+MANAGE := $(PY) $(BACKEND_DIR)/manage.py
 DJANGO_SETTINGS_MODULE ?= settings.dev
 export DJANGO_SETTINGS_MODULE
 
@@ -53,8 +54,8 @@ shell:  ## Open Django shell
 ### ---------------------------
 
 .PHONY: requirements
-requirements:  ## Install project dependencies
-	pip install -r requirements.txt
+requirements:  ## Install backend project dependencies
+	pip install -r $(BACKEND_DIR)/requirements.txt
 
 .PHONY: clean
 clean:  ## Remove caches and temporary artifacts
