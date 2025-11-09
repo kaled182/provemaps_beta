@@ -297,8 +297,12 @@ FRONTEND_DIR = BASE_DIR / 'frontend'
 DATABASE_DIR = BASE_DIR / 'database'
 "@
     
-    # Inserir após BASE_DIR
-    $content = $content -replace '(BASE_DIR = Path\(__file__\)\.resolve\(\)\.parent\.parent\.parent.*?)\n', "`$1`n$newPaths`n"
+    # Inserir após BASE_DIR  
+    $insertIndex = $content.IndexOf("BASE_DIR = Path(__file__).resolve().parent.parent.parent")
+    if ($insertIndex -gt 0) {
+        $lineEnd = $content.IndexOf("`n", $insertIndex)
+        $content = $content.Insert($lineEnd + 1, $newPaths + "`n")
+    }
     
     # Atualizar DATABASES
     $content = $content -replace "'NAME': BASE_DIR / 'db\.sqlite3'", "'NAME': DATABASE_DIR / 'db.sqlite3'"
@@ -351,12 +355,12 @@ function Test-Installation {
     Write-Header "Testando instalação"
     
     if ($SkipTests) {
-        Write-Warning "Testes pulados (--SkipTests)"
+        Write-Warning "Testes pulados (-SkipTests)"
         return
     }
     
     if ($DryRun) {
-        Write-Info "[DRY RUN] Executaria testes"
+        Write-Info "DRY RUN: Executaria testes"
         return
     }
     

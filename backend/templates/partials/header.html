@@ -1,0 +1,97 @@
+{% load static %}
+
+<header role="banner"
+        class="bg-gradient-to-r from-blue-600 to-blue-500 dark:from-gray-900 dark:to-gray-800 backdrop-blur border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40 shadow-sm">
+  <div class="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex h-16 items-center justify-between">
+
+      <div class="flex items-center gap-3">
+        <a href="/" class="flex items-center gap-2" aria-label="Home">
+          <img src="{% static 'img/logo.png' %}" alt="Logo" class="h-9 w-auto" loading="lazy">
+          <span class="hidden sm:block font-semibold text-white">SIMPLES INTERNET</span>
+        </a>
+      </div>
+
+      <nav class="hidden md:flex" aria-label="Primary navigation">
+        <ul class="flex items-center gap-6 text-sm font-medium">
+          {% with current=request.resolver_match.url_name %}
+
+          <li>
+            <a href="{% url 'routes_builder:fiber_route_builder' %}"
+               class="px-2 py-2 rounded-md transition-colors duration-200
+               {% if current == 'fiber_route_builder' %}
+                 bg-white/20 text-white
+               {% else %}
+                 text-gray-100 hover:text-white hover:bg-white/10
+               {% endif %}">
+              Route Builder
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'maps_view:dashboard_view' %}"
+               class="px-2 py-2 rounded-md transition-colors duration-200
+               {% if current == 'dashboard_view' %}
+                 bg-white/20 text-white
+               {% else %}
+                 text-gray-100 hover:text-white hover:bg-white/10
+               {% endif %}">
+              Dashboard
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'maps_view:metrics_dashboard' %}"
+               class="px-2 py-2 rounded-md transition-colors duration-200
+               {% if current == 'metrics_dashboard' %}
+                 bg-white/20 text-white
+               {% else %}
+                 text-gray-100 hover:text-white hover:bg-white/10
+               {% endif %}">
+              Metrics
+            </a>
+          </li>
+
+          <li>
+            <a href="{% url 'setup_app:docs_index' %}"
+               class="px-2 py-2 rounded-md transition-colors duration-200
+               {% if current == 'docs_index' or current == 'docs_view' %}
+                 bg-white/20 text-white
+               {% else %}
+                 text-gray-100 hover:text-white hover:bg-white/10
+               {% endif %}">
+              Docs
+            </a>
+          </li>
+
+          {% endwith %}
+        </ul>
+      </nav>
+
+      <div class="flex items-center gap-4">
+        <a href="{% url 'zabbix_lookup' %}"
+           class="hidden md:inline-flex items-center gap-2 px-2 py-2 rounded-md transition-colors duration-200 text-gray-100 hover:text-white hover:bg-white/10">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
+            <path fill-rule="evenodd"
+                  d="M10 3.25a.75.75 0 01.75.75v5.25H16a.75.75 0 010 1.5h-5.25V16a.75.75 0 01-1.5 0v-5.25H4a.75.75 0 010-1.5h5.25V4a.75.75 0 01.75-.75z"
+                  clip-rule="evenodd" />
+          </svg>
+          Add Device
+        </a>
+
+        {% include 'partials/user_menu.html' %}
+
+        <button type="button" data-mobile-toggle aria-controls="mobileNav" aria-expanded="false"
+                class="md:hidden inline-flex items-center justify-center rounded-md p-2 text-gray-200 hover:text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white">
+          <span class="sr-only">Open menu</span>
+          <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<script src="{% static 'js/partials/header.js' %}?v={{ STATIC_ASSET_VERSION }}"></script>

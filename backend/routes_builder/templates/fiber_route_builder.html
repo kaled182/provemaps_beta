@@ -1,0 +1,223 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Fiber Route Builder{% endblock %}
+{% block extra_head %}
+<style>
+  .point-row:hover {
+    background: #f1f5f9;
+  }
+  #contextMenu {
+    position: fixed;
+    z-index: 2147483647;
+    pointer-events: auto;
+  }
+  #toastHost, #confirmHost {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2147483647;
+  }
+  #toastHost {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 1.5rem;
+  }
+  #confirmHost {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    pointer-events: none;
+  }
+  #confirmHost.active {
+    pointer-events: auto;
+  }
+  .confirm-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(2px);
+  }
+  .confirm-card {
+    position: relative;
+    pointer-events: auto;
+    width: min(420px, 92vw);
+    background: rgba(255, 255, 255, 0.97);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.45);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .confirm-card h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #0f172a;
+  }
+  .confirm-card p {
+    font-size: 0.95rem;
+    color: #334155;
+  }
+  .confirm-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+  }
+  .confirm-buttons button {
+    border-radius: 0.5rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+  }
+  .confirm-buttons button[data-variant="secondary"] {
+    background: #e2e8f0;
+    color: #0f172a;
+  }
+  .confirm-buttons button[data-variant="danger"] {
+    background: #ef4444;
+    color: #fff;
+  }
+  .toast-card {
+    pointer-events: auto;
+    min-width: 240px;
+    max-width: 360px;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 0.75rem;
+    box-shadow: 0 20px 25px -5px rgba(15, 23, 42, 0.3);
+    backdrop-filter: blur(8px);
+    padding: 1rem 1.25rem;
+    display: flex;
+    gap: 0.75rem;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    color: #0f172a;
+    font-size: 0.95rem;
+  }
+  .toast-card.toast-success {
+    border-left: 6px solid #22c55e;
+  }
+  .toast-card.toast-error {
+    border-left: 6px solid #ef4444;
+  }
+  .toast-card strong {
+    font-weight: 600;
+  }
+</style>
+{% endblock %}
+{% block content %}
+<h2 class="text-2xl font-bold mb-4">Fiber Route Builder</h2>
+
+<!-- Fullscreen map with floating panels -->
+<div class="relative">
+  <div id="builderMap" class="rounded border border-gray-300" style="height: 80vh;"></div>
+  <!-- Floating buttons (Route Points and Help) along the right side -->
+  <div class="absolute top-1/2 right-4 -translate-y-1/2 flex flex-col gap-3 z-10">
+    <button id="toggleRoutePoints" class="bg-indigo-600 shadow-lg shadow-indigo-300/40 text-white px-4 py-2 rounded text-sm hover:bg-indigo-500">
+      Route Points
+    </button>
+    <button id="toggleHelp" class="bg-emerald-600 shadow-lg shadow-emerald-300/40 text-white px-4 py-2 rounded text-sm hover:bg-emerald-500">
+      Help
+    </button>
+  </div>
+  
+  <!-- Collapsible Route Points panel -->
+  <div id="routePointsPanel" class="absolute top-24 right-4 bg-white/95 backdrop-blur rounded-lg shadow-lg p-4 w-80 z-10 hidden">
+    <div class="flex justify-between items-center mb-2">
+      <h3 class="font-semibold">Route Points</h3>
+      <button onclick="document.getElementById('routePointsPanel').classList.add('hidden')" class="text-gray-500 hover:text-gray-700">&times;</button>
+    </div>
+    <ol id="pointsList" class="text-sm space-y-1 max-h-64 overflow-auto"></ol>
+    <p class="text-xs text-gray-500 mt-2">
+      Click the map to add intermediate points. Drag a marker to adjust its position.
+    </p>
+    <p class="text-xs text-gray-500">
+      Double-click an intermediate marker to remove it.
+    </p>
+    <div class="mt-2 text-sm font-semibold">
+      Estimated distance: <span id="distanceKm">0</span> km
+    </div>
+  </div>
+  
+  <!-- Collapsible Help panel -->
+  <div id="helpPanel" class="absolute top-24 right-4 bg-white/95 backdrop-blur rounded-lg shadow-lg p-4 w-80 z-10 hidden">
+    <div class="flex justify-between items-center mb-2">
+      <h3 class="font-semibold">Help</h3>
+      <button onclick="document.getElementById('helpPanel').classList.add('hidden')" class="text-gray-500 hover:text-gray-700">&times;</button>
+    </div>
+    <ul class="list-disc ml-4 text-xs space-y-1">
+      <li>Right-click anywhere on map to open context menu</li>
+      <li>Right-click on a cable loads it for editing</li>
+      <li>Menu options change based on selected cable</li>
+      <li>Drag markers to adjust cable path</li>
+      <li>Double-click marker to remove intermediate point</li>
+      <li>All cables load automatically on page open</li>
+    </ul>
+  </div>
+  
+  <!-- Context menu (right click) -->
+  <!-- Updated version 2025-10-26 16:32 -->
+  <div id="contextMenu" class="absolute bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-20 hidden" style="min-width: 220px;">
+    <!-- Selected cable information (if present) -->
+    <div id="contextCableInfo" class="px-4 py-2 bg-blue-50 border-b border-blue-200 text-xs font-semibold text-blue-700 hidden">
+      <span id="contextCableName"></span>
+    </div>
+    
+    <!-- Options while creating a new cable (points set without activeFiberId) -->
+    <div id="contextCreatingOptions" class="hidden">
+      <div class="px-4 py-2 bg-green-50 border-b border-green-200 text-xs font-semibold text-green-700">
+        Creating New Cable
+      </div>
+      <button id="contextSaveNewCable" class="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2">
+        Assign the Cable
+      </button>
+      <button id="contextClearNew" class="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2">
+        Clear Points
+      </button>
+    </div>
+    
+    <!-- Conditional options when a cable is selected -->
+    <div id="contextSelectedOptions" class="hidden">
+      <!-- "Edit Cable Path" removed because the right-click menu already provides it -->
+      <button id="contextEditCable" class="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2">
+        Edit Metadata (Port/Name)
+      </button>
+      <button id="contextSavePath" class="w-full text-left px-4 py-2 hover:bg-green-50 text-sm flex items-center gap-2">
+        Save Path Changes
+      </button>
+      <button id="contextCancelEdit" class="w-full text-left px-4 py-2 hover:bg-gray-50 text-sm flex items-center gap-2">
+        Cancel Editing
+      </button>
+      <button id="contextDeleteCable" class="w-full text-left px-4 py-2 hover:bg-red-50 text-sm flex items-center gap-2 text-red-600">
+        Delete Selected Cable
+      </button>
+    </div>
+    
+    <!-- General options (import shown when map is empty) -->
+    <div id="contextGeneralOptions">
+      <button id="contextImportKML" class="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2">
+        Import KML
+      </button>
+    </div>
+    
+    <!-- Utility options (always visible) -->
+    <button id="contextLoadAll" class="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm flex items-center gap-2">
+      <span id="contextLoadAllText">Reload All Cables</span>
+    </button>
+  </div>
+</div>
+<div id="toastHost" class="hidden"></div>
+<div id="confirmHost" class="hidden"></div>
+
+{% include 'partials/save_manual_modal.html' %}
+{% include 'partials/import_kml.html' %}
+
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Load Google Maps first without callback -->
+<script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}" async defer></script>
+<!-- Then load our modules -->
+<script type="module" src="{% static 'js/fiber_route_builder.js' %}?v={{ STATIC_ASSET_VERSION }}"></script>
+{% endblock %}

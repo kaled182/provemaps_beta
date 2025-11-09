@@ -1,0 +1,32 @@
+{% load static %}
+
+<div id="addDeviceModal"
+     class="fixed inset-0 flex items-center justify-center bg-black/50 opacity-0 pointer-events-none transition-opacity duration-300 z-50">
+  <div id="addDeviceModalContent"
+       class="bg-white rounded-lg shadow-lg w-full max-w-md p-6 relative transform scale-95 opacity-0 transition-all duration-300">
+
+    <button onclick="closeModal()" class="absolute top-2 right-2 text-gray-600 hover:text-black text-xl">
+      &times;
+    </button>
+
+    <h2 class="text-xl font-semibold mb-4 text-gray-800">Add Device (via Zabbix)</h2>
+
+    <form id="addDeviceForm">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label class="block text-sm font-medium text-gray-700">Zabbix host ID</label>
+        <input type="text" name="device_name" required
+               class="w-full border rounded-md px-3 py-2 focus:outline-none focus:ring focus:ring-blue-300">
+      </div>
+
+      <div class="flex justify-end gap-2 mt-4">
+        <button type="button" onclick="closeModal()"
+                class="px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300 transition">Cancel</button>
+        <button type="submit"
+                class="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition">Add</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="{% static 'js/partials/add_device.js' %}"></script>
