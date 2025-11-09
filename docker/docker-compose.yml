@@ -56,6 +56,7 @@
       - ../backend:/app/backend
       - ../frontend:/app/frontend
       - ../database:/app/database
+      - ../doc:/app/doc
       - ../logs:/app/backend/logs
 
   celery:
@@ -102,6 +103,7 @@
       - ../backend:/app/backend
       - ../frontend:/app/frontend
       - ../database:/app/database
+      - ../doc:/app/doc
       - ../logs:/app/backend/logs
 
   beat:
@@ -147,6 +149,7 @@
       - ../backend:/app/backend
       - ../frontend:/app/frontend
       - ../database:/app/database
+      - ../doc:/app/doc
       - ../logs:/app/backend/logs
 
   redis:

@@ -1,0 +1,32 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{% block title %}SIMPLES INTERNET - Django Maps{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/x-icon" href="{% static 'favicon.ico' %}">
+
+  <!-- Tailwind CSS from CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-gray-100 text-gray-800 flex flex-col min-h-screen">
+
+  {% include 'partials/header.html' %}
+
+  <main class="flex-1 container mx-auto p-6">
+    {% block content %}
+    <p>Content goes here.</p>
+    {% endblock %}
+  </main>
+
+  <footer class="bg-gray-800 text-white text-center p-4">
+    &copy; {% now "Y" %} Fiber Setup Dashboard
+  </footer>
+
+  {% block extra_scripts %}
+  {% endblock %}
+
+</body>
+</html>
