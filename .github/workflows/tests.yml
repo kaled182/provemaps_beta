@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - inicial
+      - refactor/folder-structure
   pull_request:
     branches:
       - main
