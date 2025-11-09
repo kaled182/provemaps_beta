@@ -124,7 +124,10 @@ CSP_FONT_SRC = os.getenv(
 ).split()
 CSP_CONNECT_SRC = os.getenv(
     "CSP_CONNECT_SRC",
-    "'self' https://maps.googleapis.com",
+    "'self' "
+    "https://maps.googleapis.com "
+    "https://cdn.jsdelivr.net "
+    "https://maps.gstatic.com",
 ).split()
 CSP_FRAME_ANCESTORS = os.getenv("CSP_FRAME_ANCESTORS", "'none'").split()
 CONTENT_SECURITY_POLICY = {
