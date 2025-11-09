@@ -4,10 +4,20 @@ Integration tests for inventory models after migration from zabbix_api.
 These tests validate that the model separation was successful and that
 all relationships, imports, and admin configurations work correctly.
 """
-from django.contrib.admin.sites import AdminSite
+from django.contrib.admin import AdminSite, RelatedOnlyFieldListFilter
 from django.test import TestCase, SimpleTestCase
 
-from inventory.admin import DeviceAdmin, FiberCableAdmin, PortAdmin, SiteAdmin
+from inventory.admin import (
+    DeviceAdmin,
+    FiberCableAdmin,
+    HasNotesFilter,
+    HasZabbixItemKeyFilter,
+    OpticalPowerFilter,
+    PortAdmin,
+    SiteAdmin,
+    SiteListFilter,
+    TrafficItemsFilter,
+)
 from inventory.models import Device, FiberCable, FiberEvent, Port, Site
 
 
@@ -235,9 +245,17 @@ class InventoryAdminTests(TestCase):
 
         self.assertEqual(
             admin.list_display,
-            ("name", "city", "latitude", "longitude")
+            (
+                "display_name",
+                "city",
+                "state",
+                "country",
+                "postal_code",
+                "latitude",
+                "longitude",
+            ),
         )
-        self.assertIn("name", admin.search_fields)
+        self.assertIn("display_name", admin.search_fields)
         self.assertIn("city", admin.search_fields)
 
     def test_device_admin_configuration(self):
@@ -255,11 +273,27 @@ class InventoryAdminTests(TestCase):
         """Test PortAdmin is properly configured."""
         admin = PortAdmin(Port, self.admin_site)
 
-        self.assertEqual(
-            admin.list_display,
-            ("name", "device", "zabbix_item_key", "notes")
+        expected_display = (
+            "name",
+            "device",
+            "device_site",
+            "zabbix_item_key",
+            "notes",
         )
+        self.assertEqual(admin.list_display, expected_display)
         self.assertIn("name", admin.search_fields)
+        self.assertIn("device__name", admin.search_fields)
+        self.assertIn("device__site__display_name", admin.search_fields)
+        self.assertIn(
+            ("device", RelatedOnlyFieldListFilter),
+            admin.list_filter,
+        )
+        self.assertIn(SiteListFilter, admin.list_filter)
+        self.assertIn(HasZabbixItemKeyFilter, admin.list_filter)
+        self.assertIn(TrafficItemsFilter, admin.list_filter)
+        self.assertIn(OpticalPowerFilter, admin.list_filter)
+        self.assertIn(HasNotesFilter, admin.list_filter)
+        self.assertEqual(admin.list_select_related, ("device", "device__site"))
 
     def test_fiber_cable_admin_configuration(self):
         """Test FiberCableAdmin is properly configured."""
@@ -293,25 +327,25 @@ class InventoryModelsStringRepresentationTests(TestCase):
 
     def test_site_str(self):
         """Test Site.__str__() returns name."""
-        site = Site.objects.create(name="Test Site")
+        site = Site.objects.create(display_name="Test Site")
         self.assertEqual(str(site), "Test Site")
 
     def test_device_str(self):
         """Test Device.__str__() returns site + name."""
-        site = Site.objects.create(name="Site A")
+        site = Site.objects.create(display_name="Site A")
         device = Device.objects.create(site=site, name="Device 1")
         self.assertEqual(str(device), "Site A - Device 1")
 
     def test_port_str(self):
         """Test Port.__str__() returns device::name."""
-        site = Site.objects.create(name="Site B")
+        site = Site.objects.create(display_name="Site B")
         device = Device.objects.create(site=site, name="Router")
         port = Port.objects.create(device=device, name="eth0")
         self.assertEqual(str(port), "Site B - Router::eth0")
 
     def test_fiber_cable_str(self):
         """Test FiberCable.__str__() returns name."""
-        site = Site.objects.create(name="Site C")
+        site = Site.objects.create(display_name="Site C")
         device = Device.objects.create(site=site, name="Device")
         port_a = Port.objects.create(device=device, name="Port A")
         port_b = Port.objects.create(device=device, name="Port B")
@@ -325,7 +359,7 @@ class InventoryModelsStringRepresentationTests(TestCase):
 
     def test_fiber_event_str(self):
         """Test FiberEvent.__str__() returns formatted string."""
-        site = Site.objects.create(name="Site D")
+        site = Site.objects.create(display_name="Site D")
         device = Device.objects.create(site=site, name="Device")
         port_a = Port.objects.create(device=device, name="Port A")
         port_b = Port.objects.create(device=device, name="Port B")
