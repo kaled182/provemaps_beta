@@ -42,7 +42,9 @@ def port_factory(db: Any) -> PortFactory:
 
     def factory(*, prefix: str = "port") -> Port:
         counter = next(_PORT_COUNTER)
-        site = Site.objects.create(name=f"Test Site {uuid.uuid4().hex[:8]}")
+        site = Site.objects.create(
+            display_name=f"Test Site {uuid.uuid4().hex[:8]}"
+        )
         device = Device.objects.create(
             site=site,
             name=f"Test Device {prefix}-{counter}",

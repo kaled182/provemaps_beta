@@ -132,7 +132,7 @@ class DiagnosticsEndpointsEnabledTests(TestCase):
         self.assertEqual(payload["peername"], ["127.0.0.1", 80])
 
     def test_cable_up_sets_status_and_event(self):
-        site = Site.objects.create(name="Core", city="Goiania")
+        site = Site.objects.create(display_name="Core", city="Goiania")
         device = Device.objects.create(
             site=site,
             name="CORE-01",

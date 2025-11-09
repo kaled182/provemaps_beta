@@ -2,12 +2,17 @@
 Tests for sync_zabbix_inventory management command.
 """
 from io import StringIO
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from django.core.management import call_command
 from django.test import TestCase
 
 from inventory.models import Device, Port, Site
+
+
+PATCH_ZABBIX = (
+    "inventory.management.commands.sync_zabbix_inventory.zabbix_request"
+)
 
 
 class SyncZabbixInventoryCommandTests(TestCase):
@@ -20,7 +25,7 @@ class SyncZabbixInventoryCommandTests(TestCase):
         Site.objects.all().delete()
         Port.objects.all().delete()
 
-    @patch("inventory.management.commands.sync_zabbix_inventory.zabbix_request")
+    @patch(PATCH_ZABBIX)
     def test_sync_creates_site_and_device(self, mock_zabbix):
         """Test that sync creates site and device from Zabbix data."""
         # Mock Zabbix API response
@@ -54,7 +59,7 @@ class SyncZabbixInventoryCommandTests(TestCase):
         call_command("sync_zabbix_inventory", stdout=out)
 
         # Verify site created
-        site = Site.objects.get(name="DataCenter A")
+        site = Site.objects.get(display_name="DataCenter A")
         self.assertIsNotNone(site)
         self.assertAlmostEqual(float(site.latitude), 51.5074, places=4)
         self.assertAlmostEqual(float(site.longitude), -0.1278, places=4)
@@ -73,7 +78,7 @@ class SyncZabbixInventoryCommandTests(TestCase):
         output = out.getvalue()
         self.assertIn("Sync completed successfully", output)
 
-    @patch("inventory.management.commands.sync_zabbix_inventory.zabbix_request")
+    @patch(PATCH_ZABBIX)
     def test_dry_run_mode(self, mock_zabbix):
         """Test that dry-run mode doesn't create records."""
         mock_zabbix.return_value = [
@@ -100,11 +105,11 @@ class SyncZabbixInventoryCommandTests(TestCase):
         output = out.getvalue()
         self.assertIn("DRY RUN", output)
 
-    @patch("inventory.management.commands.sync_zabbix_inventory.zabbix_request")
+    @patch(PATCH_ZABBIX)
     def test_update_existing_device(self, mock_zabbix):
         """Test that sync updates existing device."""
         # Create existing site and device
-        site = Site.objects.create(name="Existing Site")
+        site = Site.objects.create(display_name="Existing Site")
         device = Device.objects.create(
             site=site,
             name="Old Name",
@@ -131,7 +136,7 @@ class SyncZabbixInventoryCommandTests(TestCase):
         device.refresh_from_db()
         self.assertEqual(device.name, "Updated Name")
 
-    @patch("inventory.management.commands.sync_zabbix_inventory.zabbix_request")
+    @patch(PATCH_ZABBIX)
     def test_limit_option(self, mock_zabbix):
         """Test that --limit option restricts number of hosts."""
         # Mock returns multiple hosts but limit should restrict
@@ -157,11 +162,11 @@ class SyncZabbixInventoryCommandTests(TestCase):
         self.assertIn("limit", call_args[1])
         self.assertEqual(call_args[1]["limit"], 3)
 
-    @patch("inventory.management.commands.sync_zabbix_inventory.zabbix_request")
+    @patch(PATCH_ZABBIX)
     def test_update_only_mode(self, mock_zabbix):
         """Test that --update-only skips creating new devices."""
         # Create one existing device
-        site = Site.objects.create(name="Test Site")
+        site = Site.objects.create(display_name="Test Site")
         Device.objects.create(
             site=site,
             name="Existing Device",
@@ -198,7 +203,7 @@ class SyncZabbixInventoryCommandTests(TestCase):
         device = Device.objects.get(zabbix_hostid="1")
         self.assertEqual(device.name, "Existing Device Updated")
 
-    @patch("inventory.management.commands.sync_zabbix_inventory.zabbix_request")
+    @patch(PATCH_ZABBIX)
     def test_handles_missing_inventory_gracefully(self, mock_zabbix):
         """Test that command handles hosts without inventory data."""
         mock_zabbix.return_value = [

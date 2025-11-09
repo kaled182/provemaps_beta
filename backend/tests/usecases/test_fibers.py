@@ -154,8 +154,8 @@ class CreateManualFiberTests(TestCase):
 
 class CreateFiberFromKMLTests(TestCase):
     def setUp(self) -> None:
-        self.site_a: Site = Site.objects.create(name="Site A")
-        self.site_b: Site = Site.objects.create(name="Site B")
+        self.site_a: Site = Site.objects.create(display_name="Site A")
+        self.site_b: Site = Site.objects.create(display_name="Site B")
         self.device_a: Device = Device.objects.create(
             name="Device A",
             site=self.site_a,
@@ -266,7 +266,7 @@ class CreateFiberFromKMLTests(TestCase):
 
 class DeleteFiberTests(TestCase):
     def setUp(self) -> None:
-        site: Site = Site.objects.create(name="Test Site")
+        site: Site = Site.objects.create(display_name="Test Site")
         device: Device = Device.objects.create(name="Test Device", site=site)
         port1: Port = Port.objects.create(name="Port 1", device=device)
         port2: Port = Port.objects.create(name="Port 2", device=device)

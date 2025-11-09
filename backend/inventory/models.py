@@ -11,15 +11,22 @@ from typing import TYPE_CHECKING, Any, cast
 
 from django.db import models
 from django.utils import timezone
+from django.utils.text import slugify
 
 
 class Site(models.Model):
-    """
-    Physical location/site containing network devices.
-    Original table: zabbix_api_site
-    """
-    name = models.CharField(max_length=120, unique=True)
-    city = models.CharField(max_length=120, blank=True)
+    """Physical location/site containing network devices."""
+
+    display_name = models.CharField(max_length=160, unique=True)
+    slug = models.SlugField(max_length=160, unique=True, editable=False)
+    address_line1 = models.CharField(max_length=255, blank=True)
+    address_line2 = models.CharField(max_length=255, blank=True)
+    address_line3 = models.CharField(max_length=255, blank=True)
+    city = models.CharField(max_length=160, blank=True)
+    state = models.CharField(max_length=160, blank=True)
+    postal_code = models.CharField(max_length=32, blank=True)
+    country = models.CharField(max_length=160, blank=True)
+    rack_location = models.CharField(max_length=160, blank=True)
     latitude = models.DecimalField(
         max_digits=9,
         decimal_places=6,
@@ -35,11 +42,49 @@ class Site(models.Model):
     description = models.TextField(blank=True)
 
     class Meta:
-        ordering = ["name"]
+        ordering = ["display_name"]
         db_table = "zabbix_api_site"  # Preserve original table name
 
     def __str__(self) -> str:
-        return self.name
+        return self.display_name
+
+    @property
+    def name(self) -> str:
+        """Backward compatible alias for the previous field name."""
+
+        return self.display_name
+
+    @name.setter
+    def name(self, value: str) -> None:
+        self.display_name = value
+
+    @staticmethod
+    def _build_base_slug(source: str | None) -> str:
+        base = slugify(source or "")
+        if base:
+            return base[:120]
+        return "site"
+
+    def _ensure_slug(self) -> None:
+        if self.slug and slugify(self.slug) == self.slug:
+            return
+
+        base_slug = self._build_base_slug(self.display_name or self.city)
+        candidate = base_slug
+        suffix = 2
+        while Site.objects.exclude(pk=self.pk).filter(slug=candidate).exists():
+            suffix_str = f"-{suffix}"
+            candidate = f"{base_slug[:120 - len(suffix_str)]}{suffix_str}"
+            suffix += 1
+        self.slug = candidate
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        if not self.display_name:
+            # Fall back to a human friendly version of the slug
+            fallback = self.city or self.address_line1 or self.slug or "Site"
+            self.display_name = fallback
+        self._ensure_slug()
+        super().save(*args, **kwargs)
 
 
 class Device(models.Model):
@@ -81,11 +126,12 @@ class Device(models.Model):
 
     class Meta:
         unique_together = ("site", "name")
-        ordering = ["site__name", "name"]
+        ordering = ["site__display_name", "name"]
         db_table = "zabbix_api_device"  # Preserve original table name
 
     def __str__(self) -> str:
-        return f"{self.site.name} - {self.name}" if self.site_id else self.name
+        site_label = self.site.display_name if self.site_id else None
+        return f"{site_label} - {self.name}" if site_label else self.name
 
     if TYPE_CHECKING:
         site_id: int | None
@@ -141,7 +187,7 @@ class Port(models.Model):
 
     class Meta:
         unique_together = ("device", "name")
-        ordering = ["device__site__name", "device__name", "name"]
+        ordering = ["device__site__display_name", "device__name", "name"]
         db_table = "zabbix_api_port"  # Preserve original table name
 
     def __str__(self) -> str:
