@@ -31,8 +31,9 @@
         <div class="grid gap-3 md:grid-cols-[1.5fr,1fr]">
           <input id="q" class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-500/20"
                  placeholder="Example: core, 192.168." />
-          <input id="groupids" class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-500/20"
-                 placeholder="Group IDs (optional): 2,15" />
+          <select id="groupids" class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-500/20">
+            <option value="">Loading host groups...</option>
+          </select>
         </div>
         <div class="flex items-center justify-between gap-3">
           <button id="btnSearch"
@@ -131,14 +132,43 @@
   const hostInfoEl = $("#hostInfo");
   const addBtn = $("#btnAddDevice");
   const addRes = $("#addResult");
+  const groupSelect = $("#groupids");
   let currentHost = null;
   let currentDevice = null;
+
+  function escapeHtml(value) {
+    if (value === null || value === undefined) return "";
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
 
   async function fetchJSON(url, options = {}) {
     const resp = await fetch(url, options);
     let data = null;
     try { data = await resp.json(); } catch (_) {}
-    if (!resp.ok) throw new Error((data && (data.error || data.message)) || resp.statusText);
+    if (!resp.ok) {
+      const baseMessage = data && (data.error || data.message)
+        ? String(data.error || data.message)
+        : resp.statusText;
+      const detail = data && (data.detail || data.details)
+        ? String(data.detail || data.details)
+        : "";
+      const message = detail && detail !== baseMessage
+        ? `${baseMessage}: ${detail}`
+        : baseMessage;
+      const error = new Error(message || "Request failed");
+      if (detail) {
+        error.detail = detail;
+      }
+      if (data) {
+        error.payload = data; // expose original payload for callers who need more context
+      }
+      throw error;
+    }
     return data;
   }
 
@@ -174,23 +204,53 @@
   function renderStatusBadge(status, availability) {
     const baseClass = "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium border";
     const avail = availability || {};
-    const value = avail.value;
-    const label = avail.label || "Unknown";
+    const rawValue = avail.value;
+    const value = rawValue === undefined || rawValue === null || rawValue === "" ? null : String(rawValue);
+    const fallbackLabel = avail.label || null;
+    const displayLabel = value === "1"
+      ? "Online"
+      : value === "2"
+        ? "Offline"
+        : fallbackLabel || "Unknown";
     const tooltip = avail.error ? `title="${avail.error.replace(/"/g, '&quot;')}"` : "";
     const prefix = "DEVICE";
 
     if (!value) {
-      return `<span ${tooltip} class="${baseClass} border-gray-200 bg-gray-100 text-gray-600"><span class="text-base leading-none">&#9679;</span>${prefix} - ${label}</span>`;
+      return `<span ${tooltip} class="${baseClass} border-gray-200 bg-gray-100 text-gray-600"><span class="text-base leading-none">&#9679;</span>${prefix} - ${displayLabel}</span>`;
     }
 
     let classes = "border-gray-200 bg-gray-100 text-gray-600";
-    if (String(value) === "1") {
+    if (value === "1") {
       classes = "border-green-200 bg-green-100 text-green-700";
-    } else if (String(value) === "2") {
+    } else if (value === "2") {
       classes = "border-red-200 bg-red-100 text-red-700";
     }
 
-  return `<span ${tooltip} class="${baseClass} ${classes}"><span class="text-base leading-none">&#9679;</span>${prefix} - ${label}</span>`;
+  return `<span ${tooltip} class="${baseClass} ${classes}"><span class="text-base leading-none">&#9679;</span>${prefix} - ${displayLabel}</span>`;
+  }
+
+  async function loadHostGroups() {
+    if (!groupSelect) return;
+    groupSelect.disabled = true;
+    groupSelect.innerHTML = '<option value="">Loading host groups...</option>';
+    try {
+      const payload = await fetchJSON(`${API}/lookup/host-groups/?exclude_empty=1`);
+      const groups = payload?.data || [];
+      const options = ['<option value="">Select a host group</option>'];
+      groups.forEach((group) => {
+        const groupId = group?.groupid || group?.group_id;
+        const hostCount = Number(group?.host_count ?? group?.hosts ?? 0) || 0;
+        const label = escapeHtml(group?.name || `Group ${groupId}`);
+        if (!groupId) return;
+        const suffix = hostCount ? ` (${hostCount})` : "";
+        options.push(`<option value="${groupId}">${label}${suffix}</option>`);
+      });
+      groupSelect.innerHTML = options.join("");
+    } catch (error) {
+      groupSelect.innerHTML = `<option value="">Failed to load groups (${escapeHtml(error.message)})</option>`;
+    } finally {
+      groupSelect.disabled = false;
+    }
   }
 
 
@@ -252,7 +312,7 @@
 
   $("#btnSearch").addEventListener("click", async () => {
     const q = $("#q").value.trim();
-    const groupids = $("#groupids").value.trim();
+    const groupids = groupSelect ? groupSelect.value.trim() : "";
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (groupids) params.set("groupids", groupids);
@@ -285,6 +345,17 @@
         </div>`;
     }
   });
+
+  if (groupSelect) {
+    groupSelect.addEventListener("change", () => {
+      const hasGroup = groupSelect.value.trim() !== "";
+      if (hasGroup) {
+        $("#btnSearch").click();
+      }
+    });
+  }
+
+  loadHostGroups();
 
   function renderSelectedHostInfo() {
     if (!currentHost) {
@@ -403,7 +474,24 @@
       addRes.textContent = `Device ${createdMessage}: ${response.device.name} (id=${response.device.id}). Ports detected: ${response.total_ports_detected}.`;
       await loadPortsWithOptical(response.device.id, response.device.name);
     } catch (error) {
-      addRes.textContent = `Error: ${error.message}`;
+      const base = error && error.message ? String(error.message) : "Unexpected error";
+      const detail = error && error.detail ? String(error.detail) : "";
+      const payload = error && error.payload ? error.payload : null;
+      let message = base;
+      if (detail && !message.includes(detail)) {
+        message = `${message}: ${detail}`;
+      }
+      const payloadDetail = payload && (payload.detail || payload.details || payload.message_verbose);
+      if (payloadDetail && !message.includes(payloadDetail)) {
+        message = `${message}: ${payloadDetail}`;
+      }
+      if (payload && payload.errors && Array.isArray(payload.errors) && payload.errors.length) {
+        const joined = payload.errors.map((err) => String(err)).join("; ");
+        if (joined && !message.includes(joined)) {
+          message = `${message}: ${joined}`;
+        }
+      }
+      addRes.textContent = `Error: ${message}`;
     } finally {
       addBtn.disabled = false;
     }

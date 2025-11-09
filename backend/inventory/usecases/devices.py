@@ -180,6 +180,37 @@ def _coerce_host_items(raw_items: Any) -> HostItemList:
     return result
 
 
+def _resolve_host_inventory(
+    hostid: str,
+    host: Mapping[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """Return the host inventory record if available.
+
+    Some Zabbix configurations return an empty list when the host inventory
+    feature is disabled. We normalise that to ``None`` so callers can surface
+    a clear validation error instead of hitting ``.get`` on a list.
+    """
+
+    inventory = host.get("inventory")
+    if isinstance(inventory, dict):
+        return cast(Dict[str, Any], inventory)
+
+    extra_data = ZABBIX_REQUEST(
+        "host.get",
+        {
+            "output": ["hostid"],
+            "hostids": hostid,
+            "selectInventory": "extend",
+        },
+    )
+    if extra_data:
+        candidate = extra_data[0].get("inventory")
+        if isinstance(candidate, dict):
+            return cast(Dict[str, Any], candidate)
+
+    return None
+
+
 def _coerce_dict_list(raw_items: Any) -> List[Dict[str, Any]]:
     if not isinstance(raw_items, list):
         return []
@@ -234,7 +265,7 @@ def _preload_optical_discovery_cache(
 
     # Try to reuse cached discovery map when port set did not change recently
     try:
-        signature_data = [
+        signature_data: List[Dict[str, str]] = [
             {
                 "id": str(getattr(port, "pk", getattr(port, "id", "")) or ""),
                 "name": (getattr(cast(Any, port), "name", "") or "").strip(),
@@ -704,6 +735,7 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
             "output": ["hostid", "name", "host"],
             "hostids": hostid,
             "selectInterfaces": ["interfaceid", "ip", "dns", "port", "type"],
+            "selectInventory": "extend",
         },
     )
     if not zabbix_data:
@@ -712,25 +744,16 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
     host = zabbix_data[0]
     site_name = host.get("name") or host.get("host")
 
-    lat: Optional[str] = None
-    lon: Optional[str] = None
-    address: Optional[str] = None
-
-    if "inventory" in host:
-        inv = host["inventory"]
-        lat = inv.get("location_lat")
-        lon = inv.get("location_lon")
-        address = inv.get("site_address") or inv.get("location")
-    else:
-        inv_data = ZABBIX_REQUEST(
-            "host.get",
-            {"output": ["hostid"], "hostids": hostid, "selectInventory": "extend"},
+    inventory = _resolve_host_inventory(str(hostid), host)
+    if inventory is None:
+        raise InventoryValidationError(
+            "Host inventory data is missing in Zabbix. Enable host inventory "
+            "and populate the fields before importing."
         )
-        if inv_data and "inventory" in inv_data[0]:
-            inv = inv_data[0]["inventory"]
-            lat = inv.get("location_lat")
-            lon = inv.get("location_lon")
-            address = inv.get("site_address") or inv.get("location")
+
+    lat: Optional[str] = inventory.get("location_lat")
+    lon: Optional[str] = inventory.get("location_lon")
+    address: Optional[str] = inventory.get("site_address") or inventory.get("location")
 
     site, site_created = Site.objects.get_or_create(name=site_name)
     update_fields: List[str] = []
@@ -966,7 +989,7 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
         port = record.port
         port_like = cast(PortLike, port)
         port.refresh_from_db()
-        summary = {
+        summary: Dict[str, Any] = {
             "id": port_like.id,
             "name": port_like.name,
             "zabbix_item_key": port_like.zabbix_item_key,

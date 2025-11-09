@@ -144,10 +144,11 @@ def api_add_device_from_zabbix(request: HttpRequest) -> HttpResponse:
         return JsonResponse({"error": str(exc)}, status=404)
     except InventoryUseCaseError as exc:
         logger.exception("Failed to register device via Zabbix: %s", exc)
-        return JsonResponse(
-            {"error": "Failed to register device"},
-            status=500,
-        )
+        detail = str(exc).strip()
+        payload: Dict[str, Any] = {"error": "Failed to register device"}
+        if detail:
+            payload["detail"] = detail
+        return JsonResponse(payload, status=500)
     return JsonResponse(payload)
 
 
@@ -256,7 +257,7 @@ def api_test_telnet(request: HttpRequest) -> JsonResponse:
     except ValueError:
         timeout = 3.0
 
-    result = {"host": host, "port": port, "timeout": timeout}
+    result: Dict[str, Any] = {"host": host, "port": port, "timeout": timeout}
     try:
         with socket.create_connection((host, port), timeout=timeout) as conn:
             elapsed = time.time() - started
