@@ -10,8 +10,8 @@
 </script>
 
 <style>
-/* Import legacy CSS for gradual migration */
-@import url('/static/css/base.css');
+/* Import temporary base styles while migrating legacy assets */
+@import './assets/base.css';
 
 #app {
   width: 100%;
