@@ -226,7 +226,7 @@ Write-Host "──────────────────────�
 
 Write-Info "Checking migration status..."
 try {
-    $migrationOutput = python manage.py showmigrations --plan 2>&1
+    $migrationOutput = python backend/manage.py showmigrations --plan 2>&1
     if ($LASTEXITCODE -eq 0) {
         $unapplied = $migrationOutput | Select-String -Pattern "\[ \]" -CaseSensitive
         if ($unapplied) {
