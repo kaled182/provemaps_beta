@@ -34,6 +34,14 @@ jobs:
       - name: Install node dependencies
         run: npm ci
 
+      - name: Run migrations
+        env:
+          PYTHONPATH: "${{ github.workspace }}/backend"
+          DJANGO_SETTINGS_MODULE: "settings.test"
+        working-directory: backend
+        run: |
+          ../venv/bin/python manage.py migrate --noinput
+
       - name: Run Pyright inventory shim checks
         env:
           PYTHONPATH: "${{ github.workspace }}/backend"

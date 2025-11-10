@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - inicial
+      - refactor/folder-structure
   pull_request:
     branches:
       - main
@@ -29,6 +30,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
+      - name: Run migrations
+        env:
+          PYTHONPATH: "${{ github.workspace }}/backend"
+          DJANGO_SETTINGS_MODULE: "settings.test"
+        working-directory: backend
+        run: |
+          python manage.py migrate --noinput
+
       - name: Run tests with coverage
         env:
           PYTHONPATH: "${{ github.workspace }}/backend"
@@ -42,5 +51,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-xml
-          path: coverage.xml
+          path: backend/coverage.xml
           if-no-files-found: error

@@ -162,9 +162,15 @@ Desktop.ini
 node_modules/
 package-lock.json
 
-# Project-specific generated artifacts
+# Project-specific generated artifacts (post folder-structure refactor)
 backend/logs/
+backend/media/
 backend/staticfiles/
+backend/tmp/
+backend/__pycache__/
+backend/*.sqlite3
+backend/test_db.sqlite3
+backend/test_media/
 logs/
 staticfiles/
 database/*.sqlite3
