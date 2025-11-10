@@ -74,7 +74,7 @@ class SWRCache:
 
             now = time.time()
             age = now - (timestamp or 0)
-            is_stale = age > self.fresh_ttl
+            is_stale = age >= self.fresh_ttl
 
             return {
                 "data": data,
@@ -106,7 +106,7 @@ class SWRCache:
     def get_or_fetch(
         self,
         fetch_fn: Callable[[], Any],
-        async_task: Optional[Callable] = None,
+        async_task: Optional[Callable[[], Any]] = None,
     ) -> Dict[str, Any]:
         """
         Implement the SWR pattern for the configured cache key.
@@ -201,7 +201,7 @@ dashboard_cache = SWRCache(key="dashboard:hosts_status")
 
 def get_dashboard_cached(
     fetch_fn: Callable[[], Dict[str, Any]],
-    async_task: Optional[Callable] = None,
+    async_task: Optional[Callable[[], Any]] = None,
 ) -> Dict[str, Any]:
     """Helper around :class:`SWRCache` for the dashboard payload."""
     return dashboard_cache.get_or_fetch(fetch_fn, async_task)

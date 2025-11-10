@@ -178,7 +178,7 @@ chmod +x scripts/deploy.sh
 |------|-----|
 | Dashboard | `/maps_view/dashboard/` |
 | Setup | `/setup_app/` |
-| Route Builder | `/routes_builder/` (legado) |
+| Rotas (API) | `/api/v1/inventory/routes/tasks/` |
 | Admin | `/admin/` |
 | Health | `/healthz`, `/ready`, `/live` |
 | Metrics | `/metrics/metrics` |

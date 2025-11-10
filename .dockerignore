@@ -129,7 +129,7 @@ pytest.ini
 # CI/CD and Scripts
 # ----------------------------------------------------
 .github/
-scripts/
+ # scripts/  # allow scripts to be bundled for runtime helpers
 makefile
 
 # ----------------------------------------------------

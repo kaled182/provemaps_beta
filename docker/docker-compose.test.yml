@@ -4,16 +4,14 @@ services:
   # Primary test service
   tests:
     build:
-      context: .
-      # Reuse the main image build cache (optional)
-      cache_from:
-        - web:latest
+      context: ..
+      dockerfile: docker/dockerfile
     entrypoint: ["/docker-entrypoint.sh"]
     command: >
       sh -c "
       set -e
-      export DJANGO_SETTINGS_MODULE=$${DJANGO_SETTINGS_MODULE:-settings.test}
-      export PYTHONPATH=/app
+  export DJANGO_SETTINGS_MODULE=$${DJANGO_SETTINGS_MODULE:-settings.test}
+  export PYTHONPATH=/app/backend:/app
       
       echo '🎯 Environment: '$$DJANGO_SETTINGS_MODULE
       echo '🐍 Python: '$(python --version)
@@ -35,7 +33,7 @@ services:
       fi
       "
     env_file:
-      - ./.env.test
+      - ../.env.example
     environment:
       # Environment settings
       TESTING: "true"
@@ -55,11 +53,11 @@ services:
         condition: service_healthy
     volumes:
       # Development: source code
-      - .:/app
+      - ../:/app
       # Entrypoint (required because it is not copied in the Dockerfile)
-      - ./docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
       # Reports
-      - ./reports:/app/reports
+      - ../reports:/app/reports
       # Pytest cache (optional)
       - pytest-cache:/app/.pytest_cache
     working_dir: /app

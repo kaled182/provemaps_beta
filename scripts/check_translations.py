@@ -189,7 +189,6 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         default=[
             "inventory",
             "maps_view",
-            "routes_builder",
             "setup_app",
             "templates",
         ],

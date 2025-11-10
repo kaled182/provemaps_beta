@@ -18,7 +18,7 @@ System design, module structure, and architecture decisions for MapsProveFiber v
 - ✅ **MODULES.md** — Comprehensive documentation of all 10 Django apps:
   - Core infrastructure apps (core, inventory, maps_view, monitoring, setup_app)
   - Integration layer (integrations/zabbix with circuit breaker)
-  - Legacy apps (routes_builder — Phase 4 cleanup pending)
+   - Archived apps (routes_builder retired in Nov/2025)
   - Future placeholders (dwdm, gpon, service_accounts)
   - Complete dependency graph and migration history
   
@@ -144,7 +144,7 @@ See [OVERVIEW.md](OVERVIEW.md) for detailed diagrams.
 
 | Module | Status | Migration Path |
 |--------|--------|----------------|
-| **`routes_builder/`** | ⚠️ Deprecated | Use `inventory/routes/` |
+| **`routes_builder/`** | ❌ Archived (Nov 2025) | Use `inventory/routes/` |
 | **`zabbix_api/`** | ❌ Removed (v2.0.0) | Use `integrations/zabbix/` |
 
 See [MODULES.md](MODULES.md) for complete module reference.

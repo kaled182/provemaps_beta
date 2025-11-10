@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 def zabbix_lookup_page(request: HttpRequest) -> HttpResponse:
     """
     Render the Zabbix lookup integration page.
-    The frontend consumes the REST endpoints from the zabbix_api app.
+    The frontend consumes the inventory Zabbix endpoints under
+    `/api/v1/inventory/zabbix`.
     """
     return render(request, "zabbix/lookup.html")
 

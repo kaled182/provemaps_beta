@@ -78,59 +78,79 @@ else:
 print()
 
 # Layer 4: View Context (what gets passed to template)
-print("== LAYER 4: VIEW CONTEXT (routes_builder fiber route view)")
+print("== LAYER 4: VIEW CONTEXT (routes builder template injection)")
 print("-" * 80)
+match = None
 try:
-    from routes_builder.views import (  # type: ignore[attr-defined]
-        fiber_route_builder_view,
-    )
-    from django.test import RequestFactory
-    from django.contrib.auth.models import User
-    
-    factory = RequestFactory()
-    request = factory.get('/routes/fiber-route-builder/')
-    user = User.objects.first()
-    if not user:
-        print("WARN: No user found; creating test user for diagnostic")
-        user = User.objects.create_user(
-            username='diagnostic_user',
-            password='test123',
-        )
-    request.user = user
+    from importlib import import_module
 
-    fiber_route_fn = cast(Callable[[Any], Any], fiber_route_builder_view)
-    response = fiber_route_fn(request)
-    html = response.content.decode('utf-8')
-    
-    # Search for Google Maps script tag
-    import re
-    match = re.search(
-        r'maps\.googleapis\.com/maps/api/js\?key=([^"&\s]+)',
-        html,
+    routes_builder_views = import_module("routes_builder.views")
+    fiber_route_builder_view = getattr(
+        routes_builder_views,
+        "fiber_route_builder_view",
+        None,
     )
-    
-    if match:
-        key_in_html = match.group(1)
-        if key_in_html:
-            print(
-                "OK: Key in HTML "
-                f"{key_in_html[:20]}...{key_in_html[-6:]} "
-                f"(length {len(key_in_html)})"
-            )
-        else:
-            print("ERROR: Key parameter is empty in HTML")
+except ModuleNotFoundError:
+    print("INFO: routes_builder app not available; skipping view diagnostic")
+except Exception as e:  # pragma: no cover - defensive guard
+    print(f"ERROR: Unexpected import failure ({e})")
+else:
+    if not callable(fiber_route_builder_view):
+        print("INFO: fiber_route_builder_view missing; skipping diagnostic")
     else:
-        print("ERROR: Google Maps script tag not found in rendered HTML")
-        # Show snippet for debugging
-        snippet_start = html.find('maps.googleapis')
-        if snippet_start > 0:
-            snippet = html[snippet_start:snippet_start+100]
-            print(f"    HTML snippet: {snippet}")
-        
-except Exception as e:
-    print(f"ERROR: Exception while testing view ({e})")
-    import traceback
-    traceback.print_exc()
+        try:
+            from django.contrib.auth.models import User
+            from django.test import RequestFactory
+
+            factory = RequestFactory()
+            request = factory.get('/routes/fiber-route-builder/')
+            user = User.objects.first()
+            if not user:
+                print("WARN: No user found; creating test user for diagnostic")
+                user = User.objects.create_user(
+                    username='diagnostic_user',
+                    password='test123',
+                )
+            request.user = user
+
+            fiber_route_fn = cast(
+                Callable[[Any], Any],
+                fiber_route_builder_view,
+            )
+            response = fiber_route_fn(request)
+            html = response.content.decode('utf-8')
+
+            # Search for Google Maps script tag
+            import re
+
+            match = re.search(
+                r'maps\.googleapis\.com/maps/api/js\?key=([^"&\s]+)',
+                html,
+            )
+
+            if match:
+                key_in_html = match.group(1)
+                if key_in_html:
+                    print(
+                        "OK: Key in HTML "
+                        f"{key_in_html[:20]}...{key_in_html[-6:]} "
+                        f"(length {len(key_in_html)})"
+                    )
+                else:
+                    print("ERROR: Key parameter is empty in HTML")
+            else:
+                print(
+                    "ERROR: Google Maps script tag not found in rendered HTML"
+                )
+                # Show snippet for debugging
+                snippet_start = html.find('maps.googleapis')
+                if snippet_start > 0:
+                    snippet = html[snippet_start:snippet_start+100]
+                    print(f"    HTML snippet: {snippet}")
+        except Exception as e:  # pragma: no cover - keep legacy behaviour
+            print(f"ERROR: Exception while testing view ({e})")
+            import traceback
+            traceback.print_exc()
 print()
 
 # Summary
@@ -142,7 +162,7 @@ has_runtime = bool(
     config_runtime and getattr(config_runtime, 'google_maps_api_key', '')
 )
 has_settings = bool(getattr(settings, 'GOOGLE_MAPS_API_KEY', ''))
-has_html = match and match.group(1) if 'match' in locals() else False
+has_html = bool(match and match.group(1))
 
 if all([has_db, has_runtime, has_html]):
     print("OK: All layers report the Google Maps API Key is configured")

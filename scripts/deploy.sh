@@ -9,10 +9,10 @@
 #   resource verification (disk), docker compose version check, final service verification
 #
 # Usage:
-#   ./scripts/deploy.sh [--compose docker-compose.yml] [--settings settings.prod] [--health http://HOST:8000/healthz] [--timeout 180]
+#   ./scripts/deploy.sh [--compose docker/docker-compose.yml] [--settings settings.prod] [--health http://HOST:8000/healthz] [--timeout 180]
 #
 # Optional environment overrides:
-#   COMPOSE_FILE=./docker-compose.yml
+#   COMPOSE_FILE=docker/docker-compose.yml
 #   DJANGO_SETTINGS_MODULE=settings.prod
 #   HEALTHCHECK_URL=http://localhost:8000/healthz
 #   HEALTHCHECK_TIMEOUT=180
@@ -44,7 +44,7 @@ SCRIPT_VERSION="1.1.0"
 COMPOSE_MIN_VERSION="2.0.0"
 
 ### ---- DEFAULTS ----
-COMPOSE_FILE="${COMPOSE_FILE:-./docker-compose.yml}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker/docker-compose.yml}"
 DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-settings.prod}"
 HEALTHCHECK_URL="${HEALTHCHECK_URL:-http://localhost:8000/healthz}"
 HEALTHCHECK_TIMEOUT="${HEALTHCHECK_TIMEOUT:-180}"
@@ -66,7 +66,7 @@ while [[ $# -gt 0 ]]; do
 Usage: $0 [options]
 
 Options:
-  --compose FILE          Path to docker-compose.yml (default: $COMPOSE_FILE)
+  --compose FILE          Path to docker/docker-compose.yml (default: $COMPOSE_FILE)
   --settings MODULE       DJANGO_SETTINGS_MODULE (default: $DJANGO_SETTINGS_MODULE)
   --health URL            Healthcheck URL (default: $HEALTHCHECK_URL)
   --timeout SECONDS       Healthcheck timeout (default: $HEALTHCHECK_TIMEOUT)

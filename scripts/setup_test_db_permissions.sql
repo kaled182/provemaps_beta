@@ -9,13 +9,9 @@
 -- 4. Insert/update/delete test data
 --
 -- Usage:
---   docker compose exec db mariadb -u root -proot < scripts/setup_test_db_permissions.sql
---
+--   docker compose -f docker/docker-compose.yml exec db mariadb -u root -proot < scripts/setup_test_db_permissions.sql
 -- Interactive alternative:
---   docker compose exec db mariadb -u root -proot
---   source /app/scripts/setup_test_db_permissions.sql
--- ============================================================================
-
+--   docker compose -f docker/docker-compose.yml exec db mariadb -u root -proot
 -- Grant all privileges to user `app` so it can manage test databases
 GRANT ALL PRIVILEGES ON *.* TO 'app'@'%' WITH GRANT OPTION;
 
