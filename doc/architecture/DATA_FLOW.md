@@ -344,15 +344,15 @@ User clicks "Build Route"
 ┌──────────────────────────────────────────────────────────────────────┐
 │  POST /api/v1/inventory/routes/tasks/build/                         │
 │                                                                      │
-│  1. Validate request (from_site, to_site, fiber_type)              │
+│  1. Validate request payload (requires `route_id`)                 │
 │  2. Enqueue Celery task                                            │
-│     └─ task_id = build_route_task.delay(from_site, to_site, ...)  │
+│     └─ task_id = routes_builder.tasks.build_route.delay(route_id) │
 │  3. Return 202 Accepted + task_id                                  │
 └──────────────────────────────────────────────────────────────────────┘
        │
        ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│  Celery Worker: routes_builder.tasks.build_route_task               │
+│  Celery Worker: routes_builder.tasks.build_route                    │
 │                                                                      │
 │  1. Fetch inventory data (sites, devices, fibers)                  │
 │     └─ Query Django ORM for topology graph                         │

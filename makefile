@@ -7,6 +7,8 @@ MANAGE := $(PY) $(BACKEND_DIR)/manage.py
 DJANGO_SETTINGS_MODULE ?= settings.dev
 export DJANGO_SETTINGS_MODULE
 
+COMPOSE := docker compose -f docker/docker-compose.yml
+
 # Local health endpoints (adjust as needed)
 HEALTH_URL ?= http://localhost:8000/healthz
 READY_URL  ?= http://localhost:8000/ready
@@ -107,24 +109,24 @@ fmt:  ## Format code (ruff --fix / black / isort)
 ### ---------------------------
 
 .PHONY: up
-up:  ## Bring stack up via docker compose (default ./docker-compose.yml)
-	docker compose up -d
+up:  ## Bring stack up via docker compose (docker/docker-compose.yml)
+	$(COMPOSE) up -d
 
 .PHONY: down
 down:  ## Tear down docker compose stack
-	docker compose down
+	$(COMPOSE) down
 
 .PHONY: logs
 logs:  ## Tail container logs
-	docker compose logs -f
+	$(COMPOSE) logs -f
 
 .PHONY: build
 build:  ## Build images
-	docker compose build
+	$(COMPOSE) build
 
 .PHONY: restart
 restart:  ## Restart services
-	docker compose restart
+	$(COMPOSE) restart
 
 ### ---------------------------
 ### Health checks (local)

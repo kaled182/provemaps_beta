@@ -7,7 +7,7 @@ MapsProveFiber is a Django 5.x platform for fiber optic network infrastructure m
 
 ## Core Features
 - 🗺️ **Real-time Network Dashboard** — Live status visualization with WebSocket updates
-- 🔌 **Fiber Route Builder** — KML import, power budget analysis, and segment management
+- 🔌 **Fiber Route Management** — KML import, power budget analysis, and segment workflows
 - 📊 **Zabbix Integration** — Resilient API client with circuit breaker, retry logic, and caching
 - 🏗️ **Inventory Management** — Authoritative models for Sites, Devices, Ports, Routes, and Fiber Cables
 - 📈 **Observability** — Prometheus metrics, health checks, structured logging, and request tracing
@@ -30,10 +30,7 @@ MapsProveFiber is a Django 5.x platform for fiber optic network infrastructure m
 - **`maps_view/`** — Network dashboard views and real-time WebSocket publisher
   - SWR cache pattern for dashboard data
   - Templates and static assets for map visualization
-- **`routes_builder/`** — Route planning UI and services ⚠️ **(zombie app pattern)**
-  - Active services in `routes_builder/services.py` (route building, KML export, power calc)
-  - Models migrated to `inventory.models_routes` (tables renamed to `inventory_route*`)
-  - Kept in `INSTALLED_APPS` for migration chain compatibility only
+- *(Legacy `routes_builder/` assets have been retired; route logic now lives in `inventory.models_routes`.)*
 - **`setup_app/`** — Runtime credentials, encrypted settings (Fernet), documentation viewer
 
 ### Database Schema (Post-Migration)
@@ -111,7 +108,6 @@ celery -A core beat --loglevel=info
 1. Access admin: `http://localhost:8000/admin/`
 2. Configure Zabbix credentials: `http://localhost:8000/setup_app/`
 3. View dashboard: `http://localhost:8000/maps_view/dashboard/`
-4. Access route builder: `http://localhost:8000/routes_builder/fiber-route-builder/`
 
 ---
 
@@ -238,7 +234,7 @@ Comprehensive documentation is available at `/setup_app/docs/` or in the `doc/` 
 - Removed `/zabbix_api/*` endpoints → Use `/api/v1/inventory/*`
 - Renamed database tables: `routes_builder_route*` → `inventory_route*`
 - Removed `zabbix_api` app completely
-- `routes_builder` is now a zombie app (migration compatibility only)
+- Retired `routes_builder` app; route services now consolidated under `inventory`
 
 ---
 

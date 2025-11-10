@@ -20,6 +20,14 @@ Write-Host ""  # blank line for readability
 Write-Host "[INFO] Setting up MariaDB test permissions..." -ForegroundColor Cyan
 Write-Host $separator -ForegroundColor Cyan
 
+$composeFile = "docker/docker-compose.yml"
+if (-not (Test-Path $composeFile)) {
+    Write-Host "[ERROR] Compose file '$composeFile' not found" -ForegroundColor Red
+    Write-Host "Create it or adjust the path before running this script." -ForegroundColor Yellow
+    exit 1
+}
+$composeArgs = @("compose", "-f", $composeFile)
+
 # Step 1 - Docker
 Write-Host "`n[STEP 1] Checking Docker..." -ForegroundColor Yellow
 try {
@@ -30,33 +38,33 @@ try {
     Write-Host "   [OK] Docker is running" -ForegroundColor Green
 } catch {
     Write-Host "   [ERROR] Docker is not running" -ForegroundColor Red
-    Write-Host "   Run: docker compose up -d" -ForegroundColor Yellow
+    Write-Host "   Run: docker compose -f $composeFile up -d" -ForegroundColor Yellow
     exit 1
 }
 
 # Step 2 - Compose services
 Write-Host "`n[STEP 2] Checking Docker Compose services..." -ForegroundColor Yellow
 try {
-    $servicesRaw = docker compose ps --services 2>&1
+    $servicesRaw = & docker @composeArgs "ps" "--services" 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw $servicesRaw
     }
     $runningServices = $servicesRaw -split "`n" | Where-Object { $_ }
 } catch {
     Write-Host "   [ERROR] Could not list services: $_" -ForegroundColor Red
-    Write-Host "   Run: docker compose up -d" -ForegroundColor Yellow
+    Write-Host "   Run: docker compose -f $composeFile up -d" -ForegroundColor Yellow
     exit 1
 }
 
 if ($runningServices -notcontains "db") {
     Write-Host "   [ERROR] Service 'db' is not running" -ForegroundColor Red
-    Write-Host "   Run: docker compose up -d db" -ForegroundColor Yellow
+    Write-Host "   Run: docker compose -f $composeFile up -d db" -ForegroundColor Yellow
     exit 1
 }
 
 if ($runningServices -notcontains "web") {
     Write-Host "   [ERROR] Service 'web' is not running" -ForegroundColor Red
-    Write-Host "   Run: docker compose up -d web" -ForegroundColor Yellow
+    Write-Host "   Run: docker compose -f $composeFile up -d web" -ForegroundColor Yellow
     exit 1
 }
 
@@ -66,7 +74,12 @@ Write-Host "   [OK] Running services: $($runningServices -join ', ')" -Foregroun
 Write-Host "`n[STEP 3] Configuring permissions..." -ForegroundColor Yellow
 try {
     $sqlScript = Get-Content "scripts/setup_test_db_permissions.sql" -Raw
-    $result = $sqlScript | docker compose exec -T db mariadb -u root -proot 2>&1
+    $command = @"
+cat <<'SQL' | mariadb -u root -proot
+$sqlScript
+SQL
+"@
+    $result = & docker @composeArgs "exec" "-T" "db" "bash" "-lc" $command
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host "   [OK] Permissions configured successfully" -ForegroundColor Green
@@ -81,7 +94,7 @@ try {
 # Step 4 - Grant validation
 Write-Host "`n[STEP 4] Validating permissions..." -ForegroundColor Yellow
 try {
-    $grants = docker compose exec db mariadb --skip-column-names -u root -proot -e 'SHOW GRANTS FOR ''app''@''%'';' 2>&1
+    $grants = & docker @composeArgs "exec" "db" "mariadb" "--skip-column-names" "-u" "root" "-proot" "-e" "SHOW GRANTS FOR 'app'@'%';"
 
     if ($grants -match "GRANT ALL PRIVILEGES") {
         Write-Host "   [OK] User 'app' has the expected grants" -ForegroundColor Green
@@ -103,7 +116,12 @@ DROP DATABASE test_validation_db;
 SELECT "Test database created and dropped successfully" AS Status;
 '@
 
-    $testResult = $testSQL | docker compose exec -T db mariadb -u app -papp --skip-column-names
+    $command = @"
+cat <<'SQL' | mariadb -u app -papp --skip-column-names
+$testSQL
+SQL
+"@
+    $testResult = & docker @composeArgs "exec" "-T" "db" "bash" "-lc" $command
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host "   [OK] User 'app' creates and drops test databases" -ForegroundColor Green
@@ -120,5 +138,5 @@ Write-Host "`n$separator" -ForegroundColor Cyan
 Write-Host "[SUCCESS] Setup complete." -ForegroundColor Green
 Write-Host "`nNext steps:" -ForegroundColor Cyan
 Write-Host "  1. Run tests: .\scripts\run_tests.ps1" -ForegroundColor White
-Write-Host "  2. Alternative: docker compose exec web pytest tests/ -v" -ForegroundColor White
+Write-Host "  2. Alternative: docker compose -f $composeFile exec web pytest tests/ -v" -ForegroundColor White
 Write-Host ""

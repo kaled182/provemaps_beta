@@ -18,7 +18,7 @@ Write-Host "   OK - Diretórios criados`n" -ForegroundColor Green
 
 # 2. Mover Django apps para backend/
 Write-Host "2. Movendo Django apps para backend/..." -ForegroundColor Yellow
-$djangoApps = @("core", "inventory", "monitoring", "maps_view", "routes_builder", 
+$djangoApps = @("core", "inventory", "monitoring", "maps_view",
                 "setup_app", "gpon", "dwdm", "integrations", "settings", 
                 "templates", "tests", "service_accounts")
 

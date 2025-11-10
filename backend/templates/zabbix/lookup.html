@@ -122,7 +122,7 @@
 {% block extra_scripts %}
 <script>
   const csrfToken = "{{ csrf_token }}";
-  const API = "/zabbix_api";
+  const ZABBIX_LOOKUP_API = "/api/v1/inventory/zabbix";
   const INVENTORY_API = "/api/v1/inventory";
   const $ = (selector) => document.querySelector(selector);
 
@@ -234,7 +234,7 @@
     groupSelect.disabled = true;
     groupSelect.innerHTML = '<option value="">Loading host groups...</option>';
     try {
-      const payload = await fetchJSON(`${API}/lookup/host-groups/?exclude_empty=1`);
+      const payload = await fetchJSON(`${ZABBIX_LOOKUP_API}/lookup/host-groups/?exclude_empty=1`);
       const groups = payload?.data || [];
       const options = ['<option value="">Select a host group</option>'];
       groups.forEach((group) => {
@@ -331,7 +331,7 @@
       </div>`;
 
     try {
-      const data = await fetchJSON(`${API}/lookup/hosts/?${params.toString()}`);
+      const data = await fetchJSON(`${ZABBIX_LOOKUP_API}/lookup/hosts/?${params.toString()}`);
       $("#count").textContent = `${data.count} result(s)`;
       const items = (data.data || []).map(normalizeHost);
       hostsEl.innerHTML = items.length
@@ -381,7 +381,7 @@
 
   async function refreshHostAvailability(hostid) {
     try {
-      const payload = await fetchJSON(`${API}/lookup/hosts/${encodeURIComponent(hostid)}/status/`);
+      const payload = await fetchJSON(`${ZABBIX_LOOKUP_API}/lookup/hosts/${encodeURIComponent(hostid)}/status/`);
       if (!currentHost || String(currentHost.hostid) !== String(hostid)) {
         return;
       }
@@ -430,7 +430,7 @@
       </div>`;
 
     try {
-      const data = await fetchJSON(`${API}/lookup/hosts/${encodeURIComponent(hostid)}/interfaces/?only_main=true`);
+      const data = await fetchJSON(`${ZABBIX_LOOKUP_API}/lookup/hosts/${encodeURIComponent(hostid)}/interfaces/?only_main=true`);
       const interfaces = data.data || [];
       ifacesEl.innerHTML = interfaces.length
         ? interfaces.map((iface) => `
@@ -461,7 +461,7 @@
     addBtn.disabled = true;
     addRes.textContent = "Adding...";
     try {
-      const response = await fetchJSON(`${API}/api/add-device-from-zabbix/`, {
+      const response = await fetchJSON(`${INVENTORY_API}/devices/add-from-zabbix/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -533,7 +533,7 @@
         Loading ports from ${deviceName}...
       </div>`;
     try {
-      const data = await fetchJSON(`${API}/api/device-ports-optical/${deviceId}/`);
+      const data = await fetchJSON(`${INVENTORY_API}/devices/${deviceId}/ports/optical/`);
       const ports = data.ports || [];
       if (!ports.length) {
         portsEl.innerHTML = `
@@ -561,7 +561,7 @@
     const target = document.getElementById(`opt-${portId}`);
       if (target) target.textContent = "Optical: loading...";
     try {
-      const data = await fetchJSON(`${API}/api/port-optical-status/${portId}/`);
+      const data = await fetchJSON(`${INVENTORY_API}/ports/${portId}/optical/`);
       const rx = data?.optical?.rx_dbm;
       const tx = data?.optical?.tx_dbm;
       if (target) target.textContent = `Optical: RX=${fmtDbm(rx)} | TX=${fmtDbm(tx)}`;
@@ -572,7 +572,7 @@
 
   window.viewTraffic = async (portId) => {
     try {
-      const data = await fetchJSON(`${API}/api/port-traffic-history/${portId}/?period=24h`);
+      const data = await fetchJSON(`${INVENTORY_API}/ports/${portId}/traffic/?period=24h`);
       const lastIn = data.in.history.at(-1)?.value ?? "-";
       const lastOut = data.out.history.at(-1)?.value ?? "-";
       alert(`Port #${portId}\nIN (latest): ${lastIn} ${data.in.unit}\nOUT (latest): ${lastOut} ${data.out.unit}`);

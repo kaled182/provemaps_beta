@@ -263,12 +263,9 @@ state_operations = [
 
 
 class Migration(migrations.Migration):
-    # routes_builder.0001 dependency required for migration graph consistency
-    # Even though models migrated, routes_builder remains as "zombie app"
-    # for test database creation compatibility (2025-11-07)
+    # routes_builder app removed; dependency trimmed after consolidation
     dependencies = [
         ("inventory", "0002_alter_port_zabbix_item_id_trafego_in_and_more"),
-        ("routes_builder", "0001_initial"),
     ]
 
     operations = [

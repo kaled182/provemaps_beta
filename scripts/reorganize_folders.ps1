@@ -127,7 +127,6 @@ function Move-BackendFiles {
         "inventory",
         "monitoring",
         "maps_view",
-        "routes_builder",
         "setup_app",
         "gpon",
         "dwdm",

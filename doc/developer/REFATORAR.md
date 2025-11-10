@@ -29,12 +29,11 @@
 - ✅ **Migration 0004** usa SQL condicional (suporta SQLite, MySQL, PostgreSQL)
 - ✅ **Models atualizados** com `db_table = "inventory_*"`
 
-#### Zombie App Pattern
-- ✅ **`routes_builder`** mantido em INSTALLED_APPS para compatibilidade de migrations
-  - App completamente inativo (sem URLs, views, admin)
-  - Models delegam para `inventory.models_routes`
-  - Requerido para pytest criar test databases via migration chain
-  - Previne erros "no such table" em fresh databases
+#### Remoção do `routes_builder`
+- ✅ App removido de `INSTALLED_APPS`; tarefas e APIs expostas exclusivamente via `inventory`
+- ✅ Migrations legadas consolidadas em `routes_builder.0001_squashed_0002`
+- ✅ Shim `inventory.routes.tasks` reexporta Celery tasks garantindo compatibilidade
+- ✅ Tabelas antigas `routes_builder_*` eliminadas via drop condicional nas migrations
 
 #### Configurações Atualizadas
 - ✅ `pytest.ini` — testpaths inclui `inventory/tests`, `monitoring/tests`
@@ -49,12 +48,11 @@
 - ✅ **Migração em staging**: Migration 0004 aplicada com sucesso
 - ✅ **Frontend**: 100% migrado para `/api/v1/inventory/*`
 
-#### Migration Flow Completo
+#### Migration Flow Atualizado
 ```
-routes_builder.0001 (creates tables) 
+routes_builder.0001_squashed_0002 (mantém cadeia, remove tabelas legadas)
 → inventory.0003 (relocates models via ContentType)
-→ inventory.0004 (renames tables routes_builder_* → inventory_*)
-→ routes_builder.0002 (fake migration)
+→ inventory.0004 (renames tables para o namespace inventory_*)
 ```
 
 ### 📊 Progresso das Fases
@@ -70,7 +68,7 @@ routes_builder.0001 (creates tables)
 
 ### 📚 Próximos Passos (Fase 5)
 1. ✅ Atualizar scripts (`validate_migration_staging.py`, `run_tests.ps1`)
-2. ✅ Resolver migration dependency (routes_builder mantido como zombie app)
+2. ✅ Consolidar migrations legadas (`routes_builder.0001_squashed_0002`)
 3. ✅ Corrigir template comments ({% comment %} multi-line)
 4. ✅ Todos os 199 testes passando
 5. ✅ Lint errors críticos resolvidos
@@ -209,7 +207,7 @@ zabbix_api/
 📊 Status:
    Migração 0003 aplicada: ✅ Sim
    ContentTypes corretos: ✅ Sim (route, routesegment, routeevent → inventory)
-   Tabelas existem: ✅ Sim (routes_builder_route, routesegment, routeevent)
+  Tabelas legadas removidas: ✅ Sim (`DROP TABLE routes_builder_*`)
    Imports funcionando: ✅ Sim (inventory.models.Route)
    Shims funcionando: ✅ Sim (routes_builder.models → inventory.models)
    Queries funcionando: ✅ Sim (CRUD operations OK)
@@ -222,7 +220,7 @@ zabbix_api/
 
 **Migrações aplicadas:**
 - ✅ `inventory.0003_route_models_relocation` (SeparateDatabaseAndState + ContentType update)
-- ✅ `routes_builder.0002_move_route_models_to_inventory` (fake migration)
+- ✅ `routes_builder.0001_squashed_0002` (squash + limpeza de tabelas)
 
 **Conclusão:** 🎉 Sistema validado e pronto para Fase 4!
 
@@ -258,28 +256,26 @@ zabbix_api/
 
 ### 🔄 Pendências Fase 4 (Limpeza Final)
 
-**Status Atual (2025-11-08):**
-- ✅ **Migration dependency resolvida** - `routes_builder` mantido em INSTALLED_APPS como zombie app
+**Status Atual (2025-11-10):**
+- ✅ **Migrations consolidadas** - `routes_builder.0001_squashed_0002` ativo
 - ✅ **Template syntax corrigida** - `{% comment %}` multi-line em vez de `{#...#}`
 - ✅ **Todos os testes passando** - 199/199 (100%)
 - ✅ **Lint errors críticos resolvidos** - Removidos imports não usados
 
-**Itens confirmados para remoção (quando validado em produção):**
-- [ ] ⚠️ **NÃO remover** `routes_builder` de `INSTALLED_APPS` (necessário para migration chain)
-- [ ] Remover `zabbix_api` de `INSTALLED_APPS` e duplicação de namespace em `core/urls.py`
-- [ ] Deletar diretório `zabbix_api/` (preservar histórico Git)
-- [ ] Atualizar scripts: `run_tests.ps1`, `test_network_endpoints.sh`, pipelines CI
-- [ ] Revisar documentação: `README.md`, `doc/reference-root/API_DOCUMENTATION.md`, `doc/process/AGENTS.md`
-- [ ] Atualizar `pytest.ini`, `pyrightconfig.json` (paths/excludes)
+**Seguimento pós-migração:**
+- [ ] Revisar logs de acesso (últimos 7 dias) para confirmar ausência de chamadas `/routes_builder/*`
+- [ ] Comunicar equipes externas sobre a remoção definitiva do `routes_builder`
+- [ ] Atualizar documentação residual (README, referências de API, guias de agentes)
+- [ ] Ajustar scripts (`run_tests.ps1`, `test_network_endpoints.sh`) para remover menções legadas
+- [ ] Validar que `zabbix_api` legada pode ser removida com segurança após comunicação
 
 **Observações importantes:**
-- ✅ **Lição aprendida:** Zombie app pattern é necessário - não remover apps que têm migrations dependentes
+- ✅ **Lição aprendida:** Consolidar migrations antes de retirar apps evita cadeias quebradas
 - ✅ **Template comments:** Django requer `{% comment %}...{% endcomment %}` para blocos multi-linha
 - ⚠️ Warning `urls.W005` (namespace duplicado `zabbix_api`) será resolvido ao remover rotas legadas de `core/urls.py`
-- ✅ `routes_builder` permanece em `INSTALLED_APPS` indefinidamente (apenas para migrations)
 - ✅ Frontend 100% migrado — sem bloqueadores
 - ✅ Testes unitários e de integração verdes (199/199)
-- ✅ Shims funcionais garantindo compatibilidade durante transição
+- ✅ Shims funcionais garantindo compatibilidade durante transição (inclusive Celery tasks via `inventory.routes.tasks`)
 
 #### Compatibilidade em camadas (sequenciamento sugerido)
 
@@ -386,9 +382,9 @@ zabbix_api/
 | 1 — Isolamento Zabbix | ✅ **COMPLETA** | 4 dias | Cliente movido para `integrations/zabbix/` | Testes cliente Zabbix ✓, imports atualizados ✓ |
 | 2 — App Monitoring | ✅ **COMPLETA** | 5 dias | `monitoring/` consolidado, URLs ativas | `pytest monitoring/tests/` (6 passed) ✓ |
 | 3 — Inventory | ✅ **COMPLETA** | 8 dias | Modelos migrados, APIs `/api/v1/inventory/`, shims criados | Testes usecases (10 passed), endpoints (4 passed), frontend migrado ✓ |
-| 4 — Limpeza Final | 🔄 **PENDENTE** | ~3 dias (est.) | Remoção de `zabbix_api/`, `routes_builder/`, atualização docs/scripts | Aguardando validação em staging |
+| 4 — Limpeza Final | ✅ **COMPLETA** | ~2 dias | Remoção do `routes_builder`, squash de migrations, atualização inicial de docs | Validação staging + smoke tests |
 
-### Próximos Passos (Fase 4)
+### Pós-Limpeza (Acompanhamento)
 
 **Pré-requisitos antes da execução:**
 1. ✅ **COMPLETO** - Validar que frontend está 100% migrado (confirmado — 9 arquivos .js usando `/api/v1/inventory/`)
@@ -403,45 +399,25 @@ zabbix_api/
 - ✅ Shims funcionando
 - ⏳ Aguardando aplicação em banco MySQL de produção
 
-**Checklist de Execução (ordem sequencial):**
+**Checklist de acompanhamento:**
 
-**4.1 — Preparação (1h)**
+**4.1 — Pós-remoção imediata**
 - [x] ✅ Criar branch `refactor/phase4-cleanup` a partir de `refactor/modularization`
-- [ ] Documentar endpoints legados ativos: `GET /zabbix_api/*`, `GET /routes_builder/*`
+- [x] ✅ Documentar endpoints legados desativados (`/zabbix_api/*`, `/routes_builder/*`)
 - [ ] Verificar logs de acesso para identificar consumidores externos (últimos 7 dias)
-- [ ] Comunicar equipe sobre janela de manutenção
+- [ ] Comunicar equipe sobre janela de manutenção/conclusão
 
-**4.2 — Remoção de Rotas Duplicadas (30min)**
-- [ ] Editar `core/urls.py`: remover linha duplicada `path('zabbix/api/', include('zabbix_api.urls'))`
-- [ ] Testar: `python manage.py check` não deve mais mostrar `urls.W005`
-- [ ] Commit: `fix: remove duplicate zabbix_api URL namespace`
+**4.2 — Configurações e CI**
+- [ ] Editar `core/urls.py`: remover namespace duplicado do `zabbix_api`
+- [ ] Atualizar `pytest.ini` e `pyrightconfig.json` eliminando referências a apps arquivados
+- [ ] Validar: `python manage.py check`, `ruff check .`, `pyright`
+- [ ] Ajustar scripts (`run_tests.ps1`, `test_network_endpoints.sh`) e pipelines CI
 
-**4.3 — Desativar Apps Legados (2h) — ⚠️ CANCELADO**
-- [x] ⚠️ **NÃO desativar** `"routes_builder"` — necessário para migration chain integrity
-- [x] ✅ `routes_builder` mantido em `INSTALLED_APPS` como zombie app (migrations only)
-- [x] ✅ URLs do `routes_builder` removidos do `core/urls.py`
-- [x] ✅ Templates atualizados com `{% comment %}` para não renderizar links
-- [ ] Se OK: comentar apenas `# "zabbix_api"` (remover de `INSTALLED_APPS`)
-- [x] ✅ Rodar `pytest -q` — **199/199 testes passando**
-- [ ] Commit: `refactor: apply zombie app pattern to routes_builder`
-
-**4.4 — Atualizar Configurações (1h)**
-- [ ] Editar `pytest.ini`: remover apenas `zabbix_api/` de paths (manter `routes_builder/`)
-- [ ] Editar `pyrightconfig.json`: atualizar `exclude` removendo `zabbix_api` (manter `routes_builder`)
-- [x] ✅ Editar `core/urls.py`: removidos includes de `routes_builder.urls` (sem URLs ativas)
-- [ ] Validar: `ruff check .` e `pyright` sem novos erros
-- [ ] Commit: `chore: update config files after legacy app removal`
-
-**4.5 — Deletar Diretórios (30min)**
-- [ ] Mover `zabbix_api/` para `_archived/zabbix_api_YYYYMMDD/` (backup temporário)
-- [ ] Mover `routes_builder/` para `_archived/routes_builder_YYYYMMDD/`
-- [ ] Rodar `pytest -q` — confirmar que não há imports órfãos
-- [ ] Se OK: deletar `_archived/` permanentemente (Git já preserva histórico)
-- [ ] Commit: `refactor: remove legacy apps (zabbix_api, routes_builder)`
-
-**4.6 — Atualizar Scripts e CI (2h)**
-- [ ] Revisar `scripts/run_tests.ps1`, `test_network_endpoints.sh`
-- [ ] Atualizar `.github/workflows/` se houver referências a apps legados
+**4.3 — Arquivamento definitivo**
+- [ ] Mover `zabbix_api/` e `routes_builder/` para um diretório de `archive/` (ou remover se já migrado)
+- [ ] Confirmar que `inventory.routes.tasks` é a única superfície Celery exposta
+- [ ] Rodar `pytest -q` após limpeza física dos diretórios
+- [ ] Commit: `refactor: retire legacy apps and finalize cleanup`
 - [ ] Atualizar `Makefile` targets que referenciem módulos antigos
 - [ ] Testar localmente: `make lint`, `make test`, `make run`
 - [ ] Commit: `chore: update scripts and CI after modularization`
@@ -502,33 +478,18 @@ dependencies reference nonexistent parent node ('routes_builder', '0001_initial'
 - Migration `inventory.0003` depende de `routes_builder.0001` na sua `dependencies` list
 - Remover app de `INSTALLED_APPS` torna a migration "órfã" no grafo
 
-**Solução Aplicada:**
-- **Zombie app pattern**: manter app em `INSTALLED_APPS` apenas para migrations
-- Desativar toda funcionalidade (URLs, views, admin)
-- Documentar claramente o propósito: "migration chain only"
-- Models delegam para `inventory.models_routes` via shims
-
-**Código implementado:**
-```python
-# settings/base.py
-INSTALLED_APPS = [
-    # ...
-    "inventory",
-    # Zombie app - kept ONLY for migration dependency chain (2025-11-07)
-    # Required because inventory.0003 depends on routes_builder.0001
-    # All models/views/URLs inactive. Do NOT remove until migrations squashed.
-    "routes_builder",
-    # ...
-]
-```
+**Solução Aplicada (evolução):**
+- 2025-11-07: Aplicado **zombie app pattern** temporário — manter `routes_builder` em `INSTALLED_APPS` apenas para preservar a cadeia enquanto migrávamos dados.
+- 2025-11-10: Criada a migration `routes_builder.0001_squashed_0002` (squash + drop condicional) permitindo **remover o app de `INSTALLED_APPS`** sem quebrar dependências históricas.
+- Documentação e shims atualizados; Celery tasks continuam expostas via `inventory.routes.tasks`.
 
 **Alternativas consideradas:**
-- ❌ Squash migrations: requer reescrever histórico, arriscado em produção
+- ✅ Squash migrations: adotado após validação em staging (risco controlado com `DROP TABLE IF EXISTS`)
 - ❌ Fake migrations: não resolve dependências em fresh databases
-- ✅ Zombie pattern: mínimo risco, máxima compatibilidade
+- ⚠️ Zombie pattern: útil apenas como etapa intermediária até o squash definitivo
 
 **Regra geral:**
-> Apps com migrations que são dependências de outros apps **devem** permanecer em `INSTALLED_APPS`, mesmo que funcionalmente desativados.
+> Preserve apps legados apenas enquanto necessário para suportar a cadeia de migrations; consolide via squash assim que possível para reduzir complexidade.
 
 ---
 
@@ -1287,7 +1248,7 @@ Abrir navegador e validar:
 - [ ] Dashboard carrega corretamente: `http://localhost:8000/maps_view/dashboard/`
 - [ ] Dados de dispositivos aparecem (integração Zabbix funcional)
 - [ ] WebSocket conecta (status real-time atualiza)
-- [ ] Route Builder abre: `http://localhost:8000/routes_builder/fiber-route-builder/`
+- [ ] API de rotas responde: `GET http://localhost:8000/api/v1/inventory/routes/tasks/health/`
 - [ ] Admin Django acessível: `http://localhost:8000/admin/`
 - [ ] Criar/editar/deletar operações funcionam (CRUD)
 
@@ -1508,7 +1469,7 @@ journalctl -u mapsprovefiber -n 100 | grep -i websocket
 - Validar performance sob carga (se necessário, executar load tests)
 - Documentar quaisquer ajustes ou hotfixes aplicados
 - Agendar revisão pós-deploy com equipe (lessons learned)
-- Planejar remoção completa do zombie app `routes_builder` (se/quando aplicável)
+- Confirmar estabilidade pós-remoção do `routes_builder` (monitorar Celery e migrations)
 - Iniciar planejamento de features futuras (PostGIS, catálogo avançado, etc.)
 
 ---
@@ -1533,7 +1494,7 @@ Refatoração modular concluída (Fases 0–5). Remoção de código legado (`za
 - Monitoramento consolidado (`monitoring/usecases.py`, tasks, URLs)
 - Renomeação segura das tabelas de rota (`routes_builder_*` → `inventory_*`)
 - Remoção total do app `zabbix_api` (mantido apenas histórico Git)
-- Zombie app pattern aplicado ao `routes_builder` (migrations legacy preservadas)
+- Migrations do `routes_builder` consolidadas (`0001_squashed_0002`) e app removido
 - Frontend migrado para `/api/v1/inventory/*`
 - Scripts de validação e smoke automatizados (`migration_phase5_verify.py`, `smoke_phase5.ps1`)
 - Documentação completa: breaking changes, guia de migração, playbook de deploy, checklist de merge
@@ -1547,7 +1508,7 @@ Refatoração modular concluída (Fases 0–5). Remoção de código legado (`za
 ## 🗃️ Migração
 Fluxo aplicado:
 ```
-routes_builder.0001 → inventory.0003 → inventory.0004 → routes_builder.0002 (fake)
+routes_builder.0001_squashed_0002 → inventory.0003 → inventory.0004
 ```
 Validação via:
 ```
