@@ -10,7 +10,10 @@ from inventory.models import Device, FiberCable, Port, Site
 
 class PortTrafficHistoryAPITests(TestCase):
     def setUp(self):
-        self.site = Site.objects.create(name="Goiania-POP", city="Goiania")
+        self.site = Site.objects.create(
+            display_name="Goiania-POP",
+            city="Goiania",
+        )
         self.device = Device.objects.create(
             site=self.site,
             name="SW-GYN-01",
@@ -26,7 +29,7 @@ class PortTrafficHistoryAPITests(TestCase):
     def test_returns_400_when_port_missing_traffic_items(self):
         url = reverse(
             "inventory-api:port-traffic-history",
-            args=[self.port.id],
+            args=[self.port.pk],
         )
         response = self.client.get(url)
         self.assertEqual(response.status_code, 400)
@@ -63,7 +66,7 @@ class PortTrafficHistoryAPITests(TestCase):
 
         url = reverse(
             "inventory-api:port-traffic-history",
-            args=[self.port.id],
+            args=[self.port.pk],
         )
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
@@ -78,7 +81,7 @@ class PortTrafficHistoryAPITests(TestCase):
 
 class ManualFiberCreationTests(TestCase):
     def setUp(self):
-        site = Site.objects.create(name="HQ", city="Goiania")
+        site = Site.objects.create(display_name="HQ", city="Goiania")
         self.device = Device.objects.create(
             site=site,
             name="CORE-01",
@@ -106,10 +109,10 @@ class ManualFiberCreationTests(TestCase):
         url = reverse("inventory-api:fibers-manual-create")
         payload = {
             "name": "Manual Backbone",
-            "origin_device_id": str(self.device.id),
-            "origin_port_id": str(self.origin_port.id),
-            "dest_device_id": str(self.device.id),
-            "dest_port_id": str(self.dest_port.id),
+            "origin_device_id": str(self.device.pk),
+            "origin_port_id": str(self.origin_port.pk),
+            "dest_device_id": str(self.device.pk),
+            "dest_port_id": str(self.dest_port.pk),
             "path": [
                 {"lat": -16.6, "lng": -49.2},
                 {"lat": -16.7, "lng": -49.3},
@@ -137,8 +140,8 @@ class ManualFiberCreationTests(TestCase):
         url = reverse("inventory-api:fibers-manual-create")
         payload = {
             "name": "Local Loop",
-            "origin_device_id": str(self.device.id),
-            "origin_port_id": str(self.origin_port.id),
+            "origin_device_id": str(self.device.pk),
+            "origin_port_id": str(self.origin_port.pk),
             "dest_device_id": "",
             "dest_port_id": "",
             "single_port": True,
