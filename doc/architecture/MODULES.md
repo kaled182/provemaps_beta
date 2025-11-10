@@ -14,7 +14,7 @@
 | **core** | Configuration spine, metrics, health checks | None | `/health/`, `/metrics/` | ✅ Active |
 | **inventory** | Network infrastructure (Sites, Devices, Ports) | Site, Device, Port, FiberCable, Route | `/api/v1/inventory/*` | ✅ Active |
 | **maps_view** | Real-time dashboard and visualizations | None (view-only) | `/maps_view/dashboard/` | ✅ Active |
-| **routes_builder** | Optical route calculation, KML import | None (legacy Route migrated) | `/routes_builder/fiber-route-builder/` | ⚠️ Legacy (Phase 4) |
+| **routes_builder** | Optical route calculation (archived) | N/A | N/A | ❌ Archived (Nov 2025) |
 | **setup_app** | Runtime config, credentials, docs viewer | FirstTimeSetup | `/setup_app/dashboard/` | ✅ Active |
 | **monitoring** | Zabbix integration use cases | None | N/A (service layer) | ✅ Active |
 | **integrations/zabbix** | Resilient Zabbix API client | None | N/A (library) | ✅ Active |
@@ -165,51 +165,11 @@
 
 ---
 
-### 4. `routes_builder` — Optical Route Calculation
+### 4. Archived: `routes_builder`
 
-**Location**: `routes_builder/`  
-**App Config**: `RoutesBuilderConfig`  
-**Purpose**: Optical route planning, power budget calculations, KML import/export
-
-#### Status
-⚠️ **Legacy App** (Phase 4 cleanup pending)
-- Route model migrated to `inventory` app in Phase 3
-- Remaining functionality: UI views, Celery tasks, KML import
-- **Planned Removal**: After Phase 4 completion (migration dependency resolved)
-
-#### Models
-- None (Route model migrated to `inventory.models.Route`)
-
-#### Key Features
-- **Route Builder UI**: Interactive fiber route builder
-- **Power Budget Calculation**: Optical loss calculations
-- **KML Import/Export**: Import routes from KML files, export to Google Earth
-- **Celery Task Queue**: Async route building and validation
-
-#### Services (`routes_builder/services.py`)
-- `RouteBuildContext` (dataclass) — Route building context
-- `RouteBuildResult` (dataclass) — Route building result
-- `build_route()` — Calculate optical route
-- `import_kml_route()` — Import route from KML
-- `validate_route()` — Validate route integrity
-
-#### Endpoints
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/routes_builder/fiber-route-builder/` | GET | Route builder UI |
-| `/routes_builder/tasks/build/` | POST | Enqueue route build task |
-| `/routes_builder/tasks/import/` | POST | Enqueue KML import task |
-| `/routes_builder/tasks/status/<task_id>/` | GET | Task status check |
-
-#### Celery Tasks (`routes_builder/tasks.py`)
-- `build_route_task` — Async route building
-- `import_kml_task` — Async KML import
-- `validate_route_task` — Async route validation
-
-#### Dependencies
-- `inventory.models.Route` (migrated model)
-- Celery (async processing)
-- Google Maps API (geocoding, distance calculations)
+- App folder removed from active codebase in November 2025.
+- All route-building services now live under `inventory` (`inventory.services.routes` and `inventory.models_routes`).
+- Legacy documentation retained in `/archive` for historical reference only; no endpoints remain at `/routes_builder/*`.
 
 ---
 
@@ -383,15 +343,14 @@ core (root)
   │     ├── monitoring (use cases)
   │     └── integrations/zabbix (status)
   │
-  ├── routes_builder (legacy)
-  │     └── inventory.models.Route (migrated)
-  │
   ├── monitoring (use cases)
   │     ├── inventory (models)
   │     └── integrations/zabbix (API)
   │
   └── setup_app (config)
-        └── (provides runtime settings to all apps)
+        (provides runtime settings to all apps)
+
+_Note: `routes_builder` was archived in Nov/2025. See `/archive` for the legacy topology builder docs._
 ```
 
 ---
@@ -403,10 +362,10 @@ core (root)
 - ✅ ContentType migration (`routes_builder.route` → `inventory.route`)
 - ✅ Preserved table name: `routes_builder_route` → `inventory_route`
 
-### Phase 4 (In Progress)
-- ⏳ Remove `zabbix_api` app entirely
-- ⏳ Consolidate `routes_builder` functionality into `inventory`
-- ⏳ Final cleanup: remove legacy imports and shims
+### Phase 4 (Completed Nov 2025)
+- ✅ Removed `zabbix_api` app entirely
+- ✅ Consolidated former `routes_builder` functionality into `inventory`
+- ✅ Retired legacy imports/shims; archived documentation only
 
 ---
 

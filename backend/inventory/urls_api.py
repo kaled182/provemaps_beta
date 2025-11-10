@@ -5,6 +5,7 @@ from django.urls import path
 from inventory.api import devices as device_api
 from inventory.api import fibers as fiber_api
 from inventory.api import routes as routes_api
+from inventory.api import zabbix_lookup as zabbix_lookup_api
 
 app_name = "inventory-api"
 
@@ -38,6 +39,26 @@ urlpatterns = [
         "zabbix/discover-hosts/",
         device_api.api_zabbix_discover_hosts,
         name="zabbix-discover-hosts",
+    ),
+    path(
+        "zabbix/lookup/hosts/",
+        zabbix_lookup_api.lookup_hosts,
+        name="zabbix-lookup-hosts",
+    ),
+    path(
+        "zabbix/lookup/host-groups/",
+        zabbix_lookup_api.lookup_host_groups,
+        name="zabbix-lookup-host-groups",
+    ),
+    path(
+        "zabbix/lookup/hosts/<str:hostid>/status/",
+        zabbix_lookup_api.lookup_host_status,
+        name="zabbix-lookup-host-status",
+    ),
+    path(
+        "zabbix/lookup/hosts/<str:hostid>/interfaces/",
+        zabbix_lookup_api.lookup_host_interfaces,
+        name="zabbix-lookup-host-interfaces",
     ),
     path(
         "bulk/",

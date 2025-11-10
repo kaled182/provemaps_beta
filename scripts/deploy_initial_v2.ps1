@@ -138,10 +138,11 @@ if (Test-Path "scripts/smoke_phase5.ps1") {
 
 # 12. Restart services (Docker example)
 Invoke-Step "Restart containers (docker compose)" {
-    if (Test-Path "docker-compose.yml") {
-        docker compose up -d --build
+    $composeFile = "docker/docker-compose.yml"
+    if (Test-Path $composeFile) {
+        docker compose -f $composeFile up -d --build
     } else {
-        Write-Host "[deploy] docker-compose.yml não encontrado, pule restart manual" -ForegroundColor Yellow
+        Write-Host "[deploy] $composeFile não encontrado, pule restart manual" -ForegroundColor Yellow
     }
 }
 

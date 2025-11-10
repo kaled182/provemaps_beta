@@ -19,7 +19,7 @@
     environment:
       DJANGO_SETTINGS_MODULE: settings.dev
       SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
-      PYTHONPATH: /app/backend
+      PYTHONPATH: "/app/backend:/app"
       DB_HOST: db
       DB_PORT: "3306"
       DB_NAME: app
@@ -58,6 +58,7 @@
       - ../frontend:/app/frontend
       - ../database:/app/database
       - ../doc:/app/doc
+      - ../scripts:/app/scripts
       - ../.env:/app/.env:ro
       - ../logs:/app/backend/logs
 
@@ -73,7 +74,7 @@
     environment:
       DJANGO_SETTINGS_MODULE: settings.dev
       SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
-      PYTHONPATH: /app/backend
+      PYTHONPATH: "/app/backend:/app"
       DB_HOST: db
       DB_PORT: "3306"
       DB_NAME: app
@@ -107,6 +108,7 @@
       - ../frontend:/app/frontend
       - ../database:/app/database
       - ../doc:/app/doc
+      - ../scripts:/app/scripts
       - ../.env:/app/.env:ro
       - ../logs:/app/backend/logs
 
@@ -122,7 +124,7 @@
     environment:
       DJANGO_SETTINGS_MODULE: settings.dev
       SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
-      PYTHONPATH: /app/backend
+      PYTHONPATH: "/app/backend:/app"
       DB_HOST: db
       DB_PORT: "3306"
       DB_NAME: app
@@ -155,6 +157,7 @@
       - ../frontend:/app/frontend
       - ../database:/app/database
       - ../doc:/app/doc
+      - ../scripts:/app/scripts
       - ../.env:/app/.env:ro
       - ../logs:/app/backend/logs
 

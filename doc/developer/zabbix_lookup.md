@@ -2,15 +2,15 @@
 
 ## Overview
 
-The lookup page (`/zabbix/lookup/`) keeps the legacy frontend flow while the backend now proxies requests through `backend/core/urls_zabbix_proxy.py`. Key endpoints:
+The lookup page (`/zabbix/lookup/`) now consumes the inventory API directly via `inventory/api/zabbix_lookup.py`. Key endpoints:
 
-- `GET /zabbix_api/lookup/host-groups/` – lists host groups ordered by name. The optional `exclude_empty=1` flag filters out groups without hosts and includes a `host_count` field for UI badges.
-- `GET /zabbix_api/lookup/hosts/` – fetches hosts for the selected group (or search term) and returns normalized availability metadata so the UI can render status pills.
-- `POST /zabbix_api/api/add-device-from-zabbix/` – imports the selected host into the inventory and synchronizes its ports.
+- `GET /api/v1/inventory/zabbix/lookup/host-groups/` – lists host groups ordered by name. The optional `exclude_empty=1` flag filters out groups without hosts and includes a `host_count` field for UI badges.
+- `GET /api/v1/inventory/zabbix/lookup/hosts/` – fetches hosts for the selected group (or search term) and returns normalized availability metadata so the UI can render status pills.
+- `POST /api/v1/inventory/devices/add-from-zabbix/` – imports the selected host into the inventory and synchronizes its ports.
 
 ## UI Notes
 
-- The group input is now a dropdown that auto loads values via the `lookup/host-groups/` proxy and automatically triggers a search when a group is selected.
+- The group input is now a dropdown that auto loads values via the `/api/v1/inventory/zabbix/lookup/host-groups/` endpoint and automatically triggers a search when a group is selected.
 - Availability badges derive their label from the returned availability value (`1` = Online, `2` = Offline, otherwise Unknown) so missing labels from Zabbix no longer break the color coding.
 - Failed import attempts now surface the backend error detail, which helps operators understand why a device could not be added.
 

@@ -25,6 +25,14 @@ Write-Host ""  # blank line for readability
 Write-Host "[INFO] Running pytest against MariaDB (Docker Compose)..." -ForegroundColor Cyan
 Write-Host "==============================================================" -ForegroundColor Cyan
 
+$composeFile = "docker/docker-compose.yml"
+if (-not (Test-Path $composeFile)) {
+    Write-Host "[ERROR] Compose file '$composeFile' not found" -ForegroundColor Red
+    Write-Host "Create it or adjust the path before running tests." -ForegroundColor Yellow
+    exit 1
+}
+$composeArgs = @("compose", "-f", $composeFile)
+
 # Step 1 - Docker daemon
 Write-Host "`n[STEP 1] Checking Docker..." -ForegroundColor Yellow
 try {
@@ -35,33 +43,33 @@ try {
     Write-Host "   [OK] Docker is running" -ForegroundColor Green
 } catch {
     Write-Host "   [ERROR] Docker is not running" -ForegroundColor Red
-    Write-Host "   Run: docker compose up -d" -ForegroundColor Yellow
+    Write-Host "   Run: docker compose -f $composeFile up -d" -ForegroundColor Yellow
     exit 1
 }
 
 # Step 2 - Ensure Compose services are up
 Write-Host "`n[STEP 2] Checking Docker Compose services..." -ForegroundColor Yellow
 try {
-    $servicesRaw = docker compose ps --services 2>&1
+    $servicesRaw = & docker @composeArgs "ps" "--services" 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw $servicesRaw
     }
     $runningServices = $servicesRaw -split "`n" | Where-Object { $_ }
 } catch {
     Write-Host "   [ERROR] Could not list services: $_" -ForegroundColor Red
-    Write-Host "   Run: docker compose up -d" -ForegroundColor Yellow
+    Write-Host "   Run: docker compose -f $composeFile up -d" -ForegroundColor Yellow
     exit 1
 }
 
 if ($runningServices -notcontains "db") {
     Write-Host "   [ERROR] Service 'db' is not running" -ForegroundColor Red
-    Write-Host "   Run: docker compose up -d db" -ForegroundColor Yellow
+    Write-Host "   Run: docker compose -f $composeFile up -d db" -ForegroundColor Yellow
     exit 1
 }
 
 if ($runningServices -notcontains "web") {
     Write-Host "   [ERROR] Service 'web' is not running" -ForegroundColor Red
-    Write-Host "   Run: docker compose up -d web" -ForegroundColor Yellow
+    Write-Host "   Run: docker compose -f $composeFile up -d web" -ForegroundColor Yellow
     exit 1
 }
 
@@ -77,7 +85,7 @@ if ($Verbose) {
 }
 
 if ($Coverage) {
-    # Phase 4: routes_builder é zombie app, coverage em inventory/monitoring
+    # Coverage focuses on active Django apps (routes_builder removed)
     $pytestCmd += " --cov=core --cov=maps_view --cov=inventory --cov=monitoring"
     $pytestCmd += " --cov-report=term-missing --cov-report=html"
 }
@@ -96,7 +104,7 @@ Write-Host "   Command: $pytestCmd" -ForegroundColor Gray
 Write-Host ""
 
 try {
-    docker compose exec -T web bash -lc "DJANGO_SETTINGS_MODULE=settings.test $pytestCmd"
+    & docker @composeArgs "exec" "-T" "web" "bash" "-lc" "DJANGO_SETTINGS_MODULE=settings.test $pytestCmd"
     $exitCode = $LASTEXITCODE
     
     if ($exitCode -eq 0) {

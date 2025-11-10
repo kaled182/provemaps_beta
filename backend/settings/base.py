@@ -158,15 +158,15 @@ INSTALLED_APPS = [
     # Realtime / WebSockets
     "channels",
 
+    # REST API
+    "rest_framework",
+
     # Project apps
     "core.apps.CoreConfig",
     "maps_view",
     "service_accounts.apps.ServiceAccountsConfig",
     # Network inventory (models and routes consolidated in inventory)
     "inventory",
-    # Zombie app - kept ONLY for migration dependency chain (2025-11-07)
-    # Required because inventory.0003 depends on routes_builder.0001
-    # All models/views/URLs inactive. Do NOT remove until migrations squashed.
     "routes_builder",
     "setup_app",
     # Modular apps (Phase 0 scaffolding)
@@ -482,3 +482,26 @@ if SENTRY_DSN:
     except ImportError:
         # Sentry is optional; skip initialization if it's not installed
         pass
+
+# ===========================
+# Django REST Framework
+# ===========================
+
+REST_FRAMEWORK: dict[str, object] = {
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ],
+    "DEFAULT_PARSER_CLASSES": [
+        "rest_framework.parsers.JSONParser",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_PAGINATION_CLASS": (
+        "rest_framework.pagination.PageNumberPagination"
+    ),
+    "PAGE_SIZE": 100,
+}

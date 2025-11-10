@@ -47,7 +47,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     TZ=UTC \
     DJANGO_SETTINGS_MODULE=settings.prod \
-    PYTHONPATH=/app/backend
+    PYTHONPATH=/app/backend:/app
 
 # Minimal runtime plus useful utilities (without the build toolchain)
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -77,9 +77,10 @@ RUN pip install --no-index --find-links=/wheels -r requirements.txt && \
     pip install --no-cache-dir gunicorn uvicorn celery && \
     rm -rf /wheels /root/.cache
 
-# Copy backend application source only (frontend handled separately)
+# Copy backend application source and utility scripts (frontend handled separately)
 # Note: backend/ already includes manage.py after folder restructure
 COPY backend/ /app/backend/
+COPY scripts/ /app/scripts/
 
 # (Optional) copy frontend static assets if already built (placeholder)
 RUN mkdir -p /app/frontend/staticfiles
