@@ -12,7 +12,7 @@ Finalize modular architecture (Fases 0–5). Removed legacy `zabbix_api`, migrat
 - Monitoring consolidated (`monitoring/usecases.py`, tasks, URLs)
 - Safe route table rename (`routes_builder_*` → `inventory_*`) via `inventory.0003` + `inventory.0004`
 - Full removal of legacy `zabbix_api` app (Git history preserved)
-- Zombie app pattern for `routes_builder` (migrations chain only)
+- Squashed legacy migrations (`routes_builder.0001_squashed_0002`) preservando a cadeia histórica
 - Frontend fully migrated to `/api/v1/inventory/*`
 - Verification & smoke scripts (`migration_phase5_verify.py`, `smoke_phase5.ps1`)
 - Updated docs: breaking changes, migration guide, deploy playbook, merge checklist
@@ -25,7 +25,7 @@ Finalize modular architecture (Fases 0–5). Removed legacy `zabbix_api`, migrat
 
 ## Migration Flow
 ```
-routes_builder.0001 → inventory.0003 → inventory.0004 → routes_builder.0002 (fake)
+routes_builder.0001_squashed_0002 → inventory.0003 → inventory.0004
 ```
 Validation:
 ```
@@ -64,7 +64,7 @@ python scripts/migration_phase5_verify.py --phase post --compare pre.json
 
 ## Post-Merge Follow-up
 - Monitor metrics (latency/error rate) for first 24h
-- Plan removal of `routes_builder` once all databases are migrated
+- Monitor pós-squash do `routes_builder` e confirmar ausência de referências
 - Begin scoping next phase (PostGIS + Catalog) after stabilization
 
 ## Requested Reviewers

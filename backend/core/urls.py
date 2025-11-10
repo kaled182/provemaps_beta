@@ -50,14 +50,12 @@ urlpatterns: list[Any] = [
     # Apps
     path('maps_view/', include('maps_view.urls')),
     path('', include('monitoring.urls')),
-    path('api/v1/inventory/', include('inventory.urls_api')),
-    path('setup_app/', include('setup_app.urls')),
     path('routes/', include('routes_builder.urls')),
-    
-    # Zabbix API proxy (legacy endpoints)
-    path('zabbix_api/', include('core.urls_zabbix_proxy')),
+    path('api/v1/inventory/', include('inventory.urls_api')),
+    path('api/v1/', include('inventory.urls_rest')),  # DRF endpoints
+    path('setup_app/', include('setup_app.urls')),
 
-    # HTML page for Zabbix lookup (rendered via core/views.py)
+    # HTML page for Zabbix lookup (frontend now calls inventory API endpoints)
     path(
         'zabbix/lookup/',
         core_views.zabbix_lookup_page,

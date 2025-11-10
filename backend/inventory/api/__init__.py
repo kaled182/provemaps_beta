@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from . import devices, fibers, routes
+from . import devices, fibers, routes, zabbix_lookup
 
-__all__ = ["devices", "fibers", "routes"]
+__all__ = ["devices", "fibers", "routes", "zabbix_lookup"]

@@ -4,6 +4,7 @@
 > **Objetivo:** Aplicar migração `inventory.0003_route_models_relocation` em ambiente de produção  
 > **Tempo estimado:** 15-30 minutos  
 > **Risco:** Baixo (migração apenas atualiza metadados, sem alteração de dados)
+> **Status (2025-11-08):** Documento arquivado. O app `routes_builder` foi desativado e as rotas foram consolidadas em `inventory` — mantenha este guia apenas para auditorias de ambientes anteriores à v2.0.0.
 
 ---
 
@@ -18,9 +19,9 @@ mysqldump -u root -p mapspro_db > backup_pre_migration_$(date +%Y%m%d_%H%M%S).sq
 
 # Ou backup apenas das tabelas críticas
 mysqldump -u root -p mapspro_db \
-  routes_builder_route \
-  routes_builder_routesegment \
-  routes_builder_routeevent \
+-  routes_builder_route \
+-  routes_builder_routesegment \
+-  routes_builder_routeevent \
   django_content_type \
   django_migrations \
   > backup_route_models_$(date +%Y%m%d_%H%M%S).sql
@@ -48,14 +49,13 @@ source venv/bin/activate
 # Verificar migrações aplicadas
 python manage.py showmigrations inventory routes_builder
 
-# Esperado:
+# Esperado (ambientes pré-v2.0.0):
 # inventory
 #  [X] 0001_initial_from_existing_tables
 #  [X] 0002_alter_port_zabbix_item_id_trafego_in_and_more
 #  [ ] 0003_route_models_relocation
 # routes_builder
-#  [X] 0001_initial
-#  [ ] 0002_move_route_models_to_inventory
+#  [ ] 0001_squashed_0002
 ```
 
 ### 3. Verificar Logs de Acesso
@@ -65,6 +65,7 @@ python manage.py showmigrations inventory routes_builder
 grep -E "/zabbix_api/inventory|/routes_builder/" /var/log/nginx/access.log* | wc -l
 
 # Se houver muitas chamadas, investigar origem antes de prosseguir
+# Em instalações v2.0.0+ utilize `/api/v1/inventory/routes/` como referência no lugar de `/routes_builder/`
 ```
 
 ---
@@ -95,14 +96,14 @@ python manage.py migrate inventory 0003_route_models_relocation
 # Running migrations:
 #   Applying inventory.0003_route_models_relocation... OK
 
-# Migração do routes_builder (fake migration, só metadados)
-python manage.py migrate routes_builder 0002_move_route_models_to_inventory
+# Migração do routes_builder (squash — garante remoção de tabelas legadas)
+python manage.py migrate routes_builder 0001_squashed_0002
 
 # Esperado:
 # Operations to perform:
-#   Apply all migrations: routes_builder
+#   Apply all migrations: routes_builder (squashed)
 # Running migrations:
-#   Applying routes_builder.0002_move_route_models_to_inventory... OK
+#   Applying routes_builder.0001_squashed_0002... OK (ou já aplicado)
 ```
 
 ### Passo 3: Validar Migração
@@ -176,6 +177,8 @@ curl -H "Authorization: Bearer YOUR_TOKEN" \
 Se algo der errado:
 
 ### Opção 1: Reverter Migrações (Rápido)
+
+> ⚠️ **Somente para ambientes legados** — nas versões atuais `routes_builder` não está mais presente em `INSTALLED_APPS`.
 
 ```bash
 # Reverter inventory para 0002

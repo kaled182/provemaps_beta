@@ -46,7 +46,6 @@ graph TD
         subgraph "Domain Layer"
             I[inventory/]
             MO[monitoring/]
-            RB[routes_builder/]
         end
         
         subgraph "Integration Layer"
@@ -75,7 +74,7 @@ graph TD
     MO -->|combine| I
     MO -->|fetch| IZ
     IZ -->|API calls| Z
-    RB -->|Celery tasks| CE
+    I -->|route tasks| CE
     CE -->|read/write| DB
     CH -->|real-time| FE
     SA -->|runtime config| C
@@ -96,7 +95,7 @@ graph TD
 | **`monitoring/`** | Health checks, combined Zabbix + inventory status | usecases, tasks, views | ✅ v2.0.0 |
 | **`integrations/zabbix/`** | Resilient Zabbix API client | client, zabbix_service, circuit breaker | ✅ v2.0.0 |
 | **`maps_view/`** | Real-time dashboard, WebSocket publisher | views, realtime, cache_swr, tasks | ✅ Stable |
-| **`routes_builder/`** | Fiber route calculation (KML import, power calc) | services, tasks, views | ⚠️ Deprecated |
+| **~~`routes_builder/`~~** | ~~Fiber route calculation~~ (moved to `inventory`) | N/A | ❌ Archived (Nov 2025) |
 | **`setup_app/`** | Runtime settings, credential management | FirstTimeSetup, encryption | ✅ Stable |
 | **`gpon/`** | GPON topology (future) | models | ⏳ Scaffolding |
 | **`dwdm/`** | DWDM equipment (future) | models | ⏳ Scaffolding |
@@ -298,7 +297,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/v1/inventory/', include('inventory.urls_api')),  # ✅ v2.0.0
     path('monitoring/', include('monitoring.urls')),
-    path('routes/', include('routes_builder.urls')),  # ⚠️ Deprecated
     path('healthz/', health_check),
     path('ready/', readiness_check),
     path('live/', liveness_check),
@@ -384,7 +382,7 @@ graph LR
 
 ```mermaid
 graph TD
-    A[POST /routes/tasks/build/] --> B[Enqueue Celery Task]
+    A[POST /api/v1/inventory/routes/tasks/build/] --> B[Enqueue Celery Task]
     B --> C{Celery Worker}
     C --> D[routes_builder/tasks.py]
     D --> E[Parse KML geometry]
