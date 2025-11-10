@@ -27,8 +27,11 @@ if ($status) {
 # 4. Optional test run
 if (-not $SkipTests) {
     Write-Host "[tag] Executando suite de testes (pytest -q)" -ForegroundColor Yellow
-    $pytest = & D:/provemaps_beta/venv/Scripts/python.exe -m pytest -q
-    if ($LASTEXITCODE -ne 0) { Write-Error "Testes falharam. Abortando tagging."; exit 1 }
+    Push-Location backend
+    & D:/provemaps_beta/venv/Scripts/python.exe -m pytest -q
+    $testExitCode = $LASTEXITCODE
+    Pop-Location
+    if ($testExitCode -ne 0) { Write-Error "Testes falharam. Abortando tagging."; exit 1 }
     Write-Host "[tag] Testes OK" -ForegroundColor Green
 }
 
