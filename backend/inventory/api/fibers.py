@@ -205,6 +205,43 @@ def api_fibers_oper_status(request: HttpRequest) -> JsonResponse:
     return JsonResponse(payload)
 
 
+@require_GET
+@api_login_required
+@handle_api_errors
+def api_fiber_cached_optical_status(request: HttpRequest, cable_id: int) -> JsonResponse:
+    """Return cached optical status for a single cable without Zabbix calls.
+
+    Leitura direta dos campos persistidos (last_rx_power / last_tx_power) das
+    portas de origem e destino. Evita chamadas síncronas ao Zabbix durante a
+    requisição web.
+    """
+    try:
+        cable = FiberCable.objects.select_related(
+            "origin_port__device", "destination_port__device"
+        ).get(id=cable_id)
+    except FiberCable.DoesNotExist:
+        return JsonResponse({"error": "FiberCable not found"}, status=404)
+
+    origin = cable.origin_port
+    dest = cable.destination_port
+
+    payload: dict[str, Any] = {
+        "cable_id": cable.id,
+        "status": cable.status,
+        "origin_optical": {
+            "rx_dbm": origin.last_rx_power,
+            "tx_dbm": origin.last_tx_power,
+            "last_check": origin.last_optical_check,
+        },
+        "destination_optical": {
+            "rx_dbm": dest.last_rx_power,
+            "tx_dbm": dest.last_tx_power,
+            "last_check": dest.last_optical_check,
+        },
+    }
+    return JsonResponse(payload)
+
+
 @require_http_methods(["GET", "PUT", "DELETE"])
 @api_login_required
 @handle_api_errors

@@ -161,6 +161,11 @@ app.conf.update(
             "schedule": 120.0,  # Every 2 minutes
             "options": {"queue": "zabbix"},
         },
+        "update-all-port-optical-levels": {
+            "task": "inventory.tasks.update_all_port_optical_levels",
+            "schedule": 300.0,  # Every 5 minutes (RX/TX power refresh)
+            "options": {"queue": "zabbix"},
+        },
         "sync-zabbix-inventory": {
             "task": "inventory.tasks.sync_zabbix_inventory_task",
             "schedule": _inventory_sync_interval,
