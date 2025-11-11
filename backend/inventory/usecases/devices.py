@@ -41,7 +41,7 @@ ZABBIX_REQUEST = zabbix_request
 
 logger = logging.getLogger(__name__)
 
-OPTICAL_DISCOVERY_CACHE_TTL = 180  # seconds
+OPTICAL_DISCOVERY_CACHE_TTL = 120  # seconds (2 minutes max)
 
 
 class InventoryUseCaseError(Exception):

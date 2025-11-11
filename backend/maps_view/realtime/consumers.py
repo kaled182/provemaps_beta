@@ -4,7 +4,7 @@ import logging
 
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
-from .publisher import DASHBOARD_STATUS_GROUP
+from .publisher import DASHBOARD_STATUS_GROUP, CABLE_STATUS_GROUP
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,8 @@ class DashboardStatusConsumer(AsyncJsonWebsocketConsumer):
 
         try:
             await self.channel_layer.group_add(DASHBOARD_STATUS_GROUP, self.channel_name)
+            # Also subscribe to cable status updates
+            await self.channel_layer.group_add(CABLE_STATUS_GROUP, self.channel_name)
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.exception(
                 "Failed to join realtime group",
@@ -56,10 +58,15 @@ class DashboardStatusConsumer(AsyncJsonWebsocketConsumer):
             },
         )
         await self.channel_layer.group_discard(DASHBOARD_STATUS_GROUP, self.channel_name)
+        await self.channel_layer.group_discard(CABLE_STATUS_GROUP, self.channel_name)
 
     async def receive_json(self, content, **kwargs):
         # No-op: clients currently receive push-only updates.
         return
 
     async def dashboard_status(self, event):
+        await self.send_json(event.get("payload", {}))
+
+    async def cable_status(self, event):
+        """Handle cable status update messages from the group."""
         await self.send_json(event.get("payload", {}))

@@ -151,6 +151,16 @@ app.conf.update(
             "schedule": _dashboard_refresh_interval,
             "options": {"queue": "maps"},
         },
+        "refresh-fiber-list-cache": {
+            "task": "inventory.tasks.refresh_fiber_list_cache",
+            "schedule": 180.0,  # Every 3 minutes to keep cache warm
+            "options": {"queue": "default"},
+        },
+        "refresh-cables-oper-status": {
+            "task": "inventory.tasks.refresh_cables_oper_status",
+            "schedule": 120.0,  # Every 2 minutes
+            "options": {"queue": "zabbix"},
+        },
         "sync-zabbix-inventory": {
             "task": "inventory.tasks.sync_zabbix_inventory_task",
             "schedule": _inventory_sync_interval,
