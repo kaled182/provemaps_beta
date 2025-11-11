@@ -264,6 +264,36 @@ class FiberCable(models.Model):
     last_status_update = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True)
 
+    # Cached operational status values (Phase 9.1)
+    # Populated asynchronously by refresh_cables_oper_status Celery task
+    last_status_origin = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="Último status operacional da porta de origem (cache)",
+    )
+    last_status_dest = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="Último status operacional da porta de destino (cache)",
+    )
+    last_status_check = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp da última verificação de status operacional",
+    )
+
+    # Cached live status (computed from multiple sources)
+    last_live_status = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="Último status 'live' calculado (agregação de fontes)",
+    )
+    last_live_check = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp do último cálculo de status live",
+    )
+
     class Meta:
         ordering = ["name"]
         db_table = "zabbix_api_fibercable"  # Preserve original table name
