@@ -7,8 +7,21 @@ from __future__ import annotations
 
 import pytest
 from django.contrib.auth import get_user_model
-from django.contrib.gis.geos import LineString
+from django.core.exceptions import ImproperlyConfigured
 from django.test import Client
+
+try:
+    from django.contrib.gis.geos import LineString
+except (ImportError, ImproperlyConfigured):  # pragma: no cover - CI lacking GDAL
+    LineString = None
+
+if LineString is None:  # pragma: no cover - allows skipping on CI without GDAL
+    pytest.skip(
+        "GDAL/GEOS libraries unavailable; skipping spatial API tests.",
+        allow_module_level=True,
+    )
+
+assert LineString is not None  # For type checkers: we bail earlier when missing
 
 from inventory.models import FiberCable, Port, Site
 from inventory.models_routes import Route, RouteSegment
