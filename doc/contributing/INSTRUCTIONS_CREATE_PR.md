@@ -16,7 +16,7 @@
    🚀 Phase 5 Complete: Django Modularization & Technical Hygiene [v2.0]
    ```
 
-5. **Copie e cole o conteúdo de `PR_PHASE5_COMPLETE.md` na descrição**
+5. **Copie e cole o conteúdo de `doc/reports/pr/PR_PHASE5_COMPLETE.md` na descrição**
 
 6. **Adicione labels (se disponível):**
    - `breaking-change`
@@ -39,7 +39,7 @@ winget install --id GitHub.cli
 
 ### Criar PR:
 ```powershell
-gh pr create --base inicial --head refactor/modularization --title "🚀 Phase 5 Complete: Django Modularization & Technical Hygiene [v2.0]" --body-file PR_PHASE5_COMPLETE.md
+gh pr create --base inicial --head refactor/modularization --title "🚀 Phase 5 Complete: Django Modularization & Technical Hygiene [v2.0]" --body-file doc/reports/pr/PR_PHASE5_COMPLETE.md
 ```
 
 ---
@@ -95,6 +95,7 @@ Depois de criar o PR, certifique-se de:
 - `README.md` - Guia principal (reescrito)
 - `doc/developer/REFATORAR.md` - Estado atual (Fases 0-5)
 - `doc/developer/FUTURE_APPS.md` - Roadmap futuro (Fases 6-15)
+- `doc/reports/pr/PR_PHASE5_COMPLETE.md` - Corpo completo do PR pronto para uso
 - `scripts/smoke_phase5.ps1` - Smoke tests automatizados
 
 ---

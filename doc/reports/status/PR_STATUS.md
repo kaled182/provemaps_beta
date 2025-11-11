@@ -27,8 +27,8 @@ A página do GitHub deve ter aberto automaticamente. Se não abriu:
    🚀 Phase 5 Complete: Django Modularization & Technical Hygiene [v2.0]
    
    DESCRIÇÃO:
-   Copie e cole TODO o conteúdo do arquivo: PR_PHASE5_COMPLETE.md
-   (Está na raiz do projeto: d:\provemaps_beta\PR_PHASE5_COMPLETE.md)
+   Copie e cole TODO o conteúdo do arquivo: doc/reports/pr/PR_PHASE5_COMPLETE.md
+   (Arquivo atualizado para: `doc/reports/pr/PR_PHASE5_COMPLETE.md`)
 
 3️⃣ Adicione Labels (se disponível):
    ☑ breaking-change
@@ -73,9 +73,9 @@ Se quiser usar o GitHub CLI (após reiniciar o terminal):
 
    # Novo terminal PowerShell
    gh auth login
-   gh pr create --base inicial --head refactor/modularization \
-     --title "🚀 Phase 5 Complete: Django Modularization & Technical Hygiene [v2.0]" \
-     --body-file PR_PHASE5_COMPLETE.md
+    gh pr create --base inicial --head refactor/modularization \
+       --title "🚀 Phase 5 Complete: Django Modularization & Technical Hygiene [v2.0]" \
+       --body-file doc/reports/pr/PR_PHASE5_COMPLETE.md
 
 ================================================================================
 ✨ APÓS CRIAR O PR
