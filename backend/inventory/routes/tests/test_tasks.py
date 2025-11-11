@@ -1,4 +1,10 @@
-"""Tests for Celery tasks integrating with the routes_builder services."""
+# pyright: reportGeneralTypeIssues=false
+# pyright: reportUnknownMemberType=false
+# pyright: reportUnknownVariableType=false
+# pyright: reportAttributeAccessIssue=false
+# pyright: reportUnknownArgumentType=false
+
+"""Tests for Celery tasks integrating with the routes services."""
 
 from __future__ import annotations
 
@@ -11,7 +17,7 @@ from inventory.models_routes import Route
 from inventory.routes.tasks import (
     build_route,
     build_routes_batch,
-    health_check_routes_builder,
+    health_check,
     import_route_from_payload,
     invalidate_route_cache,
 )
@@ -196,6 +202,6 @@ def test_health_check_task(monkeypatch: Any) -> None:
 
     monkeypatch.setattr(services, "health_summary", fake_summary)
 
-    result = cast(Any, health_check_routes_builder).run()
+    result = cast(Any, health_check).run()
 
     assert result == {"status": "success", "summary": summary}

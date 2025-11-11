@@ -49,8 +49,24 @@ urlpatterns: list[Any] = [
 
     # Apps
     path('maps_view/', include('maps_view.urls')),
+    path('routes/', include('inventory.urls')),  # Route builder HTML views
+    path(
+        'routes_builder/fiber-route-builder/',
+        RedirectView.as_view(
+            pattern_name='inventory:fiber_route_builder',
+            permanent=True,
+        ),
+        name='routes_builder_legacy_detail',
+    ),
+    path(
+        'routes_builder/',
+        RedirectView.as_view(
+            pattern_name='inventory:fiber_route_builder',
+            permanent=True,
+        ),
+        name='routes_builder_legacy_root',
+    ),
     path('', include('monitoring.urls')),
-    path('routes/', include('routes_builder.urls')),
     path('api/v1/inventory/', include('inventory.urls_api')),
     path('api/v1/', include('inventory.urls_rest')),  # DRF endpoints
     path('setup_app/', include('setup_app.urls')),

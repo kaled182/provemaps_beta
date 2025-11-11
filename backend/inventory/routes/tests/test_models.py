@@ -1,15 +1,15 @@
 # pyright: reportGeneralTypeIssues=false
 
-"""Unit tests for routes_builder domain models."""
+"""Unit tests for inventory routes domain models."""
 
 from __future__ import annotations
+
+from typing import Any, Protocol, cast
 
 import pytest
 from django.apps import apps
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
-
-from typing import Any, Protocol, cast
 
 from inventory.models import Port
 

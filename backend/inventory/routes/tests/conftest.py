@@ -1,6 +1,6 @@
 # pyright: reportGeneralTypeIssues=false
 
-"""Fixtures dedicated to the routes_builder app tests."""
+"""Fixtures dedicated to the inventory routes test suite."""
 
 from __future__ import annotations
 

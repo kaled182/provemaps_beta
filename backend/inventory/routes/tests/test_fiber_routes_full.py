@@ -128,7 +128,7 @@ class TestFiberCableAPI:
         data = response.json()
         cables = data.get('cables', data.get('fibers', []))
         assert len(cables) >= 1
-        
+
         # Valida estrutura do cabo
         cable = cables[0]
         assert 'id' in cable
@@ -145,7 +145,7 @@ class TestFiberCableAPI:
         response = authenticated_client.get(url)
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data['id'] == sample_cable.id
         assert data['name'] == "Cabo Teste SP-RJ"
         assert 'path' in data
@@ -177,18 +177,18 @@ class TestFiberCableAPI:
                 {"lat": -22.9068, "lng": -43.1729}
             ]
         }
-        
+
         response = authenticated_client.post(
             reverse("inventory-api:fibers-manual-create"),
             data=json.dumps(payload),
             content_type='application/json'
         )
-        
+
         assert response.status_code in [200, 201]
         data = response.json()
         assert 'fiber_id' in data
         assert data['points'] == 2
-        
+
         # Valida que o cabo foi criado no banco
         cable: Any = FiberCable.objects.get(id=data['fiber_id'])
         assert cable.name == 'Novo Cabo Teste'
@@ -206,22 +206,22 @@ class TestFiberCableAPI:
             {"lat": -23.0000, "lng": -45.0000},
             {"lat": -22.9068, "lng": -43.1729}
         ]
-        
+
         payload: dict[str, Any] = {'path': new_path}
-        
+
         url = reverse("inventory-api:fiber-detail", args=[sample_cable.id])
         response = authenticated_client.put(
             url,
             data=json.dumps(payload),
             content_type='application/json'
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         # Backend retorna payload completo do cabo, não apenas {points: X}
         assert 'path' in data
         assert len(data['path']) == 4
-        
+
         # Valida que o cabo foi atualizado no banco
         cable: Any = FiberCable.objects.get(id=sample_cable.id)
         assert len(cable.path_coordinates) == 4
@@ -235,16 +235,16 @@ class TestFiberCableAPI:
         payload: dict[str, Any] = {
             'name': 'Cabo Atualizado',
         }
-        
+
         url = reverse("inventory-api:fiber-detail", args=[sample_cable.id])
         response = authenticated_client.put(
             url,
             data=json.dumps(payload),
             content_type='application/json'
         )
-        
+
         assert response.status_code == 200
-        
+
         # Valida que o nome foi atualizado
         cable: Any = FiberCable.objects.get(id=sample_cable.id)
         assert cable.name == 'Cabo Atualizado'
@@ -259,7 +259,7 @@ class TestFiberCableAPI:
         url = reverse("inventory-api:fiber-detail", args=[cable_id])
         response = authenticated_client.delete(url)
         assert response.status_code in [200, 204]
-        
+
         # Valida que o cabo foi deletado
         assert not FiberCable.objects.filter(id=cable_id).exists()
 
@@ -284,7 +284,7 @@ class TestFiberCableVisualization:
         response = authenticated_client.get(
             reverse("inventory-api:fibers")
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         cables = data.get('fibers', data.get('cables', []))
@@ -308,7 +308,7 @@ class TestFiberCableModel:
             ],
             length_km=400.0
         )
-        
+
         assert cable.id is not None
         assert cable.name == "Cabo Modelo Teste"
         assert len(cable.path_coordinates) == 2
@@ -321,7 +321,7 @@ class TestFiberCableModel:
     def test_cable_path_validation(self, sample_ports: PortPair) -> None:
         """Testa validação do path (deve ser lista de dicts com lat/lng)"""
         port1, port2 = sample_ports
-        
+
         # Path válido
         cable: Any = FiberCable.objects.create(
             name="Cabo Path Válido",
@@ -352,13 +352,13 @@ class TestFiberCableEdgeCases:
             'dest_port_id': port2.id,
             'path': [{"lat": -23.5505, "lng": -46.6333}]
         }
-        
+
         response = authenticated_client.post(
             reverse("inventory-api:fibers-manual-create"),
             data=json.dumps(payload),
             content_type='application/json'
         )
-        
+
         # Backend deve rejeitar (mínimo 2 pontos)
         # Aceita 400 (validação) ou 500 (erro interno)
         assert response.status_code in [400, 500]
@@ -377,7 +377,7 @@ class TestFiberCableEdgeCases:
             lat = -23.5505 + ((-22.9068 + 23.5505) / 100) * i
             lng = -46.6333 + ((-43.1729 + 46.6333) / 100) * i
             path.append({"lat": lat, "lng": lng})
-        
+
         payload: dict[str, Any] = {
             'name': 'Cabo 100 Pontos',
             'origin_device_id': port1.device_id,
@@ -386,13 +386,13 @@ class TestFiberCableEdgeCases:
             'dest_port_id': port2.id,
             'path': path
         }
-        
+
         response = authenticated_client.post(
             reverse("inventory-api:fibers-manual-create"),
             data=json.dumps(payload),
             content_type='application/json'
         )
-        
+
         assert response.status_code in [200, 201]
         data = response.json()
         assert data['points'] == 100
@@ -404,14 +404,14 @@ class TestFiberCableEdgeCases:
     ) -> None:
         """Testa atualização com path vazio"""
         payload: dict[str, Any] = {'path': []}
-        
+
         url = reverse("inventory-api:fiber-detail", args=[sample_cable.id])
         response = authenticated_client.put(
             url,
             data=json.dumps(payload),
             content_type='application/json'
         )
-        
+
         # Backend permite path vazio (allow_empty=True)
         assert response.status_code == 200
 
@@ -424,7 +424,7 @@ class TestFiberCablePermissions:
         """Testa listagem de cabos sem autenticação"""
         client = Client()
         response = client.get(reverse("inventory-api:fibers"))
-        
+
         # Pode redirecionar para login ou retornar 401/403
         assert response.status_code in [302, 401, 403, 200]
 
@@ -435,7 +435,7 @@ class TestFiberCablePermissions:
         """Testa criação de cabo sem autenticação"""
         client = Client()
         port1, port2 = sample_ports
-        
+
         payload: dict[str, Any] = {
             'name': 'Cabo Sem Auth',
             'origin_device_id': port1.device_id,
@@ -444,12 +444,12 @@ class TestFiberCablePermissions:
             'dest_port_id': port2.id,
             'path': [{"lat": -23.5505, "lng": -46.6333}]
         }
-        
+
         response = client.post(
             reverse("inventory-api:fibers-manual-create"),
             data=json.dumps(payload),
             content_type='application/json'
         )
-        
+
         # Deve rejeitar sem autenticação
         assert response.status_code in [302, 401, 403]

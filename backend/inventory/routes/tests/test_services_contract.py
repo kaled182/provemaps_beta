@@ -1,4 +1,4 @@
-"""Contract tests for the routes_builder.services public API."""
+"""Contract tests for the inventory routes services public API."""
 
 from __future__ import annotations
 
