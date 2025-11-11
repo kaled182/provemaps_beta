@@ -1,0 +1,147 @@
+version: '3.8'
+
+# PostgreSQL + PostGIS Configuration (Phase 10)
+# 
+# Usage:
+#   docker-compose -f docker/docker-compose.postgis.yml up -d
+#
+# Environment variables needed:
+#   DB_ENGINE=postgis
+#   DB_HOST=localhost (or postgres container name)
+#   DB_PORT=5432
+#   DB_NAME=mapsprovefiber
+#   DB_USER=provemaps
+#   DB_PASSWORD=<secure_password>
+
+services:
+  postgres:
+    # Official PostGIS image from Docker Hub:
+    #   https://hub.docker.com/r/postgis/postgis
+    # Override POSTGIS_IMAGE env var to upgrade or pin digest.
+    # Example (PowerShell): $env:POSTGIS_IMAGE="postgis/postgis:16-3.4"
+    # Example (digest pin): $env:POSTGIS_IMAGE="postgis/postgis@sha256:<digest>"
+    image: ${POSTGIS_IMAGE:-postgis/postgis:16-3.4}
+    container_name: mapsprovefiber_postgis
+    environment:
+      POSTGRES_DB: ${DB_NAME:-mapsprovefiber}
+      POSTGRES_USER: ${DB_USER:-provemaps}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=en_US.utf8 --lc-ctype=en_US.utf8"
+      # Enable PostGIS extensions automatically
+      POSTGIS_GDAL_ENABLED_DRIVERS: ENABLE_ALL
+      POSTGIS_ENABLE_OUTDB_RASTERS: 1
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init_postgis.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-provemaps} -d ${DB_NAME:-mapsprovefiber}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "work_mem=16MB"
+      - "-c"
+      - "maintenance_work_mem=128MB"
+      - "-c"
+      - "effective_cache_size=1GB"
+      # PostGIS tuning
+      - "-c"
+      - "random_page_cost=1.1"
+      - "-c"
+      - "effective_io_concurrency=200"
+
+  # PgAdmin (optional, for database management)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: mapsprovefiber_pgadmin
+    environment:
+      # Use a valid deliverable domain to avoid startup email validation failure
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - tools  # Start only with: docker-compose --profile tools up
+
+  # GDAL utility container (optional, for spatial ETL / conversions)
+  # Usage examples:
+  #   docker compose -f docker/docker-compose.postgis.yml run --rm gdal ogrinfo -al /data/input.geojson
+  #   docker compose -f docker/docker-compose.postgis.yml run --rm gdal ogr2ogr -f PostgreSQL PG:"host=postgres dbname=$DB_NAME user=$DB_USER password=$DB_PASSWORD" /data/input.shp -nln imported_layer
+  gdal:
+    image: ghcr.io/osgeo/gdal:alpine-normal-latest
+    container_name: mapsprovefiber_gdal
+    environment:
+      # Pass database connection info for scripts that connect directly
+      DB_HOST: postgres
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-mapsprovefiber}
+      DB_USER: ${DB_USER:-provemaps}
+      DB_PASSWORD: ${DB_PASSWORD:-changeme}
+      # Set default GDAL configuration (tweak as needed)
+      GDAL_CACHEMAX: 128  # MB
+      CPL_DEBUG: OFF
+    volumes:
+      - ./data:/data:rw              # Place input/output spatial files here
+      - ./scripts:/scripts:ro        # Optionally mount helper scripts
+    working_dir: /data
+    # Keep container idle by default; override command when running tasks
+    command: ["sleep", "infinity"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - tools  # Launch with: docker compose --profile tools up gdal
+
+  # Backend test runner with GDAL (GeoDjango) support.
+  # Provides an isolated environment to execute pytest using PostGIS.
+  backend-test:
+    build:
+      context: ..
+      dockerfile: docker/dockerfile
+    container_name: mapsprovefiber_backend_test
+    environment:
+      DJANGO_SETTINGS_MODULE: settings.dev
+      DB_ENGINE: postgis
+      DB_HOST: postgres
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-mapsprovefiber}
+      DB_USER: ${DB_USER:-provemaps}
+      DB_PASSWORD: ${DB_PASSWORD:-changeme}
+      PYTEST_ADDOPTS: -q
+    volumes:
+      - ../backend:/app/backend:rw
+      - ../scripts:/app/scripts:ro
+    working_dir: /app/backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # GDAL libs baked into image; run tests directly after migrations.
+    command: ["bash","-c","python manage.py migrate --noinput && pytest"]
+    profiles:
+      - tools
+    restart: "no"
+
+volumes:
+  postgres_data:
+    name: mapsprovefiber_postgres_data
+  pgadmin_data:
+    name: mapsprovefiber_pgadmin_data

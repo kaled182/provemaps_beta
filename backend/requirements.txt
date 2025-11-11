@@ -44,6 +44,7 @@ pyasn1==0.6.1
 pyasn1_modules==0.4.2
 pycparser==2.23
 PyMySQL==1.1.1
+psycopg2-binary==2.9.9
 pyOpenSSL==25.3.0
 pytest==8.3.3
 pytest-django==4.9.0
