@@ -20,12 +20,6 @@
       DJANGO_SETTINGS_MODULE: settings.dev
       SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
       PYTHONPATH: "/app/backend:/app"
-      DB_HOST: db
-      DB_PORT: "3306"
-      DB_NAME: app
-      DB_USER: app
-      DB_PASSWORD: app
-      REDIS_URL: redis://redis:6379/1
       PYTHONUNBUFFERED: 1
       INIT_MIGRATE: "true"
       INIT_COLLECTSTATIC: "true"
@@ -42,8 +36,6 @@
       ENV_FILE_PATH: /app/database/runtime.env
     depends_on:
       redis:
-        condition: service_healthy
-      db:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; resp = urllib.request.urlopen('http://localhost:8000/ready', timeout=5); exit(0 if resp.getcode() == 200 else 1)\" || exit 1"]
@@ -66,7 +58,7 @@
     build:
       context: ..
       dockerfile: docker/dockerfile
-    command: celery -A core.celery_app worker -Q default -l info -c 4
+    command: celery -A core.celery_app worker -Q default,zabbix,maps -l info -c 4
     entrypoint: ["/docker-entrypoint.sh"]
     env_file:
       - ../.env
@@ -75,12 +67,6 @@
       DJANGO_SETTINGS_MODULE: settings.dev
       SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
       PYTHONPATH: "/app/backend:/app"
-      DB_HOST: db
-      DB_PORT: "3306"
-      DB_NAME: app
-      DB_USER: app
-      DB_PASSWORD: app
-      REDIS_URL: redis://redis:6379/1
       PYTHONUNBUFFERED: 1
       WAIT_FOR_DB: "true"
       WAIT_FOR_REDIS: "true"
@@ -92,8 +78,6 @@
       ENV_FILE_PATH: /app/database/runtime.env
     depends_on:
       redis:
-        condition: service_healthy
-      db:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "celery -A core.celery_app inspect ping -d celery@$$HOSTNAME -t 5 | grep -qi pong || ps aux | grep -q '[c]elery worker'"]
@@ -125,12 +109,6 @@
       DJANGO_SETTINGS_MODULE: settings.dev
       SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
       PYTHONPATH: "/app/backend:/app"
-      DB_HOST: db
-      DB_PORT: "3306"
-      DB_NAME: app
-      DB_USER: app
-      DB_PASSWORD: app
-      REDIS_URL: redis://redis:6379/1
       PYTHONUNBUFFERED: 1
       WAIT_FOR_DB: "true"
       WAIT_FOR_REDIS: "true"
@@ -142,8 +120,6 @@
       ENV_FILE_PATH: /app/database/runtime.env
     depends_on:
       redis:
-        condition: service_healthy
-      db:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f 'celery beat' >/dev/null 2>&1"]
@@ -194,6 +170,8 @@
       timeout: 5s
       retries: 10
     restart: unless-stopped
+    profiles:
+      - mysql
 
 volumes:
   mariadb_data:

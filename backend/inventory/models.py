@@ -185,6 +185,29 @@ class Port(models.Model):
     )
     notes = models.CharField(max_length=255, blank=True)
 
+    # Cached optical power values populated asynchronously by Celery
+    # These fields allow REST APIs to serve data instantly without
+    # performing synchronous Zabbix calls during the web request.
+    last_rx_power = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Último valor RX dBm coletado do Zabbix (cache assíncrono)",
+    )
+    last_tx_power = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Último valor TX dBm coletado do Zabbix (cache assíncrono)",
+    )
+    last_optical_check = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp da última coleta óptica assíncrona",
+    )
+
     class Meta:
         unique_together = ("device", "name")
         ordering = ["device__site__display_name", "device__name", "name"]
@@ -240,6 +263,36 @@ class FiberCable(models.Model):
     )
     last_status_update = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True)
+
+    # Cached operational status values (Phase 9.1)
+    # Populated asynchronously by refresh_cables_oper_status Celery task
+    last_status_origin = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="Último status operacional da porta de origem (cache)",
+    )
+    last_status_dest = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="Último status operacional da porta de destino (cache)",
+    )
+    last_status_check = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp da última verificação de status operacional",
+    )
+
+    # Cached live status (computed from multiple sources)
+    last_live_status = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="Último status 'live' calculado (agregação de fontes)",
+    )
+    last_live_check = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp do último cálculo de status live",
+    )
 
     class Meta:
         ordering = ["name"]
