@@ -25,6 +25,7 @@ from inventory.usecases.fibers import (
     FiberUseCaseError,
     FiberValidationError,
 )
+from inventory.cache.fibers import get_cached_fiber_list
 
 logger = logging.getLogger(__name__)
 
@@ -127,15 +128,34 @@ def import_kml_modal(request: HttpRequest) -> HttpResponse:
 @api_login_required
 @handle_api_errors
 def api_fiber_cables(request: HttpRequest) -> JsonResponse:
-    """List all fiber cables with detailed information."""
-    return JsonResponse({"cables": fiber_uc.list_fiber_cables()})
+    """List all fiber cables with detailed information (cached with SWR)."""
+    data, is_fresh = get_cached_fiber_list(fiber_uc.list_fiber_cables)
+    
+    response = JsonResponse({"cables": data})
+    
+    # Add cache headers to help client-side caching
+    if is_fresh:
+        response["Cache-Control"] = "public, max-age=60"
+    else:
+        response["Cache-Control"] = "public, max-age=300, stale-while-revalidate=300"
+    
+    return response
 
 
 @require_GET
 @login_required
 @handle_api_errors
 def api_fibers_oper_status(request: HttpRequest) -> JsonResponse:
-    """Return operational status metadata for one or more cables."""
+    """
+    Return operational status metadata for one or more cables.
+    
+    OPTIMIZED: Reads from pre-calculated cache populated by Celery task
+    instead of making synchronous Zabbix calls on every request.
+    
+    This prevents the "hundreds of Zabbix queries" bottleneck that
+    was causing 30+ second delays in the dashboard.
+    """
+    from django.core.cache import cache
 
     ids_param = (request.GET.get("ids") or "").strip()
     cables_qs = FiberCable.objects.all()
@@ -157,11 +177,31 @@ def api_fibers_oper_status(request: HttpRequest) -> JsonResponse:
     present_ids = set(cable_ids)
     missing_ids = [cid for cid in requested_ids if cid not in present_ids]
 
-    results = [fiber_uc.update_cable_oper_status(cid) for cid in cable_ids]
+    # NEW: Read from cache instead of calling Zabbix
+    results = []
+    cache_misses = []
+    
+    for cable_id in cable_ids:
+        cache_key = f"cable:oper_status:{cable_id}"
+        cached_data = cache.get(cache_key)
+        
+        if cached_data:
+            results.append(cached_data)
+        else:
+            # Fallback: If cache miss, compute on-demand
+            # (this should be rare once Celery task is running)
+            cache_misses.append(cable_id)
+            status_data = fiber_uc.update_cable_oper_status(cable_id)
+            results.append(status_data)
+            # Store for next time (2-minute cache)
+            cache.set(cache_key, status_data, timeout=120)
 
     payload: dict[str, object] = {"results": results}
     if missing_ids:
         payload["missing_ids"] = missing_ids
+    if cache_misses:
+        payload["cache_misses"] = cache_misses  # For debugging
+    
     return JsonResponse(payload)
 
 
