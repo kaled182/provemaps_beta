@@ -9,6 +9,7 @@ from __future__ import annotations
 from importlib import import_module
 from typing import TYPE_CHECKING, Any, cast
 
+from django.contrib.gis.db import models as gis_models
 from django.db import models
 from django.utils import timezone
 from django.utils.text import slugify
@@ -254,7 +255,16 @@ class FiberCable(models.Model):
     path_coordinates = models.JSONField(
         blank=True,
         null=True,
-        help_text="Coordinate list e.g. [{'lat': -16.6, 'lng': -49.2}, ...]",
+        help_text="Coordinate list e.g. [{'lat': -16.6, 'lng': -49.2}, ...]. Deprecated: use path field.",
+    )
+    # Spatial field for PostGIS (Phase 10)
+    # SRID 4326 = WGS84 (GPS coordinates)
+    # Populated by data migration from path_coordinates
+    path = gis_models.LineStringField(
+        srid=4326,
+        blank=True,
+        null=True,
+        help_text="Spatial path geometry for PostGIS spatial queries (bbox filtering).",
     )
     status = models.CharField(
         max_length=15,
