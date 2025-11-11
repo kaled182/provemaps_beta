@@ -57,6 +57,39 @@ function computePercent(part, total) {
     return Math.max(0, Math.min(100, (Number(part) / Number(total)) * 100));
 }
 
+function updateSummaryUI(summary) {
+    if (!summary) return;
+    
+    // Update progress bars
+    const progressAvailable = document.getElementById('progress-available');
+    const progressUnavailable = document.getElementById('progress-unavailable');
+    const progressUnknown = document.getElementById('progress-unknown');
+    
+    if (progressAvailable && summary.availability_percentage !== undefined) {
+        progressAvailable.style.width = `${summary.availability_percentage}%`;
+    }
+    if (progressUnavailable && summary.total > 0) {
+        const unavailablePercent = computePercent(summary.unavailable, summary.total);
+        progressUnavailable.style.width = `${unavailablePercent}%`;
+    }
+    if (progressUnknown && summary.total > 0) {
+        const unknownPercent = computePercent(summary.unknown, summary.total);
+        progressUnknown.style.width = `${unknownPercent}%`;
+    }
+    
+    // Update text counters if elements exist
+    const totalEl = document.getElementById('total-hosts');
+    const availableEl = document.getElementById('available-hosts');
+    const unavailableEl = document.getElementById('unavailable-hosts');
+    const unknownEl = document.getElementById('unknown-hosts');
+    
+    if (totalEl) totalEl.textContent = summary.total || 0;
+    if (availableEl) availableEl.textContent = summary.available || 0;
+    if (unavailableEl) unavailableEl.textContent = summary.unavailable || 0;
+    if (unknownEl) unknownEl.textContent = summary.unknown || 0;
+}
+
+
 function currentWsPath(forceResolve = false) {
     if (!forceResolve && lastSuccessfulWsPath) {
         return lastSuccessfulWsPath;
@@ -402,9 +435,16 @@ function initRealtimeUpdates(forceFallbackPath = false) {
     dashboardSocket.onmessage = (event) => {
         try {
             const payload = JSON.parse(event.data);
+            
+            // Handle dashboard host status updates
             if (payload && payload.event === 'dashboard.status' && payload.data) {
                 applyDashboardSnapshot(payload.data);
                 clearFallbackTimer();
+            }
+            
+            // Handle cable status updates (NEW)
+            if (payload && payload.type === 'cable_status_update' && payload.cables) {
+                applyCableStatusBatch(payload.cables);
             }
         } catch (err) {
             console.error('[dashboard] Failed to parse realtime payload:', err);
@@ -942,10 +982,26 @@ async function addDeviceMarker(dev, siteName, siteCity) {
 
 async function loadData() {
     try {
-        const [cablesResp, sitesResp] = await Promise.all([
+        const [cablesResp, sitesResp, dashboardDataResp] = await Promise.all([
             fetchJSON('/api/v1/inventory/fibers/'),
-            fetchJSON('/api/v1/inventory/sites/')
+            fetchJSON('/api/v1/inventory/sites/'),
+            fetchJSON('/maps_view/api/dashboard/data/')
         ]);
+
+        // Update dashboard data (hosts_status, hosts_summary)
+        if (dashboardDataResp) {
+            if (Array.isArray(dashboardDataResp.hosts_status)) {
+                window.HOSTS_DATA = dashboardDataResp.hosts_status;
+                currentHostsSnapshot = dashboardDataResp.hosts_status.slice();
+            }
+            if (dashboardDataResp.hosts_summary) {
+                window.HOSTS_SUMMARY = dashboardDataResp.hosts_summary;
+                currentSummarySnapshot = { ...dashboardDataResp.hosts_summary };
+            }
+            
+            // Update UI summary stats
+            updateSummaryUI(dashboardDataResp.hosts_summary);
+        }
 
         // Devices per site
         const siteUl = document.getElementById('siteList');
@@ -1071,6 +1127,26 @@ function applyCableStatusUpdate(cid, payload) {
         }
     }
 }
+
+function applyCableStatusBatch(cables) {
+    /**
+     * Apply multiple cable status updates from WebSocket broadcast.
+     * This replaces HTTP polling with real-time push updates.
+     */
+    if (!Array.isArray(cables)) {
+        console.warn('[dashboard] Invalid cable batch:', cables);
+        return;
+    }
+    
+    cables.forEach((cableData) => {
+        if (cableData && cableData.cable_id) {
+            applyCableStatusUpdate(cableData.cable_id, cableData);
+        }
+    });
+    
+    console.log(`[dashboard] Applied ${cables.length} cable status updates via WebSocket`);
+}
+
 
 async function refreshCableStatusValueMapped() {
     const ids = Object.keys(cablePolylines);
