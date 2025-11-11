@@ -13,6 +13,8 @@ from django.core.management import call_command
 
 from inventory.domain import optical as optical_domain
 from inventory.models import Port
+from django.utils import timezone
+from django.db import models
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +190,83 @@ def warm_all_optical_snapshots() -> None:
     port_ids = list(Port.objects.values_list("id", flat=True))
     for port_id in port_ids:
         cast(Any, warm_port_optical_cache).delay(int(port_id))
+
+
+@shared_task(name="inventory.tasks.update_all_port_optical_levels")
+def update_all_port_optical_levels() -> dict[str, Any]:
+    """
+    Coleta níveis ópticos (RX/TX) para todas as portas com item keys configuradas
+    e persiste nos campos "last_*" do modelo Port.
+
+    Objetivo: Eliminar chamadas síncronas ao Zabbix em endpoints REST.
+    As APIs passam a ler diretamente do banco (Port.last_rx_power / last_tx_power).
+    """
+    logger.info("[Optical Levels Task] Iniciando atualização de níveis ópticos")
+
+    # Seleciona apenas portas que possuem ao menos uma key de RX ou TX
+    ports_qs = (
+        Port.objects.select_related("device")
+        .only(
+            "id",
+            "name",
+            "rx_power_item_key",
+            "tx_power_item_key",
+            "device__zabbix_hostid",
+        )
+        .filter(
+            (
+                models.Q(rx_power_item_key__isnull=False)
+                & ~models.Q(rx_power_item_key="")
+            )
+            | (
+                models.Q(tx_power_item_key__isnull=False)
+                & ~models.Q(tx_power_item_key="")
+            )
+        )
+    )
+
+    total = ports_qs.count()
+    updated = 0
+    errors: list[str] = []
+    now = timezone.now()
+
+    for port in ports_qs.iterator():
+        try:
+            snapshot = fetch_port_optical_snapshot(port, persist_keys=False)
+            rx_dbm = snapshot.get("rx_dbm")
+            tx_dbm = snapshot.get("tx_dbm")
+
+            # Apenas atualiza se houve algum valor retornado
+            update_fields: list[str] = []
+            if rx_dbm is not None:
+                port.last_rx_power = rx_dbm
+                update_fields.append("last_rx_power")
+            if tx_dbm is not None:
+                port.last_tx_power = tx_dbm
+                update_fields.append("last_tx_power")
+            if update_fields:
+                port.last_optical_check = now
+                update_fields.append("last_optical_check")
+                port.save(update_fields=update_fields)
+                updated += 1
+        except Exception as exc:  # noqa: BLE001
+            msg = f"Port {port.id} ({port.name}) falhou: {exc}"
+            logger.warning("[Optical Levels Task] %s", msg)
+            errors.append(msg)
+
+    result = {
+        "success": True,
+        "total": total,
+        "updated": updated,
+        "errors": len(errors),
+    }
+    logger.info(
+        "[Optical Levels Task] Concluído: %d/%d portas atualizadas (%d erros)",
+        updated,
+        total,
+        len(errors),
+    )
+    return result
 
 
 @shared_task(name="inventory.tasks.refresh_fiber_list_cache")

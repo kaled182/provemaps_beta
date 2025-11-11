@@ -185,6 +185,29 @@ class Port(models.Model):
     )
     notes = models.CharField(max_length=255, blank=True)
 
+    # Cached optical power values populated asynchronously by Celery
+    # These fields allow REST APIs to serve data instantly without
+    # performing synchronous Zabbix calls during the web request.
+    last_rx_power = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Último valor RX dBm coletado do Zabbix (cache assíncrono)",
+    )
+    last_tx_power = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Último valor TX dBm coletado do Zabbix (cache assíncrono)",
+    )
+    last_optical_check = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp da última coleta óptica assíncrona",
+    )
+
     class Meta:
         unique_together = ("device", "name")
         ordering = ["device__site__display_name", "device__name", "name"]
