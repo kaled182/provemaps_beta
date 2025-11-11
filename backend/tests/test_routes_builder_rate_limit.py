@@ -148,5 +148,5 @@ def test_enqueue_import_route_success(staff_client: Any) -> None:
     assert response.status_code == 202
     data = response.json()
     assert data["status"] == "enqueued"
-    assert data["task"] == "routes_builder.tasks.import_route_from_payload"
+    assert data["task"] == "inventory.routes.import_route_from_payload"
     assert data["created_by"] == "tests"

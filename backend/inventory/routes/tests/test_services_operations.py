@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Protocol, cast
+from typing import Any, Mapping, Protocol, cast
 
 import pytest
 from django.apps import apps
@@ -212,10 +212,10 @@ def test_invalidate_route_cache_clears_expected_keys() -> None:
 
 @pytest.mark.django_db
 def test_health_summary_includes_recent_events(
-    route_event: RouteEvent,
-    route_segment: RouteSegment,
+    route_event: RouteEventModel,
+    route_segment: RouteSegmentModel,
 ) -> None:
-    summary: dict[str, Any] = services.health_summary()
+    summary: Mapping[str, Any] = services.health_summary()
 
     assert summary["routes"] >= 1
     assert summary["segments"] >= 1

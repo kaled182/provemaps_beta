@@ -9,43 +9,41 @@ def ensure_route_tables(
     apps: Apps,
     schema_editor: BaseDatabaseSchemaEditor,
 ) -> None:
-    """Create inventory_route* tables if the legacy ones are missing."""
+    """Rename legacy routes_builder tables to inventory_* across all vendors.
+
+    Original logic only handled sqlite. For Postgres the legacy tables remain
+    (routes_builder_*) causing later migrations (spatial) to fail when they
+    expect inventory_* names. We perform conditional renames if target tables
+    are missing. For sqlite we keep the existing fallback creation behavior.
+    """
+
+    existing_tables = set(connection.introspection.table_names())
+
+    legacy_map = {
+        "routes_builder_route": "inventory_route",
+        "routes_builder_routesegment": "inventory_routesegment",
+        "routes_builder_routeevent": "inventory_routeevent",
+    }
 
     with connection.cursor() as cursor:
-        if connection.vendor != "sqlite":
-            return
+        # Rename legacy -> inventory if needed
+        for old, new in legacy_map.items():
+            if old in existing_tables and new not in existing_tables:
+                cursor.execute(f"ALTER TABLE {old} RENAME TO {new}")
 
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        )
-        tables = {row[0] for row in cursor.fetchall()}
+    # Refresh table list after possible renames
+    existing_tables = set(connection.introspection.table_names())
 
-        required_tables = {
+    # SQLite fallback: create tables if neither legacy nor target existed.
+    if connection.vendor == "sqlite":
+        required = {
             "inventory_route",
             "inventory_routesegment",
             "inventory_routeevent",
         }
-        if required_tables.issubset(tables):
+        if required.issubset(existing_tables):
             return
 
-        legacy_tables = {
-            "routes_builder_route": "inventory_route",
-            "routes_builder_routesegment": "inventory_routesegment",
-            "routes_builder_routeevent": "inventory_routeevent",
-        }
-
-        for old_name, new_name in legacy_tables.items():
-            if old_name in tables and new_name not in tables:
-                cursor.execute(
-                    f"ALTER TABLE {old_name} RENAME TO {new_name}"
-                )
-
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        )
-        tables = {row[0] for row in cursor.fetchall()}
-
-        # Recreate tables when neither legacy nor target tables exist.
         create_statements = {
             "inventory_route": (
                 "CREATE TABLE IF NOT EXISTS inventory_route ("
@@ -66,8 +64,8 @@ def ensure_route_tables(
                 "destination_port_id INTEGER NOT NULL,"
                 "FOREIGN KEY(origin_port_id) REFERENCES zabbix_api_port(id)"
                 " ON DELETE RESTRICT,"
-                "FOREIGN KEY(destination_port_id) REFERENCES "
-                "zabbix_api_port(id) ON DELETE RESTRICT"
+                "FOREIGN KEY(destination_port_id) REFERENCES zabbix_api_port(id)"
+                " ON DELETE RESTRICT"
                 ")"
             ),
             "inventory_routesegment": (
@@ -107,10 +105,9 @@ def ensure_route_tables(
                 ")"
             ),
         }
-
-        for table_name in required_tables:
-            if table_name not in tables:
-                cursor.execute(create_statements[table_name])
+        for table_name, ddl in create_statements.items():
+            if table_name not in existing_tables:
+                cursor.execute(ddl)
 
 
 def reverse_route_tables(

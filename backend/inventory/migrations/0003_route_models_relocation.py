@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from django.apps.registry import Apps
-from django.db import migrations, models
+from django.db import migrations, models, connection
 from django.db.backends.base.schema import BaseDatabaseSchemaEditor
 import django.db.models.deletion
 
@@ -268,7 +268,102 @@ class Migration(migrations.Migration):
         ("inventory", "0002_alter_port_zabbix_item_id_trafego_in_and_more"),
     ]
 
+    def create_legacy_tables_if_missing(apps, schema_editor):
+        """Create legacy routes_builder_* tables if missing.
+
+        Fresh installs lack the old app's tables, so later migrations that
+        expect them fail. We add minimal structures only when absent; existing
+        deployments are untouched.
+        """
+
+        vendor = connection.vendor
+        existing = set(connection.introspection.table_names())
+        required = {
+            "routes_builder_route",
+            "routes_builder_routesegment",
+            "routes_builder_routeevent",
+        }
+        if required.issubset(existing):
+            print("[migration 0003] Legacy route tables already exist; skipping creation.")
+            return  # Legacy tables already present; do nothing
+
+        # Only create for PostgreSQL / MySQL; SQLite handled later in 0007.
+        if vendor not in {"postgresql", "mysql"}:
+            print(f"[migration 0003] Vendor {vendor} not targeted for legacy table creation.")
+            return
+
+        with connection.cursor() as cursor:
+            if "routes_builder_route" not in existing:
+                print("[migration 0003] Creating routes_builder_route")
+                cursor.execute(
+                    """
+                    CREATE TABLE routes_builder_route (
+                        id BIGSERIAL PRIMARY KEY,
+                        name VARCHAR(150) UNIQUE NOT NULL,
+                        description TEXT NOT NULL,
+                        status VARCHAR(20) NOT NULL DEFAULT 'planned',
+                        length_km NUMERIC(7,3),
+                        estimated_loss_db NUMERIC(5,2),
+                        measured_loss_db NUMERIC(5,2),
+                        last_built_at TIMESTAMP,
+                        last_built_by VARCHAR(150) NOT NULL DEFAULT '',
+                        import_source VARCHAR(150) NOT NULL DEFAULT '',
+                        metadata JSON,
+                        created_at TIMESTAMP NOT NULL,
+                        updated_at TIMESTAMP NOT NULL,
+                        origin_port_id BIGINT NOT NULL,
+                        destination_port_id BIGINT NOT NULL
+                    )
+                    """
+                )
+            if "routes_builder_routesegment" not in existing:
+                print("[migration 0003] Creating routes_builder_routesegment")
+                cursor.execute(
+                    """
+                    CREATE TABLE routes_builder_routesegment (
+                        id BIGSERIAL PRIMARY KEY,
+                        route_id BIGINT NOT NULL,
+                        "order" INTEGER NOT NULL,
+                        from_port_id BIGINT,
+                        to_port_id BIGINT,
+                        path_coordinates JSON,
+                        length_km NUMERIC(7,3),
+                        estimated_loss_db NUMERIC(5,2),
+                        measured_loss_db NUMERIC(5,2),
+                        metadata JSON,
+                        created_at TIMESTAMP NOT NULL,
+                        updated_at TIMESTAMP NOT NULL,
+                        UNIQUE(route_id, "order")
+                    )
+                    """
+                )
+            if "routes_builder_routeevent" not in existing:
+                print("[migration 0003] Creating routes_builder_routeevent")
+                cursor.execute(
+                    """
+                    CREATE TABLE routes_builder_routeevent (
+                        id BIGSERIAL PRIMARY KEY,
+                        event_type VARCHAR(30) NOT NULL,
+                        message TEXT NOT NULL,
+                        details JSON,
+                        created_at TIMESTAMP NOT NULL,
+                        created_by VARCHAR(150) NOT NULL DEFAULT '',
+                        route_id BIGINT NOT NULL
+                    )
+                    """
+                )
+            # Basic indexes (Django will add constraints later as state sync)
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS routes_builder_routesegment_route_order_idx "
+                "ON routes_builder_routesegment(route_id, \"order\")"
+            )
+        print("[migration 0003] Legacy route table creation completed.")
+
     operations = [
+        migrations.RunPython(
+            create_legacy_tables_if_missing,
+            migrations.RunPython.noop,
+        ),
         migrations.SeparateDatabaseAndState(
             state_operations=state_operations,
             database_operations=[],

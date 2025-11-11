@@ -29,7 +29,7 @@ from inventory.api._admin_tasks import (
 from inventory.routes.tasks import (
     build_route,
     build_routes_batch,
-    health_check_routes_builder,
+    health_check,
     import_route_from_payload,
     invalidate_route_cache,
 )
@@ -86,7 +86,7 @@ def enqueue_build_route(request: HttpRequest) -> HttpResponse:
         return JsonResponse(
             {
                 "status": "enqueued",
-                "task": "routes_builder.tasks.build_route",
+                "task": "inventory.routes.build_route",
                 "task_id": task_id(result),
                 "route_id": route_id,
                 "queue": getattr(result, "queue", "maps"),
@@ -140,7 +140,7 @@ def enqueue_build_routes_batch(request: HttpRequest) -> HttpResponse:
         return JsonResponse(
             {
                 "status": "enqueued",
-                "task": "routes_builder.tasks.build_routes_batch",
+                "task": "inventory.routes.build_routes_batch",
                 "task_id": task_id(result),
                 "route_ids": route_ids,
                 "queue": getattr(result, "queue", "maps"),
@@ -181,7 +181,7 @@ def enqueue_import_route(request: HttpRequest) -> HttpResponse:
     created_by = (
         created_by_raw
         if isinstance(created_by_raw, str) and created_by_raw
-        else request.user.get_username() or "routes_builder"
+        else request.user.get_username() or "inventory.routes"
     )
 
     try:
@@ -199,7 +199,7 @@ def enqueue_import_route(request: HttpRequest) -> HttpResponse:
         return JsonResponse(
             {
                 "status": "enqueued",
-                "task": "routes_builder.tasks.import_route_from_payload",
+                "task": "inventory.routes.import_route_from_payload",
                 "task_id": task_id(result),
                 "queue": getattr(result, "queue", "maps"),
                 "created_by": created_by,
@@ -248,7 +248,7 @@ def enqueue_invalidate_route_cache(request: HttpRequest) -> HttpResponse:
         return JsonResponse(
             {
                 "status": "enqueued",
-                "task": "routes_builder.tasks.invalidate_route_cache",
+                "task": "inventory.routes.invalidate_route_cache",
                 "task_id": task_id(result),
                 "route_id": route_id,
                 "queue": getattr(result, "queue", "maps"),
@@ -281,21 +281,22 @@ def enqueue_health_check(request: HttpRequest) -> HttpResponse:
         return JsonResponse({"error": "Rate limit exceeded"}, status=429)
 
     try:
-        result = apply_async(
-            cast(SupportsApplyAsync, health_check_routes_builder)
-        )
+        result = apply_async(cast(SupportsApplyAsync, health_check))
         log_operation(request, "enqueue_health_check")
         return JsonResponse(
             {
                 "status": "enqueued",
-                "task": "routes_builder.tasks.health_check_routes_builder",
+                "task": "inventory.routes.health_check",
                 "task_id": task_id(result),
                 "queue": getattr(result, "queue", "maps"),
             },
             status=202,
         )
     except Exception as exc:  # pragma: no cover - defensive logging
-        logger.error("Failed to enqueue health_check_routes_builder: %s", exc)
+        logger.error(
+            "Failed to enqueue inventory.routes.health_check: %s",
+            exc,
+        )
         return JsonResponse({"error": "Failed to enqueue task"}, status=500)
 
 
@@ -362,8 +363,10 @@ def enqueue_bulk_operations(request: HttpRequest) -> HttpResponse:
     if not isinstance(operations_raw, list):
         return HttpResponseBadRequest("operations must be a list")
 
+    operations_iterable = cast(list[Any], operations_raw)
+
     operations: list[Mapping[str, Any]] = []
-    for entry in operations_raw:
+    for entry in operations_iterable:
         if isinstance(entry, Mapping):
             operations.append(cast(Mapping[str, Any], entry))
 

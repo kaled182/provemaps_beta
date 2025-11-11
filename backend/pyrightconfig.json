@@ -20,7 +20,6 @@
     "media",
     "legacy_backup",
     "setup_app",
-    "tests",
-    "routes_builder"
+    "tests"
   ]
 }
