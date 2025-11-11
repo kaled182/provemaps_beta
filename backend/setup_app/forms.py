@@ -1,6 +1,18 @@
 from __future__ import annotations
 
+import os
+from typing import Any
+
 from django import forms
+
+
+def _env_default(*keys: str, fallback: str = "") -> str:
+    """Return the first non-empty environment value for the provided keys."""
+    for key in keys:
+        value = os.getenv(key)
+        if value:
+            return value
+    return fallback
 
 
 class FirstTimeSetupForm(forms.Form):
@@ -22,10 +34,26 @@ class FirstTimeSetupForm(forms.Form):
     )
     maps_api_key = forms.CharField(label="Google Maps API key", max_length=255)
     unique_licence = forms.CharField(label="License key", max_length=255)
-    db_host = forms.CharField(label="Database host", max_length=255)
-    db_port = forms.CharField(label="Database port", max_length=16, initial="3306")
-    db_name = forms.CharField(label="Database name", max_length=255)
-    db_user = forms.CharField(label="Database user", max_length=255)
+    db_host = forms.CharField(
+        label="Database host",
+        max_length=255,
+        initial=_env_default("DB_HOST", "DATABASE_HOST", fallback="postgres"),
+    )
+    db_port = forms.CharField(
+        label="Database port",
+        max_length=16,
+        initial=_env_default("DB_PORT", "DATABASE_PORT", fallback="5432"),
+    )
+    db_name = forms.CharField(
+        label="Database name",
+        max_length=255,
+        initial=_env_default("DB_NAME", "DATABASE_NAME", fallback="mapsprovefiber"),
+    )
+    db_user = forms.CharField(
+        label="Database user",
+        max_length=255,
+        initial=_env_default("DB_USER", "DATABASE_USER", fallback="provemaps"),
+    )
     db_password = forms.CharField(
         label="Database password",
         max_length=255,
@@ -72,7 +100,11 @@ class EnvConfigForm(forms.Form):
         help_text="Comma separated. Example: localhost,127.0.0.1,example.com",
     )
     db_host = forms.CharField(label="DB_HOST", max_length=255)
-    db_port = forms.CharField(label="DB_PORT", max_length=16, initial="3306")
+    db_port = forms.CharField(
+        label="DB_PORT",
+        max_length=16,
+        initial=_env_default("DB_PORT", "DATABASE_PORT", fallback="5432"),
+    )
     db_name = forms.CharField(label="DB_NAME", max_length=255)
     db_user = forms.CharField(label="DB_USER", max_length=255)
     db_password = forms.CharField(
@@ -107,7 +139,7 @@ class EnvConfigForm(forms.Form):
         parts = [host.strip() for host in value.split(",") if host.strip()]
         return ",".join(parts)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
         base_class = (
             "rounded-lg border border-gray-300 px-3 py-2 text-sm "

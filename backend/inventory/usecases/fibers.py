@@ -6,11 +6,16 @@ from __future__ import annotations
 # pyright: reportPrivateUsage=false, reportAttributeAccessIssue=false
 
 import logging
+import time
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
 
-from integrations.zabbix.zabbix_service import zabbix_request
+from integrations.zabbix.zabbix_service import (
+    safe_cache_get,
+    safe_cache_set,
+    zabbix_request,
+)
 
 from inventory.cache.fibers import invalidate_fiber_cache
 from inventory.domain.geometry import (
@@ -27,6 +32,9 @@ from inventory.services.fiber_status import (
 )
 
 logger = logging.getLogger(__name__)
+
+LIVE_STATUS_CACHE_KEY_TEMPLATE = "inventory:fiber_live_status:{cable_id}"
+LIVE_STATUS_CACHE_TIMEOUT = 45  # seconds
 
 
 class FiberUseCaseError(Exception):
@@ -459,12 +467,68 @@ def delete_fiber(cable: FiberCable) -> None:
     invalidate_fiber_cache()
 
 
+def _persist_discovered_optical_keys(
+    port: Port,
+    reason: Dict[str, Any],
+) -> None:
+    if not isinstance(reason, dict):
+        return
+
+    updates: Dict[str, str] = {}
+
+    rx_candidate = reason.get("rx_key") or reason.get("rx_key_generic")
+    if rx_candidate and not port.rx_power_item_key:
+        updates["rx_power_item_key"] = str(rx_candidate)
+
+    tx_candidate = reason.get("tx_key") or reason.get("tx_key_generic")
+    if tx_candidate and not port.tx_power_item_key:
+        updates["tx_power_item_key"] = str(tx_candidate)
+
+    if not updates:
+        return
+
+    try:
+        Port.objects.filter(pk=port.pk).update(**updates)
+        for field, value in updates.items():
+            setattr(port, field, value)
+        logger.debug(
+            "Persisted auto-discovered optical keys for port %s: %s",
+            port.pk,
+            updates,
+        )
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.warning(
+            "Failed to persist optical keys for port %s: %s",
+            port.pk,
+            exc,
+        )
+
+
 def compute_live_status(
     cable: FiberCable,
     persist: bool,
     *,
     event_reason: str,
 ) -> FiberLiveStatus:
+    cache_key = LIVE_STATUS_CACHE_KEY_TEMPLATE.format(cable_id=cable.id)
+
+    if not persist:
+        cached_entry = safe_cache_get(cache_key)
+        if isinstance(cached_entry, dict):
+            cached_payload = cached_entry.get("live_status")
+            if isinstance(cached_payload, dict):
+                cached_data = dict(cached_payload)
+                cached_data["changed"] = (
+                    cached_data.get("combined_status") != cable.status
+                )
+                try:
+                    return FiberLiveStatus(**cached_data)
+                except TypeError:
+                    logger.debug(
+                        "Discarded malformed live status cache for cable %s",
+                        cable.id,
+                    )
+
     origin_dev = cable.origin_port.device
     dest_dev = cable.destination_port.device
 
@@ -482,6 +546,9 @@ def compute_live_status(
         rx_key=cable.destination_port.rx_power_item_key,
         tx_key=cable.destination_port.tx_power_item_key,
     )
+
+    _persist_discovered_optical_keys(cable.origin_port, origin_reason)
+    _persist_discovered_optical_keys(cable.destination_port, dest_reason)
     combined = combine_cable_status_service(origin_status, dest_status)
     changed = combined != cable.status
     if persist and changed:
@@ -493,7 +560,8 @@ def compute_live_status(
             new_status=combined,
             detected_reason=event_reason,
         )
-    return FiberLiveStatus(
+
+    status = FiberLiveStatus(
         origin_status=origin_status,
         destination_status=dest_status,
         origin_reason=origin_reason,
@@ -501,6 +569,15 @@ def compute_live_status(
         combined_status=combined,
         changed=changed,
     )
+
+    cache_payload = {
+        "live_status": asdict(status),
+        "computed_at": time.time(),
+        "cable_status": cable.status,
+    }
+    safe_cache_set(cache_key, cache_payload, LIVE_STATUS_CACHE_TIMEOUT)
+
+    return status
 
 
 def live_status_payload(
@@ -650,7 +727,16 @@ def create_manual_fiber(data: Dict[str, object]) -> Dict[str, object]:
 
 
 def update_cable_oper_status(cable_id: int) -> Dict[str, Any]:
-    """Return operational status metadata after refreshing a cable record."""
+    """
+    Return operational status metadata for a cable (Phase 9.1 optimized).
+    
+    OPTIMIZATION: Uses Port.last_rx_power and last_tx_power fields
+    (populated by update_all_port_optical_levels Celery task) instead
+    of calling fetch_port_optical_snapshot() synchronously.
+    
+    This eliminates Zabbix API calls during web requests, relying on
+    database-cached optical values.
+    """
     try:
         cable = FiberCable.objects.select_related(
             "origin_port__device", "destination_port__device"
@@ -676,8 +762,21 @@ def update_cable_oper_status(cable_id: int) -> Dict[str, Any]:
     meta_dest["port_name"] = dest_port.name
     meta_dest["device_name"] = dest_port.device.name
 
-    origin_optical = fetch_port_optical_snapshot(origin_port)
-    dest_optical = fetch_port_optical_snapshot(dest_port)
+    # PHASE 9.1: Use cached optical values from Port model
+    # (populated asynchronously by update_all_port_optical_levels task)
+    # instead of calling fetch_port_optical_snapshot() which hits Zabbix
+    origin_optical = {
+        "rx_dbm": origin_port.last_rx_power,
+        "tx_dbm": origin_port.last_tx_power,
+        "last_check": origin_port.last_optical_check,
+        "source": "cached",  # Indicate this is from DB cache
+    }
+    dest_optical = {
+        "rx_dbm": dest_port.last_rx_power,
+        "tx_dbm": dest_port.last_tx_power,
+        "last_check": dest_port.last_optical_check,
+        "source": "cached",
+    }
 
     status = combine_cable_status_service(status_origin, status_dest)
     previous_status = cable.status

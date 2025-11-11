@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any
 
 from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, JsonResponse
@@ -130,14 +131,16 @@ def import_kml_modal(request: HttpRequest) -> HttpResponse:
 def api_fiber_cables(request: HttpRequest) -> JsonResponse:
     """List all fiber cables with detailed information (cached with SWR)."""
     data, is_fresh = get_cached_fiber_list(fiber_uc.list_fiber_cables)
-    
+
     response = JsonResponse({"cables": data})
-    
-    # Add cache headers to help client-side caching
-    if is_fresh:
-        response["Cache-Control"] = "public, max-age=60"
-    else:
-        response["Cache-Control"] = "public, max-age=300, stale-while-revalidate=300"
+
+    # Force browsers to revalidate so new cables show up immediately after creation.
+    response["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response["Pragma"] = "no-cache"
+    response["Expires"] = "0"
+    if not is_fresh:
+        # Flag that the payload may be stale so clients can decide to refetch.
+        response["X-Fiber-Data-Stale"] = "1"
     
     return response
 
@@ -202,6 +205,71 @@ def api_fibers_oper_status(request: HttpRequest) -> JsonResponse:
     if cache_misses:
         payload["cache_misses"] = cache_misses  # For debugging
     
+    return JsonResponse(payload)
+
+
+@require_GET
+@api_login_required
+@handle_api_errors
+def api_fiber_cached_optical_status(request: HttpRequest, cable_id: int) -> JsonResponse:
+    """Return cached optical status for a single cable without Zabbix calls.
+
+    Leitura direta dos campos persistidos (last_rx_power / last_tx_power) das
+    portas de origem e destino. Evita chamadas síncronas ao Zabbix durante a
+    requisição web.
+    """
+    try:
+        cable = FiberCable.objects.select_related(
+            "origin_port__device", "destination_port__device"
+        ).get(id=cable_id)
+    except FiberCable.DoesNotExist:
+        return JsonResponse({"error": "FiberCable not found"}, status=404)
+
+    origin = cable.origin_port
+    dest = cable.destination_port
+
+    payload: dict[str, Any] = {
+        "cable_id": cable.id,
+        "status": cable.status,
+        "origin_optical": {
+            "rx_dbm": origin.last_rx_power,
+            "tx_dbm": origin.last_tx_power,
+            "last_check": origin.last_optical_check,
+        },
+        "destination_optical": {
+            "rx_dbm": dest.last_rx_power,
+            "tx_dbm": dest.last_tx_power,
+            "last_check": dest.last_optical_check,
+        },
+    }
+    return JsonResponse(payload)
+
+
+@require_GET
+@api_login_required
+@handle_api_errors
+def api_fiber_cached_live_status(request: HttpRequest, cable_id: int) -> JsonResponse:
+    """Return cached live status for a cable without Zabbix calls (Phase 9.1).
+    
+    Leitura direta dos campos FiberCable.last_live_* persistidos pela task
+    refresh_fiber_live_status. Evita cálculo síncrono de status live durante
+    requisições web.
+    """
+    try:
+        cable = FiberCable.objects.get(id=cable_id)
+    except FiberCable.DoesNotExist:
+        return JsonResponse({"error": "FiberCable not found"}, status=404)
+    
+    payload: dict[str, Any] = {
+        "cable_id": cable.id,
+        "name": cable.name,
+        "live_status": cable.last_live_status,
+        "stored_status": cable.status,
+        "last_live_check": cable.last_live_check,
+        "last_status_check": cable.last_status_check,
+        "origin_status": cable.last_status_origin,
+        "destination_status": cable.last_status_dest,
+    }
     return JsonResponse(payload)
 
 
