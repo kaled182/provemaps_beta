@@ -131,14 +131,16 @@ def import_kml_modal(request: HttpRequest) -> HttpResponse:
 def api_fiber_cables(request: HttpRequest) -> JsonResponse:
     """List all fiber cables with detailed information (cached with SWR)."""
     data, is_fresh = get_cached_fiber_list(fiber_uc.list_fiber_cables)
-    
+
     response = JsonResponse({"cables": data})
-    
-    # Add cache headers to help client-side caching
-    if is_fresh:
-        response["Cache-Control"] = "public, max-age=60"
-    else:
-        response["Cache-Control"] = "public, max-age=300, stale-while-revalidate=300"
+
+    # Force browsers to revalidate so new cables show up immediately after creation.
+    response["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response["Pragma"] = "no-cache"
+    response["Expires"] = "0"
+    if not is_fresh:
+        # Flag that the payload may be stale so clients can decide to refetch.
+        response["X-Fiber-Data-Stale"] = "1"
     
     return response
 
