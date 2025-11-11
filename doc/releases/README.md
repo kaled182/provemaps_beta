@@ -8,17 +8,27 @@ Version history, changelogs, and migration guides.
 
 | Document | Description |
 |----------|-------------|
-| **[CHANGELOG.md](CHANGELOG.md)** | Consolidated version history |
-| **[BREAKING_CHANGES.md](BREAKING_CHANGES.md)** | All breaking changes by version |
+| **[v2.0.1/CHANGELOG.md](v2.0.1/CHANGELOG.md)** | Version 2.0.1 changelog |
+| **[v2.0.0/CHANGELOG.md](v2.0.0/CHANGELOG.md)** | Version 2.0.0 changelog |
+| **[v2.0.0/BREAKING_CHANGES.md](v2.0.0/BREAKING_CHANGES.md)** | Breaking changes and migration guide |
 | **[v2.0.0/](v2.0.0/)** | Version 2.0.0 specific documentation |
 
 ---
 
 ## 🎯 Current Version
 
-**Version**: 2.0.0 (Modular Architecture)  
-**Release Date**: 2025-01-07  
+**Version**: 2.0.1 (Fiber Route Builder stabilization)  
+**Release Date**: 2025-11-11  
 **Status**: Stable
+
+### What's New in v2.0.1
+
+✅ **Fiber Route Builder restored**
+- Updated template keeps advanced workflow panels without duplicated Django blocks
+- Corrected ES module asset path so Google Maps callback initializes successfully
+- UI copy audited for English-only strings to align with project standard
+
+See [v2.0.1/CHANGELOG.md](v2.0.1/CHANGELOG.md) for full notes.
 
 ### What's New in v2.0.0
 
@@ -90,7 +100,7 @@ See [v2.0.0/BREAKING_CHANGES.md](v2.0.0/BREAKING_CHANGES.md) for complete migrat
 **Upgrade Time**: ~2 hours  
 **Rollback**: Supported (database compatible)
 
-See [CHANGELOG.md](CHANGELOG.md#v200) for detailed changes.
+See [v2.0.0/CHANGELOG.md](v2.0.0/CHANGELOG.md) for detailed changes.
 
 ---
 
