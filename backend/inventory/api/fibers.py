@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any
 
 from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, JsonResponse
@@ -238,6 +239,34 @@ def api_fiber_cached_optical_status(request: HttpRequest, cable_id: int) -> Json
             "tx_dbm": dest.last_tx_power,
             "last_check": dest.last_optical_check,
         },
+    }
+    return JsonResponse(payload)
+
+
+@require_GET
+@api_login_required
+@handle_api_errors
+def api_fiber_cached_live_status(request: HttpRequest, cable_id: int) -> JsonResponse:
+    """Return cached live status for a cable without Zabbix calls (Phase 9.1).
+    
+    Leitura direta dos campos FiberCable.last_live_* persistidos pela task
+    refresh_fiber_live_status. Evita cálculo síncrono de status live durante
+    requisições web.
+    """
+    try:
+        cable = FiberCable.objects.get(id=cable_id)
+    except FiberCable.DoesNotExist:
+        return JsonResponse({"error": "FiberCable not found"}, status=404)
+    
+    payload: dict[str, Any] = {
+        "cable_id": cable.id,
+        "name": cable.name,
+        "live_status": cable.last_live_status,
+        "stored_status": cable.status,
+        "last_live_check": cable.last_live_check,
+        "last_status_check": cable.last_status_check,
+        "origin_status": cable.last_status_origin,
+        "destination_status": cable.last_status_dest,
     }
     return JsonResponse(payload)
 

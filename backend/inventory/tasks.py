@@ -311,15 +311,18 @@ def refresh_cables_oper_status(self: Any) -> dict[str, Any]:
     """
     Pre-calculate operational status for all fiber cables.
     
+    Phase 9.1: Enhanced to persist status in FiberCable model fields
+    instead of relying solely on Redis cache.
+    
     This task runs periodically to:
     1. Fetch all cables from DB
     2. Query Zabbix for each cable's port status
-    3. Store results in Redis cache
-    4. Broadcast updates via WebSocket
-    5. Avoid blocking the API endpoint
+    3. Store results in FiberCable model (DB-backed)
+    4. Store in Redis cache (optional acceleration layer)
+    5. Broadcast updates via WebSocket
     
-    The API endpoint then reads from this cache instead of
-    making synchronous Zabbix calls on every request.
+    The API endpoint reads from FiberCable.last_status_* fields
+    (database = source of truth, Redis = optional cache).
     
     Returns:
         dict with processing statistics
@@ -332,6 +335,7 @@ def refresh_cables_oper_status(self: Any) -> dict[str, Any]:
     logger.info("[Cable Status Task] Starting background refresh")
     
     start_time = __import__('time').time()
+    now = timezone.now()
     
     # Fetch all cables
     cables = FiberCable.objects.select_related(
@@ -351,8 +355,17 @@ def refresh_cables_oper_status(self: Any) -> dict[str, Any]:
             # Call the existing function that queries Zabbix
             status_data = fiber_uc.update_cable_oper_status(cable.id)
             
-            # Store in cache with 2-minute TTL
-            # (matches task interval to avoid gaps)
+            # PHASE 9.1: Persist in database (source of truth)
+            cable.last_status_origin = status_data.get("origin_status", "unknown")
+            cable.last_status_dest = status_data.get("destination_status", "unknown")
+            cable.last_status_check = now
+            cable.save(update_fields=[
+                "last_status_origin",
+                "last_status_dest",
+                "last_status_check",
+            ])
+            
+            # Store in Redis cache (optional acceleration layer)
             cache_key = f"cable:oper_status:{cable.id}"
             cache.set(cache_key, status_data, timeout=120)
             
@@ -398,6 +411,94 @@ def refresh_cables_oper_status(self: Any) -> dict[str, Any]:
         elapsed,
         error_count,
         len(cable_updates),
+    )
+    
+    return result
+
+
+@shared_task(
+    name="inventory.tasks.refresh_fiber_live_status",
+    bind=True,
+    time_limit=300,  # 5 minutes max
+)
+def refresh_fiber_live_status(self: Any) -> dict[str, Any]:
+    """
+    Calculate live status for all fiber cables (Phase 9.1).
+    
+    Similar to refresh_cables_oper_status but calls compute_live_status
+    which performs more advanced status detection including optical power
+    checks and interface status validation.
+    
+    Results are persisted to FiberCable.last_live_status and last_live_check.
+    
+    Returns:
+        dict with processing statistics
+    """
+    from inventory.models import FiberCable
+    from inventory.usecases import fibers as fiber_uc
+    
+    logger.info("[Live Status Task] Starting background refresh")
+    
+    start_time = __import__('time').time()
+    now = timezone.now()
+    
+    # Fetch all cables
+    cables = FiberCable.objects.select_related(
+        "origin_port__device",
+        "destination_port__device"
+    ).all()
+    
+    total_count = cables.count()
+    success_count = 0
+    error_count = 0
+    changed_count = 0
+    
+    for cable in cables:
+        try:
+            # Compute live status (may update cable.status if changed)
+            live_status = fiber_uc.compute_live_status(
+                cable,
+                persist=True,  # Allow status updates
+                event_reason="celery-live-status-refresh",
+            )
+            
+            # PHASE 9.1: Persist live status result in database
+            cable.last_live_status = live_status.combined_status
+            cable.last_live_check = now
+            cable.save(update_fields=["last_live_status", "last_live_check"])
+            
+            if live_status.changed:
+                changed_count += 1
+            
+            success_count += 1
+            
+        except Exception as exc:
+            logger.warning(
+                "[Live Status Task] Failed to process cable %d: %s",
+                cable.id,
+                exc,
+            )
+            error_count += 1
+    
+    elapsed = __import__('time').time() - start_time
+    
+    result = {
+        "success": True,
+        "total_cables": total_count,
+        "processed": success_count,
+        "changed": changed_count,
+        "errors": error_count,
+        "elapsed_seconds": round(elapsed, 2),
+    }
+    
+    logger.info(
+        "[Live Status Task] Completed: %d/%d cables in %.2fs "
+        "(%d changed, %d errors)",
+        success_count,
+        total_count,
+        elapsed,
+        changed_count,
+        error_count,
     )
     
     return result
