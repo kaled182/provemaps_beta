@@ -10,7 +10,6 @@ import logging
 from typing import Any, Dict, List
 
 from django.conf import settings
-from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ImproperlyConfigured
 
 try:  # pragma: no cover - environment dependent import
@@ -21,7 +20,9 @@ except (ImportError, ImproperlyConfigured):
     HAS_GIS = False
 from django.db.models import QuerySet
 from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.views.decorators.http import require_GET
 
+from integrations.zabbix.decorators import api_login_required
 from inventory.models import FiberCable
 from inventory.models_routes import RouteSegment
 
@@ -97,6 +98,21 @@ def _serialize_route_segment(segment: RouteSegment) -> Dict[str, Any]:
         ),
     }
     
+    # Add status from parent route (Phase 11 Sprint 3)
+    # Maps route status to segment display status
+    if segment.route:
+        route_status = segment.route.status
+        # Map route status to frontend status values
+        status_map = {
+            'active': 'operational',
+            'planned': 'maintenance',
+            'degraded': 'degraded',
+            'archived': 'unknown',
+        }
+        data["status"] = status_map.get(route_status, 'unknown')
+    else:
+        data["status"] = 'unknown'
+    
     # Legacy JSONField (deprecated)
     if segment.path_coordinates:
         data["path_coordinates"] = segment.path_coordinates
@@ -138,7 +154,8 @@ def _serialize_fiber_cable(cable: FiberCable) -> Dict[str, Any]:
     return data
 
 
-@login_required
+@require_GET
+@api_login_required
 def api_route_segments_bbox(request: HttpRequest) -> HttpResponse:
     """
     GET /api/v1/segments/?bbox=lng_min,lat_min,lng_max,lat_max
@@ -227,7 +244,8 @@ def api_route_segments_bbox(request: HttpRequest) -> HttpResponse:
     )
 
 
-@login_required
+@require_GET
+@api_login_required
 def api_fiber_cables_bbox(request: HttpRequest) -> HttpResponse:
     """
     GET /api/v1/fibers/bbox/?bbox=lng_min,lat_min,lng_max,lat_max

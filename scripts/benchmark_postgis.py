@@ -82,19 +82,19 @@ def create_test_data(count: int = 1000) -> None:
     )
     
     device, _ = site.devices.get_or_create(
-        hostname='BENCH-DEVICE-01',
+        name='BENCH-DEVICE-01',
         defaults={'zabbix_hostid': '999999'},
     )
     
     port_a, _ = Port.objects.get_or_create(
         device=device,
-        interface_name='eth0',
-        defaults={'zabbix_itemid': '888888'},
+        name='eth0',
+        defaults={'zabbix_item_key': 'net.if.in[eth0]'},
     )
     port_b, _ = Port.objects.get_or_create(
         device=device,
-        interface_name='eth1',
-        defaults={'zabbix_itemid': '888889'},
+        name='eth1',
+        defaults={'zabbix_item_key': 'net.if.in[eth1]'},
     )
     
     route, _ = Route.objects.get_or_create(

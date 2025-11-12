@@ -30,24 +30,61 @@ def build_dashboard_event_payload():
 
 @login_required
 def dashboard_view(request):
-    """
-    Primary dashboard (HTML) — loads fast, fetches data via AJAX.
+    """Dashboard entrypoint.
 
-    Previously embedded all hosts data inline, causing 30-second delays.
-    Now serves minimal HTML shell; frontend loads data from /api/dashboard/data/.
+    When feature flag ``USE_VUE_DASHBOARD`` is enabled this serves the Vue 3
+    SPA (static HTML from ``staticfiles/vue-spa/index.html``).
+    Otherwise it falls back to the legacy Django template ``dashboard.html``.
+
+    Canary rollout: If ``VUE_DASHBOARD_ROLLOUT_PERCENTAGE`` is set (0-100),
+    only that percentage of users will see the Vue dashboard.
+    User assignment is based on session ID hash for consistency.
     """
+    import hashlib
+
     google_maps_key = (
         runtime_settings.get_runtime_config().google_maps_api_key
         or getattr(settings, 'GOOGLE_MAPS_API_KEY', '')
     )
 
-    return render(
-        request,
-        'dashboard.html',
-        {
+    template_name = 'dashboard.html'
+    use_vue = getattr(settings, 'USE_VUE_DASHBOARD', False)
+
+    if use_vue:
+        # Canary rollout logic
+        rollout_pct = getattr(
+            settings, 'VUE_DASHBOARD_ROLLOUT_PERCENTAGE', 100
+        )
+
+        if rollout_pct < 100:
+            # Ensure session exists
+            if not request.session.session_key:
+                request.session.create()
+
+            # Hash session ID to get consistent user assignment
+            session_hash = hashlib.md5(
+                request.session.session_key.encode()
+            ).hexdigest()
+            user_bucket = int(session_hash[:8], 16) % 100
+
+            # Serve Vue to users in rollout bucket
+            if user_bucket < rollout_pct:
+                template_name = 'spa.html'
+        else:
+            # 100% rollout - serve Vue to everyone
+            template_name = 'spa.html'
+
+    context = {
             'GOOGLE_MAPS_API_KEY': google_maps_key,
-        },
-    )
+            'USE_VUE_DASHBOARD': getattr(
+                settings, 'USE_VUE_DASHBOARD', False
+            ),
+            'VUE_DASHBOARD_ROLLOUT_PERCENTAGE': getattr(
+                settings, 'VUE_DASHBOARD_ROLLOUT_PERCENTAGE', 0
+            ),
+        }
+
+    return render(request, template_name, context)
 
 
 @login_required

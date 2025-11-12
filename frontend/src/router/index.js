@@ -1,17 +1,34 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
+const inferBasePath = () => {
+  if (typeof window !== 'undefined') {
+    const { pathname } = window.location;
+
+    if (pathname.startsWith('/maps_view/')) {
+      return '/maps_view/';
+    }
+  }
+
+  return import.meta.env.BASE_URL || '/';
+};
+
 const routes = [
   {
     path: '/',
     name: 'home',
     redirect: '/dashboard',
   },
-  // Fase 7: Add Dashboard and RouteBuilder routes
-  // {
-  //   path: '/dashboard',
-  //   name: 'dashboard',
-  //   component: () => import('@/views/Dashboard.vue'),
-  // },
+  {
+    path: '/dashboard',
+    name: 'dashboard',
+    component: () => import('@/components/Dashboard/DashboardView.vue'), // Phase 11 Sprint 2: Full dashboard with sidebar + map
+  },
+  // Legacy fallback (Sprint 1 map-only view)
+  {
+    path: '/map',
+    name: 'map',
+    component: () => import('@/components/MapView.vue'),
+  },
   // {
   //   path: '/routes',
   //   name: 'routes',
@@ -20,7 +37,7 @@ const routes = [
 ];
 
 const router = createRouter({
-  history: createWebHistory('/'),
+  history: createWebHistory(inferBasePath()),
   routes,
 });
 

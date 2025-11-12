@@ -6,12 +6,12 @@ from typing import TYPE_CHECKING, Any
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.db import models
 
+from .fields import LenientJSONField
+
 try:  # pragma: no cover - environment dependent import
     from django.contrib.gis.db import models as gis_models
 except (ImportError, ImproperlyConfigured):
-    from django.db import models as _fallback_models
-
-    class _FallbackLineStringField(_fallback_models.JSONField):
+    class _FallbackLineStringField(LenientJSONField):
         description = "Fallback LineString storage when GDAL is unavailable"
 
         def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -153,10 +153,13 @@ class RouteSegment(models.Model):
         null=True,
         blank=True,
     )
-    path_coordinates = models.JSONField(
+    path_coordinates = LenientJSONField(
         blank=True,
         null=True,
-        help_text='Array of {"lat": float, "lng": float} points. Deprecated: use path field with PostGIS.',
+        help_text=(
+            'Array of {"lat": float, "lng": float} points. '
+            'Deprecated: use path field with PostGIS.'
+        ),
     )
     # Spatial field for PostGIS (Phase 10)
     # SRID 4326 = WGS84 (GPS coordinates)
@@ -165,7 +168,10 @@ class RouteSegment(models.Model):
         srid=4326,
         blank=True,
         null=True,
-        help_text="Spatial path geometry for PostGIS spatial queries (bbox filtering).",
+        help_text=(
+            "Spatial path geometry for PostGIS spatial queries "
+            "(bbox filtering)."
+        ),
     )
     length_km = models.DecimalField(
         max_digits=7,

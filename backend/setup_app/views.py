@@ -32,7 +32,7 @@ def _staff_check(user):
 
 def first_time_setup(request):
     if FirstTimeSetup.objects.filter(configured=True).exists():
-        return redirect("setup_app:setup_dashboard")
+        return redirect("/maps_view/dashboard/")
 
     if request.method == "POST":
         form = FirstTimeSetupForm(request.POST, request.FILES)

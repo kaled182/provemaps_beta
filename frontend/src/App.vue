@@ -6,7 +6,8 @@
 
 <script setup>
 // Base application component
-// Fase 7 migration: Dashboard.vue (1,137 lines) and RouteBuilder.vue (1,039 lines) will replace legacy JS
+// Phase 11 Sprint 2: Full dashboard with real-time WebSocket integration
+// DashboardView (sidebar + map) replaces legacy dashboard.js (1,137 lines)
 </script>
 
 <style>
@@ -16,5 +17,12 @@
 #app {
   width: 100%;
   height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+* {
+  box-sizing: border-box;
 }
 </style>
