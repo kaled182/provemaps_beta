@@ -1,5 +1,3 @@
-version: '3.8'
-
 # PostgreSQL + PostGIS Configuration (Phase 10)
 # 
 # Usage:
@@ -14,6 +12,183 @@ version: '3.8'
 #   DB_PASSWORD=<secure_password>
 
 services:
+  web:
+    build:
+      context: ..
+      dockerfile: docker/dockerfile
+    container_name: mapsprovefiber_web
+    command: >
+      gunicorn core.asgi:application
+      -k uvicorn.workers.UvicornWorker
+      -b 0.0.0.0:8000
+      --workers 3
+      --timeout 120
+      --max-requests 1000
+    entrypoint: ["/docker-entrypoint.sh"]
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../.env
+    working_dir: /app/backend
+    environment:
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-settings.dev}
+      DB_ENGINE: postgis
+      DB_HOST: postgres
+      DB_PORT: "${DB_PORT:-5432}"
+      DB_NAME: ${DB_NAME:-mapsprovefiber}
+      DB_USER: ${DB_USER:-provemaps}
+      DB_PASSWORD: ${DB_PASSWORD:-changeme}
+      SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
+      PYTHONPATH: "/app/backend:/app"
+      PYTHONUNBUFFERED: 1
+      GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
+      GEOS_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgeos_c.so
+      PROJ_LIB: /usr/share/proj
+      REDIS_URL: redis://redis:6379/0
+      INIT_MIGRATE: "true"
+      INIT_COLLECTSTATIC: "true"
+      INIT_ENSURE_SUPERUSER: "true"
+      CELERY_STATUS_TIMEOUT: "6"
+      CELERY_PING_TIMEOUT: "2"
+      CELERY_METRICS_ENABLED: "true"
+      CELERY_METRICS_UPDATE_INTERVAL: "30"
+      HEALTHCHECK_DB_TIMEOUT: "5"
+      HEALTHCHECK_FORCE_NO_TIMEOUT: "true"
+      SERVICE_ACCOUNT_ROTATION_INTERVAL_SECONDS: "3600"
+      SERVICE_ACCOUNT_WEBHOOK_CONNECT_TIMEOUT: "3"
+      SERVICE_ACCOUNT_WEBHOOK_READ_TIMEOUT: "5"
+      ENV_FILE_PATH: /app/database/runtime.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; resp = urllib.request.urlopen('http://localhost:8000/ready', timeout=5); exit(0 if resp.getcode() == 200 else 1)\" || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    volumes:
+      - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - ../backend:/app/backend
+      - ../frontend:/app/frontend
+      - ../database:/app/database
+      - ../doc:/app/doc
+      - ../scripts:/app/scripts
+      - ../.env:/app/.env:ro
+      - ../logs:/app/backend/logs
+
+  celery:
+    build:
+      context: ..
+      dockerfile: docker/dockerfile
+    container_name: mapsprovefiber_celery
+    command: celery -A core.celery_app worker -Q default,zabbix,maps -l info -c 4
+    entrypoint: ["/docker-entrypoint.sh"]
+    env_file:
+      - ../.env
+    working_dir: /app/backend
+    environment:
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-settings.dev}
+      DB_ENGINE: postgis
+      DB_HOST: postgres
+      DB_PORT: "${DB_PORT:-5432}"
+      DB_NAME: ${DB_NAME:-mapsprovefiber}
+      DB_USER: ${DB_USER:-provemaps}
+      DB_PASSWORD: ${DB_PASSWORD:-changeme}
+      SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
+      PYTHONPATH: "/app/backend:/app"
+      PYTHONUNBUFFERED: 1
+      GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
+      GEOS_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgeos_c.so
+      PROJ_LIB: /usr/share/proj
+      REDIS_URL: redis://redis:6379/0
+      WAIT_FOR_DB: "true"
+      WAIT_FOR_REDIS: "true"
+      CELERY_METRICS_ENABLED: "true"
+      CELERY_METRICS_UPDATE_INTERVAL: "30"
+      SERVICE_ACCOUNT_ROTATION_INTERVAL_SECONDS: "3600"
+      SERVICE_ACCOUNT_WEBHOOK_CONNECT_TIMEOUT: "3"
+      SERVICE_ACCOUNT_WEBHOOK_READ_TIMEOUT: "5"
+      ENV_FILE_PATH: /app/database/runtime.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A core.celery_app inspect ping -d celery@$$HOSTNAME -t 5 | grep -qi pong || ps aux | grep -q '[c]elery worker'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    volumes:
+      - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - ../backend:/app/backend
+      - ../frontend:/app/frontend
+      - ../database:/app/database
+      - ../doc:/app/doc
+      - ../scripts:/app/scripts
+      - ../.env:/app/.env:ro
+      - ../logs:/app/backend/logs
+
+  beat:
+    build:
+      context: ..
+      dockerfile: docker/dockerfile
+    container_name: mapsprovefiber_beat
+    command: celery -A core.celery_app beat -l info --pidfile=/tmp/celerybeat.pid
+    entrypoint: ["/docker-entrypoint.sh"]
+    env_file:
+      - ../.env
+    working_dir: /app/backend
+    environment:
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-settings.dev}
+      DB_ENGINE: postgis
+      DB_HOST: postgres
+      DB_PORT: "${DB_PORT:-5432}"
+      DB_NAME: ${DB_NAME:-mapsprovefiber}
+      DB_USER: ${DB_USER:-provemaps}
+      DB_PASSWORD: ${DB_PASSWORD:-changeme}
+      SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
+      PYTHONPATH: "/app/backend:/app"
+      PYTHONUNBUFFERED: 1
+      GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
+      GEOS_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgeos_c.so
+      PROJ_LIB: /usr/share/proj
+      REDIS_URL: redis://redis:6379/0
+      WAIT_FOR_DB: "true"
+      WAIT_FOR_REDIS: "true"
+      CELERY_METRICS_ENABLED: "true"
+      CELERY_METRICS_UPDATE_INTERVAL: "30"
+      SERVICE_ACCOUNT_ROTATION_INTERVAL_SECONDS: "3600"
+      SERVICE_ACCOUNT_WEBHOOK_CONNECT_TIMEOUT: "3"
+      SERVICE_ACCOUNT_WEBHOOK_READ_TIMEOUT: "5"
+      ENV_FILE_PATH: /app/database/runtime.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'celery beat' >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    volumes:
+      - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - ../backend:/app/backend
+      - ../frontend:/app/frontend
+      - ../database:/app/database
+      - ../doc:/app/doc
+      - ../scripts:/app/scripts
+      - ../.env:/app/.env:ro
+      - ../logs:/app/backend/logs
+
   postgres:
     # Official PostGIS image from Docker Hub:
     #   https://hub.docker.com/r/postgis/postgis
@@ -140,8 +315,25 @@ services:
       - tools
     restart: "no"
 
+  redis:
+    image: redis:7-alpine
+    container_name: mapsprovefiber_redis
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
 volumes:
   postgres_data:
     name: mapsprovefiber_postgres_data
   pgadmin_data:
     name: mapsprovefiber_pgadmin_data
+  redis_data:
+    name: mapsprovefiber_redis_data

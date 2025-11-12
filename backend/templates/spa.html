@@ -1,0 +1,35 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Dashboard Vue 3</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    {# Google Maps key passed from view for possible inline usage #}
+    {% if GOOGLE_MAPS_API_KEY %}
+      <meta name="google-maps-api-key" content="{{ GOOGLE_MAPS_API_KEY }}" />
+    {% endif %}
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      html, body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        background-color: #111827;
+      }
+
+      #app {
+        min-height: calc(100vh - 4rem);
+      }
+    </style>
+    {# Vite build produces deterministic main.js via vite.config.js output settings #}
+    <script type="module" src="{% static 'vue-spa/assets/main.js' %}"></script>
+  </head>
+  <body class="bg-gray-900 text-white">
+    {% include 'partials/header.html' %}
+    <main id="app" class="bg-gray-900 text-white"></main>
+    <noscript>Este aplicativo requer JavaScript habilitado.</noscript>
+  </body>
+</html>

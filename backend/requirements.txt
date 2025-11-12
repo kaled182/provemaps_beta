@@ -20,6 +20,7 @@ constantly==23.10.4
 cryptography==46.0.3
 daphne==4.1.2
 Django==5.2.7
+django-debug-toolbar==6.1.0
 # NOTE: GDAL requires system-level libraries. See Dockerfile or deployment guide for installation steps.
 GDAL==3.10.3
 django-environ==0.12.0
@@ -55,6 +56,7 @@ coverage==7.6.1
 python-dateutil==2.9.0.post0
 redis==7.0.0
 requests==2.32.5
+sentry-sdk==2.44.0
 service-identity==24.2.0
 setuptools>=61.0
 six==1.17.0

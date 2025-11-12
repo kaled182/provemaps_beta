@@ -53,6 +53,12 @@ SERVICE_RESTART_COMMANDS = os.getenv(
     "",
 )
 
+# Vue 3 Dashboard Feature Flag (Phase 11 - Sprint 3)
+USE_VUE_DASHBOARD = os.getenv("USE_VUE_DASHBOARD", "false").lower() == "true"
+VUE_DASHBOARD_ROLLOUT_PERCENTAGE = int(
+    os.getenv("VUE_DASHBOARD_ROLLOUT_PERCENTAGE", "0")
+)
+
 fernet_keys = [
     key.strip()
     for key in os.getenv("FERNET_KEYS", "").split(",")
@@ -212,6 +218,13 @@ MIDDLEWARE = [
 ROOT_URLCONF = "core.urls"
 WSGI_APPLICATION = "core.wsgi.application"
 ASGI_APPLICATION = "core.asgi.application"
+
+# -----------------------------------------------------
+# Authentication & Login Redirects
+# -----------------------------------------------------
+LOGIN_URL = "/accounts/login/"
+LOGIN_REDIRECT_URL = "/maps_view/dashboard/"
+LOGOUT_REDIRECT_URL = "/accounts/login/"
 
 # -----------------------------------------------------
 # Database (MySQL/MariaDB with fallbacks) - optimized

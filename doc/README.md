@@ -77,7 +77,7 @@ Guidelines for contributors.
 Long-term planning and migration timelines.
 
 - `ROADMAP_NEXT_STEPS.md` — Phases 6-7 execution plan, automation scripts, and success metrics.
-- `ROADMAP_VUE3_PREPARATION.md` — Vue 3 migration preparation and task breakdown.
+- `ROADMAP_VUE3_PREPARATION.md` — Vue 3 migration preparation and task breakdown (última atualização 12/11/2025).
 
 ### 🗂️ [Reports](reports/)
 Historical logs, compliance reviews, and PR status snapshots. See `reports/README.md` for a detailed index.

@@ -87,22 +87,28 @@ LOGGING["loggers"]["django.db.backends"] = {
 # -----------------------------------------------------
 # Debug Toolbar (auto-configure)
 # -----------------------------------------------------
-try:
-    import_module("debug_toolbar")
-    INSTALLED_APPS.append("debug_toolbar")
-    MIDDLEWARE.insert(
-        0,
-        "debug_toolbar.middleware.DebugToolbarMiddleware",
-    )
-    DEBUG_TOOLBAR_CONFIG: Dict[str, Callable[[Any], bool]] = {
-        "SHOW_TOOLBAR_CALLBACK": lambda request: True,
-    }
-    INTERNAL_IPS = ["127.0.0.1", "localhost", "0.0.0.0", "172.16.0.0/12"]
-    print("[DEBUG_TOOLBAR] Django Debug Toolbar enabled")
-except ImportError:
-    print("[INFO] Django Debug Toolbar not installed")
-except Exception as e:
-    print(f"[WARN] Error configuring Debug Toolbar: {e}")
+# Disable in Docker unless explicitly enabled
+ENABLE_DEBUG_TOOLBAR = os.getenv("ENABLE_DEBUG_TOOLBAR", "True").lower() == "true"
+
+if ENABLE_DEBUG_TOOLBAR:
+    try:
+        import_module("debug_toolbar")
+        INSTALLED_APPS.append("debug_toolbar")
+        MIDDLEWARE.insert(
+            0,
+            "debug_toolbar.middleware.DebugToolbarMiddleware",
+        )
+        DEBUG_TOOLBAR_CONFIG: Dict[str, Callable[[Any], bool]] = {
+            "SHOW_TOOLBAR_CALLBACK": lambda request: True,
+        }
+        INTERNAL_IPS = ["127.0.0.1", "localhost", "0.0.0.0", "172.16.0.0/12"]
+        print("[DEBUG_TOOLBAR] Django Debug Toolbar enabled")
+    except ImportError:
+        print("[INFO] Django Debug Toolbar not installed")
+    except Exception as e:
+        print(f"[WARN] Error configuring Debug Toolbar: {e}")
+else:
+    print("[DEBUG_TOOLBAR] Disabled via ENABLE_DEBUG_TOOLBAR=False")
 
 
 # -----------------------------------------------------

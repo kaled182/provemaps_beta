@@ -31,6 +31,22 @@
       GEOS_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgeos_c.so
       PROJ_LIB: /usr/share/proj
       REDIS_URL: redis://redis:6379/0
+      # Static Asset Cache Busting (Sprint 1)
+      STATIC_ASSET_VERSION: "1.0.0"
+      # Sprint 1 Feature Flags (Filters & Search)
+      ENABLE_FILTERS: "True"
+      ENABLE_SEARCH: "True"
+      ENABLE_URL_PERSISTENCE: "True"
+      # Disable Debug Toolbar in Docker (prevents redirect interception)
+      ENABLE_DEBUG_TOOLBAR: "False"
+      # Vue 3 Dashboard Feature Flags (Phase 11 - Canary Rollout)
+      USE_VUE_DASHBOARD: "True"
+      VUE_DASHBOARD_ROLLOUT_PERCENTAGE: "100"
+      # Sentry APM (Phase 12 - Error Tracking & Performance Monitoring)
+      SENTRY_DSN: "https://2b2a767ff10ec5ce098ba093c054a300@o4510353484742656.ingest.us.sentry.io/4510353502371840"
+      SENTRY_ENVIRONMENT: "development"
+      SENTRY_TRACES_SAMPLE_RATE: "0.1"
+      SENTRY_PROFILES_SAMPLE_RATE: "0.1"
       INIT_MIGRATE: "true"
       INIT_COLLECTSTATIC: "true"
       INIT_ENSURE_SUPERUSER: "true"
