@@ -8,7 +8,12 @@ This migration:
 3. Handles errors gracefully (logs + skips invalid data)
 4. Only runs when DB_ENGINE=postgis (safe for MySQL deployments)
 """
-from django.contrib.gis.geos import LineString
+from django.core.exceptions import ImproperlyConfigured
+
+try:
+    from django.contrib.gis.geos import LineString as GeoLineString
+except (ImproperlyConfigured, ImportError, ModuleNotFoundError):
+    GeoLineString = None
 from django.db import migrations
 
 
@@ -22,6 +27,9 @@ def convert_json_to_linestring(path_coords):
     Returns:
         LineString or None if conversion fails
     """
+    if GeoLineString is None:
+        return None
+
     if not path_coords or not isinstance(path_coords, list):
         return None
     
@@ -49,7 +57,7 @@ def convert_json_to_linestring(path_coords):
             points.append((float(lng), float(lat)))
         
         # Create LineString with SRID 4326 (WGS84)
-        return LineString(points, srid=4326)
+        return GeoLineString(points, srid=4326)
     
     except (ValueError, TypeError, AttributeError):
         return None
@@ -65,6 +73,10 @@ def populate_routesegment_spatial_fields(apps, schema_editor):
         print("SKIP: spatial migration requires DB_ENGINE=postgis")
         return
     
+    if GeoLineString is None:
+        print("SKIP: GDAL unavailable; spatial migration disabled")
+        return
+
     RouteSegment = apps.get_model('inventory', 'RouteSegment')
     
     total = RouteSegment.objects.count()
@@ -106,6 +118,10 @@ def populate_fibercable_spatial_fields(apps, schema_editor):
     if db_engine != 'postgis':
         return
     
+    if GeoLineString is None:
+        print("SKIP: GDAL unavailable; spatial migration disabled")
+        return
+
     FiberCable = apps.get_model('inventory', 'FiberCable')
     
     total = FiberCable.objects.count()

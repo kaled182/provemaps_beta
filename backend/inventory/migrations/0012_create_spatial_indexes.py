@@ -9,7 +9,48 @@ GiST indexes enable fast spatial queries:
 
 Performance: O(log n) instead of O(n) for spatial queries.
 """
-from django.db import migrations
+from django.db import connection, migrations
+
+
+def create_spatial_indexes(apps, schema_editor):
+    """Create GiST indexes only when the database supports PostGIS."""
+
+    if schema_editor.connection.vendor != "postgresql":
+        print("SKIP: Spatial indexes require PostgreSQL; skipping creation")
+        return
+
+    statements = [
+        """
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS
+                inventory_routesegment_path_gist
+            ON inventory_routesegment
+            USING GIST (path);
+        """,
+        """
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS
+                zabbix_api_fibercable_path_gist
+            ON zabbix_api_fibercable
+            USING GIST (path);
+        """,
+    ]
+
+    with schema_editor.connection.cursor() as cursor:
+        for statement in statements:
+            cursor.execute(statement)
+
+
+def drop_spatial_indexes(apps, schema_editor):
+    if schema_editor.connection.vendor != "postgresql":
+        return
+
+    statements = [
+        "DROP INDEX IF EXISTS inventory_routesegment_path_gist;",
+        "DROP INDEX IF EXISTS zabbix_api_fibercable_path_gist;",
+    ]
+
+    with schema_editor.connection.cursor() as cursor:
+        for statement in statements:
+            cursor.execute(statement)
 
 
 class Migration(migrations.Migration):
@@ -22,29 +63,5 @@ class Migration(migrations.Migration):
     atomic = False
 
     operations = [
-        # RouteSegment spatial index
-        migrations.RunSQL(
-            sql="""
-                CREATE INDEX CONCURRENTLY IF NOT EXISTS
-                    inventory_routesegment_path_gist
-                ON inventory_routesegment
-                USING GIST (path);
-            """,
-            reverse_sql="""
-                DROP INDEX IF EXISTS inventory_routesegment_path_gist;
-            """,
-        ),
-        
-        # FiberCable spatial index
-        migrations.RunSQL(
-            sql="""
-                CREATE INDEX CONCURRENTLY IF NOT EXISTS
-                    zabbix_api_fibercable_path_gist
-                ON zabbix_api_fibercable
-                USING GIST (path);
-            """,
-            reverse_sql="""
-                DROP INDEX IF EXISTS zabbix_api_fibercable_path_gist;
-            """,
-        ),
+        migrations.RunPython(create_spatial_indexes, drop_spatial_indexes),
     ]

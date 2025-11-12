@@ -5,7 +5,33 @@ Phase 10: Add spatial fields to RouteSegment and FiberCable.
 This migration adds LineStringField for PostGIS spatial queries while keeping
 path_coordinates JSONField for backward compatibility with MySQL.
 """
-from django.contrib.gis.db import models as gis_models
+from django.core.exceptions import ImproperlyConfigured
+
+try:
+    from django.contrib.gis.db import models as gis_gis_models
+    HAS_GDAL = True
+except (ImproperlyConfigured, ImportError, ModuleNotFoundError):
+    from django.db import models as base_models
+
+    HAS_GDAL = False
+
+    class _FallbackLineStringField(base_models.JSONField):
+        description = "JSON fallback for LineString when GDAL is unavailable"
+
+        def __init__(self, *args, **kwargs):
+            for param in ('srid', 'dim', 'geography', 'spatial_index'):
+                kwargs.pop(param, None)
+            super().__init__(*args, **kwargs)
+
+    class _FallbackModule:
+        LineStringField = _FallbackLineStringField
+        JSONField = base_models.JSONField
+
+    gis_gis_models = _FallbackModule()
+else:
+    gis_gis_models = gis_gis_models
+
+gis_models = gis_gis_models
 from django.db import migrations
 
 
@@ -41,18 +67,33 @@ class Migration(migrations.Migration):
                     ),
                 ),
             ],
-            database_operations=[
-                migrations.RunSQL(
-                    sql=(
-                        "ALTER TABLE inventory_routesegment "
-                        "ADD COLUMN IF NOT EXISTS path geometry(LineString,4326);"
+            database_operations=(
+                [
+                    migrations.RunSQL(
+                        sql=(
+                            "ALTER TABLE inventory_routesegment "
+                            "ADD COLUMN IF NOT EXISTS path geometry(LineString,4326);"
+                        ),
+                        reverse_sql=(
+                            "ALTER TABLE inventory_routesegment "
+                            "DROP COLUMN IF EXISTS path;"
+                        ),
                     ),
-                    reverse_sql=(
-                        "ALTER TABLE inventory_routesegment "
-                        "DROP COLUMN IF EXISTS path;"
+                ]
+                if HAS_GDAL
+                else [
+                    migrations.AddField(
+                        model_name='routesegment',
+                        name='path',
+                        field=gis_models.LineStringField(
+                            srid=4326,
+                            blank=True,
+                            null=True,
+                            help_text='Spatial path geometry for PostGIS spatial queries (bbox filtering).',
+                        ),
                     ),
-                ),
-            ],
+                ]
+            ),
         ),
         migrations.AlterField(
             model_name='fibercable',
