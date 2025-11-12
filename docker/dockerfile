@@ -14,15 +14,21 @@ FROM python:3.12-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    GDAL_VERSION=3.10.3
 
 # Dependencies required to compile native Python libraries (e.g. mysqlclient, pillow)
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
+    python3-dev \
     default-libmysqlclient-dev \
     libpq-dev \
     pkg-config \
+    gdal-bin \
+    libgdal-dev \
+    libgeos-dev \
+    proj-bin \
   && rm -rf /var/lib/apt/lists/* \
   && apt-get clean
 
@@ -47,7 +53,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     TZ=UTC \
     DJANGO_SETTINGS_MODULE=settings.prod \
-    PYTHONPATH=/app/backend:/app
+    PYTHONPATH=/app/backend:/app \
+    GDAL_VERSION=3.10.3 \
+    GDAL_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/libgdal.so \
+    GEOS_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/libgeos_c.so \
+    PROJ_LIB=/usr/share/proj \
+    LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu
 
 # Minimal runtime plus useful utilities (without the build toolchain)
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -59,6 +70,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     tzdata \
     gdal-bin \
     libgdal-dev \
+    libgeos-dev \
     proj-bin \
     procps \
   && rm -rf /var/lib/apt/lists/* \

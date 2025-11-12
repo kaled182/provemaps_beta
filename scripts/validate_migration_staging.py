@@ -10,17 +10,19 @@ Uso:
 """
 import os
 import sys
-import django
 from pathlib import Path
+
+import django
+from django.db import connection
 
 # Configurar Django
 BASE_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(BASE_DIR))
+BACKEND_DIR = BASE_DIR / "backend"
+sys.path.insert(0, str(BACKEND_DIR))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "settings.test")
 django.setup()
 
-from django.db import connection
-from django.contrib.contenttypes.models import ContentType
+# call_command not needed, removed to fix lint
 # call_command not needed, removed to fix lint
 
 
@@ -30,14 +32,12 @@ def print_header(text: str) -> None:
     print(f"  {text}")
     print('=' * 80)
 
-
 def check_database_connection() -> bool:
     """Verifica conexão com o banco."""
     print_header("1. Verificando Conexão com Banco de Dados")
     try:
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1")
-            result = cursor.fetchone()
         print("✅ Conexão com banco estabelecida")
         print(f"   Engine: {connection.settings_dict['ENGINE']}")
         print(f"   Database: {connection.settings_dict.get('NAME', 'N/A')}")
@@ -45,7 +45,7 @@ def check_database_connection() -> bool:
     except Exception as e:
         print(f"❌ Erro ao conectar ao banco: {e}")
         return False
-
+        return False
 
 def check_current_migration_state() -> dict:
     """Verifica estado atual das migrações."""
@@ -86,12 +86,15 @@ def check_current_migration_state() -> dict:
         'has_0003': has_0003,
         'has_rb_0002': has_rb_0002,
     }
+    }
 
 
 def check_content_types() -> dict:
     """Verifica ContentTypes dos modelos Route."""
     print_header("3. Verificando ContentTypes")
     
+    from django.contrib.contenttypes.models import ContentType
+
     route_models = ['route', 'routesegment', 'routeevent']
     results = {}
     
@@ -120,7 +123,6 @@ def check_content_types() -> dict:
     
     return results
 
-
 def check_model_tables() -> dict:
     """Verifica se as tabelas dos modelos existem."""
     print_header("4. Verificando Tabelas no Banco")
@@ -132,7 +134,7 @@ def check_model_tables() -> dict:
         'inventory_routeevent',
     ]
     results = {}
-    
+
     with connection.cursor() as cursor:
         for table in tables:
             try:
@@ -144,6 +146,7 @@ def check_model_tables() -> dict:
                 results[table] = None
                 print(f"❌ {table}: Não encontrada ({str(e)[:50]})")
     
+    return results
     return results
 
 
@@ -170,26 +173,20 @@ def check_model_imports() -> bool:
 
 
 def check_shims() -> bool:
-    """Verifica se os shims estão funcionando."""
-    print_header("6. Verificando Shims de Compatibilidade")
-    
+    """Confirma que o módulo legacy routes_builder foi removido."""
+
+    print_header("6. Verificando Remoção do routes_builder")
+
     try:
-        from routes_builder.models import Route as RBRoute
-        from inventory.models import Route as InvRoute
-        
-        print("✅ routes_builder.models.Route (shim) importado")
-        print("✅ inventory.models.Route importado")
-        
-        # Verificar se são a mesma classe
-        if RBRoute is InvRoute:
-            print("✅ Shim está delegando corretamente para inventory")
-            return True
-        else:
-            print("⚠️  Shim não está delegando corretamente")
-            return False
-    except Exception as e:
-        print(f"❌ Erro ao verificar shims: {e}")
-        return False
+        import importlib
+
+        importlib.import_module("routes_builder")
+    except ImportError:
+        print("✅ routes_builder não está mais disponível (esperado)")
+        return True
+
+    print("⚠️  routes_builder ainda pode ser importado; verifique limpeza")
+    return False
 
 
 def run_sample_queries() -> bool:
@@ -271,15 +268,23 @@ def run_validation(dry_run: bool = False) -> bool:
         ct['inventory'] > 0 and ct['routes_builder'] == 0
         for ct in results['content_types'].values()
     )
-    tables_exist = all(count is not None for count in results['tables'].values())
-    
-    print(f"\n📊 Status:")
-    print(f"   Migração 0003 aplicada: {'✅ Sim' if migration_applied else '❌ Não'}")
-    print(f"   ContentTypes corretos: {'✅ Sim' if content_types_ok else '❌ Não'}")
-    print(f"   Tabelas existem: {'✅ Sim' if tables_exist else '❌ Não'}")
-    print(f"   Imports funcionando: {'✅ Sim' if results['imports'] else '❌ Não'}")
-    print(f"   Shims funcionando: {'✅ Sim' if results['shims'] else '❌ Não'}")
-    print(f"   Queries funcionando: {'✅ Sim' if results['queries'] else '❌ Não'}")
+    tables_exist = all(
+        count is not None for count in results['tables'].values()
+    )
+
+    print("\n📊 Status:")
+    migration_status = "✅ Sim" if migration_applied else "❌ Não"
+    print(f"   Migração 0003 aplicada: {migration_status}")
+    content_types_status = "✅ Sim" if content_types_ok else "❌ Não"
+    print(f"   ContentTypes corretos: {content_types_status}")
+    tables_status = "✅ Sim" if tables_exist else "❌ Não"
+    print(f"   Tabelas existem: {tables_status}")
+    imports_status = "✅ Sim" if results['imports'] else "❌ Não"
+    print(f"   Imports funcionando: {imports_status}")
+    shims_status = "✅ Sim" if results['shims'] else "❌ Não"
+    print(f"   Shims funcionando: {shims_status}")
+    queries_status = "✅ Sim" if results['queries'] else "❌ Não"
+    print(f"   Queries funcionando: {queries_status}")
     
     all_ok = all([
         tables_exist,
@@ -290,8 +295,14 @@ def run_validation(dry_run: bool = False) -> bool:
     
     if not migration_applied:
         print("\n⚠️  AÇÃO NECESSÁRIA: Executar migração")
-        print("   python manage.py migrate inventory 0003_route_models_relocation")
-        print("   python manage.py migrate routes_builder 0002_move_route_models_to_inventory")
+        print(
+            "   python manage.py migrate inventory "
+            "0003_route_models_relocation"
+        )
+        print(
+            "   python manage.py migrate routes_builder "
+            "0002_move_route_models_to_inventory"
+        )
     
     if all_ok:
         print("\n✅ VALIDAÇÃO COMPLETA: Sistema pronto para Fase 4")
@@ -303,9 +314,15 @@ def run_validation(dry_run: bool = False) -> bool:
 
 if __name__ == '__main__':
     import argparse
-    
-    parser = argparse.ArgumentParser(description='Valida migração de modelos Route')
-    parser.add_argument('--dry-run', action='store_true', help='Apenas simula, não executa')
+
+    parser = argparse.ArgumentParser(
+        description='Valida migração de modelos Route'
+    )
+    parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Apenas simula, não executa',
+    )
     args = parser.parse_args()
     
     success = run_validation(dry_run=args.dry_run)

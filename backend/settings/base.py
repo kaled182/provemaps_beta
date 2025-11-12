@@ -179,6 +179,20 @@ INSTALLED_APPS = [
     "dwdm",
 ]
 
+try:  # Allow tests to run without native spatial libs (GDAL/GEOS)
+    from django.contrib.gis import gdal as _gdal  # type: ignore
+except Exception:  # pragma: no cover - environment dependent
+    SPATIAL_SUPPORT_ENABLED = False
+else:
+    # Import succeeded: GDAL bindings are available
+    SPATIAL_SUPPORT_ENABLED = True
+    GDAL_VERSION = getattr(_gdal, "GDAL_VERSION", "")
+
+if not SPATIAL_SUPPORT_ENABLED:
+    INSTALLED_APPS = [
+        app for app in INSTALLED_APPS if app != "django.contrib.gis"
+    ]
+
 MIDDLEWARE = [
     "django_prometheus.middleware.PrometheusBeforeMiddleware",
     "django.middleware.security.SecurityMiddleware",
@@ -319,6 +333,13 @@ else:
     session_engine = "django.contrib.sessions.backends.db"
 
 SESSION_ENGINE = session_engine
+
+# -----------------------------------------------------
+# Dashboard SWR cache tuning
+# -----------------------------------------------------
+SWR_ENABLED = os.getenv("SWR_ENABLED", "true").lower() == "true"
+SWR_FRESH_TTL = int(os.getenv("SWR_FRESH_TTL", "30"))
+SWR_STALE_TTL = max(SWR_FRESH_TTL, int(os.getenv("SWR_STALE_TTL", "60")))
 
 # -----------------------------------------------------
 # ASGI / Channels (WebSockets)

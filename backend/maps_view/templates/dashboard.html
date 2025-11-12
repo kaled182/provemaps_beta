@@ -389,12 +389,12 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
 <!-- Custom JavaScript -->
-{{ hosts_status|json_script:"hosts-data" }}
-{{ hosts_summary|json_script:"hosts-summary" }}
 <script>
   const GOOGLE_MAPS_API_KEY = "{{ GOOGLE_MAPS_API_KEY }}";
-  const HOSTS_DATA = JSON.parse(document.getElementById('hosts-data').textContent || '[]');
-  const HOSTS_SUMMARY = JSON.parse(document.getElementById('hosts-summary').textContent || '{}');
+  // Data will be loaded via AJAX from /api/dashboard/data/
+  const HOSTS_DATA = [];
+  const HOSTS_SUMMARY = {};
+
 </script>
 
 <script src="{% static 'js/dashboard.js' %}"></script>

@@ -9,7 +9,6 @@ import logging
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
 from django.shortcuts import render
 from prometheus_client import REGISTRY, generate_latest
 from setup_app.services import runtime_settings
@@ -31,32 +30,10 @@ def build_dashboard_event_payload():
 @login_required
 def dashboard_view(request):
     """
-    Primary dashboard (HTML) — loads fast, fetches data via AJAX.
+    Primary dashboard (HTML) backed by the SWR cache helper.
 
-    Previously embedded all hosts data inline, causing 30-second delays.
-    Now serves minimal HTML shell; frontend loads data from /api/dashboard/data/.
-    """
-    google_maps_key = (
-        runtime_settings.get_runtime_config().google_maps_api_key
-        or getattr(settings, 'GOOGLE_MAPS_API_KEY', '')
-    )
-
-    return render(
-        request,
-        'dashboard.html',
-        {
-            'GOOGLE_MAPS_API_KEY': google_maps_key,
-        },
-    )
-
-
-@login_required
-def dashboard_data_api(request):
-    """
-    JSON API endpoint for dashboard data (hosts_status + hosts_summary).
-
-    Uses the same SWR cache as the legacy view to avoid duplicate Zabbix queries.
-    Frontend polls this endpoint to update the map without blocking page load.
+    The view uses the cache to serve fresh or stale data immediately and
+    schedules a background refresh when the snapshot is stale.
     """
     from maps_view.cache_swr import get_dashboard_cached
     from maps_view.tasks import refresh_dashboard_cache_task
@@ -67,14 +44,28 @@ def dashboard_data_api(request):
         async_task=refresh_dashboard_cache_task.delay,
     )
 
-    response_data = cache_result["data"]
-    response_data["cache_metadata"] = {
+    context = cache_result["data"]
+
+    # Inject cache metadata for the template to display status banners
+    context["cache_metadata"] = {
         "is_stale": cache_result.get("is_stale", False),
         "timestamp": cache_result.get("timestamp"),
         "cache_hit": cache_result.get("cache_hit", False),
     }
 
-    return JsonResponse(response_data)
+    google_maps_key = (
+        runtime_settings.get_runtime_config().google_maps_api_key
+        or getattr(settings, 'GOOGLE_MAPS_API_KEY', '')
+    )
+
+    return render(
+        request,
+        'dashboard.html',
+        {
+            'GOOGLE_MAPS_API_KEY': google_maps_key,
+            **context,
+        },
+    )
 
 
 # Mantido para compatibilidade (se usado em outros lugares)

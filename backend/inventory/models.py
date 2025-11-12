@@ -9,10 +9,30 @@ from __future__ import annotations
 from importlib import import_module
 from typing import TYPE_CHECKING, Any, cast
 
-from django.contrib.gis.db import models as gis_models
+from django.core.exceptions import ImproperlyConfigured
 from django.db import models
 from django.utils import timezone
 from django.utils.text import slugify
+
+try:  # pragma: no cover - environment specific import
+    from django.contrib.gis.db import models as gis_models
+except (ImportError, ImproperlyConfigured):
+    # CI environments without GDAL/GEOS support should still run the ORM and
+    # unit tests. Fall back to a JSON representation that mimics the spatial
+    # field API shape closely enough for non-spatial assertions.
+    class _FallbackLineStringField(models.JSONField):
+        description = "Fallback LineString storage when GDAL is unavailable"
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            kwargs.pop("srid", None)
+            kwargs.setdefault("null", True)
+            kwargs.setdefault("blank", True)
+            super().__init__(*args, **kwargs)
+
+    class _FallbackGISModule:  # minimal shim with the attribute we need
+        LineStringField = _FallbackLineStringField
+
+    gis_models = _FallbackGISModule()  # type: ignore[assignment]
 
 
 class Site(models.Model):
