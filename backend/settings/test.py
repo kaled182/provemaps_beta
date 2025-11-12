@@ -27,7 +27,9 @@ SECURE_SSL_REDIRECT = False
 # - Set TEST_DB_ENGINE=mysql to reuse the MariaDB container (docker-compose).
 DATABASES: Dict[str, Dict[str, Any]]
 
-if os.getenv("TEST_DB_ENGINE", "").lower() == "mysql":
+test_db_engine = os.getenv("TEST_DB_ENGINE", "").lower()
+
+if test_db_engine == "mysql":
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.mysql",
@@ -47,6 +49,25 @@ if os.getenv("TEST_DB_ENGINE", "").lower() == "mysql":
         }
     }
     print("[TEST] Environment loaded - MySQL backend")
+elif test_db_engine in {"postgres", "postgresql", "postgis"}:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.contrib.gis.db.backends.postgis",
+            "NAME": os.getenv("DB_NAME", "app"),
+            "USER": os.getenv("DB_USER", "app"),
+            "PASSWORD": os.getenv("DB_PASSWORD", "app"),
+            "HOST": os.getenv("DB_HOST", "postgres"),
+            "PORT": os.getenv("DB_PORT", "5432"),
+            "OPTIONS": {
+                "connect_timeout": 10,
+                "options": "-c search_path=public,postgis",
+            },
+            "TEST": {
+                "NAME": os.getenv("TEST_DB_NAME", ""),
+            },
+        }
+    }
+    print("[TEST] Environment loaded - PostGIS backend")
 else:
     DATABASES = {
         "default": {

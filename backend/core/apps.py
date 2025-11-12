@@ -12,6 +12,8 @@ class CoreConfig(AppConfig):
         from core.metrics_static_version import init_static_version_metric
         from core.metrics_custom import init_metrics
         from core.metrics_feature_flags import collect_feature_flags
+        # Register GIS system checks for manage.py check --tag gis
+        from core import checks_gis  # noqa: F401
 
         init_static_version_metric()
         init_metrics()
