@@ -5,6 +5,7 @@ from django.urls import path
 from inventory.api import devices as device_api
 from inventory.api import fibers as fiber_api
 from inventory.api import routes as routes_api
+from inventory.api import spatial as spatial_api
 from inventory.api import zabbix_lookup as zabbix_lookup_api
 
 app_name = "inventory-api"
@@ -191,5 +192,16 @@ urlpatterns = [
         "routes/tasks/bulk/",
         routes_api.enqueue_bulk_operations,
         name="routes-bulk",
+    ),
+    # Spatial queries (Phase 10 - PostGIS)
+    path(
+        "segments/",
+        spatial_api.api_route_segments_bbox,
+        name="segments-bbox",
+    ),
+    path(
+        "fibers/bbox/",
+        spatial_api.api_fiber_cables_bbox,
+        name="fibers-bbox",
     ),
 ]

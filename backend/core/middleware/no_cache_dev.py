@@ -11,7 +11,6 @@ class NoCacheDevMiddleware:
     """Force no-cache headers on sensitive pages when DEBUG is enabled."""
 
     TARGET_PREFIXES: tuple[str, ...] = (
-        "/routes_builder/",
         "/static/js/fiber_route_builder",
     )
 

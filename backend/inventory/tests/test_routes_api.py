@@ -1,3 +1,8 @@
+# pyright: reportGeneralTypeIssues=false
+# pyright: reportUnknownArgumentType=false
+# pyright: reportUnknownMemberType=false
+# pyright: reportUnknownVariableType=false
+
 from __future__ import annotations
 
 import json
@@ -78,7 +83,7 @@ def test_enqueue_build_route_success(
     assert response.status_code == 202
     payload = response.json()
     assert payload["status"] == "enqueued"
-    assert payload["task"] == "routes_builder.tasks.build_route"
+    assert payload["task"] == "inventory.routes.build_route"
     assert payload["route_id"] == 42
     assert capture_apply_async[0]["task"] is task_build_route
     assert capture_apply_async[0]["args"] == [42]

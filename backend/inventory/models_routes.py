@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.contrib.gis.db import models as gis_models
 from django.core.exceptions import ValidationError
 from django.db import models
 
@@ -137,7 +138,16 @@ class RouteSegment(models.Model):
     path_coordinates = models.JSONField(
         blank=True,
         null=True,
-        help_text='Array of {"lat": float, "lng": float} points.',
+        help_text='Array of {"lat": float, "lng": float} points. Deprecated: use path field with PostGIS.',
+    )
+    # Spatial field for PostGIS (Phase 10)
+    # SRID 4326 = WGS84 (GPS coordinates)
+    # Populated by data migration from path_coordinates
+    path = gis_models.LineStringField(
+        srid=4326,
+        blank=True,
+        null=True,
+        help_text="Spatial path geometry for PostGIS spatial queries (bbox filtering).",
     )
     length_km = models.DecimalField(
         max_digits=7,
