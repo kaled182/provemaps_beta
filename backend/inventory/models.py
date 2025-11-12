@@ -14,13 +14,15 @@ from django.db import models
 from django.utils import timezone
 from django.utils.text import slugify
 
+from .fields import LenientJSONField
+
 try:  # pragma: no cover - environment specific import
     from django.contrib.gis.db import models as gis_models
 except (ImportError, ImproperlyConfigured):
     # CI environments without GDAL/GEOS support should still run the ORM and
     # unit tests. Fall back to a JSON representation that mimics the spatial
     # field API shape closely enough for non-spatial assertions.
-    class _FallbackLineStringField(models.JSONField):
+    class _FallbackLineStringField(LenientJSONField):
         description = "Fallback LineString storage when GDAL is unavailable"
 
         def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -272,10 +274,13 @@ class FiberCable(models.Model):
         blank=True,
     )
     # Intermediate coordinates when plotting (may include origin/destination)
-    path_coordinates = models.JSONField(
+    path_coordinates = LenientJSONField(
         blank=True,
         null=True,
-        help_text="Coordinate list e.g. [{'lat': -16.6, 'lng': -49.2}, ...]. Deprecated: use path field.",
+        help_text=(
+            "Coordinate list e.g. [{'lat': -16.6, 'lng': -49.2}, ...]. "
+            "Deprecated: use path field."
+        ),
     )
     # Spatial field for PostGIS (Phase 10)
     # SRID 4326 = WGS84 (GPS coordinates)
@@ -284,7 +289,10 @@ class FiberCable(models.Model):
         srid=4326,
         blank=True,
         null=True,
-        help_text="Spatial path geometry for PostGIS spatial queries (bbox filtering).",
+        help_text=(
+            "Spatial path geometry for PostGIS spatial queries "
+            "(bbox filtering)."
+        ),
     )
     status = models.CharField(
         max_length=15,
