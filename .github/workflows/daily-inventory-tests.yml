@@ -8,10 +8,43 @@ on:
 jobs:
   targeted-pytest:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: app
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U app -d app"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      PYTHONPATH: "${{ github.workspace }}/backend"
+      DJANGO_SETTINGS_MODULE: "settings.test"
+      DB_ENGINE: "postgis"
+      TEST_DB_ENGINE: "postgis"
+      DB_NAME: "app"
+      DB_USER: "app"
+      DB_PASSWORD: "app"
+      DB_HOST: "postgres"
+      DB_PORT: "5432"
+      GDAL_LIBRARY_PATH: "/usr/lib/x86_64-linux-gnu/libgdal.so"
+      GEOS_LIBRARY_PATH: "/usr/lib/x86_64-linux-gnu/libgeos_c.so"
+      PROJ_LIB: "/usr/share/proj"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Install system packages (GDAL/GEOS)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gdal-bin libgdal-dev libgeos-dev postgresql-client
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -31,16 +64,28 @@ jobs:
           venv/bin/python -m pip install --upgrade pip
           venv/bin/pip install -r backend/requirements.txt
 
+      - name: Wait for PostGIS service
+        run: |
+          for i in {1..30}; do
+            if pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
       - name: Install node dependencies
         run: npm ci
 
       - name: Run migrations
-        env:
-          PYTHONPATH: "${{ github.workspace }}/backend"
-          DJANGO_SETTINGS_MODULE: "settings.test"
         working-directory: backend
         run: |
           ../venv/bin/python manage.py migrate --noinput
+
+      - name: Run GIS system checks
+        working-directory: backend
+        run: |
+          ../venv/bin/python manage.py check --tag gis
 
       - name: Run Pyright inventory shim checks
         env:
