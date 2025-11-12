@@ -47,6 +47,11 @@ def refresh_dashboard_cache_task() -> Dict[str, Any]:
     try:
         fresh_data = monitoring_usecases.get_hosts_status_data()
         dashboard_cache.set_cached_data(fresh_data)
+        broadcasted = broadcast_dashboard_status(fresh_data)
+        if not broadcasted:
+            logger.debug(
+                "Realtime broadcast skipped; dashboard channel not configured.",
+            )
 
         duration = time.time() - start
         hosts_count = len(fresh_data.get("hosts_status", []))
@@ -61,6 +66,7 @@ def refresh_dashboard_cache_task() -> Dict[str, Any]:
             "success": True,
             "hosts_count": hosts_count,
             "duration_seconds": round(duration, 3),
+            "broadcasted": broadcasted,
         }
 
     except Exception as exc:
