@@ -16,6 +16,7 @@ class InventoryConfig(AppConfig):
             import importlib
 
             importlib.import_module("inventory.models_routes")
+            importlib.import_module("inventory.signals_spatial")
         except ImportError:
             # The module may be absent in certain stripped-down runtimes.
             return

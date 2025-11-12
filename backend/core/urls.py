@@ -95,6 +95,13 @@ urlpatterns: list[Any] = [
     ),
 ]
 
+# Django Debug Toolbar (only in dev/baseline mode)
+if settings.DEBUG and 'debug_toolbar' in settings.INSTALLED_APPS:
+    import debug_toolbar
+    urlpatterns = [
+        path('__debug__/', include(debug_toolbar.urls)),
+    ] + urlpatterns
+
 # Serve static files during development
 if settings.DEBUG:
     urlpatterns += static(

@@ -1,9 +1,11 @@
 # ------------------------------------------------------------
 # Dockerfile - multi-stage (slim) for Django (mapsprovefiber)
 # - Optimized layers (wheel cache)
+# - Frontend build included (Node.js multi-stage)
 # - Lean and secure runtime (non-root, tz, ca-certs)
 # - Compatible with docker-compose.yml (web/celery/beat)
 # - Gunicorn + Uvicorn + Celery installed
+# - Sprint 1: Includes frontend build with cache busting
 # - HEALTHCHECK defined in docker-compose.yml (preferred)
 # ------------------------------------------------------------
 
@@ -43,7 +45,29 @@ RUN pip install --upgrade pip wheel && \
 
 
 ############################
-# Stage 2: runtime
+# Stage 2: build frontend (Node.js)
+############################
+FROM node:20-slim AS frontend-builder
+
+WORKDIR /app/frontend
+
+# Copy package files and install dependencies
+COPY frontend/package*.json ./
+RUN npm ci
+
+# Copy frontend source code
+COPY frontend/ ./
+
+# Build production frontend
+# This creates optimized assets in backend/staticfiles/vue-spa/
+RUN npm run build
+
+# Verify build output
+RUN ls -lah ../backend/staticfiles/vue-spa/assets/ || echo "Build output not found"
+
+
+############################
+# Stage 3: runtime
 ############################
 FROM python:3.12-slim AS runtime
 
@@ -98,8 +122,11 @@ RUN pip install --no-index --find-links=/wheels -r requirements.txt && \
 COPY backend/ /app/backend/
 COPY scripts/ /app/scripts/
 
-# (Optional) copy frontend static assets if already built (placeholder)
-RUN mkdir -p /app/frontend/staticfiles
+# Copy frontend build output from frontend-builder stage
+COPY --from=frontend-builder /app/backend/staticfiles/vue-spa/ /app/backend/staticfiles/vue-spa/
+
+# Verify frontend assets were copied
+RUN ls -lah /app/backend/staticfiles/vue-spa/assets/ || echo "Frontend assets not found"
 
 # Permissions and writable directories
 RUN mkdir -p /app/backend/logs /app/backend/media /app/backend/staticfiles /app/backend/tmp && \

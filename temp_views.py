@@ -106,7 +106,7 @@ def metrics_dashboard(request):
             continue
         elif line.strip():
             sample = line.strip()
-            metrics_labels = {}
+            sample_labels = {}
             value = ""
             if "{" in sample:
                 metric_name, rest = sample.split("{", 1)
@@ -114,7 +114,7 @@ def metrics_dashboard(request):
                 for label in labels_part.split(","):
                     if "=" in label:
                         key, val = label.split("=", 1)
-                        metrics_labels[key] = val.strip('"')
+                        sample_labels[key] = val.strip('"')
                 value = value.strip()
             else:
                 metric_name, value = sample.split(" ", 1)
@@ -122,7 +122,7 @@ def metrics_dashboard(request):
                 {
                     "raw": sample,
                     "value": value.strip(),
-                    "labels": metrics_labels,
+                    "labels": sample_labels,
                 }
             )
 

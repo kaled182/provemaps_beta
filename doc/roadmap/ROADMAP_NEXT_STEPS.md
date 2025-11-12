@@ -328,6 +328,7 @@ provemaps_beta/
 - ✅ 12-Factor App - Configuração de ambiente
 
 ### **Fase 7:**
+- ✅ [Roadmap Vue 3](ROADMAP_VUE3_PREPARATION.md) — Histórico completo da preparação para Vue 3.
 - ✅ [Vue 3 Official Docs](https://vuejs.org/)
 - ✅ [Vite Guide](https://vitejs.dev/guide/)
 - ✅ [Pinia Documentation](https://pinia.vuejs.org/)

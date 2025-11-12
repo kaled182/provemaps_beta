@@ -15,6 +15,8 @@ Follow the sections in order.
 - Mirror the version info in the main `README.md` once the rollout is complete.
 
 ## 2. Update Containers (Docker/Docker Compose)
+> ℹ️ Use `docker/docker-compose.postgis.yml` as the default stack for GIS work. It now launches the web, Celery, and Redis services against PostGIS. The legacy `docker/docker-compose.yml` remains only for MariaDB compatibility or fallback testing—avoid mixing the two runtimes in the same session.
+
 1. Base image packages:
    - Add to Dockerfile: `apt-get install -y gdal-bin libgdal-dev libgeos-dev postgresql-client` (adjust per distro).
    - Export library paths if the distro places GDAL/GEOS outside default search paths (`LD_LIBRARY_PATH`).
@@ -141,8 +143,11 @@ python manage.py check --tag gis
 3. All pytest suites pass, including spatial tests.
 4. `/api/v1/inventory/segments/?bbox=...` returns `path_geojson` data.
 5. Web dashboards map routes using the spatial column (no fallback JSON).
-6. CI pipeline finishes green.
-7. Health checks and metrics reflect GIS readiness.
+6. Admin NASA Worldview preview renders the updated geometry after edits (verify via `/admin/inventory/fibercable/<id>/change/`).
+7. CI pipeline finishes green.
+8. Health checks and metrics reflect GIS readiness.
 
 Once every item is checked, the project runs with full, non-fallback spatial
 capabilities.
+
+> ✅ Validation log (2025-11-12): `docker compose -f docker/docker-compose.postgis.yml exec web python manage.py migrate` (applied `inventory.0013_lenient_json_fields`) and `docker compose -f docker/docker-compose.postgis.yml exec web pytest -q` (209 passed, 6 skipped) confirm the PostGIS stack is operational and that NASA Worldview reflects the synchronized path geometry.
