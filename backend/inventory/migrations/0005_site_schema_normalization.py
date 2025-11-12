@@ -52,7 +52,7 @@ def normalize_blank_fields(
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('inventory', '0004_rename_route_tables'),
+        ('inventory', '0004b_update_route_table_names'),
     ]
 
     operations = [
@@ -116,23 +116,15 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="site",
             name="slug",
-            field=models.SlugField(
-                blank=True,
-                default="",
-                editable=False,
-                max_length=160,
-            ),
-        ),
-        migrations.RunPython(populate_site_slugs, migrations.RunPython.noop),
-        migrations.AlterField(
-            model_name="site",
-            name="slug",
+            # Directly create slug as unique to avoid duplicate pattern_ops index creation
             field=models.SlugField(
                 editable=False,
                 max_length=160,
                 unique=True,
             ),
         ),
+        # Populate slugs after field exists (already unique)
+        migrations.RunPython(populate_site_slugs, migrations.RunPython.noop),
         migrations.AlterField(
             model_name="site",
             name="address_line1",

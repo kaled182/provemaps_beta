@@ -1,0 +1,2154 @@
+[
+{
+  "model": "inventory.site",
+  "pk": 1,
+  "fields": {
+    "display_name": "Santana do Araguaia",
+    "slug": "santana-do-araguaia",
+    "address_line1": "",
+    "address_line2": "",
+    "address_line3": "",
+    "city": "",
+    "state": "",
+    "postal_code": "",
+    "country": "",
+    "rack_location": "",
+    "latitude": "-9.341126",
+    "longitude": "-50.321592",
+    "description": ""
+  }
+},
+{
+  "model": "inventory.site",
+  "pk": 2,
+  "fields": {
+    "display_name": "Santana do Araguaia - PA",
+    "slug": "santana-do-araguaia-pa",
+    "address_line1": "",
+    "address_line2": "",
+    "address_line3": "",
+    "city": "",
+    "state": "",
+    "postal_code": "",
+    "country": "",
+    "rack_location": "",
+    "latitude": "-9.492512",
+    "longitude": "-50.448123",
+    "description": ""
+  }
+},
+{
+  "model": "inventory.device",
+  "pk": 1,
+  "fields": {
+    "site": 1,
+    "device_icon": "",
+    "name": "Huawei - Switch Santana Marajo",
+    "vendor": "",
+    "model": "",
+    "zabbix_hostid": "10658",
+    "uptime_item_key": "",
+    "cpu_usage_item_key": ""
+  }
+},
+{
+  "model": "inventory.device",
+  "pk": 2,
+  "fields": {
+    "site": 2,
+    "device_icon": "",
+    "name": "Huawei - Switch Furacao",
+    "vendor": "",
+    "model": "",
+    "zabbix_hostid": "10660",
+    "uptime_item_key": "",
+    "cpu_usage_item_key": ""
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 1,
+  "fields": {
+    "device": 1,
+    "name": "40GE0/0/1",
+    "zabbix_item_key": "ifOperStatus[40GE0/0/1]",
+    "zabbix_item_id_traffic_in": "83667",
+    "zabbix_item_id_traffic_out": "83692",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83767",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta 40GE0/0/1 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 2,
+  "fields": {
+    "device": 1,
+    "name": "40GE0/0/2",
+    "zabbix_item_key": "ifOperStatus[40GE0/0/2]",
+    "zabbix_item_id_traffic_in": "83668",
+    "zabbix_item_id_traffic_out": "83693",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83768",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta 40GE0/0/2 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 3,
+  "fields": {
+    "device": 1,
+    "name": "40GE0/0/3",
+    "zabbix_item_key": "ifOperStatus[40GE0/0/3]",
+    "zabbix_item_id_traffic_in": "83669",
+    "zabbix_item_id_traffic_out": "83694",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83769",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta 40GE0/0/3 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 4,
+  "fields": {
+    "device": 1,
+    "name": "40GE0/0/4",
+    "zabbix_item_key": "ifOperStatus[40GE0/0/4]",
+    "zabbix_item_id_traffic_in": "83670",
+    "zabbix_item_id_traffic_out": "83695",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83770",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta 40GE0/0/4 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 5,
+  "fields": {
+    "device": 1,
+    "name": "40GE0/0/5",
+    "zabbix_item_key": "ifOperStatus[40GE0/0/5]",
+    "zabbix_item_id_traffic_in": "83671",
+    "zabbix_item_id_traffic_out": "83696",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83771",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta 40GE0/0/5 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 6,
+  "fields": {
+    "device": 1,
+    "name": "40GE0/0/6",
+    "zabbix_item_key": "ifOperStatus[40GE0/0/6]",
+    "zabbix_item_id_traffic_in": "83672",
+    "zabbix_item_id_traffic_out": "83697",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83772",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta 40GE0/0/6 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 7,
+  "fields": {
+    "device": 1,
+    "name": "Eth-Trunk1",
+    "zabbix_item_key": "ifOperStatusLog[Eth-Trunk1]",
+    "zabbix_item_id_traffic_in": "76142",
+    "zabbix_item_id_traffic_out": "76147",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "76152",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Interface Eth-Trunk1 - LAG 1",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 8,
+  "fields": {
+    "device": 1,
+    "name": "Eth-Trunk2",
+    "zabbix_item_key": "ifOperStatusLog[Eth-Trunk2]",
+    "zabbix_item_id_traffic_in": "205281",
+    "zabbix_item_id_traffic_out": "205282",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "205283",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Interface Eth-Trunk2 - TO:TMK:TRANSITO",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 9,
+  "fields": {
+    "device": 1,
+    "name": "Vlanif11",
+    "zabbix_item_key": "ifOperStatusLog[Vlanif11]",
+    "zabbix_item_id_traffic_in": "146576",
+    "zabbix_item_id_traffic_out": "146577",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "146578",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Interface Vlanif11 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 10,
+  "fields": {
+    "device": 1,
+    "name": "Vlanif13",
+    "zabbix_item_key": "ifOperStatusLog[Vlanif13]",
+    "zabbix_item_id_traffic_in": "76143",
+    "zabbix_item_id_traffic_out": "76148",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "76153",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Interface Vlanif13 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 11,
+  "fields": {
+    "device": 1,
+    "name": "Vlanif3000",
+    "zabbix_item_key": "ifOperStatusLog[Vlanif3000]",
+    "zabbix_item_id_traffic_in": "76146",
+    "zabbix_item_id_traffic_out": "76151",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "76156",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Interface Vlanif3000 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 12,
+  "fields": {
+    "device": 1,
+    "name": "Vlanif3800",
+    "zabbix_item_key": "ifOperStatusLog[Vlanif3800]",
+    "zabbix_item_id_traffic_in": "76144",
+    "zabbix_item_id_traffic_out": "76149",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "76154",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Interface Vlanif3800 - TO::NOC",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 13,
+  "fields": {
+    "device": 1,
+    "name": "Vlanif3815",
+    "zabbix_item_key": "ifOperStatusLog[Vlanif3815]",
+    "zabbix_item_id_traffic_in": "76145",
+    "zabbix_item_id_traffic_out": "76150",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "76155",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Interface Vlanif3815 - TO-SW-CDT",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 14,
+  "fields": {
+    "device": 1,
+    "name": "MEth0/0/1",
+    "zabbix_item_key": "ifOperStatus[MEth0/0/1]",
+    "zabbix_item_id_traffic_in": "83648",
+    "zabbix_item_id_traffic_out": "83673",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83748",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta MEth0/0/1 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 15,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/1",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/1]",
+    "zabbix_item_id_traffic_in": "76083",
+    "zabbix_item_id_traffic_out": "76089",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "76107",
+    "rx_power_item_key": "hwEntityOpticalLaneRxPower[67470030]",
+    "tx_power_item_key": "hwEntityOpticalLaneTxPower[67470030]",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/1 - TO:TMK:TRANSPORTES",
+    "last_rx_power": "-3.89",
+    "last_tx_power": "-2.99",
+    "last_optical_check": "2025-11-12T00:03:45.646Z"
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 16,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/10",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/10]",
+    "zabbix_item_id_traffic_in": "83653",
+    "zabbix_item_id_traffic_out": "83678",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83753",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/10 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 17,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/11",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/11]",
+    "zabbix_item_id_traffic_in": "76088",
+    "zabbix_item_id_traffic_out": "76094",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "76112",
+    "rx_power_item_key": "hwEntityOpticalLaneRxPower[67470030]",
+    "tx_power_item_key": "hwEntityOpticalLaneTxPower[67470030]",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/11 - TO:TMK:TRANSITO:2",
+    "last_rx_power": "-3.89",
+    "last_tx_power": "-2.99",
+    "last_optical_check": "2025-11-12T00:03:45.646Z"
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 18,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/12",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/12]",
+    "zabbix_item_id_traffic_in": "83654",
+    "zabbix_item_id_traffic_out": "83679",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83754",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/12 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 19,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/13",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/13]",
+    "zabbix_item_id_traffic_in": "83655",
+    "zabbix_item_id_traffic_out": "83680",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83755",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/13 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 20,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/14",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/14]",
+    "zabbix_item_id_traffic_in": "83656",
+    "zabbix_item_id_traffic_out": "83681",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83756",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/14 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 21,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/15",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/15]",
+    "zabbix_item_id_traffic_in": "83657",
+    "zabbix_item_id_traffic_out": "83682",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83757",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/15 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 22,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/16",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/16]",
+    "zabbix_item_id_traffic_in": "83658",
+    "zabbix_item_id_traffic_out": "83683",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83758",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/16 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 23,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/17",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/17]",
+    "zabbix_item_id_traffic_in": "83659",
+    "zabbix_item_id_traffic_out": "83684",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83759",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/17 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 24,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/18",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/18]",
+    "zabbix_item_id_traffic_in": "83660",
+    "zabbix_item_id_traffic_out": "83685",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83760",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/18 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 25,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/19",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/19]",
+    "zabbix_item_id_traffic_in": "83661",
+    "zabbix_item_id_traffic_out": "83686",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83761",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/19 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 26,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/2",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/2]",
+    "zabbix_item_id_traffic_in": "76084",
+    "zabbix_item_id_traffic_out": "76090",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "76108",
+    "rx_power_item_key": "hwEntityOpticalLaneRxPower[67469454]",
+    "tx_power_item_key": "hwEntityOpticalLaneTxPower[67469454]",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/2 - IDC-SIMPLES-TRZABV",
+    "last_rx_power": "-7.38",
+    "last_tx_power": "-1.92",
+    "last_optical_check": "2025-11-12T00:03:45.646Z"
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 27,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/20",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/20]",
+    "zabbix_item_id_traffic_in": "83662",
+    "zabbix_item_id_traffic_out": "83687",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83762",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/20 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 28,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/21",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/21]",
+    "zabbix_item_id_traffic_in": "83663",
+    "zabbix_item_id_traffic_out": "83688",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83763",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/21 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 29,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/22",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/22]",
+    "zabbix_item_id_traffic_in": "83664",
+    "zabbix_item_id_traffic_out": "83689",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83764",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/22 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 30,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/23",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/23]",
+    "zabbix_item_id_traffic_in": "83665",
+    "zabbix_item_id_traffic_out": "83690",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83765",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/23 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 31,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/24",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/24]",
+    "zabbix_item_id_traffic_in": "83666",
+    "zabbix_item_id_traffic_out": "83691",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83766",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/24 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 32,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/3",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/3]",
+    "zabbix_item_id_traffic_in": "76085",
+    "zabbix_item_id_traffic_out": "76091",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "76109",
+    "rx_power_item_key": "hwEntityOpticalLaneRxPower[67469518]",
+    "tx_power_item_key": "hwEntityOpticalLaneTxPower[67469518]",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/3 - to-sta-lag",
+    "last_rx_power": "-10.87",
+    "last_tx_power": "-2.11",
+    "last_optical_check": "2025-11-12T00:03:45.646Z"
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 33,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/4",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/4]",
+    "zabbix_item_id_traffic_in": "83649",
+    "zabbix_item_id_traffic_out": "83674",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83749",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/4 - TO:TMK:TRANSITO:1",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 34,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/5",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/5]",
+    "zabbix_item_id_traffic_in": "76086",
+    "zabbix_item_id_traffic_out": "76092",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "76110",
+    "rx_power_item_key": "hwEntityOpticalLaneRxPower[67469646]",
+    "tx_power_item_key": "hwEntityOpticalLaneTxPower[67469646]",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/5 - NOVA-BARREIRA",
+    "last_rx_power": "-13.84",
+    "last_tx_power": "1.95",
+    "last_optical_check": "2025-11-12T00:03:45.646Z"
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 35,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/6",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/6]",
+    "zabbix_item_id_traffic_in": "76087",
+    "zabbix_item_id_traffic_out": "76093",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "76111",
+    "rx_power_item_key": "hwEntityOpticalLaneRxPower[67469710]",
+    "tx_power_item_key": "hwEntityOpticalLaneTxPower[67469710]",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/6 - ROTA-CARAJAS",
+    "last_rx_power": "-14.34",
+    "last_tx_power": "-2.14",
+    "last_optical_check": "2025-11-12T00:03:45.646Z"
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 36,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/7",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/7]",
+    "zabbix_item_id_traffic_in": "83650",
+    "zabbix_item_id_traffic_out": "83675",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83750",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/7 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 37,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/8",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/8]",
+    "zabbix_item_id_traffic_in": "83651",
+    "zabbix_item_id_traffic_out": "83676",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83751",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/8 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 38,
+  "fields": {
+    "device": 1,
+    "name": "XGigabitEthernet0/0/9",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/9]",
+    "zabbix_item_id_traffic_in": "83652",
+    "zabbix_item_id_traffic_out": "83677",
+    "zabbix_interfaceid": "31",
+    "zabbix_itemid": "83752",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/9 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 39,
+  "fields": {
+    "device": 2,
+    "name": "40GE0/0/1",
+    "zabbix_item_key": "ifOperStatus[40GE0/0/1]",
+    "zabbix_item_id_traffic_in": "87928",
+    "zabbix_item_id_traffic_out": "87952",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88024",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta 40GE0/0/1 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 40,
+  "fields": {
+    "device": 2,
+    "name": "40GE0/0/2",
+    "zabbix_item_key": "ifOperStatus[40GE0/0/2]",
+    "zabbix_item_id_traffic_in": "87929",
+    "zabbix_item_id_traffic_out": "87953",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88025",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta 40GE0/0/2 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 41,
+  "fields": {
+    "device": 2,
+    "name": "40GE0/0/3",
+    "zabbix_item_key": "ifOperStatus[40GE0/0/3]",
+    "zabbix_item_id_traffic_in": "87930",
+    "zabbix_item_id_traffic_out": "87954",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88026",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta 40GE0/0/3 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 42,
+  "fields": {
+    "device": 2,
+    "name": "40GE0/0/4",
+    "zabbix_item_key": "ifOperStatus[40GE0/0/4]",
+    "zabbix_item_id_traffic_in": "87931",
+    "zabbix_item_id_traffic_out": "87955",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88027",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta 40GE0/0/4 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 43,
+  "fields": {
+    "device": 2,
+    "name": "40GE0/0/5",
+    "zabbix_item_key": "ifOperStatus[40GE0/0/5]",
+    "zabbix_item_id_traffic_in": "87932",
+    "zabbix_item_id_traffic_out": "87956",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88028",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta 40GE0/0/5 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 44,
+  "fields": {
+    "device": 2,
+    "name": "40GE0/0/6",
+    "zabbix_item_key": "ifOperStatus[40GE0/0/6]",
+    "zabbix_item_id_traffic_in": "87933",
+    "zabbix_item_id_traffic_out": "87957",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88029",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta 40GE0/0/6 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 45,
+  "fields": {
+    "device": 2,
+    "name": "Eth-Trunk1",
+    "zabbix_item_key": "ifOperStatusLog[Eth-Trunk1]",
+    "zabbix_item_id_traffic_in": "76298",
+    "zabbix_item_id_traffic_out": "76311",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "76324",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Interface Eth-Trunk1 - to-mandi",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 46,
+  "fields": {
+    "device": 2,
+    "name": "Vlanif11",
+    "zabbix_item_key": "ifOperStatusLog[Vlanif11]",
+    "zabbix_item_id_traffic_in": "76297",
+    "zabbix_item_id_traffic_out": "76310",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "76323",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Interface Vlanif11 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 47,
+  "fields": {
+    "device": 2,
+    "name": "Vlanif126",
+    "zabbix_item_key": "ifOperStatusLog[Vlanif126]",
+    "zabbix_item_id_traffic_in": "212555",
+    "zabbix_item_id_traffic_out": "212556",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "212557",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Interface Vlanif126 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 48,
+  "fields": {
+    "device": 2,
+    "name": "Vlanif3000",
+    "zabbix_item_key": "ifOperStatusLog[Vlanif3000]",
+    "zabbix_item_id_traffic_in": "76309",
+    "zabbix_item_id_traffic_out": "76322",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "76335",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Interface Vlanif3000 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 49,
+  "fields": {
+    "device": 2,
+    "name": "Vlanif301",
+    "zabbix_item_key": "ifOperStatusLog[Vlanif301]",
+    "zabbix_item_id_traffic_in": "76304",
+    "zabbix_item_id_traffic_out": "76317",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "76330",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Interface Vlanif301 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 50,
+  "fields": {
+    "device": 2,
+    "name": "Vlanif3801",
+    "zabbix_item_key": "ifOperStatusLog[Vlanif3801]",
+    "zabbix_item_id_traffic_in": "76300",
+    "zabbix_item_id_traffic_out": "76313",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "76326",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Interface Vlanif3801 - TO::NOC",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 51,
+  "fields": {
+    "device": 2,
+    "name": "Vlanif3802",
+    "zabbix_item_key": "ifOperStatusLog[Vlanif3802]",
+    "zabbix_item_id_traffic_in": "76299",
+    "zabbix_item_id_traffic_out": "76312",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "76325",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Interface Vlanif3802 - TO::NOC",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 52,
+  "fields": {
+    "device": 2,
+    "name": "Vlanif3803",
+    "zabbix_item_key": "ifOperStatusLog[Vlanif3803]",
+    "zabbix_item_id_traffic_in": "76301",
+    "zabbix_item_id_traffic_out": "76314",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "76327",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Interface Vlanif3803 - TO::NOC",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 53,
+  "fields": {
+    "device": 2,
+    "name": "Vlanif3811",
+    "zabbix_item_key": "ifOperStatusLog[Vlanif3811]",
+    "zabbix_item_id_traffic_in": "76302",
+    "zabbix_item_id_traffic_out": "76315",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "76328",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Interface Vlanif3811 - to-cristo-rei-01",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 54,
+  "fields": {
+    "device": 2,
+    "name": "Vlanif405",
+    "zabbix_item_key": "ifOperStatusLog[Vlanif405]",
+    "zabbix_item_id_traffic_in": "76306",
+    "zabbix_item_id_traffic_out": "76319",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "76332",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Interface Vlanif405 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 55,
+  "fields": {
+    "device": 2,
+    "name": "Vlanif450",
+    "zabbix_item_key": "ifOperStatusLog[Vlanif450]",
+    "zabbix_item_id_traffic_in": "76305",
+    "zabbix_item_id_traffic_out": "76318",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "76331",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Interface Vlanif450 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 56,
+  "fields": {
+    "device": 2,
+    "name": "Vlanif669",
+    "zabbix_item_key": "ifOperStatusLog[Vlanif669]",
+    "zabbix_item_id_traffic_in": "76307",
+    "zabbix_item_id_traffic_out": "76320",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "76333",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Interface Vlanif669 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 57,
+  "fields": {
+    "device": 2,
+    "name": "Vlanif999",
+    "zabbix_item_key": "ifOperStatusLog[Vlanif999]",
+    "zabbix_item_id_traffic_in": "76308",
+    "zabbix_item_id_traffic_out": "76321",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "76334",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Interface Vlanif999 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 58,
+  "fields": {
+    "device": 2,
+    "name": "MEth0/0/1",
+    "zabbix_item_key": "ifOperStatus[MEth0/0/1]",
+    "zabbix_item_id_traffic_in": "87910",
+    "zabbix_item_id_traffic_out": "87934",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88006",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta MEth0/0/1 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 59,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/1",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/1]",
+    "zabbix_item_id_traffic_in": "76453",
+    "zabbix_item_id_traffic_out": "76460",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "76481",
+    "rx_power_item_key": "hwEntityOpticalLaneRxPower[67469390]",
+    "tx_power_item_key": "hwEntityOpticalLaneTxPower[67469390]",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/1 - SANTANA",
+    "last_rx_power": "-13.20",
+    "last_tx_power": "2.65",
+    "last_optical_check": "2025-11-12T00:03:45.646Z"
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 60,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/10",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/10]",
+    "zabbix_item_id_traffic_in": "87913",
+    "zabbix_item_id_traffic_out": "87937",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88009",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/10 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 61,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/11",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/11]",
+    "zabbix_item_id_traffic_in": "87914",
+    "zabbix_item_id_traffic_out": "87938",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88010",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/11 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 62,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/12",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/12]",
+    "zabbix_item_id_traffic_in": "87915",
+    "zabbix_item_id_traffic_out": "87939",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88011",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/12 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 63,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/13",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/13]",
+    "zabbix_item_id_traffic_in": "87916",
+    "zabbix_item_id_traffic_out": "87940",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88012",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/13 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 64,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/14",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/14]",
+    "zabbix_item_id_traffic_in": "87917",
+    "zabbix_item_id_traffic_out": "87941",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88013",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/14 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 65,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/15",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/15]",
+    "zabbix_item_id_traffic_in": "87918",
+    "zabbix_item_id_traffic_out": "87942",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88014",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/15 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 66,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/16",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/16]",
+    "zabbix_item_id_traffic_in": "87919",
+    "zabbix_item_id_traffic_out": "87943",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88015",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/16 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 67,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/17",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/17]",
+    "zabbix_item_id_traffic_in": "87920",
+    "zabbix_item_id_traffic_out": "87944",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88016",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/17 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 68,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/18",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/18]",
+    "zabbix_item_id_traffic_in": "87921",
+    "zabbix_item_id_traffic_out": "87945",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88017",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/18 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 69,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/19",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/19]",
+    "zabbix_item_id_traffic_in": "87922",
+    "zabbix_item_id_traffic_out": "87946",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88018",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/19 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 70,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/2",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/2]",
+    "zabbix_item_id_traffic_in": "76454",
+    "zabbix_item_id_traffic_out": "76461",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "76482",
+    "rx_power_item_key": "hwEntityOpticalLaneRxPower[67469454]",
+    "tx_power_item_key": "hwEntityOpticalLaneTxPower[67469454]",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/2 - OLT",
+    "last_rx_power": "-10.51",
+    "last_tx_power": "-10.00",
+    "last_optical_check": "2025-11-12T00:03:45.646Z"
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 71,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/20",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/20]",
+    "zabbix_item_id_traffic_in": "87923",
+    "zabbix_item_id_traffic_out": "87947",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88019",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/20 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 72,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/21",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/21]",
+    "zabbix_item_id_traffic_in": "87924",
+    "zabbix_item_id_traffic_out": "87948",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88020",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/21 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 73,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/22",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/22]",
+    "zabbix_item_id_traffic_in": "87925",
+    "zabbix_item_id_traffic_out": "87949",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88021",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/22 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 74,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/23",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/23]",
+    "zabbix_item_id_traffic_in": "87926",
+    "zabbix_item_id_traffic_out": "87950",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88022",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/23 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 75,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/24",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/24]",
+    "zabbix_item_id_traffic_in": "87927",
+    "zabbix_item_id_traffic_out": "87951",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88023",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/24 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 76,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/3",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/3]",
+    "zabbix_item_id_traffic_in": "76455",
+    "zabbix_item_id_traffic_out": "76462",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "76483",
+    "rx_power_item_key": "hwEntityOpticalLaneRxPower[67469518]",
+    "tx_power_item_key": "hwEntityOpticalLaneTxPower[67469518]",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/3 - to-mandi-backup",
+    "last_rx_power": "-40.00",
+    "last_tx_power": "1.64",
+    "last_optical_check": "2025-11-12T00:03:45.646Z"
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 77,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/4",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/4]",
+    "zabbix_item_id_traffic_in": "76456",
+    "zabbix_item_id_traffic_out": "76463",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "76484",
+    "rx_power_item_key": "hwEntityOpticalLaneRxPower[67469582]",
+    "tx_power_item_key": "hwEntityOpticalLaneTxPower[67469582]",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/4 - FARTURA",
+    "last_rx_power": "-9.18",
+    "last_tx_power": "1.77",
+    "last_optical_check": "2025-11-12T00:03:45.646Z"
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 78,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/5",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/5]",
+    "zabbix_item_id_traffic_in": "76457",
+    "zabbix_item_id_traffic_out": "76464",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "76485",
+    "rx_power_item_key": "hwEntityOpticalLaneRxPower[67469646]",
+    "tx_power_item_key": "hwEntityOpticalLaneTxPower[67469646]",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/5 - to_elagro",
+    "last_rx_power": "-21.94",
+    "last_tx_power": "0.81",
+    "last_optical_check": "2025-11-12T00:03:45.646Z"
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 79,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/6",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/6]",
+    "zabbix_item_id_traffic_in": "76458",
+    "zabbix_item_id_traffic_out": "76465",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "76486",
+    "rx_power_item_key": "hwEntityOpticalLaneRxPower[67469710]",
+    "tx_power_item_key": "hwEntityOpticalLaneTxPower[67469710]",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/6 - to-mandi",
+    "last_rx_power": "-16.23",
+    "last_tx_power": "3.58",
+    "last_optical_check": "2025-11-12T00:03:45.646Z"
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 80,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/7",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/7]",
+    "zabbix_item_id_traffic_in": "76459",
+    "zabbix_item_id_traffic_out": "76466",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "76487",
+    "rx_power_item_key": "hwEntityOpticalLaneRxPower[67469774]",
+    "tx_power_item_key": "hwEntityOpticalLaneTxPower[67469774]",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/7 - to-cristo-rei-01",
+    "last_rx_power": "-6.41",
+    "last_tx_power": "-2.80",
+    "last_optical_check": "2025-11-12T00:03:45.646Z"
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 81,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/8",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/8]",
+    "zabbix_item_id_traffic_in": "87911",
+    "zabbix_item_id_traffic_out": "87935",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88007",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/8 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.port",
+  "pk": 82,
+  "fields": {
+    "device": 2,
+    "name": "XGigabitEthernet0/0/9",
+    "zabbix_item_key": "ifOperStatus[XGigabitEthernet0/0/9]",
+    "zabbix_item_id_traffic_in": "87912",
+    "zabbix_item_id_traffic_out": "87936",
+    "zabbix_interfaceid": "33",
+    "zabbix_itemid": "88008",
+    "rx_power_item_key": "",
+    "tx_power_item_key": "",
+    "notes": "Status Operacional da Porta XGigabitEthernet0/0/9 -",
+    "last_rx_power": null,
+    "last_tx_power": null,
+    "last_optical_check": null
+  }
+},
+{
+  "model": "inventory.fibercable",
+  "pk": 1,
+  "fields": {
+    "name": "asdas",
+    "origin_port": 70,
+    "destination_port": 70,
+    "length_km": "73.21",
+    "path_coordinates": [
+      {
+        "lat": -9.971344866418685,
+        "lng": -50.56292712924166
+      },
+      {
+        "lat": -9.96695867243838,
+        "lng": -50.56392706671345
+      },
+      {
+        "lat": -9.967267597436942,
+        "lng": -50.59046637757704
+      },
+      {
+        "lat": -9.937018434273492,
+        "lng": -50.59769224866317
+      },
+      {
+        "lat": -9.937013150332213,
+        "lng": -50.59993457539962
+      },
+      {
+        "lat": -9.93701652872297,
+        "lng": -50.60651777229378
+      },
+      {
+        "lat": -9.937092907167292,
+        "lng": -50.61414707764926
+      },
+      {
+        "lat": -9.93710347504719,
+        "lng": -50.62620205851298
+      },
+      {
+        "lat": -9.93714502889211,
+        "lng": -50.63650673222552
+      },
+      {
+        "lat": -9.937123893134654,
+        "lng": -50.63904989009636
+      },
+      {
+        "lat": -9.93741979361459,
+        "lng": -50.64153898006218
+      },
+      {
+        "lat": -9.940054658207053,
+        "lng": -50.68070400900024
+      },
+      {
+        "lat": -9.9416609574814,
+        "lng": -50.70593864545798
+      },
+      {
+        "lat": -9.9416609574814,
+        "lng": -50.70679695234275
+      },
+      {
+        "lat": -9.9416609574814,
+        "lng": -50.70739776716209
+      },
+      {
+        "lat": -9.941956853855263,
+        "lng": -50.70786983594871
+      },
+      {
+        "lat": -9.942210479105377,
+        "lng": -50.70829898939109
+      },
+      {
+        "lat": -9.94263318741824,
+        "lng": -50.70877105817771
+      },
+      {
+        "lat": -9.943140436672083,
+        "lng": -50.70924312696433
+      },
+      {
+        "lat": -9.94415493281798,
+        "lng": -50.70980102643943
+      },
+      {
+        "lat": -9.94445082693398,
+        "lng": -50.71005851850486
+      },
+      {
+        "lat": -9.94478899130992,
+        "lng": -50.71027309522605
+      },
+      {
+        "lat": -9.945158858195425,
+        "lng": -50.71050912961936
+      },
+      {
+        "lat": -9.945507589446867,
+        "lng": -50.71076662168479
+      },
+      {
+        "lat": -9.945666103529044,
+        "lng": -50.71119577512717
+      },
+      {
+        "lat": -9.945592130300257,
+        "lng": -50.7115605555532
+      },
+      {
+        "lat": -9.94554985987629,
+        "lng": -50.7119038783071
+      },
+      {
+        "lat": -9.945440945482526,
+        "lng": -50.71226372715974
+      },
+      {
+        "lat": -9.945356404590015,
+        "lng": -50.71261777874971
+      },
+      {
+        "lat": -9.945303566521094,
+        "lng": -50.71297183033968
+      },
+      {
+        "lat": -9.94488086166211,
+        "lng": -50.71357264515901
+      },
+      {
+        "lat": -9.943168901391843,
+        "lng": -50.71633254142897
+      },
+      {
+        "lat": -9.941858505990282,
+        "lng": -50.71920786949293
+      },
+      {
+        "lat": -9.943874755789807,
+        "lng": -50.73787445711893
+      },
+      {
+        "lat": -9.944746756086642,
+        "lng": -50.7514149363254
+      },
+      {
+        "lat": -9.945127190640461,
+        "lng": -50.76145712687716
+      },
+      {
+        "lat": -9.946733464984524,
+        "lng": -50.78669134928927
+      },
+      {
+        "lat": -9.94808611093863,
+        "lng": -50.80840651347384
+      },
+      {
+        "lat": -9.952482171604661,
+        "lng": -50.87544028117405
+      },
+      {
+        "lat": -9.953158483377786,
+        "lng": -50.88857237651095
+      },
+      {
+        "lat": -9.953243022250922,
+        "lng": -50.89140478923068
+      },
+      {
+        "lat": -9.953073944482766,
+        "lng": -50.89337889506564
+      },
+      {
+        "lat": -9.952059476035112,
+        "lng": -50.89475218608126
+      },
+      {
+        "lat": -9.945803517642513,
+        "lng": -50.9023052866672
+      },
+      {
+        "lat": -9.935521082600053,
+        "lng": -50.91427866770968
+      },
+      {
+        "lat": -9.93573893838996,
+        "lng": -50.91452243386077
+      },
+      {
+        "lat": -9.937292419501304,
+        "lng": -50.9154987579422
+      },
+      {
+        "lat": -9.940130864676789,
+        "lng": -50.91736243910487
+      },
+      {
+        "lat": -9.944966307335877,
+        "lng": -50.92043130287959
+      },
+      {
+        "lat": -9.946297825441805,
+        "lng": -50.92122523674799
+      },
+      {
+        "lat": -9.946678258189719,
+        "lng": -50.9215685595019
+      },
+      {
+        "lat": -9.946805069007253,
+        "lng": -50.9220191706164
+      },
+      {
+        "lat": -9.946741663604648,
+        "lng": -50.92234103569819
+      },
+      {
+        "lat": -9.946297825441805,
+        "lng": -50.92279164681269
+      },
+      {
+        "lat": -9.945832851481686,
+        "lng": -50.92319934258295
+      },
+      {
+        "lat": -9.945706040286824,
+        "lng": -50.92367141136958
+      },
+      {
+        "lat": -9.945536958617106,
+        "lng": -50.92437951454951
+      },
+      {
+        "lat": -9.945558093830597,
+        "lng": -50.9249374140246
+      },
+      {
+        "lat": -9.945853986676056,
+        "lng": -50.92553822884394
+      },
+      {
+        "lat": -9.946530312173731,
+        "lng": -50.92648236641718
+      },
+      {
+        "lat": -9.946974150020733,
+        "lng": -50.92710463890864
+      },
+      {
+        "lat": -9.94735585711953,
+        "lng": -50.92735334403841
+      },
+      {
+        "lat": -9.94803217950816,
+        "lng": -50.92728897102205
+      },
+      {
+        "lat": -9.949088930437226,
+        "lng": -50.92754646308748
+      },
+      {
+        "lat": -9.950631780654023,
+        "lng": -50.92803998954622
+      },
+      {
+        "lat": -9.952891702719562,
+        "lng": -50.92877459136636
+      },
+      {
+        "lat": -9.954751554391748,
+        "lng": -50.92907499877601
+      },
+      {
+        "lat": -9.956484588458512,
+        "lng": -50.92905354110389
+      },
+      {
+        "lat": -9.958154210136902,
+        "lng": -50.92924666015298
+      },
+      {
+        "lat": -9.95868608937739,
+        "lng": -50.92958899169419
+      },
+      {
+        "lat": -9.960080954361667,
+        "lng": -50.93104811339829
+      },
+      {
+        "lat": -9.963344426605657,
+        "lng": -50.93438299795771
+      },
+      {
+        "lat": -9.963788241591875,
+        "lng": -50.935155474154
+      },
+      {
+        "lat": -9.96421092196966,
+        "lng": -50.9371724953332
+      },
+      {
+        "lat": -9.96611192721672,
+        "lng": -50.94463514695732
+      },
+      {
+        "lat": -9.970321394736263,
+        "lng": -50.96163554398558
+      },
+      {
+        "lat": -9.970067791328379,
+        "lng": -50.96191449372313
+      },
+      {
+        "lat": -9.965841038816885,
+        "lng": -50.96281571595213
+      },
+      {
+        "lat": -9.960495057747082,
+        "lng": -50.96414275374978
+      },
+      {
+        "lat": -9.960347117991926,
+        "lng": -50.96500106063455
+      },
+      {
+        "lat": -9.960748668599841,
+        "lng": -50.96706099715799
+      },
+      {
+        "lat": -9.962994036113441,
+        "lng": -50.97582562380026
+      },
+      {
+        "lat": -9.967621779061384,
+        "lng": -50.99526507946824
+      },
+      {
+        "lat": -9.99266465188336,
+        "lng": -50.9890440013619
+      },
+      {
+        "lat": -9.994777860889206,
+        "lng": -50.99934368397909
+      },
+      {
+        "lat": -10.00235830037371,
+        "lng": -51.03097112527847
+      },
+      {
+        "lat": -10.01858690866342,
+        "lng": -51.098605707798
+      },
+      {
+        "lat": -10.01857513122754,
+        "lng": -51.09916602402672
+      },
+      {
+        "lat": -10.0161028564917,
+        "lng": -51.09974538117393
+      },
+      {
+        "lat": -10.01622703934329,
+        "lng": -51.10039719899149
+      },
+      {
+        "lat": -10.0166179556838,
+        "lng": -51.10203871090861
+      },
+      {
+        "lat": -10.01667078218018,
+        "lng": -51.1027038987443
+      },
+      {
+        "lat": -10.01672360866795,
+        "lng": -51.10345491726847
+      },
+      {
+        "lat": -10.01677643514712,
+        "lng": -51.10383042653056
+      },
+      {
+        "lat": -10.01918319743886,
+        "lng": -51.10418136827536
+      },
+      {
+        "lat": -10.01947823525392,
+        "lng": -51.1042701430233
+      },
+      {
+        "lat": -10.01970462442351,
+        "lng": -51.10539780082501
+      },
+      {
+        "lat": -10.02127342131727,
+        "lng": -51.11180167641595
+      },
+      {
+        "lat": -10.02310784688644,
+        "lng": -51.1195846227882
+      },
+      {
+        "lat": -10.01835064869525,
+        "lng": -51.12079451159628
+      }
+    ],
+    "path": null,
+    "status": "up",
+    "last_status_update": "2025-11-11T23:45:55.138Z",
+    "notes": "",
+    "last_status_origin": "up",
+    "last_status_dest": "up",
+    "last_status_check": "2025-11-12T00:05:52.755Z",
+    "last_live_status": "up",
+    "last_live_check": "2025-11-12T00:05:52.765Z"
+  }
+},
+{
+  "model": "inventory.fibercable",
+  "pk": 3,
+  "fields": {
+    "name": "asfsdfs",
+    "origin_port": 59,
+    "destination_port": 59,
+    "length_km": "162.85",
+    "path_coordinates": [
+      {
+        "lat": -9.13393728332292,
+        "lng": -50.13018785788296
+      },
+      {
+        "lat": -9.112242581539123,
+        "lng": -51.61334215475796
+      }
+    ],
+    "path": null,
+    "status": "up",
+    "last_status_update": "2025-11-11T23:45:56.484Z",
+    "notes": "single-port-monitoring",
+    "last_status_origin": "up",
+    "last_status_dest": "up",
+    "last_status_check": "2025-11-12T00:05:52.755Z",
+    "last_live_status": "up",
+    "last_live_check": "2025-11-12T00:05:52.765Z"
+  }
+},
+{
+  "model": "inventory.fibercable",
+  "pk": 6,
+  "fields": {
+    "name": "001",
+    "origin_port": 15,
+    "destination_port": 15,
+    "length_km": "377.82",
+    "path_coordinates": [
+      {
+        "lat": -9.334980931359272,
+        "lng": -52.224456656711084
+      },
+      {
+        "lat": -9.830590236662063,
+        "lng": -52.216216910617334
+      },
+      {
+        "lat": -9.527352279945507,
+        "lng": -49.947540152804834
+      },
+      {
+        "lat": -10.041610179714587,
+        "lng": -49.552032340304834
+      }
+    ],
+    "path": null,
+    "status": "up",
+    "last_status_update": "2025-11-11T23:45:53.958Z",
+    "notes": "single-port-monitoring",
+    "last_status_origin": "up",
+    "last_status_dest": "up",
+    "last_status_check": "2025-11-12T00:05:52.755Z",
+    "last_live_status": "up",
+    "last_live_check": "2025-11-12T00:05:52.765Z"
+  }
+},
+{
+  "model": "inventory.fibercable",
+  "pk": 14,
+  "fields": {
+    "name": "dfasfas",
+    "origin_port": 59,
+    "destination_port": 59,
+    "length_km": "201.99",
+    "path_coordinates": [
+      {
+        "lat": -8.948349516398435,
+        "lng": -49.389984000461084
+      },
+      {
+        "lat": -9.639529514506403,
+        "lng": -49.189483512179834
+      },
+      {
+        "lat": -9.365931625928564,
+        "lng": -49.477874625461084
+      },
+      {
+        "lat": -9.254805252004687,
+        "lng": -49.793731559054834
+      },
+      {
+        "lat": -9.617866400752227,
+        "lng": -49.711334098117334
+      }
+    ],
+    "path": null,
+    "status": "up",
+    "last_status_update": "2025-11-12T00:00:14.514Z",
+    "notes": "single-port-monitoring",
+    "last_status_origin": "up",
+    "last_status_dest": "up",
+    "last_status_check": "2025-11-12T00:05:52.755Z",
+    "last_live_status": "up",
+    "last_live_check": "2025-11-12T00:05:52.765Z"
+  }
+}
+]

@@ -30,7 +30,7 @@ multi_line_output = 3
 include_trailing_comma = true
 force_grid_wrap = 0
 combine_as_imports = true
-known_first_party = ["core", "maps_view", "setup_app", "routes_builder"]
+known_first_party = ["core", "maps_view", "setup_app"]
 skip_glob = ["migrations/*", "**/templates/**"]
 
 [tool.ruff]
@@ -76,7 +76,7 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 
 [tool.ruff.lint.isort]
-known-first-party = ["core", "maps_view", "setup_app", "routes_builder"]
+known-first-party = ["core", "maps_view", "setup_app"]
 
 [tool.mypy]
 python_version = 3.12
@@ -105,7 +105,7 @@ ignore_missing_imports = true
 
 [tool.coverage.run]
 branch = true
-source = ["core", "maps_view", "setup_app", "routes_builder"]
+source = ["core", "maps_view", "setup_app"]
 omit = [
     "*/tests/*",
     "*/migrations/*",

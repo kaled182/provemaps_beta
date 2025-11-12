@@ -152,6 +152,11 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 
+    # Geospatial support (Phase 10: PostGIS migration preparation)
+    # Enables spatial fields and queries for PostgreSQL + PostGIS
+    # NOTE: Works with MySQL but spatial features require PostGIS
+    "django.contrib.gis",
+
     # Observability
     "django_prometheus",
 
@@ -167,7 +172,6 @@ INSTALLED_APPS = [
     "service_accounts.apps.ServiceAccountsConfig",
     # Network inventory (models and routes consolidated in inventory)
     "inventory",
-    "routes_builder",
     "setup_app",
     # Modular apps (Phase 0 scaffolding)
     "monitoring",
@@ -197,32 +201,53 @@ ASGI_APPLICATION = "core.asgi.application"
 
 # -----------------------------------------------------
 # Database (MySQL/MariaDB with fallbacks) - optimized
+# Phase 10: Support for PostgreSQL + PostGIS via DB_ENGINE env var
 # -----------------------------------------------------
-DB_OPTIONS: Dict[str, Any] = {
-    "charset": "utf8mb4",
-    "init_command": "SET sql_mode='STRICT_ALL_TABLES'",
-    "connect_timeout": 10,
-}
+DB_ENGINE = os.getenv("DB_ENGINE", "mysql").lower()
 
-# Optional pool settings when supported by the driver
-if os.getenv("DB_USE_CONNECTION_POOL", "false").lower() == "true":
-    DB_OPTIONS.update(
-        {
-            "pool_size": int(os.getenv("DB_POOL_SIZE", "10")),
-            "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "20")),
-            "pool_pre_ping": True,
-            "pool_recycle": 300,
-        }
-    )
+# MySQL/MariaDB configuration (default, current production)
+DB_OPTIONS: Dict[str, Any] = {}
+
+if DB_ENGINE == "mysql":
+    DB_OPTIONS = {
+        "charset": "utf8mb4",
+        "init_command": "SET sql_mode='STRICT_ALL_TABLES'",
+        "connect_timeout": 10,
+    }
+    
+    # Optional pool settings when supported by the driver
+    if os.getenv("DB_USE_CONNECTION_POOL", "false").lower() == "true":
+        DB_OPTIONS.update(
+            {
+                "pool_size": int(os.getenv("DB_POOL_SIZE", "10")),
+                "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "20")),
+                "pool_pre_ping": True,
+                "pool_recycle": 300,
+            }
+        )
+elif DB_ENGINE in ("postgres", "postgresql", "postgis"):
+    # PostgreSQL + PostGIS configuration (Phase 10)
+    DB_OPTIONS = {
+        "connect_timeout": 10,
+        "options": "-c search_path=public,postgis",
+    }
+
+# Database engine selection
+if DB_ENGINE in ("postgres", "postgresql", "postgis"):
+    DB_BACKEND = "django.contrib.gis.db.backends.postgis"
+    DEFAULT_PORT = "5432"
+else:
+    DB_BACKEND = "django.db.backends.mysql"
+    DEFAULT_PORT = "3306"
 
 DATABASES: Dict[str, Dict[str, Any]] = {
     "default": {
-        "ENGINE": "django.db.backends.mysql",
+        "ENGINE": DB_BACKEND,
         "NAME": os.getenv("DB_NAME", "app"),
         "USER": os.getenv("DB_USER", "app"),
         "PASSWORD": os.getenv("DB_PASSWORD", "app"),
         "HOST": os.getenv("DB_HOST", "127.0.0.1"),
-        "PORT": os.getenv("DB_PORT", "3306"),
+        "PORT": os.getenv("DB_PORT", DEFAULT_PORT),
         "OPTIONS": DB_OPTIONS,
         "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "0")),
         "ATOMIC_REQUESTS": (

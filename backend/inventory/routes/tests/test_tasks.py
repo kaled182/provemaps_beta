@@ -4,7 +4,7 @@
 # pyright: reportAttributeAccessIssue=false
 # pyright: reportUnknownArgumentType=false
 
-"""Tests for Celery tasks integrating with the inventory route services."""
+"""Tests for Celery tasks integrating with the routes services."""
 
 from __future__ import annotations
 
