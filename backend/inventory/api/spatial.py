@@ -11,7 +11,14 @@ from typing import Any, Dict, List
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.contrib.gis.geos import Polygon
+from django.core.exceptions import ImproperlyConfigured
+
+try:  # pragma: no cover - environment dependent import
+    from django.contrib.gis.geos import Polygon
+    HAS_GIS = True
+except (ImportError, ImproperlyConfigured):
+    Polygon = None  # type: ignore[assignment]
+    HAS_GIS = False
 from django.db.models import QuerySet
 from django.http import HttpRequest, HttpResponse, JsonResponse
 
@@ -34,6 +41,9 @@ def _parse_bbox(bbox_str: str) -> Polygon | None:
     Example:
         "-48.5,-16.5,-47.5,-15.5" -> polygon covering Brasilia area
     """
+    if not HAS_GIS or Polygon is None:
+        return None
+
     try:
         parts = bbox_str.split(',')
         if len(parts) != 4:
@@ -162,6 +172,11 @@ def api_route_segments_bbox(request: HttpRequest) -> HttpResponse:
     """
     # Check if PostGIS is enabled
     db_engine = getattr(settings, 'DB_ENGINE', 'mysql')
+    if not HAS_GIS:
+        return JsonResponse(
+            {"error": "Spatial queries require GDAL/GEOS libraries."},
+            status=501,
+        )
     if db_engine != 'postgis':
         return JsonResponse(
             {
@@ -222,6 +237,11 @@ def api_fiber_cables_bbox(request: HttpRequest) -> HttpResponse:
     Similar to api_route_segments_bbox but for FiberCable model.
     """
     db_engine = getattr(settings, 'DB_ENGINE', 'mysql')
+    if not HAS_GIS:
+        return JsonResponse(
+            {"error": "Spatial queries require GDAL/GEOS libraries."},
+            status=501,
+        )
     if db_engine != 'postgis':
         return JsonResponse(
             {

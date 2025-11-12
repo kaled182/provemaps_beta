@@ -2,13 +2,36 @@ from __future__ import annotations
 
 """Core monitoring use cases for dashboard and host status data."""
 
+import hashlib
 import logging
 from typing import Any, Dict, List, Optional
 
+from django.conf import settings
 from django.db.models import Q
 
 from inventory.models import Device
-from integrations.zabbix.zabbix_service import zabbix_request
+from integrations.zabbix.zabbix_service import (
+    safe_cache_get,
+    safe_cache_set,
+    zabbix_request,
+)
+HOST_STATUS_CACHE_TTL = int(
+    getattr(
+        settings,
+        "MONITORING_HOST_STATUS_CACHE_TTL",
+        getattr(settings, "SWR_FRESH_TTL", 30),
+    )
+)
+HOST_STATUS_CACHE_PREFIX = "monitoring:zabbix_hosts"
+
+
+def _host_status_cache_key(hostids: List[str]) -> str:
+    """Return deterministic cache key for a hostid collection."""
+
+    joined = ",".join(sorted(hostids))
+    digest = hashlib.md5(joined.encode("utf-8", "replace")).hexdigest()
+    return f"{HOST_STATUS_CACHE_PREFIX}:{digest}"
+
 
 logger = logging.getLogger(__name__)
 
@@ -108,17 +131,41 @@ def fetch_zabbix_hosts_data(hostids: List[str]) -> List[Dict[str, Any]]:
     if not hostids:
         return []
 
-    unique_hostids = list({str(hid) for hid in hostids if hid})
+    unique_hostids = sorted({str(hid) for hid in hostids if hid})
+
+    if not unique_hostids:
+        return []
+
+    cache_key = _host_status_cache_key(unique_hostids)
+    cached_hosts = safe_cache_get(cache_key)
+    if cached_hosts is not None:
+        return cached_hosts
 
     try:
-        return zabbix_request(
-            "host.get",
-            {
-                "output": ["hostid", "name", "available", "status", "error"],
-                "hostids": unique_hostids,
-                "selectInterfaces": ["interfaceid", "ip", "available", "main"],
-            },
-        ) or []
+        hosts = (
+            zabbix_request(
+                "host.get",
+                {
+                    "output": [
+                        "hostid",
+                        "name",
+                        "available",
+                        "status",
+                        "error",
+                    ],
+                    "hostids": unique_hostids,
+                    "selectInterfaces": [
+                        "interfaceid",
+                        "ip",
+                        "available",
+                        "main",
+                    ],
+                },
+            )
+            or []
+        )
+        safe_cache_set(cache_key, hosts, HOST_STATUS_CACHE_TTL)
+        return hosts
     except Exception:
         logger.exception(
             "Failed to query hosts from Zabbix",

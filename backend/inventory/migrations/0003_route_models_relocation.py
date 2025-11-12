@@ -287,76 +287,145 @@ class Migration(migrations.Migration):
             print("[migration 0003] Legacy route tables already exist; skipping creation.")
             return  # Legacy tables already present; do nothing
 
-        # Only create for PostgreSQL / MySQL; SQLite handled later in 0007.
-        if vendor not in {"postgresql", "mysql"}:
-            print(f"[migration 0003] Vendor {vendor} not targeted for legacy table creation.")
-            return
-
+        # Create vendor-specific legacy tables when absent so later renames
+        # succeed even without the original routes_builder app installed.
         with connection.cursor() as cursor:
-            if "routes_builder_route" not in existing:
-                print("[migration 0003] Creating routes_builder_route")
-                cursor.execute(
-                    """
-                    CREATE TABLE routes_builder_route (
-                        id BIGSERIAL PRIMARY KEY,
-                        name VARCHAR(150) UNIQUE NOT NULL,
-                        description TEXT NOT NULL,
-                        status VARCHAR(20) NOT NULL DEFAULT 'planned',
-                        length_km NUMERIC(7,3),
-                        estimated_loss_db NUMERIC(5,2),
-                        measured_loss_db NUMERIC(5,2),
-                        last_built_at TIMESTAMP,
-                        last_built_by VARCHAR(150) NOT NULL DEFAULT '',
-                        import_source VARCHAR(150) NOT NULL DEFAULT '',
-                        metadata JSON,
-                        created_at TIMESTAMP NOT NULL,
-                        updated_at TIMESTAMP NOT NULL,
-                        origin_port_id BIGINT NOT NULL,
-                        destination_port_id BIGINT NOT NULL
+            if vendor in {"postgresql", "mysql"}:
+                if "routes_builder_route" not in existing:
+                    print("[migration 0003] Creating routes_builder_route")
+                    cursor.execute(
+                        """
+                        CREATE TABLE routes_builder_route (
+                            id BIGSERIAL PRIMARY KEY,
+                            name VARCHAR(150) UNIQUE NOT NULL,
+                            description TEXT NOT NULL,
+                            status VARCHAR(20) NOT NULL DEFAULT 'planned',
+                            length_km NUMERIC(7,3),
+                            estimated_loss_db NUMERIC(5,2),
+                            measured_loss_db NUMERIC(5,2),
+                            last_built_at TIMESTAMP,
+                            last_built_by VARCHAR(150) NOT NULL DEFAULT '',
+                            import_source VARCHAR(150) NOT NULL DEFAULT '',
+                            metadata JSON,
+                            created_at TIMESTAMP NOT NULL,
+                            updated_at TIMESTAMP NOT NULL,
+                            origin_port_id BIGINT NOT NULL,
+                            destination_port_id BIGINT NOT NULL
+                        )
+                        """
                     )
-                    """
-                )
-            if "routes_builder_routesegment" not in existing:
-                print("[migration 0003] Creating routes_builder_routesegment")
-                cursor.execute(
-                    """
-                    CREATE TABLE routes_builder_routesegment (
-                        id BIGSERIAL PRIMARY KEY,
-                        route_id BIGINT NOT NULL,
-                        "order" INTEGER NOT NULL,
-                        from_port_id BIGINT,
-                        to_port_id BIGINT,
-                        path_coordinates JSON,
-                        length_km NUMERIC(7,3),
-                        estimated_loss_db NUMERIC(5,2),
-                        measured_loss_db NUMERIC(5,2),
-                        metadata JSON,
-                        created_at TIMESTAMP NOT NULL,
-                        updated_at TIMESTAMP NOT NULL,
-                        UNIQUE(route_id, "order")
+                if "routes_builder_routesegment" not in existing:
+                    print("[migration 0003] Creating routes_builder_routesegment")
+                    cursor.execute(
+                        """
+                        CREATE TABLE routes_builder_routesegment (
+                            id BIGSERIAL PRIMARY KEY,
+                            route_id BIGINT NOT NULL,
+                            "order" INTEGER NOT NULL,
+                            from_port_id BIGINT,
+                            to_port_id BIGINT,
+                            path_coordinates JSON,
+                            length_km NUMERIC(7,3),
+                            estimated_loss_db NUMERIC(5,2),
+                            measured_loss_db NUMERIC(5,2),
+                            metadata JSON,
+                            created_at TIMESTAMP NOT NULL,
+                            updated_at TIMESTAMP NOT NULL,
+                            UNIQUE(route_id, "order")
+                        )
+                        """
                     )
-                    """
-                )
-            if "routes_builder_routeevent" not in existing:
-                print("[migration 0003] Creating routes_builder_routeevent")
-                cursor.execute(
-                    """
-                    CREATE TABLE routes_builder_routeevent (
-                        id BIGSERIAL PRIMARY KEY,
-                        event_type VARCHAR(30) NOT NULL,
-                        message TEXT NOT NULL,
-                        details JSON,
-                        created_at TIMESTAMP NOT NULL,
-                        created_by VARCHAR(150) NOT NULL DEFAULT '',
-                        route_id BIGINT NOT NULL
+                if "routes_builder_routeevent" not in existing:
+                    print("[migration 0003] Creating routes_builder_routeevent")
+                    cursor.execute(
+                        """
+                        CREATE TABLE routes_builder_routeevent (
+                            id BIGSERIAL PRIMARY KEY,
+                            event_type VARCHAR(30) NOT NULL,
+                            message TEXT NOT NULL,
+                            details JSON,
+                            created_at TIMESTAMP NOT NULL,
+                            created_by VARCHAR(150) NOT NULL DEFAULT '',
+                            route_id BIGINT NOT NULL
+                        )
+                        """
                     )
-                    """
+            elif vendor == "sqlite":
+                if "routes_builder_route" not in existing:
+                    print("[migration 0003] Creating routes_builder_route (sqlite)")
+                    cursor.execute(
+                        """
+                        CREATE TABLE routes_builder_route (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            name VARCHAR(150) UNIQUE NOT NULL,
+                            description TEXT NOT NULL,
+                            status VARCHAR(20) NOT NULL DEFAULT 'planned',
+                            length_km NUMERIC(7,3),
+                            estimated_loss_db NUMERIC(5,2),
+                            measured_loss_db NUMERIC(5,2),
+                            last_built_at DATETIME,
+                            last_built_by VARCHAR(150) NOT NULL DEFAULT '',
+                            import_source VARCHAR(150) NOT NULL DEFAULT '',
+                            metadata JSON,
+                            created_at DATETIME NOT NULL,
+                            updated_at DATETIME NOT NULL,
+                            origin_port_id INTEGER NOT NULL,
+                            destination_port_id INTEGER NOT NULL
+                        )
+                        """
+                    )
+                if "routes_builder_routesegment" not in existing:
+                    print("[migration 0003] Creating routes_builder_routesegment (sqlite)")
+                    cursor.execute(
+                        """
+                        CREATE TABLE routes_builder_routesegment (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            route_id INTEGER NOT NULL,
+                            "order" INTEGER NOT NULL,
+                            from_port_id INTEGER,
+                            to_port_id INTEGER,
+                            path_coordinates JSON,
+                            length_km NUMERIC(7,3),
+                            estimated_loss_db NUMERIC(5,2),
+                            measured_loss_db NUMERIC(5,2),
+                            metadata JSON,
+                            created_at DATETIME NOT NULL,
+                            updated_at DATETIME NOT NULL,
+                            UNIQUE(route_id, "order")
+                        )
+                        """
+                    )
+                if "routes_builder_routeevent" not in existing:
+                    print("[migration 0003] Creating routes_builder_routeevent (sqlite)")
+                    cursor.execute(
+                        """
+                        CREATE TABLE routes_builder_routeevent (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            event_type VARCHAR(30) NOT NULL,
+                            message TEXT NOT NULL,
+                            details JSON,
+                            created_at DATETIME NOT NULL,
+                            created_by VARCHAR(150) NOT NULL DEFAULT '',
+                            route_id INTEGER NOT NULL
+                        )
+                        """
+                    )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS routes_builder_routesegment_route_order_idx "
+                    "ON routes_builder_routesegment(route_id, \"order\")"
                 )
+            else:
+                print(
+                    f"[migration 0003] Vendor {vendor} not targeted for legacy table creation."
+                )
+                return
+
             # Basic indexes (Django will add constraints later as state sync)
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS routes_builder_routesegment_route_order_idx "
-                "ON routes_builder_routesegment(route_id, \"order\")"
-            )
+            if vendor in {"postgresql", "mysql"}:
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS routes_builder_routesegment_route_order_idx "
+                    "ON routes_builder_routesegment(route_id, \"order\")"
+                )
         print("[migration 0003] Legacy route table creation completed.")
 
     operations = [

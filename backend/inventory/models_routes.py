@@ -1,11 +1,29 @@
 """Route-related database models now hosted in the inventory app."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from django.contrib.gis.db import models as gis_models
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.db import models
+
+try:  # pragma: no cover - environment dependent import
+    from django.contrib.gis.db import models as gis_models
+except (ImportError, ImproperlyConfigured):
+    from django.db import models as _fallback_models
+
+    class _FallbackLineStringField(_fallback_models.JSONField):
+        description = "Fallback LineString storage when GDAL is unavailable"
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            kwargs.pop("srid", None)
+            kwargs.setdefault("null", True)
+            kwargs.setdefault("blank", True)
+            super().__init__(*args, **kwargs)
+
+    class _FallbackGISModule:
+        LineStringField = _FallbackLineStringField
+
+    gis_models = _FallbackGISModule()  # type: ignore[assignment]
 
 
 class Route(models.Model):

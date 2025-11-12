@@ -1,24 +1,14 @@
 # Migration Squash Plan — Routes Consolidation
 
-**Status:** Planning  
-**Target:** Fase 8 (post Vue 3 migration)  
-**Risk:** Medium (requires production coordination)
+**Status:** Completed  
+**Target:** Fase 8 (post Vue 3 migration) — delivered Nov 2025  
+**Risk:** Historical reference only (app removido)
 
 ---
 
 ## Context
 
-During the folder restructure (Fase 6), route-related models (`Route`, `RouteSegment`, `RouteEvent`) were migrated from the `routes_builder` app to `inventory`. This created a "zombie app" pattern where:
-
-- `routes_builder` remains in `INSTALLED_APPS` solely for migration compatibility
-- All active models and business logic live in `inventory`
-- Three migrations in `inventory` reference the move:
-  - `0003_route_models_relocation.py` — SeparateDatabaseAndState to relocate models
-  - `0004_rename_route_tables.py` — Rename tables from `routes_builder_*` → `inventory_*`
-  - `0007_routes_table_rename.py` — Final table name consolidation
-- `routes_builder/0002_move_route_models_to_inventory.py` marks the handoff
-
-This technical debt adds complexity for new developers and pollutes `INSTALLED_APPS`.
+During the folder restructure (Fase 6), route-related models (`Route`, `RouteSegment`, `RouteEvent`) were migrated from the `routes_builder` app to `inventory`. We originally kept a "zombie app" pattern for migration compatibility, but as of v2.1.0 the `routes_builder` Django app has been fully removed from the codebase. Historic notes below are retained for audit purposes only.
 
 ---
 
