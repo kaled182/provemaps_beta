@@ -1,6 +1,28 @@
 <template>
   <div class="status-chart">
-    <h3 class="chart-title">Status dos Hosts</h3>
+    <div class="chart-header">
+      <h3 class="chart-title">Status dos Hosts</h3>
+      <div class="chart-actions">
+        <button 
+          @click="$emit('toggle-sidebar')"
+          class="collapse-btn"
+          :title="'Colapsar sidebar'"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+          </svg>
+        </button>
+        <button 
+          @click="$emit('toggle-position')"
+          class="swap-btn"
+          :title="'Trocar lado'"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12M8 12h12m-12 5h12M3 7h.01M3 12h.01M3 17h.01" />
+          </svg>
+        </button>
+      </div>
+    </div>
     
     <!-- Simple bar chart visualization -->
     <div class="chart-container">
@@ -99,11 +121,57 @@ function getStatusLabel(status) {
   border-radius: 8px;
 }
 
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
 .chart-title {
-  margin: 0 0 16px 0;
+  margin: 0;
   font-size: 14px;
   font-weight: 600;
   color: #111827;
+}
+
+.chart-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.collapse-btn,
+.swap-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.collapse-btn:hover,
+.swap-btn:hover {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+  transform: translateY(-1px);
+}
+
+.collapse-btn svg,
+.swap-btn svg {
+  width: 16px;
+  height: 16px;
+  color: #6b7280;
+}
+
+.collapse-btn:hover svg,
+.swap-btn:hover svg {
+  color: #374151;
 }
 
 .chart-container {

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Fiber API</title>
+</head>
+<body>
+    <h1>Test Fiber API Response</h1>
+    <button onclick="testFiberAPI()">Test API</button>
+    <pre id="output"></pre>
+
+    <script>
+        async function testFiberAPI() {
+            const output = document.getElementById('output');
+            output.textContent = 'Loading...';
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/v1/inventory/fibers/', {
+                    credentials: 'include',
+                });
+                
+                if (!response.ok) {
+                    output.textContent = `HTTP Error: ${response.status}`;
+                    return;
+                }
+                
+                const data = await response.json();
+                output.textContent = JSON.stringify(data, null, 2);
+                
+                console.log('Full response:', data);
+                console.log('Cables array:', data.cables);
+                console.log('First cable:', data.cables[0]);
+                console.log('First cable has path:', 'path' in data.cables[0]);
+                console.log('Path length:', data.cables[0].path?.length);
+                console.log('First path point:', data.cables[0].path?.[0]);
+            } catch (err) {
+                output.textContent = `Error: ${err.message}`;
+                console.error(err);
+            }
+        }
+    </script>
+</body>
+</html>
