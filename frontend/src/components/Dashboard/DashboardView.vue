@@ -1,8 +1,7 @@
 <template>
   <div class="dashboard-container">
-    <!-- Header with connection status -->
+    <!-- Header (removido status de conexão, agora no navbar) -->
     <header class="dashboard-header">
-      <h1>MapsProve Dashboard</h1>
       <div class="header-actions">
         <!-- Mobile sidebar toggle -->
         <button 
@@ -14,26 +13,42 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <div class="connection-status">
-          <span 
-            class="status-indicator" 
-            :class="{ 
-              'connected': wsConnected, 
-              'connecting': wsConnecting,
-              'disconnected': !wsConnected && !wsConnecting 
-            }"
-          ></span>
-          <span class="status-text">
-            {{ wsConnected ? 'Conectado' : wsConnecting ? 'Conectando...' : 'Desconectado' }}
-          </span>
-        </div>
       </div>
     </header>
 
     <!-- Main content area: sidebar + map -->
-    <div class="dashboard-main">
+    <div class="dashboard-main" :class="{ 'sidebar-right': sidebarPosition === 'right' }">
       <!-- Left sidebar with host cards and charts -->
-      <aside class="dashboard-sidebar" :class="{ 'sidebar-open': sidebarOpen }">
+      <aside 
+        class="dashboard-sidebar" 
+        :class="{ 
+          'sidebar-open': sidebarOpen,
+          'sidebar-collapsed': sidebarCollapsed,
+          'sidebar-right': sidebarPosition === 'right'
+        }"
+      >
+        <!-- Botão de expandir quando colapsado -->
+        <div v-if="sidebarCollapsed" class="collapsed-sidebar-controls">
+          <button 
+            @click="toggleSidebar"
+            class="expand-btn"
+            title="Expandir sidebar"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+            </svg>
+          </button>
+          <button 
+            @click="toggleSidebarPosition"
+            class="swap-btn-collapsed"
+            title="Trocar lado"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12M8 12h12m-12 5h12M3 7h.01M3 12h.01M3 17h.01" />
+            </svg>
+          </button>
+        </div>
+        
         <!-- Mobile close button -->
         <button class="sidebar-close" @click="sidebarOpen = false" aria-label="Close sidebar">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -42,7 +57,11 @@
         </button>
         <!-- Status summary -->
         <div class="status-summary">
-          <StatusChart :distribution="dashboard.statusDistribution" />
+          <StatusChart 
+            :distribution="dashboard.statusDistribution"
+            @toggle-sidebar="toggleSidebar"
+            @toggle-position="toggleSidebarPosition"
+          />
         </div>
 
         <!-- Filter Bar -->
@@ -140,6 +159,26 @@ const router = useRouter();
 const route = useRoute();
 const { handleAsync } = useErrorHandler();
 const sidebarOpen = ref(false);
+const sidebarCollapsed = ref(false);
+const sidebarPosition = ref(localStorage.getItem('sidebarPosition') || 'left');
+
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value;
+  localStorage.setItem('sidebarCollapsed', sidebarCollapsed.value);
+}
+
+function toggleSidebarPosition() {
+  sidebarPosition.value = sidebarPosition.value === 'left' ? 'right' : 'left';
+  localStorage.setItem('sidebarPosition', sidebarPosition.value);
+}
+
+// Carregar estado salvo
+onMounted(() => {
+  const savedCollapsed = localStorage.getItem('sidebarCollapsed');
+  if (savedCollapsed !== null) {
+    sidebarCollapsed.value = savedCollapsed === 'true';
+  }
+});
 
 // Initialize URL sync for filter persistence
 useUrlSync(filtersStore, router, route);
@@ -203,6 +242,40 @@ onMounted(async () => {
   border-bottom: 1px solid #374151;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sidebar-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  background: #374151;
+  border: 1px solid #4b5563;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.control-btn:hover {
+  background: #4b5563;
+  transform: translateY(-1px);
+}
+
+.control-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
 .dashboard-header h1 {
   margin: 0;
   font-size: 20px;
@@ -248,6 +321,10 @@ onMounted(async () => {
   overflow: hidden;
 }
 
+.dashboard-main.sidebar-right {
+  flex-direction: row-reverse;
+}
+
 .dashboard-sidebar {
   width: 350px;
   background: #f9fafb;
@@ -255,7 +332,74 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition: all 0.3s ease-in-out;
 }
+
+.dashboard-sidebar.sidebar-collapsed {
+  width: 15px;
+  min-width: 15px;
+}
+
+.dashboard-sidebar.sidebar-collapsed .status-summary,
+.dashboard-sidebar.sidebar-collapsed .host-cards-container,
+.dashboard-sidebar.sidebar-collapsed .section-header h2,
+.dashboard-sidebar.sidebar-collapsed .host-count,
+.dashboard-sidebar.sidebar-collapsed .filter-indicator,
+.dashboard-sidebar.sidebar-collapsed .sidebar-close {
+  display: none;
+}
+
+.dashboard-sidebar.sidebar-right {
+  border-right: none;
+  border-left: 1px solid #e5e7eb;
+}
+
+.collapsed-sidebar-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 2px;
+  background: #2563eb;
+  border-bottom: 1px solid #1d4ed8;
+  align-items: center;
+  width: 15px;
+}
+
+.expand-btn,
+.swap-btn-collapsed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 11px;
+  height: 32px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s;
+  writing-mode: vertical-lr;
+}
+
+.expand-btn:hover,
+.swap-btn-collapsed:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  width: 13px;
+}
+
+.expand-btn svg,
+.swap-btn-collapsed svg {
+  width: 10px;
+  height: 10px;
+  color: white;
+  transform: rotate(90deg);
+}
+
+.dashboard-sidebar.sidebar-collapsed .collapsed-sidebar-controls {
+  display: flex;
+}
+
 
 .status-summary {
   padding: 16px;
