@@ -5,9 +5,13 @@ import { ref } from 'vue';
 // Phase 11 Sprint 1 MVP
 export const useMapStore = defineStore('map', () => {
   const segments = ref(new Map()); // id -> feature
+  const sites = ref([]); // Lista de sites para marcadores
   const lastBbox = ref(null);
   const loading = ref(false);
   const error = ref(null);
+  
+  // --- NOVO STATE ---
+  const focusedItem = ref(null); // Pode ser um site ou equipamento
 
   function bboxToString(b) {
     return `${b.lng_min},${b.lat_min},${b.lng_max},${b.lat_max}`;
@@ -56,6 +60,19 @@ export const useMapStore = defineStore('map', () => {
     }
   }
 
+  async function fetchSites() {
+    try {
+      const resp = await fetch('/api/v1/sites/', {
+        credentials: 'include'
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      sites.value = data.results || [];
+    } catch (e) {
+      console.error('[mapStore] Failed to fetch sites', e);
+    }
+  }
+
   function pruneOutside(bbox) {
     const toRemove = [];
     segments.value.forEach((feature, id) => {
@@ -72,12 +89,38 @@ export const useMapStore = defineStore('map', () => {
     toRemove.forEach(id => segments.value.delete(id));
   }
 
+  // --- NOVA ACTION ---
+  /**
+   * Define um item (site/equipamento) para o mapa focar.
+   * @param {object} item - O objeto do site (deve ter latitude e longitude)
+   */
+  function focusOnItem(item) {
+    if (item && item.latitude && item.longitude) {
+      focusedItem.value = item;
+    } else {
+      console.warn('[mapStore] Tentativa de focar em item sem coordenadas:', item);
+    }
+  }
+
+  /**
+   * Limpa o foco.
+   */
+  function clearFocus() {
+    focusedItem.value = null;
+  }
+
   return {
     segments,
+    sites,
     lastBbox,
     loading,
     error,
+    focusedItem,
     fetchSegmentsByBbox,
+    fetchSites,
     pruneOutside,
+    focusOnItem,
+    clearFocus,
   };
 });
+

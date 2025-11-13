@@ -5,6 +5,8 @@
     role="article"
     :aria-label="`Host ${host.name || host.id}, status: ${statusLabel}`"
     tabindex="0"
+    @click="focusMapOnHost"
+    style="cursor: pointer;"
   >
     <div class="card-header">
       <div class="host-info">
@@ -54,6 +56,8 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue';
+import { useMapStore } from '@/stores/map';
+import { useDashboardStore } from '@/stores/dashboard';
 
 const props = defineProps({
   host: {
@@ -62,6 +66,8 @@ const props = defineProps({
   },
 });
 
+const mapStore = useMapStore();
+const dashboardStore = useDashboardStore();
 const isRecentlyUpdated = ref(false);
 
 const statusLabel = computed(() => {
@@ -74,6 +80,43 @@ const statusLabel = computed(() => {
   };
   return statusMap[props.host.status] || 'Desconhecido';
 });
+
+// Função chamada no clique do card
+function focusMapOnHost() {
+  // Buscar o site correspondente ao host
+  const siteOfHost = findSiteByHostId(props.host.id);
+  if (siteOfHost) {
+    mapStore.focusOnItem(siteOfHost);
+  } else {
+    console.warn(`[HostCard] Não foi possível encontrar site para host ${props.host.id}`);
+  }
+}
+
+// Busca o site associado ao host na dashboard store
+function findSiteByHostId(hostId) {
+  // Tenta buscar da mapStore primeiro (se já carregou sites)
+  if (mapStore.sites && mapStore.sites.length > 0) {
+    // Assumindo que o host tem uma propriedade site_id ou similar
+    const site = mapStore.sites.find(s => 
+      s.devices?.some(d => d.hostid === hostId) || 
+      s.id === props.host.site_id
+    );
+    if (site) return site;
+  }
+  
+  // Fallback: usar dados do dashboard se disponível
+  // (você pode precisar ajustar isso baseado na estrutura real dos seus dados)
+  if (props.host.latitude && props.host.longitude) {
+    return {
+      id: props.host.site_id || props.host.id,
+      name: props.host.site_name || props.host.name,
+      latitude: props.host.latitude,
+      longitude: props.host.longitude,
+    };
+  }
+  
+  return null;
+}
 
 function formatTimestamp(timestamp) {
   if (!timestamp) return '-';

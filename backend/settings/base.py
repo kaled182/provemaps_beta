@@ -394,6 +394,13 @@ USE_TZ = True
 # -----------------------------------------------------
 STATIC_URL = "/static/"
 STATIC_ROOT = BACKEND_DIR / "staticfiles"
+
+# Informa ao Django para procurar arquivos estáticos também neste diretório.
+# O `npm run build` do Vue coloca os arquivos em `backend/static/vue-spa`.
+STATICFILES_DIRS = [
+    BACKEND_DIR / "static",
+]
+
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BACKEND_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
