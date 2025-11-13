@@ -1,0 +1,241 @@
+/* ==========================================
+   THEME VARIABLES - Dark & Light Mode
+   ========================================== */
+
+:root[data-theme="dark"] {
+  /* Background Colors */
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #2d2d2d;
+  --bg-tertiary: #3a3a3a;
+  --bg-elevated: #424242;
+  --surface-card: #2a2a2a;
+  --surface-muted: #333333;
+  --surface-highlight: rgba(255, 255, 255, 0.05);
+  --scrollbar-track: rgba(255, 255, 255, 0.05);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.2);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
+  --badge-info-bg: rgba(66, 165, 245, 0.2);
+  --badge-info-text: #90caf9;
+  --badge-neutral-bg: rgba(255, 255, 255, 0.08);
+  --badge-neutral-text: rgba(255, 255, 255, 0.8);
+  --warning-soft-bg: rgba(255, 167, 38, 0.15);
+  --warning-soft-text: #ffb74d;
+  --danger-soft-bg: rgba(239, 83, 80, 0.18);
+  --danger-soft-text: #ef9a9a;
+  --info-soft-bg: rgba(66, 165, 245, 0.18);
+  --info-soft-text: #90caf9;
+  
+  /* Menu & Sidebar Colors */
+  --menu-bg-start: #42424a;
+  --menu-bg-end: #191919;
+  --menu-item-hover: rgba(255, 255, 255, 0.1);
+  --menu-item-active-start: #66BB6A;
+  --menu-item-active-end: #43A047;
+  
+  /* Text Colors */
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.8);
+  --text-tertiary: rgba(255, 255, 255, 0.6);
+  --text-disabled: rgba(255, 255, 255, 0.4);
+  
+  /* Border Colors */
+  --border-primary: rgba(255, 255, 255, 0.1);
+  --border-secondary: rgba(255, 255, 255, 0.05);
+  
+  /* Status Colors */
+  --status-online: #66BB6A;
+  --status-online-light: rgba(102, 187, 106, 0.3);
+  --status-offline: #ef5350;
+  --status-offline-light: rgba(239, 83, 80, 0.2);
+  --status-warning: #FFA726;
+  --status-warning-light: rgba(255, 167, 38, 0.3);
+  --status-unknown: #9e9e9e;
+  
+  /* Status Gradients for charts */
+  --gradient-online: linear-gradient(90deg, #66BB6A, #43A047);
+  --gradient-offline: linear-gradient(90deg, #ef5350, #c62828);
+  --gradient-warning: linear-gradient(90deg, #FFA726, #f57c00);
+  --gradient-unknown: linear-gradient(90deg, #9e9e9e, #757575);
+  
+  /* Accent Colors */
+  --accent-primary: #66BB6A;
+  --accent-secondary: #43A047;
+  --accent-danger: #ef5350;
+  --accent-info: #42A5F5;
+  --accent-info-dark: #1e88e5;
+  --accent-info-light: rgba(66, 165, 245, 0.2);
+  
+  /* Shadow */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-accent: 0 4px 20px 0 rgba(0, 0, 0, 0.14), 0 7px 10px -5px rgba(76, 175, 80, 0.4);
+}
+
+:root[data-theme="light"] {
+  /* Background Colors */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --bg-tertiary: #eeeeee;
+  --bg-elevated: #fafafa;
+  --surface-card: #ffffff;
+  --surface-muted: #f3f4f6;
+  --surface-highlight: rgba(0, 0, 0, 0.04);
+  --scrollbar-track: rgba(0, 0, 0, 0.05);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.2);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.3);
+  --badge-info-bg: #e3f2fd;
+  --badge-info-text: #1976d2;
+  --badge-neutral-bg: rgba(0, 0, 0, 0.05);
+  --badge-neutral-text: rgba(0, 0, 0, 0.7);
+  --warning-soft-bg: #fff3cd;
+  --warning-soft-text: #b7791f;
+  --danger-soft-bg: #fdecea;
+  --danger-soft-text: #c92a2a;
+  --info-soft-bg: #e3f2fd;
+  --info-soft-text: #1565c0;
+  
+  /* Menu & Sidebar Colors */
+  --menu-bg-start: #f8f9fa;
+  --menu-bg-end: #e9ecef;
+  --menu-item-hover: rgba(0, 0, 0, 0.05);
+  --menu-item-active-start: #66BB6A;
+  --menu-item-active-end: #43A047;
+  
+  /* Text Colors */
+  --text-primary: #212121;
+  --text-secondary: rgba(0, 0, 0, 0.87);
+  --text-tertiary: rgba(0, 0, 0, 0.6);
+  --text-disabled: rgba(0, 0, 0, 0.38);
+  
+  /* Border Colors */
+  --border-primary: rgba(0, 0, 0, 0.12);
+  --border-secondary: rgba(0, 0, 0, 0.06);
+  
+  /* Status Colors */
+  --status-online: #4CAF50;
+  --status-online-light: rgba(76, 175, 80, 0.2);
+  --status-offline: #f44336;
+  --status-offline-light: rgba(244, 67, 54, 0.15);
+  --status-warning: #FF9800;
+  --status-warning-light: rgba(255, 152, 0, 0.2);
+  --status-unknown: #757575;
+  
+  /* Status Gradients for charts */
+  --gradient-online: linear-gradient(90deg, #4CAF50, #388E3C);
+  --gradient-offline: linear-gradient(90deg, #f44336, #d32f2f);
+  --gradient-warning: linear-gradient(90deg, #FF9800, #f57c00);
+  --gradient-unknown: linear-gradient(90deg, #9e9e9e, #757575);
+  
+  /* Accent Colors */
+  --accent-primary: #4CAF50;
+  --accent-secondary: #388E3C;
+  --accent-danger: #f44336;
+  --accent-info: #2196F3;
+  --accent-info-dark: #1976d2;
+  --accent-info-light: rgba(33, 150, 243, 0.16);
+  
+  /* Shadow */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.2);
+  --shadow-accent: 0 4px 20px 0 rgba(0, 0, 0, 0.1), 0 7px 10px -5px rgba(76, 175, 80, 0.3);
+}
+
+/* Default to dark theme if no attribute is set */
+:root {
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #2d2d2d;
+  --bg-tertiary: #3a3a3a;
+  --bg-elevated: #424242;
+  --surface-card: #2a2a2a;
+  --surface-muted: #333333;
+  --surface-highlight: rgba(255, 255, 255, 0.05);
+  --scrollbar-track: rgba(255, 255, 255, 0.05);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.2);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
+  --badge-info-bg: rgba(66, 165, 245, 0.2);
+  --badge-info-text: #90caf9;
+  --badge-neutral-bg: rgba(255, 255, 255, 0.08);
+  --badge-neutral-text: rgba(255, 255, 255, 0.8);
+  --warning-soft-bg: rgba(255, 167, 38, 0.15);
+  --warning-soft-text: #ffb74d;
+  --danger-soft-bg: rgba(239, 83, 80, 0.18);
+  --danger-soft-text: #ef9a9a;
+  --info-soft-bg: rgba(66, 165, 245, 0.18);
+  --info-soft-text: #90caf9;
+  --menu-bg-start: #42424a;
+  --menu-bg-end: #191919;
+  --menu-item-hover: rgba(255, 255, 255, 0.1);
+  --menu-item-active-start: #66BB6A;
+  --menu-item-active-end: #43A047;
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.8);
+  --text-tertiary: rgba(255, 255, 255, 0.6);
+  --text-disabled: rgba(255, 255, 255, 0.4);
+  --border-primary: rgba(255, 255, 255, 0.1);
+  --border-secondary: rgba(255, 255, 255, 0.05);
+  --status-online: #66BB6A;
+  --status-online-light: rgba(102, 187, 106, 0.3);
+  --status-offline: #ef5350;
+  --status-offline-light: rgba(239, 83, 80, 0.2);
+  --status-warning: #FFA726;
+  --status-warning-light: rgba(255, 167, 38, 0.3);
+  --status-unknown: #9e9e9e;
+  --gradient-online: linear-gradient(90deg, #66BB6A, #43A047);
+  --gradient-offline: linear-gradient(90deg, #ef5350, #c62828);
+  --gradient-warning: linear-gradient(90deg, #FFA726, #f57c00);
+  --gradient-unknown: linear-gradient(90deg, #9e9e9e, #757575);
+  --accent-primary: #66BB6A;
+  --accent-secondary: #43A047;
+  --accent-danger: #ef5350;
+  --accent-info: #42A5F5;
+  --accent-info-dark: #1e88e5;
+  --accent-info-light: rgba(66, 165, 245, 0.2);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-accent: 0 4px 20px 0 rgba(0, 0, 0, 0.14), 0 7px 10px -5px rgba(76, 175, 80, 0.4);
+}
+
+/* Google Maps InfoWindow theming - força tema nos modais do Google Maps */
+/* Especificidade aumentada para Chrome com body > div */
+:root[data-theme="light"] .gm-style-iw,
+:root[data-theme="light"] .gm-style-iw-c,
+:root[data-theme="light"] .gm-style-iw-d,
+body :root[data-theme="light"] .gm-style-iw,
+body :root[data-theme="light"] .gm-style-iw-c,
+body :root[data-theme="light"] .gm-style-iw-d {
+  background-color: var(--surface-card) !important;
+  color: var(--text-secondary) !important;
+  border: none !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+:root[data-theme="dark"] .gm-style-iw,
+:root[data-theme="dark"] .gm-style-iw-c,
+:root[data-theme="dark"] .gm-style-iw-d,
+body :root[data-theme="dark"] .gm-style-iw,
+body :root[data-theme="dark"] .gm-style-iw-c,
+body :root[data-theme="dark"] .gm-style-iw-d {
+  background-color: var(--surface-card) !important;
+  color: var(--text-secondary) !important;
+  border: none !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+/* Remove seta branca do InfoWindow */
+.gm-style .gm-style-iw-t::after,
+body .gm-style .gm-style-iw-t::after {
+  background: var(--surface-card) !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+/* Remove borda do botão de fechar */
+.gm-ui-hover-effect,
+body .gm-ui-hover-effect {
+  background-color: transparent !important;
+  border: none !important;
+}
+

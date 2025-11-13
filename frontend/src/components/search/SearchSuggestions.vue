@@ -63,15 +63,16 @@ function handleSelect(suggestion) {
   }
 }
 
-function getStatusColor(status) {
-  const colors = {
-    operational: '#10b981',
-    warning: '#f59e0b',
-    critical: '#ef4444',
-    offline: '#6b7280',
-    unknown: '#3b82f6',
-  };
-  return colors[status] || colors.unknown;
+const statusClassMap = {
+  operational: 'status-operational',
+  warning: 'status-warning',
+  critical: 'status-critical',
+  offline: 'status-offline',
+  unknown: 'status-unknown',
+};
+
+function getStatusClass(status) {
+  return statusClassMap[status] || statusClassMap.unknown;
 }
 
 function getStatusIcon(status) {
@@ -118,8 +119,8 @@ function getStatusIcon(status) {
       
       <template v-else>
         <span 
-          class="suggestion-status" 
-          :style="{ color: getStatusColor(suggestion.device.status) }"
+          class="suggestion-status"
+          :class="getStatusClass(suggestion.device.status)"
           :aria-label="`Status: ${suggestion.device.status}`"
         >
           {{ getStatusIcon(suggestion.device.status) }}
@@ -150,10 +151,10 @@ function getStatusIcon(status) {
   top: calc(100% + 8px);
   left: 0;
   right: 0;
-  background: white;
-  border: 1px solid #e5e7eb;
+  background: var(--surface-card);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-lg);
   max-height: 400px;
   overflow-y: auto;
   z-index: 20;
@@ -166,7 +167,7 @@ function getStatusIcon(status) {
   padding: 0.75rem 1rem;
   cursor: pointer;
   transition: background 0.15s;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .search-suggestion:last-child {
@@ -175,16 +176,16 @@ function getStatusIcon(status) {
 
 .search-suggestion:hover,
 .search-suggestion.selected {
-  background: #f9fafb;
+  background: var(--surface-highlight);
 }
 
 .suggestion-icon {
   flex-shrink: 0;
-  color: #6b7280;
+  color: var(--text-tertiary);
 }
 
 .history-icon {
-  color: #9ca3af;
+  color: var(--text-tertiary);
 }
 
 .suggestion-status {
@@ -201,7 +202,7 @@ function getStatusIcon(status) {
 .suggestion-name {
   font-weight: 500;
   font-size: 0.875rem;
-  color: #111827;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -209,7 +210,7 @@ function getStatusIcon(status) {
 
 .suggestion-meta {
   font-size: 0.75rem;
-  color: #6b7280;
+  color: var(--text-tertiary);
   margin-top: 2px;
   white-space: nowrap;
   overflow: hidden;
@@ -218,7 +219,7 @@ function getStatusIcon(status) {
 
 .suggestion-text {
   font-size: 0.875rem;
-  color: #374151;
+  color: var(--text-primary);
 }
 
 .suggestions-empty,
@@ -226,7 +227,27 @@ function getStatusIcon(status) {
   padding: 1rem;
   text-align: center;
   font-size: 0.875rem;
-  color: #6b7280;
+  color: var(--text-tertiary);
+}
+
+.suggestion-status.status-operational {
+  color: var(--status-online);
+}
+
+.suggestion-status.status-warning {
+  color: var(--status-warning);
+}
+
+.suggestion-status.status-critical {
+  color: var(--accent-danger);
+}
+
+.suggestion-status.status-offline {
+  color: var(--text-tertiary);
+}
+
+.suggestion-status.status-unknown {
+  color: var(--accent-info);
 }
 
 /* Screen reader only text */

@@ -81,13 +81,13 @@ function toggleDetails() {
 .error-title {
   font-size: 20px;
   font-weight: 600;
-  color: #111827;
+  color: var(--text-primary);
   margin: 0 0 8px 0;
 }
 
 .error-message {
   font-size: 14px;
-  color: #6b7280;
+  color: var(--text-tertiary);
   margin: 0 0 24px 0;
   line-height: 1.5;
 }
@@ -104,10 +104,10 @@ function toggleDetails() {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
-  background: #fff;
-  color: #374151;
+  background: var(--surface-card);
+  color: var(--text-secondary);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -115,19 +115,19 @@ function toggleDetails() {
 }
 
 .btn-retry {
-  background: #3b82f6;
+  background: var(--accent-info);
   color: #fff;
-  border-color: #3b82f6;
+  border-color: var(--accent-info);
 }
 
 .btn-retry:hover {
-  background: #2563eb;
-  border-color: #2563eb;
+  background: var(--accent-info-dark);
+  border-color: var(--accent-info-dark);
 }
 
 .btn-details:hover {
-  background: #f9fafb;
-  border-color: #9ca3af;
+  background: var(--surface-muted);
+  border-color: var(--border-secondary);
 }
 
 .btn-retry svg,
@@ -139,8 +139,8 @@ function toggleDetails() {
 .error-details {
   margin-top: 24px;
   text-align: left;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
+  background: var(--surface-muted);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
   padding: 12px;
 }
@@ -149,13 +149,13 @@ function toggleDetails() {
   cursor: pointer;
   font-size: 13px;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--text-tertiary);
   margin-bottom: 8px;
 }
 
 .error-details pre {
   font-size: 11px;
-  color: #374151;
+  color: var(--text-secondary);
   white-space: pre-wrap;
   word-wrap: break-word;
   margin: 0;

@@ -152,7 +152,7 @@ const showSuggestions = computed(() => isInputFocused.value);
 .search-icon {
   position: absolute;
   left: 12px;
-  color: #6b7280;
+  color: var(--text-tertiary);
   pointer-events: none;
   z-index: 1;
 }
@@ -160,22 +160,23 @@ const showSuggestions = computed(() => isInputFocused.value);
 .search-input {
   width: 100%;
   padding: 0.75rem 2.75rem 0.75rem 2.75rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
   font-size: 0.875rem;
   line-height: 1.25rem;
   transition: all 0.2s;
   outline: none;
-  background: white;
+  background: var(--surface-muted);
+  color: var(--text-primary);
 }
 
 .search-input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: var(--accent-info);
+  box-shadow: 0 0 0 3px var(--accent-info-light);
 }
 
 .search-input::placeholder {
-  color: #9ca3af;
+  color: var(--text-tertiary);
 }
 
 .search-clear {
@@ -189,19 +190,19 @@ const showSuggestions = computed(() => isInputFocused.value);
   background: none;
   border: none;
   border-radius: 4px;
-  color: #6b7280;
+  color: var(--text-tertiary);
   cursor: pointer;
   transition: all 0.2s;
   z-index: 1;
 }
 
 .search-clear:hover {
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--surface-highlight);
+  color: var(--text-primary);
 }
 
 .search-clear:active {
-  background: #e5e7eb;
+  background: var(--border-primary);
 }
 
 /* Screen reader only text */

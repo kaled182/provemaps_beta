@@ -59,10 +59,10 @@
 .skeleton-line {
   background: linear-gradient(
     to right,
-    #f3f4f6 0%,
-    #e5e7eb 20%,
-    #f3f4f6 40%,
-    #f3f4f6 100%
+    var(--surface-muted) 0%,
+    var(--surface-highlight) 20%,
+    var(--surface-muted) 40%,
+    var(--surface-muted) 100%
   );
   background-size: 800px 100px;
   animation: shimmer 1.5s infinite linear;
@@ -90,8 +90,8 @@
   gap: 1rem;
   padding: 1rem;
   margin-bottom: 0.5rem;
-  background: white;
-  border: 1px solid #e5e7eb;
+  background: var(--surface-card);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
 }
 
