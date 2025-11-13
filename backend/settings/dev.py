@@ -120,6 +120,14 @@ STATICFILES_STORAGE = (
     "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"
 )
 
+# -----------------------------------------------------
+# Vue 3 Dashboard Feature Flags (always enabled in dev)
+# -----------------------------------------------------
+# Garantimos que o template novo (spa.html) seja usado SEMPRE em desenvolvimento
+# evitando regressões involuntárias para o template legado.
+USE_VUE_DASHBOARD = True  # type: ignore[assignment]
+VUE_DASHBOARD_ROLLOUT_PERCENTAGE = 100  # type: ignore[assignment]
+
 import time as _time  # noqa: E402
 import subprocess  # noqa: E402
 
