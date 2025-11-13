@@ -1,20 +1,19 @@
 <template>
-  <article 
-    class="host-card" 
-    :class="`status-${host.status || 'unknown'}`"
+  <article
+    class="host-card"
+    :class="[`status-${host.status || 'unknown'}`]"
     role="article"
     :aria-label="`Host ${host.name || host.id}, status: ${statusLabel}`"
     tabindex="0"
     @click="focusMapOnHost"
-    style="cursor: pointer;"
   >
     <div class="card-header">
       <div class="host-info">
-        <h3 class="host-name" id="`host-name-${host.id}`">{{ host.name || `Host #${host.id}` }}</h3>
+        <h3 class="host-name" :id="`host-name-${host.id}`">{{ host.name || `Host #${host.id}` }}</h3>
         <span class="host-id" aria-label="Identificador do host">ID: {{ host.id }}</span>
       </div>
-      <div 
-        class="status-badge" 
+      <div
+        class="status-badge"
         :class="`status-${host.status || 'unknown'}`"
         role="status"
         :aria-label="`Status atual: ${statusLabel}`"
@@ -24,32 +23,33 @@
     </div>
 
     <div class="card-body">
-      <!-- Metrics if available -->
       <div v-if="host.metrics" class="host-metrics" role="list" aria-label="Métricas do host">
-        <div class="metric" v-if="host.metrics.cpu !== undefined" role="listitem">
+        <div v-if="host.metrics.cpu !== undefined" class="metric" role="listitem">
           <span class="metric-label">CPU:</span>
           <span class="metric-value" :aria-label="`Uso de CPU: ${host.metrics.cpu} porcento`">{{ host.metrics.cpu }}%</span>
         </div>
-        <div class="metric" v-if="host.metrics.memory !== undefined" role="listitem">
+        <div v-if="host.metrics.memory !== undefined" class="metric" role="listitem">
           <span class="metric-label">Memória:</span>
           <span class="metric-value" :aria-label="`Uso de memória: ${host.metrics.memory} porcento`">{{ host.metrics.memory }}%</span>
         </div>
-        <div class="metric" v-if="host.metrics.uptime !== undefined" role="listitem">
+        <div v-if="host.metrics.uptime !== undefined" class="metric" role="listitem">
           <span class="metric-label">Uptime:</span>
           <span class="metric-value" :aria-label="`Tempo de atividade: ${formatUptime(host.metrics.uptime)}`">{{ formatUptime(host.metrics.uptime) }}</span>
         </div>
       </div>
 
-      <!-- Last update timestamp -->
-      <div class="last-update" v-if="host.last_update">
+      <div v-if="host.last_update" class="last-update">
         <span class="update-label">Última atualização:</span>
-        <time class="update-time" :datetime="host.last_update" :aria-label="`Última atualização: ${formatTimestamp(host.last_update)}`">
+        <time
+          class="update-time"
+          :datetime="host.last_update"
+          :aria-label="`Última atualização: ${formatTimestamp(host.last_update)}`"
+        >
           {{ formatTimestamp(host.last_update) }}
         </time>
       </div>
     </div>
 
-    <!-- Pulse animation for real-time updates -->
     <div v-if="isRecentlyUpdated" class="update-pulse" aria-hidden="true"></div>
   </article>
 </template>
@@ -57,7 +57,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { useMapStore } from '@/stores/map';
-import { useDashboardStore } from '@/stores/dashboard';
 
 const props = defineProps({
   host: {
@@ -67,7 +66,6 @@ const props = defineProps({
 });
 
 const mapStore = useMapStore();
-const dashboardStore = useDashboardStore();
 const isRecentlyUpdated = ref(false);
 
 const statusLabel = computed(() => {
@@ -81,9 +79,7 @@ const statusLabel = computed(() => {
   return statusMap[props.host.status] || 'Desconhecido';
 });
 
-// Função chamada no clique do card
 function focusMapOnHost() {
-  // Buscar o site correspondente ao host
   const siteOfHost = findSiteByHostId(props.host.id);
   if (siteOfHost) {
     mapStore.focusOnItem(siteOfHost);
@@ -92,20 +88,16 @@ function focusMapOnHost() {
   }
 }
 
-// Busca o site associado ao host na dashboard store
 function findSiteByHostId(hostId) {
-  // Tenta buscar da mapStore primeiro (se já carregou sites)
   if (mapStore.sites && mapStore.sites.length > 0) {
-    // Assumindo que o host tem uma propriedade site_id ou similar
-    const site = mapStore.sites.find(s => 
-      s.devices?.some(d => d.hostid === hostId) || 
-      s.id === props.host.site_id
+    const site = mapStore.sites.find((siteItem) =>
+      siteItem.devices?.some((device) => device.hostid === hostId) || siteItem.id === props.host.site_id,
     );
-    if (site) return site;
+    if (site) {
+      return site;
+    }
   }
-  
-  // Fallback: usar dados do dashboard se disponível
-  // (você pode precisar ajustar isso baseado na estrutura real dos seus dados)
+
   if (props.host.latitude && props.host.longitude) {
     return {
       id: props.host.site_id || props.host.id,
@@ -114,17 +106,19 @@ function findSiteByHostId(hostId) {
       longitude: props.host.longitude,
     };
   }
-  
+
   return null;
 }
 
 function formatTimestamp(timestamp) {
-  if (!timestamp) return '-';
+  if (!timestamp) {
+    return '-';
+  }
   const date = new Date(timestamp);
   const now = new Date();
   const diffMs = now - date;
   const diffSec = Math.floor(diffMs / 1000);
-  
+
   if (diffSec < 60) return `${diffSec}s atrás`;
   if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m atrás`;
   if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h atrás`;
@@ -132,56 +126,63 @@ function formatTimestamp(timestamp) {
 }
 
 function formatUptime(seconds) {
-  if (!seconds) return '-';
+  if (!seconds) {
+    return '-';
+  }
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);
-  if (days > 0) return `${days}d ${hours}h`;
+  if (days > 0) {
+    return `${days}d ${hours}h`;
+  }
   return `${hours}h`;
 }
 
-// Flash update indicator when host updates
-watch(() => props.host.last_update, () => {
-  isRecentlyUpdated.value = true;
-  setTimeout(() => {
-    isRecentlyUpdated.value = false;
-  }, 2000);
-});
+watch(
+  () => props.host.last_update,
+  () => {
+    isRecentlyUpdated.value = true;
+    setTimeout(() => {
+      isRecentlyUpdated.value = false;
+    }, 2000);
+  },
+);
 </script>
 
 <style scoped>
 .host-card {
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--surface-card);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
   padding: 12px;
   margin-bottom: 8px;
   position: relative;
   overflow: hidden;
   transition: all 0.2s ease;
+  cursor: pointer;
 }
 
 .host-card:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-sm);
 }
 
 .host-card.status-online {
-  border-left: 4px solid #10b981;
+  border-left: 4px solid var(--status-online);
 }
 
 .host-card.status-offline {
-  border-left: 4px solid #ef4444;
+  border-left: 4px solid var(--status-offline);
 }
 
 .host-card.status-warning {
-  border-left: 4px solid #f59e0b;
+  border-left: 4px solid var(--status-warning);
 }
 
 .host-card.status-maintenance {
-  border-left: 4px solid #3b82f6;
+  border-left: 4px solid var(--accent-info);
 }
 
 .host-card.status-unknown {
-  border-left: 4px solid #6b7280;
+  border-left: 4px solid var(--text-tertiary);
 }
 
 .card-header {
@@ -199,12 +200,12 @@ watch(() => props.host.last_update, () => {
   margin: 0 0 4px 0;
   font-size: 14px;
   font-weight: 600;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .host-id {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--text-tertiary);
 }
 
 .status-badge {
@@ -216,28 +217,28 @@ watch(() => props.host.last_update, () => {
 }
 
 .status-badge.status-online {
-  background: #d1fae5;
-  color: #065f46;
+  background: var(--status-online-light);
+  color: var(--status-online);
 }
 
 .status-badge.status-offline {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--status-offline-light);
+  color: var(--status-offline);
 }
 
 .status-badge.status-warning {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--warning-soft-bg);
+  color: var(--warning-soft-text);
 }
 
 .status-badge.status-maintenance {
-  background: #dbeafe;
-  color: #1e40af;
+  background: var(--info-soft-bg);
+  color: var(--accent-info);
 }
 
 .status-badge.status-unknown {
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--badge-neutral-bg);
+  color: var(--badge-neutral-text);
 }
 
 .card-body {
@@ -257,27 +258,27 @@ watch(() => props.host.last_update, () => {
 }
 
 .metric-label {
-  color: #6b7280;
+  color: var(--text-tertiary);
 }
 
 .metric-value {
   font-weight: 600;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .last-update {
   display: flex;
   gap: 4px;
-  color: #9ca3af;
   font-size: 11px;
+  color: var(--text-tertiary);
 }
 
 .update-label {
-  color: #9ca3af;
+  color: var(--text-tertiary);
 }
 
 .update-time {
-  color: #6b7280;
+  color: var(--text-secondary);
 }
 
 .update-pulse {
@@ -286,24 +287,21 @@ watch(() => props.host.last_update, () => {
   left: 0;
   right: 0;
   height: 2px;
-  background: #3b82f6;
+  background: var(--accent-info);
   animation: pulse-slide 2s ease-out;
 }
 
 @keyframes pulse-slide {
   0% {
     transform: translateX(-100%);
-    opacity: 1;
   }
   100% {
     transform: translateX(100%);
-    opacity: 0;
   }
 }
 
-/* Accessibility: Focus styles */
 .host-card:focus {
-  outline: 2px solid #3b82f6;
+  outline: 2px solid var(--accent-info);
   outline-offset: 2px;
 }
 

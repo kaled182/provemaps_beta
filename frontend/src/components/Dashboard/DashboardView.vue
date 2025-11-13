@@ -1,21 +1,5 @@
 <template>
   <div class="dashboard-container">
-    <!-- Header (removido status de conexão, agora no navbar) -->
-    <header class="dashboard-header">
-      <div class="header-actions">
-        <!-- Mobile sidebar toggle -->
-        <button 
-          class="sidebar-toggle" 
-          @click="sidebarOpen = !sidebarOpen"
-          aria-label="Toggle sidebar"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-      </div>
-    </header>
-
     <!-- Main content area: sidebar + map -->
     <div class="dashboard-main" :class="{ 'sidebar-right': sidebarPosition === 'right' }">
       <!-- Left sidebar with host cards and charts -->
@@ -23,12 +7,12 @@
         class="dashboard-sidebar" 
         :class="{ 
           'sidebar-open': sidebarOpen,
-          'sidebar-collapsed': sidebarCollapsed,
+          'sidebar-collapsed': !isSidebarOpen,
           'sidebar-right': sidebarPosition === 'right'
         }"
       >
         <!-- Botão de expandir quando colapsado -->
-        <div v-if="sidebarCollapsed" class="collapsed-sidebar-controls">
+        <div v-if="!isSidebarOpen" class="collapsed-sidebar-controls">
           <button 
             @click="toggleSidebar"
             class="expand-btn"
@@ -127,7 +111,11 @@
 
       <!-- Map area -->
       <main class="dashboard-map">
-        <MapView />
+        <MapView 
+          :sidebar-collapsed="!isSidebarOpen"
+          :sidebar-position="sidebarPosition"
+          :ui-store="uiStore"
+        />
       </main>
     </div>
   </div>
@@ -147,6 +135,8 @@ import HostCard from '@/components/Dashboard/HostCard.vue';
 import StatusChart from '@/components/Dashboard/StatusChart.vue';
 import VirtualList from '@/components/Common/VirtualList.vue';
 import FilterBar from '@/components/filters/FilterBar.vue';
+import { useUiStore } from '@/stores/ui';
+import { storeToRefs } from 'pinia';
 
 // Lazy load MapView for better initial load performance
 const MapView = defineAsyncComponent(() => 
@@ -155,30 +145,28 @@ const MapView = defineAsyncComponent(() =>
 
 const dashboard = useDashboardStore();
 const filtersStore = useFiltersStore();
+const uiStore = useUiStore();
 const router = useRouter();
 const route = useRoute();
 const { handleAsync } = useErrorHandler();
-const sidebarOpen = ref(false);
-const sidebarCollapsed = ref(false);
-const sidebarPosition = ref(localStorage.getItem('sidebarPosition') || 'left');
+
+// Use UI store para gerenciar estado do sidebar
+const { isSidebarOpen, sidebarPosition } = storeToRefs(uiStore);
+const sidebarOpen = ref(false); // Para mobile menu toggle
+
+// Manter compatibilidade com código existente
+const sidebarCollapsed = computed({
+  get: () => !isSidebarOpen.value,
+  set: (val) => uiStore.setSidebarOpen(!val)
+});
 
 function toggleSidebar() {
-  sidebarCollapsed.value = !sidebarCollapsed.value;
-  localStorage.setItem('sidebarCollapsed', sidebarCollapsed.value);
+  uiStore.toggleSidebar();
 }
 
 function toggleSidebarPosition() {
-  sidebarPosition.value = sidebarPosition.value === 'left' ? 'right' : 'left';
-  localStorage.setItem('sidebarPosition', sidebarPosition.value);
+  uiStore.toggleSidebarPosition();
 }
-
-// Carregar estado salvo
-onMounted(() => {
-  const savedCollapsed = localStorage.getItem('sidebarCollapsed');
-  if (savedCollapsed !== null) {
-    sidebarCollapsed.value = savedCollapsed === 'true';
-  }
-});
 
 // Initialize URL sync for filter persistence
 useUrlSync(filtersStore, router, route);
@@ -228,7 +216,7 @@ onMounted(async () => {
 .dashboard-container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -237,9 +225,9 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 24px;
-  background: #1f2937;
-  color: #fff;
-  border-bottom: 1px solid #374151;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .header-actions {
@@ -258,16 +246,16 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   padding: 6px;
-  background: #374151;
-  border: 1px solid #4b5563;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
   border-radius: 4px;
-  color: #fff;
+  color: var(--text-primary);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .control-btn:hover {
-  background: #4b5563;
+  background: var(--bg-elevated);
   transform: translateY(-1px);
 }
 
@@ -293,21 +281,21 @@ onMounted(async () => {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #6b7280;
+  background: var(--status-unknown);
 }
 
 .status-indicator.connected {
-  background: #10b981;
-  box-shadow: 0 0 8px #10b981;
+  background: var(--status-online);
+  box-shadow: 0 0 8px var(--status-online);
 }
 
 .status-indicator.connecting {
-  background: #f59e0b;
+  background: var(--status-warning);
   animation: pulse 1.5s infinite;
 }
 
 .status-indicator.disconnected {
-  background: #ef4444;
+  background: var(--status-offline);
 }
 
 @keyframes pulse {
@@ -327,12 +315,14 @@ onMounted(async () => {
 
 .dashboard-sidebar {
   width: 350px;
-  background: #f9fafb;
-  border-right: 1px solid #e5e7eb;
+  background: var(--bg-primary);
+  border-right: 1px solid var(--border-primary);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   transition: all 0.3s ease-in-out;
+  position: relative;
+  z-index: 1050;
 }
 
 .dashboard-sidebar.sidebar-collapsed {
@@ -351,7 +341,7 @@ onMounted(async () => {
 
 .dashboard-sidebar.sidebar-right {
   border-right: none;
-  border-left: 1px solid #e5e7eb;
+  border-left: 1px solid var(--border-primary);
 }
 
 .collapsed-sidebar-controls {
@@ -359,8 +349,8 @@ onMounted(async () => {
   flex-direction: column;
   gap: 8px;
   padding: 12px 2px;
-  background: #2563eb;
-  border-bottom: 1px solid #1d4ed8;
+  background: var(--accent-primary);
+  border-bottom: 1px solid var(--accent-secondary);
   align-items: center;
   width: 15px;
 }
@@ -373,8 +363,8 @@ onMounted(async () => {
   width: 11px;
   height: 32px;
   padding: 0;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--menu-item-hover);
+  border: 1px solid var(--border-secondary);
   border-radius: 3px;
   cursor: pointer;
   transition: all 0.2s;
@@ -383,8 +373,8 @@ onMounted(async () => {
 
 .expand-btn:hover,
 .swap-btn-collapsed:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: var(--border-primary);
+  border-color: var(--border-primary);
   width: 13px;
 }
 
@@ -403,8 +393,8 @@ onMounted(async () => {
 
 .status-summary {
   padding: 16px;
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .host-cards-container {
@@ -419,20 +409,20 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   padding: 16px;
-  background: #fff;
-  border-bottom: 2px solid #e5e7eb;
+  background: var(--bg-secondary);
+  border-bottom: 2px solid var(--border-primary);
 }
 
 .section-header h2 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .host-count {
-  background: #3b82f6;
-  color: #fff;
+  background: var(--accent-primary);
+  color: white;
   padding: 2px 8px;
   border-radius: 12px;
   font-size: 12px;
@@ -460,16 +450,16 @@ onMounted(async () => {
 }
 
 .host-cards-list-virtual :deep(.virtual-list-container)::-webkit-scrollbar-track {
-  background: #f9fafb;
+  background: var(--bg-primary);
 }
 
 .host-cards-list-virtual :deep(.virtual-list-container)::-webkit-scrollbar-thumb {
-  background: #d1d5db;
+  background: var(--border-primary);
   border-radius: 4px;
 }
 
 .host-cards-list-virtual :deep(.virtual-list-container)::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
+  background: var(--border-secondary);
 }
 
 .loading-state,
@@ -477,12 +467,12 @@ onMounted(async () => {
 .empty-state {
   padding: 24px;
   text-align: center;
-  color: #6b7280;
+  color: var(--text-tertiary);
   font-size: 14px;
 }
 
 .error-state {
-  color: #ef4444;
+  color: var(--status-offline);
 }
 
 .dashboard-map {
@@ -513,15 +503,15 @@ onMounted(async () => {
     width: 36px;
     height: 36px;
     background: transparent;
-    border: 1px solid #374151;
+    border: 1px solid var(--border-primary);
     border-radius: 6px;
-    color: #fff;
+    color: var(--text-primary);
     cursor: pointer;
     transition: background 0.2s;
   }
 
   .sidebar-toggle:hover {
-    background: #374151;
+    background: var(--bg-tertiary);
   }
 
   .sidebar-toggle svg {
@@ -533,6 +523,7 @@ onMounted(async () => {
     display: none;
   }
 
+  /* Mobile: sidebar como overlay */
   .dashboard-sidebar {
     position: fixed;
     top: 0;
@@ -540,7 +531,7 @@ onMounted(async () => {
     width: 80%;
     max-width: 320px;
     height: 100vh;
-    z-index: 1000;
+    z-index: 1100;
     transform: translateX(-100%);
     transition: transform 0.3s ease;
     box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
@@ -559,19 +550,19 @@ onMounted(async () => {
     right: 12px;
     width: 32px;
     height: 32px;
-    background: #fff;
-    border: 1px solid #e5e7eb;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
     border-radius: 6px;
-    color: #6b7280;
+    color: var(--text-tertiary);
     cursor: pointer;
     z-index: 10;
     transition: all 0.2s;
   }
 
   .sidebar-close:hover {
-    background: #f9fafb;
-    border-color: #d1d5db;
-    color: #111827;
+    background: var(--bg-primary);
+    border-color: var(--border-secondary);
+    color: var(--text-primary);
   }
 
   .sidebar-close svg {
@@ -594,11 +585,27 @@ onMounted(async () => {
     display: flex;
     align-items: center;
   }
+
+  /* Desktop: resetar sidebar para layout normal (não overlay) */
+  .dashboard-sidebar {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: 350px;
+    max-width: none;
+    height: auto;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .dashboard-sidebar.sidebar-collapsed {
+    width: 15px;
+  }
 }
 
 /* Phase 13 Sprint 1 Day 2: Filter indicator styles */
 .filter-indicator {
-  color: #6b7280;
+  color: var(--text-tertiary);
   font-weight: normal;
   font-size: 0.875rem;
 }
@@ -606,7 +613,7 @@ onMounted(async () => {
 .btn-link {
   background: none;
   border: none;
-  color: #3b82f6;
+  color: var(--accent-primary);
   cursor: pointer;
   text-decoration: underline;
   padding: 0.5rem 1rem;
@@ -616,7 +623,7 @@ onMounted(async () => {
 }
 
 .btn-link:hover {
-  color: #2563eb;
+  color: var(--accent-secondary);
 }
 
 .empty-state {
@@ -626,7 +633,7 @@ onMounted(async () => {
 
 .empty-state p {
   margin-bottom: 0.5rem;
-  color: #6b7280;
+  color: var(--text-tertiary);
 }
 
 /* Touch-friendly controls */

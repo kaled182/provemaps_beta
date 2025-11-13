@@ -127,25 +127,25 @@ onClickOutside(dropdownRef, () => {
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
-  background: white;
-  border: 1px solid #d1d5db;
+  background: var(--surface-muted);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
   font-size: 0.875rem;
   font-weight: 500;
-  color: #374151;
+  color: var(--text-primary);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .filter-dropdown__button:hover {
-  border-color: #9ca3af;
-  background: #f9fafb;
+  border-color: var(--border-secondary);
+  background: var(--surface-highlight);
 }
 
 .filter-dropdown__button--active {
-  background: #3b82f6;
+  background: var(--accent-info);
   color: white;
-  border-color: #3b82f6;
+  border-color: var(--accent-info);
 }
 
 .filter-dropdown__icon {
@@ -161,10 +161,10 @@ onClickOutside(dropdownRef, () => {
   top: calc(100% + 0.5rem);
   left: 0;
   min-width: 200px;
-  background: white;
-  border: 1px solid #e5e7eb;
+  background: var(--surface-card);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-md);
   z-index: 10;
 }
 
@@ -173,18 +173,18 @@ onClickOutside(dropdownRef, () => {
   justify-content: space-between;
   align-items: center;
   padding: 0.75rem 1rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .filter-dropdown__title {
   font-weight: 600;
   font-size: 0.875rem;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .filter-dropdown__clear {
   font-size: 0.75rem;
-  color: #3b82f6;
+  color: var(--accent-info);
   background: none;
   border: none;
   cursor: pointer;
@@ -211,7 +211,7 @@ onClickOutside(dropdownRef, () => {
 }
 
 .filter-dropdown__option:hover {
-  background: #f9fafb;
+  background: var(--surface-highlight);
 }
 
 .filter-dropdown__option input[type="checkbox"] {
@@ -221,11 +221,11 @@ onClickOutside(dropdownRef, () => {
 .filter-dropdown__label {
   flex: 1;
   font-size: 0.875rem;
-  color: #374151;
+  color: var(--text-primary);
 }
 
 .filter-dropdown__checkmark {
-  color: #3b82f6;
+  color: var(--accent-info);
   font-weight: bold;
 }
 </style>

@@ -95,9 +95,9 @@ function handleClearAll() {
   flex-direction: column;
   gap: 1rem;
   padding: 1rem;
-  background: white;
+  background: var(--surface-card);
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-sm);
   margin-bottom: 1rem;
 }
 
@@ -120,7 +120,7 @@ function handleClearAll() {
 
 .filter-count {
   font-size: 0.875rem;
-  color: #6b7280;
+  color: var(--text-tertiary);
   font-weight: 500;
 }
 
@@ -134,14 +134,14 @@ function handleClearAll() {
 }
 
 .btn-outline {
-  border: 1px solid #d1d5db;
-  background: white;
-  color: #374151;
+  border: 1px solid var(--border-primary);
+  background: var(--surface-muted);
+  color: var(--text-primary);
 }
 
 .btn-outline:hover {
-  background: #f9fafb;
-  border-color: #9ca3af;
+  background: var(--surface-highlight);
+  border-color: var(--border-secondary);
 }
 
 @media (max-width: 768px) {
