@@ -9,6 +9,10 @@
     {% if GOOGLE_MAPS_API_KEY %}
       <meta name="google-maps-api-key" content="{{ GOOGLE_MAPS_API_KEY }}" />
     {% endif %}
+    <script>
+      // Pass CSRF token to Vue app for form submissions
+      window.CSRF_TOKEN = "{{ csrf_token }}";
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       html, body {

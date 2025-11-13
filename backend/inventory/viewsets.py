@@ -3,7 +3,7 @@ DRF ViewSets for Inventory API
 """
 
 from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny
 from inventory.models import Site, Device, Port, FiberCable
 from .serializers import (
     SiteSerializer,
@@ -18,7 +18,7 @@ class SiteViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
 
     queryset = Site.objects.all().order_by("display_name")
     serializer_class = SiteSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]  # Allow public access for dashboard
 
 
 class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
@@ -28,7 +28,7 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         "site__display_name", "name"
     )
     serializer_class = DeviceSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]  # Allow public access for dashboard
 
 
 class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
@@ -36,7 +36,7 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
 
     queryset = Port.objects.select_related("device__site").order_by("name")
     serializer_class = PortSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]  # Allow public access for dashboard
 
 
 class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
@@ -46,4 +46,4 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         "origin_port__device__site", "destination_port__device__site"
     ).order_by("name")
     serializer_class = FiberCableSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]  # Allow public access for dashboard
