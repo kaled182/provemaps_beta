@@ -92,14 +92,16 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { GoogleMap, Polyline, InfoWindow, Marker } from 'vue3-google-map';
 import { useMapStore } from '@/stores/map';
+import { storeToRefs } from 'pinia';
 import { colorForStatus, SEGMENT_STATUS_COLORS } from '@/constants/segmentStatusColors';
 import { debounce } from '@/utils/debounce';
 import MapControls from '@/components/Map/MapControls.vue';
 
 const mapStore = useMapStore();
+const { focusedItem } = storeToRefs(mapStore);
 
 const runtimeKey = typeof document !== 'undefined'
   ? document.querySelector('meta[name="google-maps-api-key"]')?.getAttribute('content')
@@ -524,6 +526,32 @@ async function showDeviceInfo(marker) {
 onMounted(() => {
   loadSitesAndDevices();
   loadFiberSegments();
+});
+
+// --- NOVO WATCHER ---
+// Observa mudanças no 'focusedItem' da store
+watch(focusedItem, (newItem) => {
+  if (newItem && mapRef.value?.map) {
+    const map = mapRef.value.map;
+    const newCenter = {
+      lat: parseFloat(newItem.latitude),
+      lng: parseFloat(newItem.longitude),
+    };
+    
+    // Anima o movimento do mapa para o item focado
+    map.panTo(newCenter);
+    
+    // Ajusta o zoom se estiver muito distante
+    const currentZoom = map.getZoom();
+    if (currentZoom < 14) {
+      map.setZoom(14);
+    }
+    
+    // Limpa o foco após 3 segundos (opcional)
+    setTimeout(() => {
+      mapStore.clearFocus();
+    }, 3000);
+  }
 });
 </script>
 
