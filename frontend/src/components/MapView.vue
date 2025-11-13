@@ -31,8 +31,14 @@
         }"
         @closeclick="closeInfoWindow"
       >
-        <div class="fiber-info-window">
-          <h4>{{ selectedSegment.properties?.name || `Cabo #${selectedSegment.id}` }}</h4>
+        <div class="fiber-info-window" :style="{ 
+          backgroundColor: 'var(--surface-card)', 
+          color: 'var(--text-secondary)',
+          padding: '8px',
+          minWidth: '280px',
+          maxWidth: '350px'
+        }">
+          <h4 :style="{ color: 'var(--text-primary)' }">{{ selectedSegment.properties?.name || `Cabo #${selectedSegment.id}` }}</h4>
           
           <!-- Loading state -->
           <div v-if="fiberInfoLoading" class="loading-spinner">
@@ -151,7 +157,16 @@
         }"
         @closeclick="closeDeviceInfo"
       >
-        <div class="info-window-content" v-html="deviceInfoHtml"></div>
+        <div 
+          class="info-window-content" 
+          v-html="deviceInfoHtml"
+          :style="{ 
+            backgroundColor: 'var(--surface-card)', 
+            color: 'var(--text-secondary)',
+            padding: '8px',
+            minWidth: '200px'
+          }"
+        ></div>
       </InfoWindow>
     </GoogleMap>
     <div v-else class="missing-key">Google Maps API key não configurada.</div>
@@ -164,11 +179,23 @@
     />
     
     <!-- Status Legend -->
-    <div v-if="showLegend" class="map-legend">
-      <h4>Legenda</h4>
-      <div class="legend-item" v-for="(color, status) in legendItems" :key="status">
-        <span class="legend-color" :style="{ background: color }"></span>
-        <span class="legend-label">{{ status }}</span>
+    <div v-if="showLegend" class="map-legend" :class="{ 'legend-collapsed': legendCollapsed }" :style="{ left: legendLeftPosition }">
+      <div class="legend-header">
+        <h4 v-if="!legendCollapsed">Legenda</h4>
+        <button @click="toggleLegendCollapse" class="legend-toggle-btn" :title="legendCollapsed ? 'Expandir legenda' : 'Colapsar legenda'">
+          <svg v-if="legendCollapsed" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+          <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+      </div>
+      <div v-if="!legendCollapsed" class="legend-content">
+        <div class="legend-item" v-for="(color, status) in legendItems" :key="status">
+          <span class="legend-color" :style="{ background: color }"></span>
+          <span class="legend-label">{{ status }}</span>
+        </div>
       </div>
     </div>
     
@@ -185,6 +212,21 @@ import { storeToRefs } from 'pinia';
 import { colorForStatus, SEGMENT_STATUS_COLORS } from '@/constants/segmentStatusColors';
 import { debounce } from '@/utils/debounce';
 import MapControls from '@/components/Map/MapControls.vue';
+
+const props = defineProps({
+  sidebarCollapsed: {
+    type: Boolean,
+    default: false
+  },
+  sidebarPosition: {
+    type: String,
+    default: 'left'
+  },
+  uiStore: {
+    type: Object,
+    default: null
+  }
+});
 
 const mapStore = useMapStore();
 const { focusedItem } = storeToRefs(mapStore);
@@ -224,6 +266,24 @@ const fiberInfoData = ref(null);
 const selectedSegment = ref(null);
 const infoWindowPosition = ref(null);
 const showLegend = ref(true);
+const legendCollapsed = ref(false);
+
+// Legend position based on sidebar state
+const legendLeftPosition = computed(() => {
+  // Menu lateral esquerdo
+  const navMenuWidth = props.uiStore?.isNavMenuOpen ? 280 : 60;
+  
+  // Se sidebar (Status dos Hosts) está à esquerda
+  if (props.sidebarPosition === 'left') {
+    if (props.sidebarCollapsed) {
+      return `${navMenuWidth + 35}px`; // nav + 15px sidebar colapsado + 20px margin
+    }
+    return `${navMenuWidth + 370}px`; // nav + 350px sidebar + 20px margin
+  }
+  
+  // Sidebar à direita, legenda só respeita menu esquerdo
+  return `${navMenuWidth + 20}px`;
+});
 
 const legendItems = computed(() => ({
   'Operacional': SEGMENT_STATUS_COLORS.operational,
@@ -417,6 +477,10 @@ function fitBounds() {
 
 function toggleLegend() {
   showLegend.value = !showLegend.value;
+}
+
+function toggleLegendCollapse() {
+  legendCollapsed.value = !legendCollapsed.value;
 }
 
 function normalizeFiberStatus(status) {
@@ -719,7 +783,11 @@ async function showDeviceInfo(marker) {
         <strong>${marker.name}</strong>
         <div>${marker.siteName}</div>
         <div>${marker.siteCity || ''}</div>
-        <div style="margin-top:8px;color:#6b7280;">Nenhum dispositivo cadastrado neste local.</div>
+              </div>
+      <div v-else>
+        <div style="margin-top:8px;color:var(--text-tertiary);">Nenhum dispositivo cadastrado neste local.</div>
+      </div>
+    </div>
       </div>
     `;
     deviceInfoLoading.value = false;
@@ -865,27 +933,102 @@ watch(focusedItem, (newItem) => {
 
 <style scoped>
 .map-wrapper { position: relative; }
-.status { position:absolute; top:8px; left:8px; background:#fff; padding:4px 8px; font-size:12px; border:1px solid #ccc; }
-.error { position:absolute; top:32px; left:8px; background:#ffecec; color:#b00; padding:4px 8px; font-size:12px; border:1px solid #e99; }
-.missing-key { padding:16px; color:#b00; }
+.status { position:absolute; top:8px; left:8px; background:var(--surface-card); padding:4px 8px; font-size:12px; border:1px solid var(--border-primary); color:var(--text-primary); }
+.error { position:absolute; top:32px; left:8px; background:var(--danger-soft-bg); color:var(--accent-danger); padding:4px 8px; font-size:12px; border:1px solid var(--accent-danger); }
+.missing-key { padding:16px; color:var(--accent-danger); }
 
 .map-legend {
-  position: absolute;
-  bottom: 24px;
-  left: 12px;
-  background: #fff;
-  padding: 12px;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  position: fixed;
+  bottom: 20px;
+  background: var(--surface-card);
+  padding: 12px 16px;
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
   min-width: 150px;
-  z-index: 1000;
+  max-width: 200px;
+  z-index: 1050;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  transition: left 0.3s ease, width 0.3s ease, padding 0.3s ease;
 }
 
-.map-legend h4 {
-  margin: 0 0 8px 0;
+.map-legend.legend-collapsed {
+  min-width: 40px;
+  max-width: 40px;
+  padding: 8px;
+}
+
+/* Ajustar posição quando há navbar/header */
+@supports (top: env(safe-area-inset-top)) {
+  .map-legend {
+    bottom: max(20px, env(safe-area-inset-bottom));
+  }
+}
+
+/* Scrollbar customizada para a legenda */
+.map-legend::-webkit-scrollbar {
+  width: 4px;
+}
+
+.map-legend::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 4px;
+}
+
+.map-legend::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+
+.map-legend::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+.legend-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.legend-collapsed .legend-header {
+  margin-bottom: 0;
+  justify-content: center;
+}
+
+.legend-header h4 {
+  margin: 0;
   font-size: 13px;
   font-weight: 600;
-  color: #111827;
+  color: var(--text-primary);
+}
+
+.legend-toggle-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  transition: color 0.2s;
+  flex-shrink: 0;
+}
+
+.legend-toggle-btn:hover {
+  color: var(--text-primary);
+}
+
+.legend-toggle-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.legend-content {
+  display: flex;
+  flex-direction: column;
 }
 
 .legend-item {
@@ -894,6 +1037,7 @@ watch(focusedItem, (newItem) => {
   gap: 8px;
   margin-bottom: 6px;
   font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .legend-color {
@@ -903,19 +1047,20 @@ watch(focusedItem, (newItem) => {
 }
 
 .legend-label {
-  color: #374151;
+  color: var(--text-secondary);
 }
 
 .info-window-content {
   padding: 8px;
   min-width: 200px;
+  color: var(--text-secondary);
 }
 
 .info-window-content h4 {
   margin: 0 0 8px 0;
   font-size: 14px;
   font-weight: 600;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .info-row {
@@ -926,33 +1071,33 @@ watch(focusedItem, (newItem) => {
 }
 
 .info-label {
-  color: #6b7280;
+  color: var(--text-tertiary);
   font-weight: 500;
 }
 
 .info-value {
-  color: #111827;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 .info-value.status-operational {
-  color: #10b981;
+  color: var(--status-online);
 }
 
 .info-value.status-degraded {
-  color: #f59e0b;
+  color: var(--status-warning);
 }
 
 .info-value.status-down {
-  color: #ef4444;
+  color: var(--status-offline);
 }
 
 .info-value.status-maintenance {
-  color: #3b82f6;
+  color: var(--accent-info);
 }
 
 .info-value.status-unknown {
-  color: #6b7280;
+  color: var(--text-tertiary);
 }
 
 /* Fiber cable info window styles */
@@ -960,20 +1105,21 @@ watch(focusedItem, (newItem) => {
   padding: 8px;
   min-width: 280px;
   max-width: 350px;
+  color: var(--text-secondary);
 }
 
 .fiber-info-window h4 {
   margin: 0 0 12px 0;
   font-size: 14px;
   font-weight: 600;
-  color: #111827;
-  border-bottom: 2px solid #e5e7eb;
+  color: var(--text-primary);
+  border-bottom: 2px solid var(--border-primary);
   padding-bottom: 6px;
 }
 
 .fiber-info-window .port-info > div > strong {
-  color: #1f2937;
-  background: #f3f4f6;
+  color: var(--text-primary);
+  background: var(--surface-highlight);
   padding: 2px 6px;
   border-radius: 3px;
   display: inline-block;
@@ -982,14 +1128,14 @@ watch(focusedItem, (newItem) => {
 .loading-spinner {
   padding: 16px;
   text-align: center;
-  color: #6b7280;
+  color: var(--text-tertiary);
   font-size: 12px;
 }
 
 .error-message {
   padding: 8px;
-  background: #fef2f2;
-  color: #dc2626;
+  background: var(--danger-soft-bg);
+  color: var(--accent-danger);
   border-radius: 4px;
   font-size: 12px;
 }
@@ -1001,19 +1147,19 @@ watch(focusedItem, (newItem) => {
 }
 
 .port-section {
-  background: #f9fafb;
+  background: var(--surface-muted);
   border-radius: 6px;
   padding: 10px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border-primary);
 }
 
 .port-header {
   font-weight: 600;
   font-size: 12px;
-  color: #374151;
+  color: var(--text-primary);
   margin-bottom: 6px;
   padding-bottom: 4px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .port-info {
@@ -1025,8 +1171,8 @@ watch(focusedItem, (newItem) => {
 }
 
 .port-info > div > strong {
-  color: #1e40af;
-  background: #dbeafe;
+  color: var(--badge-info-text);
+  background: var(--badge-info-bg);
   padding: 3px 8px;
   border-radius: 4px;
   display: inline-block;
@@ -1034,16 +1180,16 @@ watch(focusedItem, (newItem) => {
 }
 
 .port-name {
-  color: #6b7280;
+  color: var(--text-tertiary);
   font-size: 11px;
 }
 
 .optical-levels {
   margin-top: 6px;
   padding: 6px;
-  background: white;
+  background: var(--surface-card);
   border-radius: 4px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border-primary);
 }
 
 .level-row {
@@ -1054,34 +1200,34 @@ watch(focusedItem, (newItem) => {
 }
 
 .level-row span:first-child {
-  color: #6b7280;
+  color: var(--text-tertiary);
   font-weight: 500;
 }
 
 .signal-good {
-  color: #10b981;
+  color: var(--status-online);
   font-weight: 600;
 }
 
 .signal-warning {
-  color: #f59e0b;
+  color: var(--status-warning);
   font-weight: 600;
 }
 
 .signal-bad {
-  color: #ef4444;
+  color: var(--status-offline);
   font-weight: 600;
 }
 
 .signal-unknown {
-  color: #9ca3af;
+  color: var(--status-unknown);
 }
 
 .no-data {
   margin-top: 6px;
   padding: 4px;
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--warning-soft-bg);
+  color: var(--warning-soft-text);
   border-radius: 3px;
   font-size: 10px;
   text-align: center;
@@ -1092,13 +1238,13 @@ watch(focusedItem, (newItem) => {
   gap: 8px;
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--border-primary);
 }
 
 .chart-button {
   flex: 1;
   padding: 6px 10px;
-  background: #3b82f6;
+  background: var(--accent-info);
   color: white;
   border: none;
   border-radius: 4px;
@@ -1109,11 +1255,12 @@ watch(focusedItem, (newItem) => {
 }
 
 .chart-button:hover {
-  background: #2563eb;
+  background: var(--accent-info-dark);
 }
 
 .chart-button:active {
-  background: #1d4ed8;
+  background: var(--accent-info-dark);
+  filter: brightness(0.9);
 }
 
 .simple-info {

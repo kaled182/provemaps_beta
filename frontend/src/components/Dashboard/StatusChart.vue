@@ -116,7 +116,7 @@ function getStatusLabel(status) {
 
 <style scoped>
 .status-chart {
-  background: #fff;
+  background: var(--bg-secondary);
   padding: 16px;
   border-radius: 8px;
 }
@@ -130,9 +130,9 @@ function getStatusLabel(status) {
 
 .chart-title {
   margin: 0;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .chart-actions {
@@ -148,8 +148,8 @@ function getStatusLabel(status) {
   width: 28px;
   height: 28px;
   padding: 0;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
@@ -157,8 +157,8 @@ function getStatusLabel(status) {
 
 .collapse-btn:hover,
 .swap-btn:hover {
-  background: #e5e7eb;
-  border-color: #d1d5db;
+  background: var(--menu-item-hover);
+  border-color: var(--border-secondary);
   transform: translateY(-1px);
 }
 
@@ -166,12 +166,12 @@ function getStatusLabel(status) {
 .swap-btn svg {
   width: 16px;
   height: 16px;
-  color: #6b7280;
+  color: var(--text-tertiary);
 }
 
 .collapse-btn:hover svg,
 .swap-btn:hover svg {
-  color: #374151;
+  color: var(--text-primary);
 }
 
 .chart-container {
@@ -194,7 +194,7 @@ function getStatusLabel(status) {
 
 .bar-wrapper {
   height: 32px;
-  background: #f3f4f6;
+  background: var(--bg-primary);
   border-radius: 4px;
   overflow: hidden;
   position: relative;
@@ -211,23 +211,23 @@ function getStatusLabel(status) {
 }
 
 .bar-fill.status-online {
-  background: linear-gradient(90deg, #10b981, #059669);
+  background: var(--gradient-online);
 }
 
 .bar-fill.status-offline {
-  background: linear-gradient(90deg, #ef4444, #dc2626);
+  background: var(--gradient-offline);
 }
 
 .bar-fill.status-warning {
-  background: linear-gradient(90deg, #f59e0b, #d97706);
+  background: var(--gradient-warning);
 }
 
 .bar-fill.status-unknown {
-  background: linear-gradient(90deg, #9ca3af, #6b7280);
+  background: var(--gradient-unknown);
 }
 
 .bar-value {
-  color: #fff;
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 600;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
@@ -237,8 +237,8 @@ function getStatusLabel(status) {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  color: #6b7280;
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 .status-icon {
@@ -248,19 +248,19 @@ function getStatusLabel(status) {
 }
 
 .status-icon.status-online {
-  background: #10b981;
+  background: var(--status-online);
 }
 
 .status-icon.status-offline {
-  background: #ef4444;
+  background: var(--status-offline);
 }
 
 .status-icon.status-warning {
-  background: #f59e0b;
+  background: var(--status-warning);
 }
 
 .status-icon.status-unknown {
-  background: #6b7280;
+  background: var(--status-unknown);
 }
 
 .status-name {
@@ -271,7 +271,7 @@ function getStatusLabel(status) {
   display: flex;
   justify-content: space-between;
   padding-top: 12px;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--border-primary);
 }
 
 .summary-item {
@@ -281,23 +281,23 @@ function getStatusLabel(status) {
 }
 
 .summary-label {
-  color: #6b7280;
+  color: var(--text-tertiary);
 }
 
 .summary-value {
   font-weight: 600;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .summary-value.health-good {
-  color: #10b981;
+  color: var(--status-online);
 }
 
 .summary-value.health-warning {
-  color: #f59e0b;
+  color: var(--status-warning);
 }
 
 .summary-value.health-critical {
-  color: #ef4444;
+  color: var(--status-offline);
 }
 </style>

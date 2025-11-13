@@ -1,0 +1,39 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ProveMaps - Dashboard{% endblock %}</title>
+    
+    {# Google Maps API Key #}
+    {% if GOOGLE_MAPS_API_KEY %}
+      <meta name="google-maps-api-key" content="{{ GOOGLE_MAPS_API_KEY }}" />
+    {% endif %}
+    
+    {# CSRF Token for Vue app (logout, forms) #}
+    <script>
+      window.CSRF_TOKEN = "{{ csrf_token }}";
+    </script>
+    
+    {# Tailwind CSS from CDN (temporary during migration) #}
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    {# Vite-built Vue SPA assets #}
+    <script type="module" src="{% static 'vue-spa/assets/main.js' %}"></script>
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="h-full overflow-hidden bg-gray-900">
+    {# Vue app mount point #}
+    <div id="app" class="h-full"></div>
+    
+    <noscript>
+        <div style="padding: 2rem; text-align: center; background: #fee; color: #900;">
+            Este aplicativo requer JavaScript habilitado para funcionar.
+        </div>
+    </noscript>
+    
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

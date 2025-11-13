@@ -63,12 +63,12 @@ defineEmits(['retry']);
 .error-title {
   font-size: 1.25rem;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--text-primary);
   margin-bottom: 0.5rem;
 }
 
 .error-message {
-  color: #6b7280;
+  color: var(--text-tertiary);
   margin-bottom: 1.5rem;
   max-width: 400px;
   line-height: 1.5;
