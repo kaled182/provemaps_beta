@@ -6,6 +6,7 @@
   /* Background Colors */
   --bg-primary: #1a1a1a;
   --bg-secondary: #2d2d2d;
+  --bg-secondary-rgb: 45, 45, 45;
   --bg-tertiary: #3a3a3a;
   --bg-elevated: #424242;
   --surface-card: #2a2a2a;
@@ -26,8 +27,8 @@
   --info-soft-text: #90caf9;
   
   /* Menu & Sidebar Colors */
-  --menu-bg-start: #42424a;
-  --menu-bg-end: #191919;
+  --menu-bg-start: #4a4a52;
+  --menu-bg-end: #2c2c34;
   --menu-item-hover: rgba(255, 255, 255, 0.1);
   --menu-item-active-start: #66BB6A;
   --menu-item-active-end: #43A047;
@@ -76,6 +77,7 @@
   /* Background Colors */
   --bg-primary: #ffffff;
   --bg-secondary: #f5f5f5;
+  --bg-secondary-rgb: 245, 245, 245;
   --bg-tertiary: #eeeeee;
   --bg-elevated: #fafafa;
   --surface-card: #ffffff;
@@ -96,8 +98,8 @@
   --info-soft-text: #1565c0;
   
   /* Menu & Sidebar Colors */
-  --menu-bg-start: #f8f9fa;
-  --menu-bg-end: #e9ecef;
+  --menu-bg-start: #ffffff;
+  --menu-bg-end: #f5f5f5;
   --menu-item-hover: rgba(0, 0, 0, 0.05);
   --menu-item-active-start: #66BB6A;
   --menu-item-active-end: #43A047;

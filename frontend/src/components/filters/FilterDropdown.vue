@@ -165,6 +165,7 @@ onClickOutside(dropdownRef, () => {
   border: 1px solid var(--border-primary);
   border-radius: 8px;
   box-shadow: var(--shadow-md);
+  backdrop-filter: blur(10px);
   z-index: 10;
 }
 

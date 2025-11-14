@@ -1,11 +1,14 @@
 <template>
-  <div class="app-container">
+  <div class="flex h-screen overflow-hidden">
+    <!-- Menu Lateral Esquerdo -->
     <TheNavMenu />
-    <div class="app-content" :style="{ marginLeft: uiStore.navMenuWidth }">
-      <main class="main-content">
-        <router-view />
-      </main>
-    </div>
+    
+    <!-- Área de Conteúdo Principal (Dashboard com sidebar + mapa) -->
+    <main class="flex-1 relative overflow-hidden">
+      <router-view />
+    </main>
+
+    <SiteDeviceModal />
   </div>
 </template>
 
@@ -13,6 +16,7 @@
 import { RouterView } from 'vue-router';
 import { onMounted } from 'vue';
 import TheNavMenu from '@/components/Layout/TheNavMenu.vue';
+import SiteDeviceModal from '@/components/Map/SiteDeviceModal.vue';
 import { useUiStore } from '@/stores/ui';
 
 const uiStore = useUiStore();
@@ -21,10 +25,6 @@ const uiStore = useUiStore();
 onMounted(() => {
   uiStore.applyTheme();
 });
-
-// Base application component
-// Phase 11 Sprint 2: Full dashboard with real-time WebSocket integration
-// DashboardView (sidebar + map) replaces legacy dashboard.js (1,137 lines)
 </script>
 
 <style>
@@ -34,7 +34,7 @@ onMounted(() => {
 /* Import temporary base styles while migrating legacy assets */
 @import './assets/base.css';
 
-/* Garanta que o app ocupe a tela inteira */
+/* Garante que o app ocupe a tela inteira */
 html, body, #app {
   height: 100%;
   margin: 0;
