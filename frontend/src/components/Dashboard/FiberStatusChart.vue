@@ -1,11 +1,12 @@
 <template>
-  <div class="status-chart">
+  <div class="fiber-status-chart">
     <div class="chart-header">
+      <h3 class="chart-title">Status dos Enlaces</h3>
       <div class="chart-actions">
         <button 
           @click="$emit('toggle-sidebar')"
-          class="collapse-btn"
-          :title="'Colapsar sidebar'"
+          class="control-btn"
+          title="Colapsar sidebar"
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
@@ -13,8 +14,8 @@
         </button>
         <button 
           @click="$emit('toggle-position')"
-          class="swap-btn"
-          :title="'Trocar lado'"
+          class="control-btn"
+          title="Trocar lado"
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12M8 12h12m-12 5h12M3 7h.01M3 12h.01M3 17h.01" />
@@ -53,12 +54,6 @@
           <span class="summary-label">Total:</span>
           <span class="summary-value">{{ total }}</span>
         </div>
-        <div class="summary-item" v-if="healthPercentage !== null">
-          <span class="summary-label">Saúde:</span>
-          <span class="summary-value" :class="healthClass">
-            {{ healthPercentage }}%
-          </span>
-        </div>
       </div>
     </div>
   </div>
@@ -71,7 +66,7 @@ const props = defineProps({
   distribution: {
     type: Object,
     required: true,
-    default: () => ({ online: 0, offline: 0, warning: 0, unknown: 0 }),
+    default: () => ({ up: 0, down: 0, degraded: 0, unknown: 0 }),
   },
 });
 
@@ -83,20 +78,6 @@ const maxValue = computed(() => {
   return Math.max(...Object.values(props.distribution), 1);
 });
 
-const healthPercentage = computed(() => {
-  if (total.value === 0) return null;
-  const healthy = props.distribution.online || 0;
-  return Math.round((healthy / total.value) * 100);
-});
-
-const healthClass = computed(() => {
-  const pct = healthPercentage.value;
-  if (pct === null) return '';
-  if (pct >= 80) return 'health-good';
-  if (pct >= 50) return 'health-warning';
-  return 'health-critical';
-});
-
 function getBarWidth(value) {
   if (total.value === 0) return '0%';
   return `${(value / maxValue.value) * 100}%`;
@@ -104,9 +85,9 @@ function getBarWidth(value) {
 
 function getStatusLabel(status) {
   const labels = {
-    online: 'Online',
-    offline: 'Offline',
-    warning: 'Alerta',
+    up: 'Operacional',
+    down: 'Fora',
+    degraded: 'Degradado',
     unknown: 'Desconhecido',
   };
   return labels[status] || status;
@@ -114,17 +95,25 @@ function getStatusLabel(status) {
 </script>
 
 <style scoped>
-.status-chart {
+.fiber-status-chart {
   background: transparent;
   padding: 16px;
   border-radius: 8px;
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .chart-header {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
+}
+
+.chart-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .chart-actions {
@@ -132,8 +121,7 @@ function getStatusLabel(status) {
   gap: 6px;
 }
 
-.collapse-btn,
-.swap-btn {
+.control-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -147,90 +135,71 @@ function getStatusLabel(status) {
   transition: all 0.2s;
 }
 
-.collapse-btn:hover,
-.swap-btn:hover {
+.control-btn:hover {
   background: var(--menu-item-hover);
   border-color: var(--border-secondary);
   transform: translateY(-1px);
 }
 
-.collapse-btn svg,
-.swap-btn svg {
+.control-btn svg {
   width: 16px;
   height: 16px;
   color: var(--text-tertiary);
 }
 
-.collapse-btn:hover svg,
-.swap-btn:hover svg {
+.control-btn:hover svg {
   color: var(--text-primary);
 }
 
 .chart-container {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .chart-bars {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .chart-bar-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .bar-wrapper {
-  height: 32px;
+  height: 24px;
   background: var(--bg-tertiary);
-  border-radius: 4px;
+  border-radius: 3px;
   overflow: hidden;
   position: relative;
-  border: 1px solid var(--border-primary);
 }
 
 .bar-fill {
   height: 100%;
+  min-width: 2px;
+  transition: width 0.3s ease;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   padding-right: 8px;
-  transition: width 0.3s ease;
-  min-width: 32px;
-}
-
-.bar-fill.status-online {
-  background: var(--gradient-online);
-}
-
-.bar-fill.status-offline {
-  background: var(--gradient-offline);
-}
-
-.bar-fill.status-warning {
-  background: var(--gradient-warning);
-}
-
-.bar-fill.status-unknown {
-  background: var(--gradient-unknown);
+  border-radius: 3px;
 }
 
 .bar-value {
-  color: var(--text-primary);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .bar-label {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-secondary);
 }
 
@@ -240,57 +209,48 @@ function getStatusLabel(status) {
   border-radius: 50%;
 }
 
-.status-icon.status-online {
-  background: var(--status-online);
+/* Status-based colors for fiber cables */
+.status-up .status-icon,
+.bar-fill.status-up {
+  background: #10b981;
 }
 
-.status-icon.status-offline {
-  background: var(--status-offline);
+.status-down .status-icon,
+.bar-fill.status-down {
+  background: #ef4444;
 }
 
-.status-icon.status-warning {
-  background: var(--status-warning);
+.status-degraded .status-icon,
+.bar-fill.status-degraded {
+  background: #f59e0b;
 }
 
-.status-icon.status-unknown {
-  background: var(--status-unknown);
-}
-
-.status-name {
-  font-weight: 500;
+.status-unknown .status-icon,
+.bar-fill.status-unknown {
+  background: #6b7280;
 }
 
 .chart-summary {
   display: flex;
-  justify-content: space-between;
-  padding-top: 12px;
+  gap: 16px;
+  padding-top: 8px;
   border-top: 1px solid var(--border-primary);
 }
 
 .summary-item {
   display: flex;
+  align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .summary-label {
   color: var(--text-tertiary);
+  font-weight: 500;
 }
 
 .summary-value {
-  font-weight: 600;
   color: var(--text-primary);
-}
-
-.summary-value.health-good {
-  color: var(--status-online);
-}
-
-.summary-value.health-warning {
-  color: var(--status-warning);
-}
-
-.summary-value.health-critical {
-  color: var(--status-offline);
+  font-weight: 600;
 }
 </style>

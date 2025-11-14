@@ -22,30 +22,29 @@ describe('FilterBar', () => {
     const wrapper = mount(FilterBar);
     const store = useFiltersStore();
     
-    store.toggleStatus('operational');
+    store.toggleStatus('online');
     await wrapper.vm.$nextTick();
     
-    // Updated text: "1 filter active" instead of "Filters (1)"
-    expect(wrapper.text()).toContain('1 filter active');
+    expect(wrapper.find('.filter-count').text()).toBe('1');
   });
 
   it('shows clear all button when filters active', async () => {
     const wrapper = mount(FilterBar);
     const store = useFiltersStore();
     
-    store.toggleStatus('operational');
+    store.toggleStatus('online');
     await wrapper.vm.$nextTick();
     
     const clearButton = wrapper.find('.btn-outline');
     expect(clearButton.exists()).toBe(true);
-    expect(clearButton.text()).toBe('Clear All');
+    expect(clearButton.text()).toBe('✕');
   });
 
   it('clears all filters when clear button clicked', async () => {
     const wrapper = mount(FilterBar);
     const store = useFiltersStore();
     
-    store.toggleStatus('operational');
+    store.toggleStatus('online');
     store.toggleType('OLT');
     await wrapper.vm.$nextTick();
     
