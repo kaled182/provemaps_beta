@@ -36,8 +36,10 @@ function toggleDropdown() {
   isOpen.value = !isOpen.value;
 }
 
-function handleToggle(value) {
-  emit('toggle', value);
+function handleToggle(event, value) {
+  event.stopPropagation();
+  const isChecked = event.target?.checked ?? false;
+  emit('toggle', value, isChecked);
 }
 
 function handleClear(event) {
@@ -99,7 +101,7 @@ onClickOutside(dropdownRef, () => {
           <input
             type="checkbox"
             :checked="isSelected(option.value)"
-            @change="handleToggle(option.value)"
+            @change="handleToggle($event, option.value)"
           />
           <span class="filter-dropdown__label">
             {{ option.label }}

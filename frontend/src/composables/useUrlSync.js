@@ -11,14 +11,35 @@ import { useDebounceFn } from '@vueuse/core';
  */
 export function useUrlSync(filtersStore, router, route) {
   // Valid status values (prevent URL injection)
-  const VALID_STATUSES = ['operational', 'warning', 'critical', 'offline', 'unknown'];
+  const STATUS_ALIASES = {
+    operational: 'online',
+    online: 'online',
+    operational_up: 'online',
+    critical: 'offline',
+    down: 'offline',
+    offline: 'offline',
+    degraded: 'degraded',
+    warning: 'warning',
+    maintenance: 'maintenance',
+    unknown: 'unknown',
+  };
+
+  const VALID_STATUSES = Object.values(STATUS_ALIASES).filter((value, index, self) => self.indexOf(value) === index);
 
   // Parse comma-separated string to array with validation
   const parseArrayParam = (param, validValues = null) => {
     if (!param) return [];
-    if (Array.isArray(param)) return param; // Vue Router might parse as array
+    const normalize = value => STATUS_ALIASES[value] ?? value;
+    if (Array.isArray(param)) {
+      const normalized = param.map(normalize);
+      return validValues ? normalized.filter(v => validValues.includes(v)) : normalized;
+    }
     
-    const values = param.split(',').filter(Boolean);
+    const values = param
+      .split(',')
+      .map(value => value.trim())
+      .filter(Boolean)
+      .map(value => STATUS_ALIASES[value] ?? value);
     
     // Validate if validation array provided
     if (validValues) {

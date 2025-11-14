@@ -1,5 +1,45 @@
 <template>
   <div class="map-wrapper">
+    <!-- Signal Tooltip (hover) - Positioned overlay -->
+    <div
+      v-if="signalTooltipVisible && signalTooltipPixelPosition"
+      class="signal-tooltip-overlay"
+      :style="{
+        left: signalTooltipPixelPosition.x + 'px',
+        top: signalTooltipPixelPosition.y + 'px'
+      }"
+    >
+      <div class="signal-tooltip">
+        <div v-if="signalTooltipData?.loading" class="tooltip-loading">
+          Carregando...
+        </div>
+        <div v-else-if="signalTooltipData?.error" class="tooltip-error">
+          Sem dados
+        </div>
+        <div v-else-if="signalTooltipData" class="tooltip-content">
+          <div class="tooltip-header">{{ signalTooltipData.name }}</div>
+          <div class="signal-row">
+            <span class="signal-label">📍 Origem:</span>
+            <span :class="getSignalClass(signalTooltipData.origin.rx)">
+              RX: {{ formatOptical(signalTooltipData.origin.rx) }}
+            </span>
+            <span :class="getSignalClass(signalTooltipData.origin.tx)">
+              TX: {{ formatOptical(signalTooltipData.origin.tx) }}
+            </span>
+          </div>
+          <div class="signal-row">
+            <span class="signal-label">🎯 Destino:</span>
+            <span :class="getSignalClass(signalTooltipData.destination.rx)">
+              RX: {{ formatOptical(signalTooltipData.destination.rx) }}
+            </span>
+            <span :class="getSignalClass(signalTooltipData.destination.tx)">
+              TX: {{ formatOptical(signalTooltipData.destination.tx) }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
     <GoogleMap
       v-if="apiKey"
       ref="mapRef"
@@ -150,6 +190,46 @@
           </div>
         </div>
       </InfoWindow>
+      
+      <!-- Signal Tooltip (hover) - Positioned overlay -->
+      <div
+        v-if="signalTooltipVisible && signalTooltipPixelPosition"
+        class="signal-tooltip-overlay"
+        :style="{
+          left: signalTooltipPixelPosition.x + 'px',
+          top: signalTooltipPixelPosition.y + 'px'
+        }"
+      >
+        <div class="signal-tooltip">
+          <div v-if="signalTooltipData?.loading" class="tooltip-loading">
+            Carregando...
+          </div>
+          <div v-else-if="signalTooltipData?.error" class="tooltip-error">
+            Sem dados
+          </div>
+          <div v-else-if="signalTooltipData" class="tooltip-content">
+            <div class="tooltip-header">{{ signalTooltipData.name }}</div>
+            <div class="signal-row">
+              <span class="signal-label">📍 Origem:</span>
+              <span :class="getSignalClass(signalTooltipData.origin.rx)">
+                RX: {{ formatOptical(signalTooltipData.origin.rx) }}
+              </span>
+              <span :class="getSignalClass(signalTooltipData.origin.tx)">
+                TX: {{ formatOptical(signalTooltipData.origin.tx) }}
+              </span>
+            </div>
+            <div class="signal-row">
+              <span class="signal-label">🎯 Destino:</span>
+              <span :class="getSignalClass(signalTooltipData.destination.rx)">
+                RX: {{ formatOptical(signalTooltipData.destination.rx) }}
+              </span>
+              <span :class="getSignalClass(signalTooltipData.destination.tx)">
+                TX: {{ formatOptical(signalTooltipData.destination.tx) }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <InfoWindow
         v-if="selectedDevice && deviceInfoWindowPosition"
@@ -257,6 +337,12 @@ const deviceInfoError = ref(null);
 const selectedFiberCable = ref(null);
 const fiberInfoLoading = ref(false);
 const fiberInfoData = ref(null);
+
+// Signal tooltip state (hover)
+const signalTooltipVisible = ref(false);
+const signalTooltipPosition = ref(null);
+const signalTooltipPixelPosition = ref(null);
+const signalTooltipData = ref(null);
 
 // InfoWindow state
 const selectedSegment = ref(null);
@@ -438,6 +524,96 @@ function closeInfoWindow() {
   infoWindowPosition.value = null;
   fiberInfoData.value = null;
   fiberInfoLoading.value = false;
+}
+
+// Tooltip de sinal (hover)
+async function showSignalTooltip(feature, event) {
+  console.log('[showSignalTooltip] Called with:', feature.id, event);
+  
+  // Só mostrar tooltip para fiber cables
+  if (!feature.id || !feature.id.toString().startsWith('fiber-')) {
+    console.log('[showSignalTooltip] Not a fiber cable, skipping');
+    return;
+  }
+  
+  signalTooltipVisible.value = true;
+  updateTooltipPosition(event);
+  signalTooltipData.value = { loading: true };
+  
+  console.log('[showSignalTooltip] Tooltip visible:', signalTooltipVisible.value);
+  console.log('[showSignalTooltip] Position:', signalTooltipPixelPosition.value);
+  
+  const cableId = feature.id.replace('fiber-', '');
+  
+  try {
+    // Buscar dados do cabo
+    const response = await fetch(`/api/v1/inventory/fibers/${cableId}/`, {
+      credentials: 'include',
+    });
+    
+    if (!response.ok) {
+      signalTooltipData.value = { error: true };
+      return;
+    }
+    
+    const cableData = await response.json();
+    
+    // Buscar níveis de sinal das portas
+    const portPromises = [];
+    
+    if (cableData.origin?.port_id) {
+      portPromises.push(
+        fetch(`/api/v1/inventory/ports/${cableData.origin.port_id}/optical/`, {
+          credentials: 'include',
+        }).then(r => r.ok ? r.json() : null)
+      );
+    } else {
+      portPromises.push(Promise.resolve(null));
+    }
+    
+    if (cableData.destination?.port_id) {
+      portPromises.push(
+        fetch(`/api/v1/inventory/ports/${cableData.destination.port_id}/optical/`, {
+          credentials: 'include',
+        }).then(r => r.ok ? r.json() : null)
+      );
+    } else {
+      portPromises.push(Promise.resolve(null));
+    }
+    
+    const [originPortData, destPortData] = await Promise.all(portPromises);
+    
+    signalTooltipData.value = {
+      name: cableData.name,
+      origin: {
+        rx: originPortData?.optical?.rx_dbm,
+        tx: originPortData?.optical?.tx_dbm,
+      },
+      destination: {
+        rx: destPortData?.optical?.rx_dbm,
+        tx: destPortData?.optical?.tx_dbm,
+      },
+    };
+  } catch (err) {
+    console.error('[showSignalTooltip] Error:', err);
+    signalTooltipData.value = { error: true };
+  }
+}
+
+function updateTooltipPosition(event) {
+  if (event && event.domEvent) {
+    signalTooltipPixelPosition.value = {
+      x: event.domEvent.clientX,
+      y: event.domEvent.clientY
+    };
+  }
+}
+
+function hideSignalTooltip() {
+  signalTooltipVisible.value = false;
+  signalTooltipPosition.value = null;
+  signalTooltipPixelPosition.value = null;
+  signalTooltipData.value = null;
 }
 
 function formatOptical(dbm) {
@@ -1014,10 +1190,36 @@ function drawNativePolylines() {
       clickable: true
     });
     
+    // Click handler - mostra janela completa
     polyline.addListener('click', () => {
       console.log('[Polyline] Clicked:', feature.id);
       showSegmentInfo(feature);
     });
+    
+    // TESTE: Adicionar log para verificar se listeners são anexados
+    console.log('[drawNativePolylines] Listeners anexados para:', feature.id);
+    
+    // Hover handlers - IMPORTANTE: Google Maps Polyline suporta mouseover/mouseout nativamente
+    const mouseoverListener = google.maps.event.addListener(polyline, 'mouseover', (event) => {
+      console.log('[Polyline] MOUSEOVER EVENT:', feature.id, event);
+      polyline.setOptions({ strokeWeight: 5, strokeOpacity: 1.0 });
+      showSignalTooltip(feature, event);
+    });
+    
+    const mouseoutListener = google.maps.event.addListener(polyline, 'mouseout', () => {
+      console.log('[Polyline] MOUSEOUT EVENT:', feature.id);
+      polyline.setOptions({ strokeWeight: 3, strokeOpacity: 0.8 });
+      hideSignalTooltip();
+    });
+    
+    const mousemoveListener = google.maps.event.addListener(polyline, 'mousemove', (event) => {
+      if (signalTooltipVisible.value) {
+        updateTooltipPosition(event);
+      }
+    });
+    
+    // Armazenar listeners para cleanup
+    polyline._hoverListeners = [mouseoverListener, mouseoutListener, mousemoveListener];
     
     nativePolylines.value.push(polyline);
   });
@@ -1179,6 +1381,88 @@ watch(focusedItem, async (newItem) => {
   max-width: 380px;
   background: transparent !important;
   color: var(--text-secondary);
+}
+
+/* Signal Tooltip (hover) */
+.signal-tooltip-overlay {
+  position: fixed;
+  z-index: 10000;
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+}
+
+.signal-tooltip {
+  padding: 8px 12px;
+  min-width: 250px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  pointer-events: auto;
+}
+
+.tooltip-loading,
+.tooltip-error {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-align: center;
+  padding: 4px 0;
+}
+
+.tooltip-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tooltip-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.signal-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.signal-label {
+  font-weight: 500;
+  color: var(--text-secondary);
+  min-width: 70px;
+}
+
+/* Tooltip signal values - mesmas cores do modal */
+.signal-tooltip .signal-row span:not(.signal-label) {
+  font-size: 12px;
+  font-weight: 600;
+  background: transparent;
+  padding: 0;
+}
+
+.signal-tooltip .signal-good {
+  background: transparent !important;
+  color: var(--status-online) !important;
+}
+
+.signal-tooltip .signal-warning {
+  background: transparent !important;
+  color: var(--status-warning) !important;
+}
+
+.signal-tooltip .signal-bad {
+  background: transparent !important;
+  color: var(--status-offline) !important;
+}
+
+.signal-tooltip .signal-unknown {
+  background: transparent !important;
+  color: var(--text-tertiary) !important;
 }
 
 .info-window-header {
@@ -1544,23 +1828,32 @@ watch(focusedItem, async (newItem) => {
   color: var(--text-tertiary);
 }
 
-.signal-good {
-  color: var(--status-online);
+/* Modal signal values - apenas cor do texto, sem background */
+.level-row .signal-good {
+  color: var(--status-online) !important;
   font-weight: 600;
+  background: transparent !important;
+  padding: 0 !important;
 }
 
-.signal-warning {
-  color: var(--status-warning);
+.level-row .signal-warning {
+  color: var(--status-warning) !important;
   font-weight: 600;
+  background: transparent !important;
+  padding: 0 !important;
 }
 
-.signal-bad {
-  color: var(--status-offline);
+.level-row .signal-bad {
+  color: var(--status-offline) !important;
   font-weight: 600;
+  background: transparent !important;
+  padding: 0 !important;
 }
 
-.signal-unknown {
-  color: var(--status-unknown);
+.level-row .signal-unknown {
+  color: var(--status-unknown) !important;
+  background: transparent !important;
+  padding: 0 !important;
 }
 
 .no-data {

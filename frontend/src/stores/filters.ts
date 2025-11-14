@@ -2,6 +2,24 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 
+const STATUS_ALIASES: Record<string, string> = {
+  operational: 'online',
+  operational_up: 'online',
+  online: 'online',
+  critical: 'offline',
+  down: 'offline',
+  offline: 'offline',
+  degraded: 'degraded',
+  warning: 'warning',
+  maintenance: 'maintenance',
+  unknown: 'unknown',
+};
+
+function normalizeStatus(value: string): string {
+  const key = value?.trim().toLowerCase();
+  return STATUS_ALIASES[key] ?? value;
+}
+
 export interface FilterState {
   status: string[];
   types: string[];
@@ -33,13 +51,33 @@ export const useFiltersStore = defineStore('filters', () => {
   }));
 
   // Actions
-  function toggleStatus(statusValue: string) {
-    const index = status.value.indexOf(statusValue);
+  function setStatusFilter(statusValue: string, shouldEnable?: boolean) {
+    const normalized = normalizeStatus(statusValue);
+    const index = status.value.indexOf(normalized);
+
+    if (shouldEnable === true) {
+      if (index === -1) {
+        status.value.push(normalized);
+      }
+      return;
+    }
+
+    if (shouldEnable === false) {
+      if (index > -1) {
+        status.value.splice(index, 1);
+      }
+      return;
+    }
+
     if (index > -1) {
       status.value.splice(index, 1);
     } else {
-      status.value.push(statusValue);
+      status.value.push(normalized);
     }
+  }
+
+  function toggleStatus(statusValue: string) {
+    setStatusFilter(statusValue);
   }
 
   function toggleType(typeValue: string) {
@@ -94,6 +132,7 @@ export const useFiltersStore = defineStore('filters', () => {
     hasActiveFilters,
     filterState,
     // Actions
+    setStatusFilter,
     toggleStatus,
     toggleType,
     toggleLocation,
