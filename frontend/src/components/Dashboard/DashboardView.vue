@@ -39,10 +39,11 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
-        <!-- Status summary -->
-        <div class="status-summary">
-          <StatusChart 
-            :distribution="dashboard.statusDistribution"
+        
+        <!-- Fiber Status Summary -->
+        <div class="fiber-status-summary">
+          <FiberStatusChart 
+            :distribution="dashboard.fiberStatusDistribution"
             @toggle-sidebar="toggleSidebar"
             @toggle-position="toggleSidebarPosition"
           />
@@ -132,7 +133,7 @@ import { useErrorHandler } from '@/composables/useErrorHandler';
 import { throttle } from '@/composables/usePerformance';
 import { defineAsyncComponent } from 'vue';
 import HostCard from '@/components/Dashboard/HostCard.vue';
-import StatusChart from '@/components/Dashboard/StatusChart.vue';
+import FiberStatusChart from '@/components/Dashboard/FiberStatusChart.vue';
 import VirtualList from '@/components/Common/VirtualList.vue';
 import FilterBar from '@/components/filters/FilterBar.vue';
 import { useUiStore } from '@/stores/ui';
@@ -208,6 +209,12 @@ onMounted(async () => {
   await handleAsync(
     () => dashboard.fetchDashboard(),
     { errorMessage: 'Failed to load dashboard data' }
+  );
+  
+  // Fetch fiber cables data
+  await handleAsync(
+    () => dashboard.fetchFiberCables(),
+    { errorMessage: 'Failed to load fiber cables data' }
   );
 });
 </script>
@@ -391,11 +398,8 @@ onMounted(async () => {
   display: flex;
 }
 
-
-.status-summary {
-  padding: 16px;
+.fiber-status-summary {
   background: transparent;
-  border-bottom: 1px solid var(--border-primary);
 }
 
 .host-cards-container {

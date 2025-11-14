@@ -16,27 +16,27 @@ describe('Filters Store', () => {
     expect(store.searchQuery).toBe('');
   });
 
-  it('toggles status filter', () => {
+  it('toggles status filter with alias support', () => {
     const store = useFiltersStore();
     store.toggleStatus('operational');
-    expect(store.status).toContain('operational');
+    expect(store.status).toContain('online');
     
     store.toggleStatus('operational');
-    expect(store.status).not.toContain('operational');
+    expect(store.status).not.toContain('online');
   });
 
   it('calculates active filter count', () => {
     const store = useFiltersStore();
     expect(store.activeFilterCount).toBe(0);
     
-    store.toggleStatus('operational');
+    store.toggleStatus('online');
     store.toggleType('OLT');
     expect(store.activeFilterCount).toBe(2);
   });
 
   it('clears all filters', () => {
     const store = useFiltersStore();
-    store.toggleStatus('operational');
+    store.toggleStatus('online');
     store.toggleType('OLT');
     store.setSearchQuery('test');
     
@@ -55,7 +55,19 @@ describe('Filters Store', () => {
     expect(store.hasActiveFilters).toBe(true);
     
     store.clearAllFilters();
-    store.toggleStatus('operational');
+    store.toggleStatus('online');
     expect(store.hasActiveFilters).toBe(true);
+  });
+
+  it('sets status explicitly without duplicates', () => {
+    const store = useFiltersStore();
+    store.setStatusFilter('online', true);
+    expect(store.status).toEqual(['online']);
+
+    store.setStatusFilter('online', true);
+    expect(store.status).toEqual(['online']);
+
+    store.setStatusFilter('online', false);
+    expect(store.status).toEqual([]);
   });
 });

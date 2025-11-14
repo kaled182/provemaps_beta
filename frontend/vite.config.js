@@ -13,6 +13,7 @@ export default defineConfig({
     outDir: '../backend/staticfiles/vue-spa', // Output to Django static collection area for SPA (Phase 11)
     emptyOutDir: true,
     manifest: true, // Generate manifest.json for Django asset mapping
+    minify: false, // Disable minification to keep console.log for debugging
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, 'index.html'),

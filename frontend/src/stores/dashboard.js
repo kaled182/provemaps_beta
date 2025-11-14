@@ -15,6 +15,11 @@ export const useDashboardStore = defineStore('dashboard', () => {
   const lastUpdate = ref(null);
   const loading = ref(false);
   const error = ref(null);
+  
+  // Fiber cables data
+  const fiberCables = ref(new Map()); // id -> { name, status, origin, destination, ... }
+  const fibersLoading = ref(false);
+  const fibersError = ref(null);
 
   // Memoized filter functions for better performance with large datasets
   const filterByStatus = memoize((hostMap, status) => {
@@ -37,6 +42,24 @@ export const useDashboardStore = defineStore('dashboard', () => {
     warning: warningHosts.value,
     unknown: unknownHosts.value,
   }));
+  
+  // Fiber status distribution
+  const fiberStatusDistribution = computed(() => {
+    const distribution = { up: 0, down: 0, degraded: 0, unknown: 0 };
+    const cables = Array.from(fiberCables.value.values());
+    console.log('[dashboardStore] Computing fiber distribution, cables count:', cables.length);
+    cables.forEach(cable => {
+      const status = cable.status || 'unknown';
+      console.log('[dashboardStore] Cable:', cable.name, 'Status:', status);
+      if (distribution.hasOwnProperty(status)) {
+        distribution[status]++;
+      } else {
+        distribution.unknown++;
+      }
+    });
+    console.log('[dashboardStore] Fiber distribution:', distribution);
+    return distribution;
+  });
 
   const hostsList = computed(() => Array.from(hosts.value.values()));
 
@@ -207,6 +230,41 @@ export const useDashboardStore = defineStore('dashboard', () => {
       loading.value = false;
     }
   }
+  
+  /**
+   * Fetch fiber cables data
+   */
+  async function fetchFiberCables() {
+    fibersLoading.value = true;
+    fibersError.value = null;
+    try {
+      console.log('[dashboardStore] Fetching fiber cables...');
+      const resp = await fetch('/api/v1/inventory/fibers/', {
+        credentials: 'include',
+      });
+      console.log('[dashboardStore] Fiber cables response status:', resp.status);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      console.log('[dashboardStore] Fiber cables data:', data);
+      const cables = Array.isArray(data.cables) ? data.cables : [];
+      console.log('[dashboardStore] Cables array:', cables, 'Length:', cables.length);
+      const updatedCables = new Map();
+
+      cables.forEach(cable => {
+        if (cable && cable.id) {
+          updatedCables.set(cable.id, cable);
+        }
+      });
+
+      fiberCables.value = updatedCables;
+      console.log('[dashboardStore] Fiber cables loaded:', updatedCables.size);
+    } catch (e) {
+      fibersError.value = e.message;
+      console.error('[dashboardStore] Failed to fetch fiber cables', e);
+    } finally {
+      fibersLoading.value = false;
+    }
+  }
 
   /**
    * Update host status from WebSocket message
@@ -274,6 +332,9 @@ export const useDashboardStore = defineStore('dashboard', () => {
     lastUpdate,
     loading,
     error,
+    fiberCables,
+    fibersLoading,
+    fibersError,
     
     // Computed
     totalHosts,
@@ -282,6 +343,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     warningHosts,
     unknownHosts,
     statusDistribution,
+    fiberStatusDistribution,
     hostsList,
     filteredHosts,
     availableLocations,
@@ -289,6 +351,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     
     // Actions
     fetchDashboard,
+    fetchFiberCables,
     updateHostFromWebSocket,
     updateDashboardSnapshot,
     handleWebSocketMessage,
