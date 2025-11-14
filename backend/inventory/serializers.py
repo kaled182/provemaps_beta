@@ -37,6 +37,7 @@ class SiteSerializer(serializers.ModelSerializer[Site]):
         required=False,
         allow_null=True,
     )
+    device_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Site
@@ -52,6 +53,7 @@ class SiteSerializer(serializers.ModelSerializer[Site]):
             "zip_code",
             "latitude",
             "longitude",
+            "device_count",
         ]
         read_only_fields = ["id", "slug"]
 
@@ -72,7 +74,10 @@ class DeviceSerializer(serializers.ModelSerializer[Device]):
             "name",
             "vendor",
             "model",
+            "primary_ip",
             "zabbix_hostid",
+            "uptime_item_key",
+            "cpu_usage_item_key",
         ]
         read_only_fields = ["id"]
 

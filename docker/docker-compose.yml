@@ -39,9 +39,9 @@
       ENABLE_URL_PERSISTENCE: "True"
       # Disable Debug Toolbar in Docker (prevents redirect interception)
       ENABLE_DEBUG_TOOLBAR: "False"
-      # Vue 3 Dashboard Feature Flags (Phase 11 - Canary Rollout)
-      USE_VUE_DASHBOARD: "True"
-      VUE_DASHBOARD_ROLLOUT_PERCENTAGE: "100"
+      # Vue 3 Dashboard Feature Flags (Phase 11 - Canary Rollout) - TEMPORARILY DISABLED FOR SITE-BASED MAP
+      USE_VUE_DASHBOARD: "False"
+      VUE_DASHBOARD_ROLLOUT_PERCENTAGE: "0"
       # Sentry APM (Phase 12 - Error Tracking & Performance Monitoring)
       SENTRY_DSN: "https://2b2a767ff10ec5ce098ba093c054a300@o4510353484742656.ingest.us.sentry.io/4510353502371840"
       SENTRY_ENVIRONMENT: "development"
@@ -75,6 +75,8 @@
     volumes:
       - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
       - ../backend:/app/backend
+      # Exclude vue-spa from volume mount to preserve built frontend assets
+      - /app/backend/staticfiles/vue-spa
       - ../frontend:/app/frontend
       - ../database:/app/database
       - ../doc:/app/doc

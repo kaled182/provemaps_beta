@@ -113,6 +113,34 @@ export const useDashboardStore = defineStore('dashboard', () => {
   });
 
   /**
+   * Extract unique device types from host data with counts
+   * Only shows types that exist in the current dataset
+   */
+  const availableTypes = computed(() => {
+    const typeMap = new Map();
+    
+    Array.from(hosts.value.values()).forEach(host => {
+      const deviceType = host.device_type;
+      
+      if (deviceType && !typeMap.has(deviceType)) {
+        typeMap.set(deviceType, {
+          value: deviceType,
+          label: deviceType,
+          count: 0,
+        });
+      }
+      
+      if (deviceType) {
+        const type = typeMap.get(deviceType);
+        type.count += 1;
+      }
+    });
+    
+    return Array.from(typeMap.values())
+      .sort((a, b) => a.label.localeCompare(b.label));
+  });
+
+  /**
    * Fetch initial dashboard data from cached endpoint
    */
   function normalizeHost(raw) {
@@ -130,6 +158,9 @@ export const useDashboardStore = defineStore('dashboard', () => {
       host_id: raw.hostid,
       name: raw.name,
       site: raw.site,
+      site_id: raw.site_id,
+      site_name: raw.site_name,
+      device_type: raw.device_type || null,
       status,
       availability,
       availability_text: raw.available_text,
@@ -139,7 +170,10 @@ export const useDashboardStore = defineStore('dashboard', () => {
       color: raw.color,
       status_class: raw.status_class,
       interface: raw.interface || null,
-      ip: raw.interface?.ip || raw.ip || null,
+      ip: raw.interface?.ip || raw.ip || raw.primary_ip || null,
+      primary_ip: raw.primary_ip || raw.interface?.ip || raw.ip || null,
+      uptime_value: raw.uptime_value || null,
+      cpu_value: raw.cpu_value || null,
       last_update: raw.last_update || null,
       raw,
     };
@@ -251,6 +285,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     hostsList,
     filteredHosts,
     availableLocations,
+    availableTypes,
     
     // Actions
     fetchDashboard,

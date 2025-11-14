@@ -16,14 +16,8 @@ const statusOptions = [
   { value: 'unknown', label: '🔵 Unknown', color: 'blue' },
 ];
 
-const typeOptions = [
-  { value: 'OLT', label: 'OLT (GPON)' },
-  { value: 'Switch', label: 'Switch' },
-  { value: 'Router', label: 'Router' },
-  { value: 'Server', label: 'Server' },
-  { value: 'Firewall', label: 'Firewall' },
-  { value: 'AP', label: 'Access Point' },
-];
+// Use real types from dashboard data (dynamic based on Zabbix groups)
+const typeOptions = computed(() => dashboardStore.availableTypes);
 
 // Use real locations from dashboard data (Phase 13 Sprint 1 Day 2)
 const locationOptions = computed(() => dashboardStore.availableLocations);
@@ -95,10 +89,9 @@ function handleClearAll() {
   flex-direction: column;
   gap: 1rem;
   padding: 1rem;
-  background: var(--surface-card);
+  background: transparent;
   border-radius: 8px;
-  box-shadow: var(--shadow-sm);
-  margin-bottom: 1rem;
+  margin-bottom: 0;
 }
 
 .filter-bar__search {
@@ -135,12 +128,12 @@ function handleClearAll() {
 
 .btn-outline {
   border: 1px solid var(--border-primary);
-  background: var(--surface-muted);
+  background: var(--surface-highlight);
   color: var(--text-primary);
 }
 
 .btn-outline:hover {
-  background: var(--surface-highlight);
+  background: var(--menu-item-hover);
   border-color: var(--border-secondary);
 }
 

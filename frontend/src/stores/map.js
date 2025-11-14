@@ -95,11 +95,24 @@ export const useMapStore = defineStore('map', () => {
    * @param {object} item - O objeto do site (deve ter latitude e longitude)
    */
   function focusOnItem(item) {
-    if (item && item.latitude && item.longitude) {
-      focusedItem.value = item;
-    } else {
-      console.warn('[mapStore] Tentativa de focar em item sem coordenadas:', item);
+    if (!item) {
+      console.warn('[mapStore] Tentativa de focar em item vazio');
+      return;
     }
+
+    const lat = Number(item.latitude ?? item.lat ?? item.site?.latitude);
+    const lng = Number(item.longitude ?? item.lng ?? item.site?.longitude);
+
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      console.warn('[mapStore] Tentativa de focar em item sem coordenadas válidas:', item);
+      return;
+    }
+
+    focusedItem.value = {
+      ...item,
+      latitude: lat,
+      longitude: lng,
+    };
   }
 
   /**

@@ -1,0 +1,142 @@
+# ====================================================
+# Docker Build Context Exclusions
+# ====================================================
+# Keep local configuration and development artifacts out of
+# Docker image builds to ensure reproducible deployments.
+# ====================================================
+
+# ----------------------------------------------------
+# Git
+# ----------------------------------------------------
+.git
+.gitignore
+.gitattributes
+
+# ----------------------------------------------------
+# Docker Tooling
+# ----------------------------------------------------
+.dockerignore
+docker-compose*.yml
+dockerfile
+Dockerfile
+
+# ----------------------------------------------------
+# Python
+# ----------------------------------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+.pytest_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ----------------------------------------------------
+# IDEs / Editors
+# ----------------------------------------------------
+.vscode/
+.idea/
+*.sublime-*
+*.swp
+*.swo
+*~
+
+# ----------------------------------------------------
+# OS Specific
+# ----------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ----------------------------------------------------
+# Local Environment Files (critical)
+# ----------------------------------------------------
+# Host-specific settings should stay outside containers.
+# Docker Compose populates the correct variables via the
+# environment section in compose files.
+.env
+.env.*
+!.env.example
+
+# ----------------------------------------------------
+# Logs and Runtime Data
+# ----------------------------------------------------
+logs/
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# ----------------------------------------------------
+# Media and Static Files
+# ----------------------------------------------------
+# Generated during runtime or build; avoid bundling cached output.
+media/
+staticfiles/
+node_modules/
+
+# ----------------------------------------------------
+# Database Files
+# ----------------------------------------------------
+# SQLite databases should not be in the image
+db.sqlite3
+db.sqlite3-journal
+*.db
+
+# ----------------------------------------------------
+# Documentation and Project Files
+# ----------------------------------------------------
+README.md
+CONTRIBUTING.md
+CHANGELOG*.md
+DEPLOYMENT.md
+QUICKSTART*.md
+TUTORIAL*.md
+STATUS*.md
+SECURITY.md
+COMANDOS_RAPIDOS.md
+AGENTS.md
+API_DOCUMENTATION.md
+doc/
+
+# ----------------------------------------------------
+# Test Files
+# ----------------------------------------------------
+tests/
+test_*.sh
+conftest.py
+pytest.ini
+.pytest_cache/
+
+# ----------------------------------------------------
+# CI/CD and Scripts
+# ----------------------------------------------------
+.github/
+ # scripts/  # allow scripts to be bundled for runtime helpers
+makefile
+
+# ----------------------------------------------------
+# Other
+# ----------------------------------------------------
+celerybeat-schedule
+celerybeat.pid
+package.json
+package-lock.json
+pyproject.toml

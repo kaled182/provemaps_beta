@@ -35,6 +35,7 @@ from inventory.domain.optical import (
     fetch_ports_optical_snapshots,
 )
 from inventory.models import Device, FiberCable, Port, Site
+from inventory.services.device_groups import sync_device_groups_for_device
 from integrations.zabbix.zabbix_service import zabbix_request
 
 ZABBIX_REQUEST = zabbix_request
@@ -653,10 +654,12 @@ def get_device_ports_with_optical(device_id: int) -> Dict[str, Any]:
             },
         )
         cable_any = cast(Any, cable) if cable else None
+        port_notes = cast(str, getattr(port_any, "notes", ""))
         ports_with_optical.append(
             {
                 "id": port_id,
                 "name": cast(str, getattr(port_any, "name", "")),
+                "notes": port_notes,
                 "cable_id": cast(
                     Optional[int],
                     getattr(cable_any, "id", None) if cable_any else None,
@@ -678,9 +681,74 @@ def get_device_ports_with_optical(device_id: int) -> Dict[str, Any]:
         duration,
     )
 
+    # Fetch uptime and CPU values from Zabbix
+    uptime_value = None
+    cpu_value = None
+    
+    uptime_key = getattr(cast(Any, device), "uptime_item_key", "")
+    cpu_key = getattr(cast(Any, device), "cpu_usage_item_key", "")
+    
+    if uptime_key or cpu_key:
+        try:
+            # Fetch item values from Zabbix
+            items_to_fetch = []
+            if uptime_key:
+                items_to_fetch.append(uptime_key)
+            if cpu_key:
+                items_to_fetch.append(cpu_key)
+            
+            item_values = zabbix_request(
+                "item.get",
+                {
+                    "output": ["key_", "lastvalue", "units"],
+                    "hostids": [hostid],
+                    "filter": {"key_": items_to_fetch},
+                },
+            )
+            
+            # Map values
+            for item in item_values:
+                key = item.get("key_", "")
+                lastvalue = item.get("lastvalue", "")
+                units = item.get("units", "")
+                
+                if key == uptime_key and lastvalue:
+                    # Convert uptime from seconds to human readable format
+                    try:
+                        seconds = int(lastvalue)
+                        days = seconds // 86400
+                        hours = (seconds % 86400) // 3600
+                        minutes = (seconds % 3600) // 60
+                        
+                        parts = []
+                        if days > 0:
+                            parts.append(f"{days}d")
+                        if hours > 0:
+                            parts.append(f"{hours}h")
+                        if minutes > 0:
+                            parts.append(f"{minutes}m")
+                        
+                        uptime_value = " ".join(parts) if parts else "< 1m"
+                    except (ValueError, TypeError):
+                        uptime_value = lastvalue
+                
+                elif key == cpu_key and lastvalue:
+                    # Format CPU value
+                    try:
+                        cpu_float = float(lastvalue)
+                        cpu_value = f"{cpu_float:.1f}%"
+                    except (ValueError, TypeError):
+                        cpu_value = f"{lastvalue}{units}" if units else lastvalue
+        
+        except Exception as e:
+            logger.warning(f"Failed to fetch Zabbix values for device {device.id}: {e}")
+    
     return {
         "device_id": cast(int, getattr(cast(Any, device), "id", device.pk)),
         "device_name": cast(str, getattr(cast(Any, device), "name", "")),
+        "primary_ip": cast(Optional[str], getattr(cast(Any, device), "primary_ip", None)),
+        "uptime_value": uptime_value,
+        "cpu_value": cpu_value,
         "ports": ports_with_optical,
     }
 
@@ -785,24 +853,92 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
     lat_decimal = _to_decimal(_clean(inventory.get("location_lat")))
     lon_decimal = _to_decimal(_clean(inventory.get("location_lon")))
 
-    site = existing_device.site if existing_device else None
+    # Find existing site based on what Zabbix returns
+    # DO NOT use existing_device.site - we need to check if device should be moved to a different site
+    site = None
+    logger.info(f"Searching for site: '{site_display_name}'")
+    
+    # Strategy 1: Exact match (case-insensitive)
+    site = Site.objects.filter(display_name__iexact=site_display_name).first()
+    if site:
+        logger.info(f"Found site by exact match: {site.display_name}")
+    
     if site is None:
-        site = Site.objects.filter(display_name__iexact=site_display_name).first()
-    if site is None:
+        # Strategy 2: Match by slug
         site = Site.objects.filter(slug=slug_candidate).first()
+        if site:
+            logger.info(f"Found site by slug '{slug_candidate}': {site.display_name}")
+    
+    if site is None:
+        # Strategy 3: Normalize both sides and compare (remove accents)
+        from unicodedata import normalize
+        
+        # Remove accents from search term
+        normalized_search = normalize('NFKD', site_display_name).encode('ASCII', 'ignore').decode('ASCII').strip().lower()
+        logger.info(f"Trying normalized search: '{normalized_search}'")
+        
+        # Check all sites with normalized comparison
+        for existing_site in Site.objects.all():
+            normalized_existing = normalize('NFKD', existing_site.display_name).encode('ASCII', 'ignore').decode('ASCII').strip().lower()
+            if normalized_existing == normalized_search:
+                site = existing_site
+                logger.info(f"Found site by normalized match: {site.display_name}")
+                break
+    
     site_created = False
     if site is None:
-        site = Site(**address_payload)
-        site.slug = slug_candidate
+        logger.warning(f"Site '{site_display_name}' not found in database. Creating new site.")
+        
+        # Last resort: Use get_or_create to avoid duplicate key violations
+        # This ensures thread-safety when multiple devices are added simultaneously
+        site_defaults = {**address_payload}
+        site_defaults['slug'] = slug_candidate
         if lat_decimal is not None:
-            site.latitude = lat_decimal
+            site_defaults['latitude'] = lat_decimal
         if lon_decimal is not None:
-            site.longitude = lon_decimal
-        site.save()
-        site_created = True
+            site_defaults['longitude'] = lon_decimal
+        
+        try:
+            site, site_created = Site.objects.get_or_create(
+                display_name=site_display_name,
+                defaults=site_defaults
+            )
+            if site_created:
+                logger.info(f"Created new site: {site.display_name}")
+            else:
+                logger.info(f"Site already exists (race condition avoided): {site.display_name}")
+        except Exception as e:
+            # If still fails due to unique constraint, try to find it one more time
+            logger.error(f"Failed to create site '{site_display_name}': {e}")
+            
+            # Try exact match again (another process might have created it)
+            site = Site.objects.filter(display_name__iexact=site_display_name).first()
+            
+            if site is None:
+                # Try normalized match as last resort
+                from unicodedata import normalize
+                normalized_search = normalize('NFKD', site_display_name).encode('ASCII', 'ignore').decode('ASCII').strip().lower()
+                
+                for existing_site in Site.objects.all():
+                    normalized_existing = normalize('NFKD', existing_site.display_name).encode('ASCII', 'ignore').decode('ASCII').strip().lower()
+                    if normalized_existing == normalized_search:
+                        site = existing_site
+                        logger.info(f"Found site after error by normalized match: {site.display_name}")
+                        break
+            
+            if site is None:
+                # Absolute last resort: use normalized name
+                logger.error(f"Could not find or create site '{site_display_name}'. Re-raising exception.")
+                raise
     else:
+        logger.info(f"Using existing site: {site.display_name}")
+        
+        # Update site fields if needed (but NEVER update display_name or slug - these are immutable)
         update_fields: List[str] = []
         for field, value in address_payload.items():
+            # Skip immutable fields
+            if field in ('display_name', 'slug'):
+                continue
             if value and getattr(site, field) != value:
                 setattr(site, field, value)
                 update_fields.append(field)
@@ -812,11 +948,65 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
         if lon_decimal is not None and site.longitude != lon_decimal:
             site.longitude = lon_decimal
             update_fields.append("longitude")
-        if slug_candidate and site.slug != slug_candidate:
-            site.slug = slug_candidate
-            update_fields.append("slug")
         if update_fields:
             site.save(update_fields=update_fields)
+
+    # Extrair IP primário das interfaces do Zabbix
+    primary_ip = None
+    interfaces = host.get("interfaces", [])
+    if interfaces:
+        # Preferir interface do tipo 1 (agent) ou 2 (SNMP), depois qualquer uma com IP
+        for iface in interfaces:
+            if iface.get("ip"):
+                primary_ip = iface["ip"].strip()
+                # Preferir interface do tipo 1 ou 2
+                if iface.get("type") in ["1", "2", 1, 2]:
+                    break
+
+    # Buscar items do Zabbix primeiro para detectar uptime e CPU keys
+    raw_host_items = ZABBIX_REQUEST(
+        "item.get",
+        {
+            "output": ["itemid", "key_", "name", "interfaceid", "lastvalue", "units", "snmpindex"],
+            "hostids": hostid,
+            "filter": {"status": "0"},
+            "limit": 2000,
+        },
+    )
+    host_items: HostItemList = _coerce_host_items(raw_host_items)
+
+    # Buscar item keys para uptime e CPU usage
+    uptime_key = None
+    cpu_key = None
+    
+    for item in host_items:
+        key = item.get("key_") or ""
+        key_lower = key.lower()
+        name_lower = (item.get("name") or "").lower()
+        
+        # Identificar item key de uptime - aceita: sysUpTime, system.uptime
+        # NÃO aceita: InterfaceUptime, ifLastChange, lastdowntime, etc
+        if not uptime_key:
+            # Verificar se é realmente uptime do SISTEMA (não interface, lastchange, etc)
+            if "sysuptime" in key_lower:
+                uptime_key = key
+            elif "system.uptime" in key_lower:
+                uptime_key = key
+            elif "uptime" in key_lower:
+                # Excluir falsos positivos: interface, lastchange, lastdown, iflast
+                if not any(exclude in key_lower for exclude in ["interface", "lastchange", "lastdown", "iflast"]):
+                    uptime_key = key
+            elif "uptime" in name_lower and "system" in name_lower:
+                uptime_key = key
+        
+        # Identificar item key de CPU usage - aceita: hwCpuDevDuty, cpu.util, system.cpu, etc
+        if not cpu_key:
+            if any(pattern in key_lower for pattern in ["hwcpudevduty", "cpu.util", "cpu.usage", "system.cpu"]):
+                cpu_key = key
+            elif "cpu" in key_lower and any(pattern in key_lower for pattern in ["duty", "load", "util", "usage"]):
+                cpu_key = key
+            elif "cpu" in name_lower and any(pattern in name_lower for pattern in ["uso", "usage", "util", "duty", "utiliza"]):
+                cpu_key = key
 
     device_created = False
     if existing_device:
@@ -831,6 +1021,18 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
         if not device.zabbix_hostid or str(device.zabbix_hostid) != hostid_str:
             device.zabbix_hostid = hostid_str
             update_fields.append("zabbix_hostid")
+        # Atualizar IP se mudou
+        if primary_ip and device.primary_ip != primary_ip:
+            device.primary_ip = primary_ip
+            update_fields.append("primary_ip")
+        # Atualizar uptime_item_key se mudou
+        if uptime_key and device.uptime_item_key != uptime_key:
+            device.uptime_item_key = uptime_key
+            update_fields.append("uptime_item_key")
+        # Atualizar cpu_usage_item_key se mudou
+        if cpu_key and device.cpu_usage_item_key != cpu_key:
+            device.cpu_usage_item_key = cpu_key
+            update_fields.append("cpu_usage_item_key")
         if update_fields:
             device.save(update_fields=update_fields)
     else:
@@ -841,6 +1043,9 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
                 "vendor": "",
                 "model": "",
                 "zabbix_hostid": hostid_str,
+                "primary_ip": primary_ip,
+                "uptime_item_key": uptime_key or "",
+                "cpu_usage_item_key": cpu_key or "",
             },
         )
         if (
@@ -850,19 +1055,25 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
                 or str(device.zabbix_hostid) != hostid_str
             )
         ):
+            update_fields_list = ["zabbix_hostid"]
             device.zabbix_hostid = hostid_str
-            device.save(update_fields=["zabbix_hostid"])
+            if primary_ip and device.primary_ip != primary_ip:
+                device.primary_ip = primary_ip
+                update_fields_list.append("primary_ip")
+            if uptime_key and device.uptime_item_key != uptime_key:
+                device.uptime_item_key = uptime_key
+                update_fields_list.append("uptime_item_key")
+            if cpu_key and device.cpu_usage_item_key != cpu_key:
+                device.cpu_usage_item_key = cpu_key
+                update_fields_list.append("cpu_usage_item_key")
+            device.save(update_fields=update_fields_list)
 
-    raw_host_items = ZABBIX_REQUEST(
-        "item.get",
-        {
-            "output": ["itemid", "key_", "name", "interfaceid", "lastvalue", "units", "snmpindex"],
-            "hostids": hostid,
-            "filter": {"status": "0"},
-            "limit": 2000,
-        },
-    )
-    host_items: HostItemList = _coerce_host_items(raw_host_items)
+    # Sync device groups from Zabbix automatically
+    try:
+        sync_device_groups_for_device(device)
+        logger.info(f"Auto-synced device groups for {device.name}")
+    except Exception as e:
+        logger.warning(f"Failed to auto-sync device groups for {device.name}: {e}")
 
     port_records: List[PortRecord] = []
     primary_items: HostItemList = []
