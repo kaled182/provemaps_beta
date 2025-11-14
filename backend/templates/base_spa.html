@@ -19,8 +19,8 @@
     {# Tailwind CSS from CDN (temporary during migration) #}
     <script src="https://cdn.tailwindcss.com"></script>
     
-    {# Vite-built Vue SPA assets #}
-    <script type="module" src="{% static 'vue-spa/assets/main.js' %}"></script>
+    {# Vite-built Vue SPA assets with cache busting #}
+    <script type="module" src="{% static 'vue-spa/assets/main.js' %}?v={{ STATIC_ASSET_VERSION|default:'1' }}"></script>
     
     {% block extra_head %}{% endblock %}
 </head>

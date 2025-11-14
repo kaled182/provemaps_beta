@@ -17,7 +17,7 @@ describe('Dashboard Store - Filtered Hosts', () => {
     dashboardStore.hosts.set(1, {
       id: 1,
       name: 'OLT-Central-01',
-      status: 'operational',
+      status: 'online',
       type: 'OLT',
       site_id: '1',
       site_name: 'POP Central',
@@ -33,7 +33,7 @@ describe('Dashboard Store - Filtered Hosts', () => {
     dashboardStore.hosts.set(3, {
       id: 3,
       name: 'OLT-Sul-01',
-      status: 'operational',
+      status: 'online',
       type: 'OLT',
       site_id: '3',
       site_name: 'POP Sul',
@@ -45,9 +45,9 @@ describe('Dashboard Store - Filtered Hosts', () => {
   });
 
   it('filters by status', () => {
-    filtersStore.toggleStatus('operational');
+    filtersStore.toggleStatus('online');
     expect(dashboardStore.filteredHosts.length).toBe(2);
-    expect(dashboardStore.filteredHosts.every(h => h.status === 'operational')).toBe(true);
+    expect(dashboardStore.filteredHosts.every(h => h.status === 'online')).toBe(true);
   });
 
   it('filters by type', () => {
@@ -63,11 +63,11 @@ describe('Dashboard Store - Filtered Hosts', () => {
   });
 
   it('combines multiple filters', () => {
-    filtersStore.toggleStatus('operational');
+    filtersStore.toggleStatus('online');
     filtersStore.toggleType('OLT');
     expect(dashboardStore.filteredHosts.length).toBe(2);
     expect(dashboardStore.filteredHosts.every(h => 
-      h.status === 'operational' && h.type === 'OLT'
+      h.status === 'online' && h.type === 'OLT'
     )).toBe(true);
   });
 
@@ -107,7 +107,7 @@ describe('Dashboard Store - Filtered Hosts', () => {
     dashboardStore.hosts.set(4, {
       id: 4,
       name: 'Router-Central-01',
-      status: 'operational',
+      status: 'online',
       type: 'Router',
       site_id: '1',
       site_name: 'POP Central',
