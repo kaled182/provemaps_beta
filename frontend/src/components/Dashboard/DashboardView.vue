@@ -307,6 +307,7 @@ onMounted(async () => {
   display: flex;
   flex: 1;
   overflow: hidden;
+  height: 100%;
 }
 
 .dashboard-main.sidebar-right {
@@ -314,15 +315,15 @@ onMounted(async () => {
 }
 
 .dashboard-sidebar {
+  flex-shrink: 0;
   width: 350px;
-  background: var(--bg-primary);
+  background: linear-gradient(195deg, var(--menu-bg-start) 0%, var(--menu-bg-end) 100%);
   border-right: 1px solid var(--border-primary);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: all 0.3s ease-in-out;
-  position: relative;
-  z-index: 1050;
+  transition: width 0.3s ease-in-out;
+  box-shadow: var(--shadow-accent);
 }
 
 .dashboard-sidebar.sidebar-collapsed {
@@ -349,8 +350,8 @@ onMounted(async () => {
   flex-direction: column;
   gap: 8px;
   padding: 12px 2px;
-  background: var(--accent-primary);
-  border-bottom: 1px solid var(--accent-secondary);
+  background: linear-gradient(195deg, var(--menu-item-active-start) 0%, var(--menu-item-active-end) 100%);
+  border-bottom: 1px solid var(--border-primary);
   align-items: center;
   width: 15px;
 }
@@ -362,10 +363,10 @@ onMounted(async () => {
   justify-content: center;
   width: 11px;
   height: 32px;
-  padding: 0;
+  padding: 4px 2px;
   background: var(--menu-item-hover);
   border: 1px solid var(--border-secondary);
-  border-radius: 3px;
+  border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
   writing-mode: vertical-lr;
@@ -373,9 +374,9 @@ onMounted(async () => {
 
 .expand-btn:hover,
 .swap-btn-collapsed:hover {
-  background: var(--border-primary);
-  border-color: var(--border-primary);
-  width: 13px;
+  background: var(--accent-secondary);
+  border-color: var(--accent-secondary);
+  width: 15px;
 }
 
 .expand-btn svg,
@@ -393,7 +394,7 @@ onMounted(async () => {
 
 .status-summary {
   padding: 16px;
-  background: var(--bg-secondary);
+  background: transparent;
   border-bottom: 1px solid var(--border-primary);
 }
 
@@ -409,8 +410,8 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   padding: 16px;
-  background: var(--bg-secondary);
-  border-bottom: 2px solid var(--border-primary);
+  background: transparent;
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .section-header h2 {
@@ -433,6 +434,12 @@ onMounted(async () => {
   flex: 1;
   overflow-y: auto;
   padding: 8px;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.host-cards-list::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Opera */
 }
 
 .host-cards-list-virtual {
@@ -441,25 +448,12 @@ onMounted(async () => {
 }
 
 .host-cards-list-virtual :deep(.virtual-list-container) {
-  scrollbar-width: thin;
-  scrollbar-color: #d1d5db #f9fafb;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
 }
 
 .host-cards-list-virtual :deep(.virtual-list-container)::-webkit-scrollbar {
-  width: 8px;
-}
-
-.host-cards-list-virtual :deep(.virtual-list-container)::-webkit-scrollbar-track {
-  background: var(--bg-primary);
-}
-
-.host-cards-list-virtual :deep(.virtual-list-container)::-webkit-scrollbar-thumb {
-  background: var(--border-primary);
-  border-radius: 4px;
-}
-
-.host-cards-list-virtual :deep(.virtual-list-container)::-webkit-scrollbar-thumb:hover {
-  background: var(--border-secondary);
+  display: none; /* Chrome/Safari/Opera */
 }
 
 .loading-state,

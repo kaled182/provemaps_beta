@@ -27,6 +27,11 @@ from core import views as core_views
 # Health endpoints separados em core/views_health.py
 from core import views_health as health_views
 
+# Customize Django Admin
+admin.site.site_header = "SIMPLES INTERNET - Administração"
+admin.site.site_title = "Maps Prove Fiber Admin"
+admin.site.index_title = "Gerenciamento do Sistema"
+
 
 def redirect_to_maps_view(request: Any):
     """Redireciona raiz para dashboard."""

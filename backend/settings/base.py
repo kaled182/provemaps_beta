@@ -150,6 +150,11 @@ CONTENT_SECURITY_POLICY = {
 # Apps
 # -----------------------------------------------------
 INSTALLED_APPS = [
+    # Django Unfold - Must be before django.contrib.admin
+    "unfold",
+    "unfold.contrib.filters",
+    "unfold.contrib.forms",
+    
     # Django core
     "django.contrib.admin",
     "django.contrib.auth",
@@ -406,7 +411,7 @@ MEDIA_ROOT = BACKEND_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Cache-busting version (overridden via STATIC_ASSET_VERSION in env)
-STATIC_ASSET_VERSION = os.getenv("STATIC_ASSET_VERSION", "20251026.1")
+STATIC_ASSET_VERSION = os.getenv("STATIC_ASSET_VERSION", "20251113.2309")
 
 # -----------------------------------------------------
 # Templates (cache enabled in production)
@@ -570,4 +575,120 @@ REST_FRAMEWORK: dict[str, object] = {
         "rest_framework.pagination.PageNumberPagination"
     ),
     "PAGE_SIZE": 100,
+}
+
+# ===========================
+# Django Unfold Configuration
+# ===========================
+
+UNFOLD = {
+    "SITE_TITLE": "Maps Prove Fiber",
+    "SITE_HEADER": "SIMPLES INTERNET",
+    "SITE_URL": "/maps_view/dashboard/",
+    "SITE_ICON": {
+        "light": lambda request: "admin/img/si-logo.svg",
+        "dark": lambda request: "admin/img/si-logo.svg",
+    },
+    "SITE_LOGO": {
+        "light": lambda request: "admin/img/si-logo.svg",
+        "dark": lambda request: "admin/img/si-logo.svg",
+    },
+    "SITE_SYMBOL": "SI",
+    "SHOW_HISTORY": True,
+    "SHOW_VIEW_ON_SITE": True,
+    "ENVIRONMENT": "production" if not DEBUG else "development",
+    "DASHBOARD_CALLBACK": None,
+    "THEME": "dark",
+    "COLORS": {
+        "primary": {
+            "50": "239 246 255",
+            "100": "219 234 254",
+            "200": "191 219 254",
+            "300": "147 197 253",
+            "400": "96 165 250",
+            "500": "59 130 246",
+            "600": "37 99 235",
+            "700": "29 78 216",
+            "800": "30 64 175",
+            "900": "30 58 138",
+            "950": "23 37 84",
+        },
+    },
+    "EXTENSIONS": {
+        "modeltranslation": {
+            "flags": {
+                "en": "🇬🇧",
+                "fr": "🇫🇷",
+                "nl": "🇧🇪",
+            },
+        },
+    },
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": True,
+        "navigation": [
+            {
+                "title": "Dashboard",
+                "separator": False,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "Ver Dashboard",
+                        "icon": "home",
+                        "link": "/maps_view/dashboard/",
+                    },
+                ],
+            },
+            {
+                "title": "Autenticação",
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": "Grupos",
+                        "icon": "group",
+                        "link": lambda request: "/admin/auth/group/",
+                    },
+                    {
+                        "title": "Usuários",
+                        "icon": "person",
+                        "link": lambda request: "/admin/auth/user/",
+                    },
+                ],
+            },
+            {
+                "title": "Network Inventory",
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": "Sites",
+                        "icon": "location_on",
+                        "link": lambda request: "/admin/inventory/site/",
+                    },
+                    {
+                        "title": "Devices",
+                        "icon": "router",
+                        "link": lambda request: "/admin/inventory/device/",
+                    },
+                    {
+                        "title": "Device Groups",
+                        "icon": "dns",
+                        "link": lambda request: "/admin/inventory/devicegroup/",
+                    },
+                    {
+                        "title": "Fiber Cables",
+                        "icon": "cable",
+                        "link": lambda request: "/admin/inventory/fibercable/",
+                    },
+                    {
+                        "title": "Ports",
+                        "icon": "settings_ethernet",
+                        "link": lambda request: "/admin/inventory/port/",
+                    },
+                ],
+            },
+        ],
+    },
+    "TABS": [],
 }

@@ -116,7 +116,7 @@ function getStatusLabel(status) {
 
 <style scoped>
 .status-chart {
-  background: var(--bg-secondary);
+  background: transparent;
   padding: 16px;
   border-radius: 8px;
 }
@@ -148,7 +148,7 @@ function getStatusLabel(status) {
   width: 28px;
   height: 28px;
   padding: 0;
-  background: var(--bg-primary);
+  background: var(--surface-highlight);
   border: 1px solid var(--border-primary);
   border-radius: 4px;
   cursor: pointer;
@@ -194,10 +194,11 @@ function getStatusLabel(status) {
 
 .bar-wrapper {
   height: 32px;
-  background: var(--bg-primary);
+  background: var(--bg-tertiary);
   border-radius: 4px;
   overflow: hidden;
   position: relative;
+  border: 1px solid var(--border-primary);
 }
 
 .bar-fill {
@@ -230,7 +231,7 @@ function getStatusLabel(status) {
   color: var(--text-primary);
   font-size: 12px;
   font-weight: 600;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .bar-label {

@@ -10,7 +10,6 @@
     <div class="card-header">
       <div class="host-info">
         <h3 class="host-name" :id="`host-name-${host.id}`">{{ host.name || `Host #${host.id}` }}</h3>
-        <span class="host-id" aria-label="Identificador do host">ID: {{ host.id }}</span>
       </div>
       <div
         class="status-badge"
@@ -23,30 +22,19 @@
     </div>
 
     <div class="card-body">
-      <div v-if="host.metrics" class="host-metrics" role="list" aria-label="Métricas do host">
-        <div v-if="host.metrics.cpu !== undefined" class="metric" role="listitem">
-          <span class="metric-label">CPU:</span>
-          <span class="metric-value" :aria-label="`Uso de CPU: ${host.metrics.cpu} porcento`">{{ host.metrics.cpu }}%</span>
+      <div class="host-stats">
+        <div v-if="host.ip || host.primary_ip" class="stat-item">
+          <span class="stat-icon">📍</span>
+          <span class="stat-value">{{ host.ip || host.primary_ip }}</span>
         </div>
-        <div v-if="host.metrics.memory !== undefined" class="metric" role="listitem">
-          <span class="metric-label">Memória:</span>
-          <span class="metric-value" :aria-label="`Uso de memória: ${host.metrics.memory} porcento`">{{ host.metrics.memory }}%</span>
+        <div v-if="host.uptime_value || host.metrics?.uptime" class="stat-item">
+          <span class="stat-icon">⏱️</span>
+          <span class="stat-value">{{ host.uptime_value || formatUptime(host.metrics.uptime) }}</span>
         </div>
-        <div v-if="host.metrics.uptime !== undefined" class="metric" role="listitem">
-          <span class="metric-label">Uptime:</span>
-          <span class="metric-value" :aria-label="`Tempo de atividade: ${formatUptime(host.metrics.uptime)}`">{{ formatUptime(host.metrics.uptime) }}</span>
+        <div v-if="host.cpu_value || host.metrics?.cpu !== undefined" class="stat-item">
+          <span class="stat-icon">💻</span>
+          <span class="stat-value">{{ host.cpu_value || `${host.metrics.cpu}%` }}</span>
         </div>
-      </div>
-
-      <div v-if="host.last_update" class="last-update">
-        <span class="update-label">Última atualização:</span>
-        <time
-          class="update-time"
-          :datetime="host.last_update"
-          :aria-label="`Última atualização: ${formatTimestamp(host.last_update)}`"
-        >
-          {{ formatTimestamp(host.last_update) }}
-        </time>
       </div>
     </div>
 
@@ -65,6 +53,9 @@ const props = defineProps({
   },
 });
 
+// Debug: log host data
+console.log('[HostCard] Host data:', props.host);
+
 const mapStore = useMapStore();
 const isRecentlyUpdated = ref(false);
 
@@ -79,35 +70,68 @@ const statusLabel = computed(() => {
   return statusMap[props.host.status] || 'Desconhecido';
 });
 
-function focusMapOnHost() {
-  const siteOfHost = findSiteByHostId(props.host.id);
-  if (siteOfHost) {
-    mapStore.focusOnItem(siteOfHost);
-  } else {
-    console.warn(`[HostCard] Não foi possível encontrar site para host ${props.host.id}`);
-  }
-}
-
-function findSiteByHostId(hostId) {
-  if (mapStore.sites && mapStore.sites.length > 0) {
-    const site = mapStore.sites.find((siteItem) =>
-      siteItem.devices?.some((device) => device.hostid === hostId) || siteItem.id === props.host.site_id,
-    );
-    if (site) {
-      return site;
+async function focusMapOnHost() {
+  console.log('[HostCard] Clique no card, host:', props.host);
+  
+  // Tentar encontrar o dispositivo nas APIs
+  try {
+    // Primeiro, buscar o device completo com site
+    const deviceResponse = await fetch('/api/v1/devices/', { credentials: 'include' });
+    if (!deviceResponse.ok) {
+      console.error('[HostCard] Erro ao buscar devices');
+      return;
     }
-  }
-
-  if (props.host.latitude && props.host.longitude) {
-    return {
-      id: props.host.site_id || props.host.id,
-      name: props.host.site_name || props.host.name,
-      latitude: props.host.latitude,
-      longitude: props.host.longitude,
+    
+    const devicesData = await deviceResponse.json();
+    const devices = devicesData.results || devicesData;
+    
+    // Encontrar o device correspondente ao host
+    const device = devices.find(d => 
+      d.id === props.host.id || 
+      d.zabbix_hostid === props.host.host_id ||
+      d.name === props.host.name
+    );
+    
+    if (!device) {
+      console.warn('[HostCard] Device não encontrado para host:', props.host);
+      return;
+    }
+    
+    console.log('[HostCard] Device encontrado:', device);
+    
+    // Buscar o site para obter as coordenadas
+    const siteResponse = await fetch(`/api/v1/sites/${device.site}/`, { credentials: 'include' });
+    if (!siteResponse.ok) {
+      console.error('[HostCard] Erro ao buscar site');
+      return;
+    }
+    
+    const site = await siteResponse.json();
+    console.log('[HostCard] Site encontrado:', site);
+    
+    if (!site.latitude || !site.longitude) {
+      console.warn('[HostCard] Site sem coordenadas:', site);
+      return;
+    }
+    
+    // Criar objeto para focar com flag de abrir modal
+    const deviceToFocus = {
+      id: device.id,
+      hostid: device.zabbix_hostid,
+      name: device.name,
+      latitude: site.latitude,
+      longitude: site.longitude,
+      site_id: site.id,
+      site_name: site.name || site.display_name,
+      openModal: true,
     };
+    
+    console.log('[HostCard] Focando no dispositivo:', deviceToFocus);
+    mapStore.focusOnItem(deviceToFocus);
+    
+  } catch (error) {
+    console.error('[HostCard] Erro ao focar no host:', error);
   }
-
-  return null;
 }
 
 function formatTimestamp(timestamp) {
@@ -150,7 +174,7 @@ watch(
 
 <style scoped>
 .host-card {
-  background: var(--surface-card);
+  background: var(--surface-highlight);
   border: 1px solid var(--border-primary);
   border-radius: 8px;
   padding: 12px;
@@ -162,6 +186,7 @@ watch(
 }
 
 .host-card:hover {
+  background: var(--menu-item-hover);
   box-shadow: var(--shadow-sm);
 }
 
@@ -243,6 +268,31 @@ watch(
 
 .card-body {
   font-size: 12px;
+}
+
+.host-stats {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.stat-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.stat-value {
+  color: var(--text-primary);
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .host-metrics {

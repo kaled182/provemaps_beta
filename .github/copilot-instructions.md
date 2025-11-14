@@ -1,49 +1,43 @@
 ## Copilot Instructions — MapsProveFiber
-Concise, project-specific guidance for AI code agents. Focus on CURRENT patterns (not aspirations) so you can act safely and fast.
+Concise, project-specific guidance for AI code agents. Focus on CURRENT patterns so you can deliver safe changes fast.
 
-### Core Architecture
-- Django 5 multi-app; `core` is the spine (settings, URLs, metrics, ASGI/WSGI, Channels routing).
-- Primary domains: `inventory` (authoritative Site/Device/Port), `maps_view` (real-time dashboard), `routes_builder` (fiber/KML + power calc), `setup_app` (runtime credentials), Zabbix integration via `integrations/zabbix` + `monitoring/usecases.py`.
-- Async: Celery workers (`celery -A core worker` / beat) plus Channels websocket at `ws/dashboard/status/` (see `core/routing.py`).
-- Persistence: MySQL/MariaDB (prod) or SQLite (local). Redis optional; code must degrade gracefully if absent.
+### Architecture & Apps
+- Django 5 project rooted in `backend/`; `settings/base.py` loads env defaults (MySQL/MariaDB with optional PostGIS, Redis optional) and defaults to `DJANGO_SETTINGS_MODULE=settings.dev`.
+- `core/` hosts settings glue (ASGI/WSGI, Celery bootstrap, Prometheus metrics, health views, root URLs).
+- `inventory/` owns canonical models (Site, Device, Port, FiberCable, Route, etc.) plus services like `inventory/routes/services.py`; the legacy routes-builder APIs now live under `inventory.routes`.
+- `maps_view/` drives the dashboard (Django templates + optional Vue SPA) and real-time flows; business logic is sourced from `monitoring/usecases.py` via thin shims.
+- `integrations/zabbix/` encapsulates JSON-RPC access and cache helpers; `setup_app/` persists runtime credentials with `FirstTimeSetup` records (`runtime_settings.get_runtime_config`).
 
-### Observability & Health
-- Prometheus via `django_prometheus`; metrics endpoint `/metrics/` (may redirect to `/metrics/metrics`). Custom static version metric in `core/metrics_static_version.py`.
-- Health checks in `core/views_health.py`; Makefile wrappers: `make health`, `make ready`, `make live`.
-- When adding endpoints respect settings flags in `settings/base.py` (`ENABLE_DIAGNOSTIC_ENDPOINTS`, `HEALTHCHECK_*`).
+### Async, Realtime & Caching
+- Celery configured in `core/celery.py` (queues: `default`, `zabbix`, `maps`); run workers with `celery -A core worker -Q <queue>` and beat to execute cache warmers (`inventory.tasks.*`, `monitoring.tasks.refresh_dashboard_cache_task`).
+- Channels routing defined in `core/routing.py`; use `maps_view.realtime.publisher.broadcast_dashboard_status` / `broadcast_cable_status_update` instead of direct `group_send`.
+- Dashboard endpoints reuse SWR helpers in `maps_view/cache_swr.py`; pair `get_dashboard_cached` with `refresh_dashboard_cache_task.delay` to refresh data safely.
+- Fiber listings follow the same pattern via `inventory/cache/fibers.py`; the Celery task `inventory.tasks.refresh_fiber_list_cache` populates cache + websocket updates.
 
-### Service Layer Pattern
-- Keep business logic in each app's `services.py`; views stay thin (see `maps_view/views.py` and `routes_builder/views.py`).
-- Routes Builder returns dataclasses (`RouteBuildContext`, `RouteBuildResult`) from `routes_builder/services.py`—preserve these shapes.
-- Dashboard data retrieval uses SWR cache helper `maps_view.cache_swr.get_dashboard_cached`; refresh via Celery `refresh_dashboard_cache_task.delay`.
+### Data & Integration Boundaries
+- Never call Zabbix with raw `requests`; reuse `integrations.zabbix.zabbix_service.zabbix_request` and `safe_cache_*`. `monitoring/usecases.py` is the canonical join between inventory rows and live Zabbix status.
+- Fiber/route workflows rely on typed services (`RouteBuildContext`, `RouteBuildResult`) and usecases in `inventory/usecases/fibers.py`; invalidate caches via `invalidate_fiber_cache` or `invalidate_route_cache` when mutating data.
+- Runtime secrets (Zabbix, Google Maps, DB overrides) flow through `setup_app.services.runtime_settings`; call `reload_config()` after persisting `FirstTimeSetup`.
+- Feature flags: `USE_VUE_DASHBOARD` + `VUE_DASHBOARD_ROLLOUT_PERCENTAGE` gate the SPA; keep `{% static 'vue-spa/...' %}?v={{ STATIC_ASSET_VERSION }}` intact for cache busting.
 
-### Zabbix Integration
-- Never direct `requests`; use `integrations.zabbix.zabbix_service` helpers (`zabbix_request`, safe cache wrappers). Client resiliency lives in `integrations/zabbix/client.py` (retry, circuit breaker, Prom metrics).
-- Combine inventory + Zabbix status in `monitoring/usecases.py` (also re-exported by `maps_view/services.py` for backwards compatibility).
+### Developer Workflow
+- Activate the venv and rely on Makefile exports; run server with `make run` (uses `settings.dev`).
+- Key commands: `make migrate`, `make fmt`, `make lint`, `make test`, `make health|ready|live`.
+- Tests run with `pytest -q` (`pyproject.toml` points to `settings.test` and strict markers); integration suites live under `backend/tests/` plus app-specific `tests/` folders.
+- Celery worker/beat: `celery -A core worker -l info` and `celery -A core beat -l info`; queue selection matters (route/fiber jobs target `maps`, Zabbix polling on `zabbix`).
+- Frontend lives in `frontend/` (Vite + Vue 3); `npm run build` outputs to `backend/static/vue-spa/`, consumed by `maps_view/templates/spa.html` behind the feature flag.
+- Docker Compose (`make up`) runs the full stack; when Redis/MySQL are absent the code falls back to SQLite and locmem caches—ensure new features stay resilient.
 
-### Runtime Config & Secrets
-- Dynamic credentials handled by `setup_app/services/runtime_settings.py` (`FirstTimeSetup`). Call `reload_config()` after updates.
-- Don’t log secrets; rely on provided context processors + encrypted storage (Fernet).
+### Testing & Quality Signals
+- Preserve dataclass field order and payload shapes (numerous assertions in `backend/tests/routes` and SWR tests expect deterministic metadata).
+- Celery runs eagerly in tests; new tasks must tolerate `CELERY_TASK_ALWAYS_EAGER=True` and skip external calls when brokers are offline.
+- Prometheus metrics live at `/metrics/`; update via helpers in `core/metrics_*` (`metrics_static_version`, `metrics_celery`).
+- WebSocket consumers in `maps_view/realtime/consumers.py` assume authenticated sessions; route new realtime data through publisher helpers so Channels groups stay consistent.
 
-### Static Assets & Templates
-- Append `?v={{ STATIC_ASSET_VERSION }}` (from `setup_app.context_processors.static_version`) to `{% static %}` references—enforces cache busting. Keep ManifestStaticFilesStorage assumptions intact.
+### When Extending
+- Place business rules inside `services/` or `usecases/` modules and keep views/serializers thin; reuse existing DTOs like `RouteBuildResult` or fiber payload dicts.
+- Prefer resilient cache helpers (`safe_cache_*`, `SWRCache`, `invalidate_*`) over bare `cache.*` calls to handle missing Redis.
+- Update Celery routing/beat entries in `core/celery.py` when adding long-running or scheduled jobs and align queue choice with workload type.
+- Wire new endpoints through the owning app’s `urls.py` and include them in `core/urls.py`; respect `settings.ENABLE_DIAGNOSTIC_ENDPOINTS` gates for health/diagnostic features.
 
-### Caching & Redis Absence
-- Use `safe_cache_*` (in `integrations/zabbix/zabbix_service.py`) instead of assuming Redis present. If adding new caches, mirror existing graceful degradation style.
-- Reuse existing cache key constants (`CACHE_KEY_*`) when invalidating route builder or dashboard data.
-
-### Tests & Quality Workflow
-- Run with `pytest -q`; domain-specific tests under `routes_builder/tests` and root `tests/`. Use fixtures from `routes_builder/tests/conftest.py` for inventory object creation.
-- Formatting: `make fmt` (ruff+black+isort); lint: `make lint`. Maintain dataclass field order for stable tests.
-
-### Adding APIs / Features
-- Place new endpoints in the owning app’s `urls.py`; include them via `core/urls.py` namespace. Keep response shaping consistent with existing serializers.
-- For real-time features, broadcast via `maps_view.realtime.publisher.broadcast_dashboard_status`—ensure `CHANNEL_LAYER_URL` configured for non-local fan-out.
-
-### Example Safe Extension
-- To add a cached dashboard metric: implement fetch in `maps_view/services.py`, wrap with SWR in `cache_swr.py`, expose via a thin view, and refresh through Celery task.
-
-### Quick Dev Commands
-- `make run` (dev server), `make up` (Compose), `make migrate`, `make superuser`, `celery -A core worker`, `celery -A core beat`, `make fmt`, `make lint`.
-
-Feedback: Tell us if any section is unclear or missing (e.g., deployment quirks, data model edges) so we can iterate.
+Feedback: Flag unclear areas (e.g., PostGIS rollout, Vue SPA expectations) so we can extend these instructions.

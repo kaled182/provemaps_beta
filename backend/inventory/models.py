@@ -110,6 +110,32 @@ class Site(models.Model):
         super().save(*args, **kwargs)
 
 
+class DeviceGroup(models.Model):
+    """
+    Device group imported from Zabbix host groups.
+    Used for categorization and filtering (e.g., "Switch Huawei", "Router Mikrotik", "VSOLUTION").
+    """
+    zabbix_groupid = models.CharField(
+        max_length=32,
+        unique=True,
+        help_text="groupid inside Zabbix",
+    )
+    name = models.CharField(
+        max_length=255,
+        unique=True,
+        help_text="Group name from Zabbix (e.g. 'Switch Huawei')",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        db_table = "inventory_device_group"
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class Device(models.Model):
     """
     Network device (router, switch, OLT, etc.) at a site.
@@ -128,6 +154,11 @@ class Device(models.Model):
     name = models.CharField(max_length=120)
     vendor = models.CharField(max_length=120, blank=True)
     model = models.CharField(max_length=120, blank=True)
+    primary_ip = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        help_text="Primary IP address of the device",
+    )
     zabbix_hostid = models.CharField(
         max_length=32,
         blank=True,
@@ -145,6 +176,12 @@ class Device(models.Model):
             "Zabbix item key for CPU usage "
             "(e.g. system.cpu.util[,user])"
         ),
+    )
+    groups = models.ManyToManyField(
+        DeviceGroup,
+        related_name="devices",
+        blank=True,
+        help_text="Zabbix host groups for this device",
     )
 
     class Meta:
