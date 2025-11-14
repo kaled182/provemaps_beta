@@ -36,7 +36,9 @@
         :class="{ 'active': isActive(item.path) }"
         :title="!uiStore.isNavMenuOpen ? item.label : ''"
       >
-        <span class="nav-icon" v-html="item.icon"></span>
+        <span class="nav-icon">
+          <component :is="item.icon" :size="22" weight="regular" />
+        </span>
         <transition name="fade">
           <span v-if="uiStore.isNavMenuOpen" class="nav-label">{{ item.label }}</span>
         </transition>
@@ -50,7 +52,9 @@
       
       <!-- Status de Conexão -->
       <div class="nav-item status-item" :class="connectionStatus.color">
-        <span class="nav-icon" v-html="connectionStatus.icon"></span>
+        <span class="nav-icon">
+          <component :is="connectionStatus.icon" :size="22" weight="regular" />
+        </span>
         <transition name="fade">
           <span v-if="uiStore.isNavMenuOpen" class="nav-label">{{ connectionStatus.text }}</span>
         </transition>
@@ -63,10 +67,7 @@
         :title="!uiStore.isNavMenuOpen ? 'Setup' : ''"
       >
         <span class="nav-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
+          <PhGear :size="22" weight="regular" />
         </span>
         <transition name="fade">
           <span v-if="uiStore.isNavMenuOpen" class="nav-label">Setup</span>
@@ -80,9 +81,7 @@
         :title="!uiStore.isNavMenuOpen ? 'Admin' : ''"
       >
         <span class="nav-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-          </svg>
+          <PhFaders :size="22" weight="regular" />
         </span>
         <transition name="fade">
           <span v-if="uiStore.isNavMenuOpen" class="nav-label">Admin</span>
@@ -96,14 +95,8 @@
         :title="!uiStore.isNavMenuOpen ? (uiStore.theme === 'dark' ? 'Modo Claro' : 'Modo Escuro') : ''"
       >
         <span class="nav-icon">
-          <!-- Sun icon for dark mode (clicking switches to light) -->
-          <svg v-if="uiStore.theme === 'dark'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-          </svg>
-          <!-- Moon icon for light mode (clicking switches to dark) -->
-          <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-          </svg>
+          <PhSun v-if="uiStore.theme === 'dark'" :size="22" weight="regular" />
+          <PhMoon v-else :size="22" weight="regular" />
         </span>
         <transition name="fade">
           <span v-if="uiStore.isNavMenuOpen" class="nav-label">
@@ -121,9 +114,7 @@
           :title="!uiStore.isNavMenuOpen ? 'Sair' : ''"
         >
           <span class="nav-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
+            <PhSignOut :size="22" weight="regular" />
           </span>
           <transition name="fade">
             <span v-if="uiStore.isNavMenuOpen" class="nav-label">Sair</span>
@@ -137,6 +128,21 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useUiStore } from '@/stores/ui';
+import { 
+  PhHouse, 
+  PhChartBar, 
+  PhGitBranch, 
+  PhBook, 
+  PhPlusCircle,
+  PhLightning,
+  PhClock,
+  PhWifiSlash,
+  PhGear,
+  PhFaders,
+  PhSun,
+  PhMoon,
+  PhSignOut
+} from '@phosphor-icons/vue';
 
 const uiStore = useUiStore();
 const csrfToken = ref(window.CSRF_TOKEN || '');
@@ -149,19 +155,19 @@ const connectionStatus = computed(() => {
     return { 
       color: 'bg-green-500', 
       text: 'Conectado',
-      icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>'
+      icon: PhLightning
     };
   } else if (wsConnecting.value) {
     return { 
       color: 'bg-yellow-500', 
       text: 'Conectando',
-      icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>'
+      icon: PhClock
     };
   } else {
     return { 
       color: 'bg-red-500', 
       text: 'Desconectado',
-      icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" /></svg>'
+      icon: PhWifiSlash
     };
   }
 });
@@ -215,27 +221,27 @@ const menuItems = [
   {
     label: 'Dashboard',
     path: '/maps_view/dashboard/',
-    icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>'
+    icon: PhHouse
   },
   {
     label: 'Metrics',
     path: '/maps_view/metrics/',
-    icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>'
+    icon: PhChartBar
   },
   {
     label: 'Routes',
     path: '/routes/fiber-route-builder/',
-    icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>'
+    icon: PhGitBranch
   },
   {
     label: 'Docs',
     path: '/docs/',
-    icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>'
+    icon: PhBook
   },
   {
     label: 'Add Device',
     path: '/zabbix/lookup/',
-    icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>',
+    icon: PhPlusCircle,
     badge: '+'
   }
 ];
@@ -247,18 +253,16 @@ function isActive(path) {
 
 <style scoped>
 .nav-menu {
-  position: fixed;
-  left: 0;
-  top: 0;
-  bottom: 0;
+  flex-shrink: 0;
   width: 280px;
   background: linear-gradient(195deg, var(--menu-bg-start) 0%, var(--menu-bg-end) 100%);
   box-shadow: var(--shadow-accent);
   display: flex;
   flex-direction: column;
-  transition: width 0.3s ease, transform 0.3s ease, background 0.3s ease;
-  z-index: 1200;
+  transition: width 0.3s ease, background 0.3s ease;
+  z-index: 100;
   overflow: hidden;
+  height: 100vh;
 }
 
 .nav-menu-collapsed {

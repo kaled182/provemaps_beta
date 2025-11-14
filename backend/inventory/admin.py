@@ -4,7 +4,7 @@ Django admin configuration for inventory models.
 from django.contrib import admin
 from django.db.models import Q
 
-from .models import Device, FiberCable, FiberEvent, Port, Site
+from .models import Device, DeviceGroup, FiberCable, FiberEvent, Port, Site
 
 
 def _blank_q(field: str) -> Q:
@@ -184,6 +184,19 @@ class FiberCableAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
     list_filter = ("status",)
     raw_id_fields = ("origin_port", "destination_port")
     readonly_fields = ("last_status_update",)
+
+
+@admin.register(DeviceGroup)
+class DeviceGroupAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = ("name", "zabbix_groupid", "device_count", "created_at", "updated_at")
+    search_fields = ("name", "zabbix_groupid")
+    list_filter = ("created_at", "updated_at")
+    readonly_fields = ("created_at", "updated_at")
+    
+    def device_count(self, obj):
+        """Count of devices in this group."""
+        return obj.devices.count()
+    device_count.short_description = "Devices"
 
 
 @admin.register(FiberEvent)

@@ -1,3 +1,4 @@
+// Dashboard Map - Site-based view v2.0 - Updated 2025-11-13 23:07
 const STATUS_COLORS = {
     up: '#16a34a', // green
     down: '#dc2626', // red
@@ -56,6 +57,39 @@ function computePercent(part, total) {
     }
     return Math.max(0, Math.min(100, (Number(part) / Number(total)) * 100));
 }
+
+function updateSummaryUI(summary) {
+    if (!summary) return;
+    
+    // Update progress bars
+    const progressAvailable = document.getElementById('progress-available');
+    const progressUnavailable = document.getElementById('progress-unavailable');
+    const progressUnknown = document.getElementById('progress-unknown');
+    
+    if (progressAvailable && summary.availability_percentage !== undefined) {
+        progressAvailable.style.width = `${summary.availability_percentage}%`;
+    }
+    if (progressUnavailable && summary.total > 0) {
+        const unavailablePercent = computePercent(summary.unavailable, summary.total);
+        progressUnavailable.style.width = `${unavailablePercent}%`;
+    }
+    if (progressUnknown && summary.total > 0) {
+        const unknownPercent = computePercent(summary.unknown, summary.total);
+        progressUnknown.style.width = `${unknownPercent}%`;
+    }
+    
+    // Update text counters if elements exist
+    const totalEl = document.getElementById('total-hosts');
+    const availableEl = document.getElementById('available-hosts');
+    const unavailableEl = document.getElementById('unavailable-hosts');
+    const unknownEl = document.getElementById('unknown-hosts');
+    
+    if (totalEl) totalEl.textContent = summary.total || 0;
+    if (availableEl) availableEl.textContent = summary.available || 0;
+    if (unavailableEl) unavailableEl.textContent = summary.unavailable || 0;
+    if (unknownEl) unknownEl.textContent = summary.unknown || 0;
+}
+
 
 function currentWsPath(forceResolve = false) {
     if (!forceResolve && lastSuccessfulWsPath) {
@@ -402,9 +436,16 @@ function initRealtimeUpdates(forceFallbackPath = false) {
     dashboardSocket.onmessage = (event) => {
         try {
             const payload = JSON.parse(event.data);
+            
+            // Handle dashboard host status updates
             if (payload && payload.event === 'dashboard.status' && payload.data) {
                 applyDashboardSnapshot(payload.data);
                 clearFallbackTimer();
+            }
+            
+            // Handle cable status updates (NEW)
+            if (payload && payload.type === 'cable_status_update' && payload.cables) {
+                applyCableStatusBatch(payload.cables);
             }
         } catch (err) {
             console.error('[dashboard] Failed to parse realtime payload:', err);
@@ -815,6 +856,218 @@ function buildCableInfoContent(cableData) {
     `;
 }
 
+function addSiteMarkerWithDevices(site) {
+    if (!site.latitude || !site.longitude) return;
+    
+    const position = { lat: site.latitude, lng: site.longitude };
+    bounds.extend(position);
+
+    // Determine marker color based on device status
+    let markerColor = '#6b7280'; // gray (unknown)
+    const devices = site.devices || [];
+    
+    console.log(`[addSiteMarkerWithDevices] Site: ${site.site_name}, devices count: ${devices.length}`, devices);
+    
+    if (devices.length > 0) {
+        const hasUnavailable = devices.some(d => d.available === '2');
+        const hasAvailable = devices.some(d => d.available === '1');
+        
+        if (hasUnavailable) {
+            markerColor = '#dc2626'; // red
+        } else if (hasAvailable) {
+            markerColor = '#16a34a'; // green
+        }
+    }
+
+    const tooltipText = `${site.site_name} (${devices.length} device${devices.length !== 1 ? 's' : ''})`;
+    console.log(`[addSiteMarkerWithDevices] Tooltip text: ${tooltipText}`);
+
+    // Create custom marker icon with color
+    const marker = new google.maps.Marker({
+        position,
+        map,
+        title: tooltipText,
+        icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            fillColor: markerColor,
+            fillOpacity: 0.9,
+            strokeColor: '#ffffff',
+            strokeWeight: 2,
+            scale: 10
+        }
+    });
+
+    // Click handler: show modal with device list
+    marker.addListener('click', () => {
+        showSiteDevicesModal(site);
+    });
+
+    markers.push(marker);
+}
+
+function showSiteDevicesModal(site) {
+    const devices = site.devices || [];
+    const modalHtml = `
+        <div style="min-width: 350px; max-width: 500px;">
+            <div style="border-bottom: 2px solid #e5e7eb; padding-bottom: 12px; margin-bottom: 16px;">
+                <h3 style="margin: 0; font-size: 18px; font-weight: 600; color: #1f2937;">${site.site_name}</h3>
+                ${site.city ? `<p style="margin: 4px 0 0 0; font-size: 14px; color: #6b7280;">📍 ${site.city}</p>` : ''}
+                <p style="margin: 8px 0 0 0; font-size: 14px; color: #6b7280;">
+                    ${devices.length} device${devices.length !== 1 ? 's' : ''} at this location
+                </p>
+            </div>
+            <div style="max-height: 400px; overflow-y: auto;">
+                ${devices.map(device => `
+                    <div class="device-item" style="
+                        border: 1px solid #e5e7eb;
+                        border-radius: 8px;
+                        padding: 12px;
+                        margin-bottom: 8px;
+                        cursor: pointer;
+                        transition: all 0.2s;
+                        background: white;
+                    " 
+                    onmouseover="this.style.background='#f9fafb'; this.style.borderColor='#3b82f6';"
+                    onmouseout="this.style.background='white'; this.style.borderColor='#e5e7eb';"
+                    onclick="showDeviceDetails(${device.device_id})">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <strong style="font-size: 15px; color: #1f2937;">${device.name || 'Unknown Device'}</strong>
+                            <span style="
+                                display: inline-block;
+                                padding: 4px 8px;
+                                border-radius: 12px;
+                                font-size: 12px;
+                                font-weight: 500;
+                                ${device.available === '1' ? 'background: #dcfce7; color: #16a34a;' : 
+                                  device.available === '2' ? 'background: #fee2e2; color: #dc2626;' : 
+                                  'background: #f3f4f6; color: #6b7280;'}
+                            ">${device.available_text || 'Unknown'}</span>
+                        </div>
+                        ${device.device_type ? `
+                            <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">
+                                🔧 ${device.device_type}
+                            </div>
+                        ` : ''}
+                        ${device.primary_ip ? `
+                            <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">
+                                📍 ${device.primary_ip}
+                            </div>
+                        ` : ''}
+                        <div style="display: flex; gap: 16px; font-size: 12px; color: #6b7280; margin-top: 8px;">
+                            ${device.uptime_value ? `<span>⏱️ ${device.uptime_value}</span>` : ''}
+                            ${device.cpu_value ? `<span>💻 ${device.cpu_value}</span>` : ''}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+
+    // Create and show InfoWindow
+    const infoWindow = new google.maps.InfoWindow({
+        content: modalHtml
+    });
+    
+    // Find the marker for this site
+    const siteMarker = markers.find(m => 
+        m.getPosition().lat() === site.latitude && 
+        m.getPosition().lng() === site.longitude
+    );
+    
+    if (siteMarker) {
+        infoWindow.open(map, siteMarker);
+    }
+}
+
+function showDeviceDetails(deviceId) {
+    // Find the device in current snapshot
+    const device = currentHostsSnapshot.find(d => d.device_id === deviceId);
+    if (!device) {
+        console.error('Device not found:', deviceId);
+        return;
+    }
+    
+    // Close any open InfoWindow and open device detail modal
+    // We'll reuse the existing device modal structure
+    showDeviceModal(device);
+}
+
+function showDeviceModal(device) {
+    // Build detailed device modal content
+    const modalHtml = `
+        <div style="min-width: 300px; max-width: 500px;">
+            <div style="border-bottom: 2px solid #e5e7eb; padding-bottom: 12px; margin-bottom: 16px;">
+                <h3 style="margin: 0; font-size: 18px; font-weight: 600; color: #1f2937;">${device.name || 'Unknown Device'}</h3>
+                <p style="margin: 4px 0 0 0; font-size: 14px; color: #6b7280;">${device.site || 'N/A'}</p>
+            </div>
+            
+            <div style="space-y: 12px;">
+                <div style="margin-bottom: 12px;">
+                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Status</div>
+                    <span style="
+                        display: inline-block;
+                        padding: 6px 12px;
+                        border-radius: 12px;
+                        font-size: 14px;
+                        font-weight: 500;
+                        ${device.available === '1' ? 'background: #dcfce7; color: #16a34a;' : 
+                          device.available === '2' ? 'background: #fee2e2; color: #dc2626;' : 
+                          'background: #f3f4f6; color: #6b7280;'}
+                    ">${device.available_text || 'Unknown'}</span>
+                </div>
+                
+                ${device.device_type ? `
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Device Type</div>
+                        <div style="font-size: 14px; color: #1f2937;">🔧 ${device.device_type}</div>
+                    </div>
+                ` : ''}
+                
+                ${device.primary_ip ? `
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">IP Address</div>
+                        <div style="font-size: 14px; font-family: monospace; color: #1f2937;">📍 ${device.primary_ip}</div>
+                    </div>
+                ` : ''}
+                
+                ${device.uptime_value ? `
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Uptime</div>
+                        <div style="font-size: 14px; color: #1f2937;">⏱️ ${device.uptime_value}</div>
+                    </div>
+                ` : ''}
+                
+                ${device.cpu_value ? `
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">CPU Usage</div>
+                        <div style="font-size: 14px; color: #1f2937;">💻 ${device.cpu_value}</div>
+                    </div>
+                ` : ''}
+                
+                <div style="margin-bottom: 12px;">
+                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Zabbix Host ID</div>
+                    <div style="font-size: 14px; font-family: monospace; color: #1f2937;">${device.hostid || 'N/A'}</div>
+                </div>
+                
+                ${device.error ? `
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size: 12px; color: #dc2626; margin-bottom: 4px;">Error</div>
+                        <div style="font-size: 13px; color: #dc2626; background: #fee2e2; padding: 8px; border-radius: 6px;">${device.error}</div>
+                    </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+    
+    const infoWindow = new google.maps.InfoWindow({
+        content: modalHtml
+    });
+    
+    // Open at map center
+    infoWindow.setPosition(map.getCenter());
+    infoWindow.open(map);
+}
+
 function addSiteMarker(s) {
     if (s.lat == null) return;
     const position = { lat: s.lat, lng: s.lng };
@@ -942,22 +1195,42 @@ async function addDeviceMarker(dev, siteName, siteCity) {
 
 async function loadData() {
     try {
-        const [cablesResp, sitesResp] = await Promise.all([
+        const [cablesResp, sitesDataResp] = await Promise.all([
             fetchJSON('/api/v1/inventory/fibers/'),
-            fetchJSON('/api/v1/inventory/sites/')
+            fetchJSON('/maps_view/api/dashboard/sites/')
         ]);
 
-        // Devices per site
-        const siteUl = document.getElementById('siteList');
-        const sites = Array.isArray(sitesResp?.sites) ? sitesResp.sites : [];
-        if (siteUl) {
-            siteUl.innerHTML = '';
-            sites.forEach((site) => {
-                const li = document.createElement('li');
-                siteUl.appendChild(li);
-                (site.devices || []).forEach((device) => addDeviceMarker(device, site.name, site.city));
-            });
+        // Update dashboard data (hosts_summary and hosts data for sidebar)
+        if (sitesDataResp) {
+            // Flatten devices from all sites for sidebar display
+            const allDevices = [];
+            if (Array.isArray(sitesDataResp.sites)) {
+                sitesDataResp.sites.forEach(site => {
+                    if (Array.isArray(site.devices)) {
+                        allDevices.push(...site.devices);
+                    }
+                });
+            }
+            
+            window.HOSTS_DATA = allDevices;
+            currentHostsSnapshot = allDevices.slice();
+            
+            if (sitesDataResp.hosts_summary) {
+                window.HOSTS_SUMMARY = sitesDataResp.hosts_summary;
+                currentSummarySnapshot = { ...sitesDataResp.hosts_summary };
+            }
+            
+            // Update UI summary stats
+            updateSummaryUI(sitesDataResp.hosts_summary);
         }
+
+        // Render site markers on map (grouped by site)
+        const sites = Array.isArray(sitesDataResp?.sites) ? sitesDataResp.sites : [];
+        console.log('[loadData] Sites data:', sites);
+        sites.forEach((site) => {
+            console.log(`[loadData] Processing site: ${site.site_name}, devices: ${site.devices?.length || 0}`);
+            addSiteMarkerWithDevices(site);
+        });
 
         // Cables (API may return either `fibers` or `cables`)
         const cables = Array.isArray(cablesResp?.fibers)
@@ -1071,6 +1344,26 @@ function applyCableStatusUpdate(cid, payload) {
         }
     }
 }
+
+function applyCableStatusBatch(cables) {
+    /**
+     * Apply multiple cable status updates from WebSocket broadcast.
+     * This replaces HTTP polling with real-time push updates.
+     */
+    if (!Array.isArray(cables)) {
+        console.warn('[dashboard] Invalid cable batch:', cables);
+        return;
+    }
+    
+    cables.forEach((cableData) => {
+        if (cableData && cableData.cable_id) {
+            applyCableStatusUpdate(cableData.cable_id, cableData);
+        }
+    });
+    
+    console.log(`[dashboard] Applied ${cables.length} cable status updates via WebSocket`);
+}
+
 
 async function refreshCableStatusValueMapped() {
     const ids = Object.keys(cablePolylines);

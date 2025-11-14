@@ -16,6 +16,7 @@ from setup_app.services import runtime_settings
 
 from .services import get_hosts_status_data
 from .realtime.events import build_dashboard_payload
+from monitoring.usecases import get_sites_with_devices_data
 
 
 logger = logging.getLogger(__name__)
@@ -92,7 +93,8 @@ def dashboard_data_api(request):
     """
     JSON API endpoint for dashboard data (hosts_status + hosts_summary).
 
-    Uses the same SWR cache as the legacy view to avoid duplicate Zabbix queries.
+    Uses the same SWR cache as the legacy view to avoid duplicate
+    Zabbix queries.
     Frontend polls this endpoint to update the map without blocking page load.
     """
     from maps_view.cache_swr import get_dashboard_cached
@@ -101,6 +103,33 @@ def dashboard_data_api(request):
     # Retrieve data following the SWR pattern
     cache_result = get_dashboard_cached(
         fetch_fn=get_hosts_status_data,
+        async_task=refresh_dashboard_cache_task.delay,
+    )
+
+    response_data = cache_result["data"]
+    response_data["cache_metadata"] = {
+        "is_stale": cache_result.get("is_stale", False),
+        "timestamp": cache_result.get("timestamp"),
+        "cache_hit": cache_result.get("cache_hit", False),
+    }
+
+    return JsonResponse(response_data)
+
+
+@login_required
+def dashboard_sites_api(request):
+    """
+    JSON API endpoint for dashboard sites data (sites with grouped devices).
+
+    Returns sites with devices grouped by site for map visualization.
+    Each site includes coordinates and array of devices at that location.
+    """
+    from maps_view.cache_swr import get_dashboard_cached
+    from maps_view.tasks import refresh_dashboard_cache_task
+
+    # Retrieve data following the SWR pattern
+    cache_result = get_dashboard_cached(
+        fetch_fn=get_sites_with_devices_data,
         async_task=refresh_dashboard_cache_task.delay,
     )
 

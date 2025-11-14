@@ -55,15 +55,19 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci
 
+# Create backend directory structure (needed for vite build output)
+RUN mkdir -p /app/backend/staticfiles/vue-spa/assets
+
 # Copy frontend source code
 COPY frontend/ ./
 
 # Build production frontend
-# This creates optimized assets in backend/staticfiles/vue-spa/
+# This creates optimized assets in ../backend/staticfiles/vue-spa/
 RUN npm run build
 
 # Verify build output
-RUN ls -lah ../backend/staticfiles/vue-spa/assets/ || echo "Build output not found"
+RUN ls -lah /app/backend/staticfiles/vue-spa/ || echo "Build output not found" && \
+    ls -lah /app/backend/staticfiles/vue-spa/assets/ || echo "Assets not found"
 
 
 ############################
