@@ -152,12 +152,12 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1" for="manualOriginDeviceSelect">Origin device</label>
-          <select id="manualOriginDeviceSelect" name="origin_device_id" required
+          <select id="manualOriginDeviceSelect" name="origin_device_id" required data-placeholder="Select..."
                   class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
             <option value="">Select...</option>
             {% for device in devices %}
               <option value="{{ device.id }}">
-                {{ device.name }}{% if device.site_id %} ({{ device.site.display_name|default:device.site.name }}){% endif %}
+                {{ device.name }}{% if device.site %} ({{ device.site }}){% endif %}
               </option>
             {% endfor %}
           </select>
@@ -184,12 +184,12 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1" for="manualDestDeviceSelect">Destination device</label>
-          <select id="manualDestDeviceSelect" name="dest_device_id" required
+          <select id="manualDestDeviceSelect" name="dest_device_id" required data-placeholder="Select..."
                   class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
             <option value="">Select...</option>
             {% for device in devices %}
               <option value="{{ device.id }}">
-                {{ device.name }}{% if device.site_id %} ({{ device.site.display_name|default:device.site.name }}){% endif %}
+                {{ device.name }}{% if device.site %} ({{ device.site }}){% endif %}
               </option>
             {% endfor %}
           </select>
@@ -210,6 +210,27 @@
     </form>
   </div>
 </div>
+
+{{ devices|json_script:"fiber-device-options-data" }}
+<script>
+  (function preloadDeviceOptions() {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    try {
+      const el = document.getElementById('fiber-device-options-data');
+      if (!el) {
+        return;
+      }
+      const parsed = JSON.parse(el.textContent || '[]');
+      if (Array.isArray(parsed)) {
+        window.__FIBER_DEVICE_OPTIONS = parsed;
+      }
+    } catch (error) {
+      console.error('[NetworkDesign] Failed to preload device options.', error);
+    }
+  }());
+</script>
 {% include "partials/import_kml.html" %}
 {% endblock %}
 

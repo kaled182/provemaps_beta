@@ -165,7 +165,7 @@ try {
 Write-Step "Verifying frontend deployment"
 try {
     Write-Info "Checking dashboard endpoint..."
-    $dashboardResponse = Invoke-WebRequest -Uri "http://localhost:8000/maps_view/dashboard/" -TimeoutSec 10 -UseBasicParsing -MaximumRedirection 0
+    $dashboardResponse = Invoke-WebRequest -Uri "http://localhost:8000/monitoring/backbone/" -TimeoutSec 10 -UseBasicParsing -MaximumRedirection 0
     Write-Success "Dashboard endpoint responding (HTTP $($dashboardResponse.StatusCode))"
 } catch {
     if ($_.Exception.Response.StatusCode -eq 302) {
@@ -191,7 +191,7 @@ Write-Success "Docker deployment completed!"
 Write-Info ""
 Write-Info "Services:"
 Write-Info "  - Web:      http://localhost:8000"
-Write-Info "  - Dashboard: http://localhost:8000/maps_view/dashboard/"
+Write-Info "  - Backbone: http://localhost:8000/monitoring/backbone/"
 Write-Info "  - Health:   http://localhost:8000/healthz"
 Write-Info "  - Admin:    http://localhost:8000/admin/"
 Write-Info ""
@@ -212,7 +212,7 @@ Write-Info "  ✅ Error & loading states"
 Write-Info ""
 Write-Info "Next steps:"
 Write-Info "  1. Create superuser: docker compose -f docker/docker-compose.yml exec web python manage.py createsuperuser"
-Write-Info "  2. Open browser: http://localhost:8000/maps_view/dashboard/"
+Write-Info "  2. Open browser: http://localhost:8000/monitoring/backbone/"
 Write-Info "  3. Execute smoke tests (see SPRINT1_DEPLOYMENT_READY.md)"
 Write-Info ""
 

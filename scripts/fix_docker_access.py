@@ -101,7 +101,7 @@ except Exception as e:
 
 print("\n" + "="*60)
 print("SETUP COMPLETE - Try accessing:")
-print("  - Dashboard: http://localhost:8000/maps_view/dashboard/")
+print("  - Backbone dashboard: http://localhost:8000/monitoring/backbone/")
 print("  - Admin: http://localhost:8000/admin/")
 print("  - Login with: admin / admin123")
 print("="*60)

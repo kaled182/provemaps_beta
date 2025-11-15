@@ -31,11 +31,11 @@
 
       <div class="mb-3">
         <label class="block text-sm font-medium text-gray-700 mb-1">Source device</label>
-        <select name="origin_device_id" id="kmlOriginDeviceSelect" required
-                class="w-full border rounded-md px-3 py-2 focus:outline-none focus:ring focus:ring-blue-300">
+        <select name="origin_device_id" id="kmlOriginDeviceSelect" required data-placeholder="Select..."
+          class="w-full border rounded-md px-3 py-2 focus:outline-none focus:ring focus:ring-blue-300">
           <option value="">Select...</option>
           {% for device in devices %}
-          <option value="{{ device.id }}">{{ device.name }} ({{ device.site.name }})</option>
+          <option value="{{ device.id }}">{{ device.name }}{% if device.site %} ({{ device.site }}){% endif %}</option>
           {% endfor %}
         </select>
       </div>
@@ -59,11 +59,11 @@
 
       <div class="mb-3">
         <label class="block text-sm font-medium text-gray-700 mb-1">Destination device</label>
-        <select name="dest_device_id" id="kmlDestDeviceSelect" required
-                class="w-full border rounded-md px-3 py-2 focus:outline-none focus:ring focus:ring-blue-300">
+        <select name="dest_device_id" id="kmlDestDeviceSelect" required data-placeholder="Select..."
+          class="w-full border rounded-md px-3 py-2 focus:outline-none focus:ring focus:ring-blue-300">
           <option value="">Select...</option>
           {% for device in devices %}
-          <option value="{{ device.id }}">{{ device.name }} ({{ device.site.name }})</option>
+          <option value="{{ device.id }}">{{ device.name }}{% if device.site %} ({{ device.site }}){% endif %}</option>
           {% endfor %}
         </select>
       </div>
