@@ -47,6 +47,8 @@ export const useFiltersStore = defineStore('filters', () => {
     return state.status.length + state.types.length + state.locations.length;
   });
 
+  let statusMutationLocked = false;
+
   // Actions
   function setStatusFilter(statusValue, shouldEnable) {
     const normalized = normalizeStatus(statusValue);
@@ -54,27 +56,40 @@ export const useFiltersStore = defineStore('filters', () => {
       return;
     }
 
-    const index = state.status.indexOf(normalized);
-
-    if (shouldEnable === true) {
-      if (index === -1) {
-        state.status.push(normalized);
+      if (statusMutationLocked) {
+        console.warn('[FILTERS] Ignoring duplicate status mutation for', normalized);
+        return;
       }
-      return;
-    }
 
-    if (shouldEnable === false) {
-      if (index > -1) {
-        state.status.splice(index, 1);
+      statusMutationLocked = true;
+
+      try {
+        const index = state.status.indexOf(normalized);
+
+        if (shouldEnable === true) {
+          if (index === -1) {
+            state.status.push(normalized);
+          }
+          return;
+        }
+
+        if (shouldEnable === false) {
+          if (index > -1) {
+            state.status.splice(index, 1);
+          }
+          return;
+        }
+
+        if (index > -1) {
+          state.status.splice(index, 1);
+        } else {
+          state.status.push(normalized);
+        }
+      } finally {
+        setTimeout(() => {
+          statusMutationLocked = false;
+        }, 50);
       }
-      return;
-    }
-
-    if (index > -1) {
-      state.status.splice(index, 1);
-    } else {
-      state.status.push(normalized);
-    }
   }
 
   function toggleStatus(statusValue) {
