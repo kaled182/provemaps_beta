@@ -79,6 +79,42 @@ class PortTrafficHistoryAPITests(TestCase):
         self.assertEqual(payload["out"]["history"][0]["value"], 5.0)
 
 
+class DeviceSelectOptionsAPITests(TestCase):
+    def setUp(self):
+        self.site = Site.objects.create(
+            display_name="Backbone POP",
+            city="Goiania",
+        )
+        self.device = Device.objects.create(
+            site=self.site,
+            name="CORE-GYN-01",
+            vendor="Cisco",
+            model="C9500",
+            zabbix_hostid="30101",
+        )
+        self.user = get_user_model().objects.create_user(
+            "viewer",
+            password="pass",
+        )
+
+    def test_returns_device_options(self):
+        self.client.force_login(self.user)
+
+        url = reverse("inventory-api:device-select-options")
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        self.assertIn("devices", payload)
+        self.assertEqual(len(payload["devices"]), 1)
+
+        option = payload["devices"][0]
+        self.assertEqual(option["id"], self.device.pk)
+        self.assertEqual(option["name"], self.device.name)
+        self.assertEqual(option["site"], self.site.display_name)
+
+
 class ManualFiberCreationTests(TestCase):
     def setUp(self):
         site = Site.objects.create(display_name="HQ", city="Goiania")

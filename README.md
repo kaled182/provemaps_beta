@@ -107,7 +107,7 @@ celery -A core beat --loglevel=info
 ### First-time Setup
 1. Access admin: `http://localhost:8000/admin/`
 2. Configure Zabbix credentials: `http://localhost:8000/setup_app/`
-3. View dashboard: `http://localhost:8000/maps_view/dashboard/`
+3. View dashboard: `http://localhost:8000/monitoring/backbone/`
 
 ---
 

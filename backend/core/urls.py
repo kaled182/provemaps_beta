@@ -35,7 +35,7 @@ admin.site.index_title = "Gerenciamento do Sistema"
 
 def redirect_to_maps_view(request: Any):
     """Redireciona raiz para dashboard."""
-    return redirect('maps_view/dashboard')
+    return redirect('monitoring:backbone_dashboard')
 
 
 urlpatterns: list[Any] = [
@@ -54,24 +54,75 @@ urlpatterns: list[Any] = [
 
     # Apps
     path('maps_view/', include('maps_view.urls')),
-    path('routes/', include('inventory.urls')),  # Route builder HTML views
     path(
-        'routes_builder/fiber-route-builder/',
+        'NetworkDesign/',
+        include('inventory.urls'),
+    ),  # Route builder HTML views
+    path(
+        'network-design/',
         RedirectView.as_view(
-            pattern_name='inventory:fiber_route_builder',
+            pattern_name='inventory:network_design',
+            permanent=True,
+        ),
+        name='network_design_lower_redirect',
+    ),
+    path(
+        'routes/fiber-route-builder/',
+        RedirectView.as_view(
+            pattern_name='inventory:network_design',
             permanent=True,
         ),
         name='routes_builder_legacy_detail',
     ),
     path(
+        'routes_builder/fiber-route-builder/',
+        RedirectView.as_view(
+            pattern_name='inventory:network_design',
+            permanent=True,
+        ),
+        name='routes_builder_legacy_detail_old',
+    ),
+    path(
         'routes_builder/',
         RedirectView.as_view(
-            pattern_name='inventory:fiber_route_builder',
+            pattern_name='inventory:network_design',
             permanent=True,
         ),
         name='routes_builder_legacy_root',
     ),
-    path('', include('monitoring.urls')),
+    path(
+        'backbone/',
+        RedirectView.as_view(
+            pattern_name='monitoring:backbone_dashboard',
+            permanent=True,
+        ),
+        name='backbone_dashboard_legacy',
+    ),
+    path(
+        'monitoring-all/',
+        RedirectView.as_view(
+            pattern_name='monitoring:monitoring_overview',
+            permanent=True,
+        ),
+        name='monitoring_overview_legacy',
+    ),
+    path(
+        'gpon/',
+        RedirectView.as_view(
+            pattern_name='monitoring:gpon_dashboard',
+            permanent=True,
+        ),
+        name='gpon_dashboard_legacy',
+    ),
+    path(
+        'dwdm/',
+        RedirectView.as_view(
+            pattern_name='monitoring:dwdm_dashboard',
+            permanent=True,
+        ),
+        name='dwdm_dashboard_legacy',
+    ),
+    path('monitoring/', include('monitoring.urls')),
     path('api/v1/inventory/', include('inventory.urls_api')),
     path('api/v1/', include('inventory.urls_rest')),  # DRF endpoints
     path('setup_app/', include('setup_app.urls')),
