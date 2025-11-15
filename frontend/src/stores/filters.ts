@@ -27,6 +27,8 @@ export interface FilterState {
   searchQuery: string;
 }
 
+let statusMutationLocked = false;
+
 export const useFiltersStore = defineStore('filters', () => {
   // State
   const status = ref<string[]>([]);
@@ -53,26 +55,39 @@ export const useFiltersStore = defineStore('filters', () => {
   // Actions
   function setStatusFilter(statusValue: string, shouldEnable?: boolean) {
     const normalized = normalizeStatus(statusValue);
-    const index = status.value.indexOf(normalized);
-
-    if (shouldEnable === true) {
-      if (index === -1) {
-        status.value.push(normalized);
-      }
+    if (statusMutationLocked) {
+      console.warn('[FILTERS] Ignoring duplicate status mutation for', normalized);
       return;
     }
 
-    if (shouldEnable === false) {
+    statusMutationLocked = true;
+
+    try {
+      const index = status.value.indexOf(normalized);
+
+      if (shouldEnable === true) {
+        if (index === -1) {
+          status.value.push(normalized);
+        }
+        return;
+      }
+
+      if (shouldEnable === false) {
+        if (index > -1) {
+          status.value.splice(index, 1);
+        }
+        return;
+      }
+
       if (index > -1) {
         status.value.splice(index, 1);
+      } else {
+        status.value.push(normalized);
       }
-      return;
-    }
-
-    if (index > -1) {
-      status.value.splice(index, 1);
-    } else {
-      status.value.push(normalized);
+    } finally {
+      setTimeout(() => {
+        statusMutationLocked = false;
+      }, 50);
     }
   }
 

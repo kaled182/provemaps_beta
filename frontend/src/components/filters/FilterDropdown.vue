@@ -36,10 +36,16 @@ function toggleDropdown() {
   isOpen.value = !isOpen.value;
 }
 
-function handleToggle(event, value) {
-  event.stopPropagation();
-  const isChecked = event.target?.checked ?? false;
-  emit('toggle', value, isChecked);
+function handleOptionClick(value) {
+  const shouldEnable = !isSelected(value);
+  emit('toggle', value, shouldEnable);
+}
+
+function handleOptionKeydown(event, value) {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    handleOptionClick(value);
+  }
 }
 
 function handleClear(event) {
@@ -97,20 +103,34 @@ onClickOutside(dropdownRef, () => {
           v-for="option in options"
           :key="option.value"
           class="filter-dropdown__option"
+          :class="{ 'filter-dropdown__option--selected': isSelected(option.value) }"
+          role="checkbox"
+          :aria-checked="isSelected(option.value)"
+          tabindex="0"
+          @click.prevent="handleOptionClick(option.value)"
+          @keydown="handleOptionKeydown($event, option.value)"
         >
-          <input
-            type="checkbox"
-            :checked="isSelected(option.value)"
-            @change="handleToggle($event, option.value)"
-          />
+          <span
+            class="filter-dropdown__checkbox"
+            :class="{ 'filter-dropdown__checkbox--checked': isSelected(option.value) }"
+            aria-hidden="true"
+          >
+            <svg
+              v-if="isSelected(option.value)"
+              class="filter-dropdown__checkbox-icon"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M16.707 5.293a1 1 0 0 1 0 1.414l-8 8a1 1 0 0 1-1.414 0l-4-4a1 1 0 0 1 1.414-1.414L8 12.586l7.293-7.293a1 1 0 0 1 1.414 0z"
+                clip-rule="evenodd"
+              />
+            </svg>
+          </span>
+
           <span class="filter-dropdown__label">
             {{ option.label }}
-          </span>
-          <span
-            v-if="isSelected(option.value)"
-            class="filter-dropdown__checkmark"
-          >
-            ✓
           </span>
         </label>
       </div>
@@ -211,24 +231,45 @@ onClickOutside(dropdownRef, () => {
   padding: 0.5rem 1rem;
   cursor: pointer;
   transition: background 0.15s;
+  border-radius: 6px;
+  outline: none;
 }
 
-.filter-dropdown__option:hover {
+.filter-dropdown__option:hover,
+.filter-dropdown__option:focus-visible {
   background: var(--surface-highlight);
 }
 
-.filter-dropdown__option input[type="checkbox"] {
-  cursor: pointer;
+.filter-dropdown__option--selected {
+  background: var(--surface-muted);
+}
+
+.filter-dropdown__checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 0.3rem;
+  border: 1px solid var(--border-primary);
+  background: var(--surface-card);
+  transition: all 0.15s;
+}
+
+.filter-dropdown__checkbox--checked {
+  background: var(--accent-info);
+  border-color: var(--accent-info);
+  color: var(--surface-card);
+}
+
+.filter-dropdown__checkbox-icon {
+  width: 0.85rem;
+  height: 0.85rem;
 }
 
 .filter-dropdown__label {
   flex: 1;
   font-size: 0.875rem;
   color: var(--text-primary);
-}
-
-.filter-dropdown__checkmark {
-  color: var(--accent-info);
-  font-weight: bold;
 }
 </style>
