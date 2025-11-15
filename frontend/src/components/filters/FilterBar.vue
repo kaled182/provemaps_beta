@@ -4,15 +4,31 @@ import { useFiltersStore } from '@/stores/filters';
 import { useDashboardStore } from '@/stores/dashboard';
 import FilterDropdown from './FilterDropdown.vue';
 import SearchInput from '@/components/search/SearchInput.vue';
+import { PhCheckCircle, PhXCircle, PhQuestion } from '@phosphor-icons/vue';
 
 const filtersStore = useFiltersStore();
 const dashboardStore = useDashboardStore();
 
 // Status options baseados nos valores reais do sistema
 const statusOptions = [
-  { value: 'online', label: '✅ Operational', color: 'green' },
-  { value: 'offline', label: '⚫ Offline', color: 'red' },
-  { value: 'unknown', label: '🔵 Unknown', color: 'gray' },
+  {
+    value: 'online',
+    label: 'Operational',
+    icon: PhCheckCircle,
+    iconColor: 'var(--status-online)',
+  },
+  {
+    value: 'offline',
+    label: 'Offline',
+    icon: PhXCircle,
+    iconColor: 'var(--status-offline)',
+  },
+  {
+    value: 'unknown',
+    label: 'Unknown',
+    icon: PhQuestion,
+    iconColor: 'var(--status-unknown)',
+  },
 ];
 
 // Use real types from dashboard data (dynamic based on Zabbix groups)

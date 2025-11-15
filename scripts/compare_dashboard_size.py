@@ -47,7 +47,7 @@ def measure_response_size():
     print("="*60)
     
     print("\n1. Testing HTML page size...")
-    response_html = client.get('/maps_view/dashboard/')
+    response_html = client.get('/monitoring/backbone/')
     html_size = len(response_html.content)
     print(f"   HTML size: {html_size:,} bytes ({html_size / 1024:.2f} KB)")
     

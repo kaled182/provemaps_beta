@@ -75,8 +75,8 @@
     volumes:
       - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
       - ../backend:/app/backend
-      # Exclude vue-spa from volume mount to preserve built frontend assets
-      - /app/backend/staticfiles/vue-spa
+      # Bind vue-spa assets so fresh builds are picked up without rebuilding the image
+      - ../backend/staticfiles/vue-spa:/app/backend/staticfiles/vue-spa
       - ../frontend:/app/frontend
       - ../database:/app/database
       - ../doc:/app/doc

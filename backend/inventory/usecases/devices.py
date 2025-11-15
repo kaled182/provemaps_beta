@@ -1736,6 +1736,43 @@ def port_traffic_history(port_id: int, params: Mapping[str, str]) -> TrafficData
     return traffic_data
 
 
+def list_device_select_options() -> List[Dict[str, Any]]:
+    """Return device options suitable for select inputs in the UI."""
+
+    device_rows = (
+        Device.objects.select_related("site")
+        .order_by("name")
+        .values(
+            "id",
+            "name",
+            "site_id",
+            "site__display_name",
+            "site__name",
+        )
+    )
+
+    options: List[Dict[str, Any]] = []
+
+    for entry in device_rows:
+        site_label = entry.get("site__display_name") or entry.get("site__name")
+        site_id = entry.get("site_id")
+
+        option: Dict[str, Any] = {
+            "id": int(entry["id"]),
+            "name": entry["name"],
+        }
+
+        if site_label:
+            option["site"] = site_label
+
+        if site_id:
+            option["site_id"] = int(site_id)
+
+        options.append(option)
+
+    return options
+
+
 __all__ = [
     "InventoryUseCaseError",
     "InventoryValidationError",
@@ -1748,5 +1785,6 @@ __all__ = [
     "bulk_create_inventory",
     "list_sites",
     "port_traffic_history",
+    "list_device_select_options",
     "ZABBIX_REQUEST",
 ]

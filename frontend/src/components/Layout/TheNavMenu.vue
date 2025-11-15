@@ -27,24 +27,66 @@
     </div>
 
     <!-- Menu Items -->
-    <nav class="nav-items">
-      <a 
-        v-for="item in menuItems" 
-        :key="item.path"
-        :href="item.path" 
-        class="nav-item"
-        :class="{ 'active': isActive(item.path) }"
-        :title="!uiStore.isNavMenuOpen ? item.label : ''"
-      >
-        <span class="nav-icon">
-          <component :is="item.icon" :size="22" weight="regular" />
-        </span>
-        <transition name="fade">
-          <span v-if="uiStore.isNavMenuOpen" class="nav-label">{{ item.label }}</span>
-        </transition>
-        <span v-if="item.badge && uiStore.isNavMenuOpen" class="nav-badge">{{ item.badge }}</span>
-      </a>
-    </nav>
+        <nav class="nav-items">
+          <div
+            v-for="item in menuItems"
+            :key="item.label"
+            class="nav-group"
+            :class="{ 'has-children': item.children?.length, 'group-active': isItemActive(item) }"
+          >
+            <RouterLink
+              v-if="item.useRouter"
+              :to="item.path"
+              class="nav-item"
+              :class="{ 'active': isItemActive(item) }"
+              :title="!uiStore.isNavMenuOpen ? item.label : ''"
+            >
+              <span class="nav-icon">
+                <component :is="item.icon" :size="22" weight="regular" />
+              </span>
+              <transition name="fade">
+                <span v-if="uiStore.isNavMenuOpen" class="nav-label">{{ item.label }}</span>
+              </transition>
+              <span v-if="item.badge && uiStore.isNavMenuOpen" class="nav-badge">{{ item.badge }}</span>
+            </RouterLink>
+            <a
+              v-else
+              :href="item.path"
+              class="nav-item"
+              :class="{ 'active': isItemActive(item) }"
+              :title="!uiStore.isNavMenuOpen ? item.label : ''"
+            >
+              <span class="nav-icon">
+                <component :is="item.icon" :size="22" weight="regular" />
+              </span>
+              <transition name="fade">
+                <span v-if="uiStore.isNavMenuOpen" class="nav-label">{{ item.label }}</span>
+              </transition>
+              <span v-if="item.badge && uiStore.isNavMenuOpen" class="nav-badge">{{ item.badge }}</span>
+            </a>
+
+            <transition name="fade">
+              <div
+                v-if="item.children?.length && uiStore.isNavMenuOpen"
+                class="nav-children"
+              >
+                <RouterLink
+                  v-for="child in item.children"
+                  :key="child.path"
+                  :to="child.path"
+                  class="nav-item nav-item-child"
+                  :class="{ 'active': isPathActive(child.path) }"
+                  :title="child.label"
+                >
+                  <span class="nav-icon child-icon">
+                    <component :is="child.icon" :size="18" weight="regular" />
+                  </span>
+                  <span class="nav-label">{{ child.label }}</span>
+                </RouterLink>
+              </div>
+            </transition>
+          </div>
+        </nav>
 
     <!-- Footer -->
     <div class="nav-menu-footer">
@@ -63,7 +105,7 @@
       <a 
         href="/setup/" 
         class="nav-item"
-        :class="{ 'active': isActive('/setup/') }"
+          :class="{ 'active': isPathActive('/setup/') }"
         :title="!uiStore.isNavMenuOpen ? 'Setup' : ''"
       >
         <span class="nav-icon">
@@ -77,7 +119,7 @@
       <a 
         href="/admin/" 
         class="nav-item"
-        target="_blank"
+          :class="{ 'active': isPathActive('/admin/') }"
         :title="!uiStore.isNavMenuOpen ? 'Admin' : ''"
       >
         <span class="nav-icon">
@@ -127,12 +169,12 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { useRoute } from 'vue-router';
 import { useUiStore } from '@/stores/ui';
-import { 
-  PhHouse, 
-  PhChartBar, 
-  PhGitBranch, 
-  PhBook, 
+import {
+  PhChartBar,
+  PhGitBranch,
+  PhBook,
   PhPlusCircle,
   PhLightning,
   PhClock,
@@ -141,10 +183,16 @@ import {
   PhFaders,
   PhSun,
   PhMoon,
-  PhSignOut
+  PhSignOut,
+  PhShareNetwork,
+  PhPulse,
+  PhListBullets,
+  PhTreeStructure,
+  PhWaveform,
 } from '@phosphor-icons/vue';
 
 const uiStore = useUiStore();
+const route = useRoute();
 const csrfToken = ref(window.CSRF_TOKEN || '');
 const wsConnected = ref(false);
 const wsConnecting = ref(false);
@@ -219,35 +267,96 @@ onUnmounted(() => {
 
 const menuItems = [
   {
-    label: 'Dashboard',
-    path: '/maps_view/dashboard/',
-    icon: PhHouse
+    label: 'Monitoring',
+    path: '/monitoring/monitoring-all',
+    icon: PhPulse,
+    useRouter: true,
+    children: [
+      {
+        label: 'Overview',
+        path: '/monitoring/monitoring-all',
+        icon: PhListBullets,
+      },
+      {
+        label: 'Backbone',
+        path: '/monitoring/backbone',
+        icon: PhShareNetwork,
+      },
+      {
+        label: 'GPON',
+        path: '/monitoring/gpon',
+        icon: PhTreeStructure,
+      },
+      {
+        label: 'DWDM',
+        path: '/monitoring/dwdm',
+        icon: PhWaveform,
+      },
+    ],
   },
   {
     label: 'Metrics',
     path: '/maps_view/metrics/',
-    icon: PhChartBar
+    icon: PhChartBar,
   },
   {
-    label: 'Routes',
-    path: '/routes/fiber-route-builder/',
-    icon: PhGitBranch
+    label: 'Network Design',
+    path: '/NetworkDesign/',
+    icon: PhGitBranch,
+    useRouter: true,
   },
   {
     label: 'Docs',
     path: '/docs/',
-    icon: PhBook
+    icon: PhBook,
   },
   {
     label: 'Add Device',
     path: '/zabbix/lookup/',
     icon: PhPlusCircle,
-    badge: '+'
-  }
+    badge: '+',
+  },
 ];
 
-function isActive(path) {
-  return window.location.pathname.startsWith(path);
+function normalizePath(path = '/') {
+  if (!path) {
+    return '/';
+  }
+
+  if (path.length > 1 && path.endsWith('/')) {
+    return path.slice(0, -1);
+  }
+
+  return path;
+}
+
+const currentPath = computed(() => {
+  const routePath = route?.path || '';
+  if (routePath) {
+    return normalizePath(routePath);
+  }
+  return normalizePath(window.location.pathname);
+});
+
+function isPathActive(path) {
+  const target = normalizePath(path);
+  const current = currentPath.value;
+
+  if (current === target) {
+    return true;
+  }
+
+  return current.startsWith(`${target}/`);
+}
+
+function isItemActive(item) {
+  if (!item?.children?.length) {
+    return isPathActive(item.path);
+  }
+  return (
+    isPathActive(item.path) ||
+    item.children.some(child => isPathActive(child.path))
+  );
 }
 </script>
 
@@ -341,6 +450,26 @@ function isActive(path) {
   overflow-x: hidden;
 }
 
+.nav-group {
+  margin-bottom: 0.5rem;
+}
+
+.nav-group.group-active > .nav-item {
+  box-shadow: var(--shadow-accent);
+}
+
+.nav-children {
+  display: flex;
+  flex-direction: column;
+  padding-left: 2.75rem;
+  gap: 0.125rem;
+  margin-top: 0.35rem;
+}
+
+.nav-menu-collapsed .nav-children {
+  display: none;
+}
+
 .nav-items::-webkit-scrollbar {
   width: 4px;
 }
@@ -368,6 +497,18 @@ function isActive(path) {
   white-space: nowrap;
 }
 
+.nav-item-child {
+  padding: 0.6rem 1rem;
+  margin-bottom: 0;
+  border-radius: 6px;
+  background: transparent;
+}
+
+.nav-item-child.active {
+  background: var(--menu-item-hover);
+  color: var(--text-primary);
+}
+
 .nav-menu-collapsed .nav-item {
   justify-content: center;
   padding: 0.75rem 0.5rem;
@@ -379,10 +520,44 @@ function isActive(path) {
 }
 
 .nav-item.router-link-active,
-.nav-item.router-link-exact-active {
+.nav-item.router-link-exact-active,
+.nav-item.active {
   background: linear-gradient(195deg, var(--menu-item-active-start) 0%, var(--menu-item-active-end) 100%);
   color: white;
   box-shadow: var(--shadow-accent);
+}
+
+.nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  margin-right: 0.75rem;
+  color: inherit;
+}
+
+.child-icon {
+  min-width: 18px;
+  margin-right: 0.5rem;
+}
+
+.nav-menu-collapsed .nav-icon {
+  margin-right: 0;
+}
+
+.nav-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.nav-badge {
+  margin-left: auto;
+  background: var(--menu-item-hover);
+  color: var(--text-primary);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.125rem 0.5rem;
 }
 
 .nav-item-icon {

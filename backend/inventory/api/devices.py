@@ -107,6 +107,14 @@ def api_device_ports(
 @require_GET
 @login_required
 @handle_api_errors
+def api_device_select_options(request: HttpRequest) -> HttpResponse:
+    payload = device_uc.list_device_select_options()
+    return JsonResponse({"devices": payload})
+
+
+@require_GET
+@login_required
+@handle_api_errors
 def api_device_ports_with_optical(
     request: HttpRequest,
     device_id: int,
@@ -548,6 +556,7 @@ __all__ = [
     "api_update_cable_oper_status",
     "api_device_port_optical_status",
     "api_device_ports",
+    "api_device_select_options",
     "api_device_ports_with_optical",
     "api_add_device_from_zabbix",
     "api_zabbix_discover_hosts",

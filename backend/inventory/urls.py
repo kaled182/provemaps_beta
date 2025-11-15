@@ -7,9 +7,9 @@ app_name = "inventory"
 urlpatterns = [
     # HTML view
     path(
-        "fiber-route-builder/",
+        "",
         views.fiber_route_builder,
-        name="fiber_route_builder",
+        name="network_design",
     ),
 
     # REST API endpoints used by the React-free UI
