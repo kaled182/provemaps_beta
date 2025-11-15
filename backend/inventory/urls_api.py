@@ -12,6 +12,11 @@ app_name = "inventory-api"
 
 urlpatterns = [
     path(
+        "devices/select-options/",
+        device_api.api_device_select_options,
+        name="device-select-options",
+    ),
+    path(
         "devices/<int:device_id>/ports/",
         device_api.api_device_ports,
         name="device-ports",

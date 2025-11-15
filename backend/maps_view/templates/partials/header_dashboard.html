@@ -60,29 +60,16 @@
             </a>
           </li>
 
-          <!-- Nav Item: Routes -->
+          <!-- Nav Item: Network Design -->
           <li>
-            <a href="{% url 'inventory:fiber_route_builder' %}"
+            <a href="{% url 'inventory:network_design' %}"
               class="px-2 py-2 rounded-md transition-colors duration-200
-              {% if current == 'fiber_route_builder' %}
+              {% if current == 'network_design' %}
                 bg-white/20 text-white
               {% else %}
                 text-gray-100 hover:text-white hover:bg-white/10
               {% endif %}">
-              Routes
-            </a>
-          </li>
-
-          <!-- Nav Item: Docs -->
-          <li>
-            <a href="{% url 'setup_app:docs_index' %}"
-              class="px-2 py-2 rounded-md transition-colors duration-200
-              {% if current == 'docs_index' or current == 'docs_view' %}
-                bg-white/20 text-white
-              {% else %}
-                text-gray-100 hover:text-white hover:bg-white/10
-              {% endif %}">
-              Docs
+              Network Design
             </a>
           </li>
 

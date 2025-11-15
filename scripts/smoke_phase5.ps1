@@ -187,7 +187,7 @@ Write-Host "──────────────────────�
 Write-Host " 4. Dashboard Pages" -ForegroundColor Yellow
 Write-Host "───────────────────────────────────────────────────────────────" -ForegroundColor Yellow
 
-Test-Endpoint -Name "Maps Dashboard" -Url "$BaseUrl/maps_view/dashboard/" -ExpectedContent "dashboard"
+Test-Endpoint -Name "Backbone Dashboard" -Url "$BaseUrl/monitoring/backbone/" -ExpectedContent "dashboard"
 
 Write-Host ""
 
