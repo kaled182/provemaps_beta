@@ -227,6 +227,6 @@ export function cleanupMap() {
   map = null;
   polyline = null;
   markers = [];
-  mapClickListener = null;
-  mapRightClickListener = null;
+  clickCallback = null;
+  rightClickCallback = null;
 }

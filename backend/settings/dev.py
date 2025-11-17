@@ -147,10 +147,26 @@ def _git_sha() -> str:
 
 
 # sha-timestamp for cache busting and traceability
+# Use env var if set (for deployment), otherwise generate on module load
+_static_version_override = os.getenv("STATIC_ASSET_VERSION")
 
-STATIC_ASSET_VERSION = (
-    f"{_git_sha()}-{_time.strftime('%Y%m%d%H%M%S')}"
-)
+# Check for deploy-time override file (created by deploy script)
+if not _static_version_override:
+    _deploy_env_file = BASE_DIR / ".env.deploy"
+    if _deploy_env_file.exists():
+        try:
+            _deploy_content = _deploy_env_file.read_text().strip()
+            if _deploy_content.startswith("STATIC_ASSET_VERSION="):
+                _static_version_override = _deploy_content.split("=", 1)[1]
+        except Exception:
+            pass
+
+if _static_version_override:
+    STATIC_ASSET_VERSION = _static_version_override
+else:
+    STATIC_ASSET_VERSION = (
+        f"{_git_sha()}-{_time.strftime('%Y%m%d%H%M%S', _time.gmtime())}"
+    )
 print(f"[STATIC_VERSION] STATIC_ASSET_VERSION={STATIC_ASSET_VERSION}")
 
 # No-cache middleware for sensitive routes
