@@ -26,6 +26,7 @@ import { showErrorMessage } from './uiHelpers.js';
 let _makeEditableCallback = null;
 let _mapInstance = null;
 let visualizationPolylines = [];
+let allCablesPolylines = [];
 
 export function initCableService(config) {
     if (config && typeof config.makeEditableCallback === 'function') {

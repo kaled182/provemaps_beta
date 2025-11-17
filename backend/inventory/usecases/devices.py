@@ -1747,14 +1747,13 @@ def list_device_select_options() -> List[Dict[str, Any]]:
             "name",
             "site_id",
             "site__display_name",
-            "site__name",
         )
     )
 
     options: List[Dict[str, Any]] = []
 
     for entry in device_rows:
-        site_label = entry.get("site__display_name") or entry.get("site__name")
+        site_label = entry.get("site__display_name") or ""
         site_id = entry.get("site_id")
 
         option: Dict[str, Any] = {

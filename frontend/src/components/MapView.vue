@@ -274,11 +274,12 @@
     
     <div class="status" v-if="loading">Carregando segmentos...</div>
     <div class="error" v-if="error">Erro: {{ error }}</div>
+    <div class="error" v-if="mapLoadError">{{ mapLoadError }}</div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, onErrorCaptured } from 'vue';
 import { GoogleMap, InfoWindow, Marker } from 'vue3-google-map';
 import { useMapStore } from '@/stores/map';
 import { useInventoryStore } from '@/stores/inventory';
@@ -318,6 +319,7 @@ const mapRef = ref(null);
 
 const loading = computed(() => mapStore.loading);
 const error = computed(() => mapStore.error);
+const mapLoadError = ref(null);
 const segmentList = computed(() => Array.from(mapStore.segments.values()));
 
 const fiberSegments = ref([]);
@@ -1340,6 +1342,11 @@ watch(focusedItem, async (newItem) => {
       mapStore.clearFocus();
     }, 3000);
   }
+});
+onErrorCaptured((err) => {
+  mapLoadError.value = err?.message || "Erro ao renderizar mapa";
+  console.error("[MapView] Captured error", err);
+  return false;
 });
 </script>
 

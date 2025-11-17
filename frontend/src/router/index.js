@@ -10,6 +10,9 @@ const inferBasePath = () => {
     if (pathname.startsWith('/monitoring/')) {
       return '/';
     }
+    if (pathname.startsWith('/Network/')) {
+      return '/';
+    }
     if (pathname.startsWith('/NetworkDesign/')) {
       return '/';
     }
@@ -53,9 +56,23 @@ const routes = [
     component: () => import('@/components/Monitoring/MonitoringDwdm.vue'),
   },
   {
-    path: '/NetworkDesign/',
+    path: '/Network/NetworkDesign/',
     name: 'network-design',
     component: () => import('@/components/NetworkDesign/NetworkDesignView.vue'),
+  },
+  {
+    path: '/Network/DeviceImport/',
+    name: 'device-import',
+    component: () => import('@/components/Zabbix/ZabbixLookupView.vue'),
+  },
+  // Legacy redirects
+  {
+    path: '/NetworkDesign/',
+    redirect: '/Network/NetworkDesign/',
+  },
+  {
+    path: '/zabbix/lookup/',
+    redirect: '/Network/DeviceImport/',
   },
   // Legacy fallback (Sprint 1 map-only view)
   {

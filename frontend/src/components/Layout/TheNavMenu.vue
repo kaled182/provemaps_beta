@@ -2,6 +2,7 @@
   <aside 
     class="nav-menu"
     :class="{ 'nav-menu-collapsed': !uiStore.isNavMenuOpen }"
+    :style="navMenuStyle"
   >
     <!-- Header do Menu -->
     <div class="nav-menu-header">
@@ -32,10 +33,33 @@
             v-for="item in menuItems"
             :key="item.label"
             class="nav-group"
-            :class="{ 'has-children': item.children?.length, 'group-active': isItemActive(item) }"
+            :class="{ 'has-children': item.children?.length, 'group-active': isItemActive(item), 'expanded': isGroupExpanded(item.label) }"
           >
+            <!-- Item COM submenu - apenas toggle, não navega -->
+            <button
+              v-if="item.children?.length"
+              @click="toggleGroup(item.label)"
+              class="nav-item nav-item-toggle"
+              :class="{ 'active': isItemActive(item) }"
+              :title="!uiStore.isNavMenuOpen ? item.label : ''"
+            >
+              <span class="nav-icon">
+                <component :is="item.icon" :size="22" weight="regular" />
+              </span>
+              <transition name="fade">
+                <span v-if="uiStore.isNavMenuOpen" class="nav-label">{{ item.label }}</span>
+              </transition>
+              <transition name="fade">
+                <span v-if="uiStore.isNavMenuOpen" class="nav-chevron">
+                  <PhCaretDown v-if="isGroupExpanded(item.label)" :size="16" weight="bold" />
+                  <PhCaretRight v-else :size="16" weight="bold" />
+                </span>
+              </transition>
+            </button>
+            
+            <!-- Item SEM submenu - comportamento normal -->
             <RouterLink
-              v-if="item.useRouter"
+              v-else-if="item.useRouter"
               :to="item.path"
               class="nav-item"
               :class="{ 'active': isItemActive(item) }"
@@ -65,9 +89,10 @@
               <span v-if="item.badge && uiStore.isNavMenuOpen" class="nav-badge">{{ item.badge }}</span>
             </a>
 
-            <transition name="fade">
+            <!-- Submenu - só aparece se expandido E menu aberto -->
+            <transition name="slide-fade">
               <div
-                v-if="item.children?.length && uiStore.isNavMenuOpen"
+                v-if="item.children?.length && uiStore.isNavMenuOpen && isGroupExpanded(item.label)"
                 class="nav-children"
               >
                 <RouterLink
@@ -168,7 +193,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onBeforeMount, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useUiStore } from '@/stores/ui';
 import {
@@ -189,6 +214,8 @@ import {
   PhListBullets,
   PhTreeStructure,
   PhWaveform,
+  PhCaretDown,
+  PhCaretRight,
 } from '@phosphor-icons/vue';
 
 const uiStore = useUiStore();
@@ -197,6 +224,67 @@ const csrfToken = ref(window.CSRF_TOKEN || '');
 const wsConnected = ref(false);
 const wsConnecting = ref(false);
 let ws = null;
+
+// Estado de expansão dos grupos com submenu
+const expandedGroups = ref(new Set());
+
+// Função para alternar expansão de um grupo
+function toggleGroup(itemLabel) {
+  if (expandedGroups.value.has(itemLabel)) {
+    expandedGroups.value.delete(itemLabel);
+  } else {
+    expandedGroups.value.add(itemLabel);
+  }
+  // Force reactivity
+  expandedGroups.value = new Set(expandedGroups.value);
+}
+
+// Verifica se um grupo está expandido
+function isGroupExpanded(itemLabel) {
+  return expandedGroups.value.has(itemLabel);
+}
+
+// Ref local para garantir estabilidade do CSS variable
+const menuWidth = ref('280px');
+
+const navMenuStyle = computed(() => ({
+  '--nav-menu-width': menuWidth.value,
+  width: menuWidth.value,
+  minWidth: menuWidth.value,
+  maxWidth: menuWidth.value,
+  flexBasis: menuWidth.value,
+  flexGrow: '0',
+  flexShrink: '0',
+}));
+
+function applyWidth(widthPx) {
+  menuWidth.value = widthPx;
+  if (typeof document !== 'undefined') {
+    document.documentElement.style.setProperty('--nav-menu-width', widthPx);
+  }
+}
+
+// Garantir que o store está inicializado antes do mount
+onBeforeMount(() => {
+  // Força a leitura do localStorage ANTES do primeiro render
+  const storedValue = localStorage.getItem('ui.navMenuOpen');
+  const shouldBeOpen = storedValue === null ? true : storedValue === 'true';
+  
+  // Se o store não está sincronizado, força a sincronização
+  if (uiStore.isNavMenuOpen !== shouldBeOpen) {
+    console.warn('[NavMenu] Store dessincronizado, corrigindo:', {
+      stored: storedValue,
+      storeValue: uiStore.isNavMenuOpen,
+      correcting: shouldBeOpen
+    });
+    // Força o estado correto sem trigger de save (evita loop)
+    uiStore.isNavMenuOpen = shouldBeOpen;
+  }
+  
+  // Define largura inicial baseada no estado final
+  applyWidth(shouldBeOpen ? '280px' : '60px');
+  console.log('[NavMenu] onBeforeMount - menuWidth:', menuWidth.value, 'isOpen:', shouldBeOpen);
+});
 
 const connectionStatus = computed(() => {
   if (wsConnected.value) {
@@ -257,6 +345,21 @@ function connectWebSocket() {
 
 onMounted(() => {
   connectWebSocket();
+  applyWidth(menuWidth.value);
+  // Debug helper to inspect sidebar dimensions and state after navigation / refresh
+  window.__navMenuDebug = () => {
+    const el = document.querySelector('.nav-menu');
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    return {
+      width: rect.width,
+      height: rect.height,
+      isNavMenuOpen: uiStore.isNavMenuOpen,
+      path: window.location.pathname,
+    };
+  };
+  // Log initial state for diagnostics
+  console.log('[NavMenu] mounted debug state', window.__navMenuDebug());
 });
 
 onUnmounted(() => {
@@ -300,21 +403,27 @@ const menuItems = [
     icon: PhChartBar,
   },
   {
-    label: 'Network Design',
-    path: '/NetworkDesign/',
-    icon: PhGitBranch,
+    label: 'Network',
+    path: '/Network/NetworkDesign/',
+    icon: PhShareNetwork,
     useRouter: true,
+    children: [
+      {
+        label: 'Device Import',
+        path: '/Network/DeviceImport/',
+        icon: PhPlusCircle,
+      },
+      {
+        label: 'Network Design',
+        path: '/Network/NetworkDesign/',
+        icon: PhGitBranch,
+      },
+    ],
   },
   {
     label: 'Docs',
     path: '/docs/',
     icon: PhBook,
-  },
-  {
-    label: 'Add Device',
-    path: '/zabbix/lookup/',
-    icon: PhPlusCircle,
-    badge: '+',
   },
 ];
 
@@ -358,12 +467,27 @@ function isItemActive(item) {
     item.children.some(child => isPathActive(child.path))
   );
 }
+
+// Watch route path and menu open state to catch unexpected collapses
+watch(() => route.path, () => {
+  console.log('[NavMenu] route changed', route.path, 'state', window.__navMenuDebug());
+  applyWidth(menuWidth.value);
+});
+watch(() => uiStore.isNavMenuOpen, (newValue) => {
+  console.log('[NavMenu] isNavMenuOpen changed ->', newValue);
+  applyWidth(newValue ? '280px' : '60px');
+  console.log('[NavMenu] menuWidth updated to', menuWidth.value);
+});
 </script>
 
 <style scoped>
 .nav-menu {
-  flex-shrink: 0;
-  width: 280px;
+  /* CSS Variable binding com fallback robusto */
+  flex: none;
+  width: var(--nav-menu-width,280px) !important;
+  min-width: var(--nav-menu-width,280px) !important;
+  max-width: var(--nav-menu-width,280px) !important;
+  
   background: linear-gradient(195deg, var(--menu-bg-start) 0%, var(--menu-bg-end) 100%);
   box-shadow: var(--shadow-accent);
   display: flex;
@@ -372,10 +496,6 @@ function isItemActive(item) {
   z-index: 100;
   overflow: hidden;
   height: 100vh;
-}
-
-.nav-menu-collapsed {
-  width: 60px;
 }
 
 .nav-menu-header {
@@ -495,6 +615,25 @@ function isItemActive(item) {
   position: relative;
   overflow: hidden;
   white-space: nowrap;
+}
+
+/* Bot\u00e3o de toggle para grupos com submenu */
+.nav-item-toggle {
+  background: transparent;
+  border: none;
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.nav-chevron {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  color: inherit;
+  transition: transform 0.2s;
 }
 
 .nav-item-child {
@@ -775,5 +914,43 @@ function isItemActive(item) {
   .nav-menu.mobile-open {
     transform: translateX(0);
   }
+}
+
+/* Anima\u00e7\u00f5es de submenu */
+.slide-fade-enter-active {
+  transition: all 0.3s ease-out;
+}
+
+.slide-fade-leave-active {
+  transition: all 0.2s ease-in;
+}
+
+.slide-fade-enter-from {
+  transform: translateY(-10px);
+  opacity: 0;
+  max-height: 0;
+}
+
+.slide-fade-enter-to {
+  transform: translateY(0);
+  opacity: 1;
+  max-height: 500px;
+}
+
+.slide-fade-leave-from {
+  transform: translateY(0);
+  opacity: 1;
+  max-height: 500px;
+}
+
+.slide-fade-leave-to {
+  transform: translateY(-10px);
+  opacity: 0;
+  max-height: 0;
+}
+
+.nav-children {
+  overflow: hidden;
+  padding-left: 0.5rem;
 }
 </style>
