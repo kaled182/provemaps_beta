@@ -6,6 +6,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.shortcuts import redirect, render
+from django.http import HttpResponseForbidden
 
 from integrations.zabbix.guards import reload_diagnostics_flag_cache
 
@@ -30,7 +31,27 @@ def _staff_check(user):
     return user.is_active and user.is_staff
 
 
+def _is_setup_locked():
+    """
+    Check if setup is locked via filesystem flag.
+    This prevents production servers from being reconfigured remotely.
+    """
+    lock_file = os.path.join(settings.BASE_DIR, 'SETUP_LOCKED')
+    # Also check parent directory (project root)
+    lock_file_root = os.path.join(settings.BASE_DIR, '..', 'SETUP_LOCKED')
+    return os.path.exists(lock_file) or os.path.exists(lock_file_root)
+
+
 def first_time_setup(request):
+    # SECURITY: Block setup if locked
+    if _is_setup_locked():
+        return HttpResponseForbidden(
+            "<h1>Setup Locked</h1>"
+            "<p>This setup interface has been locked for security.</p>"
+            "<p>To unlock, remove the <code>SETUP_LOCKED</code> file "
+            "from the server and restart the application.</p>"
+        )
+    
     if FirstTimeSetup.objects.filter(configured=True).exists():
         return redirect("/maps_view/dashboard/")
 

@@ -40,6 +40,16 @@
           </svg>
         </button>
         
+        <!-- WebSocket Connection Status -->
+        <div v-if="isSidebarOpen" class="connection-status" :class="wsConnectionState">
+          <span class="status-indicator" :class="wsConnectionState"></span>
+          <span class="status-text">
+            <template v-if="wsConnectionState === 'connected'">Connected</template>
+            <template v-else-if="wsConnectionState === 'connecting'">Connecting...</template>
+            <template v-else>Offline</template>
+          </span>
+        </div>
+        
         <!-- Fiber Status Summary -->
         <div class="fiber-status-summary">
           <FiberStatusChart 
@@ -64,11 +74,15 @@
             </span>
           </div>
           
-          <div v-if="dashboard.loading" class="loading-state">
+          <div v-if="dashboard.loading" class="loading-state" data-testid="loading-state">
+            <svg class="animate-spin h-5 w-5 inline-block mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
             Carregando hosts...
           </div>
           
-          <div v-else-if="dashboard.error" class="error-state">
+          <div v-else-if="dashboard.error" class="error-state" data-testid="error-state">
             Erro: {{ dashboard.error }}
           </div>
           
@@ -104,7 +118,7 @@
           </div>
           
           <!-- Empty state when no hosts at all -->
-          <div v-if="!dashboard.loading && dashboard.totalHosts === 0" class="empty-state">
+          <div v-if="!dashboard.loading && dashboard.totalHosts === 0" class="empty-state" data-testid="empty-state">
             Nenhum host encontrado
           </div>
         </div>
@@ -188,6 +202,13 @@ const { connected: wsConnected, connecting: wsConnecting, lastMessage } = useWeb
   wsUrl.value,
   { autoConnect: true }
 );
+
+// Compute WebSocket connection state for UI indicator
+const wsConnectionState = computed(() => {
+  if (wsConnected.value) return 'connected';
+  if (wsConnecting.value) return 'connecting';
+  return 'offline';
+});
 
 // Throttle WebSocket message processing to avoid excessive re-renders
 const throttledHandleMessage = throttle((message) => {
@@ -281,7 +302,13 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  padding: 8px 16px;
+  margin: 8px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
 }
 
 .status-indicator {
@@ -467,6 +494,27 @@ onMounted(async () => {
   text-align: center;
   color: var(--text-tertiary);
   font-size: 14px;
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.loading-state svg {
+  width: 20px;
+  height: 20px;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
 }
 
 .error-state {

@@ -174,7 +174,25 @@ backend/test_media/
 logs/
 staticfiles/
 database/*.sqlite3
+database/backups/
 htmlcov/
 dist/
 celerybeat-schedule
 celerybeat.pid
+
+# Test databases and dumps (CRITICAL: Never commit these)
+test_db.sqlite3
+*.dump
+*.sql.gz
+database/backups/*.dump
+database/*.dump
+
+# Frontend test artifacts (Playwright/Vitest)
+frontend/playwright-report/
+frontend/test-results/
+frontend/.playwright/
+frontend/coverage/
+
+# Lock file for production setup (security)
+SETUP_LOCKED
+backend/SETUP_LOCKED
