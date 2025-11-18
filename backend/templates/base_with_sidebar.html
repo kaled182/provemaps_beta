@@ -1,0 +1,52 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}System Configuration - ProveMaps{% endblock %}</title>
+    
+    {# CSRF Token #}
+    <script>
+      window.CSRF_TOKEN = "{{ csrf_token }}";
+    </script>
+    
+    {# Tailwind CSS from CDN #}
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              primary: { DEFAULT: '#3b82f6', dark: '#1e40af' },
+            }
+          }
+        }
+      }
+    </script>
+    
+    {# Vue SPA CSS para sidebar #}
+    <link rel="stylesheet" href="{% static 'vue-spa/assets/main.css' %}?v={{ STATIC_ASSET_VERSION|default:'1' }}">
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="h-full overflow-hidden bg-gray-900 text-white">
+    <div class="flex h-screen overflow-hidden">
+        {# Sidebar Vue.js #}
+        <div id="app"></div>
+        
+        {# Conteúdo Django #}
+        <main class="flex-1 relative overflow-auto bg-gray-100 dark:bg-gray-900">
+            {% block content %}
+            <p class="p-6 text-gray-600">Content goes here.</p>
+            {% endblock %}
+        </main>
+    </div>
+    
+    {# Vue SPA JavaScript #}
+    <script type="module" src="{% static 'vue-spa/assets/main.js' %}?v={{ STATIC_ASSET_VERSION|default:'1' }}"></script>
+    
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

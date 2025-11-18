@@ -10,12 +10,15 @@ from typing import Any
 
 # Health endpoints
 from core import views_health as health_views
+from core import views_metrics as metrics_views
+from core import views_docs as docs_views
 # Views antigas
 from core import views as core_views
 # SPA views
 from core.views_spa import SPAView
 # API views
 from core import views_api as api_views
+from core import api_users
 
 
 # Customize Django Admin
@@ -37,6 +40,37 @@ urlpatterns: list[Any] = [
         name='metrics_root_redirect',
     ),
     path('metrics/', include('django_prometheus.urls')),
+    path(
+        'api/metrics/health/',
+        metrics_views.system_health_metrics,
+        name='system_health_metrics'
+    ),
+    path('metrics/health', SPAView.as_view(), name='metrics_health_page'),
+
+    # Documentation API
+    path(
+        'api/docs/<path:doc_path>',
+        docs_views.serve_doc_file,
+        name='serve_doc'
+    ),
+    path('docs', SPAView.as_view(), name='docs_page'),
+
+    # User Management API
+    path('api/users/', api_users.list_users, name='api_list_users'),
+    path('api/users/create/', api_users.create_user, name='api_create_user'),
+    path('api/users/<int:user_id>/', api_users.get_user, name='api_get_user'),
+    path(
+        'api/users/<int:user_id>/update/',
+        api_users.update_user,
+        name='api_update_user'
+    ),
+    path(
+        'api/users/<int:user_id>/delete/',
+        api_users.delete_user,
+        name='api_delete_user'
+    ),
+    path('api/groups/', api_users.list_groups, name='api_list_groups'),
+    path('system/users', SPAView.as_view(), name='users_page'),
 
     # APIs
     path('api/v1/inventory/', include('inventory.urls_api')),
