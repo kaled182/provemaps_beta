@@ -3,7 +3,7 @@
 Welcome to the MapsProveFiber documentation! This wiki provides comprehensive guides for developers, operators, and contributors.
 
 **Version**: v2.0.0  
-**Last Updated**: 2025-11-10  
+**Last Updated**: 2025-11-18  
 **Architecture**: Modular Django Multi-App  
 **Documentation Status**: ✅ 100% Complete ([See Report](REORGANIZATION_COMPLETE.md))
 
@@ -33,6 +33,7 @@ Day-to-day development and operations guides.
 - `DEVELOPMENT.md` — Local development, commands, workflows
 - `DOCKER.md` — Docker Compose, containers, volumes
 - `TESTING.md` — Test suite, coverage, CI/CD
+- `testing/` — Testing guides, validation checklists
 - `OBSERVABILITY.md` — Metrics, health checks, logging
 
 ### 🏗️ [Architecture](architecture/)
@@ -82,10 +83,24 @@ Long-term planning and migration timelines.
 ### 🗂️ [Reports](reports/)
 Historical logs, compliance reviews, and PR status snapshots. See `reports/README.md` for a detailed index.
 
-- `reports/phases/` — Execution journals, testing notes, and migration plans for Phases 6-10.
-- `reports/compliance/` — Cache compliance verification and timeout analysis.
-- `reports/status/PR_STATUS.md` — Checklist for Phase 5 pull request and readiness.
-- `reports/pr/PR_PHASE5_COMPLETE.md` — Full PR body used to close Phase 5.
+- `reports/phases/` — Execution journals, testing notes, and migration plans for Phases 6-10
+- `reports/rollout/` — Deployment reports and rollout documentation (Vue Dashboard, etc.)
+- `reports/fixes/` — Bug fix summaries, applied patches, and problem resolutions
+- `reports/compliance/` — Cache compliance verification and timeout analysis
+- `reports/status/PR_STATUS.md` — Checklist for Phase 5 pull request and readiness
+- `reports/pr/PR_PHASE5_COMPLETE.md` — Full PR body used to close Phase 5
+
+### 🔧 [Troubleshooting](troubleshooting/)
+Incident reports, problem resolutions, and fix documentation.
+
+- `DOCKER_CELERY_FIX.md` — Celery/Beat restart loop resolution (Docker image cache)
+- Additional troubleshooting guides as issues are documented
+
+### 🏛️ [Archive](archive/)
+Deprecated documentation and historical references.
+
+- Old migration plans, superseded guides
+- Kept for reference but no longer actively maintained
 
 ---
 

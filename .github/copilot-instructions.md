@@ -6,6 +6,35 @@
 
 ---
 
+### Documentation Standards (CRITICAL)
+
+**File Organization Rules**:
+- ❌ **NEVER create .md files in project root** (except README.md)
+- ✅ **ALL documentation belongs in `doc/` directory**
+- ✅ **Use existing subdirectories** or create new ones as needed:
+  - `doc/troubleshooting/` — Bug fixes, problem resolutions, incident reports
+  - `doc/reports/rollout/` — Deployment reports, rollout documentation
+  - `doc/reports/fixes/` — Bug fix summaries, applied patches
+  - `doc/reports/phases/` — Project phase completion reports
+  - `doc/reports/` — General reports, sprint summaries
+  - `doc/guides/testing/` — Testing guides, validation checklists
+  - `doc/guides/` — How-to guides, tutorials
+  - `doc/roadmap/` — Future plans, roadmap documents
+  - `doc/operations/` — Deployment, monitoring, operations guides
+  - `doc/architecture/` — System architecture documentation
+  - `doc/developer/` — Developer guides, setup instructions
+  - `doc/api/` — API documentation
+  - `doc/security/` — Security policies, compliance
+  - `doc/releases/` — Version changelogs, release notes
+
+**When documenting work**:
+1. Choose appropriate `doc/` subdirectory (create new one if needed)
+2. Use descriptive filename: `COMPONENT_PURPOSE.md` (e.g., `DOCKER_CELERY_FIX.md`)
+3. Never pollute project root with documentation files
+4. Update existing docs when relevant instead of creating new files
+
+---
+
 ### Environment & Infrastructure (CRITICAL)
 
 **Windows Development - Docker-Only Architecture**:
