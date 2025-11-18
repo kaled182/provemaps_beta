@@ -68,8 +68,8 @@ test.describe('MapView with Mock API', () => {
 
     await page.goto('http://localhost:8000/dashboard');
     
-    // Wait for potential map idle event and API call
-    await page.waitForTimeout(2000);
+    // Wait for potential map idle event and API call (event-based)
+    await page.waitForLoadState('networkidle');
     
     // Since we mocked the response, the store should have segments
     // We can't directly inspect Vue store from Playwright, but we can check rendering
