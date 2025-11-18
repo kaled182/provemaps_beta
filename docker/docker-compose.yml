@@ -40,9 +40,11 @@
       ENABLE_URL_PERSISTENCE: "True"
       # Disable Debug Toolbar in Docker (prevents redirect interception)
       ENABLE_DEBUG_TOOLBAR: "False"
-      # Vue 3 Dashboard Feature Flags (Phase 11 - Canary Rollout) - TEMPORARILY DISABLED FOR SITE-BASED MAP
-      USE_VUE_DASHBOARD: "False"
-      VUE_DASHBOARD_ROLLOUT_PERCENTAGE: "0"
+      # Vue 3 Dashboard Feature Flags (Phase 11 - Canary Rollout)
+      # Permite rollout gradual: 0% (desabilitado) -> 10% -> 25% -> 50% -> 100%
+      # Usar scripts/rollout_vue.ps1 para ajustar percentual com segurança
+      USE_VUE_DASHBOARD: "${USE_VUE_DASHBOARD:-true}"
+      VUE_DASHBOARD_ROLLOUT_PERCENTAGE: "${VUE_DASHBOARD_ROLLOUT_PERCENTAGE:-0}"
       # Sentry APM (Phase 12 - Error Tracking & Performance Monitoring)
       SENTRY_DSN: "https://2b2a767ff10ec5ce098ba093c054a300@o4510353484742656.ingest.us.sentry.io/4510353502371840"
       SENTRY_ENVIRONMENT: "development"
