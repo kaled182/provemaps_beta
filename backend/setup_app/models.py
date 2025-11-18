@@ -1,6 +1,7 @@
 from django.db import models
 
 from .fields import EncryptedCharField
+from .models_audit import ConfigurationAudit  # Import audit model
 
 
 class FirstTimeSetup(models.Model):

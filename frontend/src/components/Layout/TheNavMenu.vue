@@ -128,20 +128,6 @@
       </div>
       
       <a 
-        href="/setup/" 
-        class="nav-item"
-          :class="{ 'active': isPathActive('/setup/') }"
-        :title="!uiStore.isNavMenuOpen ? 'Setup' : ''"
-      >
-        <span class="nav-icon">
-          <PhGear :size="22" weight="regular" />
-        </span>
-        <transition name="fade">
-          <span v-if="uiStore.isNavMenuOpen" class="nav-label">Setup</span>
-        </transition>
-      </a>
-      
-      <a 
         href="/admin/" 
         class="nav-item"
           :class="{ 'active': isPathActive('/admin/') }"
@@ -154,6 +140,84 @@
           <span v-if="uiStore.isNavMenuOpen" class="nav-label">Admin</span>
         </transition>
       </a>
+
+      <!-- System com submenu -->
+      <div class="nav-group footer-group" :class="{ 'has-children': true, 'expanded': isGroupExpanded('System') }">
+        <button
+          @click="toggleGroup('System')"
+          class="nav-item nav-item-toggle"
+          :class="{ 'active': isPathActive('/setup/config') || isPathActive('/metrics/health') }"
+          :title="!uiStore.isNavMenuOpen ? 'System' : ''"
+        >
+          <span class="nav-icon">
+            <PhGear :size="22" weight="regular" />
+          </span>
+          <transition name="fade">
+            <span v-if="uiStore.isNavMenuOpen" class="nav-label">System</span>
+          </transition>
+          <transition name="fade">
+            <span v-if="uiStore.isNavMenuOpen" class="nav-chevron">
+              <PhCaretDown v-if="isGroupExpanded('System')" :size="16" weight="bold" />
+              <PhCaretRight v-else :size="16" weight="bold" />
+            </span>
+          </transition>
+        </button>
+
+        <transition name="slide-fade">
+          <div
+            v-if="uiStore.isNavMenuOpen && isGroupExpanded('System')"
+            class="nav-children"
+          >
+            <RouterLink
+              to="/system/users"
+              class="nav-item nav-item-child"
+              :class="{ 'active': isPathActive('/system/users') }"
+              title="Users"
+            >
+              <span class="nav-icon child-icon">
+                <PhUsers :size="18" weight="regular" />
+              </span>
+              <span class="nav-label">Users</span>
+            </RouterLink>
+            <RouterLink
+              to="/setup/config"
+              class="nav-item nav-item-child"
+              :class="{ 'active': isPathActive('/setup/config') }"
+              title="Setup"
+            >
+              <span class="nav-icon child-icon">
+                <PhGear :size="18" weight="regular" />
+              </span>
+              <span class="nav-label">Setup</span>
+            </RouterLink>
+            <RouterLink
+              to="/metrics/health"
+              class="nav-item nav-item-child"
+              :class="{ 'active': isPathActive('/metrics/health') }"
+              title="Metrics"
+            >
+              <span class="nav-icon child-icon">
+                <PhChartBar :size="18" weight="regular" />
+              </span>
+              <span class="nav-label">Metrics</span>
+            </RouterLink>
+          </div>
+        </transition>
+      </div>
+
+      <RouterLink
+        to="/docs"
+        class="nav-item"
+        :class="{ 'active': isPathActive('/docs') }"
+        :title="!uiStore.isNavMenuOpen ? 'Docs' : ''"
+      >
+        <span class="nav-icon">
+          <PhBook :size="22" weight="regular" />
+        </span>
+        <transition name="fade">
+          <span v-if="uiStore.isNavMenuOpen" class="nav-label">Docs</span>
+        </transition>
+      </RouterLink>
       
       <!-- Theme Toggle Button -->
       <button 
@@ -216,6 +280,7 @@ import {
   PhWaveform,
   PhCaretDown,
   PhCaretRight,
+  PhUsers,
 } from '@phosphor-icons/vue';
 
 const uiStore = useUiStore();
@@ -398,11 +463,6 @@ const menuItems = [
     ],
   },
   {
-    label: 'Metrics',
-    path: '/maps_view/metrics/',
-    icon: PhChartBar,
-  },
-  {
     label: 'Network',
     path: '/Network/NetworkDesign/',
     icon: PhShareNetwork,
@@ -419,11 +479,6 @@ const menuItems = [
         icon: PhGitBranch,
       },
     ],
-  },
-  {
-    label: 'Docs',
-    path: '/docs/',
-    icon: PhBook,
   },
 ];
 
