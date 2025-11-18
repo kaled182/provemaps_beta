@@ -1,31 +1,25 @@
 """
 URL configuration for core project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/5.2/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path, include
-from django.shortcuts import redirect
+from django.urls import path, include, re_path
 from django.conf import settings
 from django.conf.urls.static import static
 from django.views.generic import RedirectView
 from typing import Any
 
-# HTML views routed through core/views.py
-from core import views as core_views
-# Health endpoints separados em core/views_health.py
+# Health endpoints
 from core import views_health as health_views
+from core import views_metrics as metrics_views
+from core import views_docs as docs_views
+# Views antigas
+from core import views as core_views
+# SPA views
+from core.views_spa import SPAView
+# API views
+from core import views_api as api_views
+from core import api_users
+
 
 # Customize Django Admin
 admin.site.site_header = "SIMPLES INTERNET - Administração"
@@ -33,13 +27,8 @@ admin.site.site_title = "Maps Prove Fiber Admin"
 admin.site.index_title = "Gerenciamento do Sistema"
 
 
-def redirect_to_maps_view(request: Any):
-    """Redireciona raiz para dashboard."""
-    return redirect('monitoring:backbone_dashboard')
-
-
+# Define API, Admin e Health routes FIRST
 urlpatterns: list[Any] = [
-    path('', redirect_to_maps_view),
     path('admin/', admin.site.urls),
     path(
         'accounts/',
@@ -51,88 +40,44 @@ urlpatterns: list[Any] = [
         name='metrics_root_redirect',
     ),
     path('metrics/', include('django_prometheus.urls')),
+    path(
+        'api/metrics/health/',
+        metrics_views.system_health_metrics,
+        name='system_health_metrics'
+    ),
+    path('metrics/health', SPAView.as_view(), name='metrics_health_page'),
 
-    # Apps
-    path('maps_view/', include('maps_view.urls')),
+    # Documentation API
     path(
-        'NetworkDesign/',
-        include('inventory.urls'),
-    ),  # Route builder HTML views
+        'api/docs/<path:doc_path>',
+        docs_views.serve_doc_file,
+        name='serve_doc'
+    ),
+    path('docs', SPAView.as_view(), name='docs_page'),
+
+    # User Management API
+    path('api/users/', api_users.list_users, name='api_list_users'),
+    path('api/users/create/', api_users.create_user, name='api_create_user'),
+    path('api/users/<int:user_id>/', api_users.get_user, name='api_get_user'),
     path(
-        'network-design/',
-        RedirectView.as_view(
-            pattern_name='inventory:network_design',
-            permanent=True,
-        ),
-        name='network_design_lower_redirect',
+        'api/users/<int:user_id>/update/',
+        api_users.update_user,
+        name='api_update_user'
     ),
     path(
-        'routes/fiber-route-builder/',
-        RedirectView.as_view(
-            pattern_name='inventory:network_design',
-            permanent=True,
-        ),
-        name='routes_builder_legacy_detail',
+        'api/users/<int:user_id>/delete/',
+        api_users.delete_user,
+        name='api_delete_user'
     ),
-    path(
-        'routes_builder/fiber-route-builder/',
-        RedirectView.as_view(
-            pattern_name='inventory:network_design',
-            permanent=True,
-        ),
-        name='routes_builder_legacy_detail_old',
-    ),
-    path(
-        'routes_builder/',
-        RedirectView.as_view(
-            pattern_name='inventory:network_design',
-            permanent=True,
-        ),
-        name='routes_builder_legacy_root',
-    ),
-    path(
-        'backbone/',
-        RedirectView.as_view(
-            pattern_name='monitoring:backbone_dashboard',
-            permanent=True,
-        ),
-        name='backbone_dashboard_legacy',
-    ),
-    path(
-        'monitoring-all/',
-        RedirectView.as_view(
-            pattern_name='monitoring:monitoring_overview',
-            permanent=True,
-        ),
-        name='monitoring_overview_legacy',
-    ),
-    path(
-        'gpon/',
-        RedirectView.as_view(
-            pattern_name='monitoring:gpon_dashboard',
-            permanent=True,
-        ),
-        name='gpon_dashboard_legacy',
-    ),
-    path(
-        'dwdm/',
-        RedirectView.as_view(
-            pattern_name='monitoring:dwdm_dashboard',
-            permanent=True,
-        ),
-        name='dwdm_dashboard_legacy',
-    ),
-    path('monitoring/', include('monitoring.urls')),
+    path('api/groups/', api_users.list_groups, name='api_list_groups'),
+    path('system/users', SPAView.as_view(), name='users_page'),
+
+    # APIs
     path('api/v1/inventory/', include('inventory.urls_api')),
-    path('api/v1/', include('inventory.urls_rest')),  # DRF endpoints
+    path('api/v1/', include('inventory.urls_rest')),
+    path('api/config/', api_views.frontend_config, name='frontend_config'),
     path('setup_app/', include('setup_app.urls')),
-
-    # HTML page for Zabbix lookup (frontend now calls inventory API endpoints)
-    path(
-        'zabbix/lookup/',
-        core_views.zabbix_lookup_page,
-        name='zabbix_lookup'
-    ),
+    path('maps_view/', include('maps_view.urls')),
 
     # Health checks
     path('healthz', health_views.healthz, name='healthz'),
@@ -144,6 +89,13 @@ urlpatterns: list[Any] = [
         name='celery_status'
     ),
 
+    # Zabbix lookup page (if still needed)
+    path(
+        'zabbix/lookup/',
+        core_views.zabbix_lookup_page,
+        name='zabbix_lookup'
+    ),
+
     # Favicon
     path(
         'favicon.ico',
@@ -151,14 +103,12 @@ urlpatterns: list[Any] = [
     ),
 ]
 
-# Django Debug Toolbar (only in dev/baseline mode)
+# Django Debug Toolbar (dev only)
 if settings.DEBUG and 'debug_toolbar' in settings.INSTALLED_APPS:
     import debug_toolbar
-    urlpatterns = [
-        path('__debug__/', include(debug_toolbar.urls)),
-    ] + urlpatterns
+    urlpatterns.insert(0, path('__debug__/', include(debug_toolbar.urls)))
 
-# Serve static files during development
+# Serve static and media files (dev only)
 if settings.DEBUG:
     urlpatterns += static(
         settings.STATIC_URL,
@@ -168,3 +118,14 @@ if settings.DEBUG:
         settings.MEDIA_URL,
         document_root=settings.MEDIA_ROOT
     )
+
+# Vue SPA Catch-All Route
+# This MUST be the last route. It captures any URL not matched above
+# (by API, Admin, or Static) and serves the Vue SPA.
+urlpatterns.append(
+    re_path(
+        r"^.*$",  # Matches everything
+        SPAView.as_view(),
+        name="spa",
+    )
+)

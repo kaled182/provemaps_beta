@@ -14,17 +14,34 @@
     {# CSRF Token for Vue app (logout, forms) #}
     <script>
       window.CSRF_TOKEN = "{{ csrf_token }}";
+      
+      // Apply dark mode class immediately (before Vue loads)
+      (function() {
+        const theme = localStorage.getItem('ui.theme') || 'dark';
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        }
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
     </script>
     
     {# Tailwind CSS from CDN (temporary during migration) #}
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+      }
+    </script>
+
+    {# Vite-built CSS bundle - keep in sync with STATIC_ASSET_VERSION for cache busting #}
+    <link rel="stylesheet" href="{% static 'vue-spa/assets/main.css' %}?v={{ STATIC_ASSET_VERSION|default:'1' }}">
     
     {# Vite-built Vue SPA assets with cache busting #}
     <script type="module" src="{% static 'vue-spa/assets/main.js' %}?v={{ STATIC_ASSET_VERSION|default:'1' }}"></script>
     
     {% block extra_head %}{% endblock %}
 </head>
-<body class="h-full overflow-hidden bg-gray-900">
+<body class="h-full overflow-hidden bg-white dark:bg-gray-900">
     {# Vue app mount point #}
     <div id="app" class="h-full"></div>
     

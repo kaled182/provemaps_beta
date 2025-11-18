@@ -62,6 +62,14 @@ export const useUiStore = defineStore('ui', () => {
   
   function applyTheme() {
     document.documentElement.setAttribute('data-theme', theme.value);
+    
+    // Adicionar/remover classe 'dark' para Tailwind CSS
+    if (theme.value === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    
     console.log('[UI Store] Theme applied:', theme.value);
   }
   

@@ -31,8 +31,9 @@
       GEOS_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgeos_c.so
       PROJ_LIB: /usr/share/proj
       REDIS_URL: redis://redis:6379/0
-      # Static Asset Cache Busting (Sprint 1)
-      STATIC_ASSET_VERSION: "1.0.2"
+      # Static Asset Cache Busting - Generated dynamically by settings.dev
+      # Remove STATIC_ASSET_VERSION env var to use git-sha + timestamp from settings
+      # STATIC_ASSET_VERSION: "1.0.2"  # REMOVIDO - usar timestamp dinâmico
       # Sprint 1 Feature Flags (Filters & Search)
       ENABLE_FILTERS: "True"
       ENABLE_SEARCH: "True"
@@ -48,7 +49,8 @@
       SENTRY_TRACES_SAMPLE_RATE: "0.1"
       SENTRY_PROFILES_SAMPLE_RATE: "0.1"
       INIT_MIGRATE: "true"
-      INIT_COLLECTSTATIC: "true"
+      # Skip collectstatic on host filesystems that don't support chmod (WSL/NTFS)
+      INIT_COLLECTSTATIC: "false"
       INIT_ENSURE_SUPERUSER: "true"
       CELERY_STATUS_TIMEOUT: "6"
       CELERY_PING_TIMEOUT: "2"
