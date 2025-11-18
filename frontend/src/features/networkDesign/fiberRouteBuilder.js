@@ -46,6 +46,14 @@ let deviceOptionsDispatched = false;
 let globalListenersBound = false;
 let activeEndpoint = 'end'; // 'start' | 'end'
 const modalDefaultParent = { current: null };
+let googleRetryCount = 0;
+const GOOGLE_MAX_RETRY = 50;
+
+const getGoogleApiKey = () => {
+    if (typeof document === 'undefined') return '';
+    return document.querySelector('meta[name="google-maps-api-key"]')?.getAttribute('content')
+        || (typeof import.meta !== 'undefined' && import.meta?.env?.VITE_GOOGLE_MAPS_API_KEY) || '';
+};
 
 const SEGMENT_INSERT_THRESHOLD_PX = 28;
 const ENDPOINT_THRESHOLD_PX = 36;
@@ -64,6 +72,7 @@ function resetNetworkDesignState() {
     mapsInitStarted = false;
     activeEndpoint = 'end';
     modalDefaultParent.current = null;
+    googleRetryCount = 0;
 }
 
 function getFullscreenElement() {
@@ -319,8 +328,15 @@ function destroyNetworkDesignApp() {
  * Includes debug logging for the distance() issue
  */
 onPathChange(({ path, distance }) => {
-     // DEBUG: verify the type and value of "distance" on entry
-     console.log('[DEBUG onPathChange] Received distance - Type:', typeof distance, 'Value:', distance);
+    // Evita executar em rotas onde o DOM da NetworkDesign não existe (ex.: monitoring)
+    const container = document.querySelector('.network-design-page');
+    if (!container) {
+        console.warn('[onPathChange] NetworkDesign container not found, skipping callback.');
+        return;
+    }
+
+    // DEBUG: verify the type and value of "distance" on entry
+    console.log('[DEBUG onPathChange] Received distance - Type:', typeof distance, 'Value:', distance);
     if (currentFiberMeta) {
         currentFiberMeta.path = path.map((point) => ({ ...point }));
     }
@@ -387,6 +403,10 @@ function totalDistance() {
 
 function refreshList() {
     const list = findElement('pointsList');
+    if (!list) {
+        console.warn('[refreshList] pointsList element not found, skipping.');
+        return;
+    }
     const currentPath = getPath(); // Get from module
     list.innerHTML = '';
     currentPath.forEach((point, index) => {
@@ -641,6 +661,15 @@ console.log('[SelfCheck] Modules loaded:', {
 
 // Initialize map when Google Maps API is ready
 function waitForGoogleMaps() {
+    const key = getGoogleApiKey();
+    if (!key) {
+        console.warn('[waitForGoogleMaps] Google Maps API key not configured; skipping init.');
+        return;
+    }
+    if (googleRetryCount > GOOGLE_MAX_RETRY) {
+        console.error('[waitForGoogleMaps] Google Maps API not ready after retries, giving up.');
+        return;
+    }
     if (typeof google !== 'undefined' && google.maps) {
         console.log('[waitForGoogleMaps] Google Maps API is ready, calling initMap()');
         try {
@@ -649,8 +678,9 @@ function waitForGoogleMaps() {
             console.error('[waitForGoogleMaps] Error calling initMap():', e);
         }
     } else {
-        console.log('[waitForGoogleMaps] Google Maps API not ready yet, retrying...');
-        setTimeout(waitForGoogleMaps, 100);
+        googleRetryCount += 1;
+        console.log('[waitForGoogleMaps] Google Maps API not ready yet, retrying...', googleRetryCount);
+        setTimeout(waitForGoogleMaps, 150);
     }
 }
 

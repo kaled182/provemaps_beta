@@ -10,7 +10,13 @@ const inferBasePath = () => {
     if (pathname.startsWith('/monitoring/')) {
       return '/';
     }
+    if (pathname.startsWith('/Network/')) {
+      return '/';
+    }
     if (pathname.startsWith('/NetworkDesign/')) {
+      return '/';
+    }
+    if (pathname.startsWith('/setup/')) {
       return '/';
     }
     if (pathname.startsWith('/static/vue-spa/')) {
@@ -53,9 +59,47 @@ const routes = [
     component: () => import('@/components/Monitoring/MonitoringDwdm.vue'),
   },
   {
-    path: '/NetworkDesign/',
+    path: '/Network/NetworkDesign/',
     name: 'network-design',
     component: () => import('@/components/NetworkDesign/NetworkDesignView.vue'),
+  },
+  {
+    path: '/Network/DeviceImport/',
+    name: 'device-import',
+    component: () => import('@/components/Zabbix/ZabbixLookupView.vue'),
+  },
+  {
+    path: '/setup/config',
+    name: 'setup-config',
+    component: () => import('@/views/ConfigurationPage.vue'),
+  },
+  {
+    path: '/metrics/health',
+    name: 'system-health',
+    component: () => import('@/views/SystemHealthView.vue'),
+  },
+  {
+    path: '/docs',
+    name: 'docs',
+    component: () => import('@/views/DocsView.vue'),
+  },
+  {
+    path: '/system/users',
+    name: 'users-management',
+    component: () => import('@/views/UsersManagement.vue'),
+  },
+  // Legacy redirects
+  {
+    path: '/setup_app/config',
+    redirect: '/setup/config',
+  },
+  {
+    path: '/NetworkDesign/',
+    redirect: '/Network/NetworkDesign/',
+  },
+  {
+    path: '/zabbix/lookup/',
+    redirect: '/Network/DeviceImport/',
   },
   // Legacy fallback (Sprint 1 map-only view)
   {

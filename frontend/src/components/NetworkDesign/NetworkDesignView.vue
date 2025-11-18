@@ -346,6 +346,7 @@
 import { ref, onMounted, nextTick, onUnmounted } from 'vue';
 import { initializeNetworkDesignApp } from '@/features/networkDesign/fiberRouteBuilder.js';
 import { initializeKmlModal, cleanupKmlModal } from '@/features/networkDesign/partials/import_kml.js';
+import { waitForGoogleMaps } from '@/utils/googleMapsLoader';
 
 const csrfToken = ref(window.CSRF_TOKEN || '');
 
@@ -353,47 +354,6 @@ const ensureFiberGlobals = () => {
   if (!Array.isArray(window.__FIBER_DEVICE_OPTIONS)) {
     window.__FIBER_DEVICE_OPTIONS = [];
   }
-};
-
-const getGoogleMapsKey = () => {
-  return (
-    document.querySelector('meta[name="google-maps-api-key"]')?.getAttribute('content') || ''
-  );
-};
-
-const loadGoogleMaps = (apiKey) => {
-  return new Promise((resolve, reject) => {
-    if (window.google?.maps) {
-      resolve();
-      return;
-    }
-
-    let script = document.querySelector('script[data-google-maps]');
-    if (script) {
-      script.addEventListener('load', resolve, { once: true });
-      script.addEventListener('error', () => reject(new Error('Google Maps API failed to load')), {
-        once: true,
-      });
-      return;
-    }
-
-    if (!apiKey) {
-      reject(new Error('Missing Google Maps API key'));
-      return;
-    }
-
-    script = document.createElement('script');
-    const params = new URLSearchParams({ key: apiKey, libraries: 'geometry,places' });
-    script.src = `https://maps.googleapis.com/maps/api/js?${params.toString()}`;
-    script.async = true;
-    script.defer = true;
-    script.dataset.googleMaps = 'true';
-    script.addEventListener('load', resolve, { once: true });
-    script.addEventListener('error', () => reject(new Error('Google Maps API failed to load')), {
-      once: true,
-    });
-    document.head.appendChild(script);
-  });
 };
 
 const waitForKmlModal = async (retries = 5) => {
@@ -421,19 +381,46 @@ const closeKmlModal = () => {
 };
 
 onMounted(async () => {
+  console.log('[NetworkDesignView] Component mounting...');
   document.title = 'Network Design | ProveMaps';
+
+  // IMPORTANTE: Limpar elementos órfãos de reloads anteriores (F5)
+  const orphanedElements = [
+    'toastHost',
+    'confirmHost',
+    'contextMenu',
+    'manualSaveModal',
+    'importKmlModal'
+  ];
+  
+  orphanedElements.forEach(id => {
+    const bodyElement = document.body.querySelector(`#${id}`);
+    if (bodyElement && bodyElement.parentElement === document.body) {
+      console.log(`[NetworkDesignView] Removing orphaned element #${id} from document.body`);
+      bodyElement.remove();
+    }
+  });
 
   ensureFiberGlobals();
 
-  const apiKey = getGoogleMapsKey();
-  if (apiKey) {
-    try {
-      await loadGoogleMaps(apiKey);
-    } catch (error) {
-      console.error('[NetworkDesign] Failed to load Google Maps API', error);
+  // Aguarda Google Maps estar disponível
+  // Tenta carregar se ainda não foi carregado (fallback do router guard)
+  try {
+    console.log('[NetworkDesignView] Checking Google Maps availability...');
+    
+    // Se Google Maps já está disponível, usa imediatamente
+    if (window.google?.maps) {
+      console.log('[NetworkDesignView] ✅ Google Maps already available!');
+    } else {
+      // Tenta carregar (pode ser que o router guard tenha falhado)
+      console.log('[NetworkDesignView] Google Maps not loaded, attempting to load...');
+      await waitForGoogleMaps(30000); // 30 segundos de timeout
+      console.log('[NetworkDesignView] ✅ Google Maps loaded successfully!');
     }
-  } else {
-    console.warn('[NetworkDesign] Google Maps API key not configured.');
+  } catch (error) {
+    console.error('[NetworkDesignView] ❌ Failed to load Google Maps API', error);
+    alert('Erro ao carregar Google Maps.\n\nPossíveis causas:\n- Chave da API não configurada\n- Problema de conexão\n\nPor favor, recarregue a página (F5).');
+    return;
   }
 
   await nextTick();
@@ -444,6 +431,8 @@ onMounted(async () => {
   if (!csrfToken.value && window.CSRF_TOKEN) {
     csrfToken.value = window.CSRF_TOKEN;
   }
+  
+  console.log('[NetworkDesignView] Component mounted successfully');
 });
 
 onUnmounted(() => {

@@ -22,7 +22,7 @@ def zabbix_lookup_page(request: HttpRequest) -> HttpResponse:
     The frontend consumes the inventory Zabbix endpoints under
     `/api/v1/inventory/zabbix`.
     """
-    return render(request, "zabbix/lookup.html")
+    return render(request, "spa.html")
 
 
 def healthz(request: HttpRequest) -> JsonResponse:

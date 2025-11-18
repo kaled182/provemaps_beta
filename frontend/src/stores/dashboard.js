@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import { memoize } from '@/composables/usePerformance';
 import { useFiltersStore } from './filters';
 
 /**
@@ -21,18 +20,36 @@ export const useDashboardStore = defineStore('dashboard', () => {
   const fibersLoading = ref(false);
   const fibersError = ref(null);
 
-  // Memoized filter functions for better performance with large datasets
-  const filterByStatus = memoize((hostMap, status) => {
-    return Array.from(hostMap.values()).filter(h => h.status === status).length;
-  });
+  const filterByStatus = (hostMap, status) => {
+    if (!(hostMap instanceof Map)) return 0;
+    let count = 0;
+    hostMap.forEach((h) => {
+      if (h?.status === status) count += 1;
+    });
+    return count;
+  };
 
   // Computed aggregations
-  const totalHosts = computed(() => hosts.value.size);
-  const onlineHosts = computed(() => filterByStatus(hosts.value, 'online'));
-  const offlineHosts = computed(() => filterByStatus(hosts.value, 'offline'));
-  const warningHosts = computed(() => filterByStatus(hosts.value, 'warning'));
+  const hostMapSafe = () => {
+    if (hosts.value instanceof Map) return hosts.value;
+    const fresh = new Map();
+    hosts.value = fresh;
+    return fresh;
+  };
+
+  const fiberMapSafe = () => {
+    if (fiberCables.value instanceof Map) return fiberCables.value;
+    const fresh = new Map();
+    fiberCables.value = fresh;
+    return fresh;
+  };
+
+  const totalHosts = computed(() => hostMapSafe().size);
+  const onlineHosts = computed(() => filterByStatus(hostMapSafe(), 'online'));
+  const offlineHosts = computed(() => filterByStatus(hostMapSafe(), 'offline'));
+  const warningHosts = computed(() => filterByStatus(hostMapSafe(), 'warning'));
   const unknownHosts = computed(() => {
-    return Array.from(hosts.value.values())
+    return Array.from(hostMapSafe().values())
       .filter(h => !h.status || h.status === 'unknown').length;
   });
 
@@ -45,23 +62,29 @@ export const useDashboardStore = defineStore('dashboard', () => {
   
   // Fiber status distribution
   const fiberStatusDistribution = computed(() => {
-    const distribution = { up: 0, down: 0, degraded: 0, unknown: 0 };
-    const cables = Array.from(fiberCables.value.values());
-    console.log('[dashboardStore] Computing fiber distribution, cables count:', cables.length);
-    cables.forEach(cable => {
-      const status = cable.status || 'unknown';
-      console.log('[dashboardStore] Cable:', cable.name, 'Status:', status);
-      if (distribution.hasOwnProperty(status)) {
-        distribution[status]++;
-      } else {
-        distribution.unknown++;
-      }
-    });
-    console.log('[dashboardStore] Fiber distribution:', distribution);
-    return distribution;
+    try {
+      const distribution = { up: 0, down: 0, degraded: 0, unknown: 0 };
+      const cablesMap = fiberMapSafe();
+      const cables = Array.from(cablesMap?.values ? cablesMap.values() : []);
+      console.log('[dashboardStore] Computing fiber distribution, cables count:', cables.length);
+      cables.forEach(cable => {
+        const status = cable?.status || 'unknown';
+        console.log('[dashboardStore] Cable:', cable?.name, 'Status:', status);
+        if (Object.prototype.hasOwnProperty.call(distribution, status)) {
+          distribution[status]++;
+        } else {
+          distribution.unknown++;
+        }
+      });
+      console.log('[dashboardStore] Fiber distribution:', distribution);
+      return distribution;
+    } catch (error) {
+      console.error('[dashboardStore] Failed to compute fiber distribution', error);
+      return { up: 0, down: 0, degraded: 0, unknown: 0 };
+    }
   });
 
-  const hostsList = computed(() => Array.from(hosts.value.values()));
+  const hostsList = computed(() => Array.from(hostMapSafe().values()));
 
   /**
    * Filtered hosts based on active filters from filters store
@@ -72,7 +95,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     const { status, types, locations, searchQuery } = filtersStore;
     
     // Start with all hosts
-    let filtered = Array.from(hosts.value.values());
+    let filtered = Array.from(hostMapSafe().values());
     
     // Apply status filter
     if (status.length > 0) {
@@ -113,7 +136,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   const availableLocations = computed(() => {
     const locationMap = new Map();
     
-    Array.from(hosts.value.values()).forEach(host => {
+    Array.from(hostMapSafe().values()).forEach(host => {
       const locationId = String(host.site_id || host.location_id || '');
       const locationName = host.site_name || host.location_name || `Site ${locationId}`;
       
@@ -142,7 +165,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   const availableTypes = computed(() => {
     const typeMap = new Map();
     
-    Array.from(hosts.value.values()).forEach(host => {
+    Array.from(hostMapSafe().values()).forEach(host => {
       const deviceType = host.device_type;
       
       if (deviceType && !typeMap.has(deviceType)) {
@@ -276,12 +299,12 @@ export const useDashboardStore = defineStore('dashboard', () => {
     const { host_id, ...updates } = message;
     if (!host_id) return;
 
-    const existing = hosts.value.get(host_id);
+    const existing = hostMapSafe().get(host_id);
     if (existing) {
-      hosts.value.set(host_id, { ...existing, ...updates });
+      hostMapSafe().set(host_id, { ...existing, ...updates });
     } else {
       // New host appeared
-      hosts.value.set(host_id, { id: host_id, ...updates });
+      hostMapSafe().set(host_id, { id: host_id, ...updates });
     }
     lastUpdate.value = new Date().toISOString();
   }
@@ -295,7 +318,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     if (!message.hosts || !Array.isArray(message.hosts)) return;
 
     message.hosts.forEach(host => {
-      hosts.value.set(host.id, host);
+      hostMapSafe().set(host.id, host);
     });
     lastUpdate.value = new Date().toISOString();
   }
@@ -322,7 +345,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
    * Clear all hosts (useful for logout/reset)
    */
   function clearHosts() {
-    hosts.value.clear();
+    hostMapSafe().clear();
     lastUpdate.value = null;
   }
 

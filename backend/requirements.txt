@@ -44,6 +44,7 @@ pillow==11.3.0
 pluggy==1.6.0
 prometheus_client==0.21.1
 prompt_toolkit==3.0.52
+psutil==6.1.1
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
 pycparser==2.23
