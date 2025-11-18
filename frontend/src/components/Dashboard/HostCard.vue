@@ -1,6 +1,7 @@
 <template>
   <article
     class="host-card"
+    data-testid="host-card"
     :class="[`status-${host.status || 'unknown'}`]"
     role="article"
     :aria-label="`Host ${host.name || host.id}, status: ${statusLabel}`"

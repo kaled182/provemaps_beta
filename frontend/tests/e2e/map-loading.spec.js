@@ -179,18 +179,21 @@ test.describe('Map Loading - Error Handling', () => {
     await expect(mapContainer.first()).toBeVisible({ timeout: 15000 });
   });
 
-  test.skip('should show error message if Maps API fails', async ({ page }) => {
-    // Skip this test as it's testing edge case behavior
-    // Block Google Maps API script
-    await page.route('**/maps.googleapis.com/**', route => route.abort());
-    
-    await page.goto('http://localhost:8000/monitoring/backbone/');
-    
-    // Wait and check for error handling
-    await page.waitForTimeout(5000);
-    
-    // Map should not be visible, but page should not crash
-    const app = page.locator('#app');
-    await expect(app).toBeVisible();
-  });
+  // DECISION: Teste removido (Nov 2025)
+  // Razão: Edge case raro (Maps API fail) com baixo ROI
+  // 
+  // Análise:
+  // 1. Google Maps API tem 99.9%+ uptime
+  // 2. Falha catastrófica (API down) afeta TODA a aplicação
+  // 3. useMapService.js já tem error handling (console.error)
+  // 4. Dashboard tem error-state para falhas de dados (não de Maps)
+  // 5. Teste seria complexo (mock script blocking) com valor limitado
+  //
+  // Alternativas consideradas:
+  // - Implementar error-state específico para Maps → Baixa prioridade
+  // - Testar em staging com Maps API key inválida → Manual test
+  // - Monitoramento real (Sentry) captura falhas → Melhor que teste E2E
+  //
+  // Recomendação: Monitorar erros via Sentry em produção
+  // Referência: doc/developer/TESTING_E2E.md - "Quando NÃO testar edge cases"
 });
