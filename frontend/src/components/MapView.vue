@@ -251,6 +251,15 @@
       @toggle-legend="toggleLegend"
     />
     
+    <!-- Radius Search Tool (Phase 7) -->
+    <RadiusSearchTool
+      v-if="apiKey && enableRadiusSearch"
+      :map-ref="mapRef"
+      :initial-radius="10"
+      @search-completed="handleRadiusSearchResults"
+      @search-error="handleRadiusSearchError"
+    />
+    
     <!-- Status Legend -->
     <div v-if="showLegend" class="map-legend" :class="{ 'legend-collapsed': legendCollapsed }" :style="{ left: legendLeftPosition }">
       <div class="legend-header">
@@ -287,6 +296,7 @@ import { storeToRefs } from 'pinia';
 import { colorForStatus, SEGMENT_STATUS_COLORS } from '@/constants/segmentStatusColors';
 import { debounce } from '@/utils/debounce';
 import MapControls from '@/components/Map/MapControls.vue';
+import RadiusSearchTool from '@/components/Map/RadiusSearchTool.vue';
 
 const props = defineProps({
   sidebarCollapsed: {
@@ -300,6 +310,10 @@ const props = defineProps({
   uiStore: {
     type: Object,
     default: null
+  },
+  enableRadiusSearch: {
+    type: Boolean,
+    default: false // Phase 7: Enable radius search tool
   }
 });
 
@@ -1041,6 +1055,23 @@ function closeDeviceInfo() {
   deviceInfoWindowPosition.value = null;
   deviceInfoHtml.value = '';
   deviceInfoError.value = null;
+}
+
+/**
+ * Handle radius search results (Phase 7)
+ */
+function handleRadiusSearchResults(results) {
+  console.log('[MapView] Radius search completed:', results);
+  // Results are already rendered by RadiusSearchTool
+  // Can add additional logic here if needed (e.g., analytics, notifications)
+}
+
+/**
+ * Handle radius search error (Phase 7)
+ */
+function handleRadiusSearchError(error) {
+  console.error('[MapView] Radius search error:', error);
+  // Can show toast/notification here if needed
 }
 
 function toggleDeviceInfo(event) {
