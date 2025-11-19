@@ -23,8 +23,9 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views.decorators.http import require_GET
 
 from integrations.zabbix.decorators import api_login_required
-from inventory.models import FiberCable
+from inventory.models import FiberCable, Site
 from inventory.models_routes import RouteSegment
+from inventory.usecases.spatial import get_sites_within_radius
 
 logger = logging.getLogger(__name__)
 
@@ -304,6 +305,131 @@ def api_fiber_cables_bbox(request: HttpRequest) -> HttpResponse:
             "count": len(results),
             "bbox": bbox_str,
             "cables": results,
+        },
+        status=200,
+    )
+
+
+@require_GET
+@api_login_required
+def api_sites_within_radius(request: HttpRequest) -> HttpResponse:
+    """
+    GET /api/v1/inventory/sites/radius?lat=<lat>&lng=<lng>&radius_km=<km>&limit=<n>
+    
+    Find sites within specified radius using PostGIS ST_DWithin (Phase 7).
+    Returns sites ordered by distance from center point.
+    
+    Query Parameters:
+        lat (float, required): Latitude of center point (WGS84)
+        lng (float, required): Longitude of center point (WGS84)
+        radius_km (float, required): Search radius in kilometers
+        limit (int, optional): Max number of results (default: 100, max: 500)
+    
+    Returns:
+        JSON with sites array, each including distance_km field
+        
+    Example:
+        GET /api/v1/inventory/sites/radius?lat=-15.7801&lng=-47.9292&radius_km=10&limit=50
+        
+    Response:
+        {
+            "count": 3,
+            "center": {"lat": -15.7801, "lng": -47.9292},
+            "radius_km": 10,
+            "sites": [
+                {
+                    "id": 1,
+                    "display_name": "Brasilia Center",
+                    "latitude": -15.7801,
+                    "longitude": -47.9292,
+                    "distance_km": 0.0
+                },
+                {
+                    "id": 2,
+                    "display_name": "Brasilia North",
+                    "latitude": -15.7350,
+                    "longitude": -47.9292,
+                    "distance_km": 5.01
+                }
+            ]
+        }
+    """
+    # Parse and validate parameters
+    try:
+        lat = float(request.GET.get('lat', ''))
+        lng = float(request.GET.get('lng', ''))
+        radius_km = float(request.GET.get('radius_km', ''))
+    except (ValueError, TypeError):
+        return JsonResponse(
+            {
+                "error": "Invalid parameters. Required: lat, lng, radius_km (all floats)"
+            },
+            status=400,
+        )
+    
+    # Validate coordinate ranges
+    if not (-90 <= lat <= 90):
+        return JsonResponse(
+            {"error": "Latitude must be between -90 and 90"},
+            status=400,
+        )
+    
+    if not (-180 <= lng <= 180):
+        return JsonResponse(
+            {"error": "Longitude must be between -180 and 180"},
+            status=400,
+        )
+    
+    # Validate radius
+    if radius_km <= 0:
+        return JsonResponse(
+            {"error": "radius_km must be positive"},
+            status=400,
+        )
+    
+    if radius_km > 1000:
+        return JsonResponse(
+            {"error": "radius_km cannot exceed 1000km"},
+            status=400,
+        )
+    
+    # Parse limit with sensible defaults
+    try:
+        limit = int(request.GET.get('limit', '100'))
+    except (ValueError, TypeError):
+        limit = 100
+    
+    limit = max(1, min(limit, 500))  # Clamp between 1 and 500
+    
+    # Execute spatial query (Phase 7 - ST_DWithin)
+    sites = get_sites_within_radius(
+        lat=lat,
+        lon=lng,
+        radius_km=radius_km,
+        limit=limit,
+    )
+    
+    # Serialize results with distance annotation
+    results: List[Dict[str, Any]] = []
+    for site in sites:
+        # distance is annotated by get_sites_within_radius
+        distance_m = getattr(site, 'distance', None)
+        distance_km = round(distance_m.m / 1000.0, 2) if distance_m else None
+        
+        results.append({
+            "id": site.id,
+            "display_name": site.display_name,
+            "latitude": site.latitude,
+            "longitude": site.longitude,
+            "distance_km": distance_km,
+        })
+    
+    return JsonResponse(
+        {
+            "count": len(results),
+            "center": {"lat": lat, "lng": lng},
+            "radius_km": radius_km,
+            "sites": results,
         },
         status=200,
     )
