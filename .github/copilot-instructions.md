@@ -89,6 +89,10 @@ docker compose up -d
 
 # Quick restart (for template-only changes with mounted volumes)
 docker compose restart web
+
+# IMPORTANT: Build location matters!
+# ✅ CORRECT: cd docker; docker compose build
+# ❌ WRONG: docker compose build (from project root without -f flag)
 ```
 
 ---
@@ -97,20 +101,28 @@ docker compose restart web
 
 **Django 5 monolith** (v2.0.0 - modular refactor complete):
 - Root: `backend/`; settings in `settings/{base,dev,prod,test}.py`; default `DJANGO_SETTINGS_MODULE=settings.dev`
-- Database: MySQL/MariaDB (prod) or SQLite (dev/test); optional PostGIS support planned but not active
+- Database: **PostgreSQL 16 + PostGIS 3.4** (production & Docker dev); SQLite fallback for quick tests only
 - Async stack: Celery (queues: `default`, `zabbix`, `maps`) + Redis broker; Django Channels for WebSockets
+- ASGI/WSGI: Gunicorn with Uvicorn workers (`core.asgi:application`)
 
 **Core apps** (active):
 - `core/` — ASGI/WSGI, Celery config, Channels routing, health endpoints (`/healthz`, `/ready`, `/live`), Prometheus metrics (`/metrics/`)
-- `inventory/` — Authoritative models (`Site`, `Device`, `Port`, `FiberCable`, `Route`, `RouteSegment`, `RouteEvent`); REST APIs at `/api/v1/inventory/*`; typed services in `inventory/routes/services.py` (`RouteBuildContext`, `RouteBuildResult`)
+- `inventory/` — Authoritative models (`Site`, `Device`, `Port`, `FiberCable`, `Route`, `RouteSegment`, `RouteEvent`); REST APIs at `/api/v1/inventory/*`; typed services in `inventory/routes/services.py` (`RouteBuildContext`, `RouteBuildResult`); spatial queries in `inventory/api/spatial.py`
 - `maps_view/` — Network dashboard (Django templates + optional Vue 3 SPA); SWR cache pattern; WebSocket publisher helpers (`broadcast_dashboard_status`, `broadcast_cable_status_update`)
 - `monitoring/` — Usecases joining inventory + Zabbix status (`monitoring/usecases.py`: `get_devices_with_zabbix`, `build_zabbix_map`, `HostStatusProcessor`)
 - `integrations/zabbix/` — Resilient JSON-RPC client with circuit breaker, exponential backoff, connection pooling; **never bypass** `zabbix_request` or `safe_cache_*` helpers
 - `setup_app/` — Runtime credential storage (Fernet-encrypted `FirstTimeSetup` model); access via `setup_app.services.runtime_settings.get_runtime_config()`
 
+**Active specialized apps**:
+- `service_accounts/` — Service account lifecycle management with token rotation, audit logging, webhook notifications
+  - Models: `ServiceAccount`, `ServiceAccountToken`, `ServiceAccountAuditLog`
+  - Auto-rotation: Celery task (`tasks.py`) enforces rotation policies based on `auto_rotate_days`
+  - Webhooks: Notification system for pre-rotation warnings (`notify_before_days`)
+  - Configured via: `SERVICE_ACCOUNT_ROTATION_INTERVAL_SECONDS`, `SERVICE_ACCOUNT_WEBHOOK_*_TIMEOUT`
+
 **Archived/placeholder** apps:
 - `routes_builder/` — **RETIRED** (Nov 2025); route logic migrated to `inventory.routes` and `inventory.models_routes`
-- `dwdm/`, `gpon/`, `service_accounts/` — Placeholder modules for future features; minimal or no active code
+- `dwdm/`, `gpon/` — Placeholder modules for future features; minimal or no active code
 
 
 ---
@@ -160,7 +172,20 @@ docker compose restart web
 
 **Feature flags**:
 - `USE_VUE_DASHBOARD` + `VUE_DASHBOARD_ROLLOUT_PERCENTAGE` — gate Vue 3 SPA in `maps_view/templates/spa.html`
+  - **Current status (Nov 2025)**: Active canary rollout at 10% (configured in `.env` and `database/runtime.env`)
+  - Development: 100% rollout (`settings/dev.py`)
+  - Canary logic: User assignment based on MD5 hash of session ID for consistency
+  - View logic: `maps_view/views.py::dashboard_view()` switches between `spa.html` (Vue) and `dashboard.html` (legacy)
 - `ENABLE_DIAGNOSTIC_ENDPOINTS` — controls visibility of health/debug routes
+
+**PostGIS spatial operations** (active since Phase 10):
+- Models: `Site` (lat/lng), `FiberCable.path`, `RouteSegment.path` use `LineStringField` (SRID 4326/WGS84)
+- Spatial queries: BBox filtering in `inventory/api/spatial.py` for viewport-based map loading
+  - `Polygon.from_bbox((lng_min, lat_min, lng_max, lat_max))` for viewport queries
+  - Lazy loading: Frontend requests only visible segments/cables within map bounds
+- Utilities: `inventory/spatial.py` — `coords_to_linestring()`, `linestring_to_coords()`, `ensure_wgs84()`
+- Graceful degradation: Falls back to JSON storage when GDAL/GEOS unavailable (CI/test environments)
+- Migration: `0010_add_spatial_fields.py` + `0011_populate_spatial_fields.py` converted legacy JSON to PostGIS
 
 
 ---
@@ -194,7 +219,7 @@ docker compose restart web
 - Quick: `make test` (pytest -q) or `pytest -v <path/to/test.py>::TestClass::test_method`
 - Coverage: `make test-coverage` (generates `htmlcov/index.html`)
 - Markers: `@pytest.mark.django_db`, `@pytest.mark.slow` (skip unless `--slow`), `@pytest.mark.integration` (skip unless `--integration`)
-- Settings: `settings.test` (SQLite by default; set `TEST_DB_ENGINE=mysql` to use Docker MariaDB)
+- Settings: `settings.test` (SQLite by default; PostgreSQL available via Docker: `docker compose exec web pytest`)
 - **Note**: `conftest.py` sets `CELERY_TASK_ALWAYS_EAGER=True`; tasks run synchronously in tests
 
 **Code quality**:
@@ -212,8 +237,8 @@ docker compose restart web
 **Docker Compose**:
 - Commands: `make up|down|logs|build|restart`
 - File: `docker/docker-compose.yml`
-- Services: `web` (Django), `db` (MariaDB), `redis`, `celery_worker`, `celery_beat`
-- Resilience: Code falls back to SQLite + locmem cache when Redis/MySQL are unavailable
+- Services: `web` (Django + Gunicorn + Uvicorn), `postgres` (PostgreSQL 16 + PostGIS 3.4), `redis`, `celery` (worker), `beat` (Celery beat)
+- Resilience: Code falls back to SQLite + locmem cache when Redis/PostgreSQL are unavailable (dev only)
 
 
 ---
@@ -267,6 +292,19 @@ docker compose restart web
 - Django templates: edit `<app>/templates/`, ensure `{% static 'path' %}?v={{ STATIC_ASSET_VERSION }}` for cache busting
 - Static assets: place in `<app>/static/`, run `make collectstatic` (ManifestStaticFilesStorage hashes filenames)
 
+**Adding spatial features**:
+- Use `LineStringField(srid=4326)` for paths/routes (WGS84 standard)
+- Import helpers: `from inventory.spatial import coords_to_linestring, linestring_to_coords, ensure_wgs84`
+- BBox queries: Follow pattern in `inventory/api/spatial.py` (parse bbox string → `Polygon.from_bbox` → filter)
+- Always include fallback for non-GIS environments (see `inventory/models.py` `_FallbackLineStringField`)
+- Migrations: Use `django.contrib.gis.db.models` for spatial fields, include data migration for existing records
+
+**Adjusting Vue rollout**:
+- Update `VUE_DASHBOARD_ROLLOUT_PERCENTAGE` in `.env` and `database/runtime.env` (0-100)
+- Restart Docker containers: `cd docker; docker compose restart web`
+- Monitor: Check `maps_view/views.py::dashboard_view()` logic, Prometheus metrics, user feedback
+- Rollout path: 10% → 25% → 50% → 100% (gradual increase based on error rates)
+
 ---
 
 ### Common Pitfalls
@@ -274,6 +312,7 @@ docker compose restart web
 - 🚫 **CRITICAL: Don't run services outside Docker** — Database, Redis, Celery must run in containers, not on Windows host
 - 🚫 **Don't use SQLite for spatial features** — PostGIS fields require PostgreSQL; SQLite is only for quick non-spatial tests
 - 🚫 **CRITICAL: Don't forget to rebuild Docker** — After changing templates, Python code, or migrations: `docker compose down && docker compose build --no-cache web && docker compose up -d`
+- 🚫 **CRITICAL: Wrong working directory for Docker** — Always `cd docker` before running `docker compose` commands, or use `-f docker/docker-compose.yml` flag
 - **Don't bypass Zabbix client**: Use `zabbix_request`, not `requests.post`
 - **Don't use bare `cache.*` calls**: Use `safe_cache_*` or `SWRCache` to handle Redis outages
 - **Don't reorder dataclass fields**: Tests assert on field order; changes break serialization
@@ -298,13 +337,13 @@ docker compose restart web
 | Celery worker | `celery -A core worker -Q default,zabbix,maps -l info` | Multi-queue worker |
 | Celery beat | `celery -A core beat -l info` | Scheduled tasks |
 | Frontend build | `npm run build` (in `frontend/`) | Outputs to `backend/staticfiles/vue-spa/` |
+| Docker build | `cd docker; docker compose build` | Build from correct directory |
+| Docker logs | `cd docker; docker compose logs -f web` | View container logs |
 
 ---
 
 ### Questions to Resolve
 
-- **PostGIS rollout**: Schema supports geolocation fields, but queries/views are incomplete — clarify migration plan
-- **Vue SPA expectations**: Feature flag exists but rollout strategy unclear — define success metrics and A/B testing approach
-- **Service accounts**: Placeholder app with partial models — confirm if active development is planned or can be removed
+- **Archived apps cleanup**: Confirm if `dwdm/` and `gpon/` placeholder apps can be removed or should remain for future development
 
 **Feedback welcome**: Flag unclear areas in this doc so we can refine instructions collaboratively.
