@@ -78,6 +78,7 @@ urlpatterns: list[Any] = [
     path('api/config/', api_views.frontend_config, name='frontend_config'),
     path('setup_app/', include('setup_app.urls')),
     path('maps_view/', include('maps_view.urls')),
+    path('monitoring/', include('monitoring.urls')),
 
     # Health checks
     path('healthz', health_views.healthz, name='healthz'),

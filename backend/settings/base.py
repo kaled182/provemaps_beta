@@ -211,6 +211,8 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Force authentication on all routes
+    "core.middleware.auth_required.AuthRequiredMiddleware",
     "core.middleware.request_id.RequestIDMiddleware",
     "core.middleware.first_time_setup.FirstTimeSetupRedirectMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
@@ -228,7 +230,7 @@ ASGI_APPLICATION = "core.asgi.application"
 # Authentication & Login Redirects
 # -----------------------------------------------------
 LOGIN_URL = "/accounts/login/"
-LOGIN_REDIRECT_URL = "/maps_view/dashboard/"
+LOGIN_REDIRECT_URL = "/monitoring/monitoring-all/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
 
 # -----------------------------------------------------
