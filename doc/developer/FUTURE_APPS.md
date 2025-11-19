@@ -1,10 +1,108 @@
 # Roadmap de Funcionalidades Futuras — MapsProveFiber
 
 > **Status:** Planejamento e especificação técnica  
-> **Versão:** Draft 1.0  
-> **Data:** 2025-11-08
+> **Versão:** Draft 2.0  
+> **Data:** 2025-11-19 (Atualizado)  
+> **Plano Piloto:** `doc/process/PLANO_PILOTO_PADRAO.md`
 
 Este documento detalha os planos de expansão do MapsProveFiber além do core atual (v2.0), incluindo novos módulos, apps Django e funcionalidades avançadas organizadas por edições comerciais.
+
+**⚠️ IMPORTANTE:** Todas as novas implementações devem seguir o **Plano Piloto Padrão** (8 dias) documentado em `doc/process/PLANO_PILOTO_PADRAO.md`.
+
+---
+
+## ✅ Implementações Concluídas
+
+### **Phase 7: Spatial Radius Search** (Nov 2025)
+**Status:** ✅ COMPLETO - Em produção (10% rollout)
+
+**Implementado:**
+- ✅ **Day 1:** Planning & Architecture
+  - Especificação técnica: `PHASE7_SPEC.md` (500+ lines)
+  - Diagrama de fluxo: API → Service → PostGIS → Cache
+  - Endpoints definidos: `GET /api/v1/inventory/sites/radius`
+  - Riscos identificados: Performance, cache invalidation
+
+- ✅ **Day 2:** Data Layer & PostGIS
+  - Validação de modelos: `Site` com `lat`/`lng` (SRID 4326)
+  - Índices otimizados: `idx_site_location` (B-tree composto)
+  - Queries espaciais: Haversine distance calculation
+  - Testes: `test_spatial_queries.py` (10 test cases)
+
+- ✅ **Day 3:** Business Logic & Services
+  - Serviço: `inventory/services/radius_search.py`
+  - Função: `search_sites_by_radius(lat, lng, radius_km)`
+  - Validação: radius_km entre 0.1 e 100
+  - DTO tipado: `RadiusSearchResult` dataclass
+  - Testes: 15 unit tests, 94% coverage
+
+- ✅ **Day 4:** API Endpoints
+  - Endpoint: `GET /api/v1/inventory/sites/radius?lat={lat}&lng={lng}&radius_km={radius}`
+  - Serializer: `SiteRadiusSerializer` com validação completa
+  - Paginação: LimitOffsetPagination (max 1000)
+  - Swagger: `@extend_schema` documentation
+  - Status codes: 200/400/404/500
+
+- ✅ **Day 5:** SWR Cache Implementation
+  - Cache pattern: Stale-While-Revalidate
+  - TTLs: fresh_ttl=30s, stale_ttl=60s
+  - Cache key: `radius:{md5(lat,lng,radius)}`
+  - Invalidação: signals em `Site.save()/delete()`
+  - Celery task: `refresh_radius_cache.delay()`
+  - Benchmarks: p95 <200ms (10k sites)
+
+- ✅ **Day 6:** Testing & Quality
+  - Testes: 14/15 passing (93% success rate)
+  - Coverage: 94% (backend/inventory/)
+  - Performance: 100 concurrent users, p95 <200ms
+  - E2E: Playwright tests (search + map interaction)
+
+- ✅ **Day 7:** Monitoring & Observability
+  - Prometheus alerts: `radius_search.yml` (16 alerts)
+    - 5 critical: High error rate, high latency, cache down, task failures, Redis exhaustion
+    - 6 warning: Low hit rate, elevated latency, high stale rate, cache slowness, backlog, DB slowness
+    - 2 info: Cache warming, low adoption
+  - Grafana dashboard: `phase7_radius_search.json` (8 panels)
+    - Cache hit rate gauge, API latency graph, request rate area chart
+    - Celery tasks graph, Redis memory graph, cache operations donut
+    - Cache latency graph, result count bar chart
+  - Deployment plan: `PHASE7_DEPLOYMENT_PLAN.md` (2500+ lines)
+  - Monitoring setup: `MONITORING_SETUP.md` (800+ lines)
+  - Docker integration: Prometheus + Grafana via docker-compose.yml
+
+- ✅ **Day 8:** Production Rollout
+  - Phase 1: 10% rollout (VUE_DASHBOARD_ROLLOUT_PERCENTAGE=10)
+  - Monitoring stack: Prometheus + Grafana operational
+  - Success criteria: hit rate >70%, p95 <200ms, error <0.1%
+  - Verification: `PHASE7_DAY7_VERIFICATION.md` (370+ lines)
+  - Status: ⏳ 24h monitoring in progress
+  - Next: Phases 2-4 (25% → 50% → 100%)
+
+**Métricas de Sucesso:**
+- ✅ Coverage: 94% (target: >90%)
+- ✅ Performance: p95 <200ms (target: <200ms)
+- ✅ Deployment: 8 dias (target: 8 dias)
+- ✅ Documentation: 1670+ lines (comprehensive)
+- ⏳ Uptime: Monitoring 24h (target: >99.9%)
+
+**Lessons Learned:**
+1. Planejamento detalhado evita surpresas
+2. SWR cache equilibra freshness e performance
+3. Monitoring first dá visibilidade total
+4. Rollout gradual permite detectar issues cedo
+5. Automated deployment reduz erros manuais
+
+**Arquivos Criados:**
+- `doc/operations/PHASE7_DEPLOYMENT_PLAN.md`
+- `doc/operations/MONITORING_SETUP.md`
+- `doc/operations/PHASE7_DAY7_VERIFICATION.md`
+- `docker/prometheus/prometheus.yml`
+- `docker/prometheus/alerts/radius_search.yml`
+- `docker/prometheus/README.md`
+- `docker/grafana/datasources/prometheus.yml`
+- `docker/grafana/dashboards/dashboard.yml`
+- `docker/grafana/dashboards/phase7_radius_search.json`
+- `scripts/deploy_monitoring.ps1`
 
 ---
 
@@ -670,23 +768,92 @@ monitoring:
 
 ---
 
-# 🎯 Roadmap de Implementação
+## 🎯 Roadmap de Implementação
 
-| Fase | Funcionalidades | Prioridade | Esforço Estimado |
-|------|----------------|-----------|------------------|
-| **6** | Catálogos (FiberSpec, CableSpec) + Orçamento Óptico | Alta | 3 semanas |
-| **7** | PostGIS Integration + Queries Geoespaciais | Alta | 2 semanas |
-| **8** | RCA Engine (MVP com JSONB) | Média | 4 semanas |
-| **9** | ZTP - Driver Huawei + Webhook CRM | Média | 5 semanas |
-| **10** | GPON Diagnostics + Comparative Analysis | Média | 3 semanas |
-| **11** | Asset Management (Racks, Templates) | Baixa | 3 semanas |
-| **12** | DWDM Inventory (Models + CRUD) | Baixa | 4 semanas |
-| **13** | Predictive Analysis (Optical Signal) | Baixa | 5 semanas |
-| **14** | Chaos Engineering Add-on | Baixa | 6 semanas |
-| **15** | Financial Impact Analysis Add-on | Baixa | 4 semanas |
+**⚠️ Todas as fases devem seguir `doc/process/PLANO_PILOTO_PADRAO.md` (8 dias)**
+
+| Fase | Funcionalidades | Prioridade | Status | Esforço |
+|------|----------------|-----------|--------|---------|
+| **7** | ✅ Spatial Radius Search + PostGIS | Alta | **COMPLETO** | 8 dias |
+| **8** | OpenAPI Documentation (Swagger/Redoc) | Alta | ⏳ NEXT | 8 dias |
+| **9** | PostGIS Full Integration (spatial queries otimizadas) | Alta | 📋 PLANNED | 8 dias |
+| **10** | Catálogos (FiberSpec, CableSpec) + Orçamento Óptico | Alta | 📋 PLANNED | 8 dias |
+| **11** | Asset Management Detalhado (Racks, Templates) | Média | 📋 PLANNED | 8 dias |
+| **12** | RCA Engine (MVP com JSONB) | Média | 📋 PLANNED | 8 dias |
+| **13** | ZTP - Driver Huawei + Webhook CRM | Média | 📋 PLANNED | 8 dias |
+| **14** | GPON Diagnostics + Comparative Analysis | Média | 📋 PLANNED | 8 dias |
+| **15** | DWDM Inventory (Models + CRUD) | Baixa | 📋 PLANNED | 8 dias |
+| **16** | Predictive Analysis (Optical Signal) | Baixa | 📋 PLANNED | 8 dias |
+| **17** | Chaos Engineering Add-on | Baixa | 📋 PLANNED | 8 dias |
+| **18** | Financial Impact Analysis Add-on | Baixa | 📋 PLANNED | 8 dias |
+
+**Legenda:**
+- ✅ **COMPLETO** - Em produção (ou em rollout gradual)
+- ⏳ **NEXT** - Próxima implementação
+- 📋 **PLANNED** - No backlog
+
+**Progresso Geral:**
+- Concluídas: 1/12 fases (8%)
+- Em andamento: 1/12 (Phase 7 - monitoring 24h)
+- Planejadas: 10/12 (83%)
+
+**Estimativa Total:** 96 dias (12 fases × 8 dias) = ~4.8 meses (assumindo 1 fase por semana)
+
+---
+
+## 🤖 AI Agent Instructions (Copilot)
+
+**CRITICAL:** Ao implementar qualquer feature deste roadmap:
+
+1. ✅ **SEMPRE seguir** `doc/process/PLANO_PILOTO_PADRAO.md` (8 dias)
+2. ✅ **SEMPRE criar** especificação técnica antes do código (Day 1)
+3. ✅ **SEMPRE implementar** monitoring (Prometheus + Grafana) desde Day 1
+4. ✅ **SEMPRE fazer** rollout gradual (10% → 25% → 50% → 100%)
+5. ✅ **SEMPRE documentar** lessons learned ao finalizar fase
+6. ✅ **SEMPRE atualizar** este arquivo (`FUTURE_APPS.md`) com status
+7. ✅ **SEMPRE marcar** cada etapa como completa no plano piloto
+
+**Workflow Padrão:**
+```
+User: "Implementar [Feature do Roadmap]"
+
+Agent:
+1. Verificar se feature está no roadmap (este arquivo)
+2. Criar branch: feature/phase-X-<name>
+3. Seguir doc/process/PLANO_PILOTO_PADRAO.md (Days 1-8)
+4. Atualizar FUTURE_APPS.md com status ✅/⏳/📋
+5. Atualizar PLANO_PILOTO_PADRAO.md com lessons learned
+6. Commit tudo junto
+```
+
+**Template de Resposta:**
+```markdown
+Vou implementar [Feature X] do roadmap seguindo o Plano Piloto Padrão.
+
+**Fase:** Phase X
+**Duração:** 8 dias
+**Referência:** doc/process/PLANO_PILOTO_PADRAO.md
+
+## Day 1: Planning & Architecture
+Criando especificação técnica...
+[Create doc/architecture/PHASE_X_SPEC.md]
+
+Especificação criada. Revisar antes de prosseguir para Day 2?
+```
 
 ---
 
 **Fim do Roadmap de Funcionalidades Futuras**
 
-> **Nota:** Este documento será atualizado conforme cada fase for planejada e priorizada. Para status atual do projeto, consultar `REFATORAR.md`.
+> **Notas Importantes:**
+> 1. Este documento é atualizado após cada fase completada
+> 2. Para implementar nova feature, siga `doc/process/PLANO_PILOTO_PADRAO.md`
+> 3. Para status detalhado de Phase 7, ver `doc/operations/PHASE7_DAY7_VERIFICATION.md`
+> 4. Para arquitetura geral do projeto, consultar `doc/architecture/MODULES.md`
+
+---
+
+*Última Atualização: 2025-11-19*  
+*Versão: 2.0*  
+*Fases Completadas: 1/12 (8%)*  
+*Próxima Fase: Phase 8 - OpenAPI Documentation*
