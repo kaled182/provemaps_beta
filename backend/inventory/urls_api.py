@@ -209,4 +209,10 @@ urlpatterns = [
         spatial_api.api_fiber_cables_bbox,
         name="fibers-bbox",
     ),
+    # Phase 7 - Spatial radius search with ST_DWithin
+    path(
+        "sites/radius/",
+        spatial_api.api_sites_within_radius,
+        name="sites-radius",
+    ),
 ]
