@@ -1,0 +1,344 @@
+# Prometheus Alert Rules - Spatial Radius Search
+# Phase 7 Day 7 - Production Monitoring
+# 
+# Deploy: Copy to Prometheus server's rules directory
+# Reload: Send SIGHUP to Prometheus or use /-/reload endpoint
+
+groups:
+  - name: radius_search_critical
+    interval: 30s
+    rules:
+      # CRITICAL: High error rate on radius search API
+      - alert: RadiusSearchHighErrorRate
+        expr: |
+          (
+            rate(django_http_requests_total_by_view_transport_method_total{
+              view_name=~".*radius.*",
+              status=~"5.."
+            }[5m])
+            /
+            rate(django_http_requests_total_by_view_transport_method_total{
+              view_name=~".*radius.*"
+            }[5m])
+          ) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+          component: api
+          feature: radius_search
+          phase: phase_7
+        annotations:
+          summary: "Radius search API error rate above 1%"
+          description: |
+            Error rate: {{ $value | humanizePercentage }}
+            View: {{ $labels.view_name }}
+            Status codes: 5xx
+            Impact: Users unable to search nearby sites
+            Action: Check Django logs, review recent deployments
+            Runbook: doc/operations/PHASE7_DEPLOYMENT_PLAN.md#rollback-procedures
+
+      # CRITICAL: High API latency (p95 > 500ms)
+      - alert: RadiusSearchHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(django_http_request_duration_seconds_bucket{
+              view_name=~".*radius.*"
+            }[5m])
+          ) > 0.5
+        for: 10m
+        labels:
+          severity: critical
+          component: api
+          feature: radius_search
+          phase: phase_7
+        annotations:
+          summary: "Radius search p95 latency above 500ms"
+          description: |
+            Current p95 latency: {{ $value | humanizeDuration }}
+            View: {{ $labels.view_name }}
+            Target: < 200ms
+            Impact: Slow user experience, potential timeouts
+            Action: Check cache hit rate, review database queries
+            Runbook: doc/operations/PHASE7_DEPLOYMENT_PLAN.md#rollback-procedures
+
+      # CRITICAL: Cache completely broken (no hits at all)
+      - alert: RadiusSearchCacheDown
+        expr: |
+          (
+            rate(radius_search_cache_hits_total{status="miss"}[10m])
+            /
+            (
+              rate(radius_search_cache_hits_total{status="miss"}[10m]) +
+              rate(radius_search_cache_hits_total{status="fresh"}[10m]) +
+              rate(radius_search_cache_hits_total{status="stale"}[10m])
+            )
+          ) > 0.99
+        for: 15m
+        labels:
+          severity: critical
+          component: cache
+          feature: radius_search
+          phase: phase_7
+        annotations:
+          summary: "Radius search cache not working (100% misses)"
+          description: |
+            Cache miss rate: {{ $value | humanizePercentage }}
+            Duration: 15+ minutes
+            Impact: All requests hitting database, performance degraded
+            Possible causes: Redis down, cache disabled, cache key mismatch
+            Action: Check Redis connection, review cache settings
+            Runbook: doc/troubleshooting/REDIS_CACHE.md
+
+      # CRITICAL: Celery refresh tasks failing
+      - alert: RadiusCacheRefreshTaskFailing
+        expr: |
+          rate(celery_task_failed_total{
+            task_name="inventory.tasks.refresh_radius_cache_task"
+          }[5m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+          component: celery
+          feature: radius_search
+          phase: phase_7
+        annotations:
+          summary: "Celery radius cache refresh tasks failing"
+          description: |
+            Failure rate: {{ $value }} failures/sec
+            Task: inventory.tasks.refresh_radius_cache_task
+            Impact: Stale cache not being refreshed, outdated data served
+            Action: Check Celery worker logs, review task code
+            Runbook: doc/troubleshooting/CELERY_TASKS.md
+
+      # CRITICAL: Redis memory exhaustion (cache eviction)
+      - alert: RedisMemoryExhaustion
+        expr: |
+          redis_memory_used_bytes{job="redis"} > 2147483648
+        for: 5m
+        labels:
+          severity: critical
+          component: redis
+          feature: radius_search
+          phase: phase_7
+        annotations:
+          summary: "Redis memory usage above 2GB"
+          description: |
+            Current memory: {{ $value | humanize1024 }}B
+            Threshold: 2GB
+            Risk: Cache eviction, performance degradation
+            Action: Review cache TTL settings, check for memory leaks
+            Runbook: doc/troubleshooting/REDIS_MEMORY.md
+
+  - name: radius_search_warning
+    interval: 60s
+    rules:
+      # WARNING: Low cache hit rate (< 50%)
+      - alert: RadiusSearchLowCacheHitRate
+        expr: |
+          (
+            (
+              rate(radius_search_cache_hits_total{status="fresh"}[10m]) +
+              rate(radius_search_cache_hits_total{status="stale"}[10m])
+            )
+            /
+            (
+              rate(radius_search_cache_hits_total{status="miss"}[10m]) +
+              rate(radius_search_cache_hits_total{status="fresh"}[10m]) +
+              rate(radius_search_cache_hits_total{status="stale"}[10m])
+            )
+          ) < 0.5
+        for: 30m
+        labels:
+          severity: warning
+          component: cache
+          feature: radius_search
+          phase: phase_7
+        annotations:
+          summary: "Radius search cache hit rate below 50%"
+          description: |
+            Current hit rate: {{ $value | humanizePercentage }}
+            Target: > 70% after warmup
+            Duration: 30+ minutes
+            Impact: Increased database load, slower responses
+            Possible causes: Cache warmup in progress, query diversity high, TTL too short
+            Action: Monitor for 1h, check query patterns, consider TTL increase
+            Runbook: doc/operations/PHASE7_DEPLOYMENT_PLAN.md#cache-tuning
+
+      # WARNING: Elevated API latency (p95 > 200ms but < 500ms)
+      - alert: RadiusSearchElevatedLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(django_http_request_duration_seconds_bucket{
+              view_name=~".*radius.*"
+            }[5m])
+          ) > 0.2
+        for: 15m
+        labels:
+          severity: warning
+          component: api
+          feature: radius_search
+          phase: phase_7
+        annotations:
+          summary: "Radius search p95 latency elevated (200-500ms)"
+          description: |
+            Current p95 latency: {{ $value | humanizeDuration }}
+            Target: < 200ms
+            Duration: 15+ minutes
+            Impact: Acceptable but degraded performance
+            Action: Monitor cache hit rate, check database indexes
+            Runbook: doc/operations/PHASE7_DEPLOYMENT_PLAN.md#performance-tuning
+
+      # WARNING: High stale cache hit rate (> 20%)
+      - alert: RadiusSearchHighStaleRate
+        expr: |
+          (
+            rate(radius_search_cache_hits_total{status="stale"}[10m])
+            /
+            (
+              rate(radius_search_cache_hits_total{status="fresh"}[10m]) +
+              rate(radius_search_cache_hits_total{status="stale"}[10m])
+            )
+          ) > 0.2
+        for: 20m
+        labels:
+          severity: warning
+          component: cache
+          feature: radius_search
+          phase: phase_7
+        annotations:
+          summary: "High stale data serving rate (> 20%)"
+          description: |
+            Stale hit rate: {{ $value | humanizePercentage }}
+            Target: < 20%
+            Duration: 20+ minutes
+            Impact: Users seeing slightly outdated data, increased Celery load
+            Possible causes: Fresh TTL too short, high query rate, Celery backlog
+            Action: Review fresh TTL setting, check Celery queue length
+            Runbook: doc/operations/PHASE7_DEPLOYMENT_PLAN.md#swr-tuning
+
+      # WARNING: Cache latency elevated (> 50ms)
+      - alert: RadiusSearchCacheSlowness
+        expr: |
+          histogram_quantile(0.95,
+            rate(radius_search_cache_latency_seconds_bucket{
+              operation="get"
+            }[5m])
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          component: cache
+          feature: radius_search
+          phase: phase_7
+        annotations:
+          summary: "Cache get operation p95 latency > 50ms"
+          description: |
+            Current p95: {{ $value | humanizeDuration }}
+            Target: < 10ms
+            Duration: 10+ minutes
+            Impact: Cache benefit reduced, network or Redis overload
+            Possible causes: Redis CPU saturation, network issues, large payload
+            Action: Check Redis metrics, network latency, payload size
+            Runbook: doc/troubleshooting/REDIS_PERFORMANCE.md
+
+      # WARNING: Celery queue backlog
+      - alert: RadiusCacheRefreshBacklog
+        expr: |
+          celery_queue_length{queue="maps"} > 100
+        for: 10m
+        labels:
+          severity: warning
+          component: celery
+          feature: radius_search
+          phase: phase_7
+        annotations:
+          summary: "Celery maps queue backlog > 100 tasks"
+          description: |
+            Queue length: {{ $value }}
+            Queue: maps (radius cache refresh)
+            Duration: 10+ minutes
+            Impact: Stale cache refresh delayed, users see outdated data
+            Possible causes: High stale hit rate, worker bottleneck
+            Action: Check Celery worker count, review task execution time
+            Runbook: doc/troubleshooting/CELERY_QUEUE.md
+
+      # WARNING: Database query slowness (spatial index issue)
+      - alert: RadiusSearchDatabaseSlowness
+        expr: |
+          histogram_quantile(0.95,
+            rate(django_db_query_duration_seconds_bucket{
+              query_type=~".*ST_DWithin.*"
+            }[5m])
+          ) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          component: database
+          feature: radius_search
+          phase: phase_7
+        annotations:
+          summary: "PostGIS spatial query p95 > 100ms"
+          description: |
+            Current p95: {{ $value | humanizeDuration }}
+            Target: < 50ms
+            Query: ST_DWithin (radius search)
+            Duration: 10+ minutes
+            Impact: Cache misses slow, user experience degraded
+            Possible causes: Missing GiST index, table bloat, query plan change
+            Action: Verify spatial index, run ANALYZE, check query plan
+            Runbook: doc/troubleshooting/POSTGIS_PERFORMANCE.md
+
+  - name: radius_search_info
+    interval: 300s
+    rules:
+      # INFO: Cache warmup detected (low hit rate in first hour)
+      - alert: RadiusSearchCacheWarming
+        expr: |
+          (
+            (
+              rate(radius_search_cache_hits_total{status="fresh"}[5m]) +
+              rate(radius_search_cache_hits_total{status="stale"}[5m])
+            )
+            /
+            (
+              rate(radius_search_cache_hits_total{status="miss"}[5m]) +
+              rate(radius_search_cache_hits_total{status="fresh"}[5m]) +
+              rate(radius_search_cache_hits_total{status="stale"}[5m])
+            )
+          ) < 0.3
+        for: 5m
+        labels:
+          severity: info
+          component: cache
+          feature: radius_search
+          phase: phase_7
+        annotations:
+          summary: "Cache warmup in progress (hit rate < 30%)"
+          description: |
+            Current hit rate: {{ $value | humanizePercentage }}
+            Expected: Normal during first 30-60 minutes after deployment
+            Impact: Temporary increased database load
+            Action: Monitor for 1h, should improve as cache warms
+            Note: This is informational, not an actionable alert
+
+      # INFO: Feature adoption tracking
+      - alert: RadiusSearchLowAdoption
+        expr: |
+          rate(django_http_requests_total_by_view_transport_method_total{
+            view_name=~".*radius.*"
+          }[1h]) < 0.01
+        for: 2h
+        labels:
+          severity: info
+          component: api
+          feature: radius_search
+          phase: phase_7
+        annotations:
+          summary: "Low radius search feature adoption (< 0.01 req/s)"
+          description: |
+            Request rate: {{ $value }} req/s
+            Rollout: 10% of users
+            Duration: 2+ hours
+            Note: Feature might be underutilized or rollout percentage low
+            Action: Review user feedback, consider increasing rollout %
+            Reference: doc/operations/PHASE7_DEPLOYMENT_PLAN.md#rollout-phases
