@@ -64,7 +64,11 @@ class Site(models.Model):
     )
     # Phase 7: PostGIS PointField for optimized spatial queries
     # Enables ST_DWithin for accurate radius searches with GIST index
-    location = gis_models.PointField(srid=4326, null=True, blank=True)
+    # geography=True makes PostGIS use geography type (meters)
+    # not geometry (degrees)
+    location = gis_models.PointField(
+        srid=4326, geography=True, null=True, blank=True
+    )
     description = models.TextField(blank=True)
 
     class Meta:
