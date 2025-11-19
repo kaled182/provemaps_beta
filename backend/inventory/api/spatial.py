@@ -26,6 +26,8 @@ from integrations.zabbix.decorators import api_login_required
 from inventory.models import FiberCable, Site
 from inventory.models_routes import RouteSegment
 from inventory.usecases.spatial import get_sites_within_radius
+from inventory.cache.radius_search import get_radius_search_with_cache
+from inventory.tasks import refresh_radius_search_cache
 
 logger = logging.getLogger(__name__)
 
@@ -401,13 +403,30 @@ def api_sites_within_radius(request: HttpRequest) -> HttpResponse:
     
     limit = max(1, min(limit, 500))  # Clamp between 1 and 500
     
-    # Execute spatial query (Phase 7 - ST_DWithin)
-    sites = get_sites_within_radius(
+    # Execute spatial query with SWR cache (Phase 7 Day 5)
+    def fetch_fresh_data():
+        """Fetch sites from database."""
+        return get_sites_within_radius(
+            lat=lat,
+            lon=lng,
+            radius_km=radius_km,
+            limit=limit,
+        )
+    
+    cache_result = get_radius_search_with_cache(
         lat=lat,
-        lon=lng,
+        lng=lng,
         radius_km=radius_km,
         limit=limit,
+        fetch_fn=fetch_fresh_data,
+        async_refresh_task=lambda: refresh_radius_search_cache.delay(
+            lat, lng, radius_km, limit
+        )
     )
+    
+    sites = cache_result['data']
+    is_stale = cache_result.get('is_stale', False)
+    cache_hit = cache_result.get('cache_hit', False)
     
     # Serialize results with distance annotation
     results: List[Dict[str, Any]] = []
@@ -424,12 +443,20 @@ def api_sites_within_radius(request: HttpRequest) -> HttpResponse:
             "distance_km": distance_km,
         })
     
-    return JsonResponse(
-        {
-            "count": len(results),
-            "center": {"lat": lat, "lng": lng},
-            "radius_km": radius_km,
-            "sites": results,
-        },
-        status=200,
-    )
+    response_data = {
+        "count": len(results),
+        "center": {"lat": lat, "lng": lng},
+        "radius_km": radius_km,
+        "sites": results,
+    }
+    
+    # Include cache metadata (helpful for debugging/monitoring)
+    if settings.DEBUG or request.GET.get('debug') == '1':
+        response_data['_cache'] = {
+            'hit': cache_hit,
+            'stale': is_stale,
+            'timestamp': cache_result.get('timestamp'),
+            'age_seconds': cache_result.get('age_seconds'),
+        }
+    
+    return JsonResponse(response_data, status=200)
