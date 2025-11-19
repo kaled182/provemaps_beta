@@ -502,3 +502,97 @@ def refresh_fiber_live_status(self: Any) -> dict[str, Any]:
     )
     
     return result
+
+
+@shared_task(
+    name="inventory.refresh_radius_search_cache",
+    bind=True,
+    max_retries=2,
+    default_retry_delay=10,
+    queue="maps"
+)
+def refresh_radius_search_cache(
+    self: Any,
+    lat: float,
+    lng: float,
+    radius_km: float,
+    limit: int = 100
+) -> dict[str, Any]:
+    """
+    Async task to refresh radius search cache with fresh data from DB.
+    
+    Queued when cache is stale (30-60s old). Fetches fresh results
+    and updates cache to serve subsequent requests quickly.
+    
+    Args:
+        lat: Latitude (WGS84)
+        lng: Longitude (WGS84)
+        radius_km: Search radius in kilometers
+        limit: Maximum number of results
+    
+    Returns:
+        dict with refresh status and statistics
+    
+    Example:
+        from inventory.tasks import refresh_radius_search_cache
+        refresh_radius_search_cache.delay(-15.7801, -47.9292, 10, 100)
+    """
+    from inventory.usecases.spatial import get_sites_within_radius
+    from inventory.cache.radius_search import set_cached_radius_search
+    
+    logger.info(
+        "[Refresh Cache Task] Starting for lat=%.6f, lng=%.6f, "
+        "r=%dkm, limit=%d",
+        lat, lng, radius_km, limit
+    )
+    
+    start_time = __import__('time').time()
+    
+    try:
+        # Fetch fresh data from database
+        sites = get_sites_within_radius(lat, lng, radius_km, limit)
+        
+        # Update cache
+        success = set_cached_radius_search(lat, lng, radius_km, limit, sites)
+        
+        elapsed = __import__('time').time() - start_time
+        
+        result = {
+            "success": success,
+            "site_count": len(sites),
+            "elapsed_seconds": round(elapsed, 3),
+            "cache_updated": success
+        }
+        
+        logger.info(
+            "[Refresh Cache Task] Completed: %d sites in %.3fs "
+            "(cache_updated=%s)",
+            len(sites),
+            elapsed,
+            success
+        )
+        
+        return result
+        
+    except Exception as exc:
+        logger.error(
+            "[Refresh Cache Task] Failed: %s",
+            exc.__class__.__name__,
+            exc_info=exc
+        )
+        
+        # Retry with exponential backoff
+        if self.request.retries < self.max_retries:
+            logger.info(
+                "[Refresh Cache Task] Retrying (attempt %d/%d)",
+                self.request.retries + 1,
+                self.max_retries
+            )
+            raise self.retry(exc=exc)
+        
+        return {
+            "success": False,
+            "error": str(exc),
+            "error_type": exc.__class__.__name__
+        }
+
