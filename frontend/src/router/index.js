@@ -66,7 +66,7 @@ const routes = [
   {
     path: '/Network/DeviceImport/',
     name: 'device-import',
-    component: () => import('@/components/Zabbix/ZabbixLookupView.vue'),
+    component: () => import('@/components/DeviceImport/DeviceImportManager.vue'),
   },
   {
     path: '/setup/config',
