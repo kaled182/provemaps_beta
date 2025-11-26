@@ -22,6 +22,11 @@ urlpatterns = [
         name="device-ports",
     ),
     path(
+        "devices/<int:device_id>/ports/live/",
+        device_api.api_device_ports_live,
+        name="device-ports-live",
+    ),
+    path(
         "devices/<int:device_id>/ports/optical/",
         device_api.api_device_ports_with_optical,
         name="device-ports-optical",
@@ -50,6 +55,16 @@ urlpatterns = [
         "zabbix/lookup/hosts/",
         zabbix_lookup_api.lookup_hosts,
         name="zabbix-lookup-hosts",
+    ),
+    path(
+        "zabbix/lookup/hosts/grouped/",
+        zabbix_lookup_api.lookup_hosts_grouped,
+        name="zabbix-lookup-hosts-grouped",
+    ),
+    path(
+        "zabbix/lookup/server-info/",
+        zabbix_lookup_api.lookup_zabbix_server_info,
+        name="zabbix-server-info",
     ),
     path(
         "zabbix/lookup/host-groups/",
@@ -214,5 +229,26 @@ urlpatterns = [
         "sites/radius/",
         spatial_api.api_sites_within_radius,
         name="sites-radius",
+    ),
+    # Phase 11 - Device Import System (Nov 2025)
+    path(
+        "devices/grouped/",
+        device_api.api_inventory_grouped,
+        name="inventory-grouped",
+    ),
+    path(
+        "devices/zabbix-status/",
+        device_api.api_devices_zabbix_status,
+        name="devices-zabbix-status",
+    ),
+    path(
+        "devices/import-batch/",
+        device_api.api_import_batch,
+        name="inventory-import-batch",
+    ),
+    path(
+        "devices/<int:device_id>/",
+        device_api.api_device_delete,
+        name="device-delete",
     ),
 ]

@@ -191,10 +191,63 @@ class Device(models.Model):
         help_text="Zabbix host groups for this device",
     )
 
+    # --- DEVICE IMPORT SYSTEM FIELDS (Phase 11 - Nov 2025) ---
+    
+    # Categoria Visual para Mapas (Backbone, GPON, DWDM)
+    CATEGORY_CHOICES = [
+        ('backbone', 'Backbone / IP'),
+        ('gpon', 'GPON / FTTx'),
+        ('dwdm', 'DWDM / Óptico'),
+        ('access', 'Acesso / Clientes'),
+    ]
+    category = models.CharField(
+        max_length=20,
+        choices=CATEGORY_CHOICES,
+        default='backbone',
+        db_index=True,
+        help_text="Define a camada lógica para visualização nos mapas",
+    )
+
+    # Configurações de Alerta (Controladas pelo Modal de Importação)
+    enable_screen_alert = models.BooleanField(
+        default=True,
+        verbose_name="Alerta em Tela",
+        help_text="Exibir pop-up no dashboard em caso de falha",
+    )
+    enable_whatsapp_alert = models.BooleanField(
+        default=False,
+        verbose_name="Alerta WhatsApp",
+        help_text="Enviar mensagem automática para o grupo de operações",
+    )
+    enable_email_alert = models.BooleanField(
+        default=False,
+        verbose_name="Alerta E-mail",
+        help_text="Enviar e-mail para equipe de NOC",
+    )
+
+    # Grupo Principal de Monitoramento (Simplificação para Frontend)
+    # Complementa o ManyToMany 'groups' com um FK para organização visual
+    monitoring_group = models.ForeignKey(
+        DeviceGroup,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='primary_devices',
+        db_index=True,
+        help_text="Grupo principal para organização visual no frontend",
+    )
+
     class Meta:
         unique_together = ("site", "name")
         ordering = ["site__display_name", "name"]
         db_table = "zabbix_api_device"  # Preserve original table name
+        indexes = [
+            models.Index(
+                fields=['category', 'monitoring_group'],
+                name='device_cat_grp_idx'
+            ),
+            models.Index(fields=['zabbix_hostid'], name='device_zabbix_idx'),
+        ]
 
     def __str__(self) -> str:
         site_label = self.site.display_name if self.site_id else None
@@ -416,6 +469,66 @@ class FiberEvent(models.Model):
             f"{self.fiber.name} {self.previous_status}->{self.new_status} "
             f"@ {self.timestamp:%Y-%m-%d %H:%M:%S}"
         )
+
+
+class ImportRule(models.Model):
+    """
+    Regex-based rule for automatic device categorization during Zabbix import.
+    Applied in priority order (lowest number first) to match device names.
+    
+    Example:
+        pattern = r'^OLT.*'
+        category = 'gpon'
+        group = DeviceGroup(name='OLT Huawei')
+        priority = 10
+    """
+    pattern = models.CharField(
+        max_length=255,
+        help_text="Regex pattern to match device name (case-insensitive)",
+    )
+    category = models.CharField(
+        max_length=20,
+        choices=Device.CATEGORY_CHOICES,
+        help_text="Category to assign when pattern matches",
+    )
+    group = models.ForeignKey(
+        DeviceGroup,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Optional monitoring group to auto-assign",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text="Inactive rules are ignored during import",
+    )
+    priority = models.IntegerField(
+        default=0,
+        db_index=True,
+        help_text="Lower numbers = higher priority (0 = highest)",
+    )
+    description = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Human-readable explanation of the rule",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["priority", "id"]
+        db_table = "inventory_import_rule"
+        indexes = [
+            models.Index(
+                fields=['is_active', 'priority'],
+                name='rule_active_prio_idx'
+            ),
+        ]
+
+    def __str__(self) -> str:
+        status = "✓" if self.is_active else "✗"
+        return f"[{status}] P{self.priority}: {self.pattern} → {self.category}"
 
 
 # Route models now live in inventory.models_routes. Import them dynamically to

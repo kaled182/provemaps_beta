@@ -9,6 +9,9 @@
     </main>
 
     <SiteDeviceModal />
+    
+    <!-- Toast Notifications -->
+    <ToastContainer />
   </div>
 </template>
 
@@ -17,6 +20,7 @@ import { RouterView, useRouter } from 'vue-router';
 import { onMounted, nextTick } from 'vue';
 import TheNavMenu from '@/components/Layout/TheNavMenu.vue';
 import SiteDeviceModal from '@/components/Map/SiteDeviceModal.vue';
+import ToastContainer from '@/components/Notifications/ToastContainer.vue';
 import { useUiStore } from '@/stores/ui';
 import { loadGoogleMaps } from '@/utils/googleMapsLoader';
 

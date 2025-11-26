@@ -4,7 +4,14 @@ Exposes Site, Device, Port via REST API for Vue 3 frontend
 """
 
 from rest_framework import serializers
-from inventory.models import Site, Device, Port, FiberCable
+from inventory.models import (
+    Site,
+    Device,
+    DeviceGroup,
+    Port,
+    FiberCable,
+    ImportRule,
+)
 
 
 class SiteSerializer(serializers.ModelSerializer[Site]):
@@ -58,12 +65,27 @@ class SiteSerializer(serializers.ModelSerializer[Site]):
         read_only_fields = ["id", "slug"]
 
 
+class DeviceGroupSerializer(serializers.ModelSerializer[DeviceGroup]):
+    """DeviceGroup serializer for dropdown lists"""
+
+    class Meta:
+        model = DeviceGroup
+        fields = ["id", "name"]
+        read_only_fields = ["id"]
+
+
 class DeviceSerializer(serializers.ModelSerializer[Device]):
-    """Device serializer with nested site"""
+    """Device serializer with nested site and monitoring group info"""
 
     site_name = serializers.CharField(
         source="site.display_name", read_only=True
     )
+    # Traz o nome do grupo para exibir na lista
+    group_name = serializers.CharField(
+        source="monitoring_group.name", read_only=True, allow_null=True
+    )
+    # Alerts como objeto (para compatibilidade com o frontend)
+    alerts = serializers.SerializerMethodField()
 
     class Meta:
         model = Device
@@ -78,8 +100,29 @@ class DeviceSerializer(serializers.ModelSerializer[Device]):
             "zabbix_hostid",
             "uptime_item_key",
             "cpu_usage_item_key",
+            # Device Import System Fields
+            "category",
+            "monitoring_group",  # ID para gravação
+            "group_name",  # Nome para leitura
+            "enable_screen_alert",
+            "enable_whatsapp_alert",
+            "enable_email_alert",
+            "alerts",  # Objeto consolidado {screen, whatsapp, email}
         ]
-        read_only_fields = ["id"]
+        read_only_fields = [
+            "id",
+            "site_name",
+            "group_name",
+            "alerts"
+        ]
+
+    def get_alerts(self, obj: Device) -> dict[str, bool]:
+        """Retorna alertas como objeto para compatibilidade com frontend"""
+        return {
+            "screen": obj.enable_screen_alert,
+            "whatsapp": obj.enable_whatsapp_alert,
+            "email": obj.enable_email_alert,
+        }
 
 
 class PortSerializer(serializers.ModelSerializer[Port]):
@@ -128,3 +171,39 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
             "last_status_update",
         ]
         read_only_fields = ["id"]
+
+
+class ImportRuleSerializer(serializers.ModelSerializer[ImportRule]):
+    """Serializer for auto-import rules with regex pattern validation."""
+
+    group_name = serializers.CharField(
+        source="group.name", read_only=True, allow_null=True
+    )
+
+    class Meta:
+        model = ImportRule
+        fields = [
+            "id",
+            "pattern",
+            "category",
+            "group",
+            "group_name",
+            "is_active",
+            "priority",
+            "description",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at", "group_name"]
+
+    def validate_pattern(self, value: str) -> str:
+        """Validate that pattern is a valid regex."""
+        import re
+
+        try:
+            re.compile(value, re.IGNORECASE)
+        except re.error as e:
+            raise serializers.ValidationError(
+                f"Invalid regex pattern: {e}"
+            )
+        return value
