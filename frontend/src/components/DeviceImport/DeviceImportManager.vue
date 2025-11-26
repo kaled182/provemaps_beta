@@ -7,6 +7,20 @@
       </div>
       <div class="mt-4 md:mt-0 flex space-x-3">
         <button 
+          @click="showImportRulesModal = true"
+          class="inline-flex items-center px-4 py-2 border border-indigo-300 dark:border-indigo-600 rounded-md shadow-sm text-sm font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+        >
+          <i class="fas fa-robot mr-2"></i>
+          Configurar Regras
+        </button>
+        <button 
+          @click="handleExportCSV"
+          class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+        >
+          <i class="fas fa-file-csv mr-2"></i>
+          Exportar CSV
+        </button>
+        <button 
           @click="refreshData" 
           class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
         >
@@ -39,9 +53,9 @@
         </nav>
       </div>
 
-      <div class="p-6 min-h-[400px]">
-        <div v-if="loading" class="flex justify-center items-center h-64">
-          <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 dark:border-indigo-400"></div>
+      <div class="p-6">
+        <div v-if="loading">
+          <SkeletonLoader type="table" :rows="8" />
         </div>
 
         <div v-else>
@@ -49,13 +63,31 @@
             <component 
               :is="currentTabComponent" 
               :data="tabData"
+              :loading="loading"
+              :available-groups="availableGroups"
+              :available-sites="availableSites"
               @edit-device="openEditModal"
+              @delete-device="handleDeleteDevice"
+              @view-interfaces="openInterfacesModal"
               @trigger-sync="handleSync"
+              @refresh-data="refreshData"
             />
           </keep-alive>
         </div>
       </div>
     </div>
+
+    <!-- Confirm Delete Dialog -->
+    <ConfirmDialog
+      v-model:show="showDeleteConfirm"
+      type="danger"
+      title="Confirmar Exclusão"
+      :message="deleteConfirmMessage"
+      confirm-text="Excluir"
+      cancel-text="Cancelar"
+      @confirm="confirmDelete"
+      @cancel="cancelDelete"
+    />
 
     <DeviceEditModal
       v-if="showModal"
@@ -63,40 +95,158 @@
       :devices="selectedDevices"
       :is-new="isEditingNewDevice"
       :available-groups="availableGroups"
+      :available-sites="availableSites"
       @close="closeModal"
       @save="saveDeviceChanges"
     />
+
+    <!-- Interfaces Modal (Standalone) -->
+    <div v-if="showInterfacesModal" class="fixed inset-0 z-[60] overflow-y-auto flex items-center justify-center">
+      <div class="fixed inset-0 bg-black bg-opacity-60" @click="showInterfacesModal = false"></div>
+      <div class="bg-white dark:bg-gray-800 w-full max-w-3xl rounded-lg shadow-2xl relative z-[70] flex flex-col m-4 max-h-[80vh]">
+        <div class="p-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900 rounded-t-lg">
+          <div>
+            <h3 class="font-bold text-gray-800 dark:text-white flex items-center">
+              <i class="fas fa-network-wired text-blue-500 mr-2"></i>
+              Interfaces do Dispositivo
+            </h3>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              {{ selectedInterfaceDevice?.name || '' }}
+            </p>
+          </div>
+          <button @click="showInterfacesModal = false" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4">
+          <!-- Loading state -->
+          <div v-if="loadingInterfaces" class="flex flex-col items-center justify-center py-12">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+            <p class="text-sm text-gray-600 dark:text-gray-300">Carregando interfaces...</p>
+          </div>
+
+          <!-- Empty state -->
+          <div v-else-if="!interfacesData || interfacesData.length === 0" class="flex flex-col items-center justify-center py-12">
+            <i class="fas fa-inbox text-gray-300 dark:text-gray-600 text-5xl mb-4"></i>
+            <p class="text-gray-600 dark:text-gray-300 font-medium">Nenhuma interface encontrada</p>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">Este dispositivo não possui interfaces cadastradas.</p>
+          </div>
+
+          <!-- Interfaces list -->
+          <div v-else class="space-y-3">
+            <div 
+              v-for="(iface, index) in interfacesData" 
+              :key="index"
+              class="border dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-750 hover:shadow-md transition-shadow"
+            >
+              <div class="flex items-start justify-between">
+                <div class="flex-1">
+                  <div class="flex items-center">
+                    <i class="fas fa-ethernet text-blue-500 mr-2"></i>
+                    <h4 class="font-medium text-gray-800 dark:text-white">{{ iface.name }}</h4>
+                    <span 
+                      v-if="iface.status === 'up'" 
+                      class="ml-2 px-2 py-0.5 text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-full"
+                    >
+                      <i class="fas fa-check-circle mr-1"></i>UP
+                    </span>
+                    <span 
+                      v-else 
+                      class="ml-2 px-2 py-0.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full"
+                    >
+                      <i class="fas fa-times-circle mr-1"></i>DOWN
+                    </span>
+                  </div>
+                  <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">{{ iface.description || 'Sem descrição' }}</p>
+                  
+                  <!-- Signal levels -->
+                  <div v-if="iface.rx_power || iface.tx_power" class="mt-3 grid grid-cols-2 gap-3">
+                    <div v-if="iface.rx_power" class="bg-blue-50 dark:bg-blue-900/20 p-2 rounded">
+                      <p class="text-xs text-gray-500 dark:text-gray-400">RX Power</p>
+                      <p class="text-sm font-medium text-gray-800 dark:text-white">
+                        {{ iface.rx_power }} dBm
+                      </p>
+                    </div>
+                    <div v-if="iface.tx_power" class="bg-green-50 dark:bg-green-900/20 p-2 rounded">
+                      <p class="text-xs text-gray-500 dark:text-gray-400">TX Power</p>
+                      <p class="text-sm font-medium text-gray-800 dark:text-white">
+                        {{ iface.tx_power }} dBm
+                      </p>
+                    </div>
+                  </div>
+
+                  <!-- Bandwidth -->
+                  <div v-if="iface.speed" class="mt-2">
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                      <i class="fas fa-tachometer-alt mr-1"></i>
+                      Velocidade: <span class="font-medium text-gray-700 dark:text-gray-300">{{ iface.speed }}</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="p-4 border-t dark:border-gray-700 bg-white dark:bg-gray-800 rounded-b-lg flex justify-end">
+          <button @click="showInterfacesModal = false" class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors">
+            <i class="fas fa-times mr-2"></i>Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import Rules Modal -->
+    <ImportRulesModal v-model="showImportRulesModal" />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import InventoryManagerTab from './InventoryManagerTab.vue';
 import ImportPreviewTab from './ImportPreviewTab.vue';
 import DeviceEditModal from './DeviceEditModal.vue';
+import ImportRulesModal from './ImportRulesModal.vue';
+import SkeletonLoader from '@/components/Common/SkeletonLoader.vue';
+import ConfirmDialog from '@/components/Common/ConfirmDialog.vue';
+import { useApi } from '@/composables/useApi';
+import { useNotification } from '@/composables/useNotification';
+import { validateDevices } from '@/utils/validators';
+import { exportInventoryToCSV, exportZabbixPreviewToCSV } from '@/utils/csvExporter';
+
+// Composables
+const api = useApi();
+const { success, error: notifyError } = useNotification();
 
 // Estado
 const loading = ref(false);
 const currentTab = ref('inventory');
 const showModal = ref(false);
 const selectedDevice = ref(null);
-const selectedDevices = ref([]); // Array para importação em lote
-const isEditingNewDevice = ref(false); // Diferencia se é um device novo (pré) ou existente (pós)
+const selectedDevices = ref([]);
+const isEditingNewDevice = ref(false);
+const showImportRulesModal = ref(false);
 
-// Mock de Dados (Substituir pela sua chamada de API depois)
+// Delete confirmation
+const showDeleteConfirm = ref(false);
+const deviceToDelete = ref(null);
+const deleteConfirmMessage = computed(() => {
+  if (!deviceToDelete.value) return '';
+  return `Tem certeza que deseja excluir o dispositivo "${deviceToDelete.value.name}"? Esta ação não pode ser desfeita.`;
+});
+
+// Dados das abas
 const inventoryData = ref([]);
 const previewData = ref([]);
+const availableGroups = ref([]);
+const availableSites = ref([]);
 
-// Grupos disponíveis para seleção (virá da API futuramente)
-const availableGroups = ref([
-  'Backbone',
-  'Distribuição',
-  'Acesso GPON',
-  'Clientes Corporativos',
-  'Servidores',
-  'Network Devices'
-]);
+// Interfaces Modal state
+const showInterfacesModal = ref(false);
+const selectedInterfaceDevice = ref(null);
+const interfacesData = ref([]);
+const loadingInterfaces = ref(false);
 
+// Configuração das abas
 const tabs = computed(() => [
   { 
     id: 'inventory', 
@@ -125,78 +275,97 @@ const refreshData = async () => {
   loading.value = true;
   
   try {
-    // TODO: Substituir por chamadas reais de API
-    // const [inventoryResp, previewResp] = await Promise.all([
-    //   fetch('/api/devices/grouped/'),
-    //   fetch('/api/zabbix/preview/')
-    // ]);
+    // 1. Buscar inventário agrupado (Pós-Importação)
+    const grouped = await api.get('/api/v1/inventory/devices/grouped/');
+    inventoryData.value = grouped;
     
-    // Simulação de API Call
-    await new Promise(resolve => setTimeout(resolve, 800));
+    // Extrai grupos únicos (incluindo vazios) + complementa com todos do backend
+    const uniqueGroups = new Set();
+    grouped.forEach(group => {
+      if (group.group_name && group.group_name !== 'Sem Grupo Definido') {
+        uniqueGroups.add(group.group_name);
+      }
+    });
+    // Busca lista completa de DeviceGroups para garantir que o dropdown tenha TODOS
+    try {
+      const allGroupsResponse = await api.get('/api/v1/device-groups/');
+      const rawGroups = Array.isArray(allGroupsResponse)
+        ? allGroupsResponse
+        : (allGroupsResponse.results || allGroupsResponse.data || []);
+      const allGroupNames = rawGroups
+        .map(g => g && (g.name || g.group_name))
+        .filter(Boolean);
+      allGroupNames.forEach(name => uniqueGroups.add(name));
+    } catch (groupErr) {
+      console.warn('[DeviceImport] Erro ao buscar lista completa de grupos:', groupErr);
+    }
+    availableGroups.value = Array.from(uniqueGroups).sort((a, b) => a.localeCompare(b, 'pt-BR'));
     
-    // Dados já agrupados (Pós-Importação)
-    inventoryData.value = [
-      {
-        group_id: 1,
-        group_name: 'Backbone Principal',
-        devices: [
-          { 
-            id: 101, 
-            name: 'Router-Core-01', 
-            ip: '10.0.0.1', 
-            status: 'online',
-            alerts: { whatsapp: true, email: false, screen: true } 
-          },
-          { 
-            id: 102, 
-            name: 'Switch-Agg-01', 
-            ip: '10.0.0.2', 
-            status: 'online',
-            alerts: { whatsapp: false, email: true, screen: true } 
-          }
-        ]
-      },
-      {
-        group_id: 2,
-        group_name: 'Distribuição Norte',
-        devices: [
-          { 
-            id: 201, 
-            name: 'OLT-Huawei-01', 
-            ip: '10.0.10.1', 
-            status: 'online',
-            alerts: { whatsapp: true, email: true, screen: true } 
-          }
-        ]
-      }
-    ];
-
-    // Dados "Flat" vindos do Zabbix (Pré-Importação)
-    previewData.value = [
-      { 
-        id: 'zbx_999', 
-        name: 'Novo-Router-X', 
-        ip: '192.168.1.50', 
-        status: 'new', 
-        group_suggestion: 'Sem Grupo' 
-      },
-      { 
-        id: '101', 
-        name: 'Router-Core-01', 
-        ip: '10.0.0.1', 
-        status: 'changed', 
-        changes: ['Nome alterado no Zabbix'] 
-      }
-    ];
+    // 2. Buscar sites disponíveis
+    try {
+      const sitesResponse = await api.get('/api/v1/inventory/sites/');
+      availableSites.value = sitesResponse.sites || [];
+    } catch (sitesError) {
+      console.warn('Erro ao buscar sites:', sitesError);
+      availableSites.value = [];
+    }
+    
+    // 3. Buscar preview do Zabbix (Pré-Importação) agrupado por hostgroups
+    try {
+      const response = await api.get('/api/v1/inventory/zabbix/lookup/hosts/grouped/');
+      const zabbixGroups = response.data || [];
+      
+      // Marca quais já foram importados
+      const importedIPs = new Set();
+      const importedZabbixIds = new Set();
+      
+      grouped.forEach(group => {
+        group.devices?.forEach(device => {
+          if (device.primary_ip) importedIPs.add(device.primary_ip);
+          if (device.zabbix_hostid) importedZabbixIds.add(device.zabbix_hostid);
+        });
+      });
+      
+      // Marca hosts importados em cada grupo
+      previewData.value = zabbixGroups.map(group => ({
+        ...group,
+        hosts: group.hosts.map(host => ({
+          ...host,
+          is_imported: importedIPs.has(host.ip) || importedZabbixIds.has(host.zabbix_id)
+        }))
+      }));
+    } catch (zabbixError) {
+      console.warn('Erro ao buscar preview Zabbix:', zabbixError);
+      notifyError('Aviso', 'Não foi possível carregar dispositivos do Zabbix.');
+      previewData.value = [];
+    }
+    
   } catch (error) {
     console.error('Erro ao carregar dados:', error);
+    notifyError('Erro ao Carregar', error.message || 'Não foi possível conectar ao servidor.');
   } finally {
     loading.value = false;
   }
 };
 
-const openEditModal = (device, isNew = false) => {
-  selectedDevice.value = JSON.parse(JSON.stringify(device)); // Deep copy
+const openEditModal = async (device, isNew = false) => {
+  // Se for device existente, buscar dados atualizados do servidor
+  if (!isNew && device?.id) {
+    try {
+      console.log('[DeviceImportManager] Fetching fresh device data for id:', device.id);
+      const freshData = await api.get(`/api/v1/devices/${device.id}/`);
+      selectedDevice.value = JSON.parse(JSON.stringify(freshData)); // Deep copy dos dados atualizados
+      console.log('[DeviceImportManager] Fresh data loaded:', freshData);
+    } catch (error) {
+      console.warn('[DeviceImportManager] Error fetching fresh device data, using cached:', error);
+      // Fallback: usa dados cached se fetch falhar
+      selectedDevice.value = JSON.parse(JSON.stringify(device));
+    }
+  } else {
+    // Para novos devices, usa dados passados como estão
+    selectedDevice.value = JSON.parse(JSON.stringify(device)); // Deep copy
+  }
+  
   isEditingNewDevice.value = isNew;
   showModal.value = true;
 };
@@ -207,106 +376,182 @@ const closeModal = () => {
   selectedDevices.value = [];
 };
 
-// Função auxiliar: Mapeia grupo do Zabbix para nossos grupos (lógica inteligente)
+// Mapeia grupo do Zabbix para grupos conhecidos
 const matchGroup = (zabbixGroupName) => {
-  if (!zabbixGroupName) return 'Acesso GPON'; // Default
+  if (!zabbixGroupName) return null;
   
   const groupLower = zabbixGroupName.toLowerCase();
   
-  // Regras específicas de mapeamento
-  if (groupLower.includes('server') || groupLower.includes('servidor')) return 'Servidores';
-  if (groupLower.includes('network') || groupLower.includes('rede')) return 'Network Devices';
-  if (groupLower.includes('switch') || groupLower.includes('router') || groupLower.includes('backbone')) return 'Backbone';
-  if (groupLower.includes('distribuição') || groupLower.includes('distribution')) return 'Distribuição';
-  if (groupLower.includes('gpon') || groupLower.includes('olt') || groupLower.includes('onu')) return 'Acesso GPON';
-  if (groupLower.includes('corporativo') || groupLower.includes('cliente')) return 'Clientes Corporativos';
+  const mappings = {
+    'servidores': ['server', 'servidor'],
+    'network devices': ['network', 'rede'],
+    'backbone': ['switch', 'router', 'backbone'],
+    'distribuição': ['distribuição', 'distribution'],
+    'acesso gpon': ['gpon', 'olt', 'onu'],
+    'clientes corporativos': ['corporativo', 'cliente']
+  };
   
-  // Tenta encontrar correspondência parcial (case-insensitive)
-  const match = availableGroups.value.find(g => 
-    groupLower.includes(g.toLowerCase()) || g.toLowerCase().includes(groupLower)
-  );
+  for (const [targetGroup, keywords] of Object.entries(mappings)) {
+    if (keywords.some(keyword => groupLower.includes(keyword))) {
+      const match = availableGroups.value.find(g => g.toLowerCase() === targetGroup);
+      return match || null;
+    }
+  }
   
-  return match || 'Acesso GPON'; // Default se não achar
+  const exactMatch = availableGroups.value.find(g => g.toLowerCase() === groupLower);
+  return exactMatch || null;
 };
 
 const saveDeviceChanges = async (payload) => {
-  console.log('Salvando dispositivo(s):', payload);
-  
   try {
+    // Validação antes de enviar
     if (payload.mode === 'batch') {
-      // Importação em lote
-      console.log(`Importando ${payload.devices.length} dispositivos em lote:`, payload.devices);
-      
-      // TODO: Implementar chamada de API batch
-      // const response = await fetch('/api/devices/batch-import/', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ devices: payload.devices })
-      // });
-      
-      alert(`${payload.devices.length} dispositivos importados com sucesso!`);
-    } else {
-      // Importação/edição single (compatibilidade)
-      console.log('Salvando dispositivo único:', payload);
-      
-      // TODO: Implementar chamada de API
-      // const response = await fetch(`/api/devices/${payload.id}/`, {
-      //   method: 'PATCH',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(payload)
-      // });
-      
-      alert('Dispositivo salvo com sucesso!');
+      const validation = validateDevices(payload.devices);
+      if (!validation.valid) {
+        const errorMessages = Object.values(validation.deviceErrors)
+          .flat()
+          .join(', ');
+        notifyError('Validação Falhou', errorMessages);
+        return;
+      }
     }
+
+    const response = await api.post('/api/v1/inventory/devices/import-batch/', payload);
     
-    closeModal();
-    await refreshData(); // Atualiza a lista
+    if (response.success) {
+      const message = payload.mode === 'batch'
+        ? `${response.created + response.updated} dispositivos processados`
+        : 'Dispositivo salvo com sucesso';
+      
+      success(
+        'Importação Concluída',
+        `${message} (${response.created} novos, ${response.updated} atualizados)`
+      );
+      
+      closeModal();
+      await refreshData();
+    } else {
+      throw new Error(response.error || 'Erro desconhecido');
+    }
   } catch (error) {
     console.error('Erro ao salvar dispositivo:', error);
-    alert('Erro ao salvar. Veja o console para detalhes.');
+    notifyError('Erro ao Salvar', error.message || 'Não foi possível processar a importação.');
   }
 };
 
 const handleSync = (selectedItems) => {
-  console.log('Importando/Sincronizando itens:', selectedItems);
-  
   if (!Array.isArray(selectedItems) || selectedItems.length === 0) {
-    alert('Selecione ao menos um dispositivo para importar.');
+    notifyError('Atenção', 'Selecione ao menos um dispositivo para importar.');
     return;
   }
   
-  // Normaliza os dados para o formato esperado pelo modal
-  const normalizedDevices = selectedItems.map(deviceData => ({
-    ...deviceData,
-    name: deviceData.name,
-    ip: deviceData.ip || deviceData.ip_address,
-    ip_address: deviceData.ip || deviceData.ip_address,
-    mac: deviceData.mac || '',
-    zabbix_id: deviceData.zabbix_id,
-    group: matchGroup(deviceData.group_name),
-    category: 'backbone',
-    alerts: {
-      screen: true,
-      whatsapp: false,
-      email: false
-    }
-  }));
+  openEditModal(null, true, selectedItems);
+};
+
+// Interfaces Modal
+const openInterfacesModal = async (device) => {
+  selectedInterfaceDevice.value = device;
+  showInterfacesModal.value = true;
   
-  if (normalizedDevices.length === 1) {
-    // Modo SINGLE: Usa selectedDevice (compatibilidade)
-    selectedDevice.value = normalizedDevices[0];
-    selectedDevices.value = []; // Limpa array
-  } else {
-    // Modo BATCH: Usa selectedDevices array
-    selectedDevices.value = normalizedDevices;
-    selectedDevice.value = null; // Limpa single
+  await fetchInterfaces(device);
+};
+
+const fetchInterfaces = async (device) => {
+  if (!device || !device.id) {
+    interfacesData.value = [];
+    return;
   }
-  
-  isEditingNewDevice.value = true;
-  showModal.value = true;
+
+  loadingInterfaces.value = true;
+
+  try {
+    console.log('[DeviceImportManager] Fetching interfaces for device:', device.id);
+    
+    // Chamada à API com dados em tempo real do Zabbix
+    const response = await api.get(`/api/v1/inventory/devices/${device.id}/ports/live/`);
+    
+    if (response.ports) {
+      // Dados já vêm formatados do backend com status e sinais ópticos
+      interfacesData.value = response.ports.map(port => ({
+        id: port.id,
+        name: port.name,
+        description: port.description || '',
+        status: port.status || 'unknown',
+        speed: port.speed || '',
+        rx_power: port.rx_power,
+        tx_power: port.tx_power,
+        fiber_cable_id: port.fiber_cable_id,
+        zabbix_item_key: port.zabbix_item_key
+      }));
+      
+      console.log('[DeviceImportManager] Interfaces loaded:', interfacesData.value.length);
+    } else {
+      interfacesData.value = [];
+    }
+  } catch (error) {
+    console.error('[DeviceImportManager] Error fetching interfaces:', error);
+    notifyError('Erro', 'Não foi possível carregar as interfaces do dispositivo.');
+    interfacesData.value = [];
+  } finally {
+    loadingInterfaces.value = false;
+  }
 };
 
 onMounted(() => {
   refreshData();
+  
+  // Listener para evento de sincronização completa
+  window.addEventListener('device-sync-complete', handleDeviceSyncComplete);
 });
+
+onUnmounted(() => {
+  window.removeEventListener('device-sync-complete', handleDeviceSyncComplete);
+});
+
+// Handler para evento de sincronização completa
+const handleDeviceSyncComplete = (event) => {
+  console.log('[DeviceImportManager] Device sync complete event received:', event.detail);
+  // Recarrega dados após sincronização
+  refreshData();
+};
+
+// Delete: Handlers de exclusão com confirmação
+const handleDeleteDevice = (device) => {
+  deviceToDelete.value = device;
+  showDeleteConfirm.value = true;
+};
+
+const confirmDelete = async () => {
+  if (!deviceToDelete.value) return;
+  
+  try {
+    await api.delete(`/api/v1/inventory/devices/${deviceToDelete.value.id}/`);
+    success('Dispositivo Excluído', `${deviceToDelete.value.name} foi removido com sucesso.`);
+    deviceToDelete.value = null;
+    showDeleteConfirm.value = false;
+    await refreshData();
+  } catch (error) {
+    notifyError('Erro ao Excluir', error.message || 'Não foi possível excluir o dispositivo.');
+  }
+};
+
+const cancelDelete = () => {
+  deviceToDelete.value = null;
+  showDeleteConfirm.value = false;
+};
+
+// Export: Handler de exportação CSV
+const handleExportCSV = () => {
+  try {
+    if (currentTab.value === 'inventory') {
+      exportInventoryToCSV(inventoryData.value);
+      success('Exportação Concluída', 'Inventário exportado para CSV com sucesso.');
+    } else {
+      exportZabbixPreviewToCSV(previewData.value);
+      success('Exportação Concluída', 'Preview do Zabbix exportado para CSV com sucesso.');
+    }
+  } catch (error) {
+    notifyError('Erro na Exportação', error.message || 'Não foi possível gerar o arquivo CSV.');
+  }
+};
 </script>

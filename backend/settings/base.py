@@ -108,12 +108,14 @@ CSP_SCRIPT_SRC = os.getenv(
     "'self' 'unsafe-inline' 'unsafe-eval' "
     "https://cdn.jsdelivr.net "
     "https://cdn.tailwindcss.com "
+    "https://cdnjs.cloudflare.com "
     "https://maps.googleapis.com",
 ).split()
 CSP_STYLE_SRC = os.getenv(
     "CSP_STYLE_SRC",
     "'self' 'unsafe-inline' "
     "https://cdn.tailwindcss.com "
+    "https://cdnjs.cloudflare.com "
     "https://fonts.googleapis.com",
 ).split()
 CSP_IMG_SRC = os.getenv(
@@ -126,7 +128,7 @@ CSP_IMG_SRC = os.getenv(
 ).split()
 CSP_FONT_SRC = os.getenv(
     "CSP_FONT_SRC",
-    "'self' data: https://fonts.gstatic.com",
+    "'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com",
 ).split()
 CSP_CONNECT_SRC = os.getenv(
     "CSP_CONNECT_SRC",

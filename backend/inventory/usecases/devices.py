@@ -597,6 +597,430 @@ def get_device_ports(device_id: int) -> Dict[str, Any]:
     return {"ports": ports_data}
 
 
+def get_device_ports_with_live_status(device_id: int) -> Dict[str, Any]:
+    """
+    Retorna portas do dispositivo com status em tempo real do Zabbix.
+    Inclui: status operacional, velocidade, e níveis de sinal óptico (RX/TX).
+    """
+    try:
+        device: Device = Device.objects.select_related("site").get(id=device_id)
+    except Device.DoesNotExist as exc:
+        raise InventoryNotFound("Device not found") from exc
+
+    ports_qs: QuerySet[Port] = Port.objects.filter(device=device).select_related("device")
+    ports_list = list(ports_qs)
+    
+    hostid = (getattr(cast(Any, device), "zabbix_hostid", "") or "").strip()
+    
+    # Preload optical discovery cache
+    discovery_cache: Dict[Any, Any] = {}
+    if hostid:
+        discovery_cache = _preload_optical_discovery_cache(hostid, ports_list)
+    
+    # Fetch optical snapshots (RX/TX power)
+    optical_snapshots: Dict[int, Dict[str, Any]] = {}
+    if hostid:
+        optical_snapshots = fetch_ports_optical_snapshots(
+            ports_list,
+            discovery_cache=discovery_cache,
+            persist_keys=True,
+            include_status_meta=False,
+        )
+    
+    # Fetch interface status from Zabbix
+    interface_status_map: Dict[str, Dict[str, Any]] = {}
+    if hostid:
+        interface_status_map = _fetch_interface_status_bulk(hostid, ports_list)
+    
+    ports_data: List[Dict[str, Any]] = []
+    
+    for port in ports_list:
+        port_any = cast(Any, port)
+        port_id = cast(int, getattr(port_any, "id", port_any.pk))
+        port_name = cast(str, getattr(port_any, "name", ""))
+        
+        # Get optical data
+        optical = optical_snapshots.get(port_id, {})
+        rx_dbm = optical.get("rx_dbm")
+        tx_dbm = optical.get("tx_dbm")
+        
+        # Get interface status
+        status_data = interface_status_map.get(port_name, {})
+        status = status_data.get("status", "unknown")
+        speed = status_data.get("speed", "")
+        
+        # CORREÇÃO MELHORADA: Se tem sinal óptico (RX ou TX), a porta está UP
+        # Override do status do Zabbix quando há evidência física de link
+        has_optical_signal = (rx_dbm is not None or tx_dbm is not None)
+        
+        if has_optical_signal:
+            # Se tem sinal óptico, independente do status administrativo
+            status = "up"
+        elif status == "unknown":
+            # Se não tem sinal óptico e status é desconhecido, marca como down
+            status = "down"
+        
+        # Get cable info
+        cable_as_origin = FiberCable.objects.filter(origin_port=port).first()
+        cable_as_dest = FiberCable.objects.filter(destination_port=port).first()
+        fiber_cable = cable_as_origin or cable_as_dest
+        fiber_cable_id = cast(Optional[int], getattr(fiber_cable, "id", None) if fiber_cable else None)
+        
+        # FILTRO: Apenas portas físicas em uso (com sinal óptico OU status UP OU com cabo conectado)
+        is_in_use = (
+            rx_dbm is not None or 
+            tx_dbm is not None or 
+            status == "up" or 
+            fiber_cable_id is not None
+        )
+        
+        if not is_in_use:
+            continue  # Pula portas não utilizadas
+        
+        ports_data.append({
+            "id": port_id,
+            "name": port_name,
+            "description": getattr(port_any, "notes", "") or "",
+            "status": status,
+            "speed": speed,
+            "rx_power": round(rx_dbm, 2) if rx_dbm is not None else None,
+            "tx_power": round(tx_dbm, 2) if tx_dbm is not None else None,
+            "fiber_cable_id": fiber_cable_id,
+            "zabbix_item_key": getattr(port_any, "zabbix_item_key", None),
+        })
+    
+    return {
+        "device": {
+            "id": device.id,
+            "name": device.name,
+            "zabbix_hostid": hostid,
+        },
+        "ports": ports_data
+    }
+
+
+def _fetch_interface_status_bulk(hostid: str, ports: List[Port]) -> Dict[str, Dict[str, Any]]:
+    """
+    Busca status de interfaces no Zabbix usando item.get.
+    Retorna mapa: {interface_name: {status: 'up'|'down'|'unknown', speed: '1 Gbps'}}
+    """
+    from integrations.zabbix.zabbix_service import zabbix_request
+    
+    if not hostid:
+        return {}
+    
+    result_map: Dict[str, Dict[str, Any]] = {}
+    
+    try:
+        # Busca todos os items do host
+        items_response = zabbix_request("item.get", {
+            "hostids": [hostid],
+            "output": ["itemid", "key_", "name", "lastvalue", "units", "value_type"],
+            "filter": {
+                "state": "0"  # Apenas items ativos
+            }
+        })
+        
+        if not items_response:
+            return {}
+        
+        # Processa items para cada porta
+        for port in ports:
+            port_name = getattr(port, "name", "")
+            if not port_name:
+                continue
+            
+            # Mapeia items relevantes para esta porta
+            status_item = None
+            speed_item = None
+            
+            for item in items_response:
+                key = item.get("key_", "")
+                name = item.get("name", "")
+                
+                # Match por nome da interface em diferentes formatos
+                # Verifica se o nome da porta está presente no key ou name do item
+                port_match = (
+                    port_name in key or 
+                    port_name in name or
+                    port_name.replace("/", ".") in key or  # Huawei usa ponto em vez de barra
+                    port_name.replace(".", "/") in key     # E vice-versa
+                )
+                
+                if port_match:
+                    key_lower = key.lower()
+                    name_lower = name.lower()
+                    
+                    # Status operacional: net.if.status[ifName] ou hwIfOperStatus
+                    if "status" in key_lower or "operstatus" in key_lower or "ifoperstatus" in name_lower:
+                        status_item = item
+                    # Velocidade: net.if.speed[ifName] ou hwIfSpeed ou interface.speed
+                    elif "speed" in key_lower or "bandwidth" in key_lower or "ifspeed" in name_lower:
+                        speed_item = item
+            
+            # Processa status
+            status = "unknown"
+            if status_item:
+                last_value = status_item.get("lastvalue", "")
+                # Zabbix interface status: 0=down, 1=up, 2=unknown
+                # Huawei também pode usar: 1=up, 2=down
+                if last_value in ("1", "up", "UP"):
+                    status = "up"
+                elif last_value in ("0", "2", "down", "DOWN"):
+                    status = "down"
+            
+            # Processa velocidade
+            speed = ""
+            if speed_item:
+                last_value = speed_item.get("lastvalue", "")
+                units = speed_item.get("units", "")
+                name = speed_item.get("name", "")
+                key = speed_item.get("key_", "")
+                
+                # DEBUG: Log do item de velocidade
+                logger.debug(
+                    f"[SPEED_DEBUG] Interface: {port_name}, "
+                    f"Value: {last_value}, Units: {units}, "
+                    f"Name: {name}, Key: {key}"
+                )
+                
+                if last_value and last_value != "0":
+                    try:
+                        # Tenta converter para número
+                        speed_val = float(last_value)
+                        
+                        # DETECÇÃO INTELIGENTE baseada no nome da interface
+                        # XGigabitEthernet = 10 Gbps
+                        # GigabitEthernet = 1 Gbps
+                        # 40GE = 40 Gbps
+                        # FastEthernet = 100 Mbps
+                        
+                        # Detecta pelo nome da INTERFACE (não do item)
+                        interface_name_lower = port_name.lower()
+                        
+                        if "xgigabit" in interface_name_lower or "10ge" in interface_name_lower:
+                            # XGigabitEthernet sempre 10 Gbps
+                            speed = "10 Gbps"
+                            logger.debug(f"[SPEED_DEBUG] XGigabitEthernet detectado: {speed}")
+                        
+                        elif "40ge" in interface_name_lower:
+                            # 40GE sempre 40 Gbps
+                            speed = "40 Gbps"
+                            logger.debug(f"[SPEED_DEBUG] 40GE detectado: {speed}")
+                        
+                        elif "100ge" in interface_name_lower:
+                            # 100GE sempre 100 Gbps
+                            speed = "100 Gbps"
+                            logger.debug(f"[SPEED_DEBUG] 100GE detectado: {speed}")
+                        
+                        elif "gigabit" in interface_name_lower or "1ge" in interface_name_lower or "ge0" in interface_name_lower:
+                            # GigabitEthernet sempre 1 Gbps
+                            speed = "1 Gbps"
+                            logger.debug(f"[SPEED_DEBUG] GigabitEthernet detectado: {speed}")
+                        
+                        elif "fastethernet" in interface_name_lower or "fe0" in interface_name_lower:
+                            # FastEthernet sempre 100 Mbps
+                            speed = "100 Mbps"
+                            logger.debug(f"[SPEED_DEBUG] FastEthernet detectado: {speed}")
+                        
+                        else:
+                            # Fallback: Usa o valor do Zabbix com detecção de contexto
+                            # Se o nome do item indica Gbps/Mbps, usa isso
+                            if "Gbps" in name or "Gbit" in name or "GE" in name:
+                                # Valor já está em Gbps ou é indicado como Gigabit
+                                if speed_val >= 1000:
+                                    speed = f"{int(speed_val // 1000)} Gbps"
+                                else:
+                                    speed = f"{int(speed_val)} Gbps"
+                            elif "Mbps" in name or "Mbit" in name or "MB" in name:
+                                # Valor está em Mbps
+                                if speed_val >= 1000:
+                                    speed = f"{int(speed_val // 1000)} Gbps"
+                                else:
+                                    speed = f"{int(speed_val)} Mbps"
+                            else:
+                                # Conversão padrão de bps (assume que valor está em bits por segundo)
+                                if speed_val >= 1_000_000_000:
+                                    speed = f"{int(speed_val // 1_000_000_000)} Gbps"
+                                elif speed_val >= 1_000_000:
+                                    speed = f"{int(speed_val // 1_000_000)} Mbps"
+                                elif speed_val >= 1_000:
+                                    speed = f"{int(speed_val // 1_000)} Kbps"
+                                else:
+                                    speed = f"{int(speed_val)} bps"
+                            
+                            logger.debug(f"[SPEED_DEBUG] Fallback conversion: {speed}")
+                    
+                    except (ValueError, TypeError):
+                        # Se não conseguir converter, usa o valor bruto
+                        speed = str(last_value)
+                        if units:
+                            speed += f" {units}"
+                        logger.debug(f"[SPEED_DEBUG] Raw value used: {speed}")
+            
+            result_map[port_name] = {
+                "status": status,
+                "speed": speed
+            }
+    
+    except Exception as e:
+        logger.exception(f"Error fetching interface status from Zabbix for host {hostid}: {e}")
+    
+    return result_map
+
+
+def import_interfaces_from_zabbix(device: Device) -> Dict[str, Any]:
+    """
+    Importa automaticamente interfaces/portas do Zabbix para o Device.
+    Busca apenas interfaces físicas relevantes (com sinal óptico ou UP).
+    
+    Returns:
+        Dict com estatísticas: {created: int, updated: int, skipped: int}
+    """
+    from integrations.zabbix.zabbix_service import zabbix_request
+    
+    if not device.zabbix_hostid:
+        return {"created": 0, "updated": 0, "skipped": 0, "error": "Device sem zabbix_hostid"}
+    
+    hostid = device.zabbix_hostid.strip()
+    stats = {"created": 0, "updated": 0, "skipped": 0}
+    
+    try:
+        # 1. Busca todas as interfaces do host no Zabbix
+        interfaces_response = zabbix_request("hostinterface.get", {
+            "hostids": [hostid],
+            "output": ["interfaceid", "type", "ip", "port", "details"]
+        })
+        
+        if not interfaces_response:
+            logger.info(f"Nenhuma interface Zabbix encontrada para host {hostid}")
+            return stats
+        
+        # 2. Busca items do host para mapear nomes de interfaces
+        items_response = zabbix_request("item.get", {
+            "hostids": [hostid],
+            "output": ["itemid", "key_", "name", "lastvalue", "interfaceid"],
+            "filter": {"state": "0"},
+            "search": {
+                "key_": ["status", "speed", "optical", "ifOperStatus", "hwIfOperStatus"]
+            },
+            "searchWildcardsEnabled": True
+        })
+        
+        if not items_response:
+            logger.info(f"Nenhum item de interface encontrado para host {hostid}")
+            return stats
+        
+        # 3. Agrupa items por nome de interface
+        interface_map: Dict[str, Dict[str, Any]] = {}
+        
+        for item in items_response:
+            key = item.get("key_", "")
+            name = item.get("name", "")
+            
+            # Extrai nome da interface do key (ex: net.if.status[eth0] → eth0)
+            interface_name = None
+            
+            # Padrões de extração
+            import re
+            patterns = [
+                r'\[([^\]]+)\]',  # [ifname]
+                r'\.([XG]?[Ee]thernet[\d/\.]+)',  # Ethernet/GigabitEthernet/XGigabitEthernet
+                r'\.(\d+GE[\d/\.]+)',  # 40GE0/0/1
+                r'Interface\s+([^\s]+)',  # "Interface eth0"
+            ]
+            
+            for pattern in patterns:
+                match = re.search(pattern, key + " " + name)
+                if match:
+                    interface_name = match.group(1)
+                    break
+            
+            if not interface_name:
+                continue
+            
+            # Normaliza nome (remove espaços, caso)
+            interface_name = interface_name.strip()
+            
+            if interface_name not in interface_map:
+                interface_map[interface_name] = {
+                    "name": interface_name,
+                    "status_item": None,
+                    "speed_item": None,
+                    "rx_optical_item": None,
+                    "tx_optical_item": None,
+                    "description": ""
+                }
+            
+            key_lower = key.lower()
+            
+            # Classifica o item
+            if "status" in key_lower or "operstatus" in key_lower:
+                interface_map[interface_name]["status_item"] = item
+                interface_map[interface_name]["description"] = name
+            elif "speed" in key_lower or "bandwidth" in key_lower:
+                interface_map[interface_name]["speed_item"] = item
+            elif "rx" in key_lower and ("optical" in key_lower or "power" in key_lower):
+                interface_map[interface_name]["rx_optical_item"] = item
+            elif "tx" in key_lower and ("optical" in key_lower or "power" in key_lower):
+                interface_map[interface_name]["tx_optical_item"] = item
+        
+        # 4. Filtra apenas interfaces relevantes e cria/atualiza portas
+        for if_name, if_data in interface_map.items():
+            # Verifica se é interface física relevante
+            status_item = if_data.get("status_item")
+            rx_item = if_data.get("rx_optical_item")
+            tx_item = if_data.get("tx_optical_item")
+            
+            # Critério: Tem item de status OU tem itens ópticos
+            is_relevant = status_item or rx_item or tx_item
+            
+            if not is_relevant:
+                stats["skipped"] += 1
+                continue
+            
+            # Prepara dados da porta
+            port_defaults = {
+                "notes": if_data.get("description", f"Status Operacional da Porta {if_name}"),
+            }
+            
+            # Adiciona item keys se existirem
+            if status_item:
+                port_defaults["zabbix_item_key"] = status_item.get("key_", "")
+            
+            if rx_item:
+                port_defaults["rx_power_item_key"] = rx_item.get("key_", "")
+            
+            if tx_item:
+                port_defaults["tx_power_item_key"] = tx_item.get("key_", "")
+            
+            # Get or Create porta
+            port, created = Port.objects.update_or_create(
+                device=device,
+                name=if_name,
+                defaults=port_defaults
+            )
+            
+            if created:
+                stats["created"] += 1
+                logger.info(f"Porta criada: {device.name} - {if_name}")
+            else:
+                stats["updated"] += 1
+                logger.info(f"Porta atualizada: {device.name} - {if_name}")
+        
+        logger.info(
+            f"Importação de interfaces concluída para {device.name}: "
+            f"{stats['created']} criadas, {stats['updated']} atualizadas, "
+            f"{stats['skipped']} ignoradas"
+        )
+        
+    except Exception as e:
+        logger.exception(f"Erro ao importar interfaces do Zabbix para device {device.id}: {e}")
+        stats["error"] = str(e)
+    
+    return stats
+
+
 def get_device_ports_with_optical(device_id: int) -> Dict[str, Any]:
     start_time = time.perf_counter()
     try:
@@ -1012,6 +1436,27 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
     if existing_device:
         device = existing_device
         update_fields: List[str] = []
+        # Auto-apply import rules for devices that existed before rules were created
+        # Only if device still has default category and/or no monitoring group assigned
+        if (not device.monitoring_group_id or device.category == 'backbone'):
+            try:
+                from inventory.services.import_rules import apply_import_rules  # local import to avoid circulars
+                rule_result_existing = apply_import_rules(desired_device_name)
+                if rule_result_existing:
+                    # Update category if still default
+                    if device.category == 'backbone' and rule_result_existing.get("category") and rule_result_existing["category"] != device.category:
+                        device.category = rule_result_existing["category"]
+                        update_fields.append("category")
+                    # Assign monitoring_group if missing and rule has group
+                    if (not device.monitoring_group_id) and rule_result_existing.get("group_id"):
+                        device.monitoring_group_id = rule_result_existing["group_id"]
+                        update_fields.append("monitoring_group")
+                    logger.info(
+                        f"Applied import rule #{rule_result_existing.get('rule_id')} (existing device sync) to {desired_device_name}: "
+                        f"category={rule_result_existing.get('category')}, group_id={rule_result_existing.get('group_id')}"
+                    )
+            except Exception as e:  # pragma: no cover - defensive
+                logger.warning(f"Failed applying import rules to existing device {desired_device_name}: {e}")
         if device.site_id != getattr(site, "pk", None):
             device.site = site
             update_fields.append("site")
@@ -1036,17 +1481,35 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
         if update_fields:
             device.save(update_fields=update_fields)
     else:
+        # Apply import rules for auto-categorization
+        from inventory.services.import_rules import apply_import_rules
+        
+        rule_result = apply_import_rules(desired_device_name)
+        
+        device_defaults = {
+            "vendor": "",
+            "model": "",
+            "zabbix_hostid": hostid_str,
+            "primary_ip": primary_ip,
+            "uptime_item_key": uptime_key or "",
+            "cpu_usage_item_key": cpu_key or "",
+        }
+        
+        # Apply rule if matched
+        if rule_result:
+            device_defaults["category"] = rule_result["category"]
+            if rule_result["group_id"]:
+                device_defaults["monitoring_group_id"] = rule_result["group_id"]
+            logger.info(
+                f"Applied import rule #{rule_result['rule_id']} "
+                f"({rule_result['rule_description']}) to {desired_device_name}: "
+                f"category={rule_result['category']}"
+            )
+        
         device, device_created = Device.objects.get_or_create(
             site=site,
             name=desired_device_name,
-            defaults={
-                "vendor": "",
-                "model": "",
-                "zabbix_hostid": hostid_str,
-                "primary_ip": primary_ip,
-                "uptime_item_key": uptime_key or "",
-                "cpu_usage_item_key": cpu_key or "",
-            },
+            defaults=device_defaults,
         )
         if (
             not device_created
@@ -1539,7 +2002,8 @@ def list_sites() -> Dict[str, Any]:
         data.append(
             {
                 "id": site_like.id,
-                "name": site_like.name,
+                "display_name": site_like.display_name,
+                "name": site_like.name,  # Backward compat
                 "city": site_like.city,
                 "lat": float(site_like.latitude) if site_like.latitude else None,
                 "lng": float(site_like.longitude) if site_like.longitude else None,

@@ -4,16 +4,11 @@
     <!-- Header com Filtros e Ações -->
     <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
       <div class="flex items-center gap-4 flex-1">
-        <div class="w-64">
-          <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Origem da Importação</label>
-          <select 
-            v-model="selectedServerId" 
-            @change="fetchPreviewData" 
-            class="block w-full pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-          >
-            <option value="1">Zabbix Principal (10.0.0.50)</option>
-            <option value="2">Zabbix Secundário / Proxy</option>
-          </select>
+        <div class="flex items-center space-x-2 px-3 py-2 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded-md">
+          <i class="fas fa-server text-indigo-600 dark:text-indigo-400"></i>
+          <span class="text-sm font-medium text-indigo-900 dark:text-indigo-200">
+            {{ zabbixServerInfo }}
+          </span>
         </div>
 
         <div class="flex-1">
@@ -32,7 +27,19 @@
         </div>
       </div>
 
-      <div class="flex items-end">
+      <div class="flex items-end gap-2">
+        <button 
+          @click="showIgnored = !showIgnored"
+          class="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none"
+          :title="showIgnored ? 'Ocultar devices ignorados' : 'Mostrar devices ignorados'"
+        >
+          <i :class="showIgnored ? 'fas fa-eye-slash' : 'fas fa-eye'" class="mr-2"></i>
+          {{ showIgnored ? 'Ocultar Ignorados' : 'Mostrar Ignorados' }}
+          <span v-if="ignoredCount > 0" class="ml-2 px-2 py-0.5 text-xs bg-gray-200 dark:bg-gray-700 rounded-full">
+            {{ ignoredCount }}
+          </span>
+        </button>
+        
         <button 
           @click="importSelected" 
           :disabled="selectedCount === 0"
@@ -45,7 +52,7 @@
     </div>
 
     <!-- Lista de Grupos Hierárquica -->
-    <div class="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
+    <div class="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md max-h-[600px] overflow-y-auto">
       <ul class="divide-y divide-gray-200 dark:divide-gray-700">
         <li v-for="group in filteredGroups" :key="group.zabbix_group_id" class="group-container">
           
@@ -83,7 +90,14 @@
           <div v-show="expandedGroups.includes(group.zabbix_group_id)" class="border-t border-gray-200 dark:border-gray-700">
             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                <tr v-for="host in group.hosts" :key="host.zabbix_id" :class="{'bg-green-50 dark:bg-green-900/20': host.is_imported}">
+                <tr 
+                  v-for="host in group.hosts" 
+                  :key="host.zabbix_id" 
+                  :class="{
+                    'bg-green-50 dark:bg-green-900/20': host.is_imported && !ignoredDevices.has(host.zabbix_id),
+                    'bg-gray-100 dark:bg-gray-700/50 opacity-60': ignoredDevices.has(host.zabbix_id)
+                  }"
+                >
                   <td class="px-6 py-4 whitespace-nowrap w-10">
                     <input 
                       v-if="!host.is_imported"
@@ -98,11 +112,22 @@
                   <td class="px-6 py-4 whitespace-nowrap">
                     <div class="flex items-center">
                       <div class="ml-0">
-                        <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          {{ host.name }}
+                        <div class="flex items-center gap-2">
+                          <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {{ host.name }}
+                          </div>
+                          <!-- Badge de Drift (Desatualizado) -->
+                          <span 
+                            v-if="host.is_imported && host.has_drift"
+                            class="px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-400 cursor-help"
+                            :title="`Dados desatualizados: ${host.drift_fields?.join(', ')}`"
+                          >
+                            <i class="fas fa-exclamation-triangle mr-1"></i>
+                            Desatualizado
+                          </span>
                         </div>
                         <div class="text-sm text-gray-500 dark:text-gray-400">
-                          {{ host.ip }} 
+                          {{ host.ip || '(sem IP)' }}
                           <span v-if="host.mac" class="text-xs text-gray-400 dark:text-gray-500 ml-2">({{ host.mac }})</span>
                         </div>
                       </div>
@@ -111,28 +136,74 @@
 
                   <td class="px-6 py-4 whitespace-nowrap">
                     <span 
-                      class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
-                      :class="host.is_imported ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400' : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400'"
+                      v-if="ignoredDevices.has(host.zabbix_id)"
+                      class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
                     >
-                      {{ host.is_imported ? 'Importado' : 'Novo Detectado' }}
+                      <i class="fas fa-ban mr-1"></i>
+                      Ignorado
+                    </span>
+                    <span 
+                      v-else-if="host.is_imported"
+                      class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400"
+                    >
+                      Importado
+                    </span>
+                    <span 
+                      v-else
+                      class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400"
+                    >
+                      Novo Detectado
                     </span>
                   </td>
 
                   <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button 
-                      v-if="!host.is_imported"
-                      @click="$emit('edit-device', host, true)" 
-                      class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300"
-                    >
-                      Configurar e Importar
-                    </button>
-                    <button 
-                      v-else
-                      class="text-gray-400 dark:text-gray-600 cursor-not-allowed"
-                      disabled
-                    >
-                      Ver Detalhes
-                    </button>
+                    <!-- Device ignorado -->
+                    <div v-if="ignoredDevices.has(host.zabbix_id)" class="flex items-center justify-end gap-2">
+                      <button 
+                        @click="restoreDevice(host.zabbix_id)"
+                        class="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300"
+                        title="Restaurar e voltar à lista de sincronização"
+                      >
+                        <i class="fas fa-undo mr-1"></i>
+                        Restaurar
+                      </button>
+                    </div>
+                    
+                    <!-- Device não importado e não ignorado -->
+                    <div v-else-if="!host.is_imported" class="flex items-center justify-end gap-2">
+                      <button 
+                        @click="$emit('edit-device', host, true)" 
+                        class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300"
+                      >
+                        Configurar e Importar
+                      </button>
+                      <button 
+                        @click="ignoreDevice(host.zabbix_id)"
+                        class="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300"
+                        title="Ignorar este device"
+                      >
+                        <i class="fas fa-ban mr-1"></i>
+                        Ignorar
+                      </button>
+                    </div>
+                    <div v-else class="flex items-center justify-end gap-2">
+                      <button 
+                        @click="viewDeviceDetails(host)"
+                        class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 hover:underline"
+                      >
+                        Ver Detalhes
+                      </button>
+                      <!-- Botão Sincronizar (apenas se has_drift) -->
+                      <button 
+                        v-if="host.has_drift"
+                        @click="syncDeviceChanges(host)"
+                        class="text-orange-600 dark:text-orange-400 hover:text-orange-900 dark:hover:text-orange-300 hover:underline"
+                        title="Sincronizar com dados atuais do Zabbix"
+                      >
+                        <i class="fas fa-sync-alt mr-1"></i>
+                        Sincronizar
+                      </button>
+                    </div>
                   </td>
                 </tr>
               </tbody>
@@ -145,63 +216,83 @@
         <p class="text-gray-500 dark:text-gray-400">Nenhum grupo ou host encontrado com este filtro.</p>
       </div>
     </div>
+
+    <!-- Modal de Detalhes (Readonly) -->
+    <DeviceEditModal
+      v-if="showDetailsModal"
+      :device="selectedDeviceForDetails"
+      :read-only="true"
+      :available-groups="props.availableGroups"
+      :available-sites="props.availableSites"
+      @close="closeDetailsModal"
+      @edit="handleEditDevice"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { useApi } from '@/composables/useApi';
+import DeviceEditModal from './DeviceEditModal.vue';
 
-const props = defineProps(['data']); // Dados brutos passados pelo pai
-const emit = defineEmits(['edit-device', 'trigger-sync']);
+const api = useApi();
+
+const props = defineProps({
+  data: { type: Array, default: () => [] },
+  availableGroups: { type: Array, default: () => [] },
+  availableSites: { type: Array, default: () => [] }
+});
+const emit = defineEmits(['edit-device', 'trigger-sync', 'refresh-data']);
 
 // Estado Local
-const selectedServerId = ref('1');
 const searchQuery = ref('');
 const expandedGroups = ref([]); // IDs dos grupos abertos
 const selectedHosts = ref([]); // IDs dos hosts selecionados para importar
+const zabbixServerInfo = ref('Carregando...');
 
-// Mock Data (Isso viria do seu Backend Python futuramente)
-// Estrutura: Lista de Grupos, cada um contendo uma lista de Hosts
-const mockZabbixData = ref([
-  {
-    zabbix_group_id: 101,
-    name: 'Zabbix Servers',
-    hosts: [
-      { zabbix_id: '10084', name: 'Zabbix server', ip: '127.0.0.1', is_imported: true }
-    ]
-  },
-  {
-    zabbix_group_id: 102,
-    name: 'Linux Servers',
-    hosts: [
-      { zabbix_id: '10085', name: 'Web-App-01', ip: '192.168.1.10', is_imported: true },
-      { zabbix_id: '10086', name: 'DB-Master-01', ip: '192.168.1.15', is_imported: false }, // Novo
-      { zabbix_id: '10087', name: 'Cache-Redis-01', ip: '192.168.1.20', is_imported: false } // Novo
-    ]
-  },
-  {
-    zabbix_group_id: 103,
-    name: 'Network Devices',
-    hosts: [
-      { zabbix_id: '10090', name: 'Core-Switch-L3', ip: '10.0.0.1', mac: 'AA:BB:CC:DD:EE:FF', is_imported: false },
-      { zabbix_id: '10091', name: 'Border-Router', ip: '200.200.200.1', is_imported: true }
-    ]
+// Estado para ignorados (blacklist)
+const IGNORED_DEVICES_KEY = 'zabbix_ignored_devices';
+const ignoredDevices = ref(new Set(JSON.parse(localStorage.getItem(IGNORED_DEVICES_KEY) || '[]')));
+const showIgnored = ref(false);
+
+// Estado para modal de detalhes (readonly)
+const showDetailsModal = ref(false);
+const selectedDeviceForDetails = ref(null);
+
+// Fetch Zabbix server info
+const fetchServerInfo = async () => {
+  try {
+    const response = await api.get('/api/v1/inventory/zabbix/lookup/server-info/');
+    if (response.configured) {
+      zabbixServerInfo.value = response.server_name || 'Servidor Zabbix';
+    } else {
+      zabbixServerInfo.value = 'Zabbix não configurado';
+    }
+  } catch (error) {
+    console.error('Erro ao buscar info do servidor Zabbix:', error);
+    zabbixServerInfo.value = 'Servidor Zabbix';
   }
-]);
+};
 
 // Computed: Filtragem
 const filteredGroups = computed(() => {
   const query = searchQuery.value.toLowerCase();
+  const dataSource = props.data && props.data.length > 0 ? props.data : [];
   
-  return mockZabbixData.value.map(group => {
+  return dataSource.map(group => {
     // Se o nome do grupo bate, mostra tudo. Se não, filtra os hosts dentro.
     const groupMatch = group.name.toLowerCase().includes(query);
     
     // Filtra hosts
-    const filteredHosts = group.hosts.filter(h => 
+    let filteredHosts = group.hosts.filter(h => 
       h.name.toLowerCase().includes(query) || 
       h.ip.includes(query)
     );
+
+    // Remove ignorados se toggle estiver desativado
+    if (!showIgnored.value) {
+      filteredHosts = filteredHosts.filter(h => !ignoredDevices.value.has(h.zabbix_id));
+    }
 
     // Retorna o grupo se houver match no nome ou se tiver hosts filhos filtrados
     if (groupMatch || filteredHosts.length > 0) {
@@ -215,6 +306,7 @@ const filteredGroups = computed(() => {
 });
 
 const selectedCount = computed(() => selectedHosts.value.length);
+const ignoredCount = computed(() => ignoredDevices.value.size);
 
 // Métodos de UI
 const fetchPreviewData = () => {
@@ -259,10 +351,184 @@ const toggleSelectGroup = (group, isChecked) => {
   }
 };
 
+// Função para abrir modal de visualização (readonly)
+const viewDeviceDetails = async (host) => {
+  if (!host.is_imported) {
+    console.warn('Device not imported yet:', host);
+    return;
+  }
+
+  console.log('[ImportPreviewTab] Opening details for host:', host);
+
+  try {
+    let deviceData = null;
+
+    // Tenta buscar por zabbix_hostid primeiro (mais confiável)
+    if (host.zabbix_id) {
+      try {
+        console.log('[ImportPreviewTab] Fetching by zabbix_id:', host.zabbix_id);
+        deviceData = await api.get(
+          `/api/v1/devices/by-zabbix/${host.zabbix_id}/`
+        );
+        console.log('[ImportPreviewTab] Device found:', deviceData);
+      } catch (error) {
+        console.warn('[ImportPreviewTab] Not found by zabbix_id:', error);
+      }
+    }
+
+    // Fallback: busca por device_id se disponível
+    if (!deviceData && host.device_id) {
+      console.log('[ImportPreviewTab] Fetching by device_id:', host.device_id);
+      deviceData = await api.get(`/api/v1/devices/${host.device_id}/`);
+    }
+
+    // Se encontrou dados via API, abre modal readonly
+    if (deviceData) {
+      selectedDeviceForDetails.value = {
+        ...deviceData,
+        zabbix_id: host.zabbix_id || deviceData.zabbix_hostid,
+      };
+      
+      console.log('[ImportPreviewTab] Opening readonly modal with device data:', {
+        id: deviceData.id,
+        name: deviceData.name,
+        group_name: deviceData.group_name,
+        monitoring_group: deviceData.monitoring_group,
+        category: deviceData.category
+      });
+      showDetailsModal.value = true;
+      return;
+    }
+
+    // Fallback: usa dados locais
+    console.warn('[ImportPreviewTab] Using host data as fallback');
+    selectedDeviceForDetails.value = {
+      id: host.device_id || host.zabbix_id,
+      zabbix_hostid: host.zabbix_id,
+      name: host.name,
+      primary_ip: host.ip,
+      category: 'backbone',
+      site: null,
+      monitoring_group: null,
+      enable_screen_alert: true,
+      enable_whatsapp_alert: false,
+      enable_email_alert: false
+    };
+    
+    showDetailsModal.value = true;
+    
+  } catch (error) {
+    console.error('[ImportPreviewTab] Error fetching device:', error);
+    alert('Erro ao carregar dados do dispositivo. Tente novamente.');
+  }
+};
+
+// Função para fechar modal readonly
+const closeDetailsModal = () => {
+  showDetailsModal.value = false;
+  selectedDeviceForDetails.value = null;
+};
+
+// Função para sincronizar alterações do Zabbix
+const syncDeviceChanges = async (host) => {
+  if (!host.has_drift) {
+    return;
+  }
+
+  const changesText = host.drift_fields.join(', ');
+  const confirmMsg = `Deseja sincronizar as seguintes alterações do Zabbix?\n\n${changesText}\n\nIsso atualizará o dispositivo com os dados atuais do Zabbix.`;
+  
+  if (!confirm(confirmMsg)) {
+    return;
+  }
+
+  try {
+    console.log('[ImportPreviewTab] Syncing device changes:', host);
+
+    // Busca device atual do banco
+    let deviceData = null;
+    try {
+      deviceData = await api.get(`/api/v1/devices/by-zabbix/${host.zabbix_id}/`);
+    } catch (error) {
+      console.error('[ImportPreviewTab] Device not found:', error);
+      if (error.response?.status === 404) {
+        alert('Dispositivo não encontrado no sistema.\n\nEle pode ter sido excluído. Tente recarregar a página para atualizar a lista.');
+      } else {
+        alert('Erro ao buscar dispositivo: ' + (error.message || 'Erro desconhecido'));
+      }
+      return;
+    }
+
+    // Chama nova ação de sincronização completa (backend puxa Zabbix, aplica regras, grupos, site)
+    try {
+      const syncResp = await api.post(`/api/v1/devices/${deviceData.id}/sync/`);
+      console.log('[ImportPreviewTab] Sync response:', syncResp);
+    } catch (syncErr) {
+      console.error('[ImportPreviewTab] Sync action failed:', syncErr);
+      alert('Falha ao sincronizar com Zabbix: ' + (syncErr.response?.data?.error || syncErr.message));
+      return;
+    }
+
+    console.log('[ImportPreviewTab] Device synced successfully (action)');
+    alert('Dispositivo sincronizado com sucesso!');
+
+    // Solicita refresh dos dados
+    emit('refresh-data');
+
+  } catch (error) {
+    console.error('[ImportPreviewTab] Error syncing device:', error);
+    alert(`Erro ao sincronizar: ${error.message || 'Tente novamente.'}`);
+  }
+};
+
+// Função para ignorar device (blacklist)
+const ignoreDevice = (zabbixId) => {
+  if (!confirm('Deseja ignorar este dispositivo? Ele não aparecerá mais na lista de sincronização.')) {
+    return;
+  }
+
+  ignoredDevices.value.add(zabbixId);
+  
+  // Salva no localStorage
+  localStorage.setItem(
+    IGNORED_DEVICES_KEY,
+    JSON.stringify(Array.from(ignoredDevices.value))
+  );
+
+  console.log('[ImportPreviewTab] Device ignored:', zabbixId);
+};
+
+// Função para restaurar device ignorado
+const restoreDevice = (zabbixId) => {
+  ignoredDevices.value.delete(zabbixId);
+  
+  // Atualiza localStorage
+  localStorage.setItem(
+    IGNORED_DEVICES_KEY,
+    JSON.stringify(Array.from(ignoredDevices.value))
+  );
+
+  console.log('[ImportPreviewTab] Device restored:', zabbixId);
+};
+
+// Função chamada pelo botão "Editar Configurações" dentro do modal readonly
+// Esta função fecha o modal readonly e emite evento para o pai abrir modal de edição
+const handleEditDevice = (device) => {
+  console.log('[ImportPreviewTab] Edit button clicked, emitting to parent:', device);
+  
+  // Fecha o modal readonly
+  showDetailsModal.value = false;
+  
+  // Emite evento para o DeviceImportManager abrir o modal de edição
+  emit('edit-device', device, false);
+};
+
 const importSelected = () => {
   const hostsToImport = [];
+  const dataSource = props.data && props.data.length > 0 ? props.data : [];
+  
   // Encontra os objetos completos baseados nos IDs selecionados
-  mockZabbixData.value.forEach(group => {
+  dataSource.forEach(group => {
     group.hosts.forEach(host => {
       if (selectedHosts.value.includes(host.zabbix_id)) {
         hostsToImport.push({
@@ -279,8 +545,12 @@ const importSelected = () => {
 };
 
 onMounted(() => {
+  // Buscar informações do servidor Zabbix
+  fetchServerInfo();
+  
   // Por padrão, expandir o primeiro grupo que tenha itens novos
-  const firstGroupWithNew = mockZabbixData.value.find(g => g.hosts.some(h => !h.is_imported));
+  const dataSource = props.data && props.data.length > 0 ? props.data : [];
+  const firstGroupWithNew = dataSource.find(g => g.hosts && g.hosts.some(h => !h.is_imported));
   if (firstGroupWithNew) {
     expandedGroups.value.push(firstGroupWithNew.zabbix_group_id);
   }
@@ -296,5 +566,42 @@ onMounted(() => {
 /* Rotação do chevron */
 .rotate-90 {
   transform: rotate(90deg);
+}
+
+/* Scrollbar invisível/minimalista */
+.max-h-\[600px\]::-webkit-scrollbar {
+  width: 6px;
+}
+
+.max-h-\[600px\]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.max-h-\[600px\]::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.3);
+  border-radius: 3px;
+}
+
+.max-h-\[600px\]::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.5);
+}
+
+/* Dark mode scrollbar */
+.dark .max-h-\[600px\]::-webkit-scrollbar-thumb {
+  background: rgba(75, 85, 99, 0.3);
+}
+
+.dark .max-h-\[600px\]::-webkit-scrollbar-thumb:hover {
+  background: rgba(75, 85, 99, 0.5);
+}
+
+/* Firefox scrollbar */
+.max-h-\[600px\] {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.3) transparent;
+}
+
+.dark .max-h-\[600px\] {
+  scrollbar-color: rgba(75, 85, 99, 0.3) transparent;
 }
 </style>

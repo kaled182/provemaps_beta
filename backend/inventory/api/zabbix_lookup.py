@@ -9,6 +9,7 @@ from django.http import HttpRequest, JsonResponse
 from django.views.decorators.http import require_GET
 
 from integrations.zabbix.zabbix_service import zabbix_request
+from setup_app.services.runtime_settings import get_runtime_config
 
 
 _AVAILABILITY_LABELS: Dict[str, Dict[str, str]] = {
@@ -153,6 +154,175 @@ def _pick_primary_interface(
         "dns": primary.get("dns"),
         "port": primary.get("port"),
     }
+
+
+@require_GET
+@login_required
+def lookup_zabbix_server_info(request: HttpRequest) -> JsonResponse:
+    """Returns information about the configured Zabbix server."""
+    config = get_runtime_config()
+    
+    # Extract server URL and parse
+    zabbix_url = config.zabbix_api_url or ""
+    
+    # Parse server name/IP from URL
+    server_info = "Servidor Zabbix Configurado"
+    if zabbix_url:
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(zabbix_url)
+            server_info = parsed.netloc or parsed.path.split('/')[0]
+        except Exception:
+            server_info = "Zabbix Server"
+    
+    return JsonResponse({
+        "server_name": server_info,
+        "api_url": zabbix_url,
+        "configured": bool(zabbix_url and config.zabbix_api_user)
+    })
+
+
+@require_GET
+@login_required
+def lookup_hosts_grouped(request: HttpRequest) -> JsonResponse:
+    """Returns Zabbix hosts grouped by hostgroup for import preview."""
+    
+    params: Dict[str, Any] = {
+        "output": [
+            "hostid",
+            "host",
+            "name",
+            "status",
+            "available",
+            "error",
+            "snmp_available",
+            "snmp_error",
+            "ipmi_available",
+            "ipmi_error",
+            "jmx_available",
+            "jmx_error",
+        ],
+        "selectInterfaces": [
+            "interfaceid",
+            "ip",
+            "dns",
+            "port",
+            "type",
+            "main",
+            "useip",
+            "available",
+            "error",
+        ],
+        "selectGroups": ["groupid", "name"],
+    }
+
+    try:
+        raw_hosts = cast(
+            List[Dict[str, Any]],
+            zabbix_request("host.get", params) or [],
+        )
+    except Exception as exc:
+        return JsonResponse({"error": f"Zabbix API error: {exc}"}, status=502)
+
+    # Fetch all imported devices from database for drift detection
+    from inventory.models import Device
+    imported_devices = {
+        device.zabbix_hostid: device
+        for device in Device.objects.filter(
+            zabbix_hostid__isnull=False
+        ).select_related('monitoring_group')
+    }
+
+    # Group hosts by hostgroup
+    groups_dict: Dict[str, Dict[str, Any]] = {}
+    
+    for host in raw_hosts:
+        interfaces = _normalise_interfaces(host.get("interfaces", []))
+        availability = _build_availability(host, interfaces)
+        primary_interface = _pick_primary_interface(interfaces)
+        
+        host_status = (
+            "online" if availability.get("state") == "online" else "offline"
+        )
+        
+        hostid = host.get("hostid")
+        zabbix_name = host.get("name") or host.get("host")
+        zabbix_ip = primary_interface.get("ip") if primary_interface else None
+        
+        # Drift detection: compare Zabbix data with saved device
+        has_drift = False
+        drift_fields = []
+        
+        if hostid in imported_devices:
+            device = imported_devices[hostid]
+            
+            # Compare name
+            if device.name != zabbix_name:
+                has_drift = True
+                drift_msg = f"nome ('{device.name}' → '{zabbix_name}')"
+                drift_fields.append(drift_msg)
+            
+            # Compare IP
+            if (device.primary_ip and zabbix_ip and
+                    device.primary_ip != zabbix_ip):
+                has_drift = True
+                drift_msg = f"IP ('{device.primary_ip}' → '{zabbix_ip}')"
+                drift_fields.append(drift_msg)
+            
+            # Compare groups (simplified: just check if groups changed)
+            zabbix_group_ids = {
+                g.get("groupid") for g in host.get("groups", [])
+            }
+            device_group_ids = {
+                str(g.zabbix_groupid)
+                for g in device.groups.all()
+                if g.zabbix_groupid
+            }
+            
+            if zabbix_group_ids != device_group_ids:
+                has_drift = True
+                drift_fields.append("grupos do Zabbix")
+        
+        host_data = {
+            "zabbix_id": hostid,
+            "name": zabbix_name,
+            "ip": zabbix_ip,
+            "status": host_status,
+            "is_imported": False,  # Frontend will mark this
+            "has_drift": has_drift,
+            "drift_fields": drift_fields,
+        }
+        
+        # Add to each group this host belongs to
+        host_groups = host.get("groups", [])
+        
+        if not host_groups:
+            # Add to "Sem Grupo" if no groups
+            if "0" not in groups_dict:
+                groups_dict["0"] = {
+                    "zabbix_group_id": "0",
+                    "name": "Sem Grupo Definido",
+                    "hosts": []
+                }
+            groups_dict["0"]["hosts"].append(host_data)
+        else:
+            for group in host_groups:
+                group_id = group.get("groupid")
+                group_name = group.get("name")
+                
+                if group_id not in groups_dict:
+                    groups_dict[group_id] = {
+                        "zabbix_group_id": group_id,
+                        "name": group_name,
+                        "hosts": []
+                    }
+                
+                groups_dict[group_id]["hosts"].append(host_data)
+    
+    # Convert to list and sort by group name
+    groups_list = sorted(groups_dict.values(), key=lambda g: g["name"])
+    
+    return JsonResponse({"data": groups_list, "count": len(groups_list)})
 
 
 @require_GET
@@ -384,7 +554,9 @@ def lookup_host_groups(request: HttpRequest) -> JsonResponse:
 
 __all__ = [
     "lookup_hosts",
+    "lookup_hosts_grouped",
     "lookup_host_status",
     "lookup_host_interfaces",
     "lookup_host_groups",
+    "lookup_zabbix_server_info",
 ]

@@ -1,0 +1,104 @@
+﻿
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <title>Login | Monitoring Portal</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            portal: {
+              light: '#E6F0FF',
+              DEFAULT: '#004AAD',
+              dark: '#002E6D',
+            },
+          },
+        },
+      },
+    };
+  </script>
+</head>
+<body class="h-full bg-portal-dark flex items-center justify-center p-6">
+
+  <div class="w-full max-w-sm animate-fade-in">
+    <div class="bg-white/10 backdrop-blur-md rounded-2xl shadow-2xl border border-white/20 p-8">
+      <div class="flex flex-col items-center mb-6">
+        
+          
+            <img src="/static/img/logo.png" alt="Logo" class="h-16 w-auto mb-3">
+          
+        
+        <h1 class="text-xl font-semibold text-white text-center tracking-wide">
+          Monitoring Portal
+        </h1>
+      </div>
+
+      
+
+      
+        
+          <p class="mb-4 text-sm text-gray-200 text-center">
+            Sign in to continue.
+          </p>
+        
+      
+
+      <form method="post" novalidate class="space-y-5">
+        <input type="hidden" name="csrfmiddlewaretoken" value="8nuQMpJ4ScqAYq0i7OcL4hpxeh6OzRMZGfh44MwTEsmYPBY7TRpfj7msGYLujguL">
+
+        <div>
+          <label for="id_username" class="block text-sm font-medium text-gray-100">Username</label>
+          <input type="text" name="username" autofocus required id="id_username" autocomplete="username"
+                 class="mt-1 w-full rounded-lg border border-white/20 bg-white/10 text-white placeholder-gray-300 focus:ring-2 focus:ring-portal-light focus:border-portal-light transition duration-150 ease-in-out">
+        </div>
+
+        <div>
+          <label for="id_password" class="block text-sm font-medium text-gray-100">Password</label>
+          <input type="password" name="password" required id="id_password" autocomplete="current-password"
+                 class="mt-1 w-full rounded-lg border border-white/20 bg-white/10 text-white placeholder-gray-300 focus:ring-2 focus:ring-portal-light focus:border-portal-light transition duration-150 ease-in-out">
+        </div>
+
+        <div class="flex items-center justify-between">
+          <label class="flex items-center gap-2 text-xs text-gray-200">
+            <input id="remember" name="remember" type="checkbox"
+                   class="h-4 w-4 rounded border-gray-400 bg-white/10 text-portal-light focus:ring-portal-light">
+            Remember me
+          </label>
+          <a href="/accounts/password_reset/"
+             class="text-xs text-portal-light hover:text-white hover:underline transition">
+             Forgot password
+          </a>
+        </div>
+
+        <button type="submit"
+                class="w-full rounded-lg bg-portal-light py-2.5 text-portal-dark font-semibold hover:bg-white hover:text-portal-dark focus:outline-none focus:ring-4 focus:ring-portal-light/40 transition-all duration-200 shadow-lg">
+          Sign in
+        </button>
+
+        <input type="hidden" name="next" value="/api/v1/inventory/devices/grouped/">
+      </form>
+
+      <p class="mt-6 text-center text-xs text-gray-300">
+        &copy; 2025 Fiber Monitoring
+      </p>
+    </div>
+  </div>
+
+  <style>
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+      animation: fade-in 0.6s ease-out;
+    }
+  </style>
+
+</body>
+</html>
+
