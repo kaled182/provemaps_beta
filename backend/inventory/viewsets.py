@@ -1,6 +1,6 @@
 """DRF ViewSets for Inventory API."""
 
-from django.db.models import Count
+from django.db.models import Count, Q
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
@@ -91,6 +91,26 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                 },
                 status=404,
             )
+
+    @action(detail=False, methods=["get"], url_path="available-for-group")
+    def available_for_group(self, request):
+        """
+        Retorna devices sem monitoring_group OU pertencentes ao grupo informado.
+        Útil para montar o picker de grupos sem baixar todos os devices.
+        """
+        group_id = request.query_params.get("group_id")
+        filters = Q(monitoring_group__isnull=True)
+        if group_id and group_id != "null":
+            filters |= Q(monitoring_group_id=group_id)
+
+        devices_qs = (
+            self.get_queryset()
+            .filter(filters)
+            .select_related("site")
+            .order_by("site__display_name", "name")
+        )
+        serializer = self.get_serializer(devices_qs, many=True)
+        return Response(serializer.data)
 
     @action(detail=True, methods=["post"], url_path="sync")
     def sync_from_zabbix(self, request, pk=None):
