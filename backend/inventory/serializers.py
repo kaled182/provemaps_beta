@@ -29,6 +29,11 @@ class SiteSerializer(serializers.ModelSerializer[Site]):
     address_line3 = serializers.CharField(
         allow_blank=True, required=False
     )
+    type = serializers.CharField(
+        source="address_line2",
+        allow_blank=True,
+        required=False,
+    )
     zip_code = serializers.CharField(
         source="postal_code", allow_blank=True, required=False
     )
@@ -55,6 +60,7 @@ class SiteSerializer(serializers.ModelSerializer[Site]):
             "address",
             "address_line2",
             "address_line3",
+            "type",
             "city",
             "state",
             "zip_code",
@@ -80,6 +86,8 @@ class DeviceSerializer(serializers.ModelSerializer[Device]):
     site_name = serializers.CharField(
         source="site.display_name", read_only=True
     )
+    # Alias para o frontend: mapeia category -> role (read-only)
+    role = serializers.CharField(source="category", read_only=True)
     # Traz o nome do grupo para exibir na lista
     group_name = serializers.CharField(
         source="monitoring_group.name", read_only=True, allow_null=True
@@ -102,6 +110,7 @@ class DeviceSerializer(serializers.ModelSerializer[Device]):
             "cpu_usage_item_key",
             # Device Import System Fields
             "category",
+            "role",
             "monitoring_group",  # ID para gravação
             "group_name",  # Nome para leitura
             "enable_screen_alert",
@@ -142,6 +151,16 @@ class PortSerializer(serializers.ModelSerializer[Port]):
             "site_name",
             "name",
             "zabbix_item_key",
+            "zabbix_item_id_traffic_in",
+            "zabbix_item_id_traffic_out",
+            "zabbix_interfaceid",
+            "zabbix_itemid",
+            "rx_power_item_key",
+            "tx_power_item_key",
+            "notes",
+            "last_rx_power",
+            "last_tx_power",
+            "last_optical_check",
         ]
         read_only_fields = ["id"]
 
