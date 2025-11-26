@@ -71,7 +71,7 @@ export async function loadGoogleMaps() {
   console.log('[GoogleMapsLoader] Starting new load...');
 
   // Inicia novo carregamento
-  loadingPromise = new Promise(async (resolve, reject) => {
+  loadingPromise = new Promise((resolve, reject) => {
     // Verifica se já existe script
     const existingScript = document.querySelector('script[data-google-maps]');
     if (existingScript) {
@@ -100,44 +100,51 @@ export async function loadGoogleMaps() {
     }
 
     // Obtém API key com retry
-    console.log('[GoogleMapsLoader] Fetching API key...');
-    const apiKey = await getGoogleMapsApiKey();
-    console.log('[GoogleMapsLoader] API key found:', !!apiKey);
-    
-    if (!apiKey) {
-      loadingPromise = null;
-      reject(new Error('Google Maps API key not found'));
-      return;
-    }
+    const loadScriptWithKey = async () => {
+      console.log('[GoogleMapsLoader] Fetching API key...');
+      const apiKey = await getGoogleMapsApiKey();
+      console.log('[GoogleMapsLoader] API key found:', !!apiKey);
 
-    // Cria novo script
-    console.log('[GoogleMapsLoader] Creating new script tag');
-    const script = document.createElement('script');
-    const params = new URLSearchParams({
-      key: apiKey,
-      libraries: 'geometry,places,marker'
-    });
-    
-    script.src = `https://maps.googleapis.com/maps/api/js?${params.toString()}`;
-    script.async = true;
-    script.defer = true;
-    script.dataset.googleMaps = 'true';
-    
-    script.addEventListener('load', () => {
-      isLoaded = true;
-      console.log('[GoogleMapsLoader] ✅ New script loaded successfully');
-      console.log('[GoogleMapsLoader] window.google.maps available:', !!window.google?.maps);
-      resolve();
-    }, { once: true });
-    
-    script.addEventListener('error', () => {
-      console.error('[GoogleMapsLoader] ❌ Failed to load script');
+      if (!apiKey) {
+        loadingPromise = null;
+        throw new Error('Google Maps API key not found');
+      }
+
+      // Cria novo script
+      console.log('[GoogleMapsLoader] Creating new script tag');
+      const script = document.createElement('script');
+      const params = new URLSearchParams({
+        key: apiKey,
+        libraries: 'geometry,places,marker'
+      });
+
+      script.src = `https://maps.googleapis.com/maps/api/js?${params.toString()}`;
+      script.async = true;
+      script.defer = true;
+      script.dataset.googleMaps = 'true';
+
+      script.addEventListener('load', () => {
+        isLoaded = true;
+        console.log('[GoogleMapsLoader] ✅ New script loaded successfully');
+        console.log('[GoogleMapsLoader] window.google.maps available:', !!window.google?.maps);
+        resolve();
+      }, { once: true });
+
+      script.addEventListener('error', () => {
+        console.error('[GoogleMapsLoader] ❌ Failed to load script');
+        loadingPromise = null;
+        reject(new Error('Failed to load Google Maps API'));
+      }, { once: true });
+
+      console.log('[GoogleMapsLoader] Appending script to head');
+      document.head.appendChild(script);
+    };
+
+    loadScriptWithKey().catch((error) => {
+      console.error('[GoogleMapsLoader] Error loading Google Maps', error);
       loadingPromise = null;
-      reject(new Error('Failed to load Google Maps API'));
-    }, { once: true });
-    
-    console.log('[GoogleMapsLoader] Appending script to head');
-    document.head.appendChild(script);
+      reject(error);
+    });
   });
 
   return loadingPromise;

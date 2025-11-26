@@ -9,17 +9,22 @@
     "preview": "vite preview",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "lint": "eslint \"src/**/*.{js,vue}\""
   },
   "devDependencies": {
     "@babel/core": "^7.28.5",
+    "@babel/eslint-parser": "^7.26.5",
     "@babel/preset-env": "^7.28.5",
     "@playwright/test": "^1.49.0",
     "@testing-library/vue": "^7.0.0",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vue/test-utils": "^2.4.0",
+    "eslint": "^8.57.1",
+    "eslint-plugin-vue": "^9.28.0",
     "pyright": "^1.1.407",
-    "vitest": "^1.2.0"
+    "vitest": "^1.2.0",
+    "vue-eslint-parser": "^9.4.3"
   },
   "jest": {
     "testEnvironment": "jsdom",

@@ -121,7 +121,9 @@ export function useApi() {
       throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
     }
 
-    return response.json();
+    // Algumas deleções retornam 204 (sem corpo). Evitamos falha de JSON vazio.
+    const text = await response.text();
+    return text ? JSON.parse(text) : null;
   }
 
   /**

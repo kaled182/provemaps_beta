@@ -69,6 +69,24 @@ const routes = [
     component: () => import('@/components/DeviceImport/DeviceImportManager.vue'),
   },
   {
+    path: '/network/inventory',
+    name: 'inventory',
+    component: () => import('@/components/Inventory/InventoryView.vue'),
+    meta: {
+      requiresAuth: true,
+      title: 'Inventário de Rede',
+    },
+  },
+  {
+    path: '/network/inventory/:id',
+    name: 'inventory-detail',
+    component: () => import('@/components/Inventory/InventoryDetailView.vue'),
+    meta: {
+      requiresAuth: true,
+      title: 'Detalhe do Site',
+    },
+  },
+  {
     path: '/setup/config',
     name: 'setup-config',
     component: () => import('@/views/ConfigurationPage.vue'),

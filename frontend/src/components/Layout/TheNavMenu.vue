@@ -478,6 +478,11 @@ const menuItems = [
         path: '/Network/NetworkDesign/',
         icon: PhGitBranch,
       },
+      {
+        label: 'Network Inventory',
+        path: '/network/inventory',
+        icon: PhListBullets,
+      },
     ],
   },
 ];
