@@ -28,20 +28,31 @@
             </button>
           </div>
           <div class="flex gap-2">
-            <button
-              @click="handleExport"
-              class="px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors flex items-center gap-2 shadow-sm text-sm"
-            >
-              <i class="fas fa-download"></i>
-              <span class="hidden sm:inline">Exportar</span>
-            </button>
-            <button
-              @click="triggerNewSite"
-              class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md transition-colors flex items-center gap-2 text-sm"
-            >
-              <i class="fas fa-plus"></i>
-              <span>Novo Site</span>
-            </button>
+            <template v-if="activeTab === 'sites'">
+              <button
+                @click="handleExport"
+                class="px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors flex items-center gap-2 shadow-sm text-sm"
+              >
+                <i class="fas fa-download"></i>
+                <span class="hidden sm:inline">Exportar</span>
+              </button>
+              <button
+                @click="triggerNewSite"
+                class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md transition-colors flex items-center gap-2 text-sm"
+              >
+                <i class="fas fa-plus"></i>
+                <span>Novo Site</span>
+              </button>
+            </template>
+            <template v-else-if="activeTab === 'device-groups'">
+              <button
+                @click="triggerNewGroup"
+                class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-md transition-colors flex items-center gap-2 text-sm"
+              >
+                <i class="fas fa-plus"></i>
+                <span>Novo Grupo</span>
+              </button>
+            </template>
           </div>
         </div>
       </div>
@@ -91,6 +102,10 @@ const activeComponent = computed(() => {
 });
 
 const triggerNewSite = () => {
+  managerRef.value?.openCreateModal();
+};
+
+const triggerNewGroup = () => {
   managerRef.value?.openCreateModal();
 };
 

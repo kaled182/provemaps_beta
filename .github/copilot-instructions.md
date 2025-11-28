@@ -1,79 +1,467 @@
-## Copilot Instructions — MapsProveFiber (Condensed v2.0.0)
+# AI Agent Instructions — MapsProveFiber v2.0.0
 
-Use CURRENT patterns only. For deep details see `doc/architecture/{MODULES,DATA_FLOW}.md`.
+**Fiber optic network infrastructure management platform** — Django 5.x + Vue 3 SPA + Zabbix integration with real-time WebSocket updates.
 
-1. Environment
-- Docker-only services (PostgreSQL+PostGIS, Redis, Celery, web). Never start DB/Redis directly on Windows.
+> 💡 **For detailed architecture**: `doc/architecture/{MODULES,DATA_FLOW}.md` | **Process docs**: `doc/process/AGENTS.md`
+
+---
+
+## 🏗️ Architecture Overview
+
+### Django Apps (Modular)
+- **`inventory/`** — Single source of truth (Site, Device, Port, FiberCable, Route models); domain logic in `usecases/` and `services/`
+- **`monitoring/`** — Combines inventory + Zabbix status; business logic for health checks and device monitoring
+- **`integrations/zabbix/`** — Resilient Zabbix API client with circuit breaker, retry logic, Prometheus metrics
+- **`maps_view/`** — Real-time dashboard, WebSocket consumers, SWR cache pattern
+- **`core/`** — Django spine (settings, URLs, Celery, health endpoints, middleware)
+- **`setup_app/`** — Encrypted runtime config (Fernet), credentials management, docs viewer
+- **`service_accounts/`** — Token rotation & webhooks (future)
+- **`dwdm/`, `gpon/`** — Placeholder apps for future DWDM/GPON features
+
+**Retired Apps**: ~~`routes_builder/`~~ (archived Nov 2025, use `inventory/routes/`), ~~`zabbix_api/`~~ (removed v2.0, use `integrations/zabbix/`)
+
+### Tech Stack
+- **Backend**: Django 5.x, PostgreSQL+PostGIS, Redis (optional), Celery workers
+- **Frontend**: Vue 3 SPA (Vite), Pinia stores, Vue Router, Google Maps API
+- **Real-time**: Django Channels (WebSocket), Celery Beat (periodic tasks)
+- **Monitoring**: Prometheus metrics (`/metrics/`), Zabbix API integration, Sentry APM
+
+---
+
+## 🚀 Development Workflow
+
+### Environment Setup (Docker Required)
 ```powershell
-cd docker; docker compose up -d
+# ALWAYS use Docker for services (PostgreSQL+PostGIS, Redis, Celery)
+cd docker
+docker compose up -d                # Start all services
 docker compose exec web python manage.py migrate
-docker compose exec web pytest
-docker compose build --no-cache web
-docker compose down
+docker compose exec web pytest      # Run tests in Docker environment
+docker compose logs -f web          # Tail logs
+docker compose build --no-cache web # Rebuild after Python/migrations changes
+docker compose down                 # Stop all services
 ```
-- Host DB: `localhost:5433`; in containers: `postgres:5432`.
 
-2. Apps Snapshot
-`core` spine; `inventory` SSOT (Sites, Devices, Ports, Fibers, Routes); `monitoring` Zabbix+inventory usecases; `integrations/zabbix` circuit-breaker client; `maps_view` dashboard + WS publishers; `setup_app` runtime encrypted config; `service_accounts` token rotation. Retired: `routes_builder/`. Placeholders: `dwdm/`, `gpon/`.
+**Database Access**: Host → `localhost:5433`; Container → `postgres:5432`
 
-3. Core Patterns
-- Place business logic in `services.py` / `usecases.py` (not views). Example: `inventory/routes/services.py` for route build & cache invalidation.
-- Zabbix calls only via `integrations/zabbix/zabbix_service.zabbix_request()`.
-- Caching: `SWRCache` + `safe_cache_get/set`; invalidate via `inventory.cache.fibers.invalidate_fiber_cache()` / `inventory.routes.services.invalidate_route_cache(id)`.
-- Spatial: LineString (SRID 4326); helpers in `inventory/spatial.py`.
-- Preserve DTO field order (`RouteBuildResult` etc.) — tests assert exact ordering.
+### Quick Commands (Makefile)
+```bash
+make up          # Start Docker stack
+make down        # Stop Docker stack
+make migrate     # Apply migrations
+make test        # Run pytest (fast, may use SQLite)
+make fmt         # Auto-format (black, ruff --fix, isort)
+make lint        # Check formatting/style
+make shell       # Django shell
+```
 
-4. Testing & Quality
-`make test` (fast, may use SQLite; avoid spatial ops). Full PostGIS tests inside Docker. Celery eager mode (`CELERY_TASK_ALWAYS_EAGER=True`). Format/lint: `make fmt` / `make lint` (Ruff, Black, isort in `backend/pyproject.toml`).
+### Frontend Development
+```bash
+cd frontend
+npm install
+npm run dev      # Vite dev server (HMR)
+npm run build    # Build to backend/staticfiles/vue-spa/
+npm run test:unit # Vitest unit tests
+```
 
-5. Frontend & Rollout
-Vue 3 SPA (`frontend/` → build to `backend/staticfiles/vue-spa/`). Dashboard selection: `maps_view/views.py::dashboard_view` using `USE_VUE_DASHBOARD` + rollout percentage in `database/runtime.env`.
+---
 
-6. Secrets & Config
-Encrypted runtime settings via `setup_app.services.runtime_settings.get_runtime_config()`. After DB changes call `reload_config()`. No hardcoded secrets.
+## 🧱 Core Patterns & Conventions
 
-7. Service Accounts
-Rotation logic + webhooks in `service_accounts/` (`tasks.py`). Respect rotation intervals & notify-before settings; add new tasks and route in `core/celery.py`.
+### 1. Service Layer Architecture
+**CRITICAL**: Business logic lives in `services.py` / `usecases.py`, NOT in views/viewsets.
 
-8. Device Import Workflow (Domain)
-- Vue components under `frontend/src/components/DeviceImport/`; batch import posts to `/api/v1/inventory/devices/import-batch/`.
-- Category mapping: `backbone`, `gpon` (GPON/FTTx), `dwdm` chosen in modal; internal Zabbix group matching via keyword map (`DeviceImportManager.vue` `matchGroup()`).
-- Alert channels toggles: screen (`dashboard map`) and WhatsApp Ops (`formState.alerts.whatsapp`). CSV export includes `enable_whatsapp_alert`.
-- Validate devices before batch (`validateDevices()`); surface errors via notification helpers.
-- **Import Rules**: Auto-association via `ImportRule` model (`inventory/models.py`) with regex patterns; CRUD through `/api/v1/import-rules/` + `ImportRulesModal.vue`; applied in priority order (lowest first); supports reordering, activation toggle, pattern testing. Applied during: (1) new device import, (2) existing device sync if still default category/no group (`add_device_from_zabbix` in `usecases/devices.py`), (3) sync action `POST /api/v1/devices/<id>/sync/`.
-- **Device Groups**: Full list via `/api/v1/device-groups/` (NOT `/api/v1/inventory/device-groups/`). Devices carregam `monitoring_group` e `role` (alias de `category`) via serializer. Picker de grupos no inventário usa endpoint dedicado `/api/v1/devices/available-for-group/?group_id=<id>` para trazer apenas devices livres ou do próprio grupo (regra de unicidade). Sync from Zabbix via `sync_device_groups_for_device()` auto-creates missing groups e preenche `monitoring_group` se vazio.
-- **Sync Endpoint**: `POST /api/v1/devices/<id>/sync/` (action in `DeviceViewSet`) re-fetches Zabbix data, re-applies rules if needed, syncs groups, updates site/name/IP. Frontend uses this via `api.post()` with CSRF token in both `ImportPreviewTab.vue` ("Sincronizar" button) and `DeviceEditModal.vue` ("Sincronizar Zabbix" button in readonly mode). Check logs for `Applied import rule #<id> (existing device sync)` confirmation.
-- **Data Consistency (Edit Modal)**: `DeviceImportManager.openEditModal()` always fetches fresh device data from server before opening edit modal (async GET `/api/v1/devices/<id>/`), ensuring modal shows current DB state regardless of cached array state.
-- **Data Consistency (Readonly Modal)**: `ImportPreviewTab.viewDeviceDetails()` fetches fresh data via `/api/v1/devices/by-zabbix/<zabbix_id>/` (primary) or `/api/v1/devices/<id>/` (fallback) before opening readonly modal. Modal receives complete device object including `group_name`, `monitoring_group`, `category`, `alerts`. Uses `DeviceEditModal` with `readOnly=true` prop.
-- **Readonly Modal Features**: Shows "Detalhes do Dispositivo" title; displays current device data (name, IP, group, category, alerts); action buttons: "Abrir Dashboard", "Editar Configurações", "Sincronizar Zabbix" (calls sync endpoint with CSRF), "Ver Interfaces". Sync button visibility controlled by `showSyncButton` computed (requires valid numeric device ID).
-- **API Endpoints**: All device operations use `/api/v1/devices/*` (NOT `/api/v1/inventory/devices/*`). Correct endpoints: GET `/api/v1/devices/<id>/`, GET `/api/v1/devices/by-zabbix/<zabbix_id>/`, POST `/api/v1/devices/<id>/sync/`. Import operations still use `/api/v1/inventory/devices/import-batch/`.
-- **CSRF Protection**: All POST/PUT/PATCH/DELETE requests must use `useApi` composable (`api.post()`, `api.put()`, etc.) which automatically includes `X-CSRFToken` header via `getAuthHeaders()`. Direct `fetch()` calls will fail with 403 Forbidden. CSRF token sourced from `window.CSRF_TOKEN` or `csrftoken` cookie.
+```python
+# ✅ CORRECT - View delegates to service layer
+from inventory.usecases import devices as device_uc
 
-9. Common Do / Don't
-DO rebuild web image after Python/migrations; DO use publisher helpers (`broadcast_dashboard_status`, `broadcast_cable_status_update`). DON'T bypass service layer, skip cache invalidation, or reorder DTO fields. DON'T use SQLite for spatial logic in production.
+def device_list_view(request):
+    devices = device_uc.list_devices_with_status()
+    return render(request, "devices.html", {"devices": devices})
 
-10. Extending
-- New endpoint: service/usecase → serializer/view/viewset → app `urls` → include in `core/urls.py`.
-- New Celery task: define in `<app>/tasks.py`, route in `core/celery.py`, assign proper queue (`default`, `zabbix`, `maps`).
-- New cache: use `safe_cache_*`, define clear key namespace + invalidation.
+# ❌ WRONG - Business logic in view
+def device_list_view(request):
+    devices = Device.objects.select_related("site").all()
+    # ... complex filtering, status enrichment, etc.
+```
 
-11. Quick Commands
-`make up` | `make down` | `make migrate` | `make test` | `make fmt` | `celery -A core worker -Q default,zabbix,maps -l info` | `npm run build`
+**Examples**: 
+- `inventory/usecases/devices.py` — Device operations, Zabbix sync
+- `inventory/usecases/fibers.py` — Fiber cable CRUD, status updates
+- `inventory/routes/services.py` — Route building, cache invalidation
 
-12. Validating Import Rules
-**Check if rules are working:**
+### 2. Zabbix Integration (Circuit Breaker)
+**ALL Zabbix calls MUST go through** `integrations/zabbix/zabbix_service.zabbix_request()`:
+
+```python
+# ✅ CORRECT
+from integrations.zabbix import zabbix_service
+hosts = zabbix_service.zabbix_request("host.get", {"output": ["hostid", "name"]})
+
+# ❌ WRONG - Direct HTTP to Zabbix (bypasses circuit breaker, metrics, retry)
+import requests
+response = requests.post(ZABBIX_URL, json={...})
+```
+
+**Circuit breaker** prevents cascading failures; monitors failure rate and opens after threshold.
+
+### 3. Caching Strategy (SWR + Invalidation)
+Use **SWR (Stale-While-Revalidate)** for dashboard data:
+
+```python
+from maps_view.cache_swr import SWRCache
+
+cache = SWRCache(key="dashboard:hosts", fresh_ttl=30, stale_ttl=60)
+data = cache.get_or_fetch(
+    fetch_fn=lambda: get_hosts_status_data(),
+    async_task=refresh_dashboard_cache_task.delay  # Celery background refresh
+)
+```
+
+**Invalidation is MANDATORY** after mutations:
+```python
+from inventory.cache.fibers import invalidate_fiber_cache
+from inventory.routes.services import invalidate_route_cache
+
+# After creating/updating fiber
+fiber.save()
+invalidate_fiber_cache()
+
+# After route changes
+route.save()
+invalidate_route_cache(route.id)
+```
+
+### 4. Spatial Operations (PostGIS)
+All spatial data uses **SRID 4326** (WGS84) with LineString geometry:
+
+```python
+from django.contrib.gis.geos import LineString
+from inventory.spatial import calculate_route_length
+
+coords = [(-47.123, -23.456), (-47.234, -23.567)]
+path = LineString(coords, srid=4326)
+length_km = calculate_route_length(path)  # Returns Decimal
+```
+
+**Helpers**: `inventory/spatial.py` — distance calculations, bounding box queries, radius search
+
+### 5. DTO Field Ordering
+**CRITICAL**: Preserve exact field order in DTOs/serializers — tests assert ordering:
+
+```python
+# ✅ CORRECT - Field order matches expected structure
+class RouteBuildResult(TypedDict):
+    route_id: int
+    status: str
+    segments: list
+    total_length_km: Decimal
+    # ... exact order from original
+
+# ❌ WRONG - Reordered fields will break tests
+class RouteBuildResult(TypedDict):
+    status: str  # Moved field breaks ordering assertions
+    route_id: int
+```
+
+---
+
+## 🧪 Testing
+
+### Running Tests
+```bash
+make test                           # Fast (may use SQLite, skip spatial)
+docker compose exec web pytest      # Full (PostGIS, production-like)
+pytest -v tests/test_specific.py    # Specific test file
+pytest --cov --cov-report=html      # Coverage report
+```
+
+**Test Configuration**: `backend/pytest.ini`, `backend/pyproject.toml` (pytest.ini_options)
+
+### Celery Testing
+```python
+# Tests run with eager mode (synchronous)
+# CELERY_TASK_ALWAYS_EAGER=True in settings.test
+
+from inventory.tasks import sync_device_status
+result = sync_device_status.delay(device_id=123)  # Runs immediately
+assert result.successful()
+```
+
+### Code Quality
+```bash
+make fmt    # Auto-fix: ruff --fix, black, isort
+make lint   # Check: ruff check, black --check, isort --check
+```
+
+**Tooling**: Ruff (linting), Black (formatting, line-length=100), isort (imports), configured in `backend/pyproject.toml`
+
+---
+
+## 🎨 Frontend Conventions
+
+### CSRF Protection (MANDATORY)
+All POST/PUT/PATCH/DELETE requests **MUST use `useApi` composable**:
+
+```javascript
+// ✅ CORRECT - Automatic CSRF token injection
+import { useApi } from '@/composables/useApi';
+const api = useApi();
+await api.post('/api/v1/devices/', deviceData);
+
+// ❌ WRONG - Missing CSRF token (403 Forbidden)
+await fetch('/api/v1/devices/', {
+  method: 'POST',
+  body: JSON.stringify(deviceData)
+});
+```
+
+**Token sources**: `window.CSRF_TOKEN` (injected in template) or `csrftoken` cookie
+
+### Vue 3 Dashboard Rollout
+Controlled via environment variables in `docker/docker-compose.yml`:
+
+```yaml
+USE_VUE_DASHBOARD: "true"
+VUE_DASHBOARD_ROLLOUT_PERCENTAGE: "50"  # 0-100
+```
+
+**Selection logic**: `maps_view/views.py::dashboard_view()` checks percentage + user session hash
+
+---
+
+## 📡 API Patterns
+
+### REST API Structure
+```
+/api/v1/inventory/        # Inventory CRUD (sites, devices, ports, fibers)
+/api/v1/devices/          # Device operations (NOT /api/v1/inventory/devices/)
+/api/v1/device-groups/    # Device groups (NOT /inventory/device-groups/)
+/api/v1/import-rules/     # Import rules for device auto-association
+/metrics/                 # Prometheus metrics
+/health/, /ready/, /live/ # Health checks
+```
+
+**CRITICAL**: Device endpoints are at `/api/v1/devices/*`, not under inventory namespace.
+
+### Adding New Endpoints
+1. Create service/usecase in `<app>/usecases/` or `<app>/services/`
+2. Create serializer in `<app>/serializers.py`
+3. Create view/viewset in `<app>/api/` or `<app>/views.py`
+4. Add route in `<app>/urls.py`
+5. Include in `core/urls.py`
+
+**Example**:
+```python
+# inventory/usecases/sites.py
+def list_sites_with_devices():
+    return Site.objects.prefetch_related("devices").all()
+
+# inventory/serializers.py
+class SiteSerializer(serializers.ModelSerializer):
+    ...
+
+# inventory/api/sites.py
+class SiteViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Site.objects.all()
+    serializer_class = SiteSerializer
+
+# inventory/urls_api.py
+router.register("sites", SiteViewSet)
+```
+
+---
+
+## 🔄 Real-Time Updates (WebSocket)
+
+### Publishing Events
+Use helper functions in `maps_view/realtime/publisher.py`:
+
+```python
+from maps_view.realtime.publisher import (
+    broadcast_dashboard_status,
+    broadcast_cable_status_update
+)
+
+# After device status changes
+broadcast_dashboard_status(hosts_status_data)
+
+# After fiber cable updates
+broadcast_cable_status_update(cable_id, new_status)
+```
+
+### Celery Beat Schedule
+Dashboard refresh task runs every 60s (configurable via `DASHBOARD_CACHE_REFRESH_INTERVAL`):
+
+```python
+# core/celery.py
+beat_schedule = {
+    "refresh-dashboard-cache": {
+        "task": "monitoring.tasks.refresh_dashboard_cache_task",
+        "schedule": 60,  # seconds
+        "options": {"queue": "maps"}
+    }
+}
+```
+
+**Adding Celery Tasks**:
+1. Define in `<app>/tasks.py`
+2. Add route in `core/celery.py`
+3. Assign queue: `default`, `zabbix`, or `maps`
+
+---
+
+## 🔐 Security & Configuration
+
+### Secrets Management
+**NEVER hardcode credentials**. Use encrypted runtime config:
+
+```python
+from setup_app.services.runtime_settings import get_runtime_config, reload_config
+
+config = get_runtime_config()  # Returns decrypted settings
+zabbix_url = config.get("zabbix_url")
+
+# After database config changes
+reload_config()  # Clear cache, force reload
+```
+
+**Encryption**: Fernet (symmetric); keys in `FERNET_KEYS` env var
+
+### Environment Variables
+```bash
+# Production checklist
+SECRET_KEY=<secure-random-key>
+DEBUG=False
+ALLOWED_HOSTS=yourdomain.com
+ZABBIX_API_URL=https://zabbix.example.com/api_jsonrpc.php
+ZABBIX_API_KEY=<api-key>  # OR ZABBIX_API_USER + ZABBIX_API_PASSWORD
+REDIS_URL=redis://localhost:6379/0
+DB_ENGINE=postgis  # mysql, postgresql, or postgis
+FERNET_KEYS=<base64-encoded-key>
+```
+
+---
+
+## 🐞 Debugging & Diagnostics
+
+### Viewing Logs
 ```powershell
-# View recent rule applications in logs
-cd docker; docker compose logs web --since 5m | Select-String -Pattern "Applied import rule" -Context 1
+# Docker logs (recent 5 minutes)
+cd docker; docker compose logs web --since 5m
 
-# Test rule logic directly (Django shell)
+# Grep for specific patterns
+docker compose logs web | Select-String -Pattern "Applied import rule"
+
+# Follow live logs
+docker compose logs -f web
+```
+
+### Django Shell (Testing Logic)
+```bash
 docker compose exec web python manage.py shell
 >>> from inventory.services.import_rules import apply_import_rules
->>> apply_import_rules("Huawei - Switch Teste")  # Should return dict with category, group_id
->>> apply_import_rules("OLT-GPON-Centro")  # Should return None if no rule matches
+>>> apply_import_rules("Huawei - Switch Teste")
+{'category': 'backbone', 'group_id': 42}
 ```
-**Expected log output:** `INFO ... devices Applied import rule #<id> (<description>) to <device_name>: category=<cat>, group_id=<gid>`
 
-**UI validation:** Import/sync a device matching regex → check "Inventário Atual (Pós)" tab → group and category should be auto-assigned.
+### Health Checks
+```bash
+curl http://localhost:8000/health/       # Database + Redis + Celery
+curl http://localhost:8000/ready/        # Ready to serve traffic
+curl http://localhost:8000/live/         # Process alive
+curl http://localhost:8000/celery/status/ # Worker status
+curl http://localhost:8000/metrics/      # Prometheus metrics
+```
 
-Feedback: Clarify placeholder apps (`dwdm/`, `gpon/`) future scope before large refactors.
+---
+
+## 🚨 Common Pitfalls
+
+### ❌ DON'T
+- Start PostgreSQL/Redis directly on Windows (Docker only)
+- Bypass service layer (business logic in views)
+- Skip cache invalidation after mutations
+- Reorder DTO fields (breaks ordering assertions)
+- Use SQLite for spatial operations in production
+- Make direct Zabbix HTTP requests (bypasses circuit breaker)
+- Hardcode secrets in code
+
+### ✅ DO
+- Rebuild Docker image after Python dependency/migration changes
+- Use publisher helpers for WebSocket broadcasts
+- Define Celery tasks in `<app>/tasks.py` and route in `core/celery.py`
+- Preserve exact field order in DTOs
+- Invalidate caches explicitly after writes
+- Use `useApi` composable for all mutating frontend requests
+
+---
+
+## 📚 Documentation
+
+- **Architecture**: `doc/architecture/{MODULES,DATA_FLOW,OVERVIEW}.md`
+- **API Reference**: `doc/api/ENDPOINTS.md`
+- **Development**: `doc/guides/DEVELOPMENT.md`
+- **Migration v1→v2**: `doc/releases/v2.0.0/BREAKING_CHANGES.md`
+- **Process/Agents**: `doc/process/AGENTS.md`
+
+---
+
+## 🎯 Device Import Workflow (Complex Domain)
+
+**Context**: Import devices from Zabbix with automatic category/group assignment via regex rules.
+
+### Key Components
+- **Frontend**: `frontend/src/components/DeviceImport/` (Vue modals, preview tabs)
+- **Backend**: `inventory/usecases/devices.py` (business logic), `inventory/models.py` (ImportRule model)
+- **Endpoints**: 
+  - `POST /api/v1/inventory/devices/import-batch/` (batch import)
+  - `GET /api/v1/devices/<id>/` (device details)
+  - `POST /api/v1/devices/<id>/sync/` (re-sync from Zabbix)
+  - `GET /api/v1/device-groups/` (list groups)
+  - `GET /api/v1/import-rules/` (CRUD rules)
+
+### Import Rules Logic
+1. **Priority order** (lowest number = highest priority)
+2. **Regex matching** on device name
+3. **Auto-assignment** of category (`backbone`, `gpon`, `dwdm`) and group
+4. **Applied during**:
+   - New device import
+   - Existing device sync (if still default category/no group)
+   - Manual sync action via UI
+
+**Validation**:
+```powershell
+# Check logs for rule applications
+docker compose logs web --since 5m | Select-String "Applied import rule"
+
+# Expected output:
+# INFO ... devices Applied import rule #3 (GPON OLTs) to OLT-Centro: category=gpon, group_id=5
+```
+
+### Data Consistency Pattern
+**Edit Modal**: Always fetches fresh data before opening:
+```javascript
+async openEditModal(device) {
+  const fresh = await api.get(`/api/v1/devices/${device.id}/`);
+  this.editingDevice = fresh;  // Use server state, not cached array
+}
+```
+
+**Readonly Modal**: Uses dedicated endpoint with fallback:
+```javascript
+async viewDeviceDetails(device) {
+  let fresh;
+  try {
+    fresh = await api.get(`/api/v1/devices/by-zabbix/${device.zabbix_id}/`);
+  } catch {
+    fresh = await api.get(`/api/v1/devices/${device.id}/`);
+  }
+  this.showDeviceModal(fresh, readOnly=true);
+}
+```
+
+---
+
+**Version**: 2024-11-27 (Updated for comprehensive AI agent onboarding)  
+**Maintainer**: For questions/clarifications → `doc/contributing/README.md`

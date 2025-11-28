@@ -30,11 +30,18 @@
         </div>
         <div v-if="host.uptime_value || host.metrics?.uptime" class="stat-item">
           <span class="stat-icon">⏱️</span>
+          <span class="stat-label">Uptime</span>
           <span class="stat-value">{{ host.uptime_value || formatUptime(host.metrics.uptime) }}</span>
         </div>
         <div v-if="host.cpu_value || host.metrics?.cpu !== undefined" class="stat-item">
           <span class="stat-icon">💻</span>
+          <span class="stat-label">CPU</span>
           <span class="stat-value">{{ host.cpu_value || `${host.metrics.cpu}%` }}</span>
+        </div>
+        <div v-if="host.metrics?.memory !== undefined" class="stat-item">
+          <span class="stat-icon">🧠</span>
+          <span class="stat-label">Memória</span>
+          <span class="stat-value">{{ `${host.metrics.memory}%` }}</span>
         </div>
       </div>
     </div>

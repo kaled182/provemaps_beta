@@ -1200,6 +1200,22 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
     if not hostid:
         raise InventoryValidationError("hostid is required")
 
+    update_identity = bool(payload.get("update_identity", True))
+    apply_auto_rules = bool(payload.get("apply_auto_rules", True))
+    sync_groups = bool(payload.get("sync_groups", True))
+    update_site = bool(payload.get("update_site", True))
+    import_interfaces = bool(payload.get("import_interfaces", True))
+
+    logger.info(
+        "[ZBX_SYNC_FLAGS] hostid=%s update_identity=%s apply_auto_rules=%s sync_groups=%s update_site=%s import_interfaces=%s",
+        hostid,
+        update_identity,
+        apply_auto_rules,
+        sync_groups,
+        update_site,
+        import_interfaces,
+    )
+
     zabbix_data = ZABBIX_REQUEST(
         "host.get",
         {
@@ -1261,6 +1277,7 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
         .filter(zabbix_hostid=hostid_str)
         .first()
     )
+    original_site_id = existing_device.site_id if existing_device else None
 
     address_payload = {
         "display_name": site_display_name,
@@ -1282,35 +1299,48 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
     site = None
     logger.info(f"Searching for site: '{site_display_name}'")
     
-    # Strategy 1: Exact match (case-insensitive)
-    site = Site.objects.filter(display_name__iexact=site_display_name).first()
-    if site:
-        logger.info(f"Found site by exact match: {site.display_name}")
-    
-    if site is None:
-        # Strategy 2: Match by slug
-        site = Site.objects.filter(slug=slug_candidate).first()
+    if not update_site:
+        if existing_device:
+            site = existing_device.site
+            logger.info(
+                "[ZBX_SYNC_FLAGS] update_site disabled; keeping existing site_id=%s for device %s",
+                site.id if site else None,
+                existing_device.id,
+            )
+        else:
+            logger.info(
+                "[ZBX_SYNC_FLAGS] update_site disabled and device does not exist; skipping site resolution"
+            )
+    else:
+        # Strategy 1: Exact match (case-insensitive)
+        site = Site.objects.filter(display_name__iexact=site_display_name).first()
         if site:
-            logger.info(f"Found site by slug '{slug_candidate}': {site.display_name}")
-    
-    if site is None:
-        # Strategy 3: Normalize both sides and compare (remove accents)
-        from unicodedata import normalize
+            logger.info(f"Found site by exact match: {site.display_name}")
         
-        # Remove accents from search term
-        normalized_search = normalize('NFKD', site_display_name).encode('ASCII', 'ignore').decode('ASCII').strip().lower()
-        logger.info(f"Trying normalized search: '{normalized_search}'")
+        if site is None:
+            # Strategy 2: Match by slug
+            site = Site.objects.filter(slug=slug_candidate).first()
+            if site:
+                logger.info(f"Found site by slug '{slug_candidate}': {site.display_name}")
         
-        # Check all sites with normalized comparison
-        for existing_site in Site.objects.all():
-            normalized_existing = normalize('NFKD', existing_site.display_name).encode('ASCII', 'ignore').decode('ASCII').strip().lower()
-            if normalized_existing == normalized_search:
-                site = existing_site
-                logger.info(f"Found site by normalized match: {site.display_name}")
-                break
+        if site is None:
+            # Strategy 3: Normalize both sides and compare (remove accents)
+            from unicodedata import normalize
+            
+            # Remove accents from search term
+            normalized_search = normalize('NFKD', site_display_name).encode('ASCII', 'ignore').decode('ASCII').strip().lower()
+            logger.info(f"Trying normalized search: '{normalized_search}'")
+            
+            # Check all sites with normalized comparison
+            for existing_site in Site.objects.all():
+                normalized_existing = normalize('NFKD', existing_site.display_name).encode('ASCII', 'ignore').decode('ASCII').strip().lower()
+                if normalized_existing == normalized_search:
+                    site = existing_site
+                    logger.info(f"Found site by normalized match: {site.display_name}")
+                    break
     
     site_created = False
-    if site is None:
+    if site is None and update_site:
         logger.warning(f"Site '{site_display_name}' not found in database. Creating new site.")
         
         # Last resort: Use get_or_create to avoid duplicate key violations
@@ -1354,7 +1384,7 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
                 # Absolute last resort: use normalized name
                 logger.error(f"Could not find or create site '{site_display_name}'. Re-raising exception.")
                 raise
-    else:
+    elif site is not None and update_site:
         logger.info(f"Using existing site: {site.display_name}")
         
         # Update site fields if needed (but NEVER update display_name or slug - these are immutable)
@@ -1438,7 +1468,7 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
         update_fields: List[str] = []
         # Auto-apply import rules for devices that existed before rules were created
         # Only if device still has default category and/or no monitoring group assigned
-        if (not device.monitoring_group_id or device.category == 'backbone'):
+        if apply_auto_rules and (not device.monitoring_group_id or device.category == 'backbone'):
             try:
                 from inventory.services.import_rules import apply_import_rules  # local import to avoid circulars
                 rule_result_existing = apply_import_rules(desired_device_name)
@@ -1457,25 +1487,25 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
                     )
             except Exception as e:  # pragma: no cover - defensive
                 logger.warning(f"Failed applying import rules to existing device {desired_device_name}: {e}")
-        if device.site_id != getattr(site, "pk", None):
+        if update_site and device.site_id != getattr(site, "pk", None):
             device.site = site
             update_fields.append("site")
-        if desired_device_name and device.name != desired_device_name:
+        if update_identity and desired_device_name and device.name != desired_device_name:
             device.name = desired_device_name
             update_fields.append("name")
         if not device.zabbix_hostid or str(device.zabbix_hostid) != hostid_str:
             device.zabbix_hostid = hostid_str
             update_fields.append("zabbix_hostid")
         # Atualizar IP se mudou
-        if primary_ip and device.primary_ip != primary_ip:
+        if update_identity and primary_ip and device.primary_ip != primary_ip:
             device.primary_ip = primary_ip
             update_fields.append("primary_ip")
         # Atualizar uptime_item_key se mudou
-        if uptime_key and device.uptime_item_key != uptime_key:
+        if update_identity and uptime_key and device.uptime_item_key != uptime_key:
             device.uptime_item_key = uptime_key
             update_fields.append("uptime_item_key")
         # Atualizar cpu_usage_item_key se mudou
-        if cpu_key and device.cpu_usage_item_key != cpu_key:
+        if update_identity and cpu_key and device.cpu_usage_item_key != cpu_key:
             device.cpu_usage_item_key = cpu_key
             update_fields.append("cpu_usage_item_key")
         if update_fields:
@@ -1484,7 +1514,7 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
         # Apply import rules for auto-categorization
         from inventory.services.import_rules import apply_import_rules
         
-        rule_result = apply_import_rules(desired_device_name)
+        rule_result = apply_import_rules(desired_device_name) if apply_auto_rules else None
         
         device_defaults = {
             "vendor": "",
@@ -1506,6 +1536,11 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
                 f"category={rule_result['category']}"
             )
         
+        if not update_site and site is None:
+            raise InventoryValidationError(
+                "Site inexistente e update_site desativado; não é possível criar novo site automaticamente."
+            )
+
         device, device_created = Device.objects.get_or_create(
             site=site,
             name=desired_device_name,
@@ -1520,23 +1555,24 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
         ):
             update_fields_list = ["zabbix_hostid"]
             device.zabbix_hostid = hostid_str
-            if primary_ip and device.primary_ip != primary_ip:
+            if update_identity and primary_ip and device.primary_ip != primary_ip:
                 device.primary_ip = primary_ip
                 update_fields_list.append("primary_ip")
-            if uptime_key and device.uptime_item_key != uptime_key:
+            if update_identity and uptime_key and device.uptime_item_key != uptime_key:
                 device.uptime_item_key = uptime_key
                 update_fields_list.append("uptime_item_key")
-            if cpu_key and device.cpu_usage_item_key != cpu_key:
+            if update_identity and cpu_key and device.cpu_usage_item_key != cpu_key:
                 device.cpu_usage_item_key = cpu_key
                 update_fields_list.append("cpu_usage_item_key")
             device.save(update_fields=update_fields_list)
 
     # Sync device groups from Zabbix automatically
-    try:
-        sync_device_groups_for_device(device)
-        logger.info(f"Auto-synced device groups for {device.name}")
-    except Exception as e:
-        logger.warning(f"Failed to auto-sync device groups for {device.name}: {e}")
+    if sync_groups:
+        try:
+            sync_device_groups_for_device(device)
+            logger.info(f"Auto-synced device groups for {device.name}")
+        except Exception as e:
+            logger.warning(f"Failed to auto-sync device groups for {device.name}: {e}")
 
     port_records: List[PortRecord] = []
     primary_items: HostItemList = []
@@ -1563,6 +1599,26 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
 
     port_record_map: Dict[tuple[int, str], PortRecord] = {}
 
+    if not import_interfaces:
+        device_like = cast(DeviceLike, device)
+        return {
+            "created": {
+                "sites": int(site_created),
+                "devices": int(device_created),
+                "ports": 0,
+            },
+            "device": {
+                "id": device_like.id,
+                "name": device_like.name,
+                "site": getattr(device_like.site, "display_name", None),
+                "zabbix_hostid": device_like.zabbix_hostid,
+            },
+            "ports_created": [],
+            "ports_updated": [],
+            "total_ports_detected": 0,
+            "optical_snapshots": [],
+        }
+
     for item in creation_candidates:
         key = item.get("key_") or ""
         tokens = _extract_key_tokens(key)
@@ -1588,8 +1644,32 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
         record = PortRecord(port=port, created=port_created, defaults=defaults)
         port_records.append(record)
         port_record_map[_port_map_key(port)] = record
+        key = item.get("key_") or ""
+        tokens = _extract_key_tokens(key)
+        if not tokens:
+            continue
+        port_name = tokens[0].strip()
+        if not port_name:
+            continue
 
-    if not port_records:
+        defaults = {
+            "zabbix_item_key": key,
+            "zabbix_interfaceid": str(item.get("interfaceid") or ""),
+            "zabbix_itemid": str(item.get("itemid") or ""),
+            "notes": item.get("name", ""),
+        }
+
+        port, port_created = Port.objects.get_or_create(
+            device=device,
+            name=port_name,
+            defaults=defaults,
+        )
+
+        record = PortRecord(port=port, created=port_created, defaults=defaults)
+        port_records.append(record)
+        port_record_map[_port_map_key(port)] = record
+
+    if import_interfaces and not port_records:
         for item in host_items:
             key = item.get("key_") or ""
             tokens = _extract_key_tokens(key)
@@ -1754,12 +1834,18 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
 
     device_like = cast(DeviceLike, device)
 
+    # Garante que, se update_site for false, não alteramos o site
+    if not update_site and device_like.site_id != original_site_id:
+        device_like.site_id = original_site_id
+        device_like.save(update_fields=["site"])
+        device_like.refresh_from_db()
+
     return {
         "created": created_summary,
         "device": {
             "id": device_like.id,
             "name": device_like.name,
-            "site": site.display_name,
+            "site": getattr(device_like.site, "display_name", None),
             "zabbix_hostid": device_like.zabbix_hostid,
         },
         "ports_created": ports_created_payload,

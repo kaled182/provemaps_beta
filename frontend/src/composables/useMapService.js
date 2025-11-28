@@ -76,9 +76,14 @@ export function useMapService(options = {}) {
     error.value = null;
 
     try {
-      // Aguarda Google Maps API estar disponível
-      await waitForGoogleMaps();
-      googleApi.value = window.google;
+      // Usa instância existente se já carregada (facilita testes)
+      if (typeof window !== 'undefined' && window.google?.maps) {
+        googleApi.value = window.google;
+      } else {
+        // Aguarda Google Maps API estar disponível
+        await waitForGoogleMaps();
+        googleApi.value = window.google;
+      }
 
       const element = typeof container === 'string' 
         ? document.querySelector(container)
