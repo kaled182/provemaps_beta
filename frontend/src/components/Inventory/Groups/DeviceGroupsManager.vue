@@ -1,18 +1,5 @@
 <template>
   <div class="h-full flex flex-col gap-4">
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-      <div>
-        <h2 class="text-lg font-bold text-gray-900 dark:text-white">Grupos de Dispositivos</h2>
-        <p class="text-sm text-gray-500 dark:text-gray-400">Gerencie agrupamentos lógicos para relatórios e acesso</p>
-      </div>
-      <button
-        @click="openCreateModal"
-        class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-md transition-colors flex items-center gap-2"
-      >
-        <i class="fas fa-plus"></i> Novo Grupo
-      </button>
-    </div>
-
     <div class="flex items-center justify-between bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
       <div class="relative w-full md:w-80">
         <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
@@ -61,6 +48,124 @@
       @close="showModal = false"
       @save="handleSave"
     />
+
+    <!-- Fluxo para grupos com devices -->
+    <div
+      v-if="deleteDialog.open"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+    >
+      <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-2xl p-6 border border-gray-200 dark:border-gray-700">
+        <div class="flex items-start gap-3">
+          <div class="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center">
+            <i class="fas fa-exclamation-triangle"></i>
+          </div>
+          <div class="flex-1">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+              {{ deleteDialog.devices.length }} devices encontrados
+            </h3>
+            <p class="text-sm text-gray-600 dark:text-gray-300 mt-1">
+              Migre ou remova os devices antes de excluir
+              <span class="font-semibold">{{ deleteDialog.group?.name }}</span>.
+            </p>
+          </div>
+        </div>
+
+        <div class="mt-4 space-y-4">
+          <div class="p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
+            <label class="flex items-start gap-3 cursor-pointer">
+              <input
+                v-model="deleteDialog.action"
+                type="radio"
+                value="migrate"
+                class="mt-1 h-4 w-4 text-indigo-600 focus:ring-indigo-500"
+                :disabled="!migrationTargets.length || deleteDialog.submitting"
+              />
+              <div>
+                <p class="text-sm font-semibold text-gray-900 dark:text-white">Migrar devices para outro grupo</p>
+                <p class="text-xs text-gray-600 dark:text-gray-300">
+                  Todos os devices serão movidos antes de remover o grupo.
+                </p>
+              </div>
+            </label>
+            <select
+              v-model="deleteDialog.targetGroupId"
+              class="mt-3 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-900 dark:text-white px-3 py-2 disabled:opacity-60"
+              :disabled="deleteDialog.action !== 'migrate' || !migrationTargets.length || deleteDialog.submitting"
+            >
+              <option v-for="target in migrationTargets" :key="target.id" :value="target.id">
+                {{ target.name }}
+              </option>
+            </select>
+            <p v-if="!migrationTargets.length" class="text-xs text-amber-600 mt-2">
+              Não há outros grupos disponíveis para migração.
+            </p>
+          </div>
+
+          <div class="p-3 rounded-xl border border-gray-200 dark:border-gray-700">
+            <label class="flex items-start gap-3 cursor-pointer">
+              <input
+                v-model="deleteDialog.action"
+                type="radio"
+                value="remove"
+                class="mt-1 h-4 w-4 text-red-600 focus:ring-red-500"
+                :disabled="deleteDialog.submitting"
+              />
+              <div>
+                <p class="text-sm font-semibold text-gray-900 dark:text-white">Remover devices do inventário</p>
+                <p class="text-xs text-gray-600 dark:text-gray-300">
+                  Os devices serão apagados definitivamente antes de excluir o grupo.
+                </p>
+              </div>
+            </label>
+          </div>
+
+          <div class="bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+            <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+              <span class="font-semibold text-gray-700 dark:text-gray-200 uppercase tracking-wide">Devices afetados</span>
+              <span class="px-2 py-1 rounded bg-white/80 dark:bg-gray-800 text-gray-700 dark:text-gray-200">
+                {{ deleteDialog.devices.length }}
+              </span>
+            </div>
+            <ul class="mt-3 max-h-36 overflow-auto text-sm text-gray-700 dark:text-gray-200 space-y-1">
+              <li
+                v-for="device in deleteDialog.devices"
+                :key="device.id"
+                class="flex items-center gap-2"
+              >
+                <i class="fas fa-server text-gray-400"></i>
+                <span class="font-medium">{{ device.name }}</span>
+                <span v-if="device.site_name" class="text-xs text-gray-500">({{ device.site_name }})</span>
+                <span v-if="device.primary_ip" class="text-xs text-gray-500">- {{ device.primary_ip }}</span>
+              </li>
+            </ul>
+          </div>
+
+          <div
+            v-if="deleteDialog.error"
+            class="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2"
+          >
+            {{ deleteDialog.error }}
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3 mt-6">
+          <button
+            @click="closeDeleteDialog"
+            class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm"
+            :disabled="deleteDialog.submitting"
+          >
+            Cancelar
+          </button>
+          <button
+            @click="submitDeleteWithDevices"
+            class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white shadow-sm transition-colors text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+            :disabled="deleteDialog.submitting || (deleteDialog.action === 'migrate' && !deleteDialog.targetGroupId)"
+          >
+            {{ deleteDialog.submitting ? 'Processando...' : 'Confirmar e remover grupo' }}
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Confirmação de remoção de grupo -->
     <div
@@ -115,6 +220,7 @@ const detailLoading = ref(false);
 const showModal = ref(false);
 const selectedGroup = ref(null);
 const confirmDialog = ref({ open: false, item: null });
+const deleteDialog = ref(getEmptyDeleteDialog());
 const groups = ref([]);
 const availableDevices = ref([]);
 const initialSelection = ref([]);
@@ -126,6 +232,23 @@ const filteredGroups = computed(() => {
   return groups.value.filter((g) => !q || (g.name || '').toLowerCase().includes(q));
 });
 
+const migrationTargets = computed(() => {
+  if (!deleteDialog.value.group) return [];
+  return groups.value.filter((g) => g.id !== deleteDialog.value.group.id);
+});
+
+function getEmptyDeleteDialog() {
+  return {
+    open: false,
+    submitting: false,
+    error: '',
+    group: null,
+    devices: [],
+    action: 'migrate',
+    targetGroupId: null,
+  };
+}
+
 const mapGroupFromApi = (g) => ({
   id: g.id,
   name: g.name,
@@ -133,6 +256,15 @@ const mapGroupFromApi = (g) => ({
   device_count: g.device_count ?? (g.devices ? g.devices.length : 0),
   device_ids: g.device_ids || (g.devices ? g.devices.map((d) => d.id) : []),
   devices: g.devices || [],
+});
+
+const mapDeviceFromApi = (d) => ({
+  id: d.id,
+  name: d.name,
+  primary_ip: d.primary_ip,
+  site_name: d.site_name || d.site || '',
+  monitoring_group: d.monitoring_group || d.group || null,
+  role: d.role || d.category || null,
 });
 
 const fetchGroups = async () => {
@@ -161,19 +293,20 @@ const fetchGroupDetail = async (id) => {
   return mapGroupFromApi(data);
 };
 
+const fetchDevicesByGroup = async (groupId) => {
+  const data = await api.get(`/api/v1/devices/available-for-group/?group_id=${groupId}`);
+  const list = Array.isArray(data) ? data : data.results || data.devices || [];
+  return list
+    .map(mapDeviceFromApi)
+    .filter((d) => String(d.monitoring_group) === String(groupId));
+};
+
 const loadAvailableDevices = async (groupId = null) => {
   try {
     const query = groupId ? `?group_id=${groupId}` : '';
     const data = await api.get(`/api/v1/devices/available-for-group/${query}`);
     const list = Array.isArray(data) ? data : data.results || data.devices || [];
-    availableDevices.value = list.map((d) => ({
-      id: d.id,
-      name: d.name,
-      primary_ip: d.primary_ip,
-      site_name: d.site_name || d.site || '',
-      monitoring_group: d.monitoring_group || d.group || null,
-      role: d.role || d.category || null,
-    }));
+    availableDevices.value = list.map(mapDeviceFromApi);
   } catch (error) {
     console.error('Erro ao carregar devices disponíveis', error);
     availableDevices.value = [];
@@ -245,12 +378,45 @@ const handleSave = async (groupData) => {
   }
 };
 
-const handleDelete = (group) => {
-  confirmDialog.value = { open: true, item: group };
+const handleDelete = async (group) => {
+  errorMessage.value = '';
+  confirmDialog.value = { open: false, item: null };
+  deleteDialog.value = getEmptyDeleteDialog();
+  detailLoading.value = true;
+  try {
+    const devicesInGroup = await fetchDevicesByGroup(group.id);
+    if (devicesInGroup.length === 0) {
+      confirmDialog.value = { open: true, item: group };
+      return;
+    }
+    const targets = groups.value.filter((g) => g.id !== group.id);
+    deleteDialog.value = {
+      ...getEmptyDeleteDialog(),
+      open: true,
+      group,
+      devices: devicesInGroup,
+      action: targets.length ? 'migrate' : 'remove',
+      targetGroupId: targets[0]?.id || null,
+    };
+  } catch (error) {
+    console.error('Erro ao verificar devices do grupo', error);
+    errorMessage.value = error.message || 'Erro ao verificar devices do grupo.';
+  } finally {
+    detailLoading.value = false;
+  }
 };
 
 const closeConfirm = () => {
   confirmDialog.value = { open: false, item: null };
+};
+
+const closeDeleteDialog = () => {
+  deleteDialog.value = getEmptyDeleteDialog();
+};
+
+const deleteGroup = async (groupId) => {
+  await api.delete(`/api/v1/device-groups/${groupId}/`);
+  await fetchGroups();
 };
 
 const proceedDelete = async () => {
@@ -259,8 +425,8 @@ const proceedDelete = async () => {
   saving.value = true;
   errorMessage.value = '';
   try {
-    await api.delete(`/api/v1/device-groups/${group.id}/`);
-    await fetchGroups();
+    await deleteGroup(group.id);
+    await loadAvailableDevices(null);
     closeConfirm();
   } catch (error) {
     console.error('Erro ao remover grupo', error);
@@ -270,8 +436,47 @@ const proceedDelete = async () => {
   }
 };
 
+const submitDeleteWithDevices = async () => {
+  if (!deleteDialog.value.group) return;
+  deleteDialog.value.submitting = true;
+  deleteDialog.value.error = '';
+  try {
+    const { action, targetGroupId, devices, group } = deleteDialog.value;
+    if (action === 'migrate') {
+      if (!targetGroupId) {
+        deleteDialog.value.error = 'Selecione um grupo de destino.';
+        return;
+      }
+      await Promise.all(
+        devices.map((device) =>
+          api.patch(`/api/v1/devices/${device.id}/`, {
+            monitoring_group: targetGroupId,
+          })
+        )
+      );
+    } else {
+      await Promise.all(
+        devices.map((device) => api.delete(`/api/v1/devices/${device.id}/`))
+      );
+    }
+    await deleteGroup(group.id);
+    await loadAvailableDevices(null);
+    closeDeleteDialog();
+  } catch (error) {
+    console.error('Erro ao remover grupo com devices', error);
+    deleteDialog.value.error =
+      error.message || 'Erro ao remover grupo e devices.';
+  } finally {
+    deleteDialog.value.submitting = false;
+  }
+};
+
 onMounted(async () => {
   await fetchGroups();
+});
+
+defineExpose({
+  openCreateModal,
 });
 </script>
 

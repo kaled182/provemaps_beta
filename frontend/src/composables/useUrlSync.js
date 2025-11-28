@@ -13,9 +13,9 @@ export function useUrlSync(filtersStore, router, route) {
   // Valid status values (prevent URL injection)
   const STATUS_ALIASES = {
     operational: 'online',
-    online: 'online',
     operational_up: 'online',
-    critical: 'offline',
+    online: 'online',
+    critical: 'critical',
     down: 'offline',
     offline: 'offline',
     degraded: 'degraded',
@@ -30,23 +30,18 @@ export function useUrlSync(filtersStore, router, route) {
   const parseArrayParam = (param, validValues = null) => {
     if (!param) return [];
     const normalize = value => STATUS_ALIASES[value] ?? value;
-    if (Array.isArray(param)) {
-      const normalized = param.map(normalize);
-      return validValues ? normalized.filter(v => validValues.includes(v)) : normalized;
-    }
-    
-    const values = param
-      .split(',')
-      .map(value => value.trim())
-      .filter(Boolean)
-      .map(value => STATUS_ALIASES[value] ?? value);
-    
-    // Validate if validation array provided
-    if (validValues) {
-      return values.filter(v => validValues.includes(v));
-    }
-    
-    return values;
+    const dedupe = (arr) => Array.from(new Set(arr));
+
+    const rawValues = Array.isArray(param)
+      ? param
+      : param
+          .split(',')
+          .map(value => value.trim())
+          .filter(Boolean);
+
+    const normalized = rawValues.map(normalize);
+    const filtered = validValues ? normalized.filter(v => validValues.includes(v)) : normalized;
+    return dedupe(filtered);
   };
 
   // Sanitize search query (prevent XSS)

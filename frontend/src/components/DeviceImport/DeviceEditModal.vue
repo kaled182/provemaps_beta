@@ -107,7 +107,7 @@
               
               <button 
                 v-if="showSyncButton"
-                @click="handleSyncFromZabbix"
+                @click="openSyncModal"
                 :disabled="syncingFromZabbix"
                 class="w-full inline-flex justify-center items-center px-4 py-2 border border-green-300 dark:border-green-600 rounded-md shadow-sm text-sm font-medium text-green-700 dark:text-green-400 bg-white dark:bg-gray-700 hover:bg-green-50 dark:hover:bg-gray-600 focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Sincronizar dados e grupos do Zabbix"
@@ -463,6 +463,16 @@
             <!-- Right: Action buttons -->
             <div class="flex flex-col-reverse sm:flex-row gap-2">
               <button 
+                v-if="!isBatch && activeDevices.length > 0 && showSyncButton"
+                @click="openSyncModal"
+                type="button"
+                class="inline-flex items-center justify-center px-4 py-2 rounded-md border border-green-300 dark:border-green-700 text-sm font-medium text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/30 hover:bg-green-100 dark:hover:bg-green-800/40 focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <i class="fas fa-sync-alt mr-2" :class="{ 'fa-spin': syncingFromZabbix }"></i>
+                {{ syncingFromZabbix ? 'Sincronizando...' : 'Sincronizar Zabbix' }}
+              </button>
+
+              <button 
                 @click="$emit('close')"
                 type="button" 
                 class="inline-flex justify-center items-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none transition-colors"
@@ -530,6 +540,103 @@
           <button @click="confirmLocation" class="px-5 py-2 bg-red-600 text-white rounded shadow hover:bg-red-700 transition-colors font-medium">
             <i class="fas fa-check mr-2"></i>
             Confirmar Localização
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Sincronizar com Zabbix -->
+    <div v-if="syncModal" class="fixed inset-0 z-[65] overflow-y-auto flex items-center justify-center">
+      <div class="fixed inset-0 bg-black bg-opacity-60" @click="closeSyncModal"></div>
+      <div class="bg-white dark:bg-gray-800 w-full max-w-lg rounded-2xl shadow-2xl relative z-[70] flex flex-col m-4">
+        <div class="p-5 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900 rounded-t-2xl">
+          <div>
+            <h3 class="font-bold text-gray-800 dark:text-white flex items-center gap-2">
+              <i class="fas fa-sync-alt text-green-500"></i>
+              Sincronizar com Zabbix
+            </h3>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Escolha quais dados deseja atualizar usando as informações mais recentes do Zabbix.
+            </p>
+          </div>
+          <button @click="closeSyncModal" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
+
+        <div class="p-5 space-y-3">
+          <div v-for="option in syncOptionList" :key="option.key" class="border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
+            <label class="flex items-start gap-3 p-3 cursor-pointer">
+              <input 
+                type="checkbox" 
+                v-model="syncOptions[option.key]"
+                :disabled="syncingFromZabbix"
+                class="mt-1 h-4 w-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+              />
+              <div>
+                <p class="text-sm font-semibold text-gray-800 dark:text-white flex items-center gap-2">
+                  <i :class="option.icon" class="text-gray-400"></i>
+                  {{ option.title }}
+                </p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {{ option.description }}
+                </p>
+              </div>
+            </label>
+          </div>
+
+          <div class="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg p-3">
+            <i class="fas fa-info-circle text-blue-500 mt-0.5"></i>
+            <p>
+              A sincronização respeita o status automático de monitoramento (online/offline). Use as opções acima para definir o que será atualizado sem perder relacionamentos já cadastrados. Se nenhuma opção for marcada, sincronizaremos todos os dados por padrão para não perder informações.
+            </p>
+          </div>
+        </div>
+
+        <div class="p-4 border-t dark:border-gray-700 bg-white dark:bg-gray-800 rounded-b-2xl flex justify-end gap-3">
+          <button 
+            @click="closeSyncModal"
+            class="px-4 py-2 rounded-md border border-gray-300 dark:border-gray-600 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+            :disabled="syncingFromZabbix"
+          >
+            Cancelar
+          </button>
+          <button 
+            @click="confirmSyncFromZabbix"
+            class="px-4 py-2 rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700 transition-colors inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            :disabled="syncingFromZabbix"
+          >
+            <i class="fas fa-sync-alt" :class="{ 'fa-spin': syncingFromZabbix }"></i>
+            {{ syncingFromZabbix ? 'Sincronizando...' : 'Confirmar' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Resultado da Sincronização -->
+    <div v-if="syncResult.open" class="fixed inset-0 z-[70] overflow-y-auto flex items-center justify-center">
+      <div class="fixed inset-0 bg-black bg-opacity-60" @click="closeSyncResult"></div>
+      <div class="bg-white dark:bg-gray-800 w-full max-w-md rounded-2xl shadow-2xl relative z-[80] flex flex-col m-4">
+        <div class="p-5 border-b dark:border-gray-700 flex items-center gap-3 bg-gray-50 dark:bg-gray-900 rounded-t-2xl">
+          <div :class="['h-11 w-11 rounded-full flex items-center justify-center text-2xl', syncResult.success ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600']">
+            <i :class="syncResult.success ? 'fas fa-check-circle' : 'fas fa-times-circle'"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-gray-800 dark:text-white text-base">
+              {{ syncResult.title }}
+            </h3>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              {{ syncResult.message }}
+            </p>
+          </div>
+        </div>
+        <div class="p-5 flex justify-end">
+          <button 
+            @click="closeSyncResult"
+            class="px-5 py-2 rounded-md text-sm font-medium text-white"
+            :class="syncResult.success ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'"
+          >
+            OK
           </button>
         </div>
       </div>
@@ -631,7 +738,6 @@
     </div>
   </div>
 </template>
-```
 
 <script setup>
 import { reactive, ref, computed, watch, nextTick, onUnmounted } from 'vue';
@@ -693,6 +799,54 @@ const loadingInterfaces = ref(false);
 
 // Sync from Zabbix state
 const syncingFromZabbix = ref(false);
+const syncModal = ref(false);
+const syncOptions = reactive({
+  updateIdentity: true,
+  applyRules: true,
+  syncGroups: true,
+  updateSite: true,
+  importInterfaces: true
+});
+const hasSyncOptionSelected = computed(() => Object.values(syncOptions).some(Boolean));
+const syncOptionList = [
+  {
+    key: 'updateIdentity',
+    title: 'Atualizar nome e IP',
+    description: 'Usa o hostname e o IP principal retornados pelo Zabbix/SNMP.',
+    icon: 'fas fa-id-badge'
+  },
+  {
+    key: 'applyRules',
+    title: 'Aplicar regras de auto-associação',
+    description: 'Executa as regras automáticas para preencher campos de inventário.',
+    icon: 'fas fa-magic'
+  },
+  {
+    key: 'syncGroups',
+    title: 'Sincronizar grupos do Zabbix',
+    description: 'Atualiza os grupos do host conforme o Zabbix.',
+    icon: 'fas fa-layer-group'
+  },
+  {
+    key: 'updateSite',
+    title: 'Atualizar site/localização',
+    description: 'Ajusta o site vinculado quando houver correspondência ou mudança.',
+    icon: 'fas fa-map-marker-alt'
+  },
+  {
+    key: 'importInterfaces',
+    title: 'Importar interfaces e portas',
+    description: 'Traz a lista de interfaces/ports para inventário e monitoramento.',
+    icon: 'fas fa-network-wired'
+  }
+];
+const syncResult = reactive({
+  open: false,
+  success: true,
+  title: '',
+  message: '',
+  deviceId: null
+});
 
 // --- LÓGICA DE INICIALIZAÇÃO ---
 
@@ -1081,8 +1235,50 @@ const enableEditMode = () => {
   emit('edit', device);
 };
 
+const resetSyncOptions = () => {
+  syncOptions.updateIdentity = true;
+  syncOptions.applyRules = true;
+  syncOptions.syncGroups = true;
+  syncOptions.updateSite = true;
+  syncOptions.importInterfaces = true;
+};
+
+const openSyncModal = () => {
+  resetSyncOptions();
+  syncModal.value = true;
+};
+
+const closeSyncModal = () => {
+  syncModal.value = false;
+};
+
+const confirmSyncFromZabbix = async () => {
+  const optionsToSend = hasSyncOptionSelected.value ? { ...syncOptions } : {
+    updateIdentity: true,
+    applyRules: true,
+    syncGroups: true,
+    updateSite: true,
+    importInterfaces: true
+  };
+  await handleSyncFromZabbix(optionsToSend);
+};
+
+const closeSyncResult = () => {
+  const deviceId = syncResult.deviceId;
+  const wasSuccess = syncResult.success;
+  syncResult.open = false;
+  if (wasSuccess) {
+    emit('close');
+    setTimeout(() => {
+      if (deviceId) {
+        window.dispatchEvent(new CustomEvent('device-sync-complete', { detail: { deviceId } }));
+      }
+    }, 100);
+  }
+};
+
 // Função para forçar sincronização com Zabbix (modo readonly)
-const handleSyncFromZabbix = async () => {
+const handleSyncFromZabbix = async (options = syncOptions) => {
   const device = activeDevices.value[0];
   if (!device || !device.id) {
     console.error('[DeviceEditModal] No valid device ID for sync');
@@ -1090,32 +1286,36 @@ const handleSyncFromZabbix = async () => {
     return;
   }
 
-  const confirmMsg = `Deseja sincronizar "${device.name || 'este dispositivo'}" com os dados atuais do Zabbix?\n\nIsso irá:\n• Atualizar nome e IP\n• Aplicar regras de auto-associação\n• Sincronizar grupos do Zabbix\n• Atualizar site/localização`;
-  
-  if (!confirm(confirmMsg)) {
-    return;
-  }
+  const payload = {
+    update_identity: !!options.updateIdentity,
+    apply_auto_rules: !!options.applyRules,
+    sync_groups: !!options.syncGroups,
+    update_site: !!options.updateSite,
+    import_interfaces: !!options.importInterfaces
+  };
 
+  syncModal.value = false;
   syncingFromZabbix.value = true;
 
   try {
     console.log('[DeviceEditModal] Syncing device with Zabbix:', device.id);
     
-    const response = await api.post(`/api/v1/devices/${device.id}/sync/`, {});
+    const response = await api.post(`/api/v1/devices/${device.id}/sync/`, payload);
     console.log('[DeviceEditModal] Sync successful:', response);
 
-    alert('✅ Dispositivo sincronizado com sucesso!\n\nO sistema foi atualizado com os dados mais recentes do Zabbix.');
-    
-    // Fecha modal e pede refresh para o pai
-    emit('close');
-    // Aguarda um pouco e dispara evento de refresh via window (para DeviceImportManager pegar)
-    setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('device-sync-complete', { detail: { deviceId: device.id } }));
-    }, 100);
+    syncResult.success = true;
+    syncResult.title = 'Dispositivo sincronizado com sucesso!';
+    syncResult.message = 'Os dados selecionados foram atualizados com as informações mais recentes do Zabbix.';
+    syncResult.deviceId = device.id;
+    syncResult.open = true;
 
   } catch (error) {
     console.error('[DeviceEditModal] Sync failed:', error);
-    alert(`❌ Erro ao sincronizar com Zabbix:\n\n${error.message}\n\nVerifique se o dispositivo ainda existe no Zabbix.`);
+    syncResult.success = false;
+    syncResult.title = 'Erro ao sincronizar com Zabbix';
+    syncResult.message = error?.message || 'Verifique se o dispositivo ainda existe no Zabbix.';
+    syncResult.deviceId = device?.id || null;
+    syncResult.open = true;
   } finally {
     syncingFromZabbix.value = false;
   }

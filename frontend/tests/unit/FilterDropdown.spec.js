@@ -45,10 +45,10 @@ describe('FilterDropdown', () => {
     });
     
     await wrapper.find('.filter-dropdown__button').trigger('click');
-    await wrapper.find('input[type="checkbox"]').trigger('change');
+    await wrapper.find('.filter-dropdown__option').trigger('click');
     
     expect(wrapper.emitted('toggle')).toBeTruthy();
-    expect(wrapper.emitted('toggle')[0]).toEqual(['opt1']);
+    expect(wrapper.emitted('toggle')[0]).toEqual(['opt1', true]);
   });
 
   it('shows selected count in button label', () => {

@@ -1,5 +1,6 @@
 <template>
   <div class="status-chart">
+    <h3 class="chart-title">Status dos Hosts</h3>
     <div class="chart-header">
       <div class="chart-actions">
         <button 

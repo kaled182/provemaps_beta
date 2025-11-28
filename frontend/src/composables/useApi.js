@@ -83,6 +83,31 @@ export function useApi() {
   }
 
   /**
+   * Realiza requisição POST com FormData (para uploads)
+   * @param {string} url - URL do endpoint
+   * @param {FormData} formData - FormData com arquivos/campos
+   * @returns {Promise<any>} Resposta da API
+   */
+  async function postFormData(url, formData) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCsrfToken(),
+        // NÃO definir Content-Type - deixa o browser configurar com boundary
+      },
+      credentials: 'same-origin',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
+  /**
    * Realiza requisição PUT
    * @param {string} url - URL do endpoint
    * @param {Object} data - Dados a enviar
@@ -151,6 +176,7 @@ export function useApi() {
   return {
     get,
     post,
+    postFormData,
     put,
     patch,
     delete: del,

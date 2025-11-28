@@ -158,16 +158,22 @@ def create_fiber_from_kml(
             )
 
     coords = parse_kml_coordinates(kml_file)
+    # Sanitiza e calcula comprimento em km
+    sanitized = sanitize_path_points(coords, allow_empty=False)
+    length_km = calculate_path_length(sanitized)
 
     fiber = FiberCable.objects.create(
         name=name,
         origin_port=origin_port,
         destination_port=dest_port,
-        path_coordinates=coords,
+        path_coordinates=sanitized,
+        length_km=length_km,
         status=FiberCable.STATUS_UNKNOWN,
     )
     invalidate_fiber_cache()
-    return fiber_to_payload(fiber, coords=coords)
+    payload = fiber_to_payload(fiber, coords=sanitized)
+    payload["length_km"] = length_km
+    return payload
 
 
 def fiber_to_payload(
@@ -313,6 +319,17 @@ def list_fiber_cables() -> List[Dict[str, object]]:
                     if cable.length_km is not None
                     else None
                 ),
+                # Campos enriquecidos (flat) para uso rápido no modal Vue
+                "origin_port_id": cable.origin_port.id,
+                "destination_port_id": cable.destination_port.id,
+                "origin_port_name": cable.origin_port.name,
+                "destination_port_name": cable.destination_port.name,
+                "origin_device_id": cable.origin_port.device.id,
+                "destination_device_id": cable.destination_port.device.id,
+                "origin_device_name": cable.origin_port.device.name,
+                "destination_device_name": cable.destination_port.device.name,
+                "origin_site_id": origin_site.id if origin_site else None,
+                "destination_site_id": dest_site.id if dest_site else None,
                 "origin": {
                     "site": origin_site.name if origin_site else None,
                     "city": origin_site.city if origin_site else None,
@@ -411,7 +428,12 @@ def update_fiber_path(cable: FiberCable, raw_path: Any) -> Dict[str, object]:
     cable.length_km = length_km
     cable.save(update_fields=["path_coordinates", "length_km"])
     invalidate_fiber_cache()
-    return {"status": "ok", "length_km": length_km, "points": len(sanitized)}
+    return {
+        "status": "ok",
+        "length_km": length_km,
+        "points": len(sanitized),
+        "path": sanitized,
+    }
 
 
 def update_fiber_metadata(

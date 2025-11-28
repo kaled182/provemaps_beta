@@ -125,6 +125,13 @@ const routes = [
     name: 'map',
     component: () => import('@/components/MapView.vue'),
   },
+  {
+    path: '/network/design/fiber/:id',
+    name: 'FiberRouteEditor',
+    component: () => import('@/features/networkDesign/FiberRouteEditor.vue'),
+    props: true,
+    meta: { title: 'Editor de Traçado' },
+  },
   // {
   //   path: '/routes',
   //   name: 'routes',

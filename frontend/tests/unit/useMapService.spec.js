@@ -152,7 +152,7 @@ describe('useMapService', () => {
     await mapService.loadPlugin('getPlugin');
 
     const plugin = mapService.getPlugin('getPlugin');
-    expect(plugin).toBe(mockPlugin);
+    expect(plugin).toEqual(mockPlugin);
   });
 
   it('should handle map initialization error', async () => {

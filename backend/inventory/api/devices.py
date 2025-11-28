@@ -906,6 +906,23 @@ def api_import_batch(request: HttpRequest) -> JsonResponse:
                                 f"{device.name}: {str(import_error)}"
                             )
                             # Não quebra o processo se importação falhar
+                        # 6b. Sincroniza campos de monitoração (uptime/cpu/host groups) na primeira importação
+                        try:
+                            device_uc.add_device_from_zabbix(
+                                {
+                                    "hostid": device.zabbix_hostid,
+                                    # Não tocar no site definido na pré-importação a menos que o usuário escolha na sincronização
+                                    "update_site": False,
+                                }
+                            )
+                            logger.info(
+                                f"[IMPORT_DEBUG] Sync inicial Zabbix aplicada para {device.name}"
+                            )
+                        except Exception as sync_error:
+                            logger.warning(
+                                f"[IMPORT_DEBUG] Falha ao aplicar sync inicial "
+                                f"para {device.name}: {sync_error}"
+                            )
                 
                 except Exception as item_error:
                     import traceback

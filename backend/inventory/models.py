@@ -9,12 +9,13 @@ from __future__ import annotations
 from importlib import import_module
 from typing import TYPE_CHECKING, Any, cast
 
-from django.core.exceptions import ImproperlyConfigured
-from django.db import models
+from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.db import models, transaction
 from django.utils import timezone
 from django.utils.text import slugify
 
 from .fields import LenientJSONField
+from .utils_fiber import get_color_for_index
 
 try:  # pragma: no cover - environment specific import
     from django.contrib.gis.db import models as gis_models
@@ -337,6 +338,58 @@ class Port(models.Model):
         return f"{self.device}::{self.name}"
 
 
+class FiberProfile(models.Model):
+    """
+    Define o gabarito de construção do cabo (template de fábrica).
+    
+    Exemplo: "48FO (4x12)" significa 4 tubos com 12 fibras cada.
+    Evita ter que configurar a construção a cada novo cabo lançado.
+    """
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Ex: 'Cabo AS-80 48FO (4x12)', '144FO (12x12)'"
+    )
+    total_fibers = models.IntegerField(
+        help_text="Capacidade total de fibras no cabo"
+    )
+    tube_count = models.IntegerField(
+        default=1,
+        help_text="Quantidade de tubos loose que o cabo possui"
+    )
+    fibers_per_tube = models.IntegerField(
+        default=12,
+        help_text="Quantidade de fibras dentro de cada tubo"
+    )
+    manufacturer = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Fabricante do cabo (Furukawa, Prysmian, etc.)"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "inventory_fiber_profile"
+        ordering = ["total_fibers", "name"]
+        verbose_name = "Perfil de Fibra"
+        verbose_name_plural = "Perfis de Fibra"
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.total_fibers}FO)"
+
+    def clean(self) -> None:
+        """Valida que tube_count * fibers_per_tube = total_fibers"""
+        super().clean()
+        if self.tube_count * self.fibers_per_tube != self.total_fibers:
+            raise ValidationError(
+                f"Inconsistência: {self.tube_count} tubos x "
+                f"{self.fibers_per_tube} fibras = "
+                f"{self.tube_count * self.fibers_per_tube}, "
+                f"mas total_fibers={self.total_fibers}"
+            )
+
+
 class FiberCable(models.Model):
     """
     Fiber optic cable connecting two ports.
@@ -354,15 +407,52 @@ class FiberCable(models.Model):
     ]
 
     name = models.CharField(max_length=150, unique=True)
+    
+    # Hierarchical Structure (Phase 11.5 - Physical Fiber Modeling)
+    profile = models.ForeignKey(
+        FiberProfile,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="cables",
+        help_text="Perfil técnico que define a estrutura interna do cabo"
+    )
+    
+    # Topology: Logical Connection ("Inventory First, Routing Later" pattern)
+    # Cables can be created without sites/ports (floating inventory)
+    # and connected later via FiberConnectionModal
+    site_a = models.ForeignKey(
+        Site,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='cables_start',
+        help_text="Site de origem (opcional até conexão lógica)"
+    )
+    site_b = models.ForeignKey(
+        Site,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='cables_end',
+        help_text="Site de destino (opcional até conexão lógica)"
+    )
+    
     origin_port = models.ForeignKey(
         Port,
         related_name="fiber_origin",
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        help_text="Porta de origem (opcional até terminação física)"
     )
     destination_port = models.ForeignKey(
         Port,
         related_name="fiber_destination",
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        help_text="Porta de destino (opcional até terminação física)"
     )
     length_km = models.DecimalField(
         max_digits=7,
@@ -443,6 +533,198 @@ class FiberCable(models.Model):
         self.status = new_status
         self.last_status_update = timezone.now()
         self.save(update_fields=["status", "last_status_update"])
+
+    def create_structure(self) -> bool:
+        """
+        Gera a estrutura física (Tubos e Fibras) baseada no Profile.
+        Deve ser chamado após salvar o cabo se um profile for definido.
+        
+        Returns:
+            bool: True se estrutura foi criada, False se já existia ou sem profile
+        """
+        if not self.profile:
+            return False
+
+        # Não recriar se já existir estrutura
+        if self.tubes.exists():
+            return False
+
+        with transaction.atomic():
+            # 1. Criar Tubos
+            for tube_num in range(1, self.profile.tube_count + 1):
+                tube_color_data = get_color_for_index(tube_num)
+                tube = BufferTube.objects.create(
+                    cable=self,
+                    number=tube_num,
+                    color=tube_color_data['name'],
+                    color_hex=tube_color_data['hex']
+                )
+
+                # 2. Criar Fibras dentro do Tubo
+                fibers_to_create = []
+                for fiber_num in range(1, self.profile.fibers_per_tube + 1):
+                    fiber_color_data = get_color_for_index(fiber_num)
+                    # Número absoluto da fibra no cabo
+                    # Ex: fibra 13 é a 1ª do 2º tubo em um cabo 4x12
+                    absolute_num = ((tube_num - 1) * self.profile.fibers_per_tube) + fiber_num
+
+                    fibers_to_create.append(FiberStrand(
+                        tube=tube,
+                        number=fiber_num,
+                        absolute_number=absolute_num,
+                        color=fiber_color_data['name'],
+                        color_hex=fiber_color_data['hex'],
+                        status='dark'  # Padrão: Apagada
+                    ))
+
+                FiberStrand.objects.bulk_create(fibers_to_create)
+
+        return True
+
+
+class BufferTube(models.Model):
+    """
+    Tubo Loose (unidade de proteção que agrupa fibras).
+    Segue padrão de cores ABNT NBR 14565 / TIA-598.
+    """
+    cable = models.ForeignKey(
+        FiberCable,
+        on_delete=models.CASCADE,
+        related_name='tubes',
+        help_text="Cabo ao qual este tubo pertence"
+    )
+    number = models.IntegerField(
+        help_text="Número sequencial do tubo (1, 2, 3...)"
+    )
+    color = models.CharField(
+        max_length=30,
+        help_text="Nome da cor do tubo conforme padrão ABNT"
+    )
+    color_hex = models.CharField(
+        max_length=7,
+        default='#FFFFFF',
+        help_text="Código hexadecimal da cor"
+    )
+
+    class Meta:
+        db_table = "inventory_buffer_tube"
+        ordering = ["cable", "number"]
+        unique_together = [["cable", "number"]]
+        verbose_name = "Tubo Loose"
+        verbose_name_plural = "Tubos Loose"
+
+    def __str__(self) -> str:
+        return f"{self.cable.name} - Tubo {self.number} ({self.color})"
+
+
+class FiberStrand(models.Model):
+    """
+    O fio de fibra individual (filamento de vidro).
+    Esta é a unidade atômica do sistema de gerenciamento.
+    """
+    STATUS_DARK = "dark"
+    STATUS_LIT = "lit"
+    STATUS_RESERVED = "reserved"
+    STATUS_BROKEN = "broken"
+    STATUS_CHOICES = [
+        (STATUS_DARK, "Apagada (Dark Fiber)"),
+        (STATUS_LIT, "Iluminada (Ativa)"),
+        (STATUS_RESERVED, "Reservada"),
+        (STATUS_BROKEN, "Rompida"),
+    ]
+
+    tube = models.ForeignKey(
+        BufferTube,
+        on_delete=models.CASCADE,
+        related_name='strands',
+        help_text="Tubo ao qual esta fibra pertence"
+    )
+    number = models.IntegerField(
+        help_text="Número da fibra dentro do tubo (1-12 tipicamente)"
+    )
+    absolute_number = models.IntegerField(
+        help_text="Número sequencial no cabo (1-144 para cabo 144FO)"
+    )
+    color = models.CharField(
+        max_length=30,
+        help_text="Nome da cor da fibra conforme padrão ABNT"
+    )
+    color_hex = models.CharField(
+        max_length=7,
+        help_text="Código hexadecimal da cor"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_DARK,
+        help_text="Status operacional da fibra"
+    )
+
+    # --- CONEXÕES FÍSICAS (segredo da modelagem) ---
+    
+    # Conexão com Porta de Equipamento (Ex: Porta SFP do Switch via DIO)
+    connected_device_port = models.OneToOneField(
+        Port,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='connected_fiber',
+        help_text="Porta de dispositivo conectada (DIO, ODF, Switch)"
+    )
+
+    # Fusão com outra fibra (Ex: Na Caixa de Emenda no Poste)
+    fused_to = models.OneToOneField(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='fusion_pair',
+        help_text="Fibra com a qual esta está fusionada (emenda)"
+    )
+
+    # Metadados de qualidade (medições ópticas)
+    attenuation_db = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Atenuação medida em dB (OTDR)"
+    )
+    last_test_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Última medição OTDR"
+    )
+    notes = models.TextField(
+        blank=True,
+        help_text="Observações técnicas sobre esta fibra"
+    )
+
+    class Meta:
+        db_table = "inventory_fiber_strand"
+        ordering = ["absolute_number"]
+        unique_together = [["tube", "number"]]
+        verbose_name = "Filamento de Fibra"
+        verbose_name_plural = "Filamentos de Fibra"
+
+    def __str__(self) -> str:
+        return (
+            f"{self.tube.cable.name} - "
+            f"T{self.tube.number}F{self.number} ({self.color})"
+        )
+
+    @property
+    def full_address(self) -> dict[str, Any]:
+        """Endereço completo da fibra (para documentação)"""
+        return {
+            "cable": self.tube.cable.name,
+            "tube": self.tube.number,
+            "tube_color": self.tube.color,
+            "fiber": self.number,
+            "fiber_color": self.color,
+            "notation": f"T{self.tube.number}F{self.number}",
+            "absolute": self.absolute_number,
+        }
 
 
 class FiberEvent(models.Model):

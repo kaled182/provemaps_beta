@@ -234,7 +234,11 @@ export const useDashboardStore = defineStore('dashboard', () => {
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
-      const hostEntries = Array.isArray(data.hosts_status) ? data.hosts_status : [];
+      const hostEntries = Array.isArray(data.hosts_status)
+        ? data.hosts_status
+        : Array.isArray(data.hosts)
+          ? data.hosts
+          : [];
       const updatedHosts = new Map();
 
       hostEntries.forEach(rawHost => {

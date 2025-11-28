@@ -46,9 +46,11 @@ export default function createDrawingPlugin(context, options = {}) {
     }
 
     // Adiciona listener de clique no mapa
-    clickListener = map.addListener('click', (event) => {
-      addPoint(event.latLng);
-    });
+    if (!clickListener) {
+      clickListener = map.addListener('click', (event) => {
+        addPoint(event.latLng);
+      });
+    }
 
     console.log('[DrawingPlugin] Drawing mode started');
   }
@@ -179,6 +181,18 @@ export default function createDrawingPlugin(context, options = {}) {
    * @param {Array<{lat: number, lng: number}>} coordinates - Array de coordenadas
    */
   function setPath(coordinates) {
+    // Garante que polyline existe antes de adicionar pontos
+    if (!polyline) {
+      polyline = new google.maps.Polyline({
+        map,
+        strokeColor: '#2563eb',
+        strokeWeight: 3,
+        strokeOpacity: 0.8,
+        geodesic: true,
+        editable: false
+      });
+    }
+    
     clearPath();
     coordinates.forEach(coord => addPoint(coord));
   }
