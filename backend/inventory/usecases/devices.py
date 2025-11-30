@@ -1295,7 +1295,6 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
     lon_decimal = _to_decimal(_clean(inventory.get("location_lon")))
 
     # Find existing site based on what Zabbix returns
-    # DO NOT use existing_device.site - we need to check if device should be moved to a different site
     site = None
     logger.info(f"Searching for site: '{site_display_name}'")
     
@@ -1338,6 +1337,19 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
                     site = existing_site
                     logger.info(f"Found site by normalized match: {site.display_name}")
                     break
+        
+        if site is None and existing_device and existing_device.site:
+            # Strategy 4: Reuse existing device's site (update its display_name)
+            # This handles cases where the site name changed in Zabbix
+            site = existing_device.site
+            logger.info(f"Reusing existing device's site (id={site.id}, old name='{site.display_name}')")
+            
+            # Update site display_name to match Zabbix
+            if site.display_name != site_display_name:
+                logger.info(f"Updating site display_name from '{site.display_name}' to '{site_display_name}'")
+                site.display_name = site_display_name
+                site.slug = slug_candidate
+                site.save(update_fields=['display_name', 'slug'])
     
     site_created = False
     if site is None and update_site:

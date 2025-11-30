@@ -7,10 +7,7 @@ app_name = 'maps_view'
 urlpatterns = [
     path(
         'dashboard/',
-        RedirectView.as_view(
-            pattern_name='monitoring:backbone_dashboard',
-            permanent=True,
-        ),
+        views.dashboard_view,
         name='dashboard_view',
     ),
     path(

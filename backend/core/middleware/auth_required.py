@@ -36,16 +36,29 @@ class AuthRequiredMiddleware:
         '/ready',
         '/live',
         '/favicon.ico',
+        '/celery/status',
+        '/setup_app/first_time/',
     ]
     
     WHITELIST_PREFIXES = [
         '/api/v1/',  # API endpoints have their own auth (DRF)
+        '/setup_app/docs/',
     ]
     
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]):
         self.get_response = get_response
     
     def __call__(self, request: HttpRequest) -> HttpResponse:
+        # Allow dashboard to be processed by FirstTimeSetup middleware when forced
+        try:
+            from setup_app.models import FirstTimeSetup
+            force_flow = getattr(settings, 'FORCE_FIRST_TIME_FLOW', False)
+            not_configured = not FirstTimeSetup.objects.filter(configured=True).exists()
+            if force_flow and not_configured and request.path.startswith('/maps_view/dashboard'):
+                return self.get_response(request)
+        except Exception:
+            pass
+
         # Check if path is whitelisted
         if self._is_whitelisted(request.path):
             return self.get_response(request)
