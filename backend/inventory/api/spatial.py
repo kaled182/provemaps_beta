@@ -32,6 +32,19 @@ from inventory.tasks import refresh_radius_search_cache
 logger = logging.getLogger(__name__)
 
 
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Compute great-circle distance between two WGS84 points in kilometers.
+    Fallback for sites without populated `location` PointField.
+    """
+    from math import radians, sin, cos, asin, sqrt
+    R = 6371.0088  # mean Earth radius in km
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+    c = 2 * asin(sqrt(a))
+    return R * c
+
+
 def _parse_bbox(bbox_str: str) -> Polygon | None:
     """
     Parse bbox query parameter into PostGIS Polygon.
@@ -433,7 +446,17 @@ def api_sites_within_radius(request: HttpRequest) -> HttpResponse:
     for site in sites:
         # distance is annotated by get_sites_within_radius
         distance_m = getattr(site, 'distance', None)
-        distance_km = round(distance_m.m / 1000.0, 2) if distance_m else None
+        if distance_m:
+            distance_km = round(distance_m.m / 1000.0, 2)
+        else:
+            # Fallback: compute using lat/lng if location is missing
+            try:
+                distance_km = round(
+                    _haversine_km(lat, lng, float(site.latitude), float(site.longitude)),
+                    2,
+                )
+            except Exception:
+                distance_km = None
         
         results.append({
             "id": site.id,
@@ -443,6 +466,9 @@ def api_sites_within_radius(request: HttpRequest) -> HttpResponse:
             "distance_km": distance_km,
         })
     
+    # Ensure ordering by distance for deterministic results
+    results.sort(key=lambda s: (s["distance_km"] if s["distance_km"] is not None else float('inf')))
+
     response_data = {
         "count": len(results),
         "center": {"lat": lat, "lng": lng},

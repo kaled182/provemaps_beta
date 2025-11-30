@@ -121,7 +121,8 @@ class Site(models.Model):
 class DeviceGroup(models.Model):
     """
     Device group imported from Zabbix host groups.
-    Used for categorization and filtering (e.g., "Switch Huawei", "Router Mikrotik", "VSOLUTION").
+    Used for categorization and filtering (e.g., "Switch Huawei",
+    "Router Mikrotik", "VSOLUTION").
     """
     zabbix_groupid = models.CharField(
         max_length=32,
@@ -390,6 +391,47 @@ class FiberProfile(models.Model):
             )
 
 
+class SpliceBoxTemplate(models.Model):
+    """
+    Template físico de Caixa de Emenda (CEO) conforme especificação de fábrica.
+    Dados baseados na linha SVT da Fibracem (24–96 fibras, bandejas e portas).
+    """
+    name = models.CharField(max_length=100)
+    manufacturer = models.CharField(max_length=50, default="Fibracem")
+    model_code = models.CharField(max_length=50, blank=True)
+
+    # Capacidade modular por bandejas
+    max_trays = models.IntegerField(help_text="Máximo de bandejas suportadas")
+    splices_per_tray = models.IntegerField(
+        default=24,
+        help_text="Fusões por bandeja (padrão Fibracem SVT = 24)"
+    )
+
+    # Portas físicas
+    cable_ports_oval = models.IntegerField(
+        default=1,
+        help_text="Entrada oval (pass-through, 10–25mm)"
+    )
+    cable_ports_round = models.IntegerField(
+        default=4,
+        help_text="Entradas cilíndricas (derivação, 8–18mm)"
+    )
+
+    # Dimensões (opcional)
+    length_mm = models.IntegerField(default=492)
+    diameter_mm = models.IntegerField(default=195)
+
+    class Meta:
+        db_table = "inventory_splice_box_template"
+        ordering = ["manufacturer", "name"]
+
+    def total_capacity(self) -> int:
+        return int(self.max_trays) * int(self.splices_per_tray)
+
+    def __str__(self) -> str:
+        return f"{self.manufacturer} {self.name} ({self.total_capacity()}FO)"
+
+
 class FiberCable(models.Model):
     """
     Fiber optic cable connecting two ports.
@@ -540,7 +582,8 @@ class FiberCable(models.Model):
         Deve ser chamado após salvar o cabo se um profile for definido.
         
         Returns:
-            bool: True se estrutura foi criada, False se já existia ou sem profile
+            bool: True se estrutura foi criada,
+            False se já existia ou sem profile
         """
         if not self.profile:
             return False
@@ -566,7 +609,9 @@ class FiberCable(models.Model):
                     fiber_color_data = get_color_for_index(fiber_num)
                     # Número absoluto da fibra no cabo
                     # Ex: fibra 13 é a 1ª do 2º tubo em um cabo 4x12
-                    absolute_num = ((tube_num - 1) * self.profile.fibers_per_tube) + fiber_num
+                    absolute_num = (
+                        (tube_num - 1) * self.profile.fibers_per_tube
+                    ) + fiber_num
 
                     fibers_to_create.append(FiberStrand(
                         tube=tube,
@@ -699,6 +744,36 @@ class FiberStrand(models.Model):
         blank=True,
         help_text="Observações técnicas sobre esta fibra"
     )
+    
+    # --- Segmentação de Cabo (rastreabilidade) ---
+    segment = models.ForeignKey(
+        'CableSegment',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='strands',
+        help_text="Segmento ao qual esta fibra pertence (para rastreabilidade)"
+    )
+
+    # --- Localização física da fusão (Matriz: Bandeja/Slot) ---
+    fusion_infrastructure = models.ForeignKey(
+        'FiberInfrastructure',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='fusions',
+        help_text="CEO onde ocorreu a fusão (para matriz visual)"
+    )
+    fusion_tray = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Número da bandeja"
+    )
+    fusion_slot = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Número do slot (1–24)"
+    )
 
     class Meta:
         db_table = "inventory_fiber_strand"
@@ -751,6 +826,177 @@ class FiberEvent(models.Model):
             f"{self.fiber.name} {self.previous_status}->{self.new_status} "
             f"@ {self.timestamp:%Y-%m-%d %H:%M:%S}"
         )
+
+
+class FiberInfrastructure(models.Model):
+    TYPES = [
+        ("slack", "Reserva Técnica"),
+        ("splice_box", "Caixa de Emenda (CEO)"),
+        ("splitter_box", "Caixa de Atendimento (CTO)"),
+        ("transition", "Transição Aéreo/Subt"),
+    ]
+
+    cable = models.ForeignKey(
+        FiberCable,
+        on_delete=models.CASCADE,
+        related_name="infrastructure_points",
+    )
+
+    type = models.CharField(max_length=20, choices=TYPES)
+    name = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Ex: CEO-01-BKB",
+    )
+
+    # Localização geográfica exata (Point) em WGS84
+    location = gis_models.PointField(geography=True, srid=4326)
+
+    # Metragem sequencial calculada (Linear Referencing)
+    distance_from_origin = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Distância em metros a partir do início do cabo",
+    )
+
+    # Metadados flexíveis
+    metadata = models.JSONField(default=dict, blank=True)
+
+    # Template físico (opcional, para CEOs)
+    box_template = models.ForeignKey(
+        SpliceBoxTemplate,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='installed_boxes'
+    )
+    installed_trays = models.IntegerField(
+        default=1,
+        help_text="Quantidade de bandejas instaladas fisicamente"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["distance_from_origin", "created_at", "id"]
+        db_table = "inventory_fiber_infrastructure"
+        verbose_name = "Ponto de Infraestrutura"
+        verbose_name_plural = "Pontos de Infraestrutura"
+
+    def __str__(self) -> str:
+        has_dist = self.distance_from_origin is not None
+        dist_val = f"{self.distance_from_origin:.1f}m"
+        dist = dist_val if has_dist else "sem distância"
+        return f"{self.get_type_display()} @ {dist}"
+
+
+class InfrastructureCableAttachment(models.Model):
+    """
+    Representa como um cabo se conecta fisicamente a uma caixa (CEO/CTO):
+    porta oval (pass-through) ou porta redonda (derivação/entrada).
+    """
+    PORT_CHOICES = [
+        ("oval", "Oval (Passagem)"),
+        ("round", "Redonda (Derivação)"),
+    ]
+
+    infrastructure = models.ForeignKey(
+        FiberInfrastructure,
+        related_name='attached_cables',
+        on_delete=models.CASCADE,
+    )
+    cable = models.ForeignKey(
+        FiberCable,
+        related_name='attachments',
+        on_delete=models.CASCADE,
+    )
+    port_type = models.CharField(max_length=10, choices=PORT_CHOICES)
+    is_pass_through = models.BooleanField(
+        default=False,
+        help_text="Se verdadeiro, cabo entra e sai (sangria/pass-through)"
+    )
+
+    class Meta:
+        db_table = 'inventory_infrastructure_cable_attachment'
+        unique_together = [['infrastructure', 'cable', 'port_type']]
+        ordering = ['infrastructure_id']
+
+    def __str__(self) -> str:
+        return (
+            f"{self.cable.name} @ {self.infrastructure.name} "
+            f"({self.port_type})"
+        )
+
+
+class CableSegment(models.Model):
+    """
+    Representa um segmento lógico de um cabo físico.
+    
+    Uso: Quando um cabo passa por múltiplas CEOs, ele é dividido em segmentos
+    para permitir rastreabilidade e fusões corretas.
+    
+    Exemplo:
+        Cabo-Principal (50km total):
+          - Seg1: Site A → CEO-01 (20km)
+          - Seg2: CEO-01 → CEO-02 (15km)
+          - Seg3: CEO-02 → Site B (15km)
+    
+    Na CEO-01, fusões acontecem entre Seg1 e Seg2 (não "consigo mesmo").
+    """
+    cable = models.ForeignKey(
+        FiberCable,
+        on_delete=models.CASCADE,
+        related_name='segments',
+        help_text='Cabo físico ao qual este segmento pertence'
+    )
+    segment_number = models.IntegerField(
+        help_text='Número sequencial do segmento (1, 2, 3...)'
+    )
+    name = models.CharField(
+        max_length=200,
+        help_text='Ex: Cabo-Principal-Seg1'
+    )
+    
+    # Infraestruturas de início e fim
+    start_infrastructure = models.ForeignKey(
+        FiberInfrastructure,
+        on_delete=models.PROTECT,
+        related_name='segments_starting_here',
+        null=True,
+        blank=True,
+        help_text='Infraestrutura de origem (CEO, Site, etc.)'
+    )
+    end_infrastructure = models.ForeignKey(
+        FiberInfrastructure,
+        on_delete=models.PROTECT,
+        related_name='segments_ending_here',
+        null=True,
+        blank=True,
+        help_text='Infraestrutura de destino'
+    )
+    
+    length_meters = models.FloatField(
+        default=0,
+        help_text='Comprimento deste segmento em metros'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'inventory_cable_segment'
+        ordering = ['cable', 'segment_number']
+        unique_together = [['cable', 'segment_number']]
+        indexes = [
+            models.Index(fields=['cable', 'segment_number'], name='idx_cable_seg_num'),
+            models.Index(fields=['start_infrastructure'], name='idx_seg_start'),
+            models.Index(fields=['end_infrastructure'], name='idx_seg_end'),
+        ]
+        verbose_name = 'Segmento de Cabo'
+        verbose_name_plural = 'Segmentos de Cabo'
+    
+    def __str__(self) -> str:
+        return f"{self.name} ({self.length_meters:.0f}m)"
 
 
 class ImportRule(models.Model):

@@ -272,6 +272,14 @@ export default function createDrawingPlugin(context, options = {}) {
     }
   }
 
+  /**
+   * Retorna a instância da polyline para adicionar listeners customizados
+   * @returns {google.maps.Polyline|null}
+   */
+  function getPolyline() {
+    return polyline;
+  }
+
   return {
     startDrawing,
     stopDrawing,
@@ -284,6 +292,7 @@ export default function createDrawingPlugin(context, options = {}) {
     clearPath,
     fitBounds,
     cleanup,
+    getPolyline,
     // Getters
     get pointCount() {
       return markers.length;

@@ -230,3 +230,31 @@ export function cleanupMap() {
   clickCallback = null;
   rightClickCallback = null;
 }
+
+/**
+ * Alterna o modo de edição de um caminho (polyline)
+ * 
+ * @param {boolean} isEditable - true = modo edição, false = modo visualização
+ * @param {HTMLElement} mapDiv - Container do mapa (para feedback de cursor)
+ * 
+ * Comportamento:
+ * - Google Maps: polyline.setEditable() + polyline.setDraggable()
+ * - Cursor: crosshair (edit) / grab (read)
+ */
+export function setPathEditable(isEditable, mapDiv = null) {
+  if (!polyline) {
+    console.warn('[mapCore] setPathEditable: polyline is null');
+    return;
+  }
+
+  // Google Maps API
+  polyline.setEditable(isEditable);
+  polyline.setDraggable(isEditable);
+  console.log(`[mapCore] Google Maps polyline editable: ${isEditable}`);
+
+  // Feedback visual: cursor do mapa
+  if (mapDiv) {
+    mapDiv.style.cursor = isEditable ? 'crosshair' : 'grab';
+    console.log(`[mapCore] Map cursor: ${mapDiv.style.cursor}`);
+  }
+}

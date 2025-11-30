@@ -30,6 +30,7 @@ from inventory.services.fiber_status import (
     fetch_interface_status_advanced,
     get_oper_status_from_port,
 )
+from inventory.spatial import coords_to_linestring
 
 logger = logging.getLogger(__name__)
 
@@ -161,12 +162,16 @@ def create_fiber_from_kml(
     # Sanitiza e calcula comprimento em km
     sanitized = sanitize_path_points(coords, allow_empty=False)
     length_km = calculate_path_length(sanitized)
+    
+    # CRITICAL: Gerar path PostGIS para permitir operações de infraestrutura
+    path_geom = coords_to_linestring(sanitized)
 
     fiber = FiberCable.objects.create(
         name=name,
         origin_port=origin_port,
         destination_port=dest_port,
         path_coordinates=sanitized,
+        path=path_geom,  # PostGIS LineString
         length_km=length_km,
         status=FiberCable.STATUS_UNKNOWN,
     )
@@ -371,6 +376,29 @@ def list_fiber_cables() -> List[Dict[str, object]]:
 def fiber_detail_payload(cable: FiberCable) -> Dict[str, object]:
     origin_site = cable.origin_port.device.site
     dest_site = cable.destination_port.device.site
+    
+    # Buscar pontos de infraestrutura
+    infrastructure_points = []
+    for p in cable.infrastructure_points.all():
+        loc = None
+        try:
+            loc = {
+                "type": "Point",
+                "coordinates": [p.location.x, p.location.y],
+            }
+        except Exception:
+            loc = None
+        infrastructure_points.append({
+            "id": p.id,
+            "type": p.type,
+            "type_display": p.get_type_display(),
+            "name": p.name,
+            "location": loc,
+            "distance_from_origin": p.distance_from_origin,
+            "metadata": p.metadata,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        })
+    
     return {
         "id": cable.id,
         "name": cable.name,
@@ -413,11 +441,20 @@ def fiber_detail_payload(cable: FiberCable) -> Dict[str, object]:
             "port_id": cable.destination_port.id,
         },
         "path": cable.path_coordinates or [],
+        "infrastructure_points": infrastructure_points,
         "single_port": cable.origin_port == cable.destination_port,
     }
 
 
 def update_fiber_path(cable: FiberCable, raw_path: Any) -> Dict[str, object]:
+    """
+    Update cable path coordinates and regenerate PostGIS geometry.
+    
+    CRITICAL: Always regenerates cable.path from path_coordinates to ensure
+    all cables have PostGIS LineString for spatial operations.
+    """
+    from inventory.spatial import coords_to_linestring
+    
     allow_empty = True
     sanitized = sanitize_path_points(raw_path, allow_empty=allow_empty)
     if sanitized and len(sanitized) < 2:
@@ -426,8 +463,14 @@ def update_fiber_path(cable: FiberCable, raw_path: Any) -> Dict[str, object]:
     length_km = calculate_path_length(sanitized)
     cable.path_coordinates = sanitized
     cable.length_km = length_km
-    cable.save(update_fields=["path_coordinates", "length_km"])
+    
+    # SEMPRE regenerar path PostGIS a partir de path_coordinates
+    # Garante que todos os cabos tenham geometria LineString
+    cable.path = coords_to_linestring(sanitized)
+    
+    cable.save(update_fields=["path_coordinates", "length_km", "path"])
     invalidate_fiber_cache()
+    
     return {
         "status": "ok",
         "length_km": length_km,
@@ -723,12 +766,16 @@ def create_manual_fiber(data: Dict[str, object]) -> Dict[str, object]:
     raw_path = data.get("path") or []
     sanitized = sanitize_path_points(raw_path, allow_empty=False)
     length_km = calculate_path_length(sanitized)
+    
+    # CRITICAL: Gerar path PostGIS para permitir operações de infraestrutura
+    path_geom = coords_to_linestring(sanitized)
 
     fiber = FiberCable.objects.create(
         name=name,
         origin_port=origin_port,
         destination_port=dest_port,
         path_coordinates=sanitized,
+        path=path_geom,  # PostGIS LineString
         length_km=length_km,
         status=FiberCable.STATUS_UNKNOWN,
         notes="single-port-monitoring" if single_port else "",

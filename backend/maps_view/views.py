@@ -29,7 +29,6 @@ def build_dashboard_event_payload():
 
 # ----------------------------- Views -----------------------------
 
-@login_required
 def dashboard_view(request):
     """Dashboard entrypoint.
 

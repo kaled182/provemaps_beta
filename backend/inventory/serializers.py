@@ -4,6 +4,7 @@ Exposes Site, Device, Port via REST API for Vue 3 frontend
 """
 
 from rest_framework import serializers
+
 from inventory.models import (
     Site,
     Device,
@@ -220,6 +221,7 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
     # Site geolocation for map airline and centering
     site_a_location = serializers.SerializerMethodField()
     site_b_location = serializers.SerializerMethodField()
+    infrastructure_points = serializers.SerializerMethodField()
     
     def get_site_a_name(self, obj: FiberCable) -> str | None:
         """Get site A name from site_a or origin_port.device.site"""
@@ -270,7 +272,10 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
         site = getattr(obj, "site_a", None)
         if site and site.latitude is not None and site.longitude is not None:
             try:
-                return {"lat": float(site.latitude), "lng": float(site.longitude)}
+                return {
+                    "lat": float(site.latitude),
+                    "lng": float(site.longitude),
+                }
             except Exception:
                 return None
         # Fallback: origin port device site
@@ -324,6 +329,34 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
                 return None
         return None
 
+    def get_infrastructure_points(self, obj: FiberCable) -> list[dict]:
+        """Return infra points without importing models to avoid cycles."""
+        points_qs = getattr(obj, "infrastructure_points", None)
+        if not points_qs:
+            return []
+        result = []
+        for p in points_qs.all():
+            loc = None
+            try:
+                loc = {
+                    "type": "Point",
+                    "coordinates": [p.location.x, p.location.y],
+                }
+            except Exception:
+                loc = None
+            type_label = getattr(p, "get_type_display", lambda: None)()
+            result.append({
+                "id": p.id,
+                "type": p.type,
+                "type_display": type_label,
+                "name": p.name,
+                "location": loc,
+                "distance_from_origin": p.distance_from_origin,
+                "metadata": p.metadata,
+                "created_at": p.created_at,
+            })
+        return result
+
     class Meta:
         model = FiberCable
         fields = [
@@ -352,6 +385,8 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
             "connection_status",
             # Geometry/Path
             "path_coordinates",
+            # Infraestrutura
+            "infrastructure_points",
             # Metadata
             "length_km",
             "status",
@@ -502,3 +537,5 @@ class FiberCableStructureSerializer(serializers.ModelSerializer):
             "profile_name",
             "tubes",
         ]
+
+

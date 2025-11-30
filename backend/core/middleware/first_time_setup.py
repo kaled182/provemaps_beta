@@ -28,6 +28,7 @@ class FirstTimeSetupRedirectMiddleware:
             "/static/",
             "/media/",
             "/setup_app/static/",
+            "/setup_app/docs/",
         ]
         self.safe_prefixes: Iterable[str] = tuple(filter(None, prefix_candidates))
         # Health and metrics endpoints should stay accessible for monitoring

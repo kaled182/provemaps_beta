@@ -1,12 +1,23 @@
 from __future__ import annotations
 
 from django.urls import path
+from .api.splice_matrix import (
+    SpliceBoxMatrixView,
+    CreateFusionView,
+    DeleteFusionView,
+    BoxContextView,
+)
 
 from inventory.api import devices as device_api
 from inventory.api import fibers as fiber_api
 from inventory.api import routes as routes_api
 from inventory.api import spatial as spatial_api
 from inventory.api import zabbix_lookup as zabbix_lookup_api
+from inventory.api.infrastructure import (
+    api_create_infrastructure,
+    api_update_infrastructure,
+    api_delete_infrastructure,
+)
 
 app_name = "inventory-api"
 
@@ -250,5 +261,40 @@ urlpatterns = [
         "devices/<int:device_id>/",
         device_api.api_device_delete,
         name="device-delete",
+    ),
+    path(
+        "infrastructure/",
+        api_create_infrastructure,
+        name="infrastructure-create",
+    ),
+    path(
+        "infrastructure/<int:pk>/",
+        api_update_infrastructure,
+        name="infrastructure-update",
+    ),
+    path(
+        "infrastructure/<int:pk>/delete/",
+        api_delete_infrastructure,
+        name="infrastructure-delete",
+    ),
+    path(
+        'splice-boxes/<int:id>/matrix/',
+        SpliceBoxMatrixView.as_view(),
+        name='splice-box-matrix',
+    ),
+    path(
+        'splice-boxes/<int:id>/context/',
+        BoxContextView.as_view(),
+        name='splice-box-context',
+    ),
+    path(
+        'fusions/',
+        CreateFusionView.as_view(),
+        name='create-fusion',
+    ),
+    path(
+        'fusions/<int:fiber_id>/',
+        DeleteFusionView.as_view(),
+        name='delete-fusion',
     ),
 ]

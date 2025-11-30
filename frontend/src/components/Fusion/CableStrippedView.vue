@@ -1,0 +1,87 @@
+<template>
+  <div class="bg-gray-900 rounded-lg border border-gray-700 mb-3 overflow-hidden shadow-sm">
+    <div class="bg-gray-800 px-3 py-2 flex justify-between items-center cursor-pointer hover:bg-gray-750 transition-colors" @click="expanded = !expanded">
+      <div class="flex items-center gap-2 overflow-hidden">
+        <i class="fas fa-chevron-right text-[10px] text-gray-500 transition-transform" :class="{'rotate-90': expanded}"></i>
+        
+        <div class="shrink-0" :title="cable.port_type === 'oval' ? 'Porta Oval (Principal)' : 'Porta Cilíndrica (Derivação)'">
+          <span v-if="cable.port_type === 'oval'" class="w-5 h-5 rounded-full bg-purple-900/50 border border-purple-500 flex items-center justify-center text-purple-400 text-[10px]">
+            <i class="fas fa-circle-notch"></i>
+          </span>
+          <span v-else class="w-5 h-5 rounded-full bg-blue-900/50 border border-blue-500 flex items-center justify-center text-blue-400 text-[10px]">
+            <i class="fas fa-dot-circle"></i>
+          </span>
+        </div>
+
+        <div class="min-w-0">
+          <div class="font-bold text-sm text-gray-200 truncate">{{ cable.name }}</div>
+          <div class="text-[10px] text-gray-500 truncate">{{ cable.profile_name || 'Sem perfil' }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="expanded" class="p-2 space-y-2 bg-black/20 border-t border-gray-700">
+      <div v-for="tube in cable.tubes" :key="tube.id" class="flex items-stretch gap-2">
+        
+        <div 
+          class="w-6 flex flex-col items-center justify-center rounded-l-sm border-l-4 bg-gray-800 shrink-0"
+          :style="{ borderLeftColor: tube.color_hex }"
+          :title="`Tubo ${tube.number}: ${tube.color}`"
+        >
+          <span class="text-[9px] font-bold text-gray-400">T{{ tube.number }}</span>
+        </div>
+
+        <div class="flex flex-wrap gap-1.5 flex-1 py-1 px-2 bg-gray-800/50 rounded-r-sm items-center">
+          <div 
+            v-for="strand in tube.strands" 
+            :key="strand.id"
+            class="w-5 h-5 rounded-full cursor-pointer border-2 transition-all duration-150 relative group"
+            :class="[
+              isSelected(strand) ? 'border-white scale-110 z-10 shadow-[0_0_8px_rgba(255,255,255,0.5)]' : 'border-transparent hover:border-gray-500',
+              strand.is_fused && !isSelected(strand) ? 'opacity-60 cursor-not-allowed' : '',
+              (!strand.is_fused && strand.fused_elsewhere) ? 'outline-dashed' : ''
+            ]"
+            :style="{ backgroundColor: strand.color_hex }"
+            :disabled="strand.is_fused"
+            @click="onClick(strand)"
+          >
+            <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-black text-white text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap z-20">
+              <template v-if="strand.is_fused">
+                FO {{ strand.number }} - Fusionada aqui
+              </template>
+              <template v-else-if="strand.fused_elsewhere">
+                FO {{ strand.number }} - {{ strand.fusion_ceo ? ('Fusionada em ' + strand.fusion_ceo) : 'Fusionada em outra caixa' }}
+              </template>
+              <template v-else>
+                FO {{ strand.number }} - {{ strand.status || 'Livre' }}
+              </template>
+            </div>
+
+            <div v-if="strand.is_fused" class="absolute inset-0 flex items-center justify-center">
+              <div class="w-1.5 h-1.5 bg-orange-500 rounded-full shadow-[0_0_4px_rgba(251,146,60,0.8)]"></div>
+            </div>
+            <div v-else-if="strand.fused_elsewhere" class="absolute inset-0 pointer-events-none">
+              <div class="absolute inset-0 border-2 border-gray-500 border-dashed rounded-full"></div>
+            </div>
+          </div>
+        </div>
+        
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref } from 'vue'
+const props = defineProps(['cable', 'selectedId'])
+const emit = defineEmits(['select'])
+
+const expanded = ref(true)
+
+const isSelected = (strand) => props.selectedId === strand.id
+
+const onClick = (strand) => {
+  if (strand.is_fused) return
+  emit('select', strand.id)
+}
+</script>
