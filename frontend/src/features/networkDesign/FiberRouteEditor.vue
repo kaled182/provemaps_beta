@@ -58,14 +58,14 @@
               <p class="text-[10px] font-bold text-gray-500 uppercase">Ações no Ponto</p>
             </div>
             
+            <button class="w-full text-left px-4 py-2.5 text-sm hover:bg-indigo-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center gap-3" @click="actionSplitCable">
+              <i class="fas fa-cut text-red-500"></i> Romper Cabo
+            </button>
+            
             <button class="w-full text-left px-4 py-2.5 text-sm hover:bg-indigo-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center gap-3" @click="actionAddSlack">
               <i class="fas fa-infinity text-blue-500"></i> Adicionar Reserva
             </button>
             
-            <button class="w-full text-left px-4 py-2.5 text-sm hover:bg-indigo-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center gap-3" @click="actionAddSplice">
-              <i class="fas fa-box text-orange-500"></i> Adicionar Caixa (CEO)
-            </button>
-
             <div class="border-t border-gray-100 dark:border-gray-700 my-1"></div>
             
             <button class="w-full text-left px-4 py-2 text-xs hover:bg-red-50 text-red-600 flex items-center gap-3" @click="closeContextMenu">
@@ -442,7 +442,32 @@ const onPluginLoaded = async (pluginName, plugin) => {
 };
 
 // Load Cable Data
-const loadCableData = async () => {
+const loadCableData = async (options = {}) => {
+  const {
+    preserveViewport = false,
+    focusPosition = null,
+    focusZoom = null,
+  } = options;
+
+  let previousCenter = null;
+  let previousZoom = null;
+
+  if (preserveViewport && mapInstance.value) {
+    const getCenterFn = mapInstance.value.getCenter;
+    previousCenter = typeof getCenterFn === 'function' ? getCenterFn.call(mapInstance.value) : null;
+    previousZoom =
+      typeof mapInstance.value.getZoom === 'function' ? mapInstance.value.getZoom() : null;
+  }
+
+  const recenterMap = (position) => {
+    if (!mapInstance.value || !position) return;
+    if (typeof mapInstance.value.panTo === 'function') {
+      mapInstance.value.panTo(position);
+    } else if (typeof mapInstance.value.setCenter === 'function') {
+      mapInstance.value.setCenter(position);
+    }
+  };
+
   try {
     const data = await api.get(`/api/v1/fiber-cables/${id}/`);
     cable.value = data;
@@ -456,34 +481,70 @@ const loadCableData = async () => {
 
     // Carregar path existente
     const path = Array.isArray(data.path_coordinates) ? data.path_coordinates : [];
+    let viewportHandled = false;
+
+    const applyViewportPreference = () => {
+      if (!mapInstance.value) return;
+
+      if (
+        focusPosition &&
+        typeof focusPosition.lat === 'number' &&
+        typeof focusPosition.lng === 'number'
+      ) {
+        recenterMap({ lat: focusPosition.lat, lng: focusPosition.lng });
+        if (typeof focusZoom === 'number') {
+          mapInstance.value.setZoom(focusZoom);
+        } else if (previousZoom !== null) {
+          mapInstance.value.setZoom(previousZoom);
+        }
+        viewportHandled = true;
+        return;
+      }
+
+      if (preserveViewport && previousCenter) {
+        recenterMap(previousCenter);
+        if (previousZoom !== null) {
+          mapInstance.value.setZoom(previousZoom);
+        }
+        viewportHandled = true;
+      }
+    };
+
     if (path.length >= 2) {
       console.log('[FiberRouteEditor] Loading existing path', path.length, 'points');
       drawing.setPath(path);
-      drawing.fitBounds();
-      
+
+      applyViewportPreference();
+      if (!viewportHandled) {
+        drawing.fitBounds();
+      }
+
       // Adicionar listener de right-click na polyline
       const polyline = drawing.getPolyline();
       if (polyline) {
         polyline.addListener('rightclick', handlePolylineRightClick);
         console.log('[FiberRouteEditor] Right-click listener added to polyline');
       }
-      
+
       // Inicializar stats
       pathStats.value = {
         points: path.length,
-        distance: (drawing.getDistance() / 1000).toFixed(2)
+        distance: (drawing.getDistance() / 1000).toFixed(2),
       };
     } else {
       // Centralizar entre Site A e B
       const locA = data.site_a_location;
       const locB = data.site_b_location;
-      if (locA && locB && mapInstance.value) {
+
+      applyViewportPreference();
+
+      if (!viewportHandled && locA && locB && mapInstance.value) {
         console.log('[FiberRouteEditor] Centering on sites', locA, locB);
         const bounds = new google.maps.LatLngBounds();
         bounds.extend(new google.maps.LatLng(locA.lat, locA.lng));
         bounds.extend(new google.maps.LatLng(locB.lat, locB.lng));
         mapInstance.value.fitBounds(bounds);
-        
+
         // Desenhar linha guia tracejada
         new google.maps.Polyline({
           path: [locA, locB],
@@ -492,18 +553,20 @@ const loadCableData = async () => {
           strokeOpacity: 0.6,
           strokeWeight: 2,
           geodesic: true,
-          icons: [{
-            icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 2 },
-            offset: '0',
-            repeat: '20px'
-          }]
+          icons: [
+            {
+              icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 2 },
+              offset: '0',
+              repeat: '20px',
+            },
+          ],
         });
       }
     }
-    
+
     // Renderizar pontos de infraestrutura existentes
     renderInfrastructureMarkers();
-    
+
     // Inicia em modo read (seguro)
     setMode('read');
   } catch (err) {
@@ -672,7 +735,7 @@ const actionAddSlack = async () => {
       console.log('[FiberRouteEditor] Infrastructure created', result);
       
       // Recarregar dados do cabo para atualizar sidebar e marcadores
-      await loadCableData();
+      await loadCableData({ preserveViewport: true });
       
       showNotification(
         'Reserva Técnica Criada!',
@@ -700,60 +763,651 @@ const actionAddSlack = async () => {
   );
 };
 
-const actionAddSplice = async () => {
+// Armazenar referência aos segmentos ativos para persistir ao salvar
+const activeSplitSegments = ref(null);
+
+// Armazenar referências aos marcadores de split
+const splitMarkers = ref({ marker1: null, marker2: null });
+
+const actionSplitCable = async () => {
   const lat = contextMenu.latlng.lat();
   const lng = contextMenu.latlng.lng();
-  console.log('[FiberRouteEditor] Add Splice Box at', lat, lng);
+  console.log('[FiberRouteEditor] Split cable at', lat, lng);
   
-  const createCEOAction = async (name) => {
-    if (!name || !name.trim()) {
+  closeContextMenu();
+  
+  // Mostrar confirmação
+  if (!confirm('Romper o cabo neste ponto?\n\nIsso criará duas pontas de cabo separadas.\n\nDepois você poderá adicionar uma CEO e conectar as pontas.')) {
+    return;
+  }
+  
+  try {
+    const drawing = getDrawing();
+    if (!drawing) {
+      showNotification('Erro', 'Plugin de desenho não disponível', 'error');
+      return;
+    }
+    
+    // Obter path atual
+    const currentPath = drawing.getPathCoordinates() || [];
+    if (currentPath.length < 3) {
       showNotification(
-        'Nome Obrigatório',
-        'Informe um nome para a Caixa de Emenda.',
-        'error'
+        'Cabo muito curto',
+        'É necessário ter pelo menos 3 pontos para romper o cabo.',
+        'warning'
       );
       return;
     }
     
-    try {
-      const result = await api.post('/api/v1/inventory/infrastructure/', {
-        cable: id,
-        type: 'splice_box',
-        name: name.trim(),
-        lat,
-        lng,
-        metadata: {}
-      });
+    // Encontrar o segmento mais próximo do clique
+    let minDist = Infinity;
+    let splitIndex = -1;
+    
+    // Procurar o segmento (aresta) mais próximo, não apenas o vértice
+    for (let i = 0; i < currentPath.length - 1; i++) {
+      const p1 = currentPath[i];
+      const p2 = currentPath[i + 1];
       
-      console.log('[FiberRouteEditor] Infrastructure created', result);
-      
-      await loadCableData();
-      
-      showNotification(
-        'Caixa de Emenda Criada!',
-        `${name}\nMetragem: ${result.distance_from_origin?.toFixed(1)}m\n(+20m adicionados ao cabo)`,
-        'success'
+      // Distância ponto-linha
+      const dist = distanceToSegment(
+        { lat, lng },
+        p1,
+        p2
       );
-    } catch (err) {
-      console.error('[FiberRouteEditor] Erro ao criar infraestrutura', err);
-      showNotification(
-        'Erro ao Criar',
-        err?.response?.data?.detail || err?.message || 'Erro ao criar ponto de infraestrutura.',
-        'error'
-      );
+      
+      if (dist < minDist) {
+        minDist = dist;
+        splitIndex = i;
+      }
     }
-  };
-  
-  closeContextMenu();
-  showInputModal(
-    'Criar Caixa de Emenda (CEO)',
-    'Nome da Caixa',
-    'Ex: CEO-1234',
-    'CEO-' + Date.now().toString().slice(-4),
-    'text',
-    createCEOAction
-  );
+    
+    // Inserir ponto de quebra no segmento mais próximo
+    const breakPoint = { lat, lng };
+    currentPath.splice(splitIndex + 1, 0, breakPoint);
+    
+    // DIVIDIR o path em DOIS segmentos
+    const segment1 = currentPath.slice(0, splitIndex + 2); // Do início até o ponto de quebra
+    const segment2 = currentPath.slice(splitIndex + 1);   // Do ponto de quebra até o fim
+    
+    console.log('[FiberRouteEditor] Segment 1:', segment1.length, 'pontos');
+    console.log('[FiberRouteEditor] Segment 2:', segment2.length, 'pontos');
+    
+    // Ocultar polyline original
+    const originalPolyline = drawing.getPolyline();
+    if (originalPolyline) {
+      originalPolyline.setVisible(false);
+    }
+    
+    // Criar DOIS polylines separados
+    const polyline1 = new google.maps.Polyline({
+      path: segment1,
+      map: mapInstance.value,
+      strokeColor: '#3B82F6',
+      strokeWeight: 4,
+      strokeOpacity: 0.8,
+      editable: true,
+      draggable: false,
+      zIndex: 10
+    });
+    
+    const polyline2 = new google.maps.Polyline({
+      path: segment2,
+      map: mapInstance.value,
+      strokeColor: '#EF4444',
+      strokeWeight: 4,
+      strokeOpacity: 0.8,
+      editable: true,
+      draggable: false,
+      zIndex: 10
+    });
+    
+    // Criar marcadores nas PONTAS (extremidades)
+    const endMarker1 = new google.maps.Marker({
+      position: segment1[segment1.length - 1],
+      map: mapInstance.value,
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 10,
+        fillColor: '#3B82F6',
+        fillOpacity: 1,
+        strokeColor: '#FFFFFF',
+        strokeWeight: 3,
+      },
+      title: 'Ponta do Cabo 1 - Clique direito para adicionar CEO',
+      draggable: true,
+      zIndex: 1000
+    });
+    
+    // Círculo de raio de 10m ao redor da ponta 1
+    const radiusCircle1 = new google.maps.Circle({
+      map: mapInstance.value,
+      center: segment1[segment1.length - 1],
+      radius: 10, // 10 metros
+      fillColor: '#3B82F6',
+      fillOpacity: 0.1,
+      strokeColor: '#3B82F6',
+      strokeOpacity: 0.3,
+      strokeWeight: 1,
+      clickable: false,
+      zIndex: 500
+    });
+    
+    const endMarker2 = new google.maps.Marker({
+      position: segment2[0],
+      map: mapInstance.value,
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 10,
+        fillColor: '#EF4444',
+        fillOpacity: 1,
+        strokeColor: '#FFFFFF',
+        strokeWeight: 3,
+      },
+      title: 'Ponta do Cabo 2 - Clique direito para adicionar CEO',
+      draggable: true,
+      zIndex: 1000
+    });
+    
+    // Círculo de raio de 10m ao redor da ponta 2
+    const radiusCircle2 = new google.maps.Circle({
+      map: mapInstance.value,
+      center: segment2[0],
+      radius: 10, // 10 metros
+      fillColor: '#EF4444',
+      fillOpacity: 0.1,
+      strokeColor: '#EF4444',
+      strokeOpacity: 0.3,
+      strokeWeight: 1,
+      clickable: false,
+      zIndex: 500
+    });
+    
+    // Armazenar referências aos marcadores
+    splitMarkers.value.marker1 = endMarker1;
+    splitMarkers.value.marker2 = endMarker2;
+    
+    // Função para verificar se ambas as pontas foram fixadas à mesma CEO
+    const checkBothMarkersFixed = async () => {
+      const m1 = splitMarkers.value.marker1;
+      const m2 = splitMarkers.value.marker2;
+      
+      // Verificar se ambos têm ceoData
+      if (!m1?.ceoData || !m2?.ceoData) {
+        console.log('[Split] Aguardando fixação de ambas as pontas...');
+        return;
+      }
+      
+      // Verificar se são a MESMA CEO
+      if (m1.ceoData.id !== m2.ceoData.id) {
+        console.log('[Split] Pontas fixadas em CEOs diferentes:', m1.ceoData.name, 'vs', m2.ceoData.name);
+        showNotification(
+          'CEOs Diferentes',
+          `As pontas estão em CEOs diferentes (${m1.ceoData.name} e ${m2.ceoData.name}). Configure pass-through manualmente se necessário.`,
+          'info'
+        );
+        return;
+      }
+      
+      // AMBAS as pontas na MESMA CEO - fazer split permanente em 2 cabos!
+      console.log('[Split] AMBAS as pontas fixadas em', m1.ceoData.name, '- iniciando split permanente');
+      
+      try {
+        const response = await api.post('/api/v1/inventory/cables/split-at-ceo/', {
+          cable_id: parseInt(id),
+          ceo_id: m1.ceoData.id,
+          split_point: {
+            lat: m1.ceoData.lat,
+            lng: m1.ceoData.lng
+          }
+        });
+        
+        console.log('[Split] Split permanente concluído:', response);
+        
+        showNotification(
+          'Cabo Partido com Sucesso!',
+          `Cabo ${response.original_cable.name} rompido. Criadas 2 extremidades: ${response.cable_a.name} (ID ${response.cable_a.id}) e ${response.cable_b.name} (ID ${response.cable_b.id}).`,
+          'success',
+          8000  // 8 segundos para ler
+        );
+        
+        // Limpar markers e polylines temporários
+        m1.setMap(null);
+        m2.setMap(null);
+        polyline1.setMap(null);
+        polyline2.setMap(null);
+        radiusCircle1.setMap(null);
+        radiusCircle2.setMap(null);
+        
+        splitMarkers.value = { marker1: null, marker2: null };
+
+        const currentZoom =
+          mapInstance.value && typeof mapInstance.value.getZoom === 'function'
+            ? mapInstance.value.getZoom()
+            : null;
+        const focusZoom = currentZoom !== null ? Math.max(currentZoom, 17) : 17;
+
+        await loadCableData({
+          preserveViewport: true,
+          focusPosition: { lat: m1.ceoData.lat, lng: m1.ceoData.lng },
+          focusZoom,
+        });
+        
+      } catch (err) {
+        console.error('[Split] Erro ao fazer split permanente:', err);
+        showNotification(
+          'Erro ao Partir Cabo',
+          err?.response?.data?.error || err?.message || 'Erro desconhecido',
+          'error'
+        );
+      }
+    };
+    
+    // Menu de contexto nas pontas
+    const createMarkerContextMenu = (marker, segment, isFirstSegment, polyline, radiusCircle) => {
+      marker.addListener('rightclick', (event) => {
+        const lat = event.latLng.lat();
+        const lng = event.latLng.lng();
+        
+        // Fechar contexto anterior
+        closeContextMenu();
+        
+        // Abrir menu customizado
+        const menuHtml = `
+          <div style="position: fixed; z-index: 9999; background: white; border-radius: 8px; 
+                      box-shadow: 0 4px 12px rgba(0,0,0,0.3); padding: 8px; min-width: 220px;
+                      left: ${event.domEvent.clientX}px; top: ${event.domEvent.clientY}px;"
+               id="temp-context-menu">
+            <div style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb; margin-bottom: 4px;">
+              <p style="font-size: 10px; font-weight: bold; color: #6b7280; text-transform: uppercase; margin: 0;">
+                Ponta do Cabo ${isFirstSegment ? '1' : '2'}
+              </p>
+            </div>
+            <button onclick="window.addCEOAtMarker()" 
+                    style="width: 100%; text-align: left; padding: 10px 16px; font-size: 14px; 
+                           border: none; background: none; cursor: pointer; display: flex; 
+                           align-items: center; gap: 12px; border-radius: 4px;"
+                    onmouseover="this.style.background='#f3f4f6'" 
+                    onmouseout="this.style.background='none'">
+              <i class="fas fa-box" style="color: #f97316; width: 16px;"></i>
+              <span style="color: #374151;">Adicionar Caixa de Emenda (CEO)</span>
+            </button>
+            <div style="border-top: 1px solid #e5e7eb; margin-top: 4px; padding-top: 4px;">
+              <button onclick="document.getElementById('temp-context-menu').remove()" 
+                      style="width: 100%; text-align: left; padding: 8px 16px; font-size: 12px; 
+                             border: none; background: none; cursor: pointer; color: #ef4444;"
+                      onmouseover="this.style.background='#fef2f2'" 
+                      onmouseout="this.style.background='none'">
+                <i class="fas fa-times"></i> Cancelar
+              </button>
+            </div>
+          </div>
+        `;
+        
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = menuHtml;
+        document.body.appendChild(tempDiv.firstElementChild);
+        
+        // Handler global para adicionar CEO
+        window.addCEOAtMarker = async () => {
+          document.getElementById('temp-context-menu')?.remove();
+          
+          const ceoName = prompt('Nome da Caixa de Emenda (CEO):', `CEO-${Date.now().toString().slice(-4)}`);
+          if (!ceoName || !ceoName.trim()) return;
+          
+          try {
+            const result = await api.post('/api/v1/inventory/infrastructure/', {
+              cable: id,
+              type: 'splice_box',
+              name: ceoName.trim(),
+              lat,
+              lng,
+              metadata: {}
+            });
+            
+            console.log('[FiberRouteEditor] CEO created at marker', result);
+            
+            // Extrair coordenadas do formato GeoJSON: location.coordinates = [lng, lat]
+            const ceoLng = result.location.coordinates[0];
+            const ceoLat = result.location.coordinates[1];
+            
+            // ANEXAR o cabo à CEO (criar attachment)
+            try {
+              const attachResponse = await api.post('/api/v1/inventory/cable-attachments/attach/', {
+                cable_id: parseInt(id),
+                infrastructure_id: result.id,
+                port_type: 'oval',
+                is_pass_through: true  // Cabo passa pela CEO (midspan)
+              });
+              console.log('[FiberRouteEditor] Cable attached to CEO', attachResponse);
+            } catch (attachErr) {
+              console.error('[FiberRouteEditor] Erro ao anexar cabo:', attachErr);
+              showNotification(
+                'Erro ao Anexar Cabo',
+                'CEO criada mas não foi possível anexar o cabo.',
+                'error'
+              );
+              return;
+            }
+            
+            // Fixar marcador na posição exata da CEO (NÃO pode mais arrastar)
+            marker.setPosition({ lat: ceoLat, lng: ceoLng });
+            marker.setDraggable(false); // FIXAR marcador
+            marker.setIcon({
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 10,
+              fillColor: '#10B981', // Verde = fixado
+              fillOpacity: 1,
+              strokeColor: '#FFFFFF',
+              strokeWeight: 3,
+            });
+            marker.setTitle(`CEO: ${ceoName} (Fixado)`);
+            
+            // Armazenar referência da CEO neste marcador
+            marker.ceoData = {
+              id: result.id,
+              name: ceoName,
+              lat: ceoLat,
+              lng: ceoLng
+            };
+            
+            // Verificar se AMBAS as pontas foram fixadas à MESMA CEO
+            await checkBothMarkersFixed();
+            
+            // Remover círculo de raio (não é mais necessário)
+            if (radiusCircle) {
+              radiusCircle.setMap(null);
+            }
+            
+            // Atualizar caminho do segmento
+            if (isFirstSegment) {
+              segment[segment.length - 1] = { lat: ceoLat, lng: ceoLng };
+              polyline.setPath(segment);
+            } else {
+              segment[0] = { lat: ceoLat, lng: ceoLng };
+              polyline.setPath(segment);
+            }
+            
+            // Recarregar dados do cabo para atualizar CEOs
+            await loadCableData({ preserveViewport: true });
+            
+            showNotification(
+              'CEO Fixada!',
+              `${ceoName} criada e cabo anexado. Arraste a OUTRA ponta até uma CEO para conectar.`,
+              'success'
+            );
+          } catch (err) {
+            console.error('[FiberRouteEditor] Erro ao criar CEO', err);
+            showNotification(
+              'Erro ao Criar CEO',
+              err?.response?.data?.detail || err?.message || 'Erro desconhecido',
+              'error'
+            );
+          }
+        };
+        
+        // Fechar ao clicar fora
+        setTimeout(() => {
+          document.addEventListener('click', function closeMenu(e) {
+            const menu = document.getElementById('temp-context-menu');
+            if (menu && !menu.contains(e.target)) {
+              menu.remove();
+              document.removeEventListener('click', closeMenu);
+            }
+          });
+        }, 100);
+      });
+    };
+    
+    createMarkerContextMenu(endMarker1, segment1, true, polyline1, radiusCircle1);
+    createMarkerContextMenu(endMarker2, segment2, false, polyline2, radiusCircle2);
+    
+    // Feedback visual ao arrastar sobre CEO
+    let hoverInfoDiv = null;
+    const createDragFeedback = (marker, segment, isFirstSegment, polyline, radiusCircle) => {
+      marker.addListener('drag', (event) => {
+        const newPos = { lat: event.latLng.lat(), lng: event.latLng.lng() };
+        
+        // Atualizar posição do círculo de raio
+        if (radiusCircle) {
+          radiusCircle.setCenter(newPos);
+        }
+        
+        // Atualizar caminho durante arraste
+        if (isFirstSegment) {
+          segment[segment.length - 1] = newPos;
+        } else {
+          segment[0] = newPos;
+        }
+        polyline.setPath(segment);
+        
+        // Verificar se está sobre uma CEO (raio de 50 metros)
+        const nearbyInfra = cable.value.infrastructure_points?.find(infra => {
+          if (!infra.location?.coordinates) return false;
+          const [infraLng, infraLat] = infra.location.coordinates;
+          const dist = Math.sqrt(
+            Math.pow(infraLat - newPos.lat, 2) + Math.pow(infraLng - newPos.lng, 2)
+          );
+          console.log(`[Drag] Distance to ${infra.name}:`, dist);
+          return dist < 0.0001; // ~10 metros
+        });
+        
+        if (nearbyInfra && nearbyInfra.type === 'splice_box') {
+          // Mostrar aviso visual
+          if (!hoverInfoDiv) {
+            hoverInfoDiv = document.createElement('div');
+            hoverInfoDiv.style.cssText = `
+              position: fixed;
+              top: 50%;
+              left: 50%;
+              transform: translate(-50%, -50%);
+              background: rgba(16, 185, 129, 0.95);
+              color: white;
+              padding: 20px 30px;
+              border-radius: 12px;
+              box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+              z-index: 9999;
+              font-size: 16px;
+              font-weight: bold;
+              text-align: center;
+              pointer-events: none;
+            `;
+            hoverInfoDiv.innerHTML = `
+              <i class="fas fa-link" style="font-size: 24px; margin-bottom: 10px; display: block;"></i>
+              Solte aqui para anexar à ${nearbyInfra.name}
+            `;
+            document.body.appendChild(hoverInfoDiv);
+          }
+          
+          // Mudar cor do marcador temporariamente
+          marker.setIcon({
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 12,
+            fillColor: '#10B981',
+            fillOpacity: 1,
+            strokeColor: '#FFFFFF',
+            strokeWeight: 3,
+          });
+        } else {
+          // Remover aviso se saiu de cima da CEO
+          if (hoverInfoDiv) {
+            hoverInfoDiv.remove();
+            hoverInfoDiv = null;
+          }
+          
+          // Restaurar cor original
+          const originalColor = isFirstSegment ? '#3B82F6' : '#EF4444';
+          marker.setIcon({
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 10,
+            fillColor: originalColor,
+            fillOpacity: 1,
+            strokeColor: '#FFFFFF',
+            strokeWeight: 3,
+          });
+        }
+      });
+    };
+    
+    // Listener para soltar ponta e anexar à CEO
+    const createDropHandler = (marker, segment, isFirstSegment, polyline, radiusCircle) => {
+      marker.addListener('dragend', async (event) => {
+        // Remover aviso visual
+        if (hoverInfoDiv) {
+          hoverInfoDiv.remove();
+          hoverInfoDiv = null;
+        }
+        
+        const newLat = event.latLng.lat();
+        const newLng = event.latLng.lng();
+        
+        // Verificar se foi solto próximo de uma CEO (raio de 50 metros)
+        const nearbyInfra = cable.value.infrastructure_points?.find(infra => {
+          if (!infra.location?.coordinates) return false;
+          const [infraLng, infraLat] = infra.location.coordinates;
+          const dist = Math.sqrt(
+            Math.pow(infraLat - newLat, 2) + Math.pow(infraLng - newLng, 2)
+          );
+          console.log(`[Drop] Distance to ${infra.name}:`, dist);
+          return dist < 0.0001; // ~10 metros
+        });
+        
+        if (nearbyInfra && nearbyInfra.type === 'splice_box') {
+          try {
+            const [infraLng, infraLat] = nearbyInfra.location.coordinates;
+            
+            // Anexar cabo à CEO no banco de dados
+            await api.post('/api/v1/inventory/cable-attachments/attach/', {
+              cable_id: parseInt(id),
+              infrastructure_id: nearbyInfra.id,
+              port_type: 'oval',
+              is_pass_through: true
+            });
+            
+            // Snap para posição exata da CEO
+            marker.setPosition({ lat: infraLat, lng: infraLng });
+            marker.setDraggable(false); // Fixar após anexar
+            marker.setIcon({
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 10,
+              fillColor: '#10B981', // Verde = anexado
+              fillOpacity: 1,
+              strokeColor: '#FFFFFF',
+              strokeWeight: 3,
+            });
+            marker.setTitle(`CEO: ${nearbyInfra.name} (Anexado)`);
+            
+            // Armazenar referência da CEO neste marcador
+            marker.ceoData = {
+              id: nearbyInfra.id,
+              name: nearbyInfra.name,
+              lat: infraLat,
+              lng: infraLng
+            };
+            
+            // Verificar se AMBAS as pontas foram fixadas à MESMA CEO
+            await checkBothMarkersFixed();
+            
+            // Remover círculo de raio (não é mais necessário)
+            if (radiusCircle) {
+              radiusCircle.setMap(null);
+            }
+            
+            if (isFirstSegment) {
+              segment[segment.length - 1] = { lat: infraLat, lng: infraLng };
+            } else {
+              segment[0] = { lat: infraLat, lng: infraLng };
+            }
+            polyline.setPath(segment);
+            
+            // Marcar como modificado para salvar depois
+            isDirty.value = true;
+            
+            // Recarregar dados
+            await loadCableData({ preserveViewport: true });
+            
+            showNotification(
+              'Cabo Anexado!',
+              `Cabo anexado à ${nearbyInfra.name}. Salve as alterações.`,
+              'success'
+            );
+          } catch (err) {
+            console.error('[FiberRouteEditor] Erro ao anexar cabo', err);
+            showNotification(
+              'Erro ao Anexar',
+              err?.response?.data?.detail || err?.message || 'Erro ao anexar cabo à CEO',
+              'error'
+            );
+          }
+        } else {
+          // Restaurar cor original se não conectou
+          const originalColor = isFirstSegment ? '#3B82F6' : '#EF4444';
+          marker.setIcon({
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 10,
+            fillColor: originalColor,
+            fillOpacity: 1,
+            strokeColor: '#FFFFFF',
+            strokeWeight: 3,
+          });
+        }
+      });
+    };
+    
+    // Armazenar referência aos segmentos
+    activeSplitSegments.value = { segment1, segment2, polyline1, polyline2, endMarker1, endMarker2, radiusCircle1, radiusCircle2 };
+    
+    createDragFeedback(endMarker1, segment1, true, polyline1, radiusCircle1);
+    createDragFeedback(endMarker2, segment2, false, polyline2, radiusCircle2);
+    createDropHandler(endMarker1, segment1, true, polyline1, radiusCircle1);
+    createDropHandler(endMarker2, segment2, false, polyline2, radiusCircle2);
+    
+    showNotification(
+      'Cabo Rompido!',
+      'Azul = Ponta 1 | Vermelho = Ponta 2\n\n1. Clique com BOTÃO DIREITO em uma ponta para criar CEO\n2. Arraste a OUTRA ponta até uma CEO existente\n3. Salve as alterações',
+      'success'
+    );
+    
+  } catch (err) {
+    console.error('[FiberRouteEditor] Erro ao romper cabo', err);
+    showNotification(
+      'Erro',
+      err?.message || 'Erro ao romper cabo',
+      'error'
+    );
+  }
 };
+
+// Função auxiliar para calcular distância ponto-segmento
+function distanceToSegment(point, p1, p2) {
+  const A = point.lat - p1.lat;
+  const B = point.lng - p1.lng;
+  const C = p2.lat - p1.lat;
+  const D = p2.lng - p1.lng;
+  
+  const dot = A * C + B * D;
+  const lenSq = C * C + D * D;
+  let param = -1;
+  
+  if (lenSq !== 0) param = dot / lenSq;
+  
+  let xx, yy;
+  
+  if (param < 0) {
+    xx = p1.lat;
+    yy = p1.lng;
+  } else if (param > 1) {
+    xx = p2.lat;
+    yy = p2.lng;
+  } else {
+    xx = p1.lat + param * C;
+    yy = p1.lng + param * D;
+  }
+  
+  const dx = point.lat - xx;
+  const dy = point.lng - yy;
+  
+  return Math.sqrt(dx * dx + dy * dy);
+}
 
 // Save Changes
 const saveChanges = async () => {
@@ -901,7 +1555,7 @@ const saveInfrastructureChanges = async () => {
     console.log('[FiberRouteEditor] Infrastructure updated', result);
     
     // Recarregar dados para atualizar sidebar e mapa
-    await loadCableData();
+    await loadCableData({ preserveViewport: true });
     closeEditInfraModal();
     
     showNotification(
@@ -927,7 +1581,7 @@ const confirmDeleteInfrastructure = async (point) => {
       console.log('[FiberRouteEditor] Infrastructure deleted', point.id);
       
       // Recarregar dados para atualizar sidebar e mapa
-      await loadCableData();
+      await loadCableData({ preserveViewport: true });
       
       showNotification(
         'Sucesso!',
@@ -1013,7 +1667,7 @@ const actionConvertSlackToCEO = async () => {
       
       console.log('[FiberRouteEditor] Converted slack to CEO', result);
       
-      await loadCableData();
+      await loadCableData({ preserveViewport: true });
       
       showNotification(
         'Conversão Concluída!',
