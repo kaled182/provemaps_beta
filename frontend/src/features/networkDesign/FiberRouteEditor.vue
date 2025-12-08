@@ -366,6 +366,43 @@ const mode = ref('read'); // 'read' | 'edit'
 const isDirty = ref(false);
 const infrastructureMarkers = ref([]); // Marcadores de infraestrutura
 
+const normalizeLatLng = (position) => {
+  if (!position) return null;
+  const lat =
+    typeof position.lat === 'function' ? position.lat() : position.lat;
+  const lng =
+    typeof position.lng === 'function' ? position.lng() : position.lng;
+
+  if (typeof lat !== 'number' || typeof lng !== 'number') {
+    return null;
+  }
+
+  return { lat, lng };
+};
+
+const focusMap = (position, zoom = null) => {
+  if (!mapInstance.value) return;
+  const center = normalizeLatLng(position);
+  if (!center) return;
+
+  requestAnimationFrame(() => {
+    if (!mapInstance.value) return;
+
+    if (typeof mapInstance.value.panTo === 'function') {
+      mapInstance.value.panTo(center);
+    } else if (typeof mapInstance.value.setCenter === 'function') {
+      mapInstance.value.setCenter(center);
+    }
+
+    if (
+      typeof zoom === 'number' &&
+      typeof mapInstance.value.setZoom === 'function'
+    ) {
+      mapInstance.value.setZoom(zoom);
+    }
+  });
+};
+
 // Notification System
 const notification = reactive({
   show: false,
@@ -449,24 +486,28 @@ const loadCableData = async (options = {}) => {
     focusZoom = null,
   } = options;
 
-  let previousCenter = null;
-  let previousZoom = null;
+  const previousCenter =
+    preserveViewport && mapInstance.value && typeof mapInstance.value.getCenter === 'function'
+      ? normalizeLatLng(mapInstance.value.getCenter())
+      : null;
 
-  if (preserveViewport && mapInstance.value) {
-    const getCenterFn = mapInstance.value.getCenter;
-    previousCenter = typeof getCenterFn === 'function' ? getCenterFn.call(mapInstance.value) : null;
-    previousZoom =
-      typeof mapInstance.value.getZoom === 'function' ? mapInstance.value.getZoom() : null;
+  const previousZoom =
+    preserveViewport && mapInstance.value && typeof mapInstance.value.getZoom === 'function'
+      ? mapInstance.value.getZoom()
+      : null;
+
+  const desiredCenter = focusPosition
+    ? normalizeLatLng(focusPosition)
+    : previousCenter;
+
+  let desiredZoom = null;
+  if (focusPosition) {
+    desiredZoom = typeof focusZoom === 'number' ? focusZoom : previousZoom;
+  } else if (preserveViewport) {
+    desiredZoom = previousZoom;
   }
 
-  const recenterMap = (position) => {
-    if (!mapInstance.value || !position) return;
-    if (typeof mapInstance.value.panTo === 'function') {
-      mapInstance.value.panTo(position);
-    } else if (typeof mapInstance.value.setCenter === 'function') {
-      mapInstance.value.setCenter(position);
-    }
-  };
+  const skipFitBounds = Boolean(desiredCenter);
 
   try {
     const data = await api.get(`/api/v1/fiber-cables/${id}/`);
@@ -481,41 +522,11 @@ const loadCableData = async (options = {}) => {
 
     // Carregar path existente
     const path = Array.isArray(data.path_coordinates) ? data.path_coordinates : [];
-    let viewportHandled = false;
-
-    const applyViewportPreference = () => {
-      if (!mapInstance.value) return;
-
-      if (
-        focusPosition &&
-        typeof focusPosition.lat === 'number' &&
-        typeof focusPosition.lng === 'number'
-      ) {
-        recenterMap({ lat: focusPosition.lat, lng: focusPosition.lng });
-        if (typeof focusZoom === 'number') {
-          mapInstance.value.setZoom(focusZoom);
-        } else if (previousZoom !== null) {
-          mapInstance.value.setZoom(previousZoom);
-        }
-        viewportHandled = true;
-        return;
-      }
-
-      if (preserveViewport && previousCenter) {
-        recenterMap(previousCenter);
-        if (previousZoom !== null) {
-          mapInstance.value.setZoom(previousZoom);
-        }
-        viewportHandled = true;
-      }
-    };
-
     if (path.length >= 2) {
       console.log('[FiberRouteEditor] Loading existing path', path.length, 'points');
       drawing.setPath(path);
 
-      applyViewportPreference();
-      if (!viewportHandled) {
+      if (!skipFitBounds) {
         drawing.fitBounds();
       }
 
@@ -536,9 +547,7 @@ const loadCableData = async (options = {}) => {
       const locA = data.site_a_location;
       const locB = data.site_b_location;
 
-      applyViewportPreference();
-
-      if (!viewportHandled && locA && locB && mapInstance.value) {
+      if (!skipFitBounds && locA && locB && mapInstance.value) {
         console.log('[FiberRouteEditor] Centering on sites', locA, locB);
         const bounds = new google.maps.LatLngBounds();
         bounds.extend(new google.maps.LatLng(locA.lat, locA.lng));
@@ -569,6 +578,12 @@ const loadCableData = async (options = {}) => {
 
     // Inicia em modo read (seguro)
     setMode('read');
+
+    if (desiredCenter) {
+      focusMap(desiredCenter, desiredZoom);
+    } else if (focusPosition) {
+      focusMap(focusPosition, focusZoom ?? previousZoom ?? null);
+    }
   } catch (err) {
     console.error('[FiberRouteEditor] Erro ao carregar cabo', err);
     showNotification(
