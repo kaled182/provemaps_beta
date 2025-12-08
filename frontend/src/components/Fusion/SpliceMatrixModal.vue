@@ -61,16 +61,16 @@
           <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
         </div>
 
-        <!-- Left Sidebar: Entrada (Cabos Source) -->
+        <!-- Left Sidebar: Direção A (Cabos Source) -->
         <div class="w-80 bg-gray-900 border-r border-gray-700 flex flex-col shrink-0">
           <div class="p-3 text-[10px] font-bold uppercase text-gray-500 bg-black/20 flex justify-between">
-            <span>Entradas</span>
+            <span>{{ nomeDirecaoA }}</span>
             <i class="fas fa-arrow-right"></i>
           </div>
           <div class="flex-1 overflow-y-auto p-3 custom-scrollbar">
             <CableStrippedView 
-              v-for="cable in cablesEntrada" 
-              :key="cable.attachment_id || cable.id" 
+              v-for="cable in cablesDirecaoA" 
+              :key="cable.unique_id || cable.id"
               :cable="cable"
               :selected-id="selection.a"
               @select="selectFiber('a', $event)"
@@ -105,16 +105,30 @@
               >
                 
                 <!-- Fiber A (Left) -->
-                <div class="flex-1 text-right text-[10px] pr-3 truncate">
-                  <template v-if="getSlotData(slot)">
-                    <span class="block text-gray-300 font-medium">{{ getSlotData(slot).fiber_a.cable }}</span>
-                    <span class="block text-gray-500">{{ getSlotData(slot).fiber_a.name }}</span>
+                <div class="flex-1 flex justify-end items-center gap-2 text-right pr-3 overflow-hidden">
+                  <template v-if="getSlotData(slot)?.fiber_a">
+                    <div
+                      class="min-w-0"
+                      :title="formatTooltip(getSlotData(slot).fiber_a)"
+                    >
+                      <span class="block text-gray-300 font-bold text-[10px] truncate leading-tight">
+                        {{ formatDirection(getSlotData(slot).fiber_a) }}
+                      </span>
+                      <span class="block text-gray-500 text-[10px] truncate uppercase">
+                        {{ formatColor(getSlotData(slot).fiber_a) }}
+                        <template v-if="getSlotData(slot).fiber_a?.fiber_code">
+                          • {{ getSlotData(slot).fiber_a.fiber_code }}
+                        </template>
+                      </span>
+                    </div>
+                    <div class="w-3 h-3 rounded-full shrink-0 border border-gray-600 shadow-sm"
+                         :style="{ backgroundColor: getSlotData(slot).fiber_a.color_hex }"></div>
                   </template>
-                  <span v-else class="text-gray-700 italic opacity-0 group-hover:opacity-100 transition-opacity">Vazio</span>
+                  <span v-else class="text-gray-700 italic text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">Vazio</span>
                 </div>
 
                 <!-- Slot Badge -->
-                <div class="w-10 h-6 shrink-0 rounded-full flex items-center justify-center text-[9px] font-bold border transition-all duration-300"
+                <div class="w-8 h-5 shrink-0 rounded-full flex items-center justify-center text-[9px] font-bold border transition-all duration-300"
                      :class="getSlotData(slot) 
                         ? 'bg-green-500/20 border-green-500 text-green-400 shadow-[0_0_10px_rgba(34,197,94,0.2)]' 
                         : 'bg-gray-800 border-gray-600 text-gray-600 border-dashed group-hover:border-gray-400 group-hover:text-gray-300'"
@@ -123,19 +137,33 @@
                 </div>
 
                 <!-- Fiber B (Right) -->
-                <div class="flex-1 text-left text-[10px] pl-3 truncate">
-                  <template v-if="getSlotData(slot)">
-                    <span class="block text-gray-300 font-medium">{{ getSlotData(slot).fiber_b.cable }}</span>
-                    <span class="block text-gray-500">{{ getSlotData(slot).fiber_b.name }}</span>
+                <div class="flex-1 flex items-center gap-2 text-left pl-3 overflow-hidden relative">
+                  <template v-if="getSlotData(slot)?.fiber_b">
+                    <div class="w-3 h-3 rounded-full shrink-0 border border-gray-600 shadow-sm"
+                         :style="{ backgroundColor: getSlotData(slot).fiber_b.color_hex }"></div>
+                    <div
+                      class="min-w-0"
+                      :title="formatTooltip(getSlotData(slot).fiber_b)"
+                    >
+                      <span class="block text-gray-300 font-bold text-[10px] truncate leading-tight">
+                        {{ formatDirection(getSlotData(slot).fiber_b) }}
+                      </span>
+                      <span class="block text-gray-500 text-[10px] truncate uppercase">
+                        {{ formatColor(getSlotData(slot).fiber_b) }}
+                        <template v-if="getSlotData(slot).fiber_b?.fiber_code">
+                          • {{ getSlotData(slot).fiber_b.fiber_code }}
+                        </template>
+                      </span>
+                    </div>
+
+                    <button
+                      @click.stop="removeFusion(slot)"
+                      class="absolute right-0 top-1/2 -translate-y-1/2 text-red-500 hover:text-red-300 bg-gray-900 p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity shadow-md border border-gray-700"
+                      title="Desfazer Fusão"
+                    >
+                      <i class="fas fa-times"></i>
+                    </button>
                   </template>
-                  <button 
-                    v-if="getSlotData(slot)"
-                    @click.stop="removeFusion(slot)"
-                    class="absolute right-2 top-1/2 -translate-y-1/2 text-red-500 opacity-0 group-hover:opacity-100 hover:text-red-400 p-1"
-                    title="Desfazer Fusão"
-                  >
-                    <i class="fas fa-times"></i>
-                  </button>
                 </div>
 
               </div>
@@ -143,16 +171,16 @@
           </div>
         </div>
 
-        <!-- Right Sidebar: Saída (Cabos Destination) -->
+        <!-- Right Sidebar: Direção B (Cabos Destination) -->
         <div class="w-80 bg-gray-900 border-l border-gray-700 flex flex-col shrink-0">
           <div class="p-3 text-[10px] font-bold uppercase text-gray-500 bg-black/20 flex justify-between">
             <i class="fas fa-arrow-right"></i>
-            <span>Saídas</span>
+            <span>{{ nomeDirecaoB }}</span>
           </div>
           <div class="flex-1 overflow-y-auto p-3 custom-scrollbar">
-             <CableStrippedView 
-              v-for="cable in cablesSaida" 
-              :key="cable.attachment_id || (cable.id + '_saida')" 
+            <CableStrippedView 
+              v-for="cable in cablesDirecaoB" 
+              :key="cable.unique_id || (cable.id + '_direcao_b')" 
               :cable="cable"
               :selected-id="selection.b"
               @select="selectFiber('b', $event)"
@@ -183,27 +211,33 @@ const boxName = ref('CEO')
 const cables = ref([])
 const selection = reactive({ a: null, b: null, aCable: null, bCable: null })
 
-// Computed: Separar cabos por port_type
-const cablesEntrada = computed(() => {
-  // Se não há nenhum attachment, mostrar todos os cabos
-  const hasAttachments = cables.value.some(c => c.attachment_id)
-  if (!hasAttachments) {
-    return cables.value
-  }
-  // Entrada: oval (principal/passagem) ou owner (cabo proprietário)
-  return cables.value.filter(c => c.port_type === 'oval' || c.port_type === 'owner')
+// Computed: Separar cabos por direção
+const cablesDirecaoA = computed(() => {
+  // Agrupar cabos pela primeira direção única
+  const directions = new Set(cables.value.map(c => c.direction))
+  const firstDirection = Array.from(directions)[0]
+  return cables.value.filter(c => c.direction === firstDirection)
 })
 
-const cablesSaida = computed(() => {
-  // Se não há nenhum attachment, mostrar todos os cabos
-  const hasAttachments = cables.value.some(c => c.attachment_id)
-  if (!hasAttachments) {
-    return cables.value
-  }
-  // Saída: round (derivação)
-  const roundCables = cables.value.filter(c => c.port_type === 'round')
-  // Se não houver cabos round, mostrar os mesmos da entrada (cenário de reparo)
-  return roundCables.length > 0 ? roundCables : cables.value.filter(c => c.port_type === 'oval')
+const cablesDirecaoB = computed(() => {
+  // Agrupar cabos pela segunda direção única
+  const directions = new Set(cables.value.map(c => c.direction))
+  const allDirections = Array.from(directions)
+  const secondDirection = allDirections[1] || allDirections[0]
+  return cables.value.filter(c => c.direction === secondDirection && c.direction !== allDirections[0])
+})
+
+// Computed: Nomes das direções (usar o campo direction diretamente)
+const nomeDirecaoA = computed(() => {
+  if (cablesDirecaoA.value.length === 0) return 'Direção A'
+  // Pegar o nome da direção do primeiro cabo
+  return cablesDirecaoA.value[0]?.direction || 'Direção A'
+})
+
+const nomeDirecaoB = computed(() => {
+  if (cablesDirecaoB.value.length === 0) return 'Direção B'
+  // Pegar o nome da direção do primeiro cabo
+  return cablesDirecaoB.value[0]?.direction || 'Direção B'
 })
 
 const resolveCableId = (fiberId) => {
@@ -233,6 +267,28 @@ const getRealFiberId = (virtualId) => {
     }
   }
   return virtualId  // Fallback
+}
+
+const formatDirection = (fiber) => {
+  if (!fiber) return '—'
+  return fiber.direction || fiber.direction_label || fiber.cable || '—'
+}
+
+const formatColor = (fiber) => {
+  if (!fiber) return '—'
+  const label = fiber.color_name || fiber.color
+  return label ? String(label).toUpperCase() : '—'
+}
+
+const formatTooltip = (fiber) => {
+  if (!fiber) return ''
+  const parts = []
+  if (fiber.cable) parts.push(fiber.cable)
+  if (fiber.direction_label && fiber.direction_label !== fiber.cable) {
+    parts.push(fiber.direction_label)
+  }
+  if (fiber.fiber_code) parts.push(fiber.fiber_code)
+  return parts.join(' • ')
 }
 
 const canFuse = computed(() => {
@@ -276,11 +332,14 @@ const loadData = async () => {
     // 2. Busca o Contexto (Cabos)
     const cablesData = await api.get(`/api/v1/inventory/splice-boxes/${props.infraPoint.id}/context/`)
     
-    if (!cablesData) {
-      throw new Error('Resposta vazia da API de contexto')
+    console.log('[SpliceMatrixModal] Raw cables response:', cablesData)
+    
+    if (!cablesData || !Array.isArray(cablesData)) {
+      console.error('[SpliceMatrixModal] Invalid cables data:', cablesData)
+      throw new Error('Resposta inválida da API de contexto (não é array)')
     }
     
-    cables.value = cablesData || []
+    cables.value = cablesData
     
   } catch (error) {
     console.error('[SpliceMatrixModal] Erro ao carregar dados:', error)

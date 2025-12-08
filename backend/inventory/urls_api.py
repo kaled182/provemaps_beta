@@ -7,12 +7,15 @@ from .api.splice_matrix import (
     DeleteFusionView,
     BoxContextView,
 )
+from .api.cable_attachment import CableAttachmentViewSet
+from .api.cable_split import CableSplitViewSet
 
 from inventory.api import devices as device_api
 from inventory.api import fibers as fiber_api
 from inventory.api import routes as routes_api
 from inventory.api import spatial as spatial_api
 from inventory.api import zabbix_lookup as zabbix_lookup_api
+from inventory.api.trace_route import trace_fiber_route
 from inventory.api.infrastructure import (
     api_create_infrastructure,
     api_update_infrastructure,
@@ -22,6 +25,25 @@ from inventory.api.infrastructure import (
 app_name = "inventory-api"
 
 urlpatterns = [
+    # Cable Attachments
+    path(
+        "cable-attachments/attach/",
+        CableAttachmentViewSet.as_view({'post': 'attach'}),
+        name="cable-attach",
+    ),
+    path(
+        "cable-attachments/detach/",
+        CableAttachmentViewSet.as_view({'post': 'detach'}),
+        name="cable-detach",
+    ),
+    
+    # Cable Split
+    path(
+        "cables/split-at-ceo/",
+        CableSplitViewSet.as_view({'post': 'split_at_ceo'}),
+        name="cable-split-ceo",
+    ),
+    
     path(
         "devices/select-options/",
         device_api.api_device_select_options,
@@ -296,5 +318,11 @@ urlpatterns = [
         'fusions/<int:fiber_id>/',
         DeleteFusionView.as_view(),
         name='delete-fusion',
+    ),
+    # Trace Route - Optical path tracing (Phase 11.5)
+    path(
+        'trace-route/',
+        trace_fiber_route,
+        name='trace-route',
     ),
 ]

@@ -4,17 +4,17 @@
       <div class="flex items-center gap-2 overflow-hidden">
         <i class="fas fa-chevron-right text-[10px] text-gray-500 transition-transform" :class="{'rotate-90': expanded}"></i>
         
-        <div class="shrink-0" :title="cable.port_type === 'oval' ? 'Porta Oval (Principal)' : 'Porta Cilíndrica (Derivação)'">
-          <span v-if="cable.port_type === 'oval'" class="w-5 h-5 rounded-full bg-purple-900/50 border border-purple-500 flex items-center justify-center text-purple-400 text-[10px]">
-            <i class="fas fa-circle-notch"></i>
+        <div class="shrink-0" :title="cable.direction === 'INCOMING' ? 'Segmento de Entrada' : 'Segmento de Saída'">
+          <span v-if="cable.direction === 'INCOMING'" class="w-5 h-5 rounded-full bg-green-900/50 border border-green-500 flex items-center justify-center text-green-400 text-[10px]">
+            <i class="fas fa-arrow-right"></i>
           </span>
-          <span v-else class="w-5 h-5 rounded-full bg-blue-900/50 border border-blue-500 flex items-center justify-center text-blue-400 text-[10px]">
-            <i class="fas fa-dot-circle"></i>
+          <span v-else class="w-5 h-5 rounded-full bg-orange-900/50 border border-orange-500 flex items-center justify-center text-orange-400 text-[10px]">
+            <i class="fas fa-arrow-left"></i>
           </span>
         </div>
 
         <div class="min-w-0">
-          <div class="font-bold text-sm text-gray-200 truncate">{{ cable.name }}</div>
+          <div class="font-bold text-sm text-gray-200 truncate">{{ cable.direction_label || cable.label || cable.name }}</div>
           <div class="text-[10px] text-gray-500 truncate">{{ cable.profile_name || 'Sem perfil' }}</div>
         </div>
       </div>

@@ -42,7 +42,14 @@ class SpliceBoxMatrixView(APIView):
         # Buscar todas as fusões nesta CEO
         fusions = (
             FiberStrand.objects.filter(fusion_infrastructure=infra)
-            .select_related('tube__cable', 'fused_to__tube__cable')
+            .select_related(
+                'tube__cable',
+                'tube__cable__site_a',
+                'tube__cable__site_b',
+                'fused_to__tube__cable',
+                'fused_to__tube__cable__site_a',
+                'fused_to__tube__cable__site_b',
+            )
             .prefetch_related('tube__cable__profile')
         )
 
@@ -55,56 +62,21 @@ class SpliceBoxMatrixView(APIView):
                 if key in matrix_data:
                     continue
                 pair = fiber.fused_to
-                is_repair = (pair is None)
+                is_repair = pair is None
+                fiber_a_payload = self._serialize_fiber(fiber, infra)
+                fiber_b_payload = None
+
+                if pair:
+                    fiber_b_payload = self._serialize_fiber(pair, infra)
+                elif is_repair:
+                    fiber_b_payload = self._serialize_fiber(fiber, infra)
+
                 matrix_data[key] = {
                     "tray": fiber.fusion_tray,
                     "slot": fiber.fusion_slot,
                     "is_repair": is_repair,
-                    "fiber_a": {
-                        "id": fiber.id,
-                        "number": fiber.number,
-                        "color": fiber.color,
-                        "color_hex": fiber.color_hex,
-                        "cable": fiber.tube.cable.name,
-                        "cable_id": fiber.tube.cable.id,
-                    },
-                    "fiber_b": (
-                        {
-                            # Segunda fibra (ou reparo) - linhas quebradas
-                            "id": (
-                                fiber.id if is_repair else (
-                                    pair.id if pair else None
-                                )
-                            ),
-                            "number": (
-                                fiber.number if is_repair else (
-                                    pair.number if pair else None
-                                )
-                            ),
-                            "color": (
-                                fiber.color if is_repair else (
-                                    pair.color if pair else None
-                                )
-                            ),
-                            "color_hex": (
-                                fiber.color_hex if is_repair else (
-                                    pair.color_hex if pair else "#cccccc"
-                                )
-                            ),
-                            "cable": (
-                                fiber.tube.cable.name if is_repair else (
-                                    pair.tube.cable.name if pair else "?"
-                                )
-                            ),
-                            "cable_id": (
-                                fiber.tube.cable.id if is_repair else (
-                                    pair.tube.cable.id if pair else None
-                                )
-                            ),
-                        }
-                        if (is_repair or pair)
-                        else None
-                    )
+                    "fiber_a": fiber_a_payload,
+                    "fiber_b": fiber_b_payload,
                 }
 
         # Template info
@@ -133,6 +105,70 @@ class SpliceBoxMatrixView(APIView):
             "total_fusions": len(matrix_data),
         }
         return Response(payload, status=status.HTTP_200_OK)
+
+    @staticmethod
+    def _serialize_fiber(
+        strand: FiberStrand,
+        infra: FiberInfrastructure,
+    ) -> dict[str, Any]:
+        cable = strand.tube.cable
+        direction = SpliceBoxMatrixView._resolve_direction_payload(
+            cable,
+            infra,
+        )
+
+        return {
+            "id": strand.id,
+            "number": strand.number,
+            "absolute_number": strand.absolute_number,
+            "color": strand.color,
+            "color_hex": strand.color_hex,
+            "color_name": strand.color,
+            "cable": cable.name,
+            "cable_id": cable.id,
+            "direction": direction["remote"],
+            "direction_label": direction["label"],
+            "direction_a": direction["a"],
+            "direction_b": direction["b"],
+            "fiber_code": f"T{strand.tube.number}F{strand.number}",
+            "tube_number": strand.tube.number,
+            "tube_color": strand.tube.color,
+            "tube_color_hex": strand.tube.color_hex,
+        }
+
+    @staticmethod
+    def _resolve_direction_payload(
+        cable: FiberCable,
+        infra: FiberInfrastructure,
+    ) -> dict[str, str | None]:
+        box_label = infra.name or f"CEO-{infra.id}"
+        site_a = (
+            cable.site_a.display_name
+            if getattr(cable, "site_a", None)
+            else None
+        )
+        site_b = (
+            cable.site_b.display_name
+            if getattr(cable, "site_b", None)
+            else None
+        )
+
+        direction_label = cable.name
+        if site_a and site_b:
+            direction_label = f"{site_a} → {site_b}"
+        elif site_a:
+            direction_label = f"{site_a} → {box_label}"
+        elif site_b:
+            direction_label = f"{box_label} → {site_b}"
+
+        remote = site_a or site_b or box_label
+
+        return {
+            "label": direction_label,
+            "remote": remote,
+            "a": site_a or box_label,
+            "b": site_b or box_label,
+        }
 
 
 class CreateFusionView(APIView):
@@ -542,34 +578,87 @@ class BoxContextView(APIView):
             "profile_name": getattr(cable.profile, "name", None),
         }
     
-    def _fallback_attachments(self, box: FiberInfrastructure) -> list[dict[str, Any]]:
+    def _fallback_attachments(
+        self,
+        box: FiberInfrastructure,
+    ) -> list[dict[str, Any]]:
         """Fallback para attachments antigos (backward compatibility)"""
         from inventory.models import InfrastructureCableAttachment
+        import logging
+        
+        logger = logging.getLogger(__name__)
         
         attachments_qs = InfrastructureCableAttachment.objects.filter(
             infrastructure=box
-        ).select_related('cable')
+        ).select_related('cable__profile')
+        
+        logger.info(
+            "[BoxContext] Found %s attachments for CEO %s",
+            attachments_qs.count(),
+            box.id,
+        )
 
         result = []
         
         for att in attachments_qs:
             cable = att.cable
             
+            # Ignorar cabos marcados como ROMPIDOS (foram partidos)
+            if cable.notes and '[ROMPIDO]' in cable.notes:
+                logger.info(
+                    f"[BoxContext] Skipping cable {cable.id} "
+                    f"({cable.name}) - marked as ROMPIDO"
+                )
+                continue
+            
+            logger.info(
+                f"[BoxContext] Processing cable {cable.id} "
+                f"({cable.name}), profile={cable.profile_id}"
+            )
+            
             # Auto-gerar estrutura se perfil existe mas estrutura ausente
-            if not cable.tubes.exists() and cable.profile_id:
-                try:
-                    cable.create_structure()
-                    cable.refresh_from_db()
-                except Exception:  # pragma: no cover - geração best-effort
-                    pass
+            if not cable.tubes.exists():
+                if cable.profile_id:
+                    try:
+                        logger.info(
+                            "[BoxContext] Creating structure for cable %s",
+                            cable.id,
+                        )
+                        cable.create_structure()
+                        cable.refresh_from_db()
+                        logger.info(
+                            "[BoxContext] Structure created: %s tubes",
+                            cable.tubes.count(),
+                        )
+                    except Exception as exc:
+                        logger.error(
+                            "[BoxContext] Failed to create structure: %s",
+                            exc,
+                        )
+                else:
+                    logger.warning(
+                        "[BoxContext] Cable %s has no profile, cannot create "
+                        "structure",
+                        cable.id,
+                    )
+                    continue  # Skip cables without profile
                     
             tubes_data = []
             for tube in cable.tubes.all():
                 strands_data = []
                 for strand in tube.strands.all():
-                    fused_here = strand.fused_to is not None and strand.fusion_infrastructure_id == box.id
-                    fused_elsewhere = strand.fused_to is not None and strand.fusion_infrastructure_id and strand.fusion_infrastructure_id != box.id
-                    virtual_id = f"{strand.id}_{att.id}" if att.id else strand.id
+                    fused_here = (
+                        strand.fused_to is not None
+                        and strand.fusion_infrastructure_id == box.id
+                    )
+                    fused_elsewhere = (
+                        strand.fused_to is not None
+                        and strand.fusion_infrastructure_id
+                        and strand.fusion_infrastructure_id != box.id
+                    )
+                    virtual_id = (
+                        f"{strand.id}_{att.id}" if att.id else strand.id
+                    )
                     strands_data.append({
                         "id": virtual_id,
                         "real_id": strand.id,
@@ -580,8 +669,18 @@ class BoxContextView(APIView):
                         "status": strand.status,
                         "is_fused": fused_here,
                         "fused_elsewhere": fused_elsewhere,
-                        "fusion_ceo": strand.fusion_infrastructure.name if strand.fusion_infrastructure else None,
+                        "fusion_ceo": (
+                            strand.fusion_infrastructure.name
+                            if strand.fusion_infrastructure
+                            else None
+                        ),
                     })
+                
+                logger.info(
+                    "[BoxContext] Tube %s: %s strands",
+                    tube.id,
+                    len(strands_data),
+                )
                 
                 if strands_data:  # Incluir apenas tubos com fibras disponíveis
                     tubes_data.append({
@@ -591,65 +690,91 @@ class BoxContextView(APIView):
                         "color_hex": tube.color_hex,
                         "strands": strands_data,
                     })
+            
+            logger.info(
+                f"[BoxContext] Cable {cable.id}: "
+                f"{len(tubes_data)} tubes with strands"
+            )
+            
+            # Build direction label (Site ↔ Site/CEO)
+            direction_label = cable.name  # Fallback
+            direction_a = "DIREÇÃO A"  # Fallback (usado pela UI)
+            direction_b = "DIREÇÃO B"
+
+            box_display_name = box.name or f"Infra {box.id}"
+
+            if cable.site_a and cable.site_b:
+                direction_label = (
+                    f"{cable.site_a.display_name} → "
+                    f"{cable.site_b.display_name}"
+                )
+                direction_a = cable.site_a.display_name
+                direction_b = cable.site_b.display_name
+            elif cable.site_a:
+                # Cabo chega nesta CEO a partir de site_a
+                direction_label = (
+                    f"{cable.site_a.display_name} → "
+                    f"{box_display_name}"
+                )
+                direction_a = cable.site_a.display_name
+                direction_b = box_display_name
+            elif cable.site_b:
+                # Cabo sai desta CEO em direção ao site_b
+                direction_label = (
+                    f"{box_display_name} → "
+                    f"{cable.site_b.display_name}"
+                )
+                direction_a = cable.site_b.display_name
+                direction_b = box_display_name
+            else:
+                direction_label = box_display_name or cable.name
+                direction_a = box_display_name or "Direção"
+                direction_b = direction_a
                     
-            # Cada attachment é um item separado (permite mesmo cabo aparecer 2x)
+            # Cada attachment é um item separado (2x se pass-through)
+            # Adicionar com direção baseada no site de origem
             result.append({
                 "id": cable.id,
                 "name": cable.name,
                 "tubes": tubes_data,
-                "attachment_id": att.id,  # ID único do attachment
+                "attachment_id": att.id,
                 "port_type": att.port_type,
                 "is_pass_through": att.is_pass_through,
+                "direction": direction_a,  # Nome do site A
+                "direction_label": direction_label,  # For display
                 "profile_name": getattr(cable.profile, "name", None),
+                "unique_id": f"{cable.id}_A_{att.id}",
             })
-
-        # Se não houver anexações explícitas, usar o cabo "proprietário" da CEO
-        if not result and box.cable_id:
-            cable = FiberCable.objects.get(pk=box.cable_id)
             
-            if not cable.tubes.exists() and cable.profile_id:
-                try:
-                    cable.create_structure()
-                    cable.refresh_from_db()
-                except Exception:
-                    pass
-            
-            tubes_data = []
-            for tube in cable.tubes.all():
-                strands_data = []
-                for strand in tube.strands.all():
-                    fused_here = strand.fused_to is not None and strand.fusion_infrastructure_id == box.id
-                    fused_elsewhere = strand.fused_to is not None and strand.fusion_infrastructure_id and strand.fusion_infrastructure_id != box.id
-                    strands_data.append({
-                        "id": strand.id,
-                        "real_id": strand.id,
-                        "number": strand.number,
-                        "absolute_number": strand.absolute_number,
-                        "color": strand.color,
-                        "color_hex": strand.color_hex,
-                        "status": strand.status,
-                        "is_fused": fused_here,
-                        "fused_elsewhere": fused_elsewhere,
-                        "fusion_ceo": strand.fusion_infrastructure.name if strand.fusion_infrastructure else None,
-                    })
-                
-                if strands_data:
-                    tubes_data.append({
-                        "id": tube.id,
-                        "number": tube.number,
-                        "color": tube.color,
-                        "color_hex": tube.color_hex,
-                        "strands": strands_data,
-                    })
-            
-            result.append({
-                "id": cable.id,
-                "name": cable.name,
-                "tubes": tubes_data,
-                "attachment_id": None,
-                "port_type": "owner",
-                "is_pass_through": False,
-                "profile_name": getattr(cable.profile, "name", None),
-            })
+            # Se pass-through, DUPLICAR com direção do site B
+            if att.is_pass_through:
+                logger.info(
+                    f"[BoxContext] Cable {cable.id} is pass-through, "
+                    "adding second direction"
+                )
+                result.append({
+                    "id": cable.id,
+                    "name": cable.name,
+                    "tubes": tubes_data,  # Mesma estrutura de tubos
+                    "attachment_id": att.id,
+                    "port_type": att.port_type,
+                    "is_pass_through": att.is_pass_through,
+                    "direction": direction_b,  # Nome do site B
+                    "direction_label": direction_label,
+                    "profile_name": getattr(cable.profile, "name", None),
+                    "unique_id": f"{cable.id}_B_{att.id}",
+                })
         
-            return result
+        logger.info(
+            f"[BoxContext] Returning {len(result)} segments "
+            "(including pass-through duplicates)"
+        )
+        
+        # DEBUG: Show complete response
+        if result:
+            logger.info(
+                f"[BoxContext] First segment has "
+                f"{len(result[0].get('tubes', []))} tubes"
+            )
+        
+        return result

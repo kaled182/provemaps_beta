@@ -30,6 +30,11 @@
 
 ## 🚀 Development Workflow
 
+### Prerequisites
+- **Python 3.12** (pyproject.toml target; 3.11+ compatible)
+- **Node.js 18+** for frontend (Vite build)
+- **Docker & Docker Compose** (required for PostgreSQL+PostGIS, Redis)
+
 ### Environment Setup (Docker Required)
 ```powershell
 # ALWAYS use Docker for services (PostgreSQL+PostGIS, Redis, Celery)
@@ -59,9 +64,26 @@ make shell       # Django shell
 ```bash
 cd frontend
 npm install
-npm run dev      # Vite dev server (HMR)
+npm run dev      # Vite dev server (HMR) at http://localhost:5173
 npm run build    # Build to backend/staticfiles/vue-spa/
-npm run test:unit # Vitest unit tests
+npm run test:unit        # Vitest unit tests
+npm run test:unit:watch  # Vitest watch mode
+npm run test:e2e         # Playwright E2E tests
+npm run lint             # ESLint check
+```
+
+**Frontend Structure**:
+```
+frontend/src/
+├── components/      # Reusable Vue components
+│   ├── DeviceImport/  # Device import modals and workflows
+│   ├── Map/          # Google Maps integration
+│   └── ...
+├── composables/     # Reusable composition functions (useApi, etc.)
+├── stores/          # Pinia state management
+├── views/           # Page-level components
+├── router/          # Vue Router configuration
+└── utils/           # Utility functions
 ```
 
 ---
@@ -89,6 +111,8 @@ def device_list_view(request):
 - `inventory/usecases/devices.py` — Device operations, Zabbix sync
 - `inventory/usecases/fibers.py` — Fiber cable CRUD, status updates
 - `inventory/routes/services.py` — Route building, cache invalidation
+- `inventory/viewsets.py` — DRF ViewSets (SiteViewSet, DeviceViewSet, PortViewSet, FiberCableViewSet)
+- `inventory/api/` — Additional API views (fusion.py, splice_matrix.py)
 
 ### 2. Zabbix Integration (Circuit Breaker)
 **ALL Zabbix calls MUST go through** `integrations/zabbix/zabbix_service.zabbix_request()`:
@@ -300,6 +324,21 @@ beat_schedule = {
         "task": "monitoring.tasks.refresh_dashboard_cache_task",
         "schedule": 60,  # seconds
         "options": {"queue": "maps"}
+    },
+    "refresh-fiber-list-cache": {
+        "task": "inventory.tasks.refresh_fiber_list_cache",
+        "schedule": 180,  # 3 minutes
+        "options": {"queue": "default"}
+    },
+    "refresh-cables-oper-status": {
+        "task": "inventory.tasks.refresh_cables_oper_status",
+        "schedule": 120,  # 2 minutes
+        "options": {"queue": "zabbix"}
+    },
+    "update-all-port-optical-levels": {
+        "task": "inventory.tasks.update_all_port_optical_levels",
+        "schedule": 300,  # 5 minutes (RX/TX power)
+        "options": {"queue": "zabbix"}
     }
 }
 ```
@@ -463,5 +502,83 @@ async viewDeviceDetails(device) {
 
 ---
 
-**Version**: 2024-11-27 (Updated for comprehensive AI agent onboarding)  
+## 🔍 Trace Route - Optical Path Tracing (Phase 11.5)
+
+**Context**: Bidirectional optical path tracing with power budget analysis, following physical fiber connections through DIOs, fusions, and switches.
+
+### Architecture
+**Backend**: Recursive graph traversal algorithm in `inventory/api/trace_route.py`
+- Traces `FiberStrand.fused_to` relationships (fusion points in CEOs)
+- Traces `FiberStrand.connected_device_port` relationships (DIO/Switch connections)
+- Calculates power budget: fiber loss (0.35 dB/km) + fusion loss (0.1 dB) + connector loss (0.5 dB)
+
+**Frontend**: Metro-style timeline visualization in `frontend/src/components/TraceRoute/`
+- `TraceRouteView.vue` — Timeline display with power budget card
+- `TraceRouteModal.vue` — Modal wrapper with loading states
+- `useTraceRoute.js` — Composable for API calls and export
+
+### Optical Path Flow
+```
+[Switch A Port 1] → [DIO Port 5] → [Fiber Strand 01] → [CEO Fusion] 
+  → [Fiber Strand 02] → [DIO Port 3] → [Switch B Port 8]
+```
+
+### Key Endpoint
+```
+GET /api/v1/inventory/trace-route/?strand_id=123
+```
+
+**Response**:
+```json
+{
+  "trace_id": "trace_123_1701234567",
+  "source": { "device_name": "SW-Core-01", "port_name": "GigabitEthernet1/0/1" },
+  "destination": { "device_name": "SW-Dist-05", "port_name": "SFP2" },
+  "path": [
+    { "step_number": 1, "type": "device_port", "name": "SW-Core-01 - Gig1/0/1", "loss_db": 0.5 },
+    { "step_number": 2, "type": "fiber_strand", "name": "Cabo-Backbone-01 - Fibra 5", "loss_db": 0.875 },
+    { "step_number": 3, "type": "fusion", "name": "Fusão em CEO-Planaltina", "loss_db": 0.1 }
+  ],
+  "total_distance_km": 2.5,
+  "total_loss_db": 1.475,
+  "fusion_count": 1,
+  "connector_count": 2,
+  "power_budget": {
+    "tx_power_dbm": 0,
+    "rx_sensitivity_dbm": -18,
+    "available_margin_db": 16.525,
+    "required_margin_db": 3,
+    "is_viable": true,
+    "status": "OK",
+    "message": "Link viável com 16.53 dB de margem"
+  }
+}
+```
+
+### Usage Pattern
+```javascript
+import { useTraceRoute } from '@/composables/useTraceRoute';
+
+const { traceFromStrand, loading, traceResult } = useTraceRoute();
+
+// Trace from fiber strand
+await traceFromStrand(strandId);
+
+// Display in modal
+<TraceRouteModal :strand-id="selectedStrand" :is-open="showTrace" @close="showTrace = false" />
+```
+
+### Power Budget Calculation
+- **Fiber Loss**: 0.35 dB/km (SM fiber typical)
+- **Fusion Loss**: 0.1 dB per fusion (typical splice)
+- **Connector Loss**: 0.5 dB per connector (SC/LC/FC)
+- **TX Power**: 0 dBm (typical SFP)
+- **RX Sensitivity**: -18 dBm (typical SFP)
+- **Required Margin**: 3 dB (safety factor)
+
+**Viability Check**: `available_margin_db >= required_margin_db`
+
+---
+
+**Version**: 2024-11-30 (Updated for comprehensive AI agent onboarding)  
 **Maintainer**: For questions/clarifications → `doc/contributing/README.md`
