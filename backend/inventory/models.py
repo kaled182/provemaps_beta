@@ -450,6 +450,18 @@ class FiberCable(models.Model):
 
     name = models.CharField(max_length=150, unique=True)
     
+    # Parent cable for segments (when cable is split)
+    # If this field is set, this cable is a segment and should not
+    # appear in the main cable list (only for internal CEO logic)
+    parent_cable = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='child_segments',
+        help_text="Cabo pai se este for um segmento criado por split"
+    )
+    
     # Hierarchical Structure (Phase 11.5 - Physical Fiber Modeling)
     profile = models.ForeignKey(
         FiberProfile,
@@ -717,16 +729,6 @@ class FiberStrand(models.Model):
         help_text="Porta de dispositivo conectada (DIO, ODF, Switch)"
     )
 
-    # Fusão com outra fibra (Ex: Na Caixa de Emenda no Poste)
-    fused_to = models.OneToOneField(
-        'self',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='fusion_pair',
-        help_text="Fibra com a qual esta está fusionada (emenda)"
-    )
-
     # Metadados de qualidade (medições ópticas)
     attenuation_db = models.DecimalField(
         max_digits=5,
@@ -755,26 +757,6 @@ class FiberStrand(models.Model):
         help_text="Segmento ao qual esta fibra pertence (para rastreabilidade)"
     )
 
-    # --- Localização física da fusão (Matriz: Bandeja/Slot) ---
-    fusion_infrastructure = models.ForeignKey(
-        'FiberInfrastructure',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='fusions',
-        help_text="CEO onde ocorreu a fusão (para matriz visual)"
-    )
-    fusion_tray = models.IntegerField(
-        null=True,
-        blank=True,
-        help_text="Número da bandeja"
-    )
-    fusion_slot = models.IntegerField(
-        null=True,
-        blank=True,
-        help_text="Número do slot (1–24)"
-    )
-
     class Meta:
         db_table = "inventory_fiber_strand"
         ordering = ["absolute_number"]
@@ -800,6 +782,74 @@ class FiberStrand(models.Model):
             "notation": f"T{self.tube.number}F{self.number}",
             "absolute": self.absolute_number,
         }
+
+
+class FiberFusion(models.Model):
+    """Fusão física entre duas fibras em uma infraestrutura."""
+
+    infrastructure = models.ForeignKey(
+        'FiberInfrastructure',
+        on_delete=models.CASCADE,
+        related_name='fusions',
+        help_text="Infraestrutura (CEO) onde a fusão foi realizada",
+    )
+    tray = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Número da bandeja onde a fusão está registrada",
+    )
+    slot = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Slot físico dentro da bandeja (1–24)",
+    )
+    fiber_a = models.ForeignKey(
+        'FiberStrand',
+        on_delete=models.CASCADE,
+        related_name='fusions_as_a',
+        help_text="Primeira fibra participante da fusão",
+    )
+    fiber_b = models.ForeignKey(
+        'FiberStrand',
+        on_delete=models.CASCADE,
+        related_name='fusions_as_b',
+        help_text="Segunda fibra participante da fusão",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'inventory_fiber_fusion'
+        verbose_name = 'Fusão de Fibra'
+        verbose_name_plural = 'Fusões de Fibra'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['infrastructure', 'tray', 'slot'],
+                name='inventory_fiber_fusion_unique_slot',
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=['fiber_a'],
+                name='idx_fusion_fiber_a',
+            ),
+            models.Index(
+                fields=['fiber_b'],
+                name='idx_fusion_fiber_b',
+            ),
+            models.Index(
+                fields=['infrastructure'],
+                name='idx_fusion_infrastructure',
+            ),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - logging helper
+        tray_label = self.tray if self.tray is not None else '-'
+        slot_label = self.slot if self.slot is not None else '-'
+        return (
+            f"Fusion infra={self.infrastructure_id} "
+            f"tray={tray_label} slot={slot_label} "
+            f"({self.fiber_a_id}<->{self.fiber_b_id})"
+        )
 
 
 class FiberEvent(models.Model):
@@ -960,7 +1010,7 @@ class CableSegment(models.Model):
     # Infraestruturas de início e fim
     start_infrastructure = models.ForeignKey(
         FiberInfrastructure,
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         related_name='segments_starting_here',
         null=True,
         blank=True,
@@ -968,7 +1018,7 @@ class CableSegment(models.Model):
     )
     end_infrastructure = models.ForeignKey(
         FiberInfrastructure,
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         related_name='segments_ending_here',
         null=True,
         blank=True,
@@ -988,9 +1038,18 @@ class CableSegment(models.Model):
         ordering = ['cable', 'segment_number']
         unique_together = [['cable', 'segment_number']]
         indexes = [
-            models.Index(fields=['cable', 'segment_number'], name='idx_cable_seg_num'),
-            models.Index(fields=['start_infrastructure'], name='idx_seg_start'),
-            models.Index(fields=['end_infrastructure'], name='idx_seg_end'),
+            models.Index(
+                fields=['cable', 'segment_number'],
+                name='idx_cable_seg_num',
+            ),
+            models.Index(
+                fields=['start_infrastructure'],
+                name='idx_seg_start',
+            ),
+            models.Index(
+                fields=['end_infrastructure'],
+                name='idx_seg_end',
+            ),
         ]
         verbose_name = 'Segmento de Cabo'
         verbose_name_plural = 'Segmentos de Cabo'

@@ -5,7 +5,7 @@ import logging
 from django.db.models import Count, Q
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
-from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
@@ -271,7 +271,10 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
 class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
     """ViewSet for FiberCable CRUD operations"""
 
-    queryset = FiberCable.objects.select_related(
+    # Exclude child segments (only show parent cables in main list)
+    queryset = FiberCable.objects.filter(
+        parent_cable__isnull=True  # Only cables without parent (main cables)
+    ).select_related(
         "origin_port__device__site", "destination_port__device__site"
     ).order_by("name")
     serializer_class = FiberCableSerializer
@@ -297,7 +300,21 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             cable.create_structure()
             # Reload to get newly created relationships
             cable.refresh_from_db()
-        
+
+        cable = (
+            FiberCable.objects.select_related(
+                "origin_port__device__site",
+                "destination_port__device__site",
+            )
+            .prefetch_related(
+                "tubes__strands__fusions_as_a__infrastructure",
+                "tubes__strands__fusions_as_a__fiber_b__tube__cable",
+                "tubes__strands__fusions_as_b__infrastructure",
+                "tubes__strands__fusions_as_b__fiber_a__tube__cable",
+            )
+            .get(pk=cable.pk)
+        )
+
         serializer = FiberCableStructureSerializer(cable)
         return Response(serializer.data)
 

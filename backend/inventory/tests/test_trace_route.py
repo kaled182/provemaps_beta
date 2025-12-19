@@ -7,6 +7,8 @@ import pytest
 from decimal import Decimal
 from django.contrib.auth import get_user_model
 
+from django.contrib.gis.geos import Point
+
 from inventory.models import (
     Site,
     Device,
@@ -14,6 +16,7 @@ from inventory.models import (
     FiberCable,
     BufferTube,
     FiberStrand,
+    FiberFusion,
     FiberInfrastructure,
 )
 from inventory.api.trace_route import (
@@ -62,7 +65,7 @@ def switch_a(db, site_a):
         name="SW-Core-01",
         category="backbone",
         site=site_a,
-        zabbix_id="10001",
+        zabbix_hostid="10001",
     )
 
 
@@ -73,7 +76,7 @@ def switch_b(db, site_b):
         name="SW-Dist-05",
         category="backbone",
         site=site_b,
-        zabbix_id="10002",
+        zabbix_hostid="10002",
     )
 
 
@@ -83,8 +86,6 @@ def port_a(db, switch_a):
     return Port.objects.create(
         device=switch_a,
         name="GigabitEthernet1/0/1",
-        port_type="ethernet",
-        admin_status="up",
     )
 
 
@@ -94,8 +95,6 @@ def port_b(db, switch_b):
     return Port.objects.create(
         device=switch_b,
         name="SFP2",
-        port_type="sfp",
-        admin_status="up",
     )
 
 
@@ -103,10 +102,10 @@ def port_b(db, switch_b):
 def cable_segment_a(db, site_a, site_b):
     """Create Cable A (Site A to CEO)."""
     cable = FiberCable.objects.create(
-        label="Cabo-Backbone-01",
-        fiber_count=12,
-        origin_site=site_a,
-        destination_site=site_b,
+        name="Cabo-Backbone-01",
+        site_a=site_a,
+        site_b=site_b,
+        length_km=Decimal("2.5"),
     )
     
     # Create buffer tube
@@ -115,7 +114,6 @@ def cable_segment_a(db, site_a, site_b):
         number=1,
         color="Azul",
         color_hex="#0000FF",
-        strand_count=12,
     )
     
     # Create fiber strand
@@ -136,10 +134,10 @@ def cable_segment_a(db, site_a, site_b):
 def cable_segment_b(db, site_a, site_b):
     """Create Cable B (CEO to Site B)."""
     cable = FiberCable.objects.create(
-        label="Cabo-Backbone-02",
-        fiber_count=12,
-        origin_site=site_a,
-        destination_site=site_b,
+        name="Cabo-Backbone-02",
+        site_a=site_a,
+        site_b=site_b,
+        length_km=Decimal("1.7"),
     )
     
     tube = BufferTube.objects.create(
@@ -147,7 +145,6 @@ def cable_segment_b(db, site_a, site_b):
         number=1,
         color="Azul",
         color_hex="#0000FF",
-        strand_count=12,
     )
     
     strand = FiberStrand.objects.create(
@@ -164,13 +161,14 @@ def cable_segment_b(db, site_a, site_b):
 
 
 @pytest.fixture
-def ceo_infrastructure(db):
+def ceo_infrastructure(db, cable_segment_a):
     """Create CEO (Fusion infrastructure)."""
+    cable = cable_segment_a.tube.cable
     return FiberInfrastructure.objects.create(
         name="CEO-Planaltina",
-        infrastructure_type="ceo",
-        latitude=-15.6000,
-        longitude=-47.7500,
+        type="splice_box",
+        cable=cable,
+        location=Point(-47.7500, -15.6000, srid=4326),
     )
 
 
@@ -180,25 +178,22 @@ def complete_path(
 ):
     """
     Create complete optical path:
-    Switch A Port → Fiber A → CEO Fusion → Fiber B → Switch B Port
+    Switch A Port -> Fiber A -> CEO Fusion -> Fiber B -> Switch B Port
     """
-    # Connect Fiber A to Port A
     cable_segment_a.connected_device_port = port_a
     cable_segment_a.save()
-    
-    # Connect Fiber B to Port B
+
     cable_segment_b.connected_device_port = port_b
     cable_segment_b.save()
-    
-    # Fuse Fiber A to Fiber B at CEO
-    cable_segment_a.fused_to = cable_segment_b
-    cable_segment_a.fusion_infrastructure = ceo_infrastructure
-    cable_segment_a.save()
-    
-    cable_segment_b.fused_to = cable_segment_a
-    cable_segment_b.fusion_infrastructure = ceo_infrastructure
-    cable_segment_b.save()
-    
+
+    FiberFusion.objects.create(
+        infrastructure=ceo_infrastructure,
+        tray=1,
+        slot=1,
+        fiber_a=cable_segment_a,
+        fiber_b=cable_segment_b,
+    )
+
     return {
         "port_a": port_a,
         "port_b": port_b,
@@ -222,6 +217,8 @@ class TestTraceRouteAPI:
         assert result["details"]["device_name"] == "SW-Core-01"
         assert result["details"]["port_name"] == "GigabitEthernet1/0/1"
         assert result["loss_db"] == Decimal("0.5")
+        assert result["details"]["port_type"] is None
+        assert result["details"]["status"] is None
     
     def test_serialize_fiber_strand(self, cable_segment_a):
         """Test fiber strand serialization."""
@@ -232,14 +229,33 @@ class TestTraceRouteAPI:
         assert "Cabo-Backbone-01" in result["name"]
         assert result["details"]["fiber_color"] == "Verde"
         assert result["details"]["fiber_number"] == 5
+        assert result["details"]["cable_name"] == "Cabo-Backbone-01"
     
-    def test_serialize_fusion(self, cable_segment_a, cable_segment_b):
+    def test_serialize_fusion(
+        self, cable_segment_a, cable_segment_b, ceo_infrastructure
+    ):
         """Test fusion point serialization."""
-        result = serialize_fusion(cable_segment_a, cable_segment_b, step_num=3)
-        
+        fusion = FiberFusion.objects.create(
+            infrastructure=ceo_infrastructure,
+            tray=1,
+            slot=5,
+            fiber_a=cable_segment_a,
+            fiber_b=cable_segment_b,
+        )
+
+        result = serialize_fusion(
+            fusion,
+            cable_segment_a,
+            cable_segment_b,
+            step_num=3,
+        )
+
         assert result["step_number"] == 3
         assert result["type"] == "fusion"
         assert result["loss_db"] == Decimal("0.1")
+        assert result["details"]["fusion_id"] == fusion.id
+        assert result["details"]["tray"] == 1
+        assert result["details"]["slot"] == 5
     
     def test_calculate_power_budget_ok(self):
         """Test power budget calculation with viable link."""
@@ -271,7 +287,9 @@ class TestTraceRouteAPI:
         """Test complete trace route from fiber strand."""
         fiber_a = complete_path["fiber_a"]
         
-        request = rf.get(f"/api/v1/inventory/trace-route/?strand_id={fiber_a.id}")
+        request = rf.get(
+            f"/api/v1/inventory/trace-route/?strand_id={fiber_a.id}"
+        )
         request.user = user
         
         response = trace_fiber_route(request)
@@ -284,7 +302,8 @@ class TestTraceRouteAPI:
         assert data["destination"]["device_name"] == "SW-Dist-05"
         
         # Verify path has all steps
-        assert len(data["path"]) == 5  # Port A → Fiber A → Fusion → Fiber B → Port B
+        assert len(data["path"]) == 5
+        # Path order: Port A -> Fiber A -> Fusion -> Fiber B -> Port B
         
         # Verify step types in order
         step_types = [step["type"] for step in data["path"]]
@@ -321,7 +340,9 @@ class TestTraceRouteAPI:
         assert response.status_code == 404
         assert "not found" in response.data["error"]
     
-    def test_trace_fiber_route_partial_path(self, rf, user, port_a, cable_segment_a):
+    def test_trace_fiber_route_partial_path(
+        self, rf, user, port_a, cable_segment_a
+    ):
         """Test trace with only one endpoint connected."""
         # Connect only to Port A
         cable_segment_a.connected_device_port = port_a

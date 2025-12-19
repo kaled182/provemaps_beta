@@ -97,6 +97,14 @@
             </button>
             
             <button 
+              v-if="contextMenu.infrastructurePoint?.type === 'splice_box'"
+              class="w-full text-left px-4 py-2.5 text-sm hover:bg-orange-50 dark:hover:bg-gray-700 text-orange-600 dark:text-orange-400 flex items-center gap-3" 
+              @click="actionSplitCableAtCEO"
+            >
+              <i class="fas fa-cut text-orange-500"></i> Romper Cabo Aqui
+            </button>
+            
+            <button 
               v-if="contextMenu.infrastructurePoint?.type === 'slack'"
               class="w-full text-left px-4 py-2.5 text-sm hover:bg-indigo-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center gap-3" 
               @click="actionConvertSlackToCEO"
@@ -946,11 +954,20 @@ const actionSplitCable = async () => {
       const m1 = splitMarkers.value.marker1;
       const m2 = splitMarkers.value.marker2;
       
+      console.log('[checkBothMarkersFixed] Iniciando verificação...');
+      console.log('[checkBothMarkersFixed] marker1:', m1 ? 'existe' : 'null');
+      console.log('[checkBothMarkersFixed] marker2:', m2 ? 'existe' : 'null');
+      console.log('[checkBothMarkersFixed] marker1.ceoData:', m1?.ceoData);
+      console.log('[checkBothMarkersFixed] marker2.ceoData:', m2?.ceoData);
+      
       // Verificar se ambos têm ceoData
       if (!m1?.ceoData || !m2?.ceoData) {
         console.log('[Split] Aguardando fixação de ambas as pontas...');
         return;
       }
+      
+      console.log('[checkBothMarkersFixed] CEO 1:', m1.ceoData.id, m1.ceoData.name);
+      console.log('[checkBothMarkersFixed] CEO 2:', m2.ceoData.id, m2.ceoData.name);
       
       // Verificar se são a MESMA CEO
       if (m1.ceoData.id !== m2.ceoData.id) {
@@ -967,22 +984,24 @@ const actionSplitCable = async () => {
       console.log('[Split] AMBAS as pontas fixadas em', m1.ceoData.name, '- iniciando split permanente');
       
       try {
-        const response = await api.post('/api/v1/inventory/cables/split-at-ceo/', {
+        const splitPayload = {
           cable_id: parseInt(id),
           ceo_id: m1.ceoData.id,
           split_point: {
             lat: m1.ceoData.lat,
             lng: m1.ceoData.lng
           }
-        });
+        };
+        console.log('[Split] Payload do split:', splitPayload);
+        
+        const response = await api.post('/api/v1/inventory/cables/split-at-ceo/', splitPayload);
         
         console.log('[Split] Split permanente concluído:', response);
         
         showNotification(
           'Cabo Partido com Sucesso!',
           `Cabo ${response.original_cable.name} rompido. Criadas 2 extremidades: ${response.cable_a.name} (ID ${response.cable_a.id}) e ${response.cable_b.name} (ID ${response.cable_b.id}).`,
-          'success',
-          8000  // 8 segundos para ler
+          'success'
         );
         
         // Limpar markers e polylines temporários
@@ -1070,14 +1089,17 @@ const actionSplitCable = async () => {
           if (!ceoName || !ceoName.trim()) return;
           
           try {
-            const result = await api.post('/api/v1/inventory/infrastructure/', {
+            const payload = {
               cable: id,
               type: 'splice_box',
               name: ceoName.trim(),
               lat,
               lng,
               metadata: {}
-            });
+            };
+            
+            console.log('[FiberRouteEditor] Creating CEO with payload:', payload);
+            const result = await api.post('/api/v1/inventory/infrastructure/', payload);
             
             console.log('[FiberRouteEditor] CEO created at marker', result);
             
@@ -1195,7 +1217,7 @@ const actionSplitCable = async () => {
         }
         polyline.setPath(segment);
         
-        // Verificar se está sobre uma CEO (raio de 50 metros)
+        // Verificar se está sobre uma CEO (raio de 100 metros)
         const nearbyInfra = cable.value.infrastructure_points?.find(infra => {
           if (!infra.location?.coordinates) return false;
           const [infraLng, infraLat] = infra.location.coordinates;
@@ -1203,7 +1225,7 @@ const actionSplitCable = async () => {
             Math.pow(infraLat - newPos.lat, 2) + Math.pow(infraLng - newPos.lng, 2)
           );
           console.log(`[Drag] Distance to ${infra.name}:`, dist);
-          return dist < 0.0001; // ~10 metros
+          return dist < 0.001; // ~100 metros em graus (aproximadamente)
         });
         
         if (nearbyInfra && nearbyInfra.type === 'splice_box') {
@@ -1275,7 +1297,7 @@ const actionSplitCable = async () => {
         const newLat = event.latLng.lat();
         const newLng = event.latLng.lng();
         
-        // Verificar se foi solto próximo de uma CEO (raio de 50 metros)
+        // Verificar se foi solto próximo de uma CEO (raio de 100 metros)
         const nearbyInfra = cable.value.infrastructure_points?.find(infra => {
           if (!infra.location?.coordinates) return false;
           const [infraLng, infraLat] = infra.location.coordinates;
@@ -1283,7 +1305,7 @@ const actionSplitCable = async () => {
             Math.pow(infraLat - newLat, 2) + Math.pow(infraLng - newLng, 2)
           );
           console.log(`[Drop] Distance to ${infra.name}:`, dist);
-          return dist < 0.0001; // ~10 metros
+          return dist < 0.001; // ~100 metros em graus (aproximadamente)
         });
         
         if (nearbyInfra && nearbyInfra.type === 'splice_box') {
@@ -1354,16 +1376,159 @@ const actionSplitCable = async () => {
             );
           }
         } else {
-          // Restaurar cor original se não conectou
-          const originalColor = isFirstSegment ? '#3B82F6' : '#EF4444';
-          marker.setIcon({
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 10,
-            fillColor: originalColor,
-            fillOpacity: 1,
-            strokeColor: '#FFFFFF',
-            strokeWeight: 3,
-          });
+          // NÃO está próximo de nenhuma CEO existente
+          // Verificar se os DOIS marcadores estão próximos um do outro
+          const m1 = splitMarkers.value.marker1;
+          const m2 = splitMarkers.value.marker2;
+          
+          if (m1 && m2) {
+            const pos1 = m1.getPosition();
+            const pos2 = m2.getPosition();
+            
+            const distBetweenMarkers = Math.sqrt(
+              Math.pow(pos1.lat() - pos2.lat(), 2) + 
+              Math.pow(pos1.lng() - pos2.lng(), 2)
+            );
+            
+            console.log('[Drop] Distância entre marcadores:', distBetweenMarkers);
+            
+            // Se estão próximos (< 0.001 = ~100m)
+            if (distBetweenMarkers < 0.001) {
+              console.log('[Drop] Marcadores estão próximos! Criar CEO e fazer split.');
+              
+              // Calcular ponto médio
+              const midLat = (pos1.lat() + pos2.lat()) / 2;
+              const midLng = (pos1.lng() + pos2.lng()) / 2;
+              
+              // Perguntar o nome da CEO
+              const ceoName = prompt(
+                'Os dois marcadores estão próximos!\n\n' +
+                'Digite o nome da Caixa de Emenda (CEO):',
+                `CEO-${Date.now().toString().slice(-4)}`
+              );
+              
+              if (!ceoName || !ceoName.trim()) {
+                // Cancelado - restaurar cor original
+                const originalColor = isFirstSegment ? '#3B82F6' : '#EF4444';
+                marker.setIcon({
+                  path: google.maps.SymbolPath.CIRCLE,
+                  scale: 10,
+                  fillColor: originalColor,
+                  fillOpacity: 1,
+                  strokeColor: '#FFFFFF',
+                  strokeWeight: 3,
+                });
+                return;
+              }
+              
+              try {
+                // Criar CEO no ponto médio
+                const ceoResult = await api.post('/api/v1/inventory/infrastructure/', {
+                  cable: parseInt(id),
+                  type: 'splice_box',
+                  name: ceoName.trim(),
+                  lat: midLat,
+                  lng: midLng,
+                  metadata: {}
+                });
+                
+                console.log('[Drop] CEO criada:', ceoResult);
+                
+                const ceoLat = ceoResult.location.coordinates[1];
+                const ceoLng = ceoResult.location.coordinates[0];
+                
+                // NÃO anexar o cabo original aqui - o split vai criar os attachments
+                // dos segmentos automaticamente
+                
+                // Snap AMBOS os marcadores para a CEO
+                m1.setPosition({ lat: ceoLat, lng: ceoLng });
+                m1.setDraggable(false);
+                m1.setIcon({
+                  path: google.maps.SymbolPath.CIRCLE,
+                  scale: 10,
+                  fillColor: '#10B981',
+                  fillOpacity: 1,
+                  strokeColor: '#FFFFFF',
+                  strokeWeight: 3,
+                });
+                m1.setTitle(`CEO: ${ceoName} (Anexado)`);
+                m1.ceoData = {
+                  id: ceoResult.id,
+                  name: ceoName,
+                  lat: ceoLat,
+                  lng: ceoLng
+                };
+                
+                m2.setPosition({ lat: ceoLat, lng: ceoLng });
+                m2.setDraggable(false);
+                m2.setIcon({
+                  path: google.maps.SymbolPath.CIRCLE,
+                  scale: 10,
+                  fillColor: '#10B981',
+                  fillOpacity: 1,
+                  strokeColor: '#FFFFFF',
+                  strokeWeight: 3,
+                });
+                m2.setTitle(`CEO: ${ceoName} (Anexado)`);
+                m2.ceoData = {
+                  id: ceoResult.id,
+                  name: ceoName,
+                  lat: ceoLat,
+                  lng: ceoLng
+                };
+                
+                showNotification(
+                  'CEO Criada!',
+                  `${ceoName} criada. Iniciando split permanente...`,
+                  'success'
+                );
+                
+                // Disparar split permanente
+                await checkBothMarkersFixed();
+                
+              } catch (err) {
+                console.error('[Drop] Erro ao criar CEO e fazer split:', err);
+                showNotification(
+                  'Erro',
+                  err?.response?.data?.detail || err?.message || 'Erro ao criar CEO',
+                  'error'
+                );
+                
+                // Restaurar cor original
+                const originalColor = isFirstSegment ? '#3B82F6' : '#EF4444';
+                marker.setIcon({
+                  path: google.maps.SymbolPath.CIRCLE,
+                  scale: 10,
+                  fillColor: originalColor,
+                  fillOpacity: 1,
+                  strokeColor: '#FFFFFF',
+                  strokeWeight: 3,
+                });
+              }
+            } else {
+              // Marcadores ainda não estão próximos - apenas restaurar cor
+              const originalColor = isFirstSegment ? '#3B82F6' : '#EF4444';
+              marker.setIcon({
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 10,
+                fillColor: originalColor,
+                fillOpacity: 1,
+                strokeColor: '#FFFFFF',
+                strokeWeight: 3,
+              });
+            }
+          } else {
+            // Restaurar cor original se não conectou
+            const originalColor = isFirstSegment ? '#3B82F6' : '#EF4444';
+            marker.setIcon({
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 10,
+              fillColor: originalColor,
+              fillOpacity: 1,
+              strokeColor: '#FFFFFF',
+              strokeWeight: 3,
+            });
+          }
         }
       });
     };
@@ -1375,6 +1540,106 @@ const actionSplitCable = async () => {
     createDragFeedback(endMarker2, segment2, false, polyline2, radiusCircle2);
     createDropHandler(endMarker1, segment1, true, polyline1, radiusCircle1);
     createDropHandler(endMarker2, segment2, false, polyline2, radiusCircle2);
+    
+    // Verificação INICIAL: checar se os marcadores já estão próximos de uma CEO
+    const checkInitialProximity = async (marker, markerName, segment, isFirstSegment, polyline, radiusCircle) => {
+      const pos = marker.getPosition();
+      const markerLat = pos.lat();
+      const markerLng = pos.lng();
+      
+      console.log(`[InitialCheck ${markerName}] Posição do marcador: lat=${markerLat}, lng=${markerLng}`);
+      console.log(`[InitialCheck] CEOs disponíveis:`, cable.value.infrastructure_points?.length);
+      
+      const nearbyInfra = cable.value.infrastructure_points?.find(infra => {
+        if (!infra.location?.coordinates) return false;
+        const [infraLng, infraLat] = infra.location.coordinates;
+        const dist = Math.sqrt(
+          Math.pow(infraLat - markerLat, 2) + Math.pow(infraLng - markerLng, 2)
+        );
+        console.log(`[InitialCheck ${markerName}] CEO ${infra.name}: lat=${infraLat}, lng=${infraLng}, distance=${dist}`);
+        return dist < 0.001; // ~100 metros
+      });
+      
+      if (nearbyInfra && nearbyInfra.type === 'splice_box') {
+        console.log(`[InitialCheck] ${markerName} está próximo de ${nearbyInfra.name}!`);
+        
+        // Mostrar prompt para confirmar anexação
+        const confirm = window.confirm(
+          `O marcador ${markerName} está próximo de "${nearbyInfra.name}".\n\n` +
+          `Deseja anexar automaticamente este cabo à CEO?`
+        );
+        
+        if (confirm) {
+          try {
+            const [infraLng, infraLat] = nearbyInfra.location.coordinates;
+            
+            // Anexar cabo à CEO
+            await api.post('/api/v1/inventory/cable-attachments/attach/', {
+              cable_id: parseInt(id),
+              infrastructure_id: nearbyInfra.id,
+              port_type: 'oval',
+              is_pass_through: true
+            });
+            
+            // Snap para posição exata da CEO
+            marker.setPosition({ lat: infraLat, lng: infraLng });
+            marker.setDraggable(false);
+            marker.setIcon({
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 10,
+              fillColor: '#10B981',
+              fillOpacity: 1,
+              strokeColor: '#FFFFFF',
+              strokeWeight: 3,
+            });
+            marker.setTitle(`CEO: ${nearbyInfra.name} (Anexado)`);
+            
+            // Armazenar dados da CEO
+            marker.ceoData = {
+              id: nearbyInfra.id,
+              name: nearbyInfra.name,
+              lat: infraLat,
+              lng: infraLng
+            };
+            
+            // Atualizar caminho
+            if (isFirstSegment) {
+              segment[segment.length - 1] = { lat: infraLat, lng: infraLng };
+            } else {
+              segment[0] = { lat: infraLat, lng: infraLng };
+            }
+            polyline.setPath(segment);
+            
+            // Remover círculo de raio
+            if (radiusCircle) {
+              radiusCircle.setMap(null);
+            }
+            
+            showNotification(
+              'CEO Detectada!',
+              `${markerName} anexado automaticamente a ${nearbyInfra.name}`,
+              'success'
+            );
+            
+            // Verificar se ambas as pontas estão fixadas
+            await checkBothMarkersFixed();
+          } catch (err) {
+            console.error('[InitialCheck] Erro ao anexar:', err);
+            showNotification(
+              'Erro ao Anexar',
+              err?.response?.data?.detail || err?.message || 'Erro ao anexar',
+              'error'
+            );
+          }
+        }
+      }
+    };
+    
+    // Executar verificação inicial para ambos os marcadores
+    setTimeout(() => {
+      checkInitialProximity(endMarker1, 'Ponta Azul', segment1, true, polyline1, radiusCircle1);
+      checkInitialProximity(endMarker2, 'Ponta Vermelha', segment2, false, polyline2, radiusCircle2);
+    }, 500); // Aguardar meio segundo para o mapa estabilizar
     
     showNotification(
       'Cabo Rompido!',
@@ -1728,6 +1993,54 @@ const actionManageSplices = () => {
   setTimeout(() => {
     console.debug('[FiberRouteEditor] Modal estado show:', spliceModal.show, 'infraPoint.id:', spliceModal.infraPoint?.id)
   }, 50)
+};
+
+const actionSplitCableAtCEO = async () => {
+  const ceo = contextMenu.infrastructurePoint;
+  if (!ceo || ceo.type !== 'splice_box') return;
+  
+  closeContextMenu();
+  
+  // Confirmação
+  const confirmMsg = `Romper o cabo "${cable.value?.name}" na CEO "${ceo.name}"?\n\n` +
+    `Isso criará 2 cabos:\n` +
+    `• Segmento A: Da origem até ${ceo.name}\n` +
+    `• Segmento B: De ${ceo.name} até o destino\n\n` +
+    `Esta ação não pode ser desfeita.`;
+  
+  if (!confirm(confirmMsg)) return;
+  
+  try {
+    console.log('[FiberRouteEditor] Rompendo cabo na CEO', ceo.name, ceo.id);
+    
+    const response = await api.post('/api/v1/inventory/cables/split-at-ceo/', {
+      cable_id: parseInt(id),
+      ceo_id: ceo.id,
+      split_point: {
+        lat: ceo.location.coordinates[1],
+        lng: ceo.location.coordinates[0]
+      }
+    });
+    
+    console.log('[FiberRouteEditor] Cabo rompido com sucesso', response);
+    
+    showNotification(
+      'Cabo Rompido!',
+      `${response.cable_a.name} (${response.cable_a.length_km}km) e ${response.cable_b.name} (${response.cable_b.length_km}km) criados.`,
+      'success'
+    );
+    
+    // Recarregar dados do cabo
+    await loadCableData({ preserveViewport: true });
+    
+  } catch (err) {
+    console.error('[FiberRouteEditor] Erro ao romper cabo na CEO', err);
+    showNotification(
+      'Erro ao Romper Cabo',
+      err?.response?.data?.error || err?.message || 'Erro desconhecido',
+      'error'
+    );
+  }
 };
 
 const closeSpliceModal = () => {

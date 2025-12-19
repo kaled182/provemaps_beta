@@ -22,7 +22,7 @@ from inventory.domain.geometry import (
     calculate_path_length,
     sanitize_path_points,
 )
-from inventory.domain.optical import fetch_port_optical_snapshot
+# NOTE: fetch_port_optical_snapshot no longer used directly here
 from inventory.models import FiberCable, FiberEvent, Port
 from inventory.services.fiber_status import (
     combine_cable_status as combine_cable_status_service,
@@ -31,6 +31,7 @@ from inventory.services.fiber_status import (
     get_oper_status_from_port,
 )
 from inventory.spatial import coords_to_linestring
+from django.db.models import Q
 
 logger = logging.getLogger(__name__)
 
@@ -532,6 +533,49 @@ def delete_fiber(cable: FiberCable) -> None:
     invalidate_fiber_cache()
 
 
+def get_delete_blockers(cable: FiberCable) -> Dict[str, object]:
+    """Identify objects that would block deleting the given cable.
+
+    Currently detects CableSegments from other cables that reference
+    this cable's infrastructures via PROTECT foreign keys.
+    """
+    # local import to avoid cycles
+    from .models import FiberInfrastructure, CableSegment
+
+    infra_ids = list(
+        FiberInfrastructure.objects.filter(cable=cable).values_list(
+            "id", flat=True
+        )
+    )
+
+    external_segments_qs = (
+        CableSegment.objects.filter(
+            Q(start_infrastructure_id__in=infra_ids)
+            | Q(end_infrastructure_id__in=infra_ids)
+        )
+        .exclude(cable_id=cable.id)
+    )
+
+    external_segments: list[dict[str, object]] = []
+    for seg in external_segments_qs.select_related("cable"):
+        external_segments.append(
+            {
+                "segment_id": seg.id,
+                "segment_number": seg.segment_number,
+                "cable_id": seg.cable_id,
+                "cable_name": getattr(seg.cable, "name", None),
+                "start_infrastructure_id": seg.start_infrastructure_id,
+                "end_infrastructure_id": seg.end_infrastructure_id,
+            }
+        )
+
+    return {
+        "infrastructure_ids": infra_ids,
+        "external_segments_count": len(external_segments),
+        "external_segments": external_segments,
+    }
+
+
 def _persist_discovered_optical_keys(
     port: Port,
     reason: Dict[str, Any],
@@ -893,6 +937,7 @@ __all__ = [
     "update_fiber_path",
     "update_fiber_metadata",
     "delete_fiber",
+    "get_delete_blockers",
     "compute_live_status",
     "live_status_payload",
     "bulk_live_status",
@@ -900,3 +945,47 @@ __all__ = [
     "create_manual_fiber",
     "update_cable_oper_status",
 ]
+
+
+def delete_fibers_bulk(
+    ids: Optional[Iterable[int]] = None,
+    delete_all: bool = False,
+) -> Dict[str, object]:
+    """Delete multiple FiberCable entries.
+
+    - If `delete_all` is True, ignores `ids` and deletes all cables.
+    - Otherwise, deletes cables whose IDs are provided in `ids`.
+    Returns a summary with deleted and missing IDs.
+    """
+    deleted_ids: list[int] = []
+    missing_ids: list[int] = []
+
+    target_ids: list[int]
+    if delete_all:
+        target_ids = list(FiberCable.objects.values_list("id", flat=True))
+    else:
+        raw_ids = list(ids or [])
+        # Normalize and validate integers
+        target_ids = []
+        for raw in raw_ids:
+            try:
+                target_ids.append(int(raw))
+            except Exception:
+                continue
+
+    for cid in target_ids:
+        try:
+            cable = FiberCable.objects.get(id=cid)
+        except FiberCable.DoesNotExist:
+            missing_ids.append(cid)
+            continue
+        delete_fiber(cable)
+        deleted_ids.append(cid)
+
+    # invalidate_fiber_cache() is already called per delete_fiber;
+    # no extra call is strictly necessary, but harmless if added.
+    return {
+        "deleted_count": len(deleted_ids),
+        "deleted_ids": deleted_ids,
+        "missing_ids": missing_ids,
+    }

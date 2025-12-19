@@ -6,6 +6,8 @@ from typing import Any
 
 from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.db import IntegrityError
+from django.db.models.deletion import ProtectedError
 from django.shortcuts import render
 from django.views.decorators.http import (
     require_GET,
@@ -293,8 +295,29 @@ def api_fiber_detail(
         return guard
 
     if request.method == "DELETE":
-        fiber_uc.delete_fiber(cable)
-        return HttpResponse(status=204)
+        try:
+            fiber_uc.delete_fiber(cable)
+            return HttpResponse(status=204)
+        except ProtectedError as exc:
+            blockers = fiber_uc.get_delete_blockers(cable)
+            return JsonResponse(
+                {
+                    "error": "Delete blocked by related objects",
+                    "detail": str(exc),
+                    "blockers": blockers,
+                },
+                status=409,
+            )
+        except IntegrityError as exc:
+            return JsonResponse(
+                {
+                    "error": (
+                        "Integrity error while deleting cable"
+                    ),
+                    "detail": str(exc),
+                },
+                status=409,
+            )
 
     try:
         payload = json.loads(request.body or "{}")
@@ -395,6 +418,69 @@ def api_create_manual_fiber(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"error": str(exc)}, status=400)
 
     return JsonResponse(result["payload"])
+
+
+@require_POST
+@api_login_required
+@handle_api_errors
+def api_delete_fibers_bulk(request: HttpRequest) -> JsonResponse:
+    """Delete multiple cables at once.
+
+    Body options:
+      - {"ids": [1,2,3]}: delete listed cable IDs
+      - {"all": true}: delete all cables
+    Requires staff privileges.
+    """
+    guard = staff_guard(request)
+    if guard:
+        return guard
+
+    try:
+        payload = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON payload"}, status=400)
+
+    delete_all_flag = str(payload.get("all", "")).lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    ids = payload.get("ids") or []
+
+    if not delete_all_flag and (not isinstance(ids, list) or not ids):
+        return JsonResponse(
+            {"error": "Provide 'ids' list or set 'all': true"},
+            status=400,
+        )
+
+    summary = fiber_uc.delete_fibers_bulk(ids=ids, delete_all=delete_all_flag)
+    return JsonResponse(summary)
+
+
+@require_POST
+@api_login_required
+@handle_api_errors
+def api_force_delete_fiber(
+    request: HttpRequest,
+    cable_id: int,
+) -> JsonResponse:
+    """Staff-only force delete.
+
+    Unlinks external segments that reference this cable's infrastructures
+    (start/end) and then deletes the cable.
+    """
+    guard = staff_guard(request)
+    if guard:
+        return guard
+
+    try:
+        cable = fiber_uc.get_fiber_cable(cable_id)
+    except FiberNotFound as exc:
+        return JsonResponse({"error": str(exc)}, status=404)
+
+    summary = fiber_uc.force_delete_fiber(cable)
+    return JsonResponse(summary)
 
 
 __all__ = [

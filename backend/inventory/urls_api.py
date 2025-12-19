@@ -147,6 +147,11 @@ urlpatterns = [
         name="fiber-detail",
     ),
     path(
+        "fibers/<int:cable_id>/force-delete/",
+        fiber_api.api_force_delete_fiber,
+        name="fiber-force-delete",
+    ),
+    path(
         "fibers/<int:cable_id>/live-status/",
         fiber_api.api_fiber_live_status,
         name="fiber-live-status",
@@ -175,6 +180,11 @@ urlpatterns = [
         "fibers/manual-create/",
         fiber_api.api_create_manual_fiber,
         name="fibers-manual-create",
+    ),
+    path(
+        "fibers/delete-bulk/",
+        fiber_api.api_delete_fibers_bulk,
+        name="fibers-delete-bulk",
     ),
     path(
         "fibers/import-kml/modal/",

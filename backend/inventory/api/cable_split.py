@@ -6,6 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.db import transaction
+from django.db.models import Q
 from django.contrib.gis.geos import LineString
 
 from inventory.models import (
@@ -14,6 +15,7 @@ from inventory.models import (
     InfrastructureCableAttachment,
     BufferTube,
     FiberStrand,
+    FiberFusion,
 )
 
 
@@ -41,11 +43,20 @@ class CableSplitViewSet(viewsets.ViewSet):
         4. Create attachments for both cables
         5. Delete original cable
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info("=" * 80)
+        logger.info("[SPLIT API] Recebendo requisição de split...")
+        logger.info(f"[SPLIT API] Request data: {request.data}")
+        
         cable_id = request.data.get('cable_id')
         ceo_id = request.data.get('ceo_id')
         split_point = request.data.get('split_point')
+        
+        logger.info(f"[SPLIT API] cable_id={cable_id}, ceo_id={ceo_id}, split_point={split_point}")
 
         if not cable_id or not ceo_id or not split_point:
+            logger.error("[SPLIT API] Parâmetros faltando!")
             return Response(
                 {"error": "cable_id, ceo_id e split_point são obrigatórios"},
                 status=status.HTTP_400_BAD_REQUEST
@@ -57,21 +68,31 @@ class CableSplitViewSet(viewsets.ViewSet):
             id=ceo_id,
             type='splice_box',
         )
+        
+        logger.info(f"[SPLIT API] Cabo encontrado: {cable.name} (ID {cable.id})")
+        logger.info(f"[SPLIT API] CEO encontrada: {ceo.name} (ID {ceo.id})")
 
         if cable.notes and '[ROMPIDO]' in cable.notes:
+            logger.info("[SPLIT API] Cabo já está rompido, reutilizando segmentos...")
             return self._handle_already_split(cable=cable, ceo=ceo)
 
         if not cable.path:
+            logger.error("[SPLIT API] Cabo sem path!")
             return Response(
                 {"error": "Cabo deve ter path (geometria) configurado"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         with transaction.atomic():
+            logger.info("[SPLIT API] Iniciando transação...")
+            
             # Converter path original para lista de coordenadas
             original_coords = list(cable.path.coords)
             split_lat = split_point['lat']
             split_lng = split_point['lng']
+            
+            logger.info(f"[SPLIT API] Path original tem {len(original_coords)} coordenadas")
+            logger.info(f"[SPLIT API] Ponto de split: lat={split_lat}, lng={split_lng}")
             
             # Encontrar índice mais próximo do ponto de split
             split_idx = self._find_split_index(
@@ -79,6 +100,8 @@ class CableSplitViewSet(viewsets.ViewSet):
                 split_lat,
                 split_lng,
             )
+            
+            logger.info(f"[SPLIT API] Índice de split encontrado: {split_idx}")
             
             # Dividir path em dois segmentos
             path_a_coords = (
@@ -90,6 +113,8 @@ class CableSplitViewSet(viewsets.ViewSet):
                 + original_coords[split_idx + 1:]
             )
             
+            logger.info(f"[SPLIT API] Path A: {len(path_a_coords)} coords, Path B: {len(path_b_coords)} coords")
+            
             # Criar LineStrings
             path_a = LineString(path_a_coords, srid=4326)
             path_b = LineString(path_b_coords, srid=4326)
@@ -99,14 +124,19 @@ class CableSplitViewSet(viewsets.ViewSet):
             length_a_km = Decimal(str(round(path_a.length * 111, 3)))
             length_b_km = Decimal(str(round(path_b.length * 111, 3)))
             
+            logger.info(f"[SPLIT API] Comprimento A: {length_a_km} km, B: {length_b_km} km")
+            
             # Gerar nomes únicos para os novos segmentos
             cable_a_name = self._generate_segment_name(cable.name, 'A')
             cable_b_name = self._generate_segment_name(cable.name, 'B')
+            
+            logger.info(f"[SPLIT API] Nomes gerados: {cable_a_name}, {cable_b_name}")
 
             # Criar Cabo A-CEO
             cable_a = FiberCable.objects.create(
                 name=cable_a_name,
                 profile=cable.profile,
+                parent_cable=cable,  # Mark as segment
                 site_a=cable.site_a,
                 site_b=None,  # Termina na CEO
                 origin_port=cable.origin_port,
@@ -117,10 +147,13 @@ class CableSplitViewSet(viewsets.ViewSet):
                 notes=f"Cabo partido de {cable.name} (segmento A-CEO)"
             )
             
+            logger.info(f"[SPLIT API] Cabo A criado: {cable_a.name} (ID {cable_a.id})")
+            
             # Criar Cabo CEO-B
             cable_b = FiberCable.objects.create(
                 name=cable_b_name,
                 profile=cable.profile,
+                parent_cable=cable,  # Mark as segment
                 site_a=None,  # Começa na CEO
                 site_b=cable.site_b,
                 origin_port=None,
@@ -131,14 +164,20 @@ class CableSplitViewSet(viewsets.ViewSet):
                 notes=f"Cabo partido de {cable.name} (segmento CEO-B)"
             )
             
+            logger.info(f"[SPLIT API] Cabo B criado: {cable_b.name} (ID {cable_b.id})")
+            
             # Copiar tubos e fibras para AMBOS os cabos
+            logger.info("[SPLIT API] Duplicando estrutura de tubos e fibras...")
             map_a, map_b = self._duplicate_cable_structure(
                 cable,
                 cable_a,
                 cable_b,
             )
             
+            logger.info(f"[SPLIT API] Estrutura duplicada. Map A: {len(map_a)} fibras, Map B: {len(map_b)} fibras")
+            
             # Criar attachments para ambos os segmentos na CEO do split
+            logger.info("[SPLIT API] Criando attachments...")
             InfrastructureCableAttachment.objects.create(
                 infrastructure=ceo,
                 cable=cable_a,
@@ -146,20 +185,28 @@ class CableSplitViewSet(viewsets.ViewSet):
                 is_pass_through=False  # Segmento A termina aqui
             )
             
+            logger.info(f"[SPLIT API] Attachment criado: {cable_a.name} → {ceo.name}")
+            
             InfrastructureCableAttachment.objects.create(
                 infrastructure=ceo,
                 cable=cable_b,
                 port_type='oval',
                 is_pass_through=False  # Segmento B termina aqui
             )
+            
+            logger.info(f"[SPLIT API] Attachment criado: {cable_b.name} → {ceo.name}")
 
+            logger.info("[SPLIT API] Reatribuindo attachments existentes...")
             moved_to_a, moved_to_b = self._reassign_existing_attachments(
                 original_cable=cable,
                 split_ceo=ceo,
                 cable_a=cable_a,
                 cable_b=cable_b,
             )
+            
+            logger.info(f"[SPLIT API] Attachments reatribuídos: A={moved_to_a}, B={moved_to_b}")
 
+            logger.info("[SPLIT API] Migrando fusões existentes...")
             migrated_a, migrated_b = self._migrate_existing_fusions(
                 original_cable=cable,
                 split_ceo=ceo,
@@ -169,6 +216,8 @@ class CableSplitViewSet(viewsets.ViewSet):
                 strand_map_b=map_b,
             )
             
+            logger.info(f"[SPLIT API] Fusões migradas: A={migrated_a}, B={migrated_b}")
+            
             # Marcar cabo original como ROMPIDO
             # (não deve mais aparecer em CEOs)
             cable.notes = (
@@ -177,6 +226,10 @@ class CableSplitViewSet(viewsets.ViewSet):
                 f"{cable_b.name} (ID {cable_b.id})"
             )
             cable.save(update_fields=['notes'])
+            
+            logger.info("[SPLIT API] Cabo original marcado como [ROMPIDO]")
+            logger.info("[SPLIT API] Split concluído com sucesso!")
+            logger.info("=" * 80)
             
         return Response({
             "status": "success",
@@ -294,20 +347,31 @@ class CableSplitViewSet(viewsets.ViewSet):
 
     def _duplicate_cable_structure(self, original_cable, cable_a, cable_b):
         """Copia tubos e fibras e retorna mapas de correspondência."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f"[_duplicate_cable_structure] Iniciando duplicação de {original_cable.name}")
+        
         tubes = BufferTube.objects.filter(
             cable=original_cable
         ).order_by('number')
+        
+        logger.info(f"[_duplicate_cable_structure] Encontrados {tubes.count()} tubos no cabo original")
 
         strand_map_a: dict[int, FiberStrand] = {}
         strand_map_b: dict[int, FiberStrand] = {}
 
         for tube in tubes:
+            logger.info(f"[_duplicate_cable_structure] Duplicando tubo {tube.number} ({tube.color})")
+            
             tube_a = BufferTube.objects.create(
                 cable=cable_a,
                 number=tube.number,
                 color=tube.color,
                 color_hex=tube.color_hex,
             )
+            
+            logger.info(f"[_duplicate_cable_structure] Tubo A criado: {tube_a.id}")
 
             tube_b = BufferTube.objects.create(
                 cable=cable_b,
@@ -315,8 +379,12 @@ class CableSplitViewSet(viewsets.ViewSet):
                 color=tube.color,
                 color_hex=tube.color_hex,
             )
+            
+            logger.info(f"[_duplicate_cable_structure] Tubo B criado: {tube_b.id}")
 
             strands = FiberStrand.objects.filter(tube=tube).order_by('number')
+            logger.info(f"[_duplicate_cable_structure] Tubo {tube.number} tem {strands.count()} fibras")
+            
             for strand in strands:
                 strand_a = FiberStrand.objects.create(
                     tube=tube_a,
@@ -324,7 +392,6 @@ class CableSplitViewSet(viewsets.ViewSet):
                     absolute_number=strand.absolute_number,
                     color=strand.color,
                     color_hex=strand.color_hex,
-                    fused_to=None,
                     connected_device_port=None,
                     status=strand.status,
                 )
@@ -335,13 +402,19 @@ class CableSplitViewSet(viewsets.ViewSet):
                     absolute_number=strand.absolute_number,
                     color=strand.color,
                     color_hex=strand.color_hex,
-                    fused_to=None,
                     connected_device_port=None,
                     status=strand.status,
                 )
 
                 strand_map_a[strand.id] = strand_a
                 strand_map_b[strand.id] = strand_b
+                
+                logger.info(
+                    f"[_duplicate_cable_structure] Fibra {strand.number}: "
+                    f"Original ID={strand.id} → A ID={strand_a.id}, B ID={strand_b.id}"
+                )
+        
+        logger.info(f"[_duplicate_cable_structure] Duplicação concluída. Total: {len(strand_map_a)} fibras/cabo")
 
         return strand_map_a, strand_map_b
 
@@ -420,119 +493,72 @@ class CableSplitViewSet(viewsets.ViewSet):
         migrated_a = 0
         migrated_b = 0
 
-        strands = FiberStrand.objects.filter(
-            tube__cable=original_cable,
-            fusion_infrastructure__isnull=False,
-        ).select_related(
-            'fusion_infrastructure',
-            'fused_to',
-            'fused_to__fusion_infrastructure',
-            'fused_to__tube__cable',
-            'tube',
+        fusions = (
+            FiberFusion.objects.filter(
+                Q(fiber_a__tube__cable=original_cable)
+                | Q(fiber_b__tube__cable=original_cable)
+            )
+            .select_related(
+                'infrastructure',
+                'fiber_a__tube__cable',
+                'fiber_b__tube__cable',
+            )
         )
 
-        processed: set[int] = set()
+        legacy_strands: dict[int, FiberStrand] = {}
 
-        for strand in strands:
-            if strand.id in processed:
-                continue
-
-            infra = strand.fusion_infrastructure
+        for fusion in fusions:
+            infra = fusion.infrastructure
             if not infra:
                 continue
 
+            infra_distance = infra.distance_from_origin or 0
             target_map = (
                 strand_map_a
-                if (infra.distance_from_origin or 0) <= ceo_distance
+                if infra_distance <= ceo_distance
                 else strand_map_b
             )
-            target_strand = target_map.get(strand.id)
-            if not target_strand:
+            map_token = 'A' if target_map is strand_map_a else 'B'
+
+            replacements: dict[str, FiberStrand] = {}
+            migrated_maps: set[str] = set()
+
+            original_fiber_a = fusion.fiber_a
+            original_fiber_b = fusion.fiber_b
+
+            if original_fiber_a.tube.cable_id == original_cable.id:
+                replacement_a = target_map.get(original_fiber_a.id)
+                if replacement_a:
+                    replacements['fiber_a'] = replacement_a
+                    migrated_maps.add(map_token)
+                    legacy_strands[original_fiber_a.id] = original_fiber_a
+
+            if original_fiber_b.tube.cable_id == original_cable.id:
+                replacement_b = target_map.get(original_fiber_b.id)
+                if replacement_b:
+                    replacements['fiber_b'] = replacement_b
+                    migrated_maps.add(map_token)
+                    legacy_strands[original_fiber_b.id] = original_fiber_b
+
+            if not replacements:
                 continue
 
-            partner = strand.fused_to
-            target_strand.fusion_infrastructure = infra
-            target_strand.fusion_tray = strand.fusion_tray
-            target_strand.fusion_slot = strand.fusion_slot
+            update_fields: list[str] = []
+            for field_name, strand in replacements.items():
+                setattr(fusion, field_name, strand)
+                update_fields.append(field_name)
 
-            if partner and partner.tube.cable_id == original_cable.id:
-                partner_distance = (
-                    partner.fusion_infrastructure.distance_from_origin
-                    if partner.fusion_infrastructure
-                    else 0
-                )
-                partner_map = (
-                    strand_map_a
-                    if partner_distance <= ceo_distance
-                    else strand_map_b
-                )
-                partner_target = partner_map.get(partner.id)
-                if partner_target:
-                    target_strand.fused_to = partner_target
-                    partner_target.fused_to = target_strand
-                    partner_target.fusion_infrastructure = (
-                        partner.fusion_infrastructure
-                    )
-                    partner_target.fusion_tray = partner.fusion_tray
-                    partner_target.fusion_slot = partner.fusion_slot
-                    partner_target.save(
-                        update_fields=[
-                            'fused_to',
-                            'fusion_infrastructure',
-                            'fusion_tray',
-                            'fusion_slot',
-                        ]
-                    )
-                    partner.fused_to = None
-                    partner.fusion_infrastructure = None
-                    partner.fusion_tray = None
-                    partner.fusion_slot = None
-                    partner.save(
-                        update_fields=[
-                            'fused_to',
-                            'fusion_infrastructure',
-                            'fusion_tray',
-                            'fusion_slot',
-                        ]
-                    )
-                    processed.add(partner.id)
-                else:
-                    target_strand.fused_to = None
-            elif partner:
-                target_strand.fused_to = partner
-                partner.fused_to = target_strand
-                partner.save(update_fields=['fused_to'])
-            else:
-                target_strand.fused_to = None
+            fusion.save(update_fields=update_fields)
 
-            target_strand.save(
-                update_fields=[
-                    'fused_to',
-                    'fusion_infrastructure',
-                    'fusion_tray',
-                    'fusion_slot',
-                ]
-            )
-
-            if target_map is strand_map_a:
+            if 'A' in migrated_maps:
                 migrated_a += 1
-            else:
+            if 'B' in migrated_maps:
                 migrated_b += 1
 
-            strand.fused_to = None
-            strand.fusion_infrastructure = None
-            strand.fusion_tray = None
-            strand.fusion_slot = None
-            strand.save(
-                update_fields=[
-                    'fused_to',
-                    'fusion_infrastructure',
-                    'fusion_tray',
-                    'fusion_slot',
-                ]
-            )
-
-            processed.add(strand.id)
+        for strand in legacy_strands.values():
+            if strand.status != FiberStrand.STATUS_DARK:
+                strand.status = FiberStrand.STATUS_DARK
+                strand.save(update_fields=['status'])
 
         return migrated_a, migrated_b
 
