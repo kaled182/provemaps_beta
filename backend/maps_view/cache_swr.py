@@ -56,6 +56,7 @@ class SWRCache:
         self.fresh_ttl = fresh_ttl
         self.stale_ttl = stale_ttl
         self.timestamp_key = f"{key}:timestamp"
+        self.monotonic_key = f"{key}:monotonic"
 
     def get_cached_data(self) -> Optional[Dict[str, Any]]:
         """
@@ -68,12 +69,34 @@ class SWRCache:
         try:
             data = cache.get(self.key)
             timestamp = cache.get(self.timestamp_key)
+            monotonic_mark = cache.get(self.monotonic_key)
 
             if data is None:
                 return None
 
-            now = time.time()
-            age = now - (timestamp or 0)
+            if monotonic_mark is not None:
+                # Use monotonic time so clock drift does not flip freshness.
+                age = time.monotonic() - monotonic_mark
+            else:
+                age = time.time() - (timestamp or 0)
+                if timestamp is not None:
+                    # Backfill monotonic marker for legacy cache entries.
+                    try:
+                        cache.set(
+                            self.monotonic_key,
+                            time.monotonic(),
+                            self.stale_ttl,
+                        )
+                    except Exception:
+                        logger.exception(
+                            "Failed to backfill SWR monotonic marker for key=%s",
+                            self.key,
+                        )
+
+            if age < 0:
+                # Clamp negative ages that arise from backwards clock jumps.
+                age = 0
+
             is_stale = age >= self.fresh_ttl
 
             return {
@@ -97,6 +120,7 @@ class SWRCache:
             now = time.time()
             cache.set(self.key, data, self.stale_ttl)
             cache.set(self.timestamp_key, now, self.stale_ttl)
+            cache.set(self.monotonic_key, time.monotonic(), self.stale_ttl)
             logger.debug(
                 "SWR cache updated: key=%s, ttl=%d", self.key, self.stale_ttl
             )
@@ -187,6 +211,7 @@ class SWRCache:
         try:
             cache.delete(self.key)
             cache.delete(self.timestamp_key)
+            cache.delete(self.monotonic_key)
             logger.info("SWR cache invalidated: key=%s", self.key)
         except Exception:
             logger.exception(

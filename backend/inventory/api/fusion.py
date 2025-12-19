@@ -4,23 +4,26 @@ API endpoints for managing optical fiber fusions and splice box matrices.
 This module implements the "digital twin" of physical splice boxes (CEOs),
 allowing users to track which fibers are fused together and where (tray/slot).
 
-CRITICAL LOGIC FIX (Phase 11.5):
-- Fusion is ATOMIC 1:1 (Strand A <-> Strand B only)
-- Physical slot occupation is independent of fiber color/number
-- No "side effects" on other fibers in the same cable
-- Validation: slot physical occupation + strand logical availability
+CRITICAL FUSION RULES:
+1. Fusion is ATOMIC 1:1 (Strand A <-> Strand B only)
+2. ⚠️ DIFFERENT CABLES ONLY: Cannot fuse fibers from the same cable (loop prevention)
+3. Any fiber color can fuse with any other fiber color (cross-color fusion allowed)
+4. Physical slot occupation is independent of fiber color/number
+5. Validation: slot occupation + strand availability + cable loop prevention
 """
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 
 from inventory.models import (
     FiberStrand,
     FiberInfrastructure,
     FiberCable,
+    FiberFusion,
 )
 
 
@@ -49,10 +52,10 @@ class FusionViewSet(viewsets.ViewSet):
     )
     def get_matrix(self, request, infra_id=None):
         """
-        Returns current fusion matrix state.
+        Returns current fusion matrix state using FiberFusion model.
         
         IMPORTANT: Does NOT assume "Slot 1 = Fiber 1".
-        Reads exactly what's stored in database.
+        Reads exactly what's stored in FiberFusion table.
         """
         box = get_object_or_404(
             FiberInfrastructure,
@@ -60,51 +63,39 @@ class FusionViewSet(viewsets.ViewSet):
             infrastructure_type='ceo'
         )
 
-        # Find all strands that point to this box physically
-        fusions = FiberStrand.objects.filter(
-            fusion_infrastructure=box,
-            fusion_tray__isnull=False,
-            fusion_slot__isnull=False
+        # Find all fusions in this CEO using FiberFusion model
+        fusions = FiberFusion.objects.filter(
+            infrastructure=box
         ).select_related(
-            'tube__cable',
-            'fused_to__tube__cable'
-        )
+            'fiber_a__tube__cable',
+            'fiber_b__tube__cable'
+        ).order_by('tray', 'slot')
 
         matrix_data = {}
-        processed_ids = set()
 
-        for strand in fusions:
-            # Avoid duplicate pairs (A->B and B->A are same visual fusion)
-            if strand.id in processed_ids:
-                continue
-
-            key = f"{strand.fusion_tray}-{strand.fusion_slot}"
-            pair = strand.fused_to
-
-            # Mark pair as processed
-            if pair:
-                processed_ids.add(pair.id)
+        for fusion in fusions:
+            key = f"{fusion.tray}-{fusion.slot}"
 
             # Build visual structure for grid
             matrix_data[key] = {
-                "tray": strand.fusion_tray,
-                "slot": strand.fusion_slot,
+                "tray": fusion.tray,
+                "slot": fusion.slot,
                 "fiber_a": {
-                    "id": strand.id,
-                    "name": f"FO {strand.number}",
-                    "color_name": strand.color,
-                    "cable": strand.tube.cable.label,
-                    "cable_id": strand.tube.cable.id,
-                    "color_hex": strand.color_hex,
+                    "id": fusion.fiber_a.id,
+                    "name": f"FO {fusion.fiber_a.number}",
+                    "color_name": fusion.fiber_a.color,
+                    "cable": fusion.fiber_a.tube.cable.name,
+                    "cable_id": fusion.fiber_a.tube.cable.id,
+                    "color_hex": fusion.fiber_a.color_hex,
                 },
                 "fiber_b": {
-                    "id": pair.id if pair else None,
-                    "name": f"FO {pair.number}" if pair else "Desconectado",
-                    "color_name": pair.color if pair else "",
-                    "cable": pair.tube.cable.label if pair else "N/A",
-                    "cable_id": pair.tube.cable.id if pair else None,
-                    "color_hex": pair.color_hex if pair else "#cccccc",
-                } if pair else None
+                    "id": fusion.fiber_b.id,
+                    "name": f"FO {fusion.fiber_b.number}",
+                    "color_name": fusion.fiber_b.color,
+                    "cable": fusion.fiber_b.tube.cable.name,
+                    "cable_id": fusion.fiber_b.tube.cable.id,
+                    "color_hex": fusion.fiber_b.color_hex,
+                }
             }
 
         # Get template info for rendering tabs
@@ -123,21 +114,27 @@ class FusionViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['post'])
     def fuse(self, request):
         """
-        Creates atomic 1:1 fusion with auto-cleanup for free movement.
+        Creates atomic 1:1 fusion using FiberFusion model.
         
         Request:
         {
             "infrastructure_id": 123,
             "tray": 1,
             "slot": 5,
-            "fiber_a": 456,  # Any fiber from Cable A
-            "fiber_b": 789   # Any fiber from Cable B
+            "fiber_a": 456,  # Fiber from INCOMING segment (left side)
+            "fiber_b": 789   # Fiber from OUTGOING segment (right side)
         }
+        
+        CRITICAL CONVENTION:
+        - fiber_a MUST be from INCOMING segment (left side of CEO)
+        - fiber_b MUST be from OUTGOING segment (right side of CEO)
+        - This ensures each virtual segment shows only its own fusions
         
         Features:
         - Auto-disconnect previous fusions (allows moving fibers)
         - Slot overwrite behavior (replaces existing fusion)
         - Atomic operation with database locking
+        - Each CEO is completely independent (no cross-CEO interference)
         
         Example:
             Move FO-1 from Slot 1 to Slot 2: ✓ Automatic cleanup
@@ -174,68 +171,63 @@ class FusionViewSet(viewsets.ViewSet):
             )
 
         with transaction.atomic():
-            # Lock rows to prevent race conditions
+            # Lock strands to prevent race conditions
             s_a = FiberStrand.objects.select_for_update().get(id=id_a)
             s_b = FiberStrand.objects.select_for_update().get(id=id_b)
+            
+            # 3. Prevent cable loop (same cable on both sides)
+            if s_a.tube.cable_id == s_b.tube.cable_id:
+                return Response(
+                    {
+                        "error": (
+                            "Loop de cabo detectado: Não é possível fundir "
+                            "fibras do mesmo cabo. Escolha fibras de cabos diferentes."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
-            # CLEANUP 1: Disconnect previous fusions for fiber A
-            if s_a.fused_to:
-                old_pair = s_a.fused_to
-                old_pair.fused_to = None
-                old_pair.status = 'dark'
-                old_pair.fusion_infrastructure = None
-                old_pair.fusion_tray = None
-                old_pair.fusion_slot = None
-                old_pair.save()
+            # CLEANUP 1: Remove any existing fusions for fiber A in THIS CEO
+            # fiber_a comes from INCOMING segment, so only remove where it's fiber_a
+            FiberFusion.objects.filter(
+                infrastructure_id=infra_id,
+                fiber_a=s_a
+            ).delete()
 
-            # CLEANUP 2: Disconnect previous fusions for fiber B
-            if s_b.fused_to:
-                old_pair = s_b.fused_to
-                old_pair.fused_to = None
-                old_pair.status = 'dark'
-                old_pair.fusion_infrastructure = None
-                old_pair.fusion_tray = None
-                old_pair.fusion_slot = None
-                old_pair.save()
+            # CLEANUP 2: Remove any existing fusions for fiber B in THIS CEO
+            # fiber_b comes from OUTGOING segment, so only remove where it's fiber_b
+            FiberFusion.objects.filter(
+                infrastructure_id=infra_id,
+                fiber_b=s_b
+            ).delete()
 
             # CLEANUP 3: Clear target slot (overwrite behavior)
-            occupants = FiberStrand.objects.filter(
-                fusion_infrastructure_id=infra_id,
-                fusion_tray=tray,
-                fusion_slot=slot
-            ).exclude(id__in=[id_a, id_b])
+            # Remove any fusion that occupies this slot
+            FiberFusion.objects.filter(
+                infrastructure_id=infra_id,
+                tray=tray,
+                slot=slot
+            ).delete()
 
-            for occ in occupants:
-                if occ.fused_to:
-                    occ.fused_to.fused_to = None
-                    occ.fused_to.fusion_infrastructure = None
-                    occ.fused_to.fusion_tray = None
-                    occ.fused_to.fusion_slot = None
-                    occ.fused_to.save()
-                occ.fused_to = None
-                occ.fusion_infrastructure = None
-                occ.fusion_tray = None
-                occ.fusion_slot = None
-                occ.status = 'dark'
-                occ.save()
+            # 4. Create new fusion in FiberFusion table
+            fusion = FiberFusion.objects.create(
+                infrastructure_id=infra_id,
+                tray=tray,
+                slot=slot,
+                fiber_a=s_a,
+                fiber_b=s_b
+            )
+            
+            # DEBUG LOG
+            print(f"[FUSION DEBUG] Created fusion in CEO {infra_id}, Slot {tray}-{slot}:")
+            print(f"  fiber_a: ID={s_a.id}, Color={s_a.color}, Cable={s_a.tube.cable.name}")
+            print(f"  fiber_b: ID={s_b.id}, Color={s_b.color}, Cable={s_b.tube.cable.name}")
 
-            # 5. Execute fusion (bidirectional logical link)
-            s_a.fused_to = s_b
-            s_b.fused_to = s_a
-
-            # 6. Record physical location (both legs point to same slot)
-            s_a.fusion_infrastructure_id = infra_id
-            s_a.fusion_tray = tray
-            s_a.fusion_slot = slot
-
-            s_b.fusion_infrastructure_id = infra_id
-            s_b.fusion_tray = tray
-            s_b.fusion_slot = slot
-
-            # 7. Update visual status
+            # 5. Update strand status to 'connected' (visual indicator)
+            # Note: Strands can have multiple fusions across different CEOs
+            # The status reflects the most recent or primary connection
             s_a.status = 'connected'
             s_b.status = 'connected'
-
             s_a.save()
             s_b.save()
 
@@ -245,8 +237,8 @@ class FusionViewSet(viewsets.ViewSet):
             "fusion": {
                 "tray": tray,
                 "slot": slot,
-                "fiber_a": f"{s_a.tube.cable.label} FO-{s_a.number}",
-                "fiber_b": f"{s_b.tube.cable.label} FO-{s_b.number}",
+                "fiber_a": f"{s_a.tube.cable.name} FO-{s_a.number}",
+                "fiber_b": f"{s_b.tube.cable.name} FO-{s_b.number}",
             }
         }, status=status.HTTP_201_CREATED)
 
@@ -280,43 +272,47 @@ class FusionViewSet(viewsets.ViewSet):
             )
 
         with transaction.atomic():
-            # Find all strands at this physical slot
-            strands = FiberStrand.objects.filter(
-                fusion_infrastructure_id=infra_id,
-                fusion_tray=tray,
-                fusion_slot=slot
-            )
+            # Find fusion at this slot using FiberFusion model
+            fusion = FiberFusion.objects.filter(
+                infrastructure_id=infra_id,
+                tray=tray,
+                slot=slot
+            ).first()
 
-            count = strands.count()
-            if count == 0:
+            if not fusion:
                 return Response(
                     {"error": f"Slot {slot} da Bandeja {tray} está vazio"},
                     status=status.HTTP_404_NOT_FOUND
                 )
 
-            # Clear fusion for all strands at this slot
-            for strand in strands:
-                # Clear the bidirectional link (fused_to)
-                if strand.fused_to:
-                    pair = strand.fused_to
-                    pair.fused_to = None
-                    pair.fusion_infrastructure = None
-                    pair.fusion_tray = None
-                    pair.fusion_slot = None
-                    pair.status = 'dark'
-                    pair.save()
-                
-                # Clear this strand
-                strand.fused_to = None
-                strand.fusion_infrastructure = None
-                strand.fusion_tray = None
-                strand.fusion_slot = None
-                strand.status = 'dark'
-                strand.save()
+            # Get the fibers before deleting
+            fiber_a = fusion.fiber_a
+            fiber_b = fusion.fiber_b
+
+            # Delete the fusion
+            fusion.delete()
+
+            # Update strand status to 'dark' if no other fusions exist
+            # (Check if fiber has fusions in other CEOs)
+            a_has_other_fusions = FiberFusion.objects.filter(
+                Q(fiber_a=fiber_a) | Q(fiber_b=fiber_a)
+            ).exists()
+            
+            b_has_other_fusions = FiberFusion.objects.filter(
+                Q(fiber_a=fiber_b) | Q(fiber_b=fiber_b)
+            ).exists()
+
+            if not a_has_other_fusions:
+                fiber_a.status = 'dark'
+                fiber_a.save()
+            
+            if not b_has_other_fusions:
+                fiber_b.status = 'dark'
+                fiber_b.save()
 
         return Response({
             "status": "success",
-            "message": f"Fusão desfeita ({count} fibras liberadas)"
+            "message": "Fusão desfeita com sucesso"
         })
 
     @action(
@@ -381,6 +377,8 @@ class FusionViewSet(viewsets.ViewSet):
             infra_id: Infrastructure ID
             attachment: InfrastructureCableAttachment instance
         """
+        from inventory.models import FiberFusion
+        
         # Build label based on direction
         if direction == 'INCOMING':
             label = f"{cable.name} (Entrada)"
@@ -392,24 +390,46 @@ class FusionViewSet(viewsets.ViewSet):
         for tube in cable.tubes.all():
             strands_data = []
             for strand in tube.strands.all():
-                # Check if fused in THIS CEO
-                is_fused_here = (
-                    strand.fused_to is not None and
-                    strand.fusion_infrastructure_id == int(infra_id)
-                )
+                # CRITICAL LOGIC FOR VIRTUAL SEGMENTS:
+                # When a cable passes through a CEO, it has TWO virtual segments:
+                # - INCOMING (left side): Shows fusions where this strand is fiber_a
+                # - OUTGOING (right side): Shows fusions where this strand is fiber_b
+                # 
+                # This prevents the same physical strand from being blocked on BOTH sides
+                # when it's only fused on ONE side of the CEO.
+                #
+                # CONVENTION:
+                # - fiber_a in FiberFusion = strand from INCOMING segment (left)
+                # - fiber_b in FiberFusion = strand from OUTGOING segment (right)
                 
-                # Check if fused in OTHER CEO
-                fused_elsewhere = (
-                    strand.fused_to is not None and
-                    strand.fusion_infrastructure_id != int(infra_id)
-                )
+                is_fused_here = False
                 
-                fusion_ceo_name = None
-                if fused_elsewhere and strand.fusion_infrastructure:
-                    fusion_ceo_name = strand.fusion_infrastructure.name
+                if direction == 'INCOMING':
+                    # For INCOMING segment, only check if this strand is fiber_a
+                    fusion_here = FiberFusion.objects.filter(
+                        infrastructure_id=int(infra_id),
+                        fiber_a=strand  # Only check fiber_a side
+                    ).first()
+                    is_fused_here = fusion_here is not None
+                    
+                    # DEBUG LOG
+                    if fusion_here:
+                        print(f"[FUSION DEBUG] INCOMING: Strand {strand.id} ({strand.color}) is fiber_a in fusion → BLOCKED")
+                    
+                else:  # OUTGOING
+                    # For OUTGOING segment, only check if this strand is fiber_b
+                    fusion_here = FiberFusion.objects.filter(
+                        infrastructure_id=int(infra_id),
+                        fiber_b=strand  # Only check fiber_b side
+                    ).first()
+                    is_fused_here = fusion_here is not None
+                    
+                    # DEBUG LOG
+                    if fusion_here:
+                        print(f"[FUSION DEBUG] OUTGOING: Strand {strand.id} ({strand.color}) is fiber_b in fusion → BLOCKED")
                 
-                # INCLUDE ALL FIBERS (fused or not)
-                # Mark is_fused=True if fused HERE (blocks selection)
+                # EACH CEO IS INDEPENDENT - Never show fusions from other CEOs
+                # No fused_elsewhere, no fusion_ceo - completely isolated
                 strands_data.append({
                     "id": strand.id,
                     "number": strand.number,
@@ -417,9 +437,7 @@ class FusionViewSet(viewsets.ViewSet):
                     "color": strand.color,
                     "color_hex": strand.color_hex,
                     "status": strand.status,
-                    "is_fused": is_fused_here,
-                    "fused_elsewhere": fused_elsewhere,
-                    "fusion_ceo": fusion_ceo_name,
+                    "is_fused": is_fused_here,  # Only TRUE if fused on THIS side of THIS CEO
                 })
             
             if strands_data:  # Only include tubes with available strands

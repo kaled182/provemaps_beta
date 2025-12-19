@@ -3,6 +3,10 @@ DRF Serializers for Inventory Models
 Exposes Site, Device, Port via REST API for Vue 3 frontend
 """
 
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
 from rest_framework import serializers
 
 from inventory.models import (
@@ -14,6 +18,7 @@ from inventory.models import (
     FiberProfile,
     BufferTube,
     FiberStrand,
+    FiberFusion,
     ImportRule,
 )
 
@@ -464,12 +469,18 @@ class FiberProfileSerializer(serializers.ModelSerializer):
 
 
 class FiberStrandSerializer(serializers.ModelSerializer):
-    """Individual fiber strand within a buffer tube"""
+    """Individual fiber strand within a buffer tube."""
 
     status_display = serializers.CharField(
         source="get_status_display", read_only=True
     )
     full_address = serializers.SerializerMethodField()
+    primary_peer = serializers.SerializerMethodField()
+    primary_fusion = serializers.SerializerMethodField()
+    fusion_count = serializers.SerializerMethodField()
+    has_multiple_fusions = serializers.SerializerMethodField()
+    fused_to = serializers.SerializerMethodField()  # Legacy alias
+    fusions = serializers.SerializerMethodField()
 
     class Meta:
         model = FiberStrand
@@ -482,15 +493,143 @@ class FiberStrandSerializer(serializers.ModelSerializer):
             "status",
             "status_display",
             "connected_device_port",
+            "fusion_count",
+            "has_multiple_fusions",
+            "primary_peer",
+            "primary_fusion",
             "fused_to",
+            "fusions",
             "attenuation_db",
             "last_test_date",
             "full_address",
         ]
 
-    def get_full_address(self, obj):
-        """Return structured address (Cabo/Tubo/Fibra notation)"""
+    def get_full_address(self, obj: FiberStrand) -> dict[str, Any]:
+        """Return structured address (Cabo/Tubo/Fibra notation)."""
         return obj.full_address
+
+    def get_primary_peer(self, obj: FiberStrand) -> dict[str, Any] | None:
+        fusion = self._get_primary_fusion(obj)
+        if not fusion:
+            return None
+        return self._build_peer_payload(obj, fusion)
+
+    def get_primary_fusion(self, obj: FiberStrand) -> dict[str, Any] | None:
+        fusion = self._get_primary_fusion(obj)
+        if not fusion:
+            return None
+        return self._build_fusion_payload(obj, fusion)
+
+    def get_fusion_count(self, obj: FiberStrand) -> int:
+        return len(self._get_all_fusions(obj))
+
+    def get_has_multiple_fusions(self, obj: FiberStrand) -> bool:
+        return self.get_fusion_count(obj) > 1
+
+    def get_fused_to(self, obj: FiberStrand) -> int | None:
+        """Legacy compatibility: expose primary peer fiber id."""
+        peer = self.get_primary_peer(obj)
+        return peer.get("id") if peer else None
+
+    def get_fusions(self, obj: FiberStrand) -> List[Dict[str, Any]]:
+        return [
+            self._build_fusion_payload(obj, fusion)
+            for fusion in self._get_all_fusions(obj)
+        ]
+
+    def _get_all_fusions(self, obj: FiberStrand) -> List[FiberFusion]:
+        cache_key = "_cached_fusions"
+        cached = getattr(obj, cache_key, None)
+        if cached is not None:
+            return cached
+
+        seen: Dict[int, FiberFusion] = {}
+        for fusion in obj.fusions_as_a.all():
+            seen[fusion.pk] = fusion
+        for fusion in obj.fusions_as_b.all():
+            seen[fusion.pk] = fusion
+
+        ordered = sorted(seen.values(), key=lambda fusion: fusion.created_at)
+        setattr(obj, cache_key, ordered)
+        return ordered
+
+    def _get_primary_fusion(self, obj: FiberStrand) -> FiberFusion | None:
+        fusions = self._get_all_fusions(obj)
+        return fusions[0] if fusions else None
+
+    @staticmethod
+    def _get_peer(
+        strand: FiberStrand,
+        fusion: FiberFusion,
+    ) -> FiberStrand | None:
+        if fusion.fiber_a_id == strand.pk:
+            return fusion.fiber_b
+        if fusion.fiber_b_id == strand.pk:
+            return fusion.fiber_a
+        return None
+
+    def _build_peer_payload(
+        self,
+        strand: FiberStrand,
+        fusion: FiberFusion,
+    ) -> dict[str, Any] | None:
+        peer = self._get_peer(strand, fusion)
+        if not peer:
+            return None
+
+        cable = getattr(getattr(peer, "tube", None), "cable", None)
+        return {
+            "id": peer.pk,
+            "number": peer.number,
+            "absolute_number": peer.absolute_number,
+            "color": peer.color,
+            "color_hex": peer.color_hex,
+            "cable_id": cable.pk if cable else None,
+            "cable_name": cable.name if cable else None,
+        }
+
+    def _build_fusion_payload(
+        self,
+        strand: FiberStrand,
+        fusion: FiberFusion,
+    ) -> dict[str, Any]:
+        infrastructure = fusion.infrastructure
+        peer_payload = self._build_peer_payload(strand, fusion)
+
+        payload: dict[str, Any] = {
+            "id": fusion.pk,
+            "infrastructure_id": (
+                infrastructure.pk if infrastructure else None
+            ),
+            "infrastructure_name": (
+                infrastructure.name if infrastructure else None
+            ),
+            "tray": fusion.tray,
+            "slot": fusion.slot,
+            "created_at": fusion.created_at.isoformat(),
+            "peer": peer_payload,
+            "peer_fiber_id": peer_payload["id"] if peer_payload else None,
+            "peer_cable_id": (
+                peer_payload["cable_id"] if peer_payload else None
+            ),
+            "peer_cable_name": (
+                peer_payload["cable_name"] if peer_payload else None
+            ),
+            "peer_number": (
+                peer_payload["number"] if peer_payload else None
+            ),
+            "peer_absolute_number": (
+                peer_payload["absolute_number"] if peer_payload else None
+            ),
+            "peer_color": peer_payload["color"] if peer_payload else None,
+            "peer_color_hex": (
+                peer_payload["color_hex"] if peer_payload else None
+            ),
+            "is_repair": bool(
+                peer_payload and peer_payload.get("id") == strand.pk
+            ),
+        }
+        return payload
 
 
 class BufferTubeSerializer(serializers.ModelSerializer):

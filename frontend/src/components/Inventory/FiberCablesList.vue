@@ -148,6 +148,9 @@
                 <button @click="handleEdit(cable)" class="text-gray-400 hover:text-indigo-600 p-1" title="Editar">
                   <i class="fas fa-edit"></i>
                 </button>
+                <button @click="handleDelete(cable)" class="text-gray-400 hover:text-red-600 p-1" title="Apagar cabo">
+                  <i class="fas fa-trash-alt"></i>
+                </button>
               </td>
             </tr>
           </tbody>
@@ -661,6 +664,19 @@ const handleEdit = async (cable) => {
     alert(err?.message || 'Erro ao carregar cabo.');
   } finally {
     saving.value = false;
+  }
+};
+
+const handleDelete = async (cable) => {
+  try {
+    const ok = confirm(`Apagar o cabo "${cable.name}"? Esta ação é permanente.`);
+    if (!ok) return;
+    await api.delete(`/api/v1/fiber-cables/${cable.id}/`);
+    await fetchCables();
+    alert('Cabo apagado com sucesso.');
+  } catch (err) {
+    console.error('Erro ao apagar cabo', err);
+    alert(err?.message || 'Erro ao apagar cabo.');
   }
 };
 </script>

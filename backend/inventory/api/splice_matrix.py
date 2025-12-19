@@ -1,18 +1,24 @@
+# pyright: reportGeneralTypeIssues=false
+
 from __future__ import annotations
 
-from typing import Any
+from collections import defaultdict
+from typing import Any, Dict, Iterable, List, Sequence
 
-from django.http import Http404
-from rest_framework.request import Request
 from django.db import transaction
+from django.db.models import Q
+from django.http import Http404
 from rest_framework import status
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from inventory.models import (
+    FiberCable,
+    FiberFusion,
     FiberInfrastructure,
     FiberStrand,
-    FiberCable,
+    InfrastructureCableAttachment,
 )
 
 
@@ -24,85 +30,77 @@ pyright: reportUnknownMemberType=false, reportUnknownVariableType=false,
 
 
 class SpliceBoxMatrixView(APIView):
-    """
-    GET /api/v1/splice-boxes/<id>/matrix
-
-    Retorna a matriz de ocupação (bandeja/slot) de uma CEO, baseada
-    em `FiberStrand.fusion_infrastructure`, `fusion_tray`, `fusion_slot`.
-    
-    Agora com informações completas da fusão (fiber_a ↔ fiber_b).
-    """
+    """Expose the physical fusion matrix for a splice box (CEO)."""
 
     def get(self, request: Request, id: int) -> Response:
         try:
             infra = FiberInfrastructure.objects.get(pk=id)
-        except FiberInfrastructure.DoesNotExist:
-            raise Http404("Splice box (infrastructure) não encontrada")
+        except FiberInfrastructure.DoesNotExist as exc:
+            message = "Splice box (infrastructure) não encontrada"
+            raise Http404(message) from exc
 
-        # Buscar todas as fusões nesta CEO
         fusions = (
-            FiberStrand.objects.filter(fusion_infrastructure=infra)
+            FiberFusion.objects.filter(infrastructure=infra)
             .select_related(
-                'tube__cable',
-                'tube__cable__site_a',
-                'tube__cable__site_b',
-                'fused_to__tube__cable',
-                'fused_to__tube__cable__site_a',
-                'fused_to__tube__cable__site_b',
+                "fiber_a__tube__cable",
+                "fiber_a__tube__cable__site_a",
+                "fiber_a__tube__cable__site_b",
+                "fiber_b__tube__cable",
+                "fiber_b__tube__cable__site_a",
+                "fiber_b__tube__cable__site_b",
             )
-            .prefetch_related('tube__cable__profile')
+            .prefetch_related(
+                "fiber_a__tube__cable__profile",
+                "fiber_b__tube__cable__profile",
+            )
         )
 
-        matrix_data = {}
-        
-        for fiber in fusions:
-            if fiber.fusion_tray and fiber.fusion_slot:
-                key = f"{fiber.fusion_tray}-{fiber.fusion_slot}"
-                # Evitar duplicatas (registrar apenas uma vez por slot)
-                if key in matrix_data:
-                    continue
-                pair = fiber.fused_to
-                is_repair = pair is None
-                fiber_a_payload = self._serialize_fiber(fiber, infra)
-                fiber_b_payload = None
+        matrix: Dict[str, Dict[str, Any]] = {}
+        for fusion in fusions:
+            if fusion.tray is None or fusion.slot is None:
+                continue
 
-                if pair:
-                    fiber_b_payload = self._serialize_fiber(pair, infra)
-                elif is_repair:
-                    fiber_b_payload = self._serialize_fiber(fiber, infra)
+            key = f"{fusion.tray}-{fusion.slot}"
+            if key in matrix:
+                # UniqueConstraint already protects, but guard just in case.
+                continue
 
-                matrix_data[key] = {
-                    "tray": fiber.fusion_tray,
-                    "slot": fiber.fusion_slot,
-                    "is_repair": is_repair,
-                    "fiber_a": fiber_a_payload,
-                    "fiber_b": fiber_b_payload,
-                }
+            is_repair = fusion.fiber_a_id == fusion.fiber_b_id
+            fiber_a_payload = self._serialize_fiber(fusion.fiber_a, infra)
+            if is_repair:
+                fiber_b_payload = dict(fiber_a_payload)
+            else:
+                fiber_b_payload = self._serialize_fiber(fusion.fiber_b, infra)
 
-        # Template info
-        template_data = {
+            matrix[key] = {
+                "tray": fusion.tray,
+                "slot": fusion.slot,
+                "fusion_id": fusion.pk,
+                "is_repair": is_repair,
+                "fiber_a": fiber_a_payload,
+                "fiber_b": fiber_b_payload,
+            }
+
+        template = {
             "max_trays": infra.installed_trays or 1,
-            "splices_per_tray": 24
+            "splices_per_tray": 24,
         }
-        
         if infra.box_template:
-            template_data = {
+            template = {
                 "max_trays": infra.box_template.max_trays,
                 "splices_per_tray": infra.box_template.splices_per_tray,
             }
 
-        box_name = (
-            infra.name
-            if infra.name
-            else f"CEO @ {infra.distance_from_origin:.0f}m"
-        )
+        distance = infra.distance_from_origin or 0
+        box_name = infra.name or f"CEO @ {distance:.0f}m"
+
         payload = {
-            "infrastructure_id": infra.id,
+            "infrastructure_id": infra.pk,
             "box_name": box_name,
-            "template": template_data,
+            "template": template,
             "installed_trays": infra.installed_trays or 1,
-            "matrix": matrix_data,
-            "total_fusions": len(matrix_data),
+            "matrix": matrix,
+            "total_fusions": len(matrix),
         }
         return Response(payload, status=status.HTTP_200_OK)
 
@@ -110,22 +108,19 @@ class SpliceBoxMatrixView(APIView):
     def _serialize_fiber(
         strand: FiberStrand,
         infra: FiberInfrastructure,
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         cable = strand.tube.cable
-        direction = SpliceBoxMatrixView._resolve_direction_payload(
-            cable,
-            infra,
-        )
+        direction = SpliceBoxMatrixView._resolve_direction(cable, infra)
 
         return {
-            "id": strand.id,
+            "id": strand.pk,
             "number": strand.number,
             "absolute_number": strand.absolute_number,
             "color": strand.color,
             "color_hex": strand.color_hex,
             "color_name": strand.color,
             "cable": cable.name,
-            "cable_id": cable.id,
+            "cable_id": cable.pk,
             "direction": direction["remote"],
             "direction_label": direction["label"],
             "direction_a": direction["a"],
@@ -137,34 +132,25 @@ class SpliceBoxMatrixView(APIView):
         }
 
     @staticmethod
-    def _resolve_direction_payload(
+    def _resolve_direction(
         cable: FiberCable,
         infra: FiberInfrastructure,
-    ) -> dict[str, str | None]:
-        box_label = infra.name or f"CEO-{infra.id}"
-        site_a = (
-            cable.site_a.display_name
-            if getattr(cable, "site_a", None)
-            else None
-        )
-        site_b = (
-            cable.site_b.display_name
-            if getattr(cable, "site_b", None)
-            else None
-        )
+    ) -> Dict[str, str | None]:
+        box_label = infra.name or f"CEO-{infra.pk}"
+        site_a = cable.site_a.display_name if cable.site_a else None
+        site_b = cable.site_b.display_name if cable.site_b else None
 
-        direction_label = cable.name
+        label = cable.name
         if site_a and site_b:
-            direction_label = f"{site_a} → {site_b}"
+            label = f"{site_a} → {site_b}"
         elif site_a:
-            direction_label = f"{site_a} → {box_label}"
+            label = f"{site_a} → {box_label}"
         elif site_b:
-            direction_label = f"{box_label} → {site_b}"
+            label = f"{box_label} → {site_b}"
 
         remote = site_a or site_b or box_label
-
         return {
-            "label": direction_label,
+            "label": label,
             "remote": remote,
             "a": site_a or box_label,
             "b": site_b or box_label,
@@ -172,21 +158,7 @@ class SpliceBoxMatrixView(APIView):
 
 
 class CreateFusionView(APIView):
-    """
-    POST /api/v1/fusions/
-
-    Body esperado (ATUALIZADO para fusão bidirecional):
-    - infrastructure_id: int (CEO onde ocorre a fusão)
-    - tray: int
-    - slot: int (1–24)
-    - fiber_a: int (primeira fibra)
-    - fiber_b: int (segunda fibra) - NOVO!
-
-    Regras:
-    - Se já existir fibra ocupando mesmo (infra, tray, slot) → 409 Conflict
-    - Fibras devem ser de cabos diferentes
-    - Marca `fused_to` bidirecional e posição física (tray/slot)
-    """
+    """Create a new `FiberFusion` entry for the given slot."""
 
     def post(self, request: Request) -> Response:
         data = request.data or {}
@@ -197,26 +169,25 @@ class CreateFusionView(APIView):
         fiber_b_id = data.get("fiber_b")
 
         if not all([infra_id, tray, slot, fiber_a_id, fiber_b_id]):
+            detail = (
+                "Campos obrigatórios: infrastructure_id, tray, slot, "
+                "fiber_a, fiber_b"
+            )
             return Response(
-                {
-                    "detail": (
-                        "Campos obrigatórios: infrastructure_id, tray, "
-                        "slot, fiber_a, fiber_b"
-                    )
-                },
+                {"detail": detail},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
-            tray = int(tray)
-            slot = int(slot)
+            tray_int = int(tray)
+            slot_int = int(slot)
         except (TypeError, ValueError):
             return Response(
                 {"detail": "Tray e slot devem ser números inteiros"},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if slot < 1 or slot > 24:
+        if slot_int < 1 or slot_int > 24:
             return Response(
                 {"detail": "Slot inválido (1–24)"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -231,550 +202,501 @@ class CreateFusionView(APIView):
             )
 
         trays = infra.installed_trays or 1
-        if tray < 1 or tray > trays:
+        if tray_int < 1 or tray_int > trays:
             return Response(
                 {"detail": f"Bandeja inválida (1–{trays})"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         with transaction.atomic():
-            # Verificar se slot está livre
-            existing = FiberStrand.objects.filter(
-                fusion_infrastructure_id=infra.id,
-                fusion_tray=tray,
-                fusion_slot=slot,
-            ).first()
-            
-            if existing:
+            occupied = (
+                FiberFusion.objects.select_for_update()
+                .filter(
+                    infrastructure=infra,
+                    tray=tray_int,
+                    slot=slot_int,
+                )
+                .first()
+            )
+            if occupied:
+                detail = (
+                    f"Slot {slot_int} da Bandeja {tray_int} já está ocupado"
+                )
                 return Response(
-                    {
-                        "detail": (
-                            f"Slot {slot} da Bandeja {tray} já está ocupado"
-                        ),
-                        "occupied_by_fiber_id": existing.id,
-                    },
+                    {"detail": detail, "fusion_id": occupied.pk},
                     status=status.HTTP_409_CONFLICT,
                 )
 
-            # Buscar fibras
             try:
-                strand_a = FiberStrand.objects.select_related(
-                    'tube__cable'
-                ).get(pk=fiber_a_id)
-                strand_b = FiberStrand.objects.select_related(
-                    'tube__cable'
-                ).get(pk=fiber_b_id)
+                strand_a = (
+                    FiberStrand.objects.select_for_update().get(pk=fiber_a_id)
+                )
             except FiberStrand.DoesNotExist:
                 return Response(
-                    {"detail": "Uma ou ambas as fibras não foram encontradas"},
+                    {"detail": "Fibra A não encontrada"},
                     status=status.HTTP_404_NOT_FOUND,
                 )
-            
-            # Caso reparo: mesma fibra nos dois lados (sem fused_to)
-            if fiber_a_id == fiber_b_id:
-                strand_a.fusion_infrastructure = infra
-                strand_a.fusion_tray = tray
-                strand_a.fusion_slot = slot
-                strand_a.fused_to = None  # Não fusiona consigo mesma
-                strand_a.save(
-                    update_fields=[
-                        'fusion_infrastructure',
-                        'fusion_tray',
-                        'fusion_slot',
-                        'fused_to',
-                    ]
-                )
-                
-                return Response(
-                    {
-                        "detail": "Emenda de reparo registrada (mesma fibra)",
-                        "fusion": {
-                            "infrastructure_id": infra.id,
-                            "tray": tray,
-                            "slot": slot,
-                            "fiber": (
-                                f"{strand_a.tube.cable.name} "
-                                f"FO{strand_a.number}"
-                            ),
-                            "repair": True
-                        }
-                    },
-                    status=status.HTTP_201_CREATED,
-                )
 
-            # Permite refusão: se fibra já fusionada, desfaz automaticamente
-            if strand_a.fused_to:
-                old_pair = strand_a.fused_to
-                old_pair.fused_to = None
-                old_pair.fusion_infrastructure = None
-                old_pair.fusion_tray = None
-                old_pair.fusion_slot = None
-                old_pair.save(
-                    update_fields=[
-                        'fused_to',
-                        'fusion_infrastructure',
-                        'fusion_tray',
-                        'fusion_slot',
-                    ]
-                )
-            
-            if strand_b.fused_to:
-                old_pair = strand_b.fused_to
-                old_pair.fused_to = None
-                old_pair.fusion_infrastructure = None
-                old_pair.fusion_tray = None
-                old_pair.fusion_slot = None
-                old_pair.save(
-                    update_fields=[
-                        'fused_to',
-                        'fusion_infrastructure',
-                        'fusion_tray',
-                        'fusion_slot',
-                    ]
-                )
+            if int(fiber_b_id) == strand_a.pk:
+                strand_b = strand_a
+            else:
+                try:
+                    strand_b = (
+                        FiberStrand.objects.select_for_update().get(
+                            pk=fiber_b_id
+                        )
+                    )
+                except FiberStrand.DoesNotExist:
+                    return Response(
+                        {"detail": "Fibra B não encontrada"},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
 
-            # Permitir fusões no mesmo cabo (sangria/reparo)
-            # Validação removida: fusões intra-cabo são válidas
+            # Uma fibra só pode ter uma fusão ativa por vez.
+            FiberFusion.objects.filter(
+                Q(fiber_a=strand_a) | Q(fiber_b=strand_a)
+            ).delete()
+            if strand_b.pk != strand_a.pk:
+                FiberFusion.objects.filter(
+                    Q(fiber_a=strand_b) | Q(fiber_b=strand_b)
+                ).delete()
 
-            # Realizar fusão bidirecional
-            strand_a.fused_to = strand_b
-            strand_b.fused_to = strand_a
-
-            # Marcar localização física (ambas apontam para mesmo slot)
-            strand_a.fusion_infrastructure = infra
-            strand_a.fusion_tray = tray
-            strand_a.fusion_slot = slot
-
-            strand_b.fusion_infrastructure = infra
-            strand_b.fusion_tray = tray
-            strand_b.fusion_slot = slot
-
-            strand_a.save(
-                update_fields=[
-                    'fused_to',
-                    'fusion_infrastructure',
-                    'fusion_tray',
-                    'fusion_slot',
-                ]
-            )
-            strand_b.save(
-                update_fields=[
-                    'fused_to',
-                    'fusion_infrastructure',
-                    'fusion_tray',
-                    'fusion_slot',
-                ]
+            fusion = FiberFusion.objects.create(
+                infrastructure=infra,
+                tray=tray_int,
+                slot=slot_int,
+                fiber_a=strand_a,
+                fiber_b=strand_b,
             )
 
+        fusion_payload = {
+            "id": fusion.pk,
+            "infrastructure_id": infra.pk,
+            "tray": tray_int,
+            "slot": slot_int,
+            "fiber_a": (
+                f"{strand_a.tube.cable.name} FO{strand_a.number}"
+            ),
+            "fiber_b": (
+                f"{strand_b.tube.cable.name} FO{strand_b.number}"
+            ),
+        }
         return Response(
-            {
-                "detail": "Fusão registrada na matriz",
-                "fusion": {
-                    "infrastructure_id": infra.id,
-                    "tray": tray,
-                    "slot": slot,
-                    "fiber_a": (
-                        f"{strand_a.tube.cable.name} "
-                        f"FO{strand_a.number}"
-                    ),
-                    "fiber_b": (
-                        f"{strand_b.tube.cable.name} "
-                        f"FO{strand_b.number}"
-                    ),
-                }
-            },
+            {"detail": "Fusão registrada na matriz", "fusion": fusion_payload},
             status=status.HTTP_201_CREATED,
         )
 
 
 class DeleteFusionView(APIView):
-    """
-    DELETE /api/v1/fusions/<fiber_id>/
-
-    Remove a marcação de fusão da fibra informada (e de seu par),
-    liberando o slot (bandeja/slot) na matriz da CEO.
-
-    Agora limpa a fusão bidirecional (fused_to).
-
-    Resultado:
-    - 204 No Content em sucesso
-    - 404 se fibra não existe
-    """
+    """Remove all fusions where the given fiber participates."""
 
     def delete(self, request: Request, fiber_id: int) -> Response:
         try:
-            strand = FiberStrand.objects.select_related(
-                'fused_to'
-            ).get(pk=fiber_id)
+            strand = FiberStrand.objects.get(pk=fiber_id)
         except FiberStrand.DoesNotExist:
             return Response(
                 {"detail": "Fibra não encontrada"},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Se não possui fusão, retorna sucesso sem ação
-        if not strand.fused_to:
-            return Response(status=status.HTTP_204_NO_CONTENT)
-
-        with transaction.atomic():
-            pair = strand.fused_to
-
-            # Limpar fusão bidirecional
-            strand.fused_to = None
-            strand.fusion_infrastructure = None
-            strand.fusion_tray = None
-            strand.fusion_slot = None
-
-            pair.fused_to = None
-            pair.fusion_infrastructure = None
-            pair.fusion_tray = None
-            pair.fusion_slot = None
-
-            strand.save(
-                update_fields=[
-                    'fused_to',
-                    'fusion_infrastructure',
-                    'fusion_tray',
-                    'fusion_slot',
-                ]
-            )
-            pair.save(
-                update_fields=[
-                    'fused_to',
-                    'fusion_infrastructure',
-                    'fusion_tray',
-                    'fusion_slot',
-                ]
-            )
-
+        FiberFusion.objects.filter(
+            Q(fiber_a=strand) | Q(fiber_b=strand)
+        ).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class BoxContextView(APIView):
-    """
-    GET /api/v1/splice-boxes/<id>/context
-
-    Retorna os SEGMENTOS de cabo que passam ou conectam nesta CEO,
-    com estrutura completa (tubos + fibras) para seleção visual.
-    
-    Modelo de Segmentação:
-    - Entrada: Segmentos que TERMINAM nesta CEO (end_infrastructure=ceo)
-    - Saída: Segmentos que COMEÇAM nesta CEO (start_infrastructure=ceo)
-    """
+    """Return virtual segments (IN/OUT) for the requested splice box."""
 
     def get(self, request: Request, id: int) -> Response:
         try:
-            box = FiberInfrastructure.objects.get(pk=id)
-        except FiberInfrastructure.DoesNotExist:
-            raise Http404("Splice box não encontrada")
-
-        from inventory.models import CableSegment
-        
-        # Buscar segmentos de entrada e saída
-        segments_entrada = (
-            CableSegment.objects.filter(end_infrastructure=box)
-            .select_related('cable__profile')
-            .prefetch_related('cable__tubes__strands')
-        )
-        
-        segments_saida = (
-            CableSegment.objects.filter(start_infrastructure=box)
-            .select_related('cable__profile')
-            .prefetch_related('cable__tubes__strands')
-        )
-        
-        result = []
-        
-        # Processar segmentos de ENTRADA
-        for seg in segments_entrada:
-            cable = seg.cable
-            result.append(
-                self._serialize_segment(
-                    seg, cable, box.id, port_type='oval'
-                )
+            box = FiberInfrastructure.objects.select_related("cable").get(
+                pk=id
             )
-        
-        # Processar segmentos de SAÍDA
-        for seg in segments_saida:
-            cable = seg.cable
-            result.append(
-                self._serialize_segment(
-                    seg, cable, box.id, port_type='round'
-                )
-            )
-        
-        # Fallback: Se não houver segmentos, tentar attachments antigos
-        if not result:
-            result = self._fallback_attachments(box)
+        except FiberInfrastructure.DoesNotExist as exc:
+            raise Http404("Splice box não encontrada") from exc
 
-        return Response(result)
-    
-    def _serialize_segment(
-        self,
-        segment: Any,
-        cable: FiberCable,
-        box_id: int,
-        port_type: str,
-    ) -> dict[str, Any]:
-        """Serializa um segmento com suas fibras"""
-        # Auto-gerar estrutura se necessário
-        if not cable.tubes.exists() and cable.profile_id:
-            try:
-                cable.create_structure()
-                cable.refresh_from_db()
-            except Exception:
-                pass
-        
-        tubes_data = []
-        for tube in cable.tubes.all():
-            strands_data = []
-            for strand in tube.strands.all():
-                # Incluir apenas fibras deste segmento
-                if strand.segment_id != segment.id:
-                    continue
-                fused_here = (
-                    strand.fused_to is not None
-                    and strand.fusion_infrastructure_id == box_id
-                )
-                fused_elsewhere = (
-                    strand.fused_to is not None
-                    and strand.fusion_infrastructure_id
-                    and strand.fusion_infrastructure_id != box_id
-                )
-                strands_data.append({
-                    "id": strand.id,
-                    "number": strand.number,
-                    "absolute_number": strand.absolute_number,
-                    "color": strand.color,
-                    "color_hex": strand.color_hex,
-                    "status": strand.status,
-                    "is_fused": fused_here,  # apenas se fusão nesta caixa
-                    "fused_elsewhere": fused_elsewhere,
-                    "fusion_ceo": (
-                        strand.fusion_infrastructure.name
-                        if strand.fusion_infrastructure
-                        else None
-                    ),
-                })
-            
-            if strands_data:
-                tubes_data.append({
-                    "id": tube.id,
-                    "number": tube.number,
-                    "color": tube.color,
-                    "color_hex": tube.color_hex,
-                    "strands": strands_data,
-                })
-        
-        return {
-            "id": cable.id,
-            "name": cable.name,
-            "segment_id": segment.id,
-            "segment_name": segment.name,
-            "segment_number": segment.segment_number,
-            "tubes": tubes_data,
-            "port_type": port_type,
-            "is_segment": True,
-            "profile_name": getattr(cable.profile, "name", None),
-        }
-    
-    def _fallback_attachments(
-        self,
-        box: FiberInfrastructure,
-    ) -> list[dict[str, Any]]:
-        """Fallback para attachments antigos (backward compatibility)"""
-        from inventory.models import InfrastructureCableAttachment
-        import logging
-        
-        logger = logging.getLogger(__name__)
-        
-        attachments_qs = InfrastructureCableAttachment.objects.filter(
-            infrastructure=box
-        ).select_related('cable__profile')
-        
-        logger.info(
-            "[BoxContext] Found %s attachments for CEO %s",
-            attachments_qs.count(),
-            box.id,
-        )
+        cables = self._collect_cables(box)
+        if not cables:
+            return Response([], status=status.HTTP_200_OK)
 
-        result = []
-        
-        for att in attachments_qs:
-            cable = att.cable
-            
-            # Ignorar cabos marcados como ROMPIDOS (foram partidos)
-            if cable.notes and '[ROMPIDO]' in cable.notes:
-                logger.info(
-                    f"[BoxContext] Skipping cable {cable.id} "
-                    f"({cable.name}) - marked as ROMPIDO"
-                )
+        for cable in cables:
+            if not cable.tubes.exists() and cable.profile_id:
+                try:
+                    cable.create_structure()
+                    cable.refresh_from_db()
+                except Exception:  # pragma: no cover - fallback only
+                    pass
+
+        fusion_lookup = self._build_fusion_lookup(self._iter_fiber_ids(cables))
+        attachments = self._group_attachments(box)
+
+        segments: List[Dict[str, Any]] = []
+        for cable in cables:
+            timeline = self._build_timeline(cable)
+            box_index = self._find_box_index(timeline, box.pk)
+
+            if box_index is None:
+                for attachment in attachments.get(cable.pk, []):
+                    segments.append(
+                        self._build_attachment_segment(
+                            cable=cable,
+                            box=box,
+                            attachment=attachment,
+                            fusion_lookup=fusion_lookup,
+                        )
+                    )
                 continue
-            
-            logger.info(
-                f"[BoxContext] Processing cable {cable.id} "
-                f"({cable.name}), profile={cable.profile_id}"
-            )
-            
-            # Auto-gerar estrutura se perfil existe mas estrutura ausente
-            if not cable.tubes.exists():
-                if cable.profile_id:
-                    try:
-                        logger.info(
-                            "[BoxContext] Creating structure for cable %s",
-                            cable.id,
-                        )
-                        cable.create_structure()
-                        cable.refresh_from_db()
-                        logger.info(
-                            "[BoxContext] Structure created: %s tubes",
-                            cable.tubes.count(),
-                        )
-                    except Exception as exc:
-                        logger.error(
-                            "[BoxContext] Failed to create structure: %s",
-                            exc,
-                        )
-                else:
-                    logger.warning(
-                        "[BoxContext] Cable %s has no profile, cannot create "
-                        "structure",
-                        cable.id,
+
+            if box_index > 0:
+                prev_point = timeline[box_index - 1]
+                segments.append(
+                    self._build_segment_payload(
+                        cable=cable,
+                        suffix=f"PREV_{prev_point['key']}",
+                        label=f"{cable.name} [Vindo de {prev_point['name']}]",
+                        direction="IN",
+                        box=box,
+                        fusion_lookup=fusion_lookup,
                     )
-                    continue  # Skip cables without profile
-                    
-            tubes_data = []
+                )
+
+            if box_index < len(timeline) - 1:
+                next_point = timeline[box_index + 1]
+                segments.append(
+                    self._build_segment_payload(
+                        cable=cable,
+                        suffix=f"NEXT_{next_point['key']}",
+                        label=f"{cable.name} [Indo para {next_point['name']}]",
+                        direction="OUT",
+                        box=box,
+                        fusion_lookup=fusion_lookup,
+                    )
+                )
+
+        return Response(segments, status=status.HTTP_200_OK)
+
+    @staticmethod
+    def _collect_cables(box: FiberInfrastructure) -> List[FiberCable]:
+        ids: List[int] = []
+        if box.cable_id:
+            ids.append(box.cable_id)
+
+        qs = (
+            InfrastructureCableAttachment.objects.filter(infrastructure=box)
+            .select_related("cable__site_a", "cable__site_b")
+        )
+        ids.extend(
+            attachment.cable_id for attachment in qs if attachment.cable_id
+        )
+
+        if not ids:
+            return []
+
+        cables = list(
+            FiberCable.objects.filter(id__in=set(ids))
+            .select_related("site_a", "site_b")
+            .prefetch_related("infrastructure_points")
+            .prefetch_related("tubes__strands")
+        )
+        return cables
+
+    @staticmethod
+    def _iter_fiber_ids(cables: Iterable[FiberCable]) -> List[int]:
+        ids: List[int] = []
+        for cable in cables:
             for tube in cable.tubes.all():
-                strands_data = []
-                for strand in tube.strands.all():
-                    fused_here = (
-                        strand.fused_to is not None
-                        and strand.fusion_infrastructure_id == box.id
+                ids.extend(strand.pk for strand in tube.strands.all())
+        return ids
+
+    def _build_timeline(self, cable: FiberCable) -> List[Dict[str, Any]]:
+        timeline: List[Dict[str, Any]] = []
+
+        if cable.site_a:
+            timeline.append(
+                {
+                    "type": "site",
+                    "id": cable.site_a.pk,
+                    "name": cable.site_a.display_name,
+                    "dist": 0.0,
+                    "key": f"site-{cable.site_a.pk}",
+                }
+            )
+
+        infra_points = cable.infrastructure_points.order_by(
+            "distance_from_origin"
+        )
+        for infra in infra_points:
+            dist = infra.distance_from_origin or 0.0
+            timeline.append(
+                {
+                    "type": "infra",
+                    "id": infra.pk,
+                    "name": infra.name or f"Infra {infra.pk}",
+                    "dist": dist,
+                    "key": f"infra-{infra.pk}",
+                }
+            )
+
+        if cable.site_b:
+            existing_distances = [item["dist"] for item in timeline] or [0.0]
+            base_max = max(existing_distances)
+            length_m = float(cable.length_km or 0) * 1000
+            end_dist = max(length_m, base_max + 1.0)
+            timeline.append(
+                {
+                    "type": "site",
+                    "id": cable.site_b.pk,
+                    "name": cable.site_b.display_name,
+                    "dist": end_dist,
+                    "key": f"site-{cable.site_b.pk}",
+                }
+            )
+
+        timeline.sort(
+            key=lambda item: (item["dist"], 0 if item["type"] == "site" else 1)
+        )
+        return timeline
+
+    @staticmethod
+    def _find_box_index(
+        timeline: Sequence[Dict[str, Any]],
+        box_id: int,
+    ) -> int | None:
+        for index, point in enumerate(timeline):
+            if point["type"] == "infra" and point["id"] == box_id:
+                return index
+        return None
+
+    def _build_segment_payload(
+        self,
+        *,
+        cable: FiberCable,
+        suffix: str,
+        label: str,
+        direction: str,
+        box: FiberInfrastructure,
+        fusion_lookup: Dict[int, List[FiberFusion]],
+    ) -> Dict[str, Any]:
+        return {
+            "id": cable.pk,
+            "virtual_id": f"{cable.pk}_{suffix}",
+            "name": cable.name,
+            "label": label,
+            "direction": direction,
+            "tubes": self._serialize_tubes_for_box(
+                cable=cable,
+                box=box,
+                fusion_lookup=fusion_lookup,
+            ),
+        }
+
+    def _build_attachment_segment(
+        self,
+        *,
+        cable: FiberCable,
+        box: FiberInfrastructure,
+        attachment: InfrastructureCableAttachment,
+        fusion_lookup: Dict[int, List[FiberFusion]],
+    ) -> Dict[str, Any]:
+        label = box.name or f"Infra {box.pk}"
+        return {
+            "id": cable.pk,
+            "virtual_id": f"{cable.pk}_ATT_{attachment.pk}",
+            "name": cable.name,
+            "label": f"{cable.name} [Ligado a {label}]",
+            "direction": "LOCAL",
+            "port_type": attachment.port_type,
+            "tubes": self._serialize_tubes_for_box(
+                cable=cable,
+                box=box,
+                fusion_lookup=fusion_lookup,
+            ),
+        }
+
+    @staticmethod
+    def _group_attachments(
+        box: FiberInfrastructure,
+    ) -> Dict[int, List[InfrastructureCableAttachment]]:
+        grouped: Dict[
+            int,
+            List[InfrastructureCableAttachment],
+        ] = defaultdict(list)
+        qs = InfrastructureCableAttachment.objects.filter(infrastructure=box)
+        for attachment in qs:
+            if attachment.cable_id:
+                grouped[attachment.cable_id].append(attachment)
+        return grouped
+
+    def _serialize_tubes_for_box(
+        self,
+        *,
+        cable: FiberCable,
+        box: FiberInfrastructure,
+        fusion_lookup: Dict[int, List[FiberFusion]],
+    ) -> List[Dict[str, Any]]:
+        tubes_payload: List[Dict[str, Any]] = []
+        for tube in cable.tubes.all():
+            strands_payload: List[Dict[str, Any]] = []
+            for strand in tube.strands.all():
+                fusions = fusion_lookup.get(strand.pk, [])
+                fusion_payloads = [
+                    self._serialize_fusion_payload(
+                        strand=strand,
+                        fusion=fusion,
+                        current_box_id=box.pk,
                     )
-                    fused_elsewhere = (
-                        strand.fused_to is not None
-                        and strand.fusion_infrastructure_id
-                        and strand.fusion_infrastructure_id != box.id
-                    )
-                    virtual_id = (
-                        f"{strand.id}_{att.id}" if att.id else strand.id
-                    )
-                    strands_data.append({
-                        "id": virtual_id,
-                        "real_id": strand.id,
+                    for fusion in fusions
+                ]
+                primary_fusion = (
+                    fusion_payloads[0] if fusion_payloads else None
+                )
+                fusion_ceo = next(
+                    (
+                        payload["infrastructure_name"]
+                        for payload in fusion_payloads
+                        if payload["infrastructure_id"]
+                        and payload["infrastructure_id"] != box.pk
+                    ),
+                    None,
+                )
+
+                strands_payload.append(
+                    {
+                        "id": strand.pk,
                         "number": strand.number,
                         "absolute_number": strand.absolute_number,
                         "color": strand.color,
                         "color_hex": strand.color_hex,
                         "status": strand.status,
-                        "is_fused": fused_here,
-                        "fused_elsewhere": fused_elsewhere,
-                        "fusion_ceo": (
-                            strand.fusion_infrastructure.name
-                            if strand.fusion_infrastructure
+                        "is_fused_here": any(
+                            payload["is_local"] for payload in fusion_payloads
+                        ),
+                        "is_fused": any(
+                            payload["is_local"] for payload in fusion_payloads
+                        ),
+                        "fused_elsewhere": any(
+                            not payload["is_local"]
+                            for payload in fusion_payloads
+                        ),
+                        "fusion_ceo": fusion_ceo,
+                        "fusion_count": len(fusion_payloads),
+                        "has_multiple_fusions": len(fusion_payloads) > 1,
+                        "primary_peer_fiber_id": (
+                            primary_fusion["peer_fiber_id"]
+                            if primary_fusion
                             else None
                         ),
-                    })
-                
-                logger.info(
-                    "[BoxContext] Tube %s: %s strands",
-                    tube.id,
-                    len(strands_data),
+                        "primary_fusion": primary_fusion,
+                        "fusions": fusion_payloads,
+                        "fusion_ids": [
+                            payload["id"] for payload in fusion_payloads
+                        ],
+                    }
                 )
-                
-                if strands_data:  # Incluir apenas tubos com fibras disponíveis
-                    tubes_data.append({
-                        "id": tube.id,
-                        "number": tube.number,
-                        "color": tube.color,
-                        "color_hex": tube.color_hex,
-                        "strands": strands_data,
-                    })
-            
-            logger.info(
-                f"[BoxContext] Cable {cable.id}: "
-                f"{len(tubes_data)} tubes with strands"
+
+            tubes_payload.append(
+                {
+                    "id": tube.pk,
+                    "number": tube.number,
+                    "color": tube.color,
+                    "color_hex": tube.color_hex,
+                    "strands": strands_payload,
+                }
             )
-            
-            # Build direction label (Site ↔ Site/CEO)
-            direction_label = cable.name  # Fallback
-            direction_a = "DIREÇÃO A"  # Fallback (usado pela UI)
-            direction_b = "DIREÇÃO B"
+        return tubes_payload
 
-            box_display_name = box.name or f"Infra {box.id}"
+    @staticmethod
+    def _serialize_fusion_payload(
+        *,
+        strand: FiberStrand,
+        fusion: FiberFusion,
+        current_box_id: int,
+    ) -> Dict[str, Any]:
+        if fusion.fiber_a_id == strand.pk:
+            peer = fusion.fiber_b
+        elif fusion.fiber_b_id == strand.pk:
+            peer = fusion.fiber_a
+        else:  # pragma: no cover - defensive guard
+            peer = None
 
-            if cable.site_a and cable.site_b:
-                direction_label = (
-                    f"{cable.site_a.display_name} → "
-                    f"{cable.site_b.display_name}"
-                )
-                direction_a = cable.site_a.display_name
-                direction_b = cable.site_b.display_name
-            elif cable.site_a:
-                # Cabo chega nesta CEO a partir de site_a
-                direction_label = (
-                    f"{cable.site_a.display_name} → "
-                    f"{box_display_name}"
-                )
-                direction_a = cable.site_a.display_name
-                direction_b = box_display_name
-            elif cable.site_b:
-                # Cabo sai desta CEO em direção ao site_b
-                direction_label = (
-                    f"{box_display_name} → "
-                    f"{cable.site_b.display_name}"
-                )
-                direction_a = cable.site_b.display_name
-                direction_b = box_display_name
-            else:
-                direction_label = box_display_name or cable.name
-                direction_a = box_display_name or "Direção"
-                direction_b = direction_a
-                    
-            # Cada attachment é um item separado (2x se pass-through)
-            # Adicionar com direção baseada no site de origem
-            result.append({
-                "id": cable.id,
-                "name": cable.name,
-                "tubes": tubes_data,
-                "attachment_id": att.id,
-                "port_type": att.port_type,
-                "is_pass_through": att.is_pass_through,
-                "direction": direction_a,  # Nome do site A
-                "direction_label": direction_label,  # For display
-                "profile_name": getattr(cable.profile, "name", None),
-                "unique_id": f"{cable.id}_A_{att.id}",
-            })
-            
-            # Se pass-through, DUPLICAR com direção do site B
-            if att.is_pass_through:
-                logger.info(
-                    f"[BoxContext] Cable {cable.id} is pass-through, "
-                    "adding second direction"
-                )
-                result.append({
-                    "id": cable.id,
-                    "name": cable.name,
-                    "tubes": tubes_data,  # Mesma estrutura de tubos
-                    "attachment_id": att.id,
-                    "port_type": att.port_type,
-                    "is_pass_through": att.is_pass_through,
-                    "direction": direction_b,  # Nome do site B
-                    "direction_label": direction_label,
-                    "profile_name": getattr(cable.profile, "name", None),
-                    "unique_id": f"{cable.id}_B_{att.id}",
-                })
-        
-        logger.info(
-            f"[BoxContext] Returning {len(result)} segments "
-            "(including pass-through duplicates)"
+        cable = getattr(getattr(peer, "tube", None), "cable", None)
+        infrastructure = fusion.infrastructure
+
+        peer_payload = (
+            {
+                "id": peer.pk,
+                "number": peer.number,
+                "absolute_number": peer.absolute_number,
+                "color": peer.color,
+                "color_hex": peer.color_hex,
+                "cable_id": cable.pk if cable else None,
+                "cable_name": cable.name if cable else None,
+            }
+            if peer
+            else None
         )
-        
-        # DEBUG: Show complete response
-        if result:
-            logger.info(
-                f"[BoxContext] First segment has "
-                f"{len(result[0].get('tubes', []))} tubes"
+
+        return {
+            "id": fusion.pk,
+            "infrastructure_id": (
+                infrastructure.pk if infrastructure else None
+            ),
+            "infrastructure_name": (
+                infrastructure.name if infrastructure else None
+            ),
+            "tray": fusion.tray,
+            "slot": fusion.slot,
+            "created_at": fusion.created_at.isoformat(),
+            "peer": peer_payload,
+            "peer_fiber_id": (
+                peer_payload["id"] if peer_payload else None
+            ),
+            "peer_cable_id": (
+                peer_payload["cable_id"] if peer_payload else None
+            ),
+            "peer_cable_name": (
+                peer_payload["cable_name"] if peer_payload else None
+            ),
+            "peer_number": (
+                peer_payload["number"] if peer_payload else None
+            ),
+            "peer_absolute_number": (
+                peer_payload["absolute_number"] if peer_payload else None
+            ),
+            "peer_color": (
+                peer_payload["color"] if peer_payload else None
+            ),
+            "peer_color_hex": (
+                peer_payload["color_hex"] if peer_payload else None
+            ),
+            "is_repair": bool(
+                peer_payload and peer_payload.get("id") == strand.pk
+            ),
+            "is_local": fusion.infrastructure_id == current_box_id,
+        }
+
+    @staticmethod
+    def _build_fusion_lookup(
+        fiber_ids: Sequence[int],
+    ) -> Dict[int, List[FiberFusion]]:
+        if not fiber_ids:
+            return {}
+
+        fusions = (
+            FiberFusion.objects.filter(
+                Q(fiber_a_id__in=fiber_ids) | Q(fiber_b_id__in=fiber_ids)
             )
-        
-        return result
+            .select_related(
+                "infrastructure",
+                "fiber_a__tube__cable",
+                "fiber_b__tube__cable",
+            )
+            .order_by("created_at", "id")
+        )
+
+        lookup: Dict[int, List[FiberFusion]] = defaultdict(list)
+        for fusion in fusions:
+            lookup[fusion.fiber_a_id].append(fusion)
+            lookup[fusion.fiber_b_id].append(fusion)
+        return lookup
