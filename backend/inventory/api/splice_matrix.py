@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, Dict, Iterable, List, Sequence, Set
 
 from django.db import transaction
 from django.db.models import Q
@@ -392,6 +392,8 @@ class BoxContextView(APIView):
                     for strand in tube.strands.all():
                         segment_fiber_map_out[strand.pk] = "OUT"
 
+        primary_render_registry: Set[int] = set()
+
         # Segundo passe: construir segmentos com mapeamentos corretos
         segments: List[Dict[str, Any]] = []
         for cable in cables:
@@ -407,6 +409,7 @@ class BoxContextView(APIView):
                             attachment=attachment,
                             fusion_lookup=fusion_lookup,
                             segment_fiber_map=segment_fiber_map_local,
+                            primary_render_registry=primary_render_registry,
                         )
                     )
                 continue
@@ -423,6 +426,7 @@ class BoxContextView(APIView):
                         box=box,
                         fusion_lookup=fusion_lookup,
                         segment_fiber_map=segment_fiber_map_in,  # Mapa do próprio segmento IN
+                        primary_render_registry=primary_render_registry,
                     )
                 )
 
@@ -438,6 +442,7 @@ class BoxContextView(APIView):
                         box=box,
                         fusion_lookup=fusion_lookup,
                         segment_fiber_map=segment_fiber_map_out,  # Mapa do próprio segmento OUT
+                        primary_render_registry=primary_render_registry,
                     )
                 )
 
@@ -545,6 +550,7 @@ class BoxContextView(APIView):
         box: FiberInfrastructure,
         fusion_lookup: Dict[int, List[FiberFusion]],
         segment_fiber_map: Dict[int, str] = None,
+        primary_render_registry: Set[int] | None = None,
     ) -> Dict[str, Any]:
         return {
             "id": cable.pk,
@@ -558,6 +564,7 @@ class BoxContextView(APIView):
                 fusion_lookup=fusion_lookup,
                 segment_direction=direction,  # NOVO: passa direção do segmento
                 segment_fiber_map=segment_fiber_map,
+                primary_render_registry=primary_render_registry,
             ),
         }
 
@@ -569,6 +576,7 @@ class BoxContextView(APIView):
         attachment: InfrastructureCableAttachment,
         fusion_lookup: Dict[int, List[FiberFusion]],
         segment_fiber_map: Dict[int, str] = None,
+        primary_render_registry: Set[int] | None = None,
     ) -> Dict[str, Any]:
         label = box.name or f"Infra {box.pk}"
         return {
@@ -584,6 +592,7 @@ class BoxContextView(APIView):
                 fusion_lookup=fusion_lookup,
                 segment_direction="LOCAL",  # NOVO: anexos são sempre LOCAL
                 segment_fiber_map=segment_fiber_map,
+                primary_render_registry=primary_render_registry,
             ),
         }
 
@@ -609,11 +618,18 @@ class BoxContextView(APIView):
         fusion_lookup: Dict[int, List[FiberFusion]],
         segment_direction: str = None,  # NOVO: direção do segmento (IN, OUT, LOCAL)
         segment_fiber_map: Dict[int, str] = None,  # NOVO: mapa fiber_id → segment_direction
+        primary_render_registry: Set[int] | None = None,
     ) -> List[Dict[str, Any]]:
         tubes_payload: List[Dict[str, Any]] = []
         for tube in cable.tubes.all():
             strands_payload: List[Dict[str, Any]] = []
             for strand in tube.strands.all():
+                is_primary_render = True
+                if primary_render_registry is not None:
+                    if strand.pk in primary_render_registry:
+                        is_primary_render = False
+                    else:
+                        primary_render_registry.add(strand.pk)
                 fusions = fusion_lookup.get(strand.pk, [])
                 fusion_payloads = [
                     self._serialize_fusion_payload(
@@ -679,6 +695,7 @@ class BoxContextView(APIView):
                         "color": strand.color,
                         "color_hex": strand.color_hex,
                         "status": strand.status,
+                        "is_primary_render": is_primary_render,
                         "is_fused_here": is_fused_here,
                         "is_fused": is_fused_here,
                         "is_fused_anywhere": is_fused_anywhere,

@@ -39,13 +39,17 @@
             :class="[
               isSelected(strand) ? 'border-white scale-110 z-10 shadow-[0_0_8px_rgba(255,255,255,0.5)]' : 'border-transparent hover:border-gray-500',
               strand.is_fused_here && !isSelected(strand) ? 'opacity-60 cursor-not-allowed' : '',
-              (!strand.is_fused_here && (strand.fused_elsewhere || strand.fused_on_other_segment)) ? 'outline-dashed' : ''
+              isDuplicate(strand) ? 'opacity-30 cursor-default border-gray-700 hover:border-gray-700' : '',
+              (!strand.is_fused_here && (strand.fused_elsewhere || strand.fused_on_other_segment) && !isDuplicate(strand)) ? 'outline-dashed' : ''
             ]"
             :style="{ backgroundColor: strand.color_hex }"
             @click="onClick(strand)"
           >
             <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-black text-white text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap z-20">
-              <template v-if="strand.is_fused_here">
+              <template v-if="isDuplicate(strand)">
+                FO {{ strand.number }} - Espelhada na outra face
+              </template>
+              <template v-else-if="strand.is_fused_here">
                 FO {{ strand.number }} - Fusionada aqui
               </template>
               <template v-else-if="strand.fused_elsewhere">
@@ -65,7 +69,7 @@
             <div v-if="strand.is_fused_here" class="absolute inset-0 flex items-center justify-center">
               <div class="w-1.5 h-1.5 bg-orange-500 rounded-full shadow-[0_0_4px_rgba(251,146,60,0.8)]"></div>
             </div>
-            <div v-else-if="strand.fused_elsewhere || strand.fused_on_other_segment" class="absolute inset-0 pointer-events-none">
+            <div v-else-if="strand.fused_elsewhere || (strand.fused_on_other_segment && !isDuplicate(strand))" class="absolute inset-0 pointer-events-none">
               <div class="absolute inset-0 border-2 border-gray-500 border-dashed rounded-full"></div>
             </div>
           </div>
@@ -96,8 +100,10 @@ const isIncoming = computed(() => segmentType.value === 'IN')
 
 const isSelected = (strand) => props.selectedId === strand.id
 
+const isDuplicate = (strand) => strand?.is_primary_render === false
+
 const onClick = (strand) => {
-  if (strand.is_fused_here) return
+  if (strand.is_fused_here || isDuplicate(strand)) return
   emit('select', strand.id)
 }
 </script>

@@ -126,6 +126,9 @@ def test_box_context_returns_enhanced_fusion_payload(
     assert incoming_strand is not None, "Expected incoming strand payload not found"
     assert outgoing_strand is not None, "Expected outgoing strand payload not found"
 
+    assert incoming_strand["is_primary_render"] is True
+    assert outgoing_strand["is_primary_render"] is False
+
     assert incoming_strand["fusion_count"] == 2
     assert incoming_strand["has_multiple_fusions"] is True
     assert incoming_strand["is_fused_here"] is True
@@ -225,6 +228,9 @@ def test_box_context_local_fusion_only_affects_incoming_segment(
     assert incoming_strand is not None
     assert outgoing_strand is not None
 
+    assert incoming_strand["is_primary_render"] is True
+    assert outgoing_strand["is_primary_render"] is False
+
     assert incoming_strand["is_fused_here"] is True
     assert incoming_strand["fused_elsewhere"] is False
     assert incoming_strand["fused_on_other_segment"] is False
@@ -315,6 +321,9 @@ def test_box_context_remote_fusion_only_marks_as_fused_elsewhere(
 
     assert incoming_strand is not None
     assert outgoing_strand is not None
+
+    assert incoming_strand["is_primary_render"] is True
+    assert outgoing_strand["is_primary_render"] is False
 
     assert incoming_strand["is_fused_here"] is False
     assert outgoing_strand["is_fused_here"] is False
