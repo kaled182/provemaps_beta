@@ -332,6 +332,7 @@ def list_fiber_cables() -> List[Dict[str, object]]:
                 "destination_port_name": cable.destination_port.name,
                 "origin_device_id": cable.origin_port.device.id,
                 "destination_device_id": cable.destination_port.device.id,
+                "parent_cable_id": cable.parent_cable_id,
                 "origin_device_name": cable.origin_port.device.name,
                 "destination_device_name": cable.destination_port.device.name,
                 "origin_site_id": origin_site.id if origin_site else None,
