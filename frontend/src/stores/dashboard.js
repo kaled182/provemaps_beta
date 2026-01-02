@@ -64,19 +64,33 @@ export const useDashboardStore = defineStore('dashboard', () => {
   const fiberStatusDistribution = computed(() => {
     try {
       const distribution = { up: 0, down: 0, degraded: 0, unknown: 0 };
-      const cablesMap = fiberMapSafe();
-      const cables = Array.from(cablesMap?.values ? cablesMap.values() : []);
-      console.log('[dashboardStore] Computing fiber distribution, cables count:', cables.length);
-      cables.forEach(cable => {
-        const status = cable?.status || 'unknown';
-        console.log('[dashboardStore] Cable:', cable?.name, 'Status:', status);
-        if (Object.prototype.hasOwnProperty.call(distribution, status)) {
-          distribution[status]++;
-        } else {
-          distribution.unknown++;
+      const severity = { down: 3, degraded: 2, up: 1, unknown: 0 };
+      const aggregated = new Map();
+      const cables = Array.from(fiberMapSafe().values());
+
+      cables.forEach((cable) => {
+        if (!cable) return;
+        const rawStatus = cable.status || 'unknown';
+        const status = Object.prototype.hasOwnProperty.call(severity, rawStatus)
+          ? rawStatus
+          : 'unknown';
+        const canonicalId = cable.parent_cable_id || cable.id;
+        if (!canonicalId) return;
+
+        const currentStatus = aggregated.get(canonicalId);
+        if (!currentStatus || severity[status] > severity[currentStatus]) {
+          aggregated.set(canonicalId, status);
         }
       });
-      console.log('[dashboardStore] Fiber distribution:', distribution);
+
+      aggregated.forEach((status) => {
+        if (Object.prototype.hasOwnProperty.call(distribution, status)) {
+          distribution[status] += 1;
+        } else {
+          distribution.unknown += 1;
+        }
+      });
+
       return distribution;
     } catch (error) {
       console.error('[dashboardStore] Failed to compute fiber distribution', error);
