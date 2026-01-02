@@ -252,13 +252,15 @@ class CreateFusionView(APIView):
                         status=status.HTTP_404_NOT_FOUND,
                     )
 
-            # Uma fibra só pode ter uma fusão ativa por vez.
+            # Remover fusões apenas dentro da mesma infraestrutura
             FiberFusion.objects.filter(
-                Q(fiber_a=strand_a) | Q(fiber_b=strand_a)
+                Q(fiber_a=strand_a) | Q(fiber_b=strand_a),
+                infrastructure=infra,
             ).delete()
             if strand_b.pk != strand_a.pk:
                 FiberFusion.objects.filter(
-                    Q(fiber_a=strand_b) | Q(fiber_b=strand_b)
+                    Q(fiber_a=strand_b) | Q(fiber_b=strand_b),
+                    infrastructure=infra,
                 ).delete()
 
             fusion = FiberFusion.objects.create(
@@ -288,7 +290,7 @@ class CreateFusionView(APIView):
 
 
 class DeleteFusionView(APIView):
-    """Remove all fusions where the given fiber participates."""
+    """Remove fusions scoped to the current infrastructure or by fusion id."""
 
     def delete(self, request: Request, fiber_id: int) -> Response:
         try:
@@ -299,9 +301,39 @@ class DeleteFusionView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        FiberFusion.objects.filter(
-            Q(fiber_a=strand) | Q(fiber_b=strand)
-        ).delete()
+        fusion_id = request.query_params.get("fusion_id")
+        if fusion_id is not None:
+            try:
+                fusion_pk = int(fusion_id)
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "fusion_id inválido"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            deleted_count, _ = FiberFusion.objects.filter(
+                Q(fiber_a=strand) | Q(fiber_b=strand),
+                pk=fusion_pk,
+            ).delete()
+            if deleted_count == 0:
+                return Response(status=status.HTTP_404_NOT_FOUND)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        infra_id_param = request.query_params.get("infrastructure_id")
+        filters = Q(fiber_a=strand) | Q(fiber_b=strand)
+        if infra_id_param is not None:
+            try:
+                infra_id = int(infra_id_param)
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "infrastructure_id inválido"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            filters &= Q(infrastructure_id=infra_id)
+
+        deleted_count, _ = FiberFusion.objects.filter(filters).delete()
+        if deleted_count == 0:
+            return Response(status=status.HTTP_404_NOT_FOUND)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -548,9 +580,22 @@ class BoxContextView(APIView):
                     )
                     for fusion in fusions
                 ]
+                fusion_payloads.sort(
+                    key=lambda payload: (
+                        0 if payload["is_local"] else 1,
+                        payload["created_at"],
+                    )
+                )
                 primary_fusion = (
                     fusion_payloads[0] if fusion_payloads else None
                 )
+                is_fused_here = any(
+                    payload["is_local"] for payload in fusion_payloads
+                )
+                has_remote_fusion = any(
+                    not payload["is_local"] for payload in fusion_payloads
+                )
+                is_fused_anywhere = bool(fusion_payloads)
                 fusion_ceo = next(
                     (
                         payload["infrastructure_name"]
@@ -569,16 +614,10 @@ class BoxContextView(APIView):
                         "color": strand.color,
                         "color_hex": strand.color_hex,
                         "status": strand.status,
-                        "is_fused_here": any(
-                            payload["is_local"] for payload in fusion_payloads
-                        ),
-                        "is_fused": any(
-                            payload["is_local"] for payload in fusion_payloads
-                        ),
-                        "fused_elsewhere": any(
-                            not payload["is_local"]
-                            for payload in fusion_payloads
-                        ),
+                        "is_fused_here": is_fused_here,
+                        "is_fused": is_fused_here,
+                        "is_fused_anywhere": is_fused_anywhere,
+                        "fused_elsewhere": has_remote_fusion,
                         "fusion_ceo": fusion_ceo,
                         "fusion_count": len(fusion_payloads),
                         "has_multiple_fusions": len(fusion_payloads) > 1,

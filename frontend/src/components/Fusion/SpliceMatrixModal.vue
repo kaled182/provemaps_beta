@@ -211,33 +211,90 @@ const boxName = ref('CEO')
 const cables = ref([])
 const selection = reactive({ a: null, b: null, aCable: null, bCable: null })
 
-// Computed: Separar cabos por direção
+const segmentKind = (segment) => {
+  if (!segment) return 'UNKNOWN'
+  const virtualId = segment.virtual_id || ''
+  
+  // Debug: log cada segmento
+  console.log('[SpliceMatrixModal] Classificando segmento:', {
+    id: segment.id,
+    virtual_id: virtualId,
+    direction: segment.direction,
+    label: segment.label
+  })
+  
+  // Priorizar virtual_id para identificar PREV/NEXT
+  if (virtualId.includes('PREV_')) {
+    console.log('  → Classificado como IN (PREV)')
+    return 'IN'
+  }
+  if (virtualId.includes('NEXT_')) {
+    console.log('  → Classificado como OUT (NEXT)')
+    return 'OUT'
+  }
+  if (virtualId.includes('_ATT_')) {
+    console.log('  → Classificado como LOCAL (ATT)')
+    return 'LOCAL'
+  }
+  
+  // Fallback para campo direction do backend
+  const direction = segment.direction || ''
+  if (direction === 'IN') {
+    console.log('  → Classificado como IN (direction)')
+    return 'IN'
+  }
+  if (direction === 'OUT') {
+    console.log('  → Classificado como OUT (direction)')
+    return 'OUT'
+  }
+  if (direction === 'LOCAL') {
+    console.log('  → Classificado como LOCAL (direction)')
+    return 'LOCAL'
+  }
+  
+  console.log('  → Classificado como UNKNOWN')
+  return 'UNKNOWN'
+}
+
 const cablesDirecaoA = computed(() => {
-  // Agrupar cabos pela primeira direção única
-  const directions = new Set(cables.value.map(c => c.direction))
-  const firstDirection = Array.from(directions)[0]
-  return cables.value.filter(c => c.direction === firstDirection)
+  const incoming = cables.value.filter((segment) => segmentKind(segment) === 'IN')
+  console.log('[SpliceMatrixModal] cablesDirecaoA:', incoming.length, 'segmentos')
+  return incoming
 })
 
 const cablesDirecaoB = computed(() => {
-  // Agrupar cabos pela segunda direção única
-  const directions = new Set(cables.value.map(c => c.direction))
-  const allDirections = Array.from(directions)
-  const secondDirection = allDirections[1] || allDirections[0]
-  return cables.value.filter(c => c.direction === secondDirection && c.direction !== allDirections[0])
+  const outgoing = cables.value.filter((segment) => segmentKind(segment) === 'OUT')
+  const local = cables.value.filter((segment) => segmentKind(segment) === 'LOCAL')
+  const unknown = cables.value.filter((segment) => segmentKind(segment) === 'UNKNOWN')
+  
+  console.log('[SpliceMatrixModal] cablesDirecaoB:', {
+    outgoing: outgoing.length,
+    local: local.length,
+    unknown: unknown.length
+  })
+  
+  // Combinar todos os não-IN
+  return [...outgoing, ...local, ...unknown]
 })
 
-// Computed: Nomes das direções (usar o campo direction diretamente)
 const nomeDirecaoA = computed(() => {
-  if (cablesDirecaoA.value.length === 0) return 'Direção A'
-  // Pegar o nome da direção do primeiro cabo
-  return cablesDirecaoA.value[0]?.direction || 'Direção A'
+  if (cablesDirecaoA.value.length === 0) return 'IN'
+  const first = cablesDirecaoA.value[0]
+  const kind = segmentKind(first)
+  if (kind === 'IN') {
+    // Extrair nome da label se possível
+    return first.label?.includes('[Vindo de') ? 'IN' : 'Entrada'
+  }
+  return 'Direção A'
 })
 
 const nomeDirecaoB = computed(() => {
-  if (cablesDirecaoB.value.length === 0) return 'Direção B'
-  // Pegar o nome da direção do primeiro cabo
-  return cablesDirecaoB.value[0]?.direction || 'Direção B'
+  if (cablesDirecaoB.value.length === 0) return 'OUT'
+  const first = cablesDirecaoB.value[0]
+  const kind = segmentKind(first)
+  if (kind === 'OUT') return 'OUT'
+  if (kind === 'LOCAL') return 'Local'
+  return 'Direção B'
 })
 
 const resolveCableId = (fiberId) => {
@@ -439,7 +496,11 @@ const removeFusion = async (slot) => {
   loading.value = true
   try {
     // Usar DELETE /fusions/<fiber_id>/
-    await api.delete(`/api/v1/inventory/fusions/${slotData.fiber_a.id}/`)
+    const params = new URLSearchParams({
+      fusion_id: String(slotData.fusion_id),
+      infrastructure_id: String(props.infraPoint.id)
+    })
+    await api.delete(`/api/v1/inventory/fusions/${slotData.fiber_a.id}/?${params.toString()}`)
     await loadData()
   } catch (e) {
     alert('Erro ao remover fusão: ' + (e.response?.data?.detail || e.message))

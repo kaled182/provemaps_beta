@@ -4,8 +4,8 @@
       <div class="flex items-center gap-2 overflow-hidden">
         <i class="fas fa-chevron-right text-[10px] text-gray-500 transition-transform" :class="{'rotate-90': expanded}"></i>
         
-        <div class="shrink-0" :title="cable.direction === 'INCOMING' ? 'Segmento de Entrada' : 'Segmento de Saída'">
-          <span v-if="cable.direction === 'INCOMING'" class="w-5 h-5 rounded-full bg-green-900/50 border border-green-500 flex items-center justify-center text-green-400 text-[10px]">
+        <div class="shrink-0" :title="segmentType === 'IN' ? 'Segmento de Entrada' : segmentType === 'OUT' ? 'Segmento de Saída' : 'Segmento Local'">
+          <span v-if="isIncoming" class="w-5 h-5 rounded-full bg-green-900/50 border border-green-500 flex items-center justify-center text-green-400 text-[10px]">
             <i class="fas fa-arrow-right"></i>
           </span>
           <span v-else class="w-5 h-5 rounded-full bg-orange-900/50 border border-orange-500 flex items-center justify-center text-orange-400 text-[10px]">
@@ -38,15 +38,14 @@
             class="w-5 h-5 rounded-full cursor-pointer border-2 transition-all duration-150 relative group"
             :class="[
               isSelected(strand) ? 'border-white scale-110 z-10 shadow-[0_0_8px_rgba(255,255,255,0.5)]' : 'border-transparent hover:border-gray-500',
-              strand.is_fused && !isSelected(strand) ? 'opacity-60 cursor-not-allowed' : '',
-              (!strand.is_fused && strand.fused_elsewhere) ? 'outline-dashed' : ''
+              strand.is_fused_here && !isSelected(strand) ? 'opacity-60 cursor-not-allowed' : '',
+              (!strand.is_fused_here && strand.fused_elsewhere) ? 'outline-dashed' : ''
             ]"
             :style="{ backgroundColor: strand.color_hex }"
-            :disabled="strand.is_fused"
             @click="onClick(strand)"
           >
             <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-black text-white text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap z-20">
-              <template v-if="strand.is_fused">
+              <template v-if="strand.is_fused_here">
                 FO {{ strand.number }} - Fusionada aqui
               </template>
               <template v-else-if="strand.fused_elsewhere">
@@ -57,7 +56,7 @@
               </template>
             </div>
 
-            <div v-if="strand.is_fused" class="absolute inset-0 flex items-center justify-center">
+            <div v-if="strand.is_fused_here" class="absolute inset-0 flex items-center justify-center">
               <div class="w-1.5 h-1.5 bg-orange-500 rounded-full shadow-[0_0_4px_rgba(251,146,60,0.8)]"></div>
             </div>
             <div v-else-if="strand.fused_elsewhere" class="absolute inset-0 pointer-events-none">
@@ -72,16 +71,27 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 const props = defineProps(['cable', 'selectedId'])
 const emit = defineEmits(['select'])
 
 const expanded = ref(true)
 
+const segmentType = computed(() => {
+  const cable = props.cable || {}
+  const virtualId = cable.virtual_id || ''
+  if (virtualId.includes('PREV_')) return 'IN'
+  if (virtualId.includes('NEXT_')) return 'OUT'
+  if (virtualId.includes('_ATT_')) return 'LOCAL'
+  return cable.direction || 'UNKNOWN'
+})
+
+const isIncoming = computed(() => segmentType.value === 'IN')
+
 const isSelected = (strand) => props.selectedId === strand.id
 
 const onClick = (strand) => {
-  if (strand.is_fused) return
+  if (strand.is_fused_here) return
   emit('select', strand.id)
 }
 </script>
