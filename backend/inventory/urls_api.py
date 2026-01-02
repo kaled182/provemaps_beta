@@ -9,6 +9,7 @@ from .api.splice_matrix import (
 )
 from .api.cable_attachment import CableAttachmentViewSet
 from .api.cable_split import CableSplitViewSet
+from .api.cable_split_v2 import CableSplitV2View
 
 from inventory.api import devices as device_api
 from inventory.api import fibers as fiber_api
@@ -42,6 +43,13 @@ urlpatterns = [
         "cables/split-at-ceo/",
         CableSplitViewSet.as_view({'post': 'split_at_ceo'}),
         name="cable-split-ceo",
+    ),
+    
+    # Cable Split V2 (usando CableSegments)
+    path(
+        "cables/<int:pk>/split-at-ceo-v2/",
+        CableSplitV2View.as_view(),
+        name="cable-split-ceo-v2",
     ),
     
     path(

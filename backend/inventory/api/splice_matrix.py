@@ -363,6 +363,36 @@ class BoxContextView(APIView):
         fusion_lookup = self._build_fusion_lookup(self._iter_fiber_ids(cables))
         attachments = self._group_attachments(box)
 
+        # NOVO: Construir DOIS passes - primeiro mapear todas as fibras aos seus segmentos
+        segment_fiber_map_in: Dict[int, str] = {}  # Fibras do segmento IN
+        segment_fiber_map_out: Dict[int, str] = {}  # Fibras do segmento OUT
+        segment_fiber_map_local: Dict[int, str] = {}  # Fibras do segmento LOCAL
+
+        # Primeiro passe: mapear fibras aos segmentos
+        for cable in cables:
+            timeline = self._build_timeline(cable)
+            box_index = self._find_box_index(timeline, box.pk)
+
+            if box_index is None:
+                # Cabo anexado = LOCAL
+                for tube in cable.tubes.all():
+                    for strand in tube.strands.all():
+                        segment_fiber_map_local[strand.pk] = "LOCAL"
+                continue
+
+            if box_index > 0:
+                # Cabo tem entrada (IN)
+                for tube in cable.tubes.all():
+                    for strand in tube.strands.all():
+                        segment_fiber_map_in[strand.pk] = "IN"
+
+            if box_index < len(timeline) - 1:
+                # Cabo tem saída (OUT)
+                for tube in cable.tubes.all():
+                    for strand in tube.strands.all():
+                        segment_fiber_map_out[strand.pk] = "OUT"
+
+        # Segundo passe: construir segmentos com mapeamentos corretos
         segments: List[Dict[str, Any]] = []
         for cable in cables:
             timeline = self._build_timeline(cable)
@@ -376,12 +406,14 @@ class BoxContextView(APIView):
                             box=box,
                             attachment=attachment,
                             fusion_lookup=fusion_lookup,
+                            segment_fiber_map=segment_fiber_map_local,
                         )
                     )
                 continue
 
             if box_index > 0:
                 prev_point = timeline[box_index - 1]
+                # CORRIGIDO: passar o mapa IN para que a lógica encontre o próprio segmento
                 segments.append(
                     self._build_segment_payload(
                         cable=cable,
@@ -390,11 +422,13 @@ class BoxContextView(APIView):
                         direction="IN",
                         box=box,
                         fusion_lookup=fusion_lookup,
+                        segment_fiber_map=segment_fiber_map_in,  # Mapa do próprio segmento IN
                     )
                 )
 
             if box_index < len(timeline) - 1:
                 next_point = timeline[box_index + 1]
+                # CORRIGIDO: passar o mapa OUT para que a lógica encontre o próprio segmento
                 segments.append(
                     self._build_segment_payload(
                         cable=cable,
@@ -403,6 +437,7 @@ class BoxContextView(APIView):
                         direction="OUT",
                         box=box,
                         fusion_lookup=fusion_lookup,
+                        segment_fiber_map=segment_fiber_map_out,  # Mapa do próprio segmento OUT
                     )
                 )
 
@@ -509,6 +544,7 @@ class BoxContextView(APIView):
         direction: str,
         box: FiberInfrastructure,
         fusion_lookup: Dict[int, List[FiberFusion]],
+        segment_fiber_map: Dict[int, str] = None,
     ) -> Dict[str, Any]:
         return {
             "id": cable.pk,
@@ -520,6 +556,8 @@ class BoxContextView(APIView):
                 cable=cable,
                 box=box,
                 fusion_lookup=fusion_lookup,
+                segment_direction=direction,  # NOVO: passa direção do segmento
+                segment_fiber_map=segment_fiber_map,
             ),
         }
 
@@ -530,6 +568,7 @@ class BoxContextView(APIView):
         box: FiberInfrastructure,
         attachment: InfrastructureCableAttachment,
         fusion_lookup: Dict[int, List[FiberFusion]],
+        segment_fiber_map: Dict[int, str] = None,
     ) -> Dict[str, Any]:
         label = box.name or f"Infra {box.pk}"
         return {
@@ -543,6 +582,8 @@ class BoxContextView(APIView):
                 cable=cable,
                 box=box,
                 fusion_lookup=fusion_lookup,
+                segment_direction="LOCAL",  # NOVO: anexos são sempre LOCAL
+                segment_fiber_map=segment_fiber_map,
             ),
         }
 
@@ -566,6 +607,8 @@ class BoxContextView(APIView):
         cable: FiberCable,
         box: FiberInfrastructure,
         fusion_lookup: Dict[int, List[FiberFusion]],
+        segment_direction: str = None,  # NOVO: direção do segmento (IN, OUT, LOCAL)
+        segment_fiber_map: Dict[int, str] = None,  # NOVO: mapa fiber_id → segment_direction
     ) -> List[Dict[str, Any]]:
         tubes_payload: List[Dict[str, Any]] = []
         for tube in cable.tubes.all():
@@ -577,6 +620,8 @@ class BoxContextView(APIView):
                         strand=strand,
                         fusion=fusion,
                         current_box_id=box.pk,
+                        segment_direction=segment_direction,  # NOVO: passa direção
+                        segment_fiber_map=segment_fiber_map,  # NOVO: passa mapa
                     )
                     for fusion in fusions
                 ]
@@ -586,16 +631,36 @@ class BoxContextView(APIView):
                         payload["created_at"],
                     )
                 )
-                primary_fusion = (
-                    fusion_payloads[0] if fusion_payloads else None
+                primary_fusion = next(
+                    (
+                        payload
+                        for payload in fusion_payloads
+                        if payload["applies_to_segment"]
+                    ),
+                    fusion_payloads[0] if fusion_payloads else None,
                 )
                 is_fused_here = any(
-                    payload["is_local"] for payload in fusion_payloads
+                    payload["applies_to_segment"]
+                    for payload in fusion_payloads
                 )
                 has_remote_fusion = any(
-                    not payload["is_local"] for payload in fusion_payloads
+                    payload["is_remote"] for payload in fusion_payloads
                 )
                 is_fused_anywhere = bool(fusion_payloads)
+                has_local_elsewhere = any(
+                    payload["is_local"] and not payload["applies_to_segment"]
+                    for payload in fusion_payloads
+                )
+                other_segment_direction = next(
+                    (
+                        payload["blocking_direction"]
+                        for payload in fusion_payloads
+                        if payload["is_local"]
+                        and not payload["applies_to_segment"]
+                        and payload.get("blocking_direction")
+                    ),
+                    None,
+                )
                 fusion_ceo = next(
                     (
                         payload["infrastructure_name"]
@@ -618,6 +683,12 @@ class BoxContextView(APIView):
                         "is_fused": is_fused_here,
                         "is_fused_anywhere": is_fused_anywhere,
                         "fused_elsewhere": has_remote_fusion,
+                        "fused_on_other_segment": has_local_elsewhere,
+                        "blocked_segment_direction": (
+                            other_segment_direction
+                            if has_local_elsewhere
+                            else None
+                        ),
                         "fusion_ceo": fusion_ceo,
                         "fusion_count": len(fusion_payloads),
                         "has_multiple_fusions": len(fusion_payloads) > 1,
@@ -651,6 +722,8 @@ class BoxContextView(APIView):
         strand: FiberStrand,
         fusion: FiberFusion,
         current_box_id: int,
+        segment_direction: str = None,  # NOVO: direção do segmento atual (IN/OUT/LOCAL)
+        segment_fiber_map: Dict[int, str] = None,  # NOVO: mapa fiber_id → segment_direction
     ) -> Dict[str, Any]:
         if fusion.fiber_a_id == strand.pk:
             peer = fusion.fiber_b
@@ -661,6 +734,40 @@ class BoxContextView(APIView):
 
         cable = getattr(getattr(peer, "tube", None), "cable", None)
         infrastructure = fusion.infrastructure
+        
+        # Lógica simplificada: fusão é "local" se foi feita nesta CEO
+        # O bloqueio agora considera o papel da fibra no segmento virtual
+        # (IN usa fiber_a, OUT usa fiber_b); segmentos extras seguem disponíveis
+        is_local_fusion = fusion.infrastructure_id == current_box_id
+        is_remote_fusion = (
+            fusion.infrastructure_id is not None
+            and fusion.infrastructure_id != current_box_id
+        )
+
+        fiber_role = None
+        if fusion.fiber_a_id == strand.pk:
+            fiber_role = "fiber_a"
+        elif fusion.fiber_b_id == strand.pk:
+            fiber_role = "fiber_b"
+
+        applies_to_segment = False
+        direction = segment_direction
+        if direction is None and segment_fiber_map:
+            direction = segment_fiber_map.get(strand.pk)
+
+        blocking_direction = None
+        if is_local_fusion:
+            if direction == "IN":
+                applies_to_segment = fiber_role == "fiber_a"
+            elif direction == "OUT":
+                applies_to_segment = fiber_role == "fiber_b"
+            else:
+                applies_to_segment = True
+
+            if fiber_role == "fiber_a":
+                blocking_direction = "IN"
+            elif fiber_role == "fiber_b":
+                blocking_direction = "OUT"
 
         peer_payload = (
             {
@@ -712,7 +819,11 @@ class BoxContextView(APIView):
             "is_repair": bool(
                 peer_payload and peer_payload.get("id") == strand.pk
             ),
-            "is_local": fusion.infrastructure_id == current_box_id,
+            "is_local": is_local_fusion,  # MODIFICADO: usa lógica melhorada
+            "is_remote": is_remote_fusion,
+            "fiber_role": fiber_role,
+            "applies_to_segment": applies_to_segment,
+            "blocking_direction": blocking_direction,
         }
 
     @staticmethod

@@ -18,7 +18,41 @@ from rest_framework.request import Request
 
 from django.db.models import Q
 
-from inventory.models import FiberFusion, FiberStrand, Port
+from inventory.models import FiberFusion, FiberStrand, Port, CableSegment
+
+
+def check_cable_integrity(strand: FiberStrand) -> tuple[bool, CableSegment | None, str]:
+    """
+    Verifica se o cabo da fibra possui algum segmento rompido.
+    
+    IMPORTANTE: Esta verificação detecta segmentos BROKEN em QUALQUER lugar do cabo,
+    não apenas no segmento específico da fibra. Isso garante que o trace pare
+    quando houver uma descontinuidade física no cabo, mesmo que a fibra em si
+    não esteja diretamente no segmento rompido.
+    
+    Returns:
+        (is_intact, broken_segment, message)
+        - is_intact: True se o cabo está íntegro (sem segmentos BROKEN)
+        - broken_segment: O primeiro segmento rompido encontrado, se houver
+        - message: Mensagem descritiva do problema
+    """
+    cable = strand.tube.cable
+    
+    # Primeiro: se a fibra tem um segmento específico atribuído, verifica apenas ele
+    if strand.segment:
+        if strand.segment.status == CableSegment.STATUS_BROKEN:
+            return False, strand.segment, f"Segmento {strand.segment.name} está rompido"
+        return True, None, ""
+    
+    # Segundo: verifica se HÁ QUALQUER segmento BROKEN no cabo
+    # (isso cobre o caso de cabos partidos que ainda não têm segmentos atribuídos às fibras)
+    broken_segments = cable.segments.filter(status=CableSegment.STATUS_BROKEN).order_by('segment_number')
+    
+    if broken_segments.exists():
+        broken_seg = broken_segments.first()
+        return False, broken_seg, f"Rompimento detectado no cabo {cable.name} (segmento {broken_seg.name})"
+    
+    return True, None, ""
 
 
 class TraceStep(TypedDict):
@@ -96,6 +130,9 @@ def serialize_fiber_strand(strand: FiberStrand, step_num: int) -> TraceStep:
         fiber_loss = distance_km * Decimal('0.35')
     else:
         fiber_loss = Decimal('0')
+    
+    # Adicionar informação de status do segmento
+    segment_status = segment.status if segment else CableSegment.STATUS_ACTIVE
 
     return TraceStep(
         step_number=step_num,
@@ -191,6 +228,28 @@ def trace_direction(
 
     while current:
         if current.id in visited_fibers:
+            break
+        
+        # CRITICAL: Verificar integridade do cabo ANTES de adicionar ao trace
+        is_intact, broken_segment, error_msg = check_cable_integrity(current)
+        
+        if not is_intact:
+            # Adicionar passo indicando rompimento
+            path.append(TraceStep(
+                step_number=step_num,
+                type='broken_segment',
+                name=f"⚠️ ROMPIMENTO: {error_msg}",
+                details={
+                    'segment_id': broken_segment.id if broken_segment else None,
+                    'segment_name': broken_segment.name if broken_segment else None,
+                    'cable_id': current.tube.cable.id,
+                    'cable_name': current.tube.cable.name,
+                    'error': error_msg,
+                    'is_broken': True,
+                },
+                loss_db=None  # Perda infinita - luz não passa
+            ))
+            # PARAR o trace aqui - luz não continua
             break
 
         path.append(serialize_fiber_strand(current, step_num))

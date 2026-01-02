@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db import transaction, models
+from django.db import transaction
 
 if TYPE_CHECKING:
     from inventory.models import FiberCable, FiberInfrastructure, CableSegment
@@ -77,36 +77,46 @@ def split_segment_at_ceo(
         length_before = distance_from_start
         length_after = segment.length_meters - distance_from_start
         
+        original_end = segment.end_infrastructure
+
         # Renomear segmento existente (será o "antes")
         segment.name = f"{cable.name}-Seg{segment.segment_number}"
         segment.end_infrastructure = ceo
         segment.length_meters = length_before
         segment.save(update_fields=['name', 'end_infrastructure', 'length_meters'])
         
-        # Criar novo segmento (depois da CEO)
+        # CRITICAL: Renumerar segmentos posteriores ANTES de criar o novo
+        # Fazemos em ordem decrescente para evitar colisão de chave única
+        later_segments = (
+            CableSegment.objects.filter(
+                cable=cable,
+                segment_number__gt=segment.segment_number
+            )
+            .order_by('-segment_number')
+            .select_for_update()
+        )
+
+        for seg in later_segments:
+            seg.segment_number += 1
+            seg.save(update_fields=['segment_number'])
+        
+        # Criar novo segmento (depois da CEO) no número liberado
         seg_after = CableSegment.objects.create(
             cable=cable,
             segment_number=segment.segment_number + 1,
             name=f"{cable.name}-Seg{segment.segment_number + 1}",
             start_infrastructure=ceo,
-            end_infrastructure=segment.end_infrastructure,  # Herda destino original
+            end_infrastructure=original_end,
             length_meters=length_after
         )
-        
-        # Renumerar segmentos posteriores (se houver)
-        CableSegment.objects.filter(
-            cable=cable,
-            segment_number__gt=segment.segment_number
-        ).exclude(
-            id=seg_after.id
-        ).update(segment_number=models.F('segment_number') + 1)
         
         return segment, seg_after
 
 
 def auto_segment_cable_at_ceo(
     cable: 'FiberCable',
-    ceo: 'FiberInfrastructure'
+    ceo: 'FiberInfrastructure',
+    distance_meters: float = None
 ) -> tuple['CableSegment', 'CableSegment']:
     """
     Segmenta automaticamente um cabo ao adicionar CEO.
@@ -119,6 +129,8 @@ def auto_segment_cable_at_ceo(
     Args:
         cable: Cabo a ser segmentado
         ceo: CEO sendo adicionada
+        distance_meters: Distância da CEO ao longo do cabo (metros).
+                        Se None, tenta usar ceo.distance_from_origin
         
     Returns:
         Tupla (seg_entrada, seg_saida) para uso em fusões
@@ -129,8 +141,21 @@ def auto_segment_cable_at_ceo(
     if not cable.segments.exists():
         create_initial_segment(cable)
     
-    # 2. Calcular distância da CEO ao longo do cabo
-    distance = ceo.distance_from_origin
+    # 2. Obter distância da CEO ao longo do cabo
+    if distance_meters is None:
+        # Tentar usar campo da CEO se existir
+        distance = getattr(ceo, 'distance_from_origin', None)
+        if distance is None:
+            # Fallback: usar ponto médio do cabo
+            total_length = sum(seg.length_meters for seg in cable.segments.all())
+            distance = total_length / 2
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"CEO {ceo.name} sem distance_from_origin, usando ponto médio: {distance}m"
+            )
+    else:
+        distance = distance_meters
     
     # 3. Encontrar segmento que contém esta distância
     current_distance = 0
