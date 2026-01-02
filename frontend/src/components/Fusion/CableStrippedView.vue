@@ -39,7 +39,7 @@
             :class="[
               isSelected(strand) ? 'border-white scale-110 z-10 shadow-[0_0_8px_rgba(255,255,255,0.5)]' : 'border-transparent hover:border-gray-500',
               strand.is_fused_here && !isSelected(strand) ? 'opacity-60 cursor-not-allowed' : '',
-              isDuplicate(strand) ? 'opacity-30 cursor-default border-gray-700 hover:border-gray-700' : '',
+              isDuplicate(strand) ? 'ring-1 ring-gray-700 opacity-70' : '',
               (!strand.is_fused_here && (strand.fused_elsewhere || strand.fused_on_other_segment) && !isDuplicate(strand)) ? 'outline-dashed' : ''
             ]"
             :style="{ backgroundColor: strand.color_hex }"
@@ -103,7 +103,7 @@ const isSelected = (strand) => props.selectedId === strand.id
 const isDuplicate = (strand) => strand?.is_primary_render === false
 
 const onClick = (strand) => {
-  if (strand.is_fused_here || isDuplicate(strand)) return
+  if (strand.is_fused_here) return
   emit('select', strand.id)
 }
 </script>
