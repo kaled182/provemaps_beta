@@ -276,6 +276,9 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         parent_cable__isnull=True  # Only cables without parent (main cables)
     ).select_related(
         "origin_port__device__site", "destination_port__device__site"
+    ).prefetch_related(
+        "segments__start_infrastructure",
+        "segments__end_infrastructure"
     ).order_by("name")
     serializer_class = FiberCableSerializer
     permission_classes = [AllowAny]  # Allow public access for dashboard

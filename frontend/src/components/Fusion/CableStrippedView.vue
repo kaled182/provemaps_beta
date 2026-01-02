@@ -39,7 +39,7 @@
             :class="[
               isSelected(strand) ? 'border-white scale-110 z-10 shadow-[0_0_8px_rgba(255,255,255,0.5)]' : 'border-transparent hover:border-gray-500',
               strand.is_fused_here && !isSelected(strand) ? 'opacity-60 cursor-not-allowed' : '',
-              (!strand.is_fused_here && strand.fused_elsewhere) ? 'outline-dashed' : ''
+              (!strand.is_fused_here && (strand.fused_elsewhere || strand.fused_on_other_segment)) ? 'outline-dashed' : ''
             ]"
             :style="{ backgroundColor: strand.color_hex }"
             @click="onClick(strand)"
@@ -51,6 +51,12 @@
               <template v-else-if="strand.fused_elsewhere">
                 FO {{ strand.number }} - {{ strand.fusion_ceo ? ('Fusionada em ' + strand.fusion_ceo) : 'Fusionada em outra caixa' }}
               </template>
+              <template v-else-if="strand.fused_on_other_segment">
+                FO {{ strand.number }} - Fusionada na face
+                <span v-if="strand.blocked_segment_direction === 'IN'">de entrada</span>
+                <span v-else-if="strand.blocked_segment_direction === 'OUT'">de saída</span>
+                <span v-else>oposta</span>
+              </template>
               <template v-else>
                 FO {{ strand.number }} - {{ strand.status || 'Livre' }}
               </template>
@@ -59,7 +65,7 @@
             <div v-if="strand.is_fused_here" class="absolute inset-0 flex items-center justify-center">
               <div class="w-1.5 h-1.5 bg-orange-500 rounded-full shadow-[0_0_4px_rgba(251,146,60,0.8)]"></div>
             </div>
-            <div v-else-if="strand.fused_elsewhere" class="absolute inset-0 pointer-events-none">
+            <div v-else-if="strand.fused_elsewhere || strand.fused_on_other_segment" class="absolute inset-0 pointer-events-none">
               <div class="absolute inset-0 border-2 border-gray-500 border-dashed rounded-full"></div>
             </div>
           </div>

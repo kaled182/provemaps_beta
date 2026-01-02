@@ -980,27 +980,21 @@ const actionSplitCable = async () => {
         return;
       }
       
-      // AMBAS as pontas na MESMA CEO - fazer split permanente em 2 cabos!
-      console.log('[Split] AMBAS as pontas fixadas em', m1.ceoData.name, '- iniciando split permanente');
+      // AMBAS as pontas na MESMA CEO - fazer split permanente em segmentos!
+      console.log('[Split] AMBAS as pontas fixadas em', m1.ceoData.name, '- iniciando split V2');
       
       try {
-        const splitPayload = {
-          cable_id: parseInt(id),
-          ceo_id: m1.ceoData.id,
-          split_point: {
-            lat: m1.ceoData.lat,
-            lng: m1.ceoData.lng
-          }
-        };
-        console.log('[Split] Payload do split:', splitPayload);
+        console.log('[Split] Chamando endpoint V2 para CEO', m1.ceoData.id);
         
-        const response = await api.post('/api/v1/inventory/cables/split-at-ceo/', splitPayload);
+        const response = await api.post(`/api/v1/inventory/cables/${parseInt(id)}/split-at-ceo-v2/`, {
+          ceo_id: m1.ceoData.id
+        });
         
-        console.log('[Split] Split permanente concluído:', response);
+        console.log('[Split] Segmentação concluída (V2):', response);
         
         showNotification(
-          'Cabo Partido com Sucesso!',
-          `Cabo ${response.original_cable.name} rompido. Criadas 2 extremidades: ${response.cable_a.name} (ID ${response.cable_a.id}) e ${response.cable_b.name} (ID ${response.cable_b.id}).`,
+          'Cabo Segmentado com Sucesso!',
+          `Segmentos criados: ${response.segments.before.name} e ${response.segments.after.name}. CEO ${m1.ceoData.name} agora separa o cabo.`,
           'success'
         );
         
@@ -1014,17 +1008,10 @@ const actionSplitCable = async () => {
         
         splitMarkers.value = { marker1: null, marker2: null };
 
-        const currentZoom =
-          mapInstance.value && typeof mapInstance.value.getZoom === 'function'
-            ? mapInstance.value.getZoom()
-            : null;
-        const focusZoom = currentZoom !== null ? Math.max(currentZoom, 17) : 17;
-
-        await loadCableData({
-          preserveViewport: true,
-          focusPosition: { lat: m1.ceoData.lat, lng: m1.ceoData.lng },
-          focusZoom,
-        });
+        // Reload da página para mostrar segmentos
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
         
       } catch (err) {
         console.error('[Split] Erro ao fazer split permanente:', err);
@@ -1729,6 +1716,11 @@ const saveChanges = async () => {
       `${result.points} pontos\n${result.length_km} km`,
       'success'
     );
+    
+    // Reload da página para atualizar mapa
+    setTimeout(() => {
+      window.location.reload();
+    }, 2000);
   } catch (err) {
     console.error('[FiberRouteEditor] Erro ao salvar traçado', err);
     showNotification(
@@ -1860,14 +1852,16 @@ const confirmDeleteInfrastructure = async (point) => {
       
       console.log('[FiberRouteEditor] Infrastructure deleted', point.id);
       
-      // Recarregar dados para atualizar sidebar e mapa
-      await loadCableData({ preserveViewport: true });
-      
       showNotification(
         'Sucesso!',
         'Infraestrutura removida com sucesso.',
         'success'
       );
+      
+      // Reload da página para atualizar mapa
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
     } catch (err) {
       console.error('[FiberRouteEditor] Erro ao excluir infraestrutura', err);
       showNotification(
@@ -1947,13 +1941,16 @@ const actionConvertSlackToCEO = async () => {
       
       console.log('[FiberRouteEditor] Converted slack to CEO', result);
       
-      await loadCableData({ preserveViewport: true });
-      
       showNotification(
         'Conversão Concluída!',
         'Reserva Técnica convertida em CEO com sucesso.',
         'success'
       );
+      
+      // Reload da página para atualizar mapa
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
     } catch (err) {
       console.error('[FiberRouteEditor] Erro ao converter', err);
       showNotification(
@@ -2002,39 +1999,37 @@ const actionSplitCableAtCEO = async () => {
   closeContextMenu();
   
   // Confirmação
-  const confirmMsg = `Romper o cabo "${cable.value?.name}" na CEO "${ceo.name}"?\n\n` +
-    `Isso criará 2 cabos:\n` +
-    `• Segmento A: Da origem até ${ceo.name}\n` +
-    `• Segmento B: De ${ceo.name} até o destino\n\n` +
-    `Esta ação não pode ser desfeita.`;
+  const confirmMsg = `Segmentar o cabo "${cable.value?.name}" na CEO "${ceo.name}"?\n\n` +
+    `Isso criará segmentos lógicos:\n` +
+    `• Segmento 1: Da origem até ${ceo.name}\n` +
+    `• Segmento BROKEN: Marcador de rompimento em ${ceo.name}\n` +
+    `• Segmento 2: De ${ceo.name} até o destino\n\n` +
+    `O cabo permanece o mesmo, mas será dividido em segmentos para trace route.`;
   
   if (!confirm(confirmMsg)) return;
   
   try {
-    console.log('[FiberRouteEditor] Rompendo cabo na CEO', ceo.name, ceo.id);
+    console.log('[FiberRouteEditor] Rompendo cabo na CEO (V2)', ceo.name, ceo.id);
     
-    const response = await api.post('/api/v1/inventory/cables/split-at-ceo/', {
-      cable_id: parseInt(id),
-      ceo_id: ceo.id,
-      split_point: {
-        lat: ceo.location.coordinates[1],
-        lng: ceo.location.coordinates[0]
-      }
+    const response = await api.post(`/api/v1/inventory/cables/${parseInt(id)}/split-at-ceo-v2/`, {
+      ceo_id: ceo.id
     });
     
-    console.log('[FiberRouteEditor] Cabo rompido com sucesso', response);
+    console.log('[FiberRouteEditor] Cabo rompido com sucesso (V2)', response);
     
     showNotification(
-      'Cabo Rompido!',
-      `${response.cable_a.name} (${response.cable_a.length_km}km) e ${response.cable_b.name} (${response.cable_b.length_km}km) criados.`,
+      'Cabo Segmentado!',
+      `Segmentos criados com sucesso. CEO ${ceo.name} agora separa o cabo.`,
       'success'
     );
     
-    // Recarregar dados do cabo
-    await loadCableData({ preserveViewport: true });
+    // Reload da página para mostrar segmentos
+    setTimeout(() => {
+      window.location.reload();
+    }, 2000);
     
   } catch (err) {
-    console.error('[FiberRouteEditor] Erro ao romper cabo na CEO', err);
+    console.error('[FiberRouteEditor] Erro ao romper cabo na CEO (V2)', err);
     showNotification(
       'Erro ao Romper Cabo',
       err?.response?.data?.error || err?.message || 'Erro desconhecido',
@@ -2082,6 +2077,11 @@ const onKmlSelected = async (evt) => {
         `${result.points} pontos\n${result.length_km} km`,
         'success'
       );
+      
+      // Reload da página para atualizar mapa
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
     } else {
       showNotification(
         'Aviso',

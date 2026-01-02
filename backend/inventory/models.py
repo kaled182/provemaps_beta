@@ -993,6 +993,15 @@ class CableSegment(models.Model):
     
     Na CEO-01, fusões acontecem entre Seg1 e Seg2 (não "consigo mesmo").
     """
+    STATUS_ACTIVE = 'active'
+    STATUS_BROKEN = 'broken'
+    STATUS_INACTIVE = 'inactive'
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, 'Ativo'),
+        (STATUS_BROKEN, 'Rompido'),
+        (STATUS_INACTIVE, 'Inativo'),
+    ]
+    
     cable = models.ForeignKey(
         FiberCable,
         on_delete=models.CASCADE,
@@ -1005,6 +1014,12 @@ class CableSegment(models.Model):
     name = models.CharField(
         max_length=200,
         help_text='Ex: Cabo-Principal-Seg1'
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_ACTIVE,
+        help_text='Status físico do segmento (ativo, rompido, inativo)'
     )
     
     # Infraestruturas de início e fim

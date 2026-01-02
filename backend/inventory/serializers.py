@@ -15,6 +15,7 @@ from inventory.models import (
     DeviceGroup,
     Port,
     FiberCable,
+    CableSegment,
     FiberProfile,
     BufferTube,
     FiberStrand,
@@ -78,6 +79,62 @@ class SiteSerializer(serializers.ModelSerializer[Site]):
             "device_count",
         ]
         read_only_fields = ["id", "slug"]
+
+
+class CableSegmentSerializer(serializers.ModelSerializer[CableSegment]):
+    """Serializer for cable segments with infrastructure references"""
+    
+    start_infra_name = serializers.CharField(
+        source="start_infrastructure.name", read_only=True, allow_null=True
+    )
+    end_infra_name = serializers.CharField(
+        source="end_infrastructure.name", read_only=True, allow_null=True
+    )
+    start_infra_location = serializers.SerializerMethodField()
+    end_infra_location = serializers.SerializerMethodField()
+    status_display = serializers.CharField(
+        source="get_status_display", read_only=True
+    )
+    
+    def get_start_infra_location(self, obj: CableSegment) -> dict[str, float] | None:
+        """Return lat/lng for start infrastructure"""
+        infra = obj.start_infrastructure
+        if infra and infra.location:
+            try:
+                return {"lat": infra.location.y, "lng": infra.location.x}
+            except Exception:
+                return None
+        return None
+    
+    def get_end_infra_location(self, obj: CableSegment) -> dict[str, float] | None:
+        """Return lat/lng for end infrastructure"""
+        infra = obj.end_infrastructure
+        if infra and infra.location:
+            try:
+                return {"lat": infra.location.y, "lng": infra.location.x}
+            except Exception:
+                return None
+        return None
+    
+    class Meta:
+        model = CableSegment
+        fields = [
+            "id",
+            "segment_number",
+            "name",
+            "status",
+            "status_display",
+            "start_infrastructure",
+            "start_infra_name",
+            "start_infra_location",
+            "end_infrastructure",
+            "end_infra_name",
+            "end_infra_location",
+            "length_meters",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
 
 
 class DeviceGroupSerializer(serializers.ModelSerializer[DeviceGroup]):
@@ -227,6 +284,9 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
     site_a_location = serializers.SerializerMethodField()
     site_b_location = serializers.SerializerMethodField()
     infrastructure_points = serializers.SerializerMethodField()
+    
+    # Segments (when cable is split)
+    segments = CableSegmentSerializer(many=True, read_only=True)
     
     def get_site_a_name(self, obj: FiberCable) -> str | None:
         """Get site A name from site_a or origin_port.device.site"""
@@ -392,6 +452,8 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
             "path_coordinates",
             # Infraestrutura
             "infrastructure_points",
+            # Segments
+            "segments",
             # Metadata
             "length_km",
             "status",
