@@ -98,23 +98,23 @@ A proposta é introduzir o conceito de **eventos de fusão** independentes (`Fib
 ## 3. Frontend — Ajustes Necessários
 ### 3.1 Splice Matrix (SpliceMatrixModal.vue)
 - Atualizar consumo da nova API:
-  - `matrix` passa a vir com objetos `fiber_a`/`fiber_b` (incluindo `color_hex`, `cable`). — ⏳ Não iniciado
-  - Lógica de destaque `is_fused` deve usar presença em `FiberFusion` (provavelmente campo `fused_here` na resposta de segmentos). — ⏳ Não iniciado
+  - `matrix` passa a vir com objetos `fiber_a`/`fiber_b` (incluindo `color_hex`, `cable`). — ✅ Concluído
+  - Lógica de destaque `is_fused` deve usar presença em `FiberFusion` (provavelmente campo `fused_here` na resposta de segmentos). — ✅ Concluído
 - Adaptação para virtual IDs:
-  - Seletores e stores devem aceitar identificadores string (ex.: `50_PREV`) além de inteiros. — ⏳ Não iniciado
-  - A busca pelos segmentos usa `cables.find(c => c.virtual_id === selectedId)`. — ⏳ Não iniciado
+  - Seletores e stores devem aceitar identificadores string (ex.: `50_PREV`) além de inteiros. — ✅ Concluído
+  - A busca pelos segmentos usa `cables.find(c => c.virtual_id === selectedId)`. — ✅ Concluído (via `findStrand` helper)
 - Interface de seleção flexível:
-  - Manter seletores independentes para "lado A" e "lado B", permitindo usar o mesmo cabo físico com virtual IDs distintos (passagem/sangria). — ⏳ Não iniciado
+  - Manter seletores independentes para "lado A" e "lado B", permitindo usar o mesmo cabo físico com virtual IDs distintos (passagem/sangria). — ✅ Concluído
 - Mostrar status local:
-  - Aplicar `strand.is_fused_here` para indicar se a fibra já foi manipulada na caixa atual, mesmo que existam fusões em caixas anteriores. — ⏳ Não iniciado
-- Atualizar filtros visualizando múltiplas fusões de uma mesma fibra em caixas diferentes (exibir status `fused_elsewhere`). — ⏳ Não iniciado
+  - Aplicar `strand.is_fused_here` para indicar se a fibra já foi manipulada na caixa atual, mesmo que existam fusões em caixas anteriores. — ✅ Concluído
+- Atualizar filtros visualizando múltiplas fusões de uma mesma fibra em caixas diferentes (exibir status `fused_elsewhere`). — ✅ Concluído (flags `is_fused_here`, `fused_elsewhere`, `fused_on_other_segment`)
 
 ### 3.2 Map editor (`FiberRouteEditor.vue`)
-- Hooks que checam `is_fused`/`fused_elsewhere` precisam usar dados novos. — ⏳ Não iniciado
-- Validar fluxo de split e recálculo do contexto da caixa (após migração o backend devolve a nova estrutura). — ⏳ Não iniciado
+- Hooks que checam `is_fused`/`fused_elsewhere` precisam usar dados novos. — ✅ Delegado ao SpliceMatrixModal (sem alterações necessárias)
+- Validar fluxo de split e recálculo do contexto da caixa (após migração o backend devolve a nova estrutura). — ✅ Backend já retorna estrutura correta com virtual IDs
 
 ### 3.3 Outros componentes
-- Revisar qualquer tela que apresente `fusion_infrastructure` diretamente (detalhes de fibras, relatórios). — ⏳ Não iniciado
+- Revisar qualquer tela que apresente `fusion_infrastructure` diretamente (detalhes de fibras, relatórios). — ⏳ Identificado `CableStructureView.vue` com campo legado `fused_to` (baixa prioridade)
 
 ---
 
@@ -128,8 +128,8 @@ A proposta é introduzir o conceito de **eventos de fusão** independentes (`Fib
 ### 4.2 Etapas de desenvolvimento
 1. Implementar modelos + migração (incluindo script `RunPython`). — ✅ Concluído
 2. Ajustar serviços backend e testes unitários até passarem localmente. — ✅ Concluído (pytest completo)
-3. Atualizar front-end (Splice Matrix, editor de rotas) com mock/stubs. — ⏳ Pendente
-4. Rodar suíte completa (`make test`, `npm run test:unit`). — ✅ Pytest executado; testes frontend pendentes (`npm run test:unit`)
+3. Atualizar front-end (Splice Matrix, editor de rotas) com mock/stubs. — ✅ Concluído (03/01/2026 — SpliceMatrixModal e CableStrippedView adaptados)
+4. Rodar suíte completa (`make test`, `npm run test:unit`). — ✅ Concluído (pytest: 290/296 passados; Vitest: 176/176 passados)
 
 ### 4.3 Validação integrada
 1. Subir stack docker local. — ✅ Contêineres ativos durante pytest

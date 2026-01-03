@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Tuple, cast
 
 from integrations.zabbix.zabbix_service import zabbix_request
+from inventory.models import CableSegment
 
 __all__ = [
     "fetch_interface_status_advanced",
@@ -225,6 +226,42 @@ def combine_cable_status(origin_status: str, dest_status: str) -> str:
 
 
 def evaluate_cable_status_for_cable(cable: Any) -> Dict[str, Any]:
+    # Verificação prioritária: segmentos físicos rompidos
+    broken_segment = (
+        cable.segments
+        .filter(
+            status__in=[
+                CableSegment.STATUS_BROKEN,
+                "broken",
+                "BROKEN",
+                "cut",
+                "CUT",
+                "rompeu",
+                "ROMPEU",
+            ]
+        )
+        .order_by('segment_number')
+        .first()
+    )
+
+    if broken_segment is not None:
+        origin_reason = {
+            "method": "cable_segment_status",
+            "segment_id": broken_segment.id,
+            "segment_name": broken_segment.name,
+            "segment_status": broken_segment.status,
+        }
+        dest_reason = dict(origin_reason)
+        return {
+            "origin_status": "down",
+            "destination_status": "down",
+            "origin_reason": origin_reason,
+            "destination_reason": dest_reason,
+            "combined_status": "down",
+            "previous_status": cable.status,
+            "changed": cable.status != "down",
+        }
+
     origin_device = cable.origin_port.device
     dest_device = cable.destination_port.device
     origin_status, origin_reason = fetch_interface_status_advanced(
