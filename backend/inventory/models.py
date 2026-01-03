@@ -32,8 +32,20 @@ except (ImportError, ImproperlyConfigured):
             kwargs.setdefault("blank", True)
             super().__init__(*args, **kwargs)
 
+    class _FallbackPointField(LenientJSONField):
+        description = "Fallback Point storage when GDAL is unavailable"
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            # Drop spatial-only kwargs so JSONField can initialize cleanly.
+            for unsupported_key in ("srid", "geography", "spatial_index", "dim"):
+                kwargs.pop(unsupported_key, None)
+            kwargs.setdefault("null", True)
+            kwargs.setdefault("blank", True)
+            super().__init__(*args, **kwargs)
+
     class _FallbackGISModule:  # minimal shim with the attribute we need
         LineStringField = _FallbackLineStringField
+        PointField = _FallbackPointField
 
     gis_models = _FallbackGISModule()  # type: ignore[assignment]
 

@@ -21,6 +21,17 @@ from django.db.models import Q
 from inventory.models import FiberFusion, FiberStrand, Port, CableSegment
 
 
+BROKEN_STATUSES = {
+    CableSegment.STATUS_BROKEN,
+    "broken",
+    "BROKEN",
+    "cut",
+    "CUT",
+    "rompeu",
+    "ROMPEU",
+}
+
+
 def check_cable_integrity(strand: FiberStrand) -> tuple[bool, CableSegment | None, str]:
     """
     Verifica se o cabo da fibra possui algum segmento rompido.
@@ -40,13 +51,27 @@ def check_cable_integrity(strand: FiberStrand) -> tuple[bool, CableSegment | Non
     
     # Primeiro: se a fibra tem um segmento específico atribuído, verifica apenas ele
     if strand.segment:
-        if strand.segment.status == CableSegment.STATUS_BROKEN:
+        segment_status = (strand.segment.status or "").lower()
+        if segment_status in BROKEN_STATUSES:
             return False, strand.segment, f"Segmento {strand.segment.name} está rompido"
         return True, None, ""
     
     # Segundo: verifica se HÁ QUALQUER segmento BROKEN no cabo
     # (isso cobre o caso de cabos partidos que ainda não têm segmentos atribuídos às fibras)
-    broken_segments = cable.segments.filter(status=CableSegment.STATUS_BROKEN).order_by('segment_number')
+    broken_segments = (
+        cable.segments.filter(
+            status__in=[
+                CableSegment.STATUS_BROKEN,
+                "broken",
+                "BROKEN",
+                "cut",
+                "CUT",
+                "rompeu",
+                "ROMPEU",
+            ]
+        )
+        .order_by('segment_number')
+    )
     
     if broken_segments.exists():
         broken_seg = broken_segments.first()
@@ -244,6 +269,26 @@ def trace_direction(
                     'segment_name': broken_segment.name if broken_segment else None,
                     'cable_id': current.tube.cable.id,
                     'cable_name': current.tube.cable.name,
+                    'start_infrastructure_id': (
+                        broken_segment.start_infrastructure_id
+                        if broken_segment
+                        else None
+                    ),
+                    'start_infrastructure_name': (
+                        broken_segment.start_infrastructure.name
+                        if broken_segment and broken_segment.start_infrastructure
+                        else None
+                    ),
+                    'end_infrastructure_id': (
+                        broken_segment.end_infrastructure_id
+                        if broken_segment
+                        else None
+                    ),
+                    'end_infrastructure_name': (
+                        broken_segment.end_infrastructure.name
+                        if broken_segment and broken_segment.end_infrastructure
+                        else None
+                    ),
                     'error': error_msg,
                     'is_broken': True,
                 },
@@ -467,6 +512,24 @@ def trace_fiber_route(request: Request) -> Response:
     
     # Calculate power budget
     power_budget = calculate_power_budget(full_path)
+
+    broken_step = next(
+        (step for step in full_path if step["type"] == "broken_segment"),
+        None,
+    )
+
+    if broken_step:
+        power_budget.update(
+            {
+                "status": "FAILED",
+                "is_viable": False,
+                "available_margin_db": 0.0,
+                "message": broken_step["name"],
+            }
+        )
+        trace_status = "BROKEN"
+    else:
+        trace_status = power_budget["status"]
     
     # Generate trace ID
     import time
@@ -482,7 +545,10 @@ def trace_fiber_route(request: Request) -> Response:
         'fusion_count': power_budget['fusion_count'],
         'connector_count': power_budget['connector_count'],
         'power_budget': power_budget,
-        'status': power_budget['status'],
+        'status': trace_status,
     }
+
+    if broken_step:
+        result['broken_segment'] = broken_step['details']
     
     return Response(result)

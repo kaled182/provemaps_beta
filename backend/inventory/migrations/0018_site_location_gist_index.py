@@ -3,6 +3,23 @@
 from django.db import migrations
 
 
+def create_site_location_index(apps, schema_editor):
+    if schema_editor.connection.vendor != "postgresql":
+        return
+
+    schema_editor.execute(
+        'CREATE INDEX IF NOT EXISTS idx_site_location '
+        'ON zabbix_api_site USING GIST (location);'
+    )
+
+
+def drop_site_location_index(apps, schema_editor):
+    if schema_editor.connection.vendor != "postgresql":
+        return
+
+    schema_editor.execute('DROP INDEX IF EXISTS idx_site_location;')
+
+
 class Migration(migrations.Migration):
     """
     Create GIST index on Site.location for O(log n) spatial queries.
@@ -16,11 +33,8 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            sql=(
-                'CREATE INDEX idx_site_location '
-                'ON zabbix_api_site USING GIST (location);'
-            ),
-            reverse_sql='DROP INDEX IF EXISTS idx_site_location;'
+        migrations.RunPython(
+            create_site_location_index,
+            reverse_code=drop_site_location_index,
         ),
     ]

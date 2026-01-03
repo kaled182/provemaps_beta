@@ -34,7 +34,7 @@
         <div class="flex flex-wrap gap-1.5 flex-1 py-1 px-2 bg-gray-800/50 rounded-r-sm items-center">
           <div 
             v-for="strand in tube.strands" 
-            :key="strand.id"
+            :key="`${strand.id}-${segmentVirtualId}`"
             class="w-5 h-5 rounded-full cursor-pointer border-2 transition-all duration-150 relative group"
             :class="[
               isSelected(strand) ? 'border-white scale-110 z-10 shadow-[0_0_8px_rgba(255,255,255,0.5)]' : 'border-transparent hover:border-gray-500',
@@ -82,7 +82,16 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-const props = defineProps(['cable', 'selectedId'])
+const props = defineProps({
+  cable: {
+    type: Object,
+    required: true
+  },
+  selected: {
+    type: Object,
+    default: null
+  }
+})
 const emit = defineEmits(['select'])
 
 const expanded = ref(true)
@@ -98,12 +107,26 @@ const segmentType = computed(() => {
 
 const isIncoming = computed(() => segmentType.value === 'IN')
 
-const isSelected = (strand) => props.selectedId === strand.id
+const segmentVirtualId = computed(() => {
+  const cable = props.cable || {}
+  return cable.virtual_id || String(cable.id || '')
+})
+
+const isSelected = (strand) => {
+  if (!props.selected) return false
+  if (props.selected.fiberId !== strand.id) return false
+  if (!props.selected.virtualId) return true
+  return props.selected.virtualId === segmentVirtualId.value
+}
 
 const isDuplicate = (strand) => strand?.is_primary_render === false
 
 const onClick = (strand) => {
   if (strand.is_fused_here) return
-  emit('select', strand.id)
+  emit('select', {
+    fiberId: strand.id,
+    virtualId: segmentVirtualId.value,
+    strand
+  })
 }
 </script>

@@ -69,10 +69,10 @@
           </div>
           <div class="flex-1 overflow-y-auto p-3 custom-scrollbar">
             <CableStrippedView 
-              v-for="cable in cablesDirecaoA" 
-              :key="cable.unique_id || cable.id"
-              :cable="cable"
-              :selected-id="selection.a"
+              v-for="segment in cablesDirecaoA" 
+              :key="segment.virtual_id || `${segment.id}-IN`"
+              :cable="segment"
+              :selected="selection.a"
               @select="selectFiber('a', $event)"
             />
           </div>
@@ -179,10 +179,10 @@
           </div>
           <div class="flex-1 overflow-y-auto p-3 custom-scrollbar">
             <CableStrippedView 
-              v-for="cable in cablesDirecaoB" 
-              :key="cable.unique_id || (cable.id + '_direcao_b')" 
-              :cable="cable"
-              :selected-id="selection.b"
+              v-for="segment in cablesDirecaoB" 
+              :key="segment.virtual_id || `${segment.id}-OUT`" 
+              :cable="segment"
+              :selected="selection.b"
               @select="selectFiber('b', $event)"
             />
           </div>
@@ -209,7 +209,10 @@ const matrix = ref({})
 const template = reactive({ max_trays: 1, splices_per_tray: 24, manufacturer: 'Fibracem', name: 'SVT' })
 const boxName = ref('CEO')
 const cables = ref([])
-const selection = reactive({ a: null, b: null, aCable: null, bCable: null })
+const selection = reactive({
+  a: null,
+  b: null,
+})
 
 const segmentKind = (segment) => {
   if (!segment) return 'UNKNOWN'
@@ -297,33 +300,38 @@ const nomeDirecaoB = computed(() => {
   return 'Direção B'
 })
 
-const resolveCableId = (fiberId) => {
-  if (!fiberId) return null
-  for (const cable of cables.value) {
-    for (const tube of cable.tubes || []) {
+const segmentVirtualId = (segment) => segment?.virtual_id || String(segment?.id || '')
+
+const findStrand = (fiberId, virtualId = null) => {
+  for (const segment of cables.value) {
+    if (virtualId && segmentVirtualId(segment) !== virtualId) {
+      continue
+    }
+    for (const tube of segment.tubes || []) {
       for (const strand of tube.strands || []) {
-        if (strand.id === fiberId) return cable.id
+        if (strand.id === fiberId) {
+          return { strand, segment }
+        }
       }
     }
   }
   return null
 }
 
-// Extrai o real_id de uma fibra (remove sufixo _attachmentId)
-const getRealFiberId = (virtualId) => {
-  if (!virtualId) return null
-  
-  // Buscar nos cabos pelo ID virtual
-  for (const cable of cables.value) {
-    for (const tube of cable.tubes || []) {
-      for (const strand of tube.strands || []) {
-        if (strand.id === virtualId) {
-          return strand.real_id || virtualId  // Usar real_id se existir
-        }
-      }
-    }
+const buildSelectionEntry = (payload) => {
+  if (!payload || !payload.fiberId) return null
+  const virtualId = payload.virtualId || null
+  return {
+    fiberId: payload.fiberId,
+    virtualId,
   }
-  return virtualId  // Fallback
+}
+
+const getRealFiberId = (selectionEntry) => {
+  if (!selectionEntry || !selectionEntry.fiberId) return null
+  const found = findStrand(selectionEntry.fiberId, selectionEntry.virtualId)
+  if (found?.strand?.real_id) return found.strand.real_id
+  return selectionEntry.fiberId
 }
 
 const formatDirection = (fiber) => {
@@ -349,9 +357,8 @@ const formatTooltip = (fiber) => {
 }
 
 const canFuse = computed(() => {
-  // Apenas verifica se duas fibras foram selecionadas
-  // Permite: mesma cor, mesmo cabo, refusão - sem restrições
-  return !!(selection.a && selection.b)
+  // Permite qualquer combinação desde que ambas as seleções existam
+  return Boolean(selection.a?.fiberId && selection.b?.fiberId)
 })
 
 // Computed: Contar uso de bandeja
@@ -397,6 +404,13 @@ const loadData = async () => {
     }
     
     cables.value = cablesData
+
+    if (selection.a && !findStrand(selection.a.fiberId, selection.a.virtualId)) {
+      selection.a = null
+    }
+    if (selection.b && !findStrand(selection.b.fiberId, selection.b.virtualId)) {
+      selection.b = null
+    }
     
   } catch (error) {
     console.error('[SpliceMatrixModal] Erro ao carregar dados:', error)
@@ -411,18 +425,19 @@ const getSlotData = (slot) => {
   return matrix.value[`${activeTray.value}-${slot}`]
 }
 
-const selectFiber = (side, fiberId) => {
-  if (selection[side] === fiberId) {
+const selectFiber = (side, payload) => {
+  const normalized = buildSelectionEntry(payload)
+  const current = selection[side]
+  if (
+    current &&
+    normalized &&
+    current.fiberId === normalized.fiberId &&
+    (current.virtualId || null) === (normalized.virtualId || null)
+  ) {
     selection[side] = null
-    if (side === 'a') selection.aCable = null
-    else selection.bCable = null
     return
   }
-  selection[side] = fiberId
-  const cableId = resolveCableId(fiberId)
-  if (side === 'a') selection.aCable = cableId
-  else selection.bCable = cableId
-  console.debug('[SpliceMatrixModal] seleção', side, 'fiber', fiberId, 'cable', cableId)
+  selection[side] = normalized
 }
 
 const fuseNextAvailable = async () => {
@@ -454,17 +469,9 @@ const performFusion = async (slot) => {
     return
   }
   try {
-    // Extrair IDs reais (remover sufixo virtual _attachmentId)
     const realFiberA = getRealFiberId(selection.a)
     const realFiberB = getRealFiberId(selection.b)
-    
-    console.debug('[SpliceMatrixModal] Fusão:', {
-      virtual_a: selection.a,
-      virtual_b: selection.b,
-      real_a: realFiberA,
-      real_b: realFiberB
-    })
-    
+
     await api.post('/api/v1/inventory/fusions/', {
       infrastructure_id: props.infraPoint.id,
       tray: activeTray.value,
@@ -476,8 +483,6 @@ const performFusion = async (slot) => {
     // Reset e Reload
     selection.a = null
     selection.b = null
-    selection.aCable = null
-    selection.bCable = null
     await loadData()
     
   } catch (e) {
