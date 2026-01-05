@@ -1,22 +1,22 @@
 <template>
   <div class="h-full min-h-0 flex flex-col gap-3">
-    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-3 flex flex-col md:flex-row gap-3 items-center justify-between">
+  <div class="app-surface rounded-xl p-3 flex flex-col md:flex-row gap-3 items-center justify-between">
       <div class="relative w-full md:w-2/5 lg:w-1/3">
-        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+        <span class="absolute left-3 top-1/2 -translate-y-1/2 app-text-tertiary">
           <i class="fas fa-search"></i>
         </span>
         <input
           v-model="searchQuery"
           type="text"
           placeholder="Buscar sites..."
-          class="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm"
+          class="w-full pl-9 pr-3 py-2 rounded-lg outline-none transition-all text-sm app-input"
         />
       </div>
 
       <div class="flex items-center gap-2 w-full md:w-auto justify-end">
         <select
           v-model="typeFilter"
-          class="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer text-sm"
+          class="px-3 py-2 rounded-lg outline-none cursor-pointer text-sm app-input"
         >
           <option value="all">Todos os Tipos</option>
           <option value="pop">POP</option>
@@ -25,16 +25,16 @@
           <option value="hub">Hub</option>
         </select>
 
-        <div class="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
+        <div class="flex app-surface-muted p-1 rounded-lg">
           <button
             @click="viewMode = 'grid'"
-            :class="['p-2 rounded-md transition-all', viewMode === 'grid' ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-400 hover:text-gray-600']"
+            :class="['p-2 rounded-md transition-all app-text-tertiary', viewMode === 'grid' ? 'app-surface app-text-primary shadow-sm' : 'app-text-tertiary']"
           >
             <i class="fas fa-th-large"></i>
           </button>
           <button
             @click="viewMode = 'list'"
-            :class="['p-2 rounded-md transition-all', viewMode === 'list' ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-400 hover:text-gray-600']"
+            :class="['p-2 rounded-md transition-all app-text-tertiary', viewMode === 'list' ? 'app-surface app-text-primary shadow-sm' : 'app-text-tertiary']"
           >
             <i class="fas fa-list"></i>
           </button>
@@ -44,13 +44,13 @@
 
     <div v-if="loading" class="flex-1 flex items-center justify-center">
       <div class="text-center">
-        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p class="text-gray-500 dark:text-gray-400">Carregando estrutura...</p>
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4 app-spinner"></div>
+        <p class="app-text-tertiary">Carregando estrutura...</p>
       </div>
     </div>
 
     <div v-else class="flex-1 min-h-0 flex flex-col gap-3 overflow-auto inventory-scroll">
-      <div v-if="errorMessage" class="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-200 border border-red-200 dark:border-red-800 px-4 py-3 rounded-lg">
+      <div v-if="errorMessage" class="px-4 py-3 rounded-lg app-text-secondary" style="background: var(--danger-soft-bg); border: 1px solid var(--accent-danger); color: var(--accent-danger);">
         {{ errorMessage }}
       </div>
 
@@ -64,46 +64,46 @@
           @view="goToDetails"
         />
 
-        <div v-if="filteredSites.length === 0" class="col-span-full flex flex-col items-center justify-center py-20 text-gray-400">
+        <div v-if="filteredSites.length === 0" class="col-span-full flex flex-col items-center justify-center py-20 app-text-tertiary">
           <i class="fas fa-map-marker-alt text-5xl mb-4 opacity-20"></i>
           <p>Nenhum site encontrado com estes filtros.</p>
         </div>
       </div>
 
-      <div v-else class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex-1 min-h-0 overflow-hidden flex flex-col">
+      <div v-else class="app-surface rounded-xl flex-1 min-h-0 overflow-hidden flex flex-col">
         <div class="overflow-auto flex-1">
           <table class="w-full text-left border-collapse">
-            <thead class="bg-gray-50 dark:bg-gray-700/50 sticky top-0 z-10">
+            <thead class="app-surface-muted sticky top-0 z-10">
               <tr>
-                <th class="p-4 text-xs font-semibold text-gray-500 uppercase">Nome</th>
-                <th class="p-4 text-xs font-semibold text-gray-500 uppercase">Tipo</th>
-                <th class="p-4 text-xs font-semibold text-gray-500 uppercase">Endereço</th>
-                <th class="p-4 text-xs font-semibold text-gray-500 uppercase text-center">Devices</th>
-                <th class="p-4 text-xs font-semibold text-gray-500 uppercase text-right">Ações</th>
+                <th class="p-4 text-xs font-semibold app-text-tertiary uppercase">Nome</th>
+                <th class="p-4 text-xs font-semibold app-text-tertiary uppercase">Tipo</th>
+                <th class="p-4 text-xs font-semibold app-text-tertiary uppercase">Endereço</th>
+                <th class="p-4 text-xs font-semibold app-text-tertiary uppercase text-center">Devices</th>
+                <th class="p-4 text-xs font-semibold app-text-tertiary uppercase text-right">Ações</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-              <tr v-for="site in filteredSites" :key="site.id" class="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                <td class="p-4 font-medium text-gray-900 dark:text-white">{{ site.name }}</td>
+              <tr v-for="site in filteredSites" :key="site.id" class="transition-colors app-row">
+                <td class="p-4 font-medium app-text-primary">{{ site.name }}</td>
                 <td class="p-4">
                   <span :class="getTypeClass(site.type)" class="px-2 py-1 rounded-full text-xs font-medium capitalize">
                     {{ site.type || 'Geral' }}
                   </span>
                 </td>
-                <td class="p-4 text-gray-500 dark:text-gray-400 text-sm">{{ site.address }}</td>
+                <td class="p-4 app-text-tertiary text-sm">{{ site.address }}</td>
                 <td class="p-4 text-center">
-                  <span class="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded text-xs font-bold">
+                  <span class="app-chip px-2 py-0.5 rounded text-xs font-bold">
                     {{ site.device_count || 0 }}
                   </span>
                 </td>
                 <td class="p-4 text-right space-x-2">
-                  <button @click="goToDetails(site)" class="text-gray-600 dark:text-gray-300 hover:text-blue-700 dark:hover:text-blue-400 p-1">
+                  <button @click="goToDetails(site)" class="app-text-secondary hover:text-[var(--accent-info)] p-1">
                     <i class="fas fa-eye"></i>
                   </button>
-                  <button @click="openEditModal(site)" class="text-blue-600 hover:text-blue-800 p-1">
+                  <button @click="openEditModal(site)" class="app-text-secondary hover:text-[var(--accent-info)] p-1">
                     <i class="fas fa-edit"></i>
                   </button>
-                  <button @click="confirmDelete(site)" class="text-red-500 hover:text-red-700 p-1">
+                  <button @click="confirmDelete(site)" class="app-text-secondary hover:text-[var(--accent-danger)] p-1">
                     <i class="fas fa-trash-alt"></i>
                   </button>
                 </td>
@@ -127,21 +127,21 @@
       v-if="confirmDialog.open"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
     >
-      <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 border border-gray-200 dark:border-gray-700">
+      <div class="app-surface rounded-2xl w-full max-w-md p-6">
         <div class="flex items-start gap-3">
-          <div class="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
+          <div class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center" style="background: var(--danger-soft-bg); color: var(--accent-danger);">
             <i class="fas fa-trash-alt"></i>
           </div>
           <div class="flex-1">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Remover site</h3>
+            <h3 class="text-lg font-semibold app-text-primary">Remover site</h3>
             <p
-              class="text-sm text-gray-600 dark:text-gray-300 mt-1"
+              class="text-sm app-text-secondary mt-1"
               v-if="(confirmDialog.item?.device_count || 0) === 0"
             >
               Tem certeza que deseja remover <span class="font-semibold">{{ confirmDialog.item?.name }}</span>? Esta ação não pode ser desfeita.
             </p>
             <p
-              class="text-sm text-yellow-700 dark:text-yellow-200 mt-1"
+              class="text-sm mt-1" style="color: var(--status-warning);"
               v-else
             >
               Este site possui {{ confirmDialog.item?.device_count }} device(s). Remova ou migre os devices para outro site antes de apagar.
@@ -152,7 +152,7 @@
         <div class="flex justify-end gap-3 mt-6">
           <button
             @click="closeConfirm"
-            class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm"
+            class="px-4 py-2 rounded-lg transition-colors text-sm app-btn"
             :disabled="saving"
           >
             Cancelar
@@ -160,7 +160,8 @@
           <template v-if="(confirmDialog.item?.device_count || 0) === 0">
             <button
               @click="proceedDelete"
-              class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white shadow-sm transition-colors text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              class="px-4 py-2 rounded-lg shadow-sm transition-colors text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              style="background: var(--accent-danger); border: 1px solid var(--accent-danger); color: #ffffff;"
               :disabled="saving"
             >
               {{ saving ? 'Removendo...' : 'Remover' }}
@@ -169,7 +170,7 @@
           <template v-else>
             <button
               @click="goToDetails(confirmDialog.item)"
-              class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors text-sm"
+              class="px-4 py-2 rounded-lg shadow-sm transition-colors text-sm app-btn-primary"
               :disabled="saving"
             >
               Ver detalhes / migrar

@@ -1,7 +1,7 @@
 <template>
   <div class="flex h-screen overflow-hidden relative bg-gray-50">
     
-    <!-- Área do Mapa (Esquerda - Expansível) -->
+    <!-- Área do Mapa -->
     <div class="flex-1 relative bg-gray-100 z-0">
       
       <UnifiedMapView
@@ -13,13 +13,13 @@
         @plugin-loaded="onPluginLoaded"
       />
       
-      <!-- Toolbar Flutuante (Modo de Edição) -->
-      <div class="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-white dark:bg-gray-800 rounded-full shadow-lg p-1.5 flex items-center gap-1 border border-gray-200 dark:border-gray-600 transition-transform duration-300 hover:scale-105">
+      <!-- Toolbar Flutuante -->
+      <div class="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-white dark:bg-gray-800 rounded-full shadow-lg p-1.5 flex items-center gap-1 border border-gray-200 dark:border-gray-600">
         
         <button 
           @click="setMode('read')"
           class="px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition-colors"
-          :class="mode === 'read' ? 'bg-gray-800 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'"
+          :class="mode === 'read' ? 'bg-gray-800 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'"
         >
           <i class="fas fa-lock"></i> Visualizar
         </button>
@@ -27,7 +27,7 @@
         <button 
           @click="setMode('edit')"
           class="px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition-colors"
-          :class="mode === 'edit' ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'"
+          :class="mode === 'edit' ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'"
         >
           <i class="fas fa-pen"></i> Editar Traçado
         </button>
@@ -38,2637 +38,358 @@
           <input type="file" class="hidden" accept=".kml" @change="onKmlSelected" />
           <i class="fas fa-file-upload"></i>
         </label>
-        
-        <button class="p-2 rounded-full text-gray-500 hover:bg-gray-100 hover:text-indigo-600" title="Ferramentas de Medição">
-          <i class="fas fa-ruler-combined"></i>
-        </button>
       </div>
-
-      <!-- Menu de Contexto (Right-Click) -->
-      <transition name="fade">
-        <div 
-          v-if="contextMenu.show" 
-          class="fixed z-50 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 w-56 py-1 overflow-hidden"
-          :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }"
-          @mouseleave="closeContextMenu"
-        >
-          <!-- Menu para Polyline (Adicionar Infraestrutura) -->
-          <template v-if="contextMenu.type === 'polyline'">
-            <div class="px-3 py-2 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
-              <p class="text-[10px] font-bold text-gray-500 uppercase">Ações no Ponto</p>
-            </div>
-            
-            <button class="w-full text-left px-4 py-2.5 text-sm hover:bg-indigo-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center gap-3" @click="actionSplitCable">
-              <i class="fas fa-cut text-red-500"></i> Romper Cabo
-            </button>
-            
-            <button class="w-full text-left px-4 py-2.5 text-sm hover:bg-indigo-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center gap-3" @click="actionAddSlack">
-              <i class="fas fa-infinity text-blue-500"></i> Adicionar Reserva
-            </button>
-            
-            <div class="border-t border-gray-100 dark:border-gray-700 my-1"></div>
-            
-            <button class="w-full text-left px-4 py-2 text-xs hover:bg-red-50 text-red-600 flex items-center gap-3" @click="closeContextMenu">
-              <i class="fas fa-times"></i> Cancelar
-            </button>
-          </template>
-
-          <!-- Menu para Infrastructure (Gerenciar Ponto) -->
-          <template v-else-if="contextMenu.type === 'infrastructure'">
-            <div class="px-3 py-2 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
-              <p class="text-[10px] font-bold text-gray-500 uppercase">{{ contextMenu.infrastructurePoint?.type_display }}</p>
-              <p class="text-[10px] text-gray-400">{{ contextMenu.infrastructurePoint?.name || 'Sem nome' }}</p>
-            </div>
-            
-            <button class="w-full text-left px-4 py-2.5 text-sm hover:bg-indigo-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center gap-3" @click="actionViewInfraDetails">
-              <i class="fas fa-info-circle text-blue-500"></i> Detalhes
-            </button>
-            
-            <button class="w-full text-left px-4 py-2.5 text-sm hover:bg-indigo-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center gap-3" @click="actionEditInfra">
-              <i class="fas fa-edit text-indigo-500"></i> Alterar
-            </button>
-            
-            <button 
-              v-if="contextMenu.infrastructurePoint?.type === 'splice_box'"
-              class="w-full text-left px-4 py-2.5 text-sm hover:bg-indigo-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center gap-3" 
-              @click="actionManageSplices"
-            >
-              <i class="fas fa-project-diagram text-purple-500"></i> Gerenciar Emendas
-            </button>
-            
-            <button 
-              v-if="contextMenu.infrastructurePoint?.type === 'splice_box'"
-              class="w-full text-left px-4 py-2.5 text-sm hover:bg-orange-50 dark:hover:bg-gray-700 text-orange-600 dark:text-orange-400 flex items-center gap-3" 
-              @click="actionSplitCableAtCEO"
-            >
-              <i class="fas fa-cut text-orange-500"></i> Romper Cabo Aqui
-            </button>
-            
-            <button 
-              v-if="contextMenu.infrastructurePoint?.type === 'slack'"
-              class="w-full text-left px-4 py-2.5 text-sm hover:bg-indigo-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center gap-3" 
-              @click="actionConvertSlackToCEO"
-            >
-              <i class="fas fa-exchange-alt text-orange-500"></i> Converter em CEO
-            </button>
-
-            <div class="border-t border-gray-100 dark:border-gray-700 my-1"></div>
-            
-            <button class="w-full text-left px-4 py-2.5 text-sm hover:bg-red-50 dark:hover:bg-gray-700 text-red-600 flex items-center gap-3" @click="actionDeleteInfra">
-              <i class="fas fa-trash"></i> Remover
-            </button>
-            
-            <button class="w-full text-left px-4 py-2 text-xs hover:bg-gray-50 text-gray-500 flex items-center gap-3" @click="closeContextMenu">
-              <i class="fas fa-times"></i> Cancelar
-            </button>
-          </template>
-          
-          <!-- Menu para Mapa Vazio (Criar Nova Infraestrutura) -->
-          <template v-else-if="contextMenu.type === 'map'">
-            <div class="px-3 py-2 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
-              <p class="text-[10px] font-bold text-gray-500 uppercase">Criar Infraestrutura</p>
-            </div>
-            
-            <button class="w-full text-left px-4 py-2.5 text-sm hover:bg-orange-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center gap-3" @click="actionCreateCEO">
-              <i class="fas fa-box text-orange-500"></i> Cadastrar CEO
-            </button>
-            
-            <button class="w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center gap-3" @click="actionCreatePole">
-              <i class="fas fa-ruler-vertical text-blue-500"></i> Cadastrar Poste
-            </button>
-            
-            <div class="border-t border-gray-100 dark:border-gray-700 my-1"></div>
-            
-            <button class="w-full text-left px-4 py-2 text-xs hover:bg-gray-50 text-gray-500 flex items-center gap-3" @click="closeContextMenu">
-              <i class="fas fa-times"></i> Cancelar
-            </button>
-          </template>
-        </div>
-      </transition>
-
-      <!-- Loading Overlay -->
-      <div v-if="loading" class="absolute inset-0 bg-white/90 dark:bg-gray-900/90 flex items-center justify-center z-20">
-        <div class="text-center">
-          <div class="animate-spin h-12 w-12 border-4 border-indigo-500 rounded-full border-t-transparent mx-auto mb-4"></div>
-          <p class="text-gray-600 dark:text-gray-300">Carregando cabo...</p>
-        </div>
-      </div>
-
     </div>
 
-    <!-- Sidebar Direito (Propriedades e Timeline) -->
+    <!-- Sidebar Direita -->
     <EditorSidebar 
-      :cable="cable" 
-      :is-dirty="isDirty" 
-      @save="saveChanges"
-      @edit-infrastructure="openEditInfrastructureModal"
-      @delete-infrastructure="confirmDeleteInfrastructure"
+      :cable="cable"
+      :mode="mode"
+      :saving="isSaving"
+      @toggle-mode="setMode"
+      @save="saveCable"
+      @cancel="cancelEdit"
+      @update-basic-info="updateBasicInfo"
     />
 
-    <!-- Modal de Edição de Infraestrutura -->
-    <transition name="fade">
-      <div v-if="editInfraModal.show" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="closeEditInfraModal">
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-          <div class="p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-gray-900 dark:to-gray-900">
-            <h3 class="text-lg font-bold text-gray-900 dark:text-white">Editar Infraestrutura</h3>
-            <p class="text-xs text-gray-500 mt-1">
-              {{ editInfraModal.type === 'slack' ? 'Alterar tamanho da reserva técnica' : 'Alterar nome ou tipo do ponto' }}
-            </p>
-          </div>
-          
-          <div class="p-6 space-y-4">
-            <!-- Nome (Não editável para Reserva Técnica) -->
-            <div v-if="editInfraModal.type !== 'slack'">
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Nome</label>
-              <input 
-                v-model="editInfraModal.name" 
-                type="text" 
-                class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-                placeholder="Ex: CEO-1234"
-              />
+    <!-- Notificação Toast -->
+    <transition name="slide-up">
+      <div 
+        v-if="notification.show" 
+        class="fixed bottom-6 right-6 z-50 max-w-md bg-white dark:bg-gray-800 rounded-lg shadow-2xl border-l-4 p-4"
+        :class="{
+          'border-blue-500': notification.type === 'info',
+          'border-green-500': notification.type === 'success',
+          'border-yellow-500': notification.type === 'warning',
+          'border-red-500': notification.type === 'error',
+        }"
+      >
+        <div class="flex items-start gap-3">
+          <i class="text-2xl" :class="{
+            'fas fa-info-circle text-blue-500': notification.type === 'info',
+            'fas fa-check-circle text-green-500': notification.type === 'success',
+            'fas fa-exclamation-triangle text-yellow-500': notification.type === 'warning',
+            'fas fa-times-circle text-red-500': notification.type === 'error',
+          }"></i>
+          <div class="flex-1">
+            <h4 class="font-bold text-gray-900 dark:text-white text-sm">{{ notification.title }}</h4>
+            <p class="text-xs text-gray-600 dark:text-gray-300 mt-1 whitespace-pre-line">{{ notification.message }}</p>
+            
+            <div v-if="notification.confirmAction" class="flex gap-2 mt-3">
+              <button @click="confirmNotification" class="px-3 py-1.5 bg-red-500 text-white text-xs font-bold rounded hover:bg-red-600">
+                Confirmar
+              </button>
+              <button @click="closeNotification" class="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs font-bold rounded hover:bg-gray-300">
+                Cancelar
+              </button>
             </div>
             
-            <!-- Tamanho da Reserva (Apenas para slack) -->
-            <div v-if="editInfraModal.type === 'slack'">
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Tamanho da Reserva (metros)
-              </label>
-              <input 
-                v-model.number="editInfraModal.slackLength" 
-                type="number" 
-                min="1"
-                step="0.1"
-                class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-                placeholder="Ex: 10"
-              />
-              <p class="text-xs text-gray-500 mt-1">
-                Este valor será adicionado ao comprimento total do cabo
-              </p>
-            </div>
-            
-            <!-- Tipo (Não editável para Reserva Técnica - usar Converter) -->
-            <div v-if="editInfraModal.type !== 'slack'">
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tipo</label>
-              <select 
-                v-model="editInfraModal.type" 
-                class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-              >
-                <option value="splice_box">Caixa de Emenda (CEO)</option>
-                <option value="splitter_box">Caixa Splitter</option>
-                <option value="transition">Transição</option>
-              </select>
-            </div>
-
-            <div class="text-xs text-gray-500 bg-gray-50 dark:bg-gray-900 p-3 rounded-lg">
-              <p><strong>Distância:</strong> {{ formatDistance(editInfraModal.distance) }}</p>
-              <p class="mt-1 text-[10px] text-gray-400">A localização e distância não podem ser alteradas.</p>
-            </div>
-          </div>
-          
-          <div class="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
-            <button 
-              @click="closeEditInfraModal" 
-              class="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium"
-            >
-              Cancelar
-            </button>
-            <button 
-              @click="saveInfrastructureChanges" 
-              class="flex-1 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 font-medium"
-            >
-              Salvar
+            <button v-else @click="closeNotification" class="mt-2 text-xs text-indigo-600 hover:underline">
+              Fechar
             </button>
           </div>
         </div>
       </div>
     </transition>
-
-    <!-- Modal de Notificação Padronizado -->
-    <transition name="fade">
-      <div v-if="notification.show" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" @click.self="closeNotification">
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-          <!-- Header com cor baseada no tipo -->
-          <div 
-            class="p-6 border-b border-gray-200 dark:border-gray-700"
-            :class="{
-              'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30': notification.type === 'success',
-              'bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-900/30 dark:to-rose-900/30': notification.type === 'error',
-              'bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/30 dark:to-amber-900/30': notification.type === 'warning',
-              'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30': notification.type === 'info'
-            }"
-          >
-            <div class="flex items-center gap-3">
-              <div 
-                class="w-10 h-10 rounded-full flex items-center justify-center"
-                :class="{
-                  'bg-green-100 dark:bg-green-800': notification.type === 'success',
-                  'bg-red-100 dark:bg-red-800': notification.type === 'error',
-                  'bg-yellow-100 dark:bg-yellow-800': notification.type === 'warning',
-                  'bg-blue-100 dark:bg-blue-800': notification.type === 'info'
-                }"
-              >
-                <i 
-                  class="text-lg"
-                  :class="{
-                    'fas fa-check-circle text-green-600 dark:text-green-400': notification.type === 'success',
-                    'fas fa-exclamation-circle text-red-600 dark:text-red-400': notification.type === 'error',
-                    'fas fa-exclamation-triangle text-yellow-600 dark:text-yellow-400': notification.type === 'warning',
-                    'fas fa-info-circle text-blue-600 dark:text-blue-400': notification.type === 'info'
-                  }"
-                ></i>
-              </div>
-              <div class="flex-1">
-                <h3 class="text-lg font-bold text-gray-900 dark:text-white">{{ notification.title }}</h3>
-              </div>
-            </div>
-          </div>
-          
-          <div class="p-6">
-            <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line">{{ notification.message }}</p>
-          </div>
-          
-          <div class="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
-            <button 
-              v-if="notification.confirmAction"
-              @click="closeNotification" 
-              class="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium"
-            >
-              Cancelar
-            </button>
-            <button 
-              @click="notification.confirmAction ? executeConfirmAction() : closeNotification()" 
-              class="px-4 py-2 rounded-lg font-medium"
-              :class="{
-                'flex-1': notification.confirmAction,
-                'w-full': !notification.confirmAction,
-                'bg-green-600 hover:bg-green-700 text-white': notification.type === 'success',
-                'bg-red-600 hover:bg-red-700 text-white': notification.type === 'error' || notification.confirmAction,
-                'bg-yellow-600 hover:bg-yellow-700 text-white': notification.type === 'warning',
-                'bg-indigo-600 hover:bg-indigo-700 text-white': notification.type === 'info' && !notification.confirmAction
-              }"
-            >
-              {{ notification.confirmAction ? 'Confirmar' : 'OK' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
-
-    <!-- Modal de Input Genérico (para prompts) -->
-    <transition name="fade">
-      <div v-if="inputModal.show" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" @click.self="closeInputModal">
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-          <div class="p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-gray-900 dark:to-gray-900">
-            <h3 class="text-lg font-bold text-gray-900 dark:text-white">{{ inputModal.title }}</h3>
-          </div>
-          
-          <div class="p-6">
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              {{ inputModal.label }}
-            </label>
-            <input 
-              v-model="inputModal.value"
-              :type="inputModal.type"
-              :placeholder="inputModal.placeholder"
-              class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
-              @keyup.enter="executeInputAction"
-            />
-          </div>
-          
-          <div class="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
-            <button 
-              @click="closeInputModal" 
-              class="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium"
-            >
-              Cancelar
-            </button>
-            <button 
-              @click="executeInputAction" 
-              class="flex-1 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 font-medium"
-            >
-              Confirmar
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
-
-    <!-- Modal de Gerenciamento de Fusões -->
-    <SpliceMatrixModal
-      :show="spliceModal.show"
-      :infra-point="spliceModal.infraPoint"
-      @close="closeSpliceModal"
-    />
-
   </div>
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue';
+import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { useApi } from '@/composables/useApi';
 import UnifiedMapView from '@/components/Map/UnifiedMapView.vue';
 import EditorSidebar from './components/EditorSidebar.vue';
-import SpliceMatrixModal from '@/components/Fusion/SpliceMatrixModal.vue';
 
 const route = useRoute();
 const api = useApi();
-const id = route.params.id;
 
-// State
-const loading = ref(true);
-const cable = ref({});
+const cableId = computed(() => route.params.id);
+
+// ==================== State Management ====================
+const cable = ref(null);
+const mode = ref('read');
+const isSaving = ref(false);
 const mapRef = ref(null);
-const pathStats = ref(null);
-const mapInstance = ref(null);
 const drawingPlugin = ref(null);
-const allAvailableCEOs = ref([]); // CEOs anexadas + standalone para detecção de proximidade
-const editInfraModal = reactive({
-  show: false,
-  id: null,
-  name: '',
-  type: '',
-  distance: 0,
-  slackLength: 0, // Tamanho da reserva técnica
-  originalType: '' // Para detectar mudanças de tipo
-});
-const mode = ref('read'); // 'read' | 'edit'
-const isDirty = ref(false);
-const infrastructureMarkers = ref([]); // Marcadores de infraestrutura
 
-const normalizeLatLng = (position) => {
-  if (!position) return null;
-  const lat =
-    typeof position.lat === 'function' ? position.lat() : position.lat;
-  const lng =
-    typeof position.lng === 'function' ? position.lng() : position.lng;
-
-  if (typeof lat !== 'number' || typeof lng !== 'number') {
-    return null;
-  }
-
-  return { lat, lng };
-};
-
-const focusMap = (position, zoom = null) => {
-  if (!mapInstance.value) return;
-  const center = normalizeLatLng(position);
-  if (!center) return;
-
-  requestAnimationFrame(() => {
-    if (!mapInstance.value) return;
-
-    if (typeof mapInstance.value.panTo === 'function') {
-      mapInstance.value.panTo(center);
-    } else if (typeof mapInstance.value.setCenter === 'function') {
-      mapInstance.value.setCenter(center);
-    }
-
-    if (
-      typeof zoom === 'number' &&
-      typeof mapInstance.value.setZoom === 'function'
-    ) {
-      mapInstance.value.setZoom(zoom);
-    }
-  });
-};
-
-// Notification System
 const notification = reactive({
   show: false,
   title: '',
   message: '',
-  type: 'info', // 'success' | 'error' | 'warning' | 'info'
-  confirmAction: null // Para modais de confirmação
+  type: 'info',
+  confirmAction: null
 });
 
-// Input Modal System
-const inputModal = reactive({
-  show: false,
-  title: '',
-  label: '',
-  value: '',
-  placeholder: '',
-  type: 'text', // 'text' | 'number'
-  submitAction: null
-});
-
-// Splice Matrix Modal
-const spliceModal = reactive({
-  show: false,
-  infraPoint: null
-});
-
-// Context Menu (Polyline + Infrastructure)
-const contextMenu = reactive({
-  show: false,
-  x: 0,
-  y: 0,
-  latlng: null,
-  type: null, // 'polyline' | 'infrastructure'
-  infrastructurePoint: null // Dados do ponto clicado
-});
-
-// Plugin Options
 const pluginOptions = {
   drawing: {
-    editable: true, // SEMPRE editável para permitir arrastar markers
-    onPathChange: (coords, distance) => {
-      pathStats.value = {
-        points: coords.length,
-        distance: (distance / 1000).toFixed(2)
-      };
-      
-      // Atualiza cable.length em tempo real para sidebar
-      cable.value.length = distance;
-      isDirty.value = true;
-    }
+    drawingMode: null,
+    drawingControl: false
   }
 };
 
-const canSave = computed(() => {
-  return pathStats.value && pathStats.value.points >= 2 && isDirty.value;
+// ==================== Google Maps Objects ====================
+let mapInstance = null;
+let originalPolyline = null;
+let startMarker = null;
+let endMarker = null;
+
+// ==================== Lifecycle ====================
+onMounted(async () => {
+  console.log('[FiberRouteEditor] Mounted — Simple Version (No CEOs/Fusion/Split)');
+  await loadCable();
 });
 
-const getDrawing = () => drawingPlugin.value;
-
-// Map Events
-const onMapReady = (map) => {
-  mapInstance.value = map;
-  console.log('[FiberRouteEditor] Map ready');
-  
-  // Adicionar listener de rightclick no mapa para menu de contexto
-  map.addListener('rightclick', (event) => {
-    const lat = event.latLng.lat();
-    const lng = event.latLng.lng();
-    
-    console.log('[Map] Clique direito no mapa:', lat, lng);
-    
-    // Mostrar menu de contexto tipo 'map'
-    contextMenu.x = event.domEvent.clientX;
-    contextMenu.y = event.domEvent.clientY;
-    contextMenu.latlng = event.latLng;
-    contextMenu.type = 'map';
-    contextMenu.show = true;
-  });
-};
-
-const onPluginLoaded = async (pluginName, plugin) => {
-  if (pluginName === 'drawing') {
-    drawingPlugin.value = plugin;
-    console.log('[FiberRouteEditor] Drawing plugin loaded');
-    await loadCableData();
-  }
-};
-
-// Load Cable Data
-const loadCableData = async (options = {}) => {
-  const {
-    preserveViewport = false,
-    focusPosition = null,
-    focusZoom = null,
-  } = options;
-
-  const previousCenter =
-    preserveViewport && mapInstance.value && typeof mapInstance.value.getCenter === 'function'
-      ? normalizeLatLng(mapInstance.value.getCenter())
-      : null;
-
-  const previousZoom =
-    preserveViewport && mapInstance.value && typeof mapInstance.value.getZoom === 'function'
-      ? mapInstance.value.getZoom()
-      : null;
-
-  const desiredCenter = focusPosition
-    ? normalizeLatLng(focusPosition)
-    : previousCenter;
-
-  let desiredZoom = null;
-  if (focusPosition) {
-    desiredZoom = typeof focusZoom === 'number' ? focusZoom : previousZoom;
-  } else if (preserveViewport) {
-    desiredZoom = previousZoom;
-  }
-
-  const skipFitBounds = Boolean(desiredCenter);
-
+// ==================== Data Loading ====================
+const loadCable = async () => {
   try {
-    const data = await api.get(`/api/v1/fiber-cables/${id}/`);
-    cable.value = data;
-    console.log('[FiberRouteEditor] Cable data loaded', data);
-
-    const drawing = getDrawing();
-    if (!drawing) {
-      console.warn('[FiberRouteEditor] Drawing plugin not available');
-      return;
-    }
-
-    // Carregar path existente
-    const path = Array.isArray(data.path_coordinates) ? data.path_coordinates : [];
-    if (path.length >= 2) {
-      console.log('[FiberRouteEditor] Loading existing path', path.length, 'points');
-      drawing.setPath(path);
-
-      if (!skipFitBounds) {
-        drawing.fitBounds();
-      }
-
-      // Adicionar listener de right-click na polyline
-      const polyline = drawing.getPolyline();
-      if (polyline) {
-        polyline.addListener('rightclick', handlePolylineRightClick);
-        console.log('[FiberRouteEditor] Right-click listener added to polyline');
-      }
-
-      // Inicializar stats
-      pathStats.value = {
-        points: path.length,
-        distance: (drawing.getDistance() / 1000).toFixed(2),
-      };
-    } else {
-      // Centralizar entre Site A e B
-      const locA = data.site_a_location;
-      const locB = data.site_b_location;
-
-      if (!skipFitBounds && locA && locB && mapInstance.value) {
-        console.log('[FiberRouteEditor] Centering on sites', locA, locB);
-        const bounds = new google.maps.LatLngBounds();
-        bounds.extend(new google.maps.LatLng(locA.lat, locA.lng));
-        bounds.extend(new google.maps.LatLng(locB.lat, locB.lng));
-        mapInstance.value.fitBounds(bounds);
-
-        // Desenhar linha guia tracejada
-        new google.maps.Polyline({
-          path: [locA, locB],
-          map: mapInstance.value,
-          strokeColor: '#9CA3AF',
-          strokeOpacity: 0.6,
-          strokeWeight: 2,
-          geodesic: true,
-          icons: [
-            {
-              icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 2 },
-              offset: '0',
-              repeat: '20px',
-            },
-          ],
-        });
-      }
-    }
-
-    // Renderizar pontos de infraestrutura existentes
-    renderInfrastructureMarkers();
+    console.log(`[FiberRouteEditor] Loading cable ${cableId.value}`);
+    const response = await api.get(`/api/v1/inventory/fiber-cables/${cableId.value}/`);
+    cable.value = response;
     
-    console.log('[loadCableData] >>> INICIANDO carregamento de CEOs standalone e pontas soltas');
+    console.log('[FiberRouteEditor] Cable loaded:', cable.value);
     
-    // Carregar e renderizar CEOs standalone (não anexadas a este cabo)
-    await loadStandaloneCEOs();
-    
-    // Carregar e renderizar pontas soltas persistidas
-    await loadLooseEnds();
-    
-    console.log('[loadCableData] <<< CONCLUÍDO carregamento de CEOs standalone e pontas soltas');
-    
-    // Verificar e renderizar segmentos BROKEN
-    renderBrokenSegments();
-
-    // Inicia em modo read (seguro)
-    setMode('read');
-
-    if (desiredCenter) {
-      focusMap(desiredCenter, desiredZoom);
-    } else if (focusPosition) {
-      focusMap(focusPosition, focusZoom ?? previousZoom ?? null);
+    if (mapInstance) {
+      await nextTick();
+      renderCableOnMap();
     }
   } catch (err) {
-    console.error('[FiberRouteEditor] Erro ao carregar cabo', err);
+    console.error('[FiberRouteEditor] Error loading cable:', err);
     showNotification(
-      'Erro ao Carregar',
-      err?.response?.data?.detail || err?.message || 'Erro ao carregar dados do cabo.',
+      'Erro ao Carregar Cabo',
+      err?.response?.data?.detail || err?.message || 'Erro desconhecido.',
       'error'
     );
-  } finally {
-    loading.value = false;
   }
 };
 
-// Renderizar marcadores de segmentos rompidos
-const renderBrokenSegments = () => {
-  if (!cable.value || !cable.value.segments) {
-    console.log('[renderBrokenSegments] Sem dados de cable ou segments');
+// ==================== Map Events ====================
+const onMapReady = (map) => {
+  console.log('[FiberRouteEditor] Map ready');
+  mapInstance = map;
+  
+  if (cable.value) {
+    renderCableOnMap();
+  }
+};
+
+const onPluginLoaded = ({ pluginName, plugin }) => {
+  if (pluginName === 'drawing') {
+    console.log('[FiberRouteEditor] Drawing plugin loaded');
+    drawingPlugin.value = plugin;
+  }
+};
+
+// ==================== Rendering ====================
+const renderCableOnMap = () => {
+  if (!mapInstance || !cable.value?.path) {
+    console.warn('[FiberRouteEditor] Cannot render: missing map or cable path');
     return;
   }
+
+  clearMapObjects();
+
+  const coords = cable.value.path.map(p => ({ lat: p[1], lng: p[0] }));
   
-  console.log('[renderBrokenSegments] Total de segmentos:', cable.value.segments.length);
-  console.log('[renderBrokenSegments] Segmentos:', cable.value.segments);
-  
-  const brokenSegments = cable.value.segments.filter(seg => 
-    seg.status === 'broken' || seg.status === 'BROKEN'
-  );
-  
-  if (brokenSegments.length === 0) {
-    console.log('[renderBrokenSegments] Nenhum segmento BROKEN encontrado');
-    return;
-  }
-  
-  console.log('[renderBrokenSegments] Detectados', brokenSegments.length, 'segmentos BROKEN');
-  console.log('[renderBrokenSegments] Segmentos BROKEN:', brokenSegments);
-  
-  brokenSegments.forEach((segment, index) => {
-    console.log(`[renderBrokenSegments] Processando segmento ${index + 1}:`, segment);
-    
-    // PRIORIDADE: break_location (calculado), depois start_infra_location
-    const location = segment.break_location || segment.start_infra_location || segment.end_infra_location;
-    
-    console.log(`[renderBrokenSegments] Localização para segmento ${index + 1}:`, location);
-    
-    if (!location || !mapInstance.value) {
-      console.warn(`[renderBrokenSegments] Segmento ${index + 1} ignorado - sem localização ou sem mapa`, {
-        hasBreakLocation: !!segment.break_location,
-        hasStartLocation: !!segment.start_infra_location,
-        hasEndLocation: !!segment.end_infra_location,
-        hasMap: !!mapInstance.value
-      });
-      return;
-    }
-    
-    // Criar marcador de rompimento (X vermelho)
-    const marker = new google.maps.Marker({
-      position: { lat: location.lat, lng: location.lng },
-      map: mapInstance.value,
-      icon: {
-        path: 'M -8,-8 L 8,8 M -8,8 L 8,-8',
-        strokeColor: '#EF4444',
-        strokeWeight: 4,
-        fillColor: '#FEE2E2',
-        fillOpacity: 1,
-        scale: 1.5,
-      },
-      title: `ROMPIMENTO: ${segment.name}`,
-      zIndex: 999,
-    });
-    
-    // Adicionar info window ao clicar
-    marker.addListener('click', () => {
-      const infoWindow = new google.maps.InfoWindow({
-        content: `
-          <div style="padding: 8px;">
-            <h3 style="margin: 0 0 8px 0; color: #EF4444; font-size: 14px; font-weight: bold;">
-              ⚠️ CABO ROMPIDO
-            </h3>
-            <p style="margin: 4px 0; font-size: 12px;"><strong>Segmento:</strong> ${segment.name}</p>
-            <p style="margin: 4px 0; font-size: 12px;"><strong>Status:</strong> ${segment.status_display || 'Rompido'}</p>
-            ${segment.start_infra_name ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Local:</strong> ${segment.start_infra_name}</p>` : ''}
-          </div>
-        `,
-      });
-      infoWindow.open(mapInstance.value, marker);
-    });
-    
-    infrastructureMarkers.value.push(marker);
+  // Draw polyline
+  originalPolyline = new google.maps.Polyline({
+    path: coords,
+    geodesic: true,
+    strokeColor: '#2563EB',
+    strokeOpacity: 0.8,
+    strokeWeight: 3,
+    map: mapInstance
   });
-  
-  // Mostrar notificação se houver rompimentos
-  if (brokenSegments.length > 0) {
-    // OCULTAR o polyline original (não deve ser mostrado quando há rompimentos)
-    const drawing = getDrawing();
-    if (drawing) {
-      const originalPolyline = drawing.getPolyline();
-      if (originalPolyline) {
-        originalPolyline.setVisible(false);
-        console.log('[renderBrokenSegments] Polyline original OCULTADO');
-      }
-    }
-    
-    // DESENHAR segmentos válidos (status !== 'BROKEN')
-    const activeSegments = cable.value.segments.filter(seg => 
-      seg.status !== 'broken' && seg.status !== 'BROKEN'
-    );
-    
-    console.log('[renderBrokenSegments] Segmentos ativos para desenhar:', activeSegments.length);
-    
-    activeSegments.forEach((segment, index) => {
-      if (!segment.start_infra_location || !segment.end_infra_location) {
-        console.warn(`[renderBrokenSegments] Segmento ${segment.name} sem coordenadas completas`);
-        return;
-      }
-      
-      // Criar polyline para este segmento
-      const segmentPath = [
-        { lat: segment.start_infra_location.lat, lng: segment.start_infra_location.lng },
-        { lat: segment.end_infra_location.lat, lng: segment.end_infra_location.lng }
-      ];
-      
-      const segmentPolyline = new google.maps.Polyline({
-        path: segmentPath,
-        map: mapInstance.value,
-        strokeColor: '#3B82F6', // Azul para segmentos ativos
-        strokeWeight: 4,
-        strokeOpacity: 0.8,
-        geodesic: true,
-        zIndex: 5
-      });
-      
-      // Adicionar info window ao clicar no segmento
-      segmentPolyline.addListener('click', () => {
-        const infoWindow = new google.maps.InfoWindow({
-          content: `
-            <div style="padding: 8px;">
-              <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: bold;">
-                📏 ${segment.name}
-              </h3>
-              <p style="margin: 4px 0; font-size: 12px;"><strong>Status:</strong> ${segment.status_display || 'Ativo'}</p>
-              <p style="margin: 4px 0; font-size: 12px;"><strong>Comprimento:</strong> ${(segment.length_km || 0).toFixed(3)} km</p>
-              <p style="margin: 4px 0; font-size: 12px;"><strong>De:</strong> ${segment.start_infra_name || 'Origem'}</p>
-              <p style="margin: 4px 0; font-size: 12px;"><strong>Para:</strong> ${segment.end_infra_name || 'Destino'}</p>
-            </div>
-          `,
-          position: segmentPath[Math.floor(segmentPath.length / 2)]
-        });
-        infoWindow.open(mapInstance.value);
-      });
-      
-      infrastructureMarkers.value.push(segmentPolyline);
-      console.log(`[renderBrokenSegments] Segmento ${segment.name} desenhado de ${segment.start_infra_name} para ${segment.end_infra_name}`);
-    });
-    
-    showNotification(
-      'Cabo Rompido',
-      `Este cabo possui ${brokenSegments.length} rompimento(s). Segmentos ativos: ${activeSegments.length}. Marcadores vermelhos indicam os pontos de rompimento.`,
-      'warning'
-    );
-  }
-};
 
-// Carregar e renderizar pontas soltas persistidas (has_loose_ends=True)
-const loadLooseEnds = async () => {
-  if (!cable.value || !mapInstance.value) {
-    console.warn('[loadLooseEnds] Sem cabo ou mapa inicializado');
-    return;
-  }
-  
-  try {
-    console.log(`[loadLooseEnds] Buscando pontas soltas para cabo ${cable.value.id}...`);
-    const response = await api.get(`/api/v1/inventory/segments/loose-ends/?cable_id=${cable.value.id}`);
-    
-    console.log('[loadLooseEnds] Response completo:', response);
-    console.log('[loadLooseEnds] Response.status:', response.status);
-    
-    if (!response || !response.loose_ends) {
-      console.warn('[loadLooseEnds] Resposta inválida:', response);
-      return;
-    }
-    
-    const looseEnds = response.loose_ends;
-    console.log(`[loadLooseEnds] Encontradas ${looseEnds.length} pontas soltas persistidas`);
-    
-    if (looseEnds.length === 0) {
-      return;
-    }
-    
-    // Renderizar cada conjunto de pontas soltas
-    looseEnds.forEach(looseEnd => {
-      console.log(`[loadLooseEnds] Renderizando pontas do segmento ${looseEnd.segment_name}`);
-      
-      // Ponta A (início do segmento)
-      if (looseEnd.start_coords && !looseEnd.has_start_attachment) {
-        const markerA = new google.maps.Marker({
-          position: { lat: looseEnd.start_coords.lat, lng: looseEnd.start_coords.lng },
-          map: mapInstance.value,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            fillColor: '#3b82f6', // azul (ponta A)
-            fillOpacity: 1,
-            strokeColor: '#fff',
-            strokeWeight: 2,
-            scale: 8,
-          },
-          title: `Ponta Solta A - ${looseEnd.segment_name}`,
-          draggable: mode.value === 'edit',
-          zIndex: 2000
-        });
-        
-        // Listener de dragend com lógica similar ao renderLooseEnds original
-        markerA.addListener('dragend', async (event) => {
-          const lat = event.latLng.lat();
-          const lng = event.latLng.lng();
-          console.log('[loadLooseEnds] Ponta A arrastada para:', lat, lng);
-          
-          // Procurar CEO próxima (raio 100m ~0.001 graus)
-          const nearbyPoint = cable.value.infrastructure_points?.find(infra => {
-            if (!infra.location?.coordinates || infra.type !== 'splice_box') return false;
-            const [infraLng, infraLat] = infra.location.coordinates;
-            const dist = Math.sqrt(
-              Math.pow(infraLat - lat, 2) + Math.pow(infraLng - lng, 2)
-            );
-            return dist < 0.001; // ~100 metros
-          });
-          
-          if (nearbyPoint) {
-            console.log('[loadLooseEnds] CEO encontrada:', nearbyPoint.name);
-            
-            // Anexar ponta à CEO
-            try {
-              const response = await api.post(
-                `/api/v1/inventory/infrastructure/${nearbyPoint.id}/attach-loose-end/`,
-                {
-                  cable_id: looseEnd.cable_id,
-                  segment_id: looseEnd.segment_id,
-                  is_start_of_segment: true
-                }
-              );
-              
-              console.log('[loadLooseEnds] Ponta A anexada:', response);
-              
-              // Mudar cor para verde (conectada)
-              markerA.setIcon({
-                path: google.maps.SymbolPath.CIRCLE,
-                scale: 10,
-                fillColor: '#10B981', // Verde
-                fillOpacity: 1,
-                strokeColor: '#FFFFFF',
-                strokeWeight: 3,
-              });
-              markerA.setDraggable(false);
-              
-              showNotification(
-                'Ponta Conectada',
-                `Ponta A anexada à ${nearbyPoint.name}`,
-                'success'
-              );
-              
-              // Recarregar dados do cabo para atualizar estado
-              await loadCableData();
-            } catch (err) {
-              console.error('[loadLooseEnds] Erro ao anexar ponta A:', err);
-              showNotification(
-                'Erro ao Conectar',
-                err?.response?.data?.detail || 'Falha ao anexar ponta à CEO',
-                'error'
-              );
-              // Voltar para posição original
-              markerA.setPosition({ lat: looseEnd.start_coords.lat, lng: looseEnd.start_coords.lng });
-            }
-          } else {
-            console.warn('[loadLooseEnds] Nenhuma CEO próxima encontrada');
-            showNotification(
-              'CEO Não Encontrada',
-              'Arraste a ponta próxima a uma CEO (raio 100m)',
-              'warning'
-            );
-            // Voltar para posição original
-            markerA.setPosition({ lat: looseEnd.start_coords.lat, lng: looseEnd.start_coords.lng });
-          }
-        });
-        
-        infrastructureMarkers.value.push(markerA);
-      }
-      
-      // Ponta B (fim do segmento)
-      if (looseEnd.end_coords && !looseEnd.has_end_attachment) {
-        const markerB = new google.maps.Marker({
-          position: { lat: looseEnd.end_coords.lat, lng: looseEnd.end_coords.lng },
-          map: mapInstance.value,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            fillColor: '#ef4444', // vermelho (ponta B)
-            fillOpacity: 1,
-            strokeColor: '#fff',
-            strokeWeight: 2,
-            scale: 8,
-          },
-          title: `Ponta Solta B - ${looseEnd.segment_name}`,
-          draggable: mode.value === 'edit',
-          zIndex: 2000
-        });
-        
-        // Listener de dragend com lógica similar ao renderLooseEnds original
-        markerB.addListener('dragend', async (event) => {
-          const lat = event.latLng.lat();
-          const lng = event.latLng.lng();
-          console.log('[loadLooseEnds] Ponta B arrastada para:', lat, lng);
-          
-          // Procurar CEO próxima (raio 100m ~0.001 graus)
-          const nearbyPoint = cable.value.infrastructure_points?.find(infra => {
-            if (!infra.location?.coordinates || infra.type !== 'splice_box') return false;
-            const [infraLng, infraLat] = infra.location.coordinates;
-            const dist = Math.sqrt(
-              Math.pow(infraLat - lat, 2) + Math.pow(infraLng - lng, 2)
-            );
-            return dist < 0.001; // ~100 metros
-          });
-          
-          if (nearbyPoint) {
-            console.log('[loadLooseEnds] CEO encontrada:', nearbyPoint.name);
-            
-            // Anexar ponta à CEO
-            try {
-              const response = await api.post(
-                `/api/v1/inventory/infrastructure/${nearbyPoint.id}/attach-loose-end/`,
-                {
-                  cable_id: looseEnd.cable_id,
-                  segment_id: looseEnd.segment_id,
-                  is_start_of_segment: false
-                }
-              );
-              
-              console.log('[loadLooseEnds] Ponta B anexada:', response);
-              
-              // Mudar cor para verde (conectada)
-              markerB.setIcon({
-                path: google.maps.SymbolPath.CIRCLE,
-                scale: 10,
-                fillColor: '#10B981', // Verde
-                fillOpacity: 1,
-                strokeColor: '#FFFFFF',
-                strokeWeight: 3,
-              });
-              markerB.setDraggable(false);
-              
-              showNotification(
-                'Ponta Conectada',
-                `Ponta B anexada à ${nearbyPoint.name}`,
-                'success'
-              );
-              
-              // Recarregar dados do cabo para atualizar estado
-              await loadCableData();
-            } catch (err) {
-              console.error('[loadLooseEnds] Erro ao anexar ponta B:', err);
-              showNotification(
-                'Erro ao Conectar',
-                err?.response?.data?.detail || 'Falha ao anexar ponta à CEO',
-                'error'
-              );
-              // Voltar para posição original
-              markerB.setPosition({ lat: looseEnd.end_coords.lat, lng: looseEnd.end_coords.lng });
-            }
-          } else {
-            console.warn('[loadLooseEnds] Nenhuma CEO próxima encontrada');
-            showNotification(
-              'CEO Não Encontrada',
-              'Arraste a ponta próxima a uma CEO (raio 100m)',
-              'warning'
-            );
-            // Voltar para posição original
-            markerB.setPosition({ lat: looseEnd.end_coords.lat, lng: looseEnd.end_coords.lng });
-          }
-        });
-        
-        infrastructureMarkers.value.push(markerB);
-      }
-    });
-    
-    console.log(`[loadLooseEnds] ${looseEnds.length} conjuntos de pontas soltas renderizados`);
-    
-    // Notificar usuário se houver pontas soltas
-    if (looseEnds.length > 0) {
-      showNotification(
-        'Pontas Soltas Detectadas',
-        `Este cabo possui ${looseEnds.length} segmento(s) com pontas soltas. Arraste-as até uma CEO para conectar.`,
-        'info'
-      );
-    }
-  } catch (err) {
-    console.error('[loadLooseEnds] Erro ao carregar pontas soltas:', err);
-    console.error('[loadLooseEnds] Erro detalhes:', err.response);
-    console.error('[loadLooseEnds] Erro status:', err.response?.status);
-    console.error('[loadLooseEnds] Erro data:', err.response?.data);
-    // Erro silencioso, pontas soltas são opcionais
-  }
-};
-
-// Renderizar pontas soltas arrastáveis (após rompimento)
-const renderLooseEnds = (looseEnds, segments) => {
-  console.log('[renderLooseEnds] INICIANDO - looseEnds:', looseEnds);
-  console.log('[renderLooseEnds] segments:', segments);
-  console.log('[renderLooseEnds] mapInstance:', mapInstance.value);
-  
-  if (!mapInstance.value) {
-    console.warn('[renderLooseEnds] Mapa não disponível');
-    return;
-  }
-  
-  if (!looseEnds) {
-    console.warn('[renderLooseEnds] looseEnds está undefined/null');
-    return;
-  }
-  
-  console.log('[renderLooseEnds] end_a:', looseEnds.end_a);
-  console.log('[renderLooseEnds] end_b:', looseEnds.end_b);
-  
-  // Criar marcador para Ponta A (FIM do segmento anterior - AZUL)
-  if (looseEnds.end_a && looseEnds.end_a.location) {
-    const markerA = new google.maps.Marker({
-      position: {
-        lat: looseEnds.end_a.location.lat,
-        lng: looseEnds.end_a.location.lng
-      },
-      map: mapInstance.value,
-      draggable: true,
+  // Start marker
+  if (coords.length > 0) {
+    startMarker = new google.maps.Marker({
+      position: coords[0],
+      map: mapInstance,
+      title: cable.value.name || 'Início',
       icon: {
         path: google.maps.SymbolPath.CIRCLE,
-        scale: 12,
-        fillColor: '#3B82F6', // Azul
+        scale: 8,
+        fillColor: '#10B981',
         fillOpacity: 1,
         strokeColor: '#FFFFFF',
-        strokeWeight: 3,
-      },
-      title: `Ponta A (Segmento ${segments.before.name}) - Arraste para CEO`,
-      zIndex: 1000,
-    });
-    
-    // Listener de drag
-    markerA.addListener('dragend', async (event) => {
-      const lat = event.latLng.lat();
-      const lng = event.latLng.lng();
-      console.log('[LooseEnd A] Arrastada para:', lat, lng);
-      
-      // Procurar CEO próxima
-      const nearbyPoint = await findNearbyInfrastructure(lat, lng, 50); // 50m radius
-      
-      if (nearbyPoint) {
-        console.log('[LooseEnd A] CEO encontrada:', nearbyPoint.name);
-        
-        // Anexar ponta à CEO
-        try {
-          const response = await api.post(
-            `/api/v1/inventory/infrastructure/${nearbyPoint.id}/attach-loose-end/`,
-            {
-              cable_id: parseInt(id),
-              segment_id: looseEnds.end_a.segment_id,
-              is_start_of_segment: looseEnds.end_a.is_start
-            }
-          );
-          
-          console.log('[LooseEnd A] Anexada:', response);
-          
-          // Mudar cor para verde (conectada)
-          markerA.setIcon({
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 10,
-            fillColor: '#10B981', // Verde
-            fillOpacity: 1,
-            strokeColor: '#FFFFFF',
-            strokeWeight: 3,
-          });
-          markerA.setDraggable(false);
-          markerA.setTitle(`Ponta A conectada a ${nearbyPoint.name}`);
-          
-          showNotification(
-            'Ponta Conectada!',
-            `Ponta A anexada a ${nearbyPoint.name}${response.both_ends_connected ? '. Ambas as pontas conectadas!' : ''}`,
-            'success'
-          );
-          
-        } catch (err) {
-          console.error('[LooseEnd A] Erro ao anexar:', err);
-          showNotification(
-            'Erro ao Conectar',
-            err?.response?.data?.error || err?.message || 'Erro ao conectar ponta',
-            'error'
-          );
-        }
-      } else {
-        showNotification(
-          'CEO Não Encontrada',
-          'Arraste a ponta para próximo de uma Caixa de Emenda (CEO)',
-          'warning'
-        );
+        strokeWeight: 2
       }
     });
-    
-    infrastructureMarkers.value.push(markerA);
+
+    const startInfo = new google.maps.InfoWindow({
+      content: `<div class="p-2">
+        <p class="font-bold text-sm">${cable.value.name || 'Cabo'}</p>
+        <p class="text-xs text-gray-600">Início do traçado</p>
+      </div>`
+    });
+
+    startMarker.addListener('click', () => {
+      startInfo.open(mapInstance, startMarker);
+    });
   }
-  
-  // Criar marcador para Ponta B (INÍCIO do segmento posterior - VERMELHO)
-  if (looseEnds.end_b && looseEnds.end_b.location) {
-    const markerB = new google.maps.Marker({
-      position: {
-        lat: looseEnds.end_b.location.lat,
-        lng: looseEnds.end_b.location.lng
-      },
-      map: mapInstance.value,
-      draggable: true,
+
+  // End marker
+  if (coords.length > 1) {
+    const lastCoord = coords[coords.length - 1];
+    endMarker = new google.maps.Marker({
+      position: lastCoord,
+      map: mapInstance,
+      title: 'Fim',
       icon: {
         path: google.maps.SymbolPath.CIRCLE,
-        scale: 12,
-        fillColor: '#EF4444', // Vermelho
-        fillOpacity: 1,
-        strokeColor: '#FFFFFF',
-        strokeWeight: 3,
-      },
-      title: `Ponta B (Segmento ${segments.after.name}) - Arraste para CEO`,
-      zIndex: 1000,
-    });
-    
-    // Listener de drag
-    markerB.addListener('dragend', async (event) => {
-      const lat = event.latLng.lat();
-      const lng = event.latLng.lng();
-      console.log('[LooseEnd B] Arrastada para:', lat, lng);
-      
-      // Procurar CEO próxima
-      const nearbyPoint = await findNearbyInfrastructure(lat, lng, 50);
-      
-      if (nearbyPoint) {
-        console.log('[LooseEnd B] CEO encontrada:', nearbyPoint.name);
-        
-        try {
-          const response = await api.post(
-            `/api/v1/inventory/infrastructure/${nearbyPoint.id}/attach-loose-end/`,
-            {
-              cable_id: parseInt(id),
-              segment_id: looseEnds.end_b.segment_id,
-              is_start_of_segment: looseEnds.end_b.is_start
-            }
-          );
-          
-          console.log('[LooseEnd B] Anexada:', response);
-          
-          markerB.setIcon({
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 10,
-            fillColor: '#10B981',
-            fillOpacity: 1,
-            strokeColor: '#FFFFFF',
-            strokeWeight: 3,
-          });
-          markerB.setDraggable(false);
-          markerB.setTitle(`Ponta B conectada a ${nearbyPoint.name}`);
-          
-          showNotification(
-            'Ponta Conectada!',
-            `Ponta B anexada a ${nearbyPoint.name}${response.both_ends_connected ? '. Ambas as pontas conectadas!' : ''}`,
-            'success'
-          );
-          
-        } catch (err) {
-          console.error('[LooseEnd B] Erro ao anexar:', err);
-          showNotification(
-            'Erro ao Conectar',
-            err?.response?.data?.error || err?.message || 'Erro ao conectar ponta',
-            'error'
-          );
-        }
-      } else {
-        showNotification(
-          'CEO Não Encontrada',
-          'Arraste a ponta para próximo de uma Caixa de Emenda (CEO)',
-          'warning'
-        );
-      }
-    });
-    
-    infrastructureMarkers.value.push(markerB);
-  }
-};
-
-// Renderizar marcadores de infraestrutura no mapa
-const renderInfrastructureMarkers = () => {
-  // Limpar marcadores antigos
-  infrastructureMarkers.value.forEach(marker => marker.setMap(null));
-  infrastructureMarkers.value = [];
-  
-  const points = cable.value.infrastructure_points || [];
-  if (!mapInstance.value || points.length === 0) return;
-  
-  console.log('[FiberRouteEditor] Rendering', points.length, 'infrastructure markers');
-  
-  points.forEach(point => {
-    if (!point.location || !point.location.coordinates) return;
-    
-    const [lng, lat] = point.location.coordinates;
-    
-    // Definir cor e ícone baseado no tipo
-    let color, icon;
-    switch(point.type) {
-      case 'slack':
-        color = '#3b82f6'; // azul
-        icon = google.maps.SymbolPath.CIRCLE;
-        break;
-      case 'splice_box':
-        color = '#f97316'; // laranja
-        icon = google.maps.SymbolPath.BACKWARD_CLOSED_ARROW;
-        break;
-      case 'splitter_box':
-        color = '#a855f7'; // roxo
-        icon = google.maps.SymbolPath.FORWARD_CLOSED_ARROW;
-        break;
-      default:
-        color = '#6b7280'; // cinza
-        icon = google.maps.SymbolPath.CIRCLE;
-    }
-    
-    const marker = new google.maps.Marker({
-      position: { lat, lng },
-      map: mapInstance.value,
-      icon: {
-        path: icon,
-        fillColor: color,
-        fillOpacity: 0.9,
-        strokeColor: '#fff',
-        strokeWeight: 2,
-        scale: point.type === 'slack' ? 8 : 5,
-        rotation: point.type === 'splice_box' ? 180 : 0
-      },
-      title: `${point.name || point.type_display} @ ${point.distance_from_origin?.toFixed(1)}m`,
-      zIndex: 1000
-    });
-    
-    // Adicionar listener de clique direito no marcador
-    marker.addListener('rightclick', (event) => {
-      if (mode.value !== 'edit') return;
-      
-      event.domEvent.preventDefault();
-      
-      contextMenu.x = event.domEvent.clientX;
-      contextMenu.y = event.domEvent.clientY;
-      contextMenu.latlng = event.latLng;
-      contextMenu.type = 'infrastructure';
-      contextMenu.infrastructurePoint = point;
-      contextMenu.show = true;
-      
-      console.log('[FiberRouteEditor] Right-click on infrastructure', point);
-    });
-    
-    infrastructureMarkers.value.push(marker);
-  });
-};
-
-// Carregar e renderizar CEOs standalone (não anexadas a este cabo)
-const loadStandaloneCEOs = async () => {
-  if (!mapInstance.value) {
-    console.warn('[loadStandaloneCEOs] Mapa não inicializado');
-    return;
-  }
-  
-  try {
-    console.log('[loadStandaloneCEOs] Buscando CEOs standalone...');
-    const response = await api.get('/api/v1/inventory/infrastructure/standalone-ceos/');
-    
-    console.log('[loadStandaloneCEOs] Response completo:', response);
-    console.log('[loadStandaloneCEOs] Response.status:', response.status);
-    
-    if (!response || !response.ceos) {
-      console.warn('[loadStandaloneCEOs] Resposta inválida:', response);
-      return;
-    }
-    
-    const ceos = response.ceos;
-    console.log(`[loadStandaloneCEOs] Encontradas ${ceos.length} CEOs standalone`);
-    
-    // Adicionar CEOs standalone à lista global de CEOs disponíveis
-    allAvailableCEOs.value = [
-      ...(cable.value.infrastructure_points || []), // CEOs já anexadas ao cabo
-      ...ceos.map(ceo => ({ // CEOs standalone
-        id: ceo.id,
-        name: ceo.name,
-        type: 'splice_box',
-        location: { coordinates: [ceo.location.lng, ceo.location.lat] }
-      }))
-    ];
-    console.log(`[loadStandaloneCEOs] Total de CEOs disponíveis: ${allAvailableCEOs.value.length}`);
-    
-    // Renderizar cada CEO como marcador arrastável
-    ceos.forEach(ceo => {
-      if (!ceo.location) {
-        console.warn('[loadStandaloneCEOs] CEO sem localização:', ceo);
-        return;
-      }
-      
-      const marker = new google.maps.Marker({
-        position: { lat: ceo.location.lat, lng: ceo.location.lng },
-        map: mapInstance.value,
-        icon: {
-          path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-          fillColor: '#f97316', // laranja (CEO)
-          fillOpacity: 0.9,
-          strokeColor: '#fff',
-          strokeWeight: 2,
-          scale: 5,
-          rotation: 180
-        },
-        title: `${ceo.name} (CEO Standalone)`,
-        draggable: mode.value === 'edit',
-        zIndex: 1000,
-        ceoData: ceo
-      });
-      
-      // Listener para atualizar localização ao arrastar
-      marker.addListener('dragend', async (event) => {
-        console.log('[loadStandaloneCEOs] CEO arrastada:', ceo.name, event.latLng.lat(), event.latLng.lng());
-        
-        try {
-          await api.put(`/api/v1/inventory/infrastructure/${ceo.id}/`, {
-            location: {
-              type: 'Point',
-              coordinates: [event.latLng.lng(), event.latLng.lat()]
-            }
-          });
-          
-          showNotification(
-            'CEO Atualizada',
-            `CEO ${ceo.name} movida com sucesso`,
-            'success'
-          );
-        } catch (err) {
-          console.error('[loadStandaloneCEOs] Erro ao atualizar CEO:', err);
-          showNotification(
-            'Erro ao Mover',
-            err?.response?.data?.detail || 'Falha ao atualizar localização da CEO',
-            'error'
-          );
-        }
-      });
-      
-      // Listener de clique direito para ações (excluir, etc)
-      marker.addListener('rightclick', (event) => {
-        if (mode.value !== 'edit') return;
-        
-        event.domEvent.preventDefault();
-        
-        contextMenu.x = event.domEvent.clientX;
-        contextMenu.y = event.domEvent.clientY;
-        contextMenu.latlng = event.latLng;
-        contextMenu.type = 'infrastructure';
-        contextMenu.infrastructurePoint = {
-          id: ceo.id,
-          name: ceo.name,
-          type: 'splice_box',
-          location: { coordinates: [ceo.location.lng, ceo.location.lat] },
-          is_standalone: true
-        };
-        contextMenu.show = true;
-        
-        console.log('[loadStandaloneCEOs] Right-click em CEO standalone:', ceo.name);
-      });
-      
-      infrastructureMarkers.value.push(marker);
-    });
-    
-    console.log(`[loadStandaloneCEOs] ${ceos.length} CEOs standalone renderizadas`);
-  } catch (err) {
-    console.error('[loadStandaloneCEOs] Erro ao carregar CEOs standalone:', err);
-    console.error('[loadStandaloneCEOs] Erro detalhes:', err.response);
-    console.error('[loadStandaloneCEOs] Erro status:', err.response?.status);
-    console.error('[loadStandaloneCEOs] Erro data:', err.response?.data);
-    // Não mostrar notificação, é um erro silencioso (CEOs são opcionais)
-  }
-};
-
-// Mode Control (Read/Edit)
-const setMode = (newMode) => {
-  mode.value = newMode;
-  const drawing = getDrawing();
-  
-  if (!drawing) return;
-  
-  if (newMode === 'edit') {
-    drawing.startDrawing();
-    
-    // Tornar marcadores de infraestrutura (incluindo standalone) arrastáveis
-    infrastructureMarkers.value.forEach(marker => {
-      if (marker.ceoData) {
-        marker.setDraggable(true);
-      }
-    });
-    
-    console.log('[FiberRouteEditor] Edit mode enabled');
-  } else {
-    drawing.stopDrawing();
-    
-    // Tornar marcadores não arrastáveis
-    infrastructureMarkers.value.forEach(marker => {
-      marker.setDraggable(false);
-    });
-    
-    console.log('[FiberRouteEditor] Read mode (locked)');
-  }
-};
-
-// Context Menu (Right-Click)
-const handlePolylineRightClick = (event) => {
-  if (mode.value !== 'edit') return; // Só abre menu se estiver editando
-  
-  event.domEvent.preventDefault();
-  
-  contextMenu.x = event.domEvent.clientX;
-  contextMenu.y = event.domEvent.clientY;
-  contextMenu.latlng = event.latLng;
-  contextMenu.type = 'polyline';
-  contextMenu.infrastructurePoint = null;
-  contextMenu.show = true;
-  
-  console.log('[FiberRouteEditor] Right-click on polyline', event.latLng.lat(), event.latLng.lng());
-};
-
-const handleMapRightClick = (event) => {
-  // Fallback caso o listener da polyline não funcione
-  if (mode.value !== 'edit') return;
-  
-  event.domEvent.preventDefault();
-  
-  contextMenu.x = event.domEvent.clientX;
-  contextMenu.y = event.domEvent.clientY;
-  contextMenu.latlng = event.latLng;
-  contextMenu.type = 'polyline';
-  contextMenu.infrastructurePoint = null;
-  contextMenu.show = true;
-};
-
-const closeContextMenu = () => {
-  contextMenu.show = false;
-  contextMenu.type = null;
-  contextMenu.infrastructurePoint = null;
-};
-
-// Context Menu Actions - Criar Infraestrutura
-const actionAddSlack = async () => {
-  const lat = contextMenu.latlng.lat();
-  const lng = contextMenu.latlng.lng();
-  console.log('[FiberRouteEditor] Add Slack at', lat, lng);
-  
-  const createSlackAction = async (slackLengthStr) => {
-    const slackLength = parseFloat(slackLengthStr);
-    if (isNaN(slackLength) || slackLength <= 0) {
-      showNotification(
-        'Tamanho Inválido',
-        'Informe um número positivo para o tamanho da reserva.',
-        'error'
-      );
-      return;
-    }
-    
-    try {
-      const result = await api.post('/api/v1/inventory/infrastructure/', {
-        cable: id,
-        type: 'slack',
-        name: '',
-        lat,
-        lng,
-        metadata: { slack_length: slackLength }
-      });
-      
-      console.log('[FiberRouteEditor] Infrastructure created', result);
-      
-      // Recarregar dados do cabo para atualizar sidebar e marcadores
-      await loadCableData({ preserveViewport: true });
-      
-      showNotification(
-        'Reserva Técnica Criada!',
-        `Tamanho: ${slackLength}m\nMetragem: ${result.distance_from_origin?.toFixed(1)}m`,
-        'success'
-      );
-    } catch (err) {
-      console.error('[FiberRouteEditor] Erro ao criar infraestrutura', err);
-      showNotification(
-        'Erro ao Criar',
-        err?.response?.data?.detail || err?.message || 'Erro ao criar ponto de infraestrutura.',
-        'error'
-      );
-    }
-  };
-  
-  closeContextMenu();
-  showInputModal(
-    'Criar Reserva Técnica',
-    'Tamanho da Reserva (metros)',
-    'Ex: 10',
-    '10',
-    'number',
-    createSlackAction
-  );
-};
-
-// Context Menu Actions - Criar CEO no mapa
-const actionCreateCEO = async () => {
-  const lat = contextMenu.latlng.lat();
-  const lng = contextMenu.latlng.lng();
-  console.log('[FiberRouteEditor] Create CEO at', lat, lng);
-  
-  closeContextMenu();
-  
-  showInputModal(
-    'Criar Caixa de Emenda (CEO)',
-    'Nome da CEO',
-    'Ex: CEO-Centro-01',
-    `CEO-${Date.now().toString().slice(-4)}`,
-    'text',
-    async (ceoName) => {
-      if (!ceoName || !ceoName.trim()) {
-        showNotification('Nome Inválido', 'Informe um nome para a CEO', 'error');
-        return;
-      }
-      
-      try {
-        // Usar endpoint standalone para criar CEO em qualquer lugar
-        const result = await api.post('/api/v1/inventory/infrastructure/create-standalone-ceo/', {
-          name: ceoName.trim(),
-          lat,
-          lng
-        });
-        
-        console.log('[FiberRouteEditor] CEO standalone created:', result);
-        
-        // Criar marcador visual da CEO no mapa
-        const marker = new google.maps.Marker({
-          position: { lat, lng },
-          map: mapInstance.value,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 12,
-            fillColor: '#F97316',  // Laranja
-            fillOpacity: 1,
-            strokeColor: '#FFFFFF',
-            strokeWeight: 3,
-          },
-          title: result.ceo.name,
-          draggable: true,  // CEO pode ser arrastada
-          zIndex: 900
-        });
-        
-        // Permitir mover a CEO
-        marker.addListener('dragend', async (event) => {
-          const newLat = event.latLng.lat();
-          const newLng = event.latLng.lng();
-          
-          console.log('[CEO] Movida para:', newLat, newLng);
-          
-          // Atualizar localização no backend
-          try {
-            await api.patch(`/api/v1/inventory/infrastructure/${result.ceo.id}/`, {
-              lat: newLat,
-              lng: newLng
-            });
-            
-            showNotification('CEO Movida', `${result.ceo.name} reposicionada`, 'success');
-          } catch (err) {
-            console.error('[CEO] Erro ao mover:', err);
-            showNotification('Erro ao Mover', err?.message || 'Erro desconhecido', 'error');
-          }
-        });
-        
-        infrastructureMarkers.value.push(marker);
-        
-        showNotification(
-          'CEO Criada!',
-          `${result.ceo.name} criada no mapa (pode arrastar para reposicionar)`,
-          'success'
-        );
-      } catch (err) {
-        console.error('[FiberRouteEditor] Erro ao criar CEO:', err);
-        showNotification(
-          'Erro ao Criar CEO',
-          err?.response?.data?.error || err?.message || 'Erro desconhecido',
-          'error'
-        );
-      }
-    }
-  );
-};
-
-// Context Menu Actions - Criar Poste no mapa
-const actionCreatePole = async () => {
-  const lat = contextMenu.latlng.lat();
-  const lng = contextMenu.latlng.lng();
-  console.log('[FiberRouteEditor] Create Pole at', lat, lng);
-  
-  closeContextMenu();
-  
-  showInputModal(
-    'Cadastrar Poste',
-    'Identificação do Poste',
-    'Ex: Poste-123',
-    `Poste-${Date.now().toString().slice(-4)}`,
-    'text',
-    async (poleName) => {
-      if (!poleName || !poleName.trim()) {
-        showNotification('Nome Inválido', 'Informe uma identificação para o poste', 'error');
-        return;
-      }
-      
-      try {
-        const result = await api.post('/api/v1/inventory/infrastructure/', {
-          cable: id,
-          type: 'transition',  // Tipo transition para poste
-          name: poleName.trim(),
-          lat,
-          lng,
-          metadata: { structure_type: 'pole' }
-        });
-        
-        console.log('[FiberRouteEditor] Pole created:', result);
-        
-        // Recarregar dados do cabo
-        await loadCableData({ preserveViewport: true });
-        
-        showNotification(
-          'Poste Cadastrado!',
-          `${result.name} adicionado ao mapa\nMetragem: ${result.distance_from_origin?.toFixed(1)}m`,
-          'success'
-        );
-      } catch (err) {
-        console.error('[FiberRouteEditor] Erro ao cadastrar poste:', err);
-        showNotification(
-          'Erro ao Cadastrar Poste',
-          err?.response?.data?.detail || err?.message || 'Erro desconhecido',
-          'error'
-        );
-      }
-    }
-  );
-};
-
-// Armazenar referência aos segmentos ativos para persistir ao salvar
-const activeSplitSegments = ref(null);
-
-// Armazenar referências aos marcadores de split
-const splitMarkers = ref({ marker1: null, marker2: null });
-
-const actionSplitCable = async () => {
-  const lat = contextMenu.latlng.lat();
-  const lng = contextMenu.latlng.lng();
-  console.log('[FiberRouteEditor] Split cable at', lat, lng);
-  
-  closeContextMenu();
-  
-  // Mostrar confirmação
-  if (!confirm('Romper o cabo neste ponto?\n\nIsso criará duas pontas de cabo separadas.\n\nDepois você poderá adicionar uma CEO e conectar as pontas.')) {
-    return;
-  }
-  
-  try {
-    const drawing = getDrawing();
-    if (!drawing) {
-      showNotification('Erro', 'Plugin de desenho não disponível', 'error');
-      return;
-    }
-    
-    // Obter path atual
-    const currentPath = drawing.getPathCoordinates() || [];
-    if (currentPath.length < 3) {
-      showNotification(
-        'Cabo muito curto',
-        'É necessário ter pelo menos 3 pontos para romper o cabo.',
-        'warning'
-      );
-      return;
-    }
-    
-    // Encontrar o segmento mais próximo do clique
-    let minDist = Infinity;
-    let splitIndex = -1;
-    
-    // Procurar o segmento (aresta) mais próximo, não apenas o vértice
-    for (let i = 0; i < currentPath.length - 1; i++) {
-      const p1 = currentPath[i];
-      const p2 = currentPath[i + 1];
-      
-      // Distância ponto-linha
-      const dist = distanceToSegment(
-        { lat, lng },
-        p1,
-        p2
-      );
-      
-      if (dist < minDist) {
-        minDist = dist;
-        splitIndex = i;
-      }
-    }
-    
-    // Inserir ponto de quebra no segmento mais próximo
-    const breakPoint = { lat, lng };
-    currentPath.splice(splitIndex + 1, 0, breakPoint);
-    
-    // DIVIDIR o path em DOIS segmentos
-    const segment1 = currentPath.slice(0, splitIndex + 2); // Do início até o ponto de quebra
-    const segment2 = currentPath.slice(splitIndex + 1);   // Do ponto de quebra até o fim
-    
-    console.log('[FiberRouteEditor] Segment 1:', segment1.length, 'pontos');
-    console.log('[FiberRouteEditor] Segment 2:', segment2.length, 'pontos');
-    
-    // Ocultar polyline original
-    const originalPolyline = drawing.getPolyline();
-    if (originalPolyline) {
-      originalPolyline.setVisible(false);
-    }
-    
-    // Criar DOIS polylines separados
-    const polyline1 = new google.maps.Polyline({
-      path: segment1,
-      map: mapInstance.value,
-      strokeColor: '#3B82F6',
-      strokeWeight: 4,
-      strokeOpacity: 0.8,
-      editable: true,
-      draggable: false,
-      zIndex: 10
-    });
-    
-    const polyline2 = new google.maps.Polyline({
-      path: segment2,
-      map: mapInstance.value,
-      strokeColor: '#EF4444',
-      strokeWeight: 4,
-      strokeOpacity: 0.8,
-      editable: true,
-      draggable: false,
-      zIndex: 10
-    });
-    
-    // Criar marcadores nas PONTAS (extremidades)
-    const endMarker1 = new google.maps.Marker({
-      position: segment1[segment1.length - 1],
-      map: mapInstance.value,
-      icon: {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 10,
-        fillColor: '#3B82F6',
-        fillOpacity: 1,
-        strokeColor: '#FFFFFF',
-        strokeWeight: 3,
-      },
-      title: 'Ponta do Cabo 1 - Clique direito para adicionar CEO',
-      draggable: true,
-      zIndex: 1000
-    });
-    
-    // Círculo de raio de 10m ao redor da ponta 1
-    const radiusCircle1 = new google.maps.Circle({
-      map: mapInstance.value,
-      center: segment1[segment1.length - 1],
-      radius: 10, // 10 metros
-      fillColor: '#3B82F6',
-      fillOpacity: 0.1,
-      strokeColor: '#3B82F6',
-      strokeOpacity: 0.3,
-      strokeWeight: 1,
-      clickable: false,
-      zIndex: 500
-    });
-    
-    const endMarker2 = new google.maps.Marker({
-      position: segment2[0],
-      map: mapInstance.value,
-      icon: {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 10,
+        scale: 8,
         fillColor: '#EF4444',
         fillOpacity: 1,
         strokeColor: '#FFFFFF',
-        strokeWeight: 3,
-      },
-      title: 'Ponta do Cabo 2 - Clique direito para adicionar CEO',
-      draggable: true,
-      zIndex: 1000
-    });
-    
-    // Círculo de raio de 10m ao redor da ponta 2
-    const radiusCircle2 = new google.maps.Circle({
-      map: mapInstance.value,
-      center: segment2[0],
-      radius: 10, // 10 metros
-      fillColor: '#EF4444',
-      fillOpacity: 0.1,
-      strokeColor: '#EF4444',
-      strokeOpacity: 0.3,
-      strokeWeight: 1,
-      clickable: false,
-      zIndex: 500
-    });
-    
-    // Armazenar referências aos marcadores
-    splitMarkers.value.marker1 = endMarker1;
-    splitMarkers.value.marker2 = endMarker2;
-    
-    // SNAPSHOT das CEOs disponíveis no momento do split (não será alterado durante o processo)
-    const ceosSnapshotForSplit = [...allAvailableCEOs.value];
-    console.log('[Split] Snapshot de CEOs criado:', ceosSnapshotForSplit.length, 'CEOs disponíveis');
-    
-    // Função para verificar se ambas as pontas foram fixadas à mesma CEO
-    const checkBothMarkersFixed = async () => {
-      const m1 = splitMarkers.value.marker1;
-      const m2 = splitMarkers.value.marker2;
-      
-      console.log('[checkBothMarkersFixed] Iniciando verificação...');
-      console.log('[checkBothMarkersFixed] marker1:', m1 ? 'existe' : 'null');
-      console.log('[checkBothMarkersFixed] marker2:', m2 ? 'existe' : 'null');
-      console.log('[checkBothMarkersFixed] marker1.ceoData:', m1?.ceoData);
-      console.log('[checkBothMarkersFixed] marker2.ceoData:', m2?.ceoData);
-      
-      // Verificar se ambos têm ceoData
-      if (!m1?.ceoData || !m2?.ceoData) {
-        console.log('[Split] Aguardando fixação de ambas as pontas...');
-        return;
+        strokeWeight: 2
       }
-      
-      console.log('[checkBothMarkersFixed] CEO 1:', m1.ceoData.id, m1.ceoData.name);
-      console.log('[checkBothMarkersFixed] CEO 2:', m2.ceoData.id, m2.ceoData.name);
-      
-      // Verificar se são a MESMA CEO
-      if (m1.ceoData.id !== m2.ceoData.id) {
-        console.log('[Split] Pontas fixadas em CEOs diferentes:', m1.ceoData.name, 'vs', m2.ceoData.name);
-        showNotification(
-          'CEOs Diferentes',
-          `As pontas estão em CEOs diferentes (${m1.ceoData.name} e ${m2.ceoData.name}). Configure pass-through manualmente se necessário.`,
-          'info'
-        );
-        return;
-      }
-      
-      // AMBAS as pontas na MESMA CEO - fazer split permanente em segmentos!
-      console.log('[Split] AMBAS as pontas fixadas em', m1.ceoData.name, '- iniciando split V2');
-      
-      try {
-        console.log('[Split] Chamando endpoint V2 para CEO', m1.ceoData.id);
-        
-        const response = await api.post(`/api/v1/inventory/cables/${parseInt(id)}/split-at-ceo-v2/`, {
-          ceo_id: m1.ceoData.id
-        });
-        
-        console.log('[Split] Segmentação concluída (V2):', response);
-        console.log('[Split] Response.loose_ends:', response.loose_ends);
-        console.log('[Split] Response.segments:', response.segments);
-        
-        // Verificar se há pontas soltas
-        if (response.loose_ends) {
-          console.log('[Split] Pontas soltas detectadas - renderizando marcadores arrastáveis');
-          
-          showNotification(
-            'Cabo Rompido!',
-            `${response.message}\nArraste as pontas AZUL e VERMELHA para conectá-las à CEO.`,
-            'warning'
-          );
-          
-          // Limpar markers e polylines temporários
-          m1.setMap(null);
-          m2.setMap(null);
-          polyline1.setMap(null);
-          polyline2.setMap(null);
-          radiusCircle1.setMap(null);
-          radiusCircle2.setMap(null);
-          
-          splitMarkers.value = { marker1: null, marker2: null };
-          
-          // Renderizar pontas soltas arrastáveis
-          renderLooseEnds(response.loose_ends, response.segments);
-          
-          // Recarregar dados do cabo para atualizar sidebar com segmentos BROKEN
-          setTimeout(async () => {
-            await loadCableData({ preserveViewport: true });
-          }, 500);
-          
-        } else {
-          // Split sem pontas soltas (código legado)
-          showNotification(
-            'Cabo Segmentado com Sucesso!',
-            `Segmentos criados: ${response.segments.before.name} e ${response.segments.after.name}. CEO ${m1.ceoData.name} agora separa o cabo.`,
-            'success'
-          );
-          
-          // Limpar markers e polylines temporários
-          m1.setMap(null);
-          m2.setMap(null);
-          polyline1.setMap(null);
-          polyline2.setMap(null);
-          radiusCircle1.setMap(null);
-          radiusCircle2.setMap(null);
-          
-          splitMarkers.value = { marker1: null, marker2: null };
+    });
 
-          // Reload da página para mostrar segmentos
-          setTimeout(() => {
-            window.location.reload();
-          }, 2000);
-        }
-        
-      } catch (err) {
-        console.error('[Split] Erro ao fazer split permanente:', err);
-        showNotification(
-          'Erro ao Partir Cabo',
-          err?.response?.data?.error || err?.message || 'Erro desconhecido',
-          'error'
-        );
-      }
-    };
-    
-    // Menu de contexto nas pontas
-    const createMarkerContextMenu = (marker, segment, isFirstSegment, polyline, radiusCircle) => {
-      marker.addListener('rightclick', (event) => {
-        const lat = event.latLng.lat();
-        const lng = event.latLng.lng();
-        
-        // Fechar contexto anterior
-        closeContextMenu();
-        
-        // Abrir menu customizado
-        const menuHtml = `
-          <div style="position: fixed; z-index: 9999; background: white; border-radius: 8px; 
-                      box-shadow: 0 4px 12px rgba(0,0,0,0.3); padding: 8px; min-width: 220px;
-                      left: ${event.domEvent.clientX}px; top: ${event.domEvent.clientY}px;"
-               id="temp-context-menu">
-            <div style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb; margin-bottom: 4px;">
-              <p style="font-size: 10px; font-weight: bold; color: #6b7280; text-transform: uppercase; margin: 0;">
-                Ponta do Cabo ${isFirstSegment ? '1' : '2'}
-              </p>
-            </div>
-            <button onclick="window.addCEOAtMarker()" 
-                    style="width: 100%; text-align: left; padding: 10px 16px; font-size: 14px; 
-                           border: none; background: none; cursor: pointer; display: flex; 
-                           align-items: center; gap: 12px; border-radius: 4px;"
-                    onmouseover="this.style.background='#f3f4f6'" 
-                    onmouseout="this.style.background='none'">
-              <i class="fas fa-box" style="color: #f97316; width: 16px;"></i>
-              <span style="color: #374151;">Adicionar Caixa de Emenda (CEO)</span>
-            </button>
-            <div style="border-top: 1px solid #e5e7eb; margin-top: 4px; padding-top: 4px;">
-              <button onclick="document.getElementById('temp-context-menu').remove()" 
-                      style="width: 100%; text-align: left; padding: 8px 16px; font-size: 12px; 
-                             border: none; background: none; cursor: pointer; color: #ef4444;"
-                      onmouseover="this.style.background='#fef2f2'" 
-                      onmouseout="this.style.background='none'">
-                <i class="fas fa-times"></i> Cancelar
-              </button>
-            </div>
-          </div>
-        `;
-        
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = menuHtml;
-        document.body.appendChild(tempDiv.firstElementChild);
-        
-        // Handler global para adicionar CEO
-        window.addCEOAtMarker = async () => {
-          document.getElementById('temp-context-menu')?.remove();
-          
-          const ceoName = prompt('Nome da Caixa de Emenda (CEO):', `CEO-${Date.now().toString().slice(-4)}`);
-          if (!ceoName || !ceoName.trim()) return;
-          
-          try {
-            const payload = {
-              cable: id,
-              type: 'splice_box',
-              name: ceoName.trim(),
-              lat,
-              lng,
-              metadata: {}
-            };
-            
-            console.log('[FiberRouteEditor] Creating CEO with payload:', payload);
-            const result = await api.post('/api/v1/inventory/infrastructure/', payload);
-            
-            console.log('[FiberRouteEditor] CEO created at marker', result);
-            
-            // Extrair coordenadas do formato GeoJSON: location.coordinates = [lng, lat]
-            const ceoLng = result.location.coordinates[0];
-            const ceoLat = result.location.coordinates[1];
-            
-            // ANEXAR o cabo à CEO (criar attachment)
-            try {
-              const attachResponse = await api.post('/api/v1/inventory/cable-attachments/attach/', {
-                cable_id: parseInt(id),
-                infrastructure_id: result.id,
-                port_type: 'oval',
-                is_pass_through: true  // Cabo passa pela CEO (midspan)
-              });
-              console.log('[FiberRouteEditor] Cable attached to CEO', attachResponse);
-            } catch (attachErr) {
-              console.error('[FiberRouteEditor] Erro ao anexar cabo:', attachErr);
-              showNotification(
-                'Erro ao Anexar Cabo',
-                'CEO criada mas não foi possível anexar o cabo.',
-                'error'
-              );
-              return;
-            }
-            
-            // Fixar marcador na posição exata da CEO (NÃO pode mais arrastar)
-            marker.setPosition({ lat: ceoLat, lng: ceoLng });
-            marker.setDraggable(false); // FIXAR marcador
-            marker.setIcon({
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 10,
-              fillColor: '#10B981', // Verde = fixado
-              fillOpacity: 1,
-              strokeColor: '#FFFFFF',
-              strokeWeight: 3,
-            });
-            marker.setTitle(`CEO: ${ceoName} (Fixado)`);
-            
-            // Armazenar referência da CEO neste marcador
-            marker.ceoData = {
-              id: result.id,
-              name: ceoName,
-              lat: ceoLat,
-              lng: ceoLng
-            };
-            
-            // Verificar se AMBAS as pontas foram fixadas à MESMA CEO
-            await checkBothMarkersFixed();
-            
-            // Remover círculo de raio (não é mais necessário)
-            if (radiusCircle) {
-              radiusCircle.setMap(null);
-            }
-            
-            // Atualizar caminho do segmento
-            if (isFirstSegment) {
-              segment[segment.length - 1] = { lat: ceoLat, lng: ceoLng };
-              polyline.setPath(segment);
-            } else {
-              segment[0] = { lat: ceoLat, lng: ceoLng };
-              polyline.setPath(segment);
-            }
-            
-            // Recarregar dados do cabo para atualizar CEOs
-            await loadCableData({ preserveViewport: true });
-            
-            showNotification(
-              'CEO Fixada!',
-              `${ceoName} criada e cabo anexado. Arraste a OUTRA ponta até uma CEO para conectar.`,
-              'success'
-            );
-          } catch (err) {
-            console.error('[FiberRouteEditor] Erro ao criar CEO', err);
-            showNotification(
-              'Erro ao Criar CEO',
-              err?.response?.data?.detail || err?.message || 'Erro desconhecido',
-              'error'
-            );
-          }
-        };
-        
-        // Fechar ao clicar fora
-        setTimeout(() => {
-          document.addEventListener('click', function closeMenu(e) {
-            const menu = document.getElementById('temp-context-menu');
-            if (menu && !menu.contains(e.target)) {
-              menu.remove();
-              document.removeEventListener('click', closeMenu);
-            }
-          });
-        }, 100);
-      });
-    };
-    
-    createMarkerContextMenu(endMarker1, segment1, true, polyline1, radiusCircle1);
-    createMarkerContextMenu(endMarker2, segment2, false, polyline2, radiusCircle2);
-    
-    // Feedback visual ao arrastar sobre CEO
-    let hoverInfoDiv = null;
-    const createDragFeedback = (marker, segment, isFirstSegment, polyline, radiusCircle) => {
-      marker.addListener('drag', (event) => {
-        const newPos = { lat: event.latLng.lat(), lng: event.latLng.lng() };
-        
-        // Atualizar posição do círculo de raio
-        if (radiusCircle) {
-          radiusCircle.setCenter(newPos);
-        }
-        
-        // Atualizar caminho durante arraste
-        if (isFirstSegment) {
-          segment[segment.length - 1] = newPos;
-        } else {
-          segment[0] = newPos;
-        }
-        polyline.setPath(segment);
-        
-        // Verificar se está sobre uma CEO (raio de 100 metros) - USA SNAPSHOT
-        const nearbyInfra = ceosSnapshotForSplit?.find(infra => {
-          if (!infra.location?.coordinates) return false;
-          const [infraLng, infraLat] = infra.location.coordinates;
-          const dist = Math.sqrt(
-            Math.pow(infraLat - newPos.lat, 2) + Math.pow(infraLng - newPos.lng, 2)
-          );
-          console.log(`[Drag] Distance to ${infra.name}:`, dist);
-          return dist < 0.001; // ~100 metros em graus (aproximadamente)
-        });
-        
-        if (nearbyInfra && nearbyInfra.type === 'splice_box') {
-          // Mostrar aviso visual
-          if (!hoverInfoDiv) {
-            hoverInfoDiv = document.createElement('div');
-            hoverInfoDiv.style.cssText = `
-              position: fixed;
-              top: 50%;
-              left: 50%;
-              transform: translate(-50%, -50%);
-              background: rgba(16, 185, 129, 0.95);
-              color: white;
-              padding: 20px 30px;
-              border-radius: 12px;
-              box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-              z-index: 9999;
-              font-size: 16px;
-              font-weight: bold;
-              text-align: center;
-              pointer-events: none;
-            `;
-            hoverInfoDiv.innerHTML = `
-              <i class="fas fa-link" style="font-size: 24px; margin-bottom: 10px; display: block;"></i>
-              Solte aqui para anexar à ${nearbyInfra.name}
-            `;
-            document.body.appendChild(hoverInfoDiv);
-          }
-          
-          // Mudar cor do marcador temporariamente
-          marker.setIcon({
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 12,
-            fillColor: '#10B981',
-            fillOpacity: 1,
-            strokeColor: '#FFFFFF',
-            strokeWeight: 3,
-          });
-        } else {
-          // Remover aviso se saiu de cima da CEO
-          if (hoverInfoDiv) {
-            hoverInfoDiv.remove();
-            hoverInfoDiv = null;
-          }
-          
-          // Restaurar cor original
-          const originalColor = isFirstSegment ? '#3B82F6' : '#EF4444';
-          marker.setIcon({
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 10,
-            fillColor: originalColor,
-            fillOpacity: 1,
-            strokeColor: '#FFFFFF',
-            strokeWeight: 3,
-          });
-        }
-      });
-    };
-    
-    // Listener para soltar ponta e anexar à CEO
-    const createDropHandler = (marker, segment, isFirstSegment, polyline, radiusCircle) => {
-      marker.addListener('dragend', async (event) => {
-        // Remover aviso visual
-        if (hoverInfoDiv) {
-          hoverInfoDiv.remove();
-          hoverInfoDiv = null;
-        }
-        
-        const newLat = event.latLng.lat();
-        const newLng = event.latLng.lng();
-        
-        // Verificar se foi solto próximo de uma CEO (raio de 100 metros) - USA SNAPSHOT
-        const nearbyInfra = ceosSnapshotForSplit?.find(infra => {
-          if (!infra.location?.coordinates) return false;
-          const [infraLng, infraLat] = infra.location.coordinates;
-          const dist = Math.sqrt(
-            Math.pow(infraLat - newLat, 2) + Math.pow(infraLng - newLng, 2)
-          );
-          console.log(`[Drop] Distance to ${infra.name}:`, dist);
-          return dist < 0.001; // ~100 metros em graus (aproximadamente)
-        });
-        
-        if (nearbyInfra && nearbyInfra.type === 'splice_box') {
-          try {
-            const [infraLng, infraLat] = nearbyInfra.location.coordinates;
-            
-            // Anexar cabo à CEO no banco de dados
-            await api.post('/api/v1/inventory/cable-attachments/attach/', {
-              cable_id: parseInt(id),
-              infrastructure_id: nearbyInfra.id,
-              port_type: 'oval',
-              is_pass_through: true
-            });
-            
-            // Snap para posição exata da CEO
-            marker.setPosition({ lat: infraLat, lng: infraLng });
-            marker.setDraggable(false); // Fixar após anexar
-            marker.setIcon({
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 10,
-              fillColor: '#10B981', // Verde = anexado
-              fillOpacity: 1,
-              strokeColor: '#FFFFFF',
-              strokeWeight: 3,
-            });
-            marker.setTitle(`CEO: ${nearbyInfra.name} (Anexado)`);
-            
-            // Armazenar referência da CEO neste marcador
-            marker.ceoData = {
-              id: nearbyInfra.id,
-              name: nearbyInfra.name,
-              lat: infraLat,
-              lng: infraLng
-            };
-            
-            // Verificar se AMBAS as pontas foram fixadas à MESMA CEO
-            await checkBothMarkersFixed();
-            
-            // Remover círculo de raio (não é mais necessário)
-            if (radiusCircle) {
-              radiusCircle.setMap(null);
-            }
-            
-            if (isFirstSegment) {
-              segment[segment.length - 1] = { lat: infraLat, lng: infraLng };
-            } else {
-              segment[0] = { lat: infraLat, lng: infraLng };
-            }
-            polyline.setPath(segment);
-            
-            // Marcar como modificado para salvar depois
-            isDirty.value = true;
-            
-            // Recarregar dados
-            await loadCableData({ preserveViewport: true });
-            
-            showNotification(
-              'Cabo Anexado!',
-              `Cabo anexado à ${nearbyInfra.name}. Salve as alterações.`,
-              'success'
-            );
-          } catch (err) {
-            console.error('[FiberRouteEditor] Erro ao anexar cabo', err);
-            showNotification(
-              'Erro ao Anexar',
-              err?.response?.data?.detail || err?.message || 'Erro ao anexar cabo à CEO',
-              'error'
-            );
-          }
-        } else {
-          // NÃO está próximo de nenhuma CEO existente
-          // Verificar se os DOIS marcadores estão próximos um do outro
-          const m1 = splitMarkers.value.marker1;
-          const m2 = splitMarkers.value.marker2;
-          
-          if (m1 && m2) {
-            const pos1 = m1.getPosition();
-            const pos2 = m2.getPosition();
-            
-            const distBetweenMarkers = Math.sqrt(
-              Math.pow(pos1.lat() - pos2.lat(), 2) + 
-              Math.pow(pos1.lng() - pos2.lng(), 2)
-            );
-            
-            console.log('[Drop] Distância entre marcadores:', distBetweenMarkers);
-            
-            // Se estão próximos (< 0.001 = ~100m)
-            if (distBetweenMarkers < 0.001) {
-              console.log('[Drop] Marcadores estão próximos! Criar CEO e fazer split.');
-              
-              // Calcular ponto médio
-              const midLat = (pos1.lat() + pos2.lat()) / 2;
-              const midLng = (pos1.lng() + pos2.lng()) / 2;
-              
-              // Perguntar o nome da CEO
-              const ceoName = prompt(
-                'Os dois marcadores estão próximos!\n\n' +
-                'Digite o nome da Caixa de Emenda (CEO):',
-                `CEO-${Date.now().toString().slice(-4)}`
-              );
-              
-              if (!ceoName || !ceoName.trim()) {
-                // Cancelado - restaurar cor original
-                const originalColor = isFirstSegment ? '#3B82F6' : '#EF4444';
-                marker.setIcon({
-                  path: google.maps.SymbolPath.CIRCLE,
-                  scale: 10,
-                  fillColor: originalColor,
-                  fillOpacity: 1,
-                  strokeColor: '#FFFFFF',
-                  strokeWeight: 3,
-                });
-                return;
-              }
-              
-              try {
-                // Criar CEO no ponto médio
-                const ceoResult = await api.post('/api/v1/inventory/infrastructure/', {
-                  cable: parseInt(id),
-                  type: 'splice_box',
-                  name: ceoName.trim(),
-                  lat: midLat,
-                  lng: midLng,
-                  metadata: {}
-                });
-                
-                console.log('[Drop] CEO criada:', ceoResult);
-                
-                const ceoLat = ceoResult.location.coordinates[1];
-                const ceoLng = ceoResult.location.coordinates[0];
-                
-                // NÃO anexar o cabo original aqui - o split vai criar os attachments
-                // dos segmentos automaticamente
-                
-                // Snap AMBOS os marcadores para a CEO
-                m1.setPosition({ lat: ceoLat, lng: ceoLng });
-                m1.setDraggable(false);
-                m1.setIcon({
-                  path: google.maps.SymbolPath.CIRCLE,
-                  scale: 10,
-                  fillColor: '#10B981',
-                  fillOpacity: 1,
-                  strokeColor: '#FFFFFF',
-                  strokeWeight: 3,
-                });
-                m1.setTitle(`CEO: ${ceoName} (Anexado)`);
-                m1.ceoData = {
-                  id: ceoResult.id,
-                  name: ceoName,
-                  lat: ceoLat,
-                  lng: ceoLng
-                };
-                
-                m2.setPosition({ lat: ceoLat, lng: ceoLng });
-                m2.setDraggable(false);
-                m2.setIcon({
-                  path: google.maps.SymbolPath.CIRCLE,
-                  scale: 10,
-                  fillColor: '#10B981',
-                  fillOpacity: 1,
-                  strokeColor: '#FFFFFF',
-                  strokeWeight: 3,
-                });
-                m2.setTitle(`CEO: ${ceoName} (Anexado)`);
-                m2.ceoData = {
-                  id: ceoResult.id,
-                  name: ceoName,
-                  lat: ceoLat,
-                  lng: ceoLng
-                };
-                
-                showNotification(
-                  'CEO Criada!',
-                  `${ceoName} criada. Iniciando split permanente...`,
-                  'success'
-                );
-                
-                // Disparar split permanente
-                await checkBothMarkersFixed();
-                
-              } catch (err) {
-                console.error('[Drop] Erro ao criar CEO e fazer split:', err);
-                showNotification(
-                  'Erro',
-                  err?.response?.data?.detail || err?.message || 'Erro ao criar CEO',
-                  'error'
-                );
-                
-                // Restaurar cor original
-                const originalColor = isFirstSegment ? '#3B82F6' : '#EF4444';
-                marker.setIcon({
-                  path: google.maps.SymbolPath.CIRCLE,
-                  scale: 10,
-                  fillColor: originalColor,
-                  fillOpacity: 1,
-                  strokeColor: '#FFFFFF',
-                  strokeWeight: 3,
-                });
-              }
-            } else {
-              // Marcadores ainda não estão próximos - apenas restaurar cor
-              const originalColor = isFirstSegment ? '#3B82F6' : '#EF4444';
-              marker.setIcon({
-                path: google.maps.SymbolPath.CIRCLE,
-                scale: 10,
-                fillColor: originalColor,
-                fillOpacity: 1,
-                strokeColor: '#FFFFFF',
-                strokeWeight: 3,
-              });
-            }
-          } else {
-            // Restaurar cor original se não conectou
-            const originalColor = isFirstSegment ? '#3B82F6' : '#EF4444';
-            marker.setIcon({
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 10,
-              fillColor: originalColor,
-              fillOpacity: 1,
-              strokeColor: '#FFFFFF',
-              strokeWeight: 3,
-            });
-          }
-        }
-      });
-    };
-    
-    // Armazenar referência aos segmentos
-    activeSplitSegments.value = { segment1, segment2, polyline1, polyline2, endMarker1, endMarker2, radiusCircle1, radiusCircle2 };
-    
-    createDragFeedback(endMarker1, segment1, true, polyline1, radiusCircle1);
-    createDragFeedback(endMarker2, segment2, false, polyline2, radiusCircle2);
-    createDropHandler(endMarker1, segment1, true, polyline1, radiusCircle1);
-    createDropHandler(endMarker2, segment2, false, polyline2, radiusCircle2);
-    
-    // Verificação INICIAL: checar se os marcadores já estão próximos de uma CEO
-    const checkInitialProximity = async (marker, markerName, segment, isFirstSegment, polyline, radiusCircle) => {
-      const pos = marker.getPosition();
-      const markerLat = pos.lat();
-      const markerLng = pos.lng();
-      
-      console.log(`[InitialCheck ${markerName}] Posição do marcador: lat=${markerLat}, lng=${markerLng}`);
-      console.log(`[InitialCheck] CEOs disponíveis no snapshot:`, ceosSnapshotForSplit?.length);
-      
-      const nearbyInfra = ceosSnapshotForSplit?.find(infra => {
-        if (!infra.location?.coordinates) return false;
-        const [infraLng, infraLat] = infra.location.coordinates;
-        const dist = Math.sqrt(
-          Math.pow(infraLat - markerLat, 2) + Math.pow(infraLng - markerLng, 2)
-        );
-        console.log(`[InitialCheck ${markerName}] CEO ${infra.name}: lat=${infraLat}, lng=${infraLng}, distance=${dist}`);
-        return dist < 0.001; // ~100 metros
-      });
-      
-      if (nearbyInfra && nearbyInfra.type === 'splice_box') {
-        console.log(`[InitialCheck] ${markerName} está próximo de ${nearbyInfra.name}!`);
-        
-        // Mostrar prompt para confirmar anexação
-        const confirm = window.confirm(
-          `O marcador ${markerName} está próximo de "${nearbyInfra.name}".\n\n` +
-          `Deseja anexar automaticamente este cabo à CEO?`
-        );
-        
-        if (confirm) {
-          try {
-            const [infraLng, infraLat] = nearbyInfra.location.coordinates;
-            
-            // Anexar cabo à CEO
-            await api.post('/api/v1/inventory/cable-attachments/attach/', {
-              cable_id: parseInt(id),
-              infrastructure_id: nearbyInfra.id,
-              port_type: 'oval',
-              is_pass_through: true
-            });
-            
-            // Snap para posição exata da CEO
-            marker.setPosition({ lat: infraLat, lng: infraLng });
-            marker.setDraggable(false);
-            marker.setIcon({
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 10,
-              fillColor: '#10B981',
-              fillOpacity: 1,
-              strokeColor: '#FFFFFF',
-              strokeWeight: 3,
-            });
-            marker.setTitle(`CEO: ${nearbyInfra.name} (Anexado)`);
-            
-            // Armazenar dados da CEO
-            marker.ceoData = {
-              id: nearbyInfra.id,
-              name: nearbyInfra.name,
-              lat: infraLat,
-              lng: infraLng
-            };
-            
-            // Atualizar caminho
-            if (isFirstSegment) {
-              segment[segment.length - 1] = { lat: infraLat, lng: infraLng };
-            } else {
-              segment[0] = { lat: infraLat, lng: infraLng };
-            }
-            polyline.setPath(segment);
-            
-            // Remover círculo de raio
-            if (radiusCircle) {
-              radiusCircle.setMap(null);
-            }
-            
-            showNotification(
-              'CEO Detectada!',
-              `${markerName} anexado automaticamente a ${nearbyInfra.name}`,
-              'success'
-            );
-            
-            // Verificar se ambas as pontas estão fixadas
-            await checkBothMarkersFixed();
-          } catch (err) {
-            console.error('[InitialCheck] Erro ao anexar:', err);
-            showNotification(
-              'Erro ao Anexar',
-              err?.response?.data?.detail || err?.message || 'Erro ao anexar',
-              'error'
-            );
-          }
-        }
-      }
-    };
-    
-    // Executar verificação inicial para ambos os marcadores
-    setTimeout(() => {
-      checkInitialProximity(endMarker1, 'Ponta Azul', segment1, true, polyline1, radiusCircle1);
-      checkInitialProximity(endMarker2, 'Ponta Vermelha', segment2, false, polyline2, radiusCircle2);
-    }, 500); // Aguardar meio segundo para o mapa estabilizar
-    
-    showNotification(
-      'Cabo Rompido!',
-      'Azul = Ponta 1 | Vermelho = Ponta 2\n\n1. Clique com BOTÃO DIREITO em uma ponta para criar CEO\n2. Arraste a OUTRA ponta até uma CEO existente\n3. Salve as alterações',
-      'success'
-    );
-    
-  } catch (err) {
-    console.error('[FiberRouteEditor] Erro ao romper cabo', err);
-    showNotification(
-      'Erro',
-      err?.message || 'Erro ao romper cabo',
-      'error'
-    );
+    const endInfo = new google.maps.InfoWindow({
+      content: `<div class="p-2">
+        <p class="font-bold text-sm">Fim do Traçado</p>
+        <p class="text-xs text-gray-600">${cable.value.calculated_length_km?.toFixed(2)} km</p>
+      </div>`
+    });
+
+    endMarker.addListener('click', () => {
+      endInfo.open(mapInstance, endMarker);
+    });
+  }
+
+  // Fit bounds
+  if (coords.length > 0) {
+    const bounds = new google.maps.LatLngBounds();
+    coords.forEach(coord => bounds.extend(coord));
+    mapInstance.fitBounds(bounds);
+  }
+
+  console.log('[FiberRouteEditor] Cable rendered on map');
+};
+
+const clearMapObjects = () => {
+  if (originalPolyline) {
+    originalPolyline.setMap(null);
+    originalPolyline = null;
+  }
+  if (startMarker) {
+    startMarker.setMap(null);
+    startMarker = null;
+  }
+  if (endMarker) {
+    endMarker.setMap(null);
+    endMarker = null;
   }
 };
 
-// Função auxiliar para calcular distância ponto-segmento
-function distanceToSegment(point, p1, p2) {
-  const A = point.lat - p1.lat;
-  const B = point.lng - p1.lng;
-  const C = p2.lat - p1.lat;
-  const D = p2.lng - p1.lng;
+// ==================== Mode Control ====================
+const setMode = (newMode) => {
+  mode.value = newMode;
+  console.log('[FiberRouteEditor] Mode changed:', newMode);
   
-  const dot = A * C + B * D;
-  const lenSq = C * C + D * D;
-  let param = -1;
-  
-  if (lenSq !== 0) param = dot / lenSq;
-  
-  let xx, yy;
-  
-  if (param < 0) {
-    xx = p1.lat;
-    yy = p1.lng;
-  } else if (param > 1) {
-    xx = p2.lat;
-    yy = p2.lng;
-  } else {
-    xx = p1.lat + param * C;
-    yy = p1.lng + param * D;
+  if (newMode === 'edit' && drawingPlugin.value) {
+    drawingPlugin.value.setDrawingMode(google.maps.drawing.OverlayType.POLYLINE);
+  } else if (drawingPlugin.value) {
+    drawingPlugin.value.setDrawingMode(null);
   }
-  
-  const dx = point.lat - xx;
-  const dy = point.lng - yy;
-  
-  return Math.sqrt(dx * dx + dy * dy);
-}
+};
 
-// Save Changes
-const saveChanges = async () => {
-  const drawing = getDrawing();
-  if (!drawing) {
-    showNotification(
-      'Plugin Indisponível',
-      'O plugin de desenho não está disponível.',
-      'error'
-    );
-    return;
-  }
-  
-  const path = drawing.getPathCoordinates() || [];
-  if (path.length < 2) {
-    showNotification(
-      'Traçado Incompleto',
-      'É necessário desenhar pelo menos 2 pontos.',
-      'warning'
-    );
-    return;
-  }
+// ==================== Save/Cancel ====================
+const saveCable = async (updatedData) => {
+  isSaving.value = true;
   
   try {
-    console.log('[FiberRouteEditor] Saving path', path.length, 'points');
-    const result = await api.post(`/api/v1/fiber-cables/${id}/update-path/`, { path });
-    console.log('[FiberRouteEditor] Path saved', result);
+    const payload = {
+      ...updatedData,
+      path: cable.value.path // Mantém path existente por enquanto
+    };
     
-    // Atualizar dados locais
-    cable.value.length_km = result.length_km;
-    cable.value.path_coordinates = result.path;
-    isDirty.value = false;
+    console.log('[FiberRouteEditor] Saving cable:', payload);
     
-    // Voltar para modo read (seguro)
-    setMode('read');
+    const response = await api.patch(
+      `/api/v1/inventory/fiber-cables/${cableId.value}/`,
+      payload
+    );
+    
+    cable.value = response;
     
     showNotification(
-      'Traçado Salvo!',
-      `${result.points} pontos\n${result.length_km} km`,
+      'Cabo Salvo!',
+      'Alterações salvas com sucesso.',
       'success'
     );
     
-    // Reload da página para atualizar mapa
-    setTimeout(() => {
-      window.location.reload();
-    }, 2000);
+    setMode('read');
   } catch (err) {
-    console.error('[FiberRouteEditor] Erro ao salvar traçado', err);
+    console.error('[FiberRouteEditor] Error saving cable:', err);
     showNotification(
       'Erro ao Salvar',
-      err?.response?.data?.detail || err?.message || 'Erro ao salvar traçado.',
+      err?.response?.data?.detail || err?.message || 'Erro desconhecido.',
       'error'
     );
+  } finally {
+    isSaving.value = false;
   }
 };
 
-// Notification System
+const cancelEdit = () => {
+  setMode('read');
+  loadCable(); // Reload para descartar mudanças
+};
+
+const updateBasicInfo = (updatedInfo) => {
+  Object.assign(cable.value, updatedInfo);
+};
+
+// ==================== KML Import ====================
+const onKmlSelected = async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append('kml_file', file);
+
+  try {
+    console.log('[FiberRouteEditor] Uploading KML...');
+    const response = await api.post(
+      `/api/v1/inventory/fiber-cables/${cableId.value}/import-kml/`,
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      }
+    );
+
+    showNotification(
+      'KML Importado!',
+      `Traçado atualizado com ${response.coordinates_count} coordenadas.`,
+      'success'
+    );
+
+    await loadCable();
+  } catch (err) {
+    console.error('[FiberRouteEditor] Error importing KML:', err);
+    showNotification(
+      'Erro ao Importar KML',
+      err?.response?.data?.detail || err?.message || 'Erro desconhecido.',
+      'error'
+    );
+  }
+
+  event.target.value = '';
+};
+
+// ==================== Notifications ====================
 const showNotification = (title, message, type = 'info', confirmAction = null) => {
   notification.title = title;
   notification.message = message;
   notification.type = type;
   notification.confirmAction = confirmAction;
   notification.show = true;
+
+  if (!confirmAction) {
+    setTimeout(closeNotification, 5000);
+  }
 };
 
 const closeNotification = () => {
@@ -2676,366 +397,37 @@ const closeNotification = () => {
   notification.confirmAction = null;
 };
 
-const executeConfirmAction = async () => {
+const confirmNotification = () => {
   if (notification.confirmAction) {
-    await notification.confirmAction();
+    notification.confirmAction();
   }
   closeNotification();
-};
-
-// Input Modal System
-const showInputModal = (title, label, placeholder = '', defaultValue = '', type = 'text', submitAction = null) => {
-  inputModal.title = title;
-  inputModal.label = label;
-  inputModal.placeholder = placeholder;
-  inputModal.value = defaultValue;
-  inputModal.type = type;
-  inputModal.submitAction = submitAction;
-  inputModal.show = true;
-};
-
-const closeInputModal = () => {
-  inputModal.show = false;
-  inputModal.submitAction = null;
-  inputModal.value = '';
-};
-
-const executeInputAction = async () => {
-  if (inputModal.submitAction) {
-    await inputModal.submitAction(inputModal.value);
-  }
-  closeInputModal();
-};
-
-// Infrastructure Management
-const openEditInfrastructureModal = (point) => {
-  editInfraModal.show = true;
-  editInfraModal.id = point.id;
-  editInfraModal.name = point.name || '';
-  editInfraModal.type = point.type;
-  editInfraModal.originalType = point.type;
-  editInfraModal.distance = point.distance_from_origin;
-  editInfraModal.slackLength = point.metadata?.slack_length || 0;
-};
-
-const closeEditInfraModal = () => {
-  editInfraModal.show = false;
-  editInfraModal.id = null;
-  editInfraModal.name = '';
-  editInfraModal.type = '';
-  editInfraModal.originalType = '';
-  editInfraModal.distance = 0;
-  editInfraModal.slackLength = 0;
-};
-
-const saveInfrastructureChanges = async () => {
-  try {
-    let payload = {};
-    
-    // Se for Reserva Técnica, atualizar apenas slack_length
-    if (editInfraModal.type === 'slack') {
-      if (!editInfraModal.slackLength || editInfraModal.slackLength <= 0) {
-        showNotification(
-          'Tamanho Inválido',
-          'O tamanho da reserva técnica deve ser maior que zero.',
-          'error'
-        );
-        return;
-      }
-      payload = {
-        metadata: { slack_length: editInfraModal.slackLength }
-      };
-    } else {
-      // Para outros tipos, atualizar nome e tipo
-      payload = {
-        name: editInfraModal.name,
-        type: editInfraModal.type
-      };
-    }
-    
-    const result = await api.patch(`/api/v1/inventory/infrastructure/${editInfraModal.id}/`, payload);
-    
-    console.log('[FiberRouteEditor] Infrastructure updated', result);
-    
-    // Recarregar dados para atualizar sidebar e mapa
-    await loadCableData({ preserveViewport: true });
-    closeEditInfraModal();
-    
-    showNotification(
-      'Sucesso!',
-      'Infraestrutura atualizada com sucesso.',
-      'success'
-    );
-  } catch (err) {
-    console.error('[FiberRouteEditor] Erro ao atualizar infraestrutura', err);
-    showNotification(
-      'Erro ao Atualizar',
-      err?.response?.data?.detail || err?.message || 'Erro ao atualizar infraestrutura.',
-      'error'
-    );
-  }
-};
-
-const confirmDeleteInfrastructure = async (point) => {
-  const deleteAction = async () => {
-    try {
-      await api.delete(`/api/v1/inventory/infrastructure/${point.id}/delete/`);
-      
-      console.log('[FiberRouteEditor] Infrastructure deleted', point.id);
-      
-      showNotification(
-        'Sucesso!',
-        'Infraestrutura removida com sucesso.',
-        'success'
-      );
-      
-      // Reload da página para atualizar mapa
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
-    } catch (err) {
-      console.error('[FiberRouteEditor] Erro ao excluir infraestrutura', err);
-      showNotification(
-        'Erro ao Remover',
-        err?.response?.data?.detail || err?.message || 'Erro ao excluir infraestrutura.',
-        'error'
-      );
-    }
-  };
-  
-  showNotification(
-    'Confirmar Exclusão',
-    `Tem certeza que deseja excluir "${point.name || point.type_display}"?\n\nEsta ação não pode ser desfeita.`,
-    'warning',
-    deleteAction
-  );
-};
-
-// Helper para formatar distância
-const formatDistance = (meters) => {
-  if (!meters && meters !== 0) return '?';
-  return meters >= 1000 ? `${(meters/1000).toFixed(2)}km` : `${Math.round(meters)}m`;
-};
-
-// Infrastructure Context Menu Actions
-const actionViewInfraDetails = () => {
-  const point = contextMenu.infrastructurePoint;
-  if (!point) return;
-  
-  const details = [
-    `Tipo: ${point.type_display}`,
-    `Nome: ${point.name || '(sem nome)'}`,
-    `Metragem: ${formatDistance(point.distance_from_origin)}`,
-  ];
-  
-  if (point.type === 'slack' && point.metadata?.slack_length) {
-    details.push(`Tamanho Reserva: ${point.metadata.slack_length}m`);
-  }
-  
-  if (point.type === 'splice_box') {
-    details.push(`CEO adiciona 20m ao cabo`);
-  }
-  
-  closeContextMenu();
-  showNotification(
-    point.type_display,
-    details.join('\n'),
-    'info'
-  );
-};
-
-const actionEditInfra = () => {
-  const point = contextMenu.infrastructurePoint;
-  if (!point) return;
-  
-  openEditInfrastructureModal(point);
-  closeContextMenu();
-};
-
-const actionDeleteInfra = async () => {
-  const point = contextMenu.infrastructurePoint;
-  if (!point) return;
-  
-  closeContextMenu();
-  await confirmDeleteInfrastructure(point);
-};
-
-const actionConvertSlackToCEO = async () => {
-  const point = contextMenu.infrastructurePoint;
-  if (!point || point.type !== 'slack') return;
-  
-  const convertAction = async () => {
-    try {
-      const result = await api.patch(`/api/v1/inventory/infrastructure/${point.id}/`, {
-        type: 'splice_box'
-      });
-      
-      console.log('[FiberRouteEditor] Converted slack to CEO', result);
-      
-      showNotification(
-        'Conversão Concluída!',
-        'Reserva Técnica convertida em CEO com sucesso.',
-        'success'
-      );
-      
-      // Reload da página para atualizar mapa
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
-    } catch (err) {
-      console.error('[FiberRouteEditor] Erro ao converter', err);
-      showNotification(
-        'Erro na Conversão',
-        err?.response?.data?.detail || err?.message || 'Erro ao converter infraestrutura.',
-        'error'
-      );
-    }
-  };
-  
-  closeContextMenu();
-  
-  const confirmMsg = `Converter "${point.name || 'Reserva Técnica'}" em Caixa de Emenda (CEO)?\n\n` +
-    `- Remove o tamanho da reserva\n` +
-    `- Adiciona 20m padrão de CEO ao cabo\n` +
-    `- Permite gerenciar emendas/fusões`;
-  
-  showNotification(
-    'Confirmar Conversão',
-    confirmMsg,
-    'warning',
-    convertAction
-  );
-};
-
-const actionManageSplices = () => {
-  const point = contextMenu.infrastructurePoint;
-  if (!point || point.type !== 'splice_box') return;
-  
-  closeContextMenu();
-  
-  // Abrir modal de gerenciamento de fusões
-  console.debug('[FiberRouteEditor] Abrindo modal de emendas para infraestrutura id:', point.id, 'nome:', point.name);
-  spliceModal.infraPoint = point;
-  spliceModal.show = true;
-  // Forçar re-render debug
-  setTimeout(() => {
-    console.debug('[FiberRouteEditor] Modal estado show:', spliceModal.show, 'infraPoint.id:', spliceModal.infraPoint?.id)
-  }, 50)
-};
-
-const actionSplitCableAtCEO = async () => {
-  const ceo = contextMenu.infrastructurePoint;
-  if (!ceo || ceo.type !== 'splice_box') return;
-  
-  closeContextMenu();
-  
-  // Confirmação
-  const confirmMsg = `Segmentar o cabo "${cable.value?.name}" na CEO "${ceo.name}"?\n\n` +
-    `Isso criará segmentos lógicos:\n` +
-    `• Segmento 1: Da origem até ${ceo.name}\n` +
-    `• Segmento BROKEN: Marcador de rompimento em ${ceo.name}\n` +
-    `• Segmento 2: De ${ceo.name} até o destino\n\n` +
-    `O cabo permanece o mesmo, mas será dividido em segmentos para trace route.`;
-  
-  if (!confirm(confirmMsg)) return;
-  
-  try {
-    console.log('[FiberRouteEditor] Rompendo cabo na CEO (V2)', ceo.name, ceo.id);
-    
-    const response = await api.post(`/api/v1/inventory/cables/${parseInt(id)}/split-at-ceo-v2/`, {
-      ceo_id: ceo.id
-    });
-    
-    console.log('[FiberRouteEditor] Cabo rompido com sucesso (V2)', response);
-    
-    showNotification(
-      'Cabo Segmentado!',
-      `Segmentos criados com sucesso. CEO ${ceo.name} agora separa o cabo.`,
-      'success'
-    );
-    
-    // Reload da página para mostrar segmentos
-    setTimeout(() => {
-      window.location.reload();
-    }, 2000);
-    
-  } catch (err) {
-    console.error('[FiberRouteEditor] Erro ao romper cabo na CEO (V2)', err);
-    showNotification(
-      'Erro ao Romper Cabo',
-      err?.response?.data?.error || err?.message || 'Erro desconhecido',
-      'error'
-    );
-  }
-};
-
-const closeSpliceModal = () => {
-  spliceModal.show = false;
-  spliceModal.infraPoint = null;
-};
-
-// KML Import
-const onKmlSelected = async (evt) => {
-  const file = evt.target.files?.[0];
-  if (!file) return;
-  
-  evt.target.value = ''; // Reset input
-  
-  try {
-    console.log('[FiberRouteEditor] Importing KML', file.name);
-    const formData = new FormData();
-    formData.append('kml', file);
-    
-    const result = await api.postFormData(`/api/v1/fiber-cables/${id}/import-kml/`, formData);
-    console.log('[FiberRouteEditor] KML imported', result);
-    
-    const drawing = getDrawing();
-    if (drawing && result.path && result.path.length > 0) {
-      drawing.clearPath();
-      drawing.setPath(result.path);
-      drawing.fitBounds();
-      
-      // Atualizar stats
-      pathStats.value = {
-        points: result.points,
-        distance: result.length_km
-      };
-      cable.value.length = result.length_km * 1000; // metros
-      isDirty.value = true;
-      
-      showNotification(
-        'KML Importado!',
-        `${result.points} pontos\n${result.length_km} km`,
-        'success'
-      );
-      
-      // Reload da página para atualizar mapa
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
-    } else {
-      showNotification(
-        'Aviso',
-        'KML importado mas sem coordenadas válidas.',
-        'warning'
-      );
-    }
-  } catch (err) {
-    console.error('[FiberRouteEditor] Falha ao importar KML', err);
-    showNotification(
-      'Erro ao Importar KML',
-      err?.response?.data?.detail || err?.message || 'Falha ao importar KML.',
-      'error'
-    );
-  }
 };
 </script>
 
 <style scoped>
-.fade-enter-active, .fade-leave-active { 
-  transition: opacity 0.2s; 
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: all 0.3s ease;
 }
-.fade-enter-from, .fade-leave-to { 
-  opacity: 0; 
+
+.slide-up-enter-from {
+  transform: translateY(100%);
+  opacity: 0;
+}
+
+.slide-up-leave-to {
+  transform: translateY(100%);
+  opacity: 0;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

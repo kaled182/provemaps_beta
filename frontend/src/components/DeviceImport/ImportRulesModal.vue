@@ -12,18 +12,18 @@
         <!-- Modal Container -->
         <div class="flex min-h-screen items-center justify-center p-4">
           <div
-            class="relative w-full max-w-5xl bg-white dark:bg-gray-800 rounded-lg shadow-xl transform transition-all"
+            class="relative w-full max-w-5xl app-surface rounded-lg transform transition-all"
             @click.stop
           >
             <!-- Header -->
-            <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
-                <i class="fas fa-robot mr-2 text-indigo-600 dark:text-indigo-400"></i>
+            <div class="flex items-center justify-between p-6 border-b app-divider">
+              <h2 class="text-2xl font-bold app-text-primary">
+                <i class="fas fa-robot mr-2" style="color: var(--accent-info);"></i>
                 Regras de Auto-Associação
               </h2>
               <button
                 @click="closeModal"
-                class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                class="app-text-tertiary close-icon-btn transition-colors"
               >
                 <i class="fas fa-times text-xl"></i>
               </button>
@@ -33,14 +33,14 @@
             <div class="p-6">
               <!-- Add Rule Button -->
               <div class="mb-4 flex justify-between items-center">
-                <p class="text-sm text-gray-600 dark:text-gray-400">
+                <p class="text-sm app-text-tertiary">
                   Regras aplicadas automaticamente durante importação do Zabbix.
                   <br>
                   <span class="font-medium">Ordem:</span> prioridade crescente (0 = maior prioridade).
                 </p>
                 <button
                   @click="addNewRule"
-                  class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+                  class="inline-flex items-center px-4 py-2 rounded-lg transition-colors shadow-sm app-btn-primary"
                 >
                   <i class="fas fa-plus mr-2"></i>
                   Nova Regra
@@ -48,31 +48,31 @@
               </div>
 
               <!-- Rules Table -->
-              <div class="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
-                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead class="bg-gray-50 dark:bg-gray-900">
+              <div class="overflow-x-auto border app-divider rounded-lg shadow-sm">
+                <table class="min-w-full divide-y app-divide">
+                  <thead class="app-surface-muted">
                     <tr>
-                      <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th class="px-4 py-3 text-left text-xs font-medium app-text-tertiary uppercase tracking-wider">
                         Prioridade
                       </th>
-                      <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th class="px-4 py-3 text-left text-xs font-medium app-text-tertiary uppercase tracking-wider">
                         Padrão Regex
                       </th>
-                      <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th class="px-4 py-3 text-left text-xs font-medium app-text-tertiary uppercase tracking-wider">
                         Categoria
                       </th>
-                      <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th class="px-4 py-3 text-left text-xs font-medium app-text-tertiary uppercase tracking-wider">
                         Grupo
                       </th>
-                      <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th class="px-4 py-3 text-left text-xs font-medium app-text-tertiary uppercase tracking-wider">
                         Status
                       </th>
-                      <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th class="px-4 py-3 text-right text-xs font-medium app-text-tertiary uppercase tracking-wider">
                         Ações
                       </th>
                     </tr>
                   </thead>
-                  <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  <tbody class="app-surface divide-y app-divide">
                     <tr
                       v-for="rule in sortedRules"
                       :key="rule.id"
@@ -83,16 +83,16 @@
                           <button
                             @click="moveRuleUp(rule)"
                             :disabled="isFirstRule(rule)"
-                            class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            class="app-text-tertiary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                             title="Mover para cima"
                           >
                             <i class="fas fa-arrow-up"></i>
                           </button>
-                          <span class="font-mono text-sm font-semibold text-gray-900 dark:text-gray-100">{{ rule.priority }}</span>
+                          <span class="font-mono text-sm font-semibold app-text-primary">{{ rule.priority }}</span>
                           <button
                             @click="moveRuleDown(rule)"
                             :disabled="isLastRule(rule)"
-                            class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            class="app-text-tertiary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                             title="Mover para baixo"
                           >
                             <i class="fas fa-arrow-down"></i>
@@ -100,10 +100,10 @@
                         </div>
                       </td>
                       <td class="px-4 py-3">
-                        <code class="text-sm bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded font-mono text-gray-900 dark:text-gray-100">
+                        <code class="text-sm app-surface-muted px-2 py-1 rounded font-mono app-text-primary">
                           {{ rule.pattern }}
                         </code>
-                        <p v-if="rule.description" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        <p v-if="rule.description" class="text-xs app-text-tertiary mt-1">
                           {{ rule.description }}
                         </p>
                       </td>
@@ -112,15 +112,15 @@
                           {{ getCategoryLabel(rule.category) }}
                         </span>
                       </td>
-                      <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                      <td class="px-4 py-3 whitespace-nowrap text-sm app-text-tertiary">
                         {{ rule.group_name || '(nenhum)' }}
                       </td>
                       <td class="px-4 py-3 whitespace-nowrap">
                         <span
                           :class="
                             rule.is_active
-                              ? 'px-2 py-1 text-xs font-semibold rounded bg-green-100 text-green-800'
-                              : 'px-2 py-1 text-xs font-semibold rounded bg-gray-100 text-gray-800'
+                              ? 'app-badge app-badge-success'
+                              : 'app-badge app-badge-muted'
                           "
                         >
                           {{ rule.is_active ? 'Ativa' : 'Inativa' }}
@@ -129,14 +129,14 @@
                       <td class="px-4 py-3 whitespace-nowrap text-right text-sm font-medium space-x-2">
                         <button
                           @click="testRule(rule)"
-                          class="text-blue-600 hover:text-blue-800"
+                          class="app-text-secondary"
                           title="Testar regex"
                         >
                           <i class="fas fa-flask"></i>
                         </button>
                         <button
                           @click="editRule(rule)"
-                          class="text-indigo-600 hover:text-indigo-800"
+                          class="app-text-secondary"
                           title="Editar"
                         >
                           <i class="fas fa-edit"></i>
@@ -145,8 +145,8 @@
                           @click="toggleRuleStatus(rule)"
                           :class="
                             rule.is_active
-                              ? 'text-yellow-600 hover:text-yellow-800'
-                              : 'text-green-600 hover:text-green-800'
+                              ? 'app-text-secondary'
+                              : 'app-text-secondary'
                           "
                           :title="rule.is_active ? 'Desativar' : 'Ativar'"
                         >
@@ -154,7 +154,7 @@
                         </button>
                         <button
                           @click="deleteRule(rule)"
-                          class="text-red-600 hover:text-red-800"
+                          class="app-text-secondary"
                           title="Excluir"
                         >
                           <i class="fas fa-trash"></i>
@@ -162,7 +162,7 @@
                       </td>
                     </tr>
                     <tr v-if="rules.length === 0">
-                      <td colspan="6" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                      <td colspan="6" class="px-4 py-8 text-center app-text-tertiary">
                         <i class="fas fa-info-circle mr-2"></i>
                         Nenhuma regra configurada. Clique em "Nova Regra" para começar.
                       </td>
@@ -172,12 +172,12 @@
               </div>
 
               <!-- Info Box -->
-              <div class="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                <h4 class="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
+              <div class="mt-4 p-4 app-surface-muted border app-divider rounded-lg">
+                <h4 class="text-sm font-semibold app-text-primary mb-2">
                   <i class="fas fa-lightbulb mr-2"></i>
                   Como funciona?
                 </h4>
-                <ul class="text-sm text-blue-800 dark:text-blue-200 space-y-1 list-disc list-inside">
+                <ul class="text-sm app-text-secondary space-y-1 list-disc list-inside">
                   <li>As regras são aplicadas em ordem de prioridade durante a importação</li>
                   <li>O padrão regex é testado contra o nome do dispositivo no Zabbix</li>
                   <li>Quando há match, o dispositivo recebe automaticamente a categoria e grupo definidos</li>
@@ -187,10 +187,10 @@
             </div>
 
             <!-- Footer -->
-            <div class="flex justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+            <div class="flex justify-end space-x-3 p-6 border-t app-divider app-surface-muted">
               <button
                 @click="closeModal"
-                class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                class="px-4 py-2 rounded-lg transition-colors app-btn"
               >
                 Fechar
               </button>
@@ -379,12 +379,12 @@ const moveRuleDown = async (rule) => {
 
 const getCategoryBadgeClass = (category) => {
   const classes = {
-    backbone: 'px-2 py-1 text-xs font-semibold rounded bg-blue-100 text-blue-800',
-    gpon: 'px-2 py-1 text-xs font-semibold rounded bg-green-100 text-green-800',
-    dwdm: 'px-2 py-1 text-xs font-semibold rounded bg-purple-100 text-purple-800',
-    access: 'px-2 py-1 text-xs font-semibold rounded bg-orange-100 text-orange-800',
+    backbone: 'app-badge app-badge-info',
+    gpon: 'app-badge app-badge-success',
+    dwdm: 'app-badge app-badge-warning',
+    access: 'app-badge app-badge-danger',
   };
-  return classes[category] || 'px-2 py-1 text-xs font-semibold rounded bg-gray-100 text-gray-800';
+  return classes[category] || 'app-badge app-badge-muted';
 };
 
 const getCategoryLabel = (category) => {
@@ -413,5 +413,9 @@ onMounted(() => {
 .modal-enter-from,
 .modal-leave-to {
   opacity: 0;
+}
+
+.close-icon-btn:hover {
+  color: var(--text-primary);
 }
 </style>

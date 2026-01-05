@@ -20,9 +20,9 @@
           <div class="navbar-actions">
             <!-- Status de Conexão -->
             <div class="connection-status">
-              <span 
+              <span
                 class="status-dot"
-                :class="connectionStatus.color"
+                :style="connectionStatus.style"
               ></span>
               <span class="status-text">{{ connectionStatus.text }}</span>
             </div>
@@ -67,11 +67,29 @@ let ws = null;
 
 const connectionStatus = computed(() => {
   if (wsConnected.value) {
-    return { color: 'bg-green-500', text: 'Conectado' };
+    return {
+      text: 'Conectado',
+      style: {
+        background: 'var(--status-online)',
+        boxShadow: '0 0 8px rgba(34, 197, 94, 0.55)',
+      },
+    };
   } else if (wsConnecting.value) {
-    return { color: 'bg-yellow-500', text: 'Conectando...' };
+    return {
+      text: 'Conectando...',
+      style: {
+        background: 'var(--status-warning)',
+        boxShadow: '0 0 8px rgba(245, 158, 11, 0.45)',
+      },
+    };
   } else {
-    return { color: 'bg-red-500', text: 'Desconectado' };
+    return {
+      text: 'Desconectado',
+      style: {
+        background: 'var(--status-offline)',
+        boxShadow: '0 0 8px rgba(248, 113, 113, 0.45)',
+      },
+    };
   }
 });
 
@@ -129,8 +147,8 @@ onUnmounted(() => {
   left: 280px;
   right: 0;
   height: 64px;
-  background: linear-gradient(195deg, #42424a 0%, #191919 100%);
-  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.14);
+  background: var(--menu-bg);
+  box-shadow: var(--shadow-md);
   z-index: 1100;
   transition: all 0.3s ease;
 }
@@ -149,7 +167,7 @@ onUnmounted(() => {
 .header-toggle-btn {
   background: transparent;
   border: none;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--menu-text-tertiary);
   cursor: pointer;
   padding: 0.5rem;
   display: flex;
@@ -160,7 +178,7 @@ onUnmounted(() => {
 }
 
 .header-toggle-btn:hover {
-  color: white;
+  color: var(--menu-text-primary);
 }
 
 .header-toggle-btn svg {
@@ -176,7 +194,7 @@ onUnmounted(() => {
 }
 
 .page-title h1 {
-  color: white;
+  color: var(--menu-text-primary);
   font-size: 1.25rem;
   font-weight: 600;
   margin: 0;
@@ -193,7 +211,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--menu-item-hover);
   border-radius: 8px;
 }
 
@@ -204,23 +222,8 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-.bg-green-500 {
-  background: #66BB6A;
-  box-shadow: 0 0 8px rgba(102, 187, 106, 0.6);
-}
-
-.bg-yellow-500 {
-  background: #FFA726;
-  box-shadow: 0 0 8px rgba(255, 167, 38, 0.6);
-}
-
-.bg-red-500 {
-  background: #ef5350;
-  box-shadow: 0 0 8px rgba(239, 83, 80, 0.6);
-}
-
 .status-text {
-  color: white;
+  color: var(--menu-text-primary);
   font-size: 0.875rem;
   font-weight: 500;
 }
@@ -230,10 +233,10 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
-  background: rgba(239, 83, 80, 0.2);
-  border: 1px solid rgba(239, 83, 80, 0.5);
+  background: var(--danger-soft-bg);
+  border: 1px solid var(--accent-danger);
   border-radius: 8px;
-  color: #ef5350;
+  color: var(--accent-danger);
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
@@ -241,9 +244,9 @@ onUnmounted(() => {
 }
 
 .logout-btn:hover {
-  background: #ef5350;
-  color: white;
-  border-color: #ef5350;
+  background: var(--accent-danger);
+  color: #ffffff;
+  border-color: var(--accent-danger);
 }
 
 .logout-btn svg {

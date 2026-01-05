@@ -172,7 +172,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
   if (themeToggle && iconSun && iconMoon) {
     // Check current theme
-    const currentTheme = localStorage.getItem('theme') || 'light';
+    const currentTheme = localStorage.getItem('ui.theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', currentTheme);
     document.documentElement.classList.toggle('dark', currentTheme === 'dark');
     
     // Display the correct icon
@@ -190,12 +191,14 @@ document.addEventListener('DOMContentLoaded', function() {
       
       if (isDark) {
         document.documentElement.classList.remove('dark');
-        localStorage.setItem('theme', 'light');
+        document.documentElement.setAttribute('data-theme', 'light');
+        localStorage.setItem('ui.theme', 'light');
         iconSun.classList.add('hidden');
         iconMoon.classList.remove('hidden');
       } else {
         document.documentElement.classList.add('dark');
-        localStorage.setItem('theme', 'dark');
+        document.documentElement.setAttribute('data-theme', 'dark');
+        localStorage.setItem('ui.theme', 'dark');
         iconSun.classList.remove('hidden');
         iconMoon.classList.add('hidden');
       }

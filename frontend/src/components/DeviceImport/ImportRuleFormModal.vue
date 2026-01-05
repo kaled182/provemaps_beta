@@ -12,15 +12,15 @@
         <!-- Modal Container -->
         <div class="flex min-h-screen items-center justify-center p-4">
           <div
-            class="relative w-full max-w-2xl bg-white dark:bg-gray-800 rounded-lg shadow-xl"
+            class="relative w-full max-w-2xl app-surface rounded-lg"
             @click.stop
           >
             <!-- Header -->
-            <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-              <h3 class="text-xl font-bold text-gray-900 dark:text-white">
+            <div class="flex items-center justify-between p-6 border-b app-divider">
+              <h3 class="text-xl font-bold app-text-primary">
                 {{ isEditMode ? 'Editar Regra' : 'Nova Regra' }}
               </h3>
-              <button @click="closeModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+              <button @click="closeModal" class="app-text-tertiary close-icon-btn">
                 <i class="fas fa-times"></i>
               </button>
             </div>
@@ -29,21 +29,21 @@
             <form @submit.prevent="handleSubmit" class="p-6 space-y-4">
               <!-- Pattern -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label class="block text-sm font-medium app-text-secondary mb-1">
                   Padrão Regex *
                 </label>
                 <input
                   v-model="formData.pattern"
                   type="text"
                   required
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  class="w-full px-3 py-2 font-mono text-sm app-input"
                   placeholder="^OLT.*|^SWITCH-HUAWEI.*"
                 />
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                <p class="text-xs app-text-tertiary mt-1">
                   <i class="fas fa-info-circle mr-1"></i>
                   Regex case-insensitive. Use ^ para início, $ para fim, .* para qualquer caractere.
                 </p>
-                <p v-if="patternError" class="text-xs text-red-600 dark:text-red-400 mt-1">
+                <p v-if="patternError" class="text-xs app-text-tertiary mt-1">
                   <i class="fas fa-exclamation-circle mr-1"></i>
                   {{ patternError }}
                 </p>
@@ -51,26 +51,26 @@
 
               <!-- Description -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label class="block text-sm font-medium app-text-secondary mb-1">
                   Descrição
                 </label>
                 <input
                   v-model="formData.description"
                   type="text"
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  class="w-full px-3 py-2 app-input"
                   placeholder="Ex: OLTs Huawei da rede FTTx"
                 />
               </div>
 
               <!-- Category -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label class="block text-sm font-medium app-text-secondary mb-1">
                   Categoria *
                 </label>
                 <select
                   v-model="formData.category"
                   required
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  class="w-full px-3 py-2 app-input"
                 >
                   <option value="">Selecione...</option>
                   <option value="backbone">Backbone / IP</option>
@@ -82,12 +82,12 @@
 
               <!-- Group -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label class="block text-sm font-medium app-text-secondary mb-1">
                   Grupo de Monitoramento
                 </label>
                 <select
                   v-model="formData.group"
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  class="w-full px-3 py-2 app-input"
                 >
                   <option :value="null">(nenhum)</option>
                   <option
@@ -98,14 +98,14 @@
                     {{ group.name }}
                   </option>
                 </select>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                <p class="text-xs app-text-tertiary mt-1">
                   Grupo do Zabbix a ser associado automaticamente
                 </p>
               </div>
 
               <!-- Priority -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label class="block text-sm font-medium app-text-secondary mb-1">
                   Prioridade *
                 </label>
                 <input
@@ -113,9 +113,9 @@
                   type="number"
                   min="0"
                   required
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  class="w-full px-3 py-2 app-input"
                 />
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                <p class="text-xs app-text-tertiary mt-1">
                   Menor número = maior prioridade (0 = primeira regra aplicada)
                 </p>
               </div>
@@ -126,27 +126,28 @@
                   v-model="formData.is_active"
                   type="checkbox"
                   id="is_active"
-                  class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                  class="h-4 w-4 rounded"
+                  style="accent-color: var(--accent-info);"
                 />
-                <label for="is_active" class="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                <label for="is_active" class="ml-2 block text-sm app-text-secondary">
                   Regra ativa (aplicar durante importação)
                 </label>
               </div>
             </form>
 
             <!-- Footer -->
-            <div class="flex justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+            <div class="flex justify-end space-x-3 p-6 border-t app-divider app-surface-muted">
               <button
                 @click="closeModal"
                 type="button"
-                class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                class="px-4 py-2 rounded-lg app-btn"
               >
                 Cancelar
               </button>
               <button
                 @click="handleSubmit"
                 type="submit"
-                class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                class="px-4 py-2 rounded-lg app-btn-primary"
               >
                 <i class="fas fa-save mr-2"></i>
                 {{ isEditMode ? 'Salvar' : 'Criar' }}
@@ -265,6 +266,12 @@ const handleSubmit = async () => {
   }
 };
 </script>
+
+<style scoped>
+.close-icon-btn:hover {
+  color: var(--text-primary);
+}
+</style>
 
 <style scoped>
 .modal-enter-active,
