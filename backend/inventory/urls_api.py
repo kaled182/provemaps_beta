@@ -10,6 +10,10 @@ from .api.splice_matrix import (
 from .api.cable_attachment import CableAttachmentViewSet
 from .api.cable_split import CableSplitViewSet
 from .api.cable_split_v2 import CableSplitV2View
+from .api.attach_loose_end import AttachLooseEndView
+from .api.create_standalone_ceo import CreateStandaloneCEOView
+from .api.list_standalone_ceos import ListStandaloneCEOsView
+from .api.list_loose_ends import ListLooseEndsView
 
 from inventory.api import devices as device_api
 from inventory.api import fibers as fiber_api
@@ -50,6 +54,34 @@ urlpatterns = [
         "cables/<int:pk>/split-at-ceo-v2/",
         CableSplitV2View.as_view(),
         name="cable-split-ceo-v2",
+    ),
+    
+    # Attach Loose End (anexar ponta solta após rompimento)
+    path(
+        "infrastructure/<int:infrastructure_id>/attach-loose-end/",
+        AttachLooseEndView.as_view(),
+        name="attach-loose-end",
+    ),
+    
+    # Create Standalone CEO (criar CEO independente, não anexada a cabo)
+    path(
+        "infrastructure/create-standalone-ceo/",
+        CreateStandaloneCEOView.as_view(),
+        name="create-standalone-ceo",
+    ),
+    
+    # List Standalone CEOs (listar CEOs independentes)
+    path(
+        "infrastructure/standalone-ceos/",
+        ListStandaloneCEOsView.as_view(),
+        name="list-standalone-ceos",
+    ),
+    
+    # List Loose Ends (listar pontas soltas de segmentos rompidos)
+    path(
+        "segments/loose-ends/",
+        ListLooseEndsView.as_view(),
+        name="list-loose-ends",
     ),
     
     path(

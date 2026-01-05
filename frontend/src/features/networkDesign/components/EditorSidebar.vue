@@ -3,6 +3,17 @@
     
     <!-- Header com info do cabo -->
     <div class="p-5 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+      <!-- Alerta de rompimento (se houver segmentos BROKEN) -->
+      <div v-if="hasBrokenSegments" class="mb-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+        <div class="flex items-center gap-2 text-red-700 dark:text-red-400">
+          <i class="fas fa-exclamation-triangle text-lg"></i>
+          <div>
+            <p class="text-sm font-bold">CABO ROMPIDO</p>
+            <p class="text-xs">{{ brokenSegmentCount }} segmento(s) com rompimento</p>
+          </div>
+        </div>
+      </div>
+      
       <div class="flex justify-between items-start mb-2">
         <span class="px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">
           {{ cable.type || 'Backbone' }}
@@ -129,12 +140,29 @@ const infrastructurePoints = computed(() => {
 })
 
 const statusColor = computed(() => {
+  // Se houver segmentos BROKEN, forçar vermelho
+  if (hasBrokenSegments.value) return 'bg-red-500 ring-2 ring-red-300 dark:ring-red-700';
+  
   switch(props.cable.status) {
     case 'active': return 'bg-green-500';
     case 'planned': return 'bg-blue-500';
     case 'cut': return 'bg-red-500';
     default: return 'bg-gray-400';
   }
+})
+
+const hasBrokenSegments = computed(() => {
+  if (!props.cable.segments) return false;
+  return props.cable.segments.some(seg => 
+    seg.status === 'broken' || seg.status === 'BROKEN'
+  );
+})
+
+const brokenSegmentCount = computed(() => {
+  if (!props.cable.segments) return 0;
+  return props.cable.segments.filter(seg => 
+    seg.status === 'broken' || seg.status === 'BROKEN'
+  ).length;
 })
 
 const formatLength = (m) => {

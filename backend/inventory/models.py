@@ -902,6 +902,9 @@ class FiberInfrastructure(models.Model):
         FiberCable,
         on_delete=models.CASCADE,
         related_name="infrastructure_points",
+        null=True,
+        blank=True,
+        help_text="Cabo ao qual este ponto pertence (pode ser null para CEOs standalone)"
     )
 
     type = models.CharField(max_length=20, choices=TYPES)
@@ -972,6 +975,21 @@ class InfrastructureCableAttachment(models.Model):
         related_name='attachments',
         on_delete=models.CASCADE,
     )
+    
+    # NOVO: Identifica qual segmento específico está conectado (para pontas soltas)
+    connected_segment = models.ForeignKey(
+        'CableSegment',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='attachments',
+        help_text='Segmento físico que está anexado (para cabos rompidos com pontas soltas)'
+    )
+    is_start_of_segment = models.BooleanField(
+        default=True,
+        help_text='Se verdadeiro, é a ponta INÍCIO do segmento; se falso, é a ponta FIM'
+    )
+    
     port_type = models.CharField(max_length=10, choices=PORT_CHOICES)
     is_pass_through = models.BooleanField(
         default=False,
@@ -1032,6 +1050,11 @@ class CableSegment(models.Model):
         choices=STATUS_CHOICES,
         default=STATUS_ACTIVE,
         help_text='Status físico do segmento (ativo, rompido, inativo)'
+    )
+    
+    has_loose_ends = models.BooleanField(
+        default=False,
+        help_text='Indica se o segmento tem pontas soltas (desconectadas) após rompimento'
     )
     
     # Infraestruturas de início e fim
