@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 
 from django.conf import settings
-from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.shortcuts import redirect, render
 from django.http import HttpResponseForbidden
@@ -12,9 +11,6 @@ from integrations.zabbix.guards import reload_diagnostics_flag_cache
 
 from .forms import EnvConfigForm, FirstTimeSetupForm
 from .models import FirstTimeSetup
-from .services import runtime_settings
-from .services.service_reloader import trigger_restart
-from .utils import env_manager
 
 DEFAULT_SERVICE_RESTART_COMMANDS = (
     settings.SERVICE_RESTART_COMMANDS
@@ -140,35 +136,6 @@ def setup_dashboard(request):
 @login_required
 @user_passes_test(_staff_check)
 def manage_environment(request):
-    """Manage environment settings via simple form.
-    - GET: Render page containing 'System Settings'
-    - POST: Update .env values and reload runtime config, then redirect
-    """
-    if request.method == "POST":
-        data = request.POST
-        bool_on = lambda v: str(v).lower() in ("1", "true", "on", "yes")
-        payload = {
-            "SECRET_KEY": data.get("secret_key", ""),
-            "DEBUG": "True" if bool_on(data.get("debug")) else "False",
-            "ZABBIX_API_URL": data.get("zabbix_api_url", ""),
-            "ZABBIX_API_USER": data.get("zabbix_api_user", ""),
-            "ZABBIX_API_PASSWORD": data.get("zabbix_api_password", ""),
-            "ZABBIX_API_KEY": data.get("zabbix_api_key", ""),
-            "GOOGLE_MAPS_API_KEY": data.get("google_maps_api_key", ""),
-            "ALLOWED_HOSTS": data.get("allowed_hosts", ""),
-            "ENABLE_DIAGNOSTIC_ENDPOINTS": "True" if bool_on(data.get("enable_diagnostics")) else "False",
-            "DB_HOST": data.get("db_host", ""),
-            "DB_PORT": data.get("db_port", ""),
-            "DB_NAME": data.get("db_name", ""),
-            "DB_USER": data.get("db_user", ""),
-            "DB_PASSWORD": data.get("db_password", ""),
-            "REDIS_URL": data.get("redis_url", ""),
-            "SERVICE_RESTART_COMMANDS": data.get("service_restart_commands", ""),
-        }
-        env_manager.write_values(payload)
-        runtime_settings.reload_config()
-        messages.success(request, "Settings updated successfully")
-        return redirect("setup_app:manage_environment")
-
+    """Serve the Vue-based configuration page."""
     context = {"title": "System Settings", "setup_logo": get_setup_logo()}
-    return render(request, "manage_environment.html", context)
+    return render(request, "spa.html", context)
