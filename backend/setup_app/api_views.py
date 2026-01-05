@@ -5,8 +5,13 @@ from __future__ import annotations
 import io
 import json
 import os
+import shutil
+import subprocess
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db import connection
 from django.http import HttpResponse, JsonResponse
@@ -25,6 +30,31 @@ from .utils import env_manager
 def _staff_check(user):
     """Check if user is staff."""
     return user.is_active and user.is_staff
+
+
+BACKUP_DIR = Path(settings.BASE_DIR) / "database" / "backups"
+
+
+def _get_db_settings() -> Dict[str, str]:
+    keys = ["DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD"]
+    values = env_manager.read_values(keys)
+    missing = [key for key in keys if key != "DB_PASSWORD" and not values.get(key)]
+    if missing:
+        raise ValueError(f"Missing database settings: {', '.join(missing)}")
+    return values
+
+
+def _safe_backup_path(filename: str) -> Path:
+    if not filename:
+        raise ValueError("Filename required")
+    safe_name = Path(filename).name
+    if safe_name != filename:
+        raise ValueError("Invalid filename")
+    return BACKUP_DIR / safe_name
+
+
+def _ensure_backup_dir() -> None:
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @require_POST
@@ -632,8 +662,247 @@ def update_configuration(request):
         )
 
 
-    except Exception as e:
+@require_http_methods(["GET"])
+@login_required
+@user_passes_test(_staff_check)
+def get_env_file(request):
+    """Return the raw .env content for editing."""
+    try:
+        env_path = env_manager.ENV_PATH
+        if not env_path.exists():
+            return JsonResponse({"success": True, "content": ""})
+
+        content = env_path.read_text(encoding="utf-8")
+        if len(content) > 512_000:
+            return JsonResponse(
+                {"success": False, "message": "Env file is too large to edit."},
+                status=400,
+            )
+        return JsonResponse({"success": True, "content": content})
+    except Exception as exc:
         return JsonResponse(
-            {"success": False, "message": f"Failed to fetch history: {str(e)}"},
+            {"success": False, "message": f"Failed to read env file: {exc}"},
+            status=500,
+        )
+
+
+@require_POST
+@login_required
+@user_passes_test(_staff_check)
+def update_env_file(request):
+    """Overwrite the .env file with provided content."""
+    try:
+        data = json.loads(request.body or "{}")
+        content = data.get("content", "")
+        if not isinstance(content, str):
+            return JsonResponse(
+                {"success": False, "message": "Invalid content payload."},
+                status=400,
+            )
+        if len(content) > 512_000:
+            return JsonResponse(
+                {"success": False, "message": "Env content is too large."},
+                status=400,
+            )
+
+        env_path = env_manager.ENV_PATH
+        env_path.parent.mkdir(parents=True, exist_ok=True)
+        if content and not content.endswith("\n"):
+            content = f"{content}\n"
+        env_path.write_text(content, encoding="utf-8")
+
+        clear_runtime_config_cache()
+        runtime_settings.reload_config()
+        reload_diagnostics_flag_cache()
+
+        ConfigurationAudit.log_change(
+            user=request.user,
+            action="update",
+            section="Env File",
+            request=request,
+            success=True,
+        )
+
+        return JsonResponse({"success": True, "message": "Env file updated."})
+    except json.JSONDecodeError:
+        return JsonResponse(
+            {"success": False, "message": "Invalid JSON data"},
+            status=400,
+        )
+    except Exception as exc:
+        ConfigurationAudit.log_change(
+            user=request.user,
+            action="update",
+            section="Env File",
+            request=request,
+            success=False,
+            error_message=str(exc),
+        )
+        return JsonResponse(
+            {"success": False, "message": f"Failed to update env file: {exc}"},
+            status=500,
+        )
+
+
+@require_http_methods(["GET", "POST"])
+@login_required
+@user_passes_test(_staff_check)
+def backups_manager(request):
+    """List backups or trigger a new backup."""
+    if request.method == "GET":
+        _ensure_backup_dir()
+        backups = []
+        for file_path in BACKUP_DIR.iterdir():
+            if not file_path.is_file():
+                continue
+            if file_path.suffix.lower() not in {".dump", ".sql", ".json"}:
+                continue
+            stat = file_path.stat()
+            backups.append(
+                {
+                    "name": file_path.name,
+                    "size": stat.st_size,
+                    "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                }
+            )
+        backups.sort(key=lambda item: item["created_at"], reverse=True)
+        return JsonResponse({"success": True, "backups": backups})
+
+    try:
+        _ensure_backup_dir()
+        if shutil.which("pg_dump") is None:
+            return JsonResponse(
+                {"success": False, "message": "pg_dump is not available on the server."},
+                status=500,
+            )
+
+        db_settings = _get_db_settings()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"manual_backup_{timestamp}.dump"
+        backup_path = BACKUP_DIR / filename
+
+        env = os.environ.copy()
+        if db_settings.get("DB_PASSWORD"):
+            env["PGPASSWORD"] = db_settings["DB_PASSWORD"]
+
+        command = [
+            "pg_dump",
+            "-Fc",
+            "-f",
+            str(backup_path),
+            "-h",
+            db_settings["DB_HOST"],
+            "-p",
+            db_settings["DB_PORT"],
+            "-U",
+            db_settings["DB_USER"],
+            db_settings["DB_NAME"],
+        ]
+
+        subprocess.run(command, check=True, env=env, capture_output=True, text=True)
+
+        ConfigurationAudit.log_change(
+            user=request.user,
+            action="create",
+            section="Backups",
+            new_value=filename,
+            request=request,
+            success=True,
+        )
+
+        return JsonResponse(
+            {"success": True, "message": "Backup criado", "filename": filename},
+            status=202,
+        )
+    except subprocess.CalledProcessError as exc:
+        return JsonResponse(
+            {"success": False, "message": exc.stderr or "Backup failed."},
+            status=500,
+        )
+    except Exception as exc:
+        return JsonResponse(
+            {"success": False, "message": f"Backup failed: {exc}"},
+            status=500,
+        )
+
+
+@require_POST
+@login_required
+@user_passes_test(_staff_check)
+def restore_backup(request):
+    """Restore a backup file."""
+    try:
+        data = json.loads(request.body or "{}")
+        filename = data.get("filename", "")
+        backup_path = _safe_backup_path(filename)
+        if not backup_path.exists():
+            return JsonResponse({"success": False, "message": "File not found."}, status=404)
+
+        if shutil.which("pg_restore") is None or shutil.which("psql") is None:
+            return JsonResponse(
+                {"success": False, "message": "Database restore tools are not available."},
+                status=500,
+            )
+
+        db_settings = _get_db_settings()
+        env = os.environ.copy()
+        if db_settings.get("DB_PASSWORD"):
+            env["PGPASSWORD"] = db_settings["DB_PASSWORD"]
+
+        if backup_path.suffix.lower() == ".dump":
+            command = [
+                "pg_restore",
+                "--clean",
+                "--if-exists",
+                "-h",
+                db_settings["DB_HOST"],
+                "-p",
+                db_settings["DB_PORT"],
+                "-U",
+                db_settings["DB_USER"],
+                "-d",
+                db_settings["DB_NAME"],
+                str(backup_path),
+            ]
+        elif backup_path.suffix.lower() == ".sql":
+            command = [
+                "psql",
+                "-h",
+                db_settings["DB_HOST"],
+                "-p",
+                db_settings["DB_PORT"],
+                "-U",
+                db_settings["DB_USER"],
+                "-d",
+                db_settings["DB_NAME"],
+                "-f",
+                str(backup_path),
+            ]
+        else:
+            return JsonResponse(
+                {"success": False, "message": "Unsupported backup format."},
+                status=400,
+            )
+
+        subprocess.run(command, check=True, env=env, capture_output=True, text=True)
+
+        ConfigurationAudit.log_change(
+            user=request.user,
+            action="restore",
+            section="Backups",
+            new_value=filename,
+            request=request,
+            success=True,
+        )
+
+        return JsonResponse({"success": True, "message": "Restauração iniciada."})
+    except subprocess.CalledProcessError as exc:
+        return JsonResponse(
+            {"success": False, "message": exc.stderr or "Restore failed."},
+            status=500,
+        )
+    except Exception as exc:
+        return JsonResponse(
+            {"success": False, "message": f"Restore failed: {exc}"},
             status=500,
         )

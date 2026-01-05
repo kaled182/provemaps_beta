@@ -19,6 +19,10 @@ urlpatterns = [
     path('api/audit-history/', api_views.get_audit_history, name='audit_history'),
     path('api/config/', api_views.get_configuration, name='get_config'),
     path('api/config/update/', api_views.update_configuration, name='update_config'),
+    path('api/env/', api_views.get_env_file, name='get_env'),
+    path('api/env/update/', api_views.update_env_file, name='update_env'),
+    path('api/backups/', api_views.backups_manager, name='backups_manager'),
+    path('api/backups/restore/', api_views.restore_backup, name='restore_backup'),
 
     # Documentation endpoints
     path("docs/", views_docs.docs_index, name="docs_index"),
