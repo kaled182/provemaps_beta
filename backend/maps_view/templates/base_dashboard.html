@@ -8,10 +8,17 @@
   <link rel="icon" type="image/x-icon" href="{% static 'favicon.ico' %}">
 
   <!-- Tailwind is pulled from CDN for local work; wire up a build step in production -->
+  <script>
+    (function() {
+      const theme = localStorage.getItem('ui.theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+    })();
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
   {% block extra_head %}{% endblock %}
 </head>
-<body class="bg-gray-100 text-gray-800 flex flex-col min-h-screen">
+<body class="bg-white dark:bg-gray-900 text-gray-900 dark:text-white flex flex-col min-h-screen">
 
   {% include 'partials/header_dashboard.html' %}
 

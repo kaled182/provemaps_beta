@@ -31,8 +31,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const iconMoon = document.getElementById('iconMoon');
 
   if (themeToggle && iconSun && iconMoon) {
-    const currentTheme = localStorage.getItem('theme') || 'light';
-    document.documentElement.classList.toggle('dark', currentTheme === 'dark');
+  const currentTheme = localStorage.getItem('ui.theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', currentTheme);
+  document.documentElement.classList.toggle('dark', currentTheme === 'dark');
 
     if (currentTheme === 'dark') {
       iconSun.classList.remove('hidden');
@@ -46,12 +47,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const isDark = document.documentElement.classList.contains('dark');
       if (isDark) {
         document.documentElement.classList.remove('dark');
-        localStorage.setItem('theme', 'light');
+        document.documentElement.setAttribute('data-theme', 'light');
+        localStorage.setItem('ui.theme', 'light');
         iconSun.classList.add('hidden');
         iconMoon.classList.remove('hidden');
       } else {
         document.documentElement.classList.add('dark');
-        localStorage.setItem('theme', 'dark');
+        document.documentElement.setAttribute('data-theme', 'dark');
+        localStorage.setItem('ui.theme', 'dark');
         iconSun.classList.remove('hidden');
         iconMoon.classList.add('hidden');
       }

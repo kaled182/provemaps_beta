@@ -983,28 +983,26 @@ function initializeDomBindings() {
     initContextMenu();
     initModalEditor();
     
-    // Toggle buttons for panels
+    // Collapse buttons for panels
     document.getElementById('toggleRoutePoints')?.addEventListener('click', () => {
         const panel = document.getElementById('routePointsPanel');
-        const helpPanel = document.getElementById('helpPanel');
+        const body = document.getElementById('routePointsPanelBody');
         if (panel) {
-            panel.classList.toggle('hidden');
-            // Hide help if route points is shown
-            if (!panel.classList.contains('hidden')) {
-                helpPanel?.classList.add('hidden');
-            }
+            panel.classList.toggle('collapsed');
+            const isCollapsed = panel.classList.contains('collapsed');
+            document.getElementById('toggleRoutePoints')?.setAttribute('aria-expanded', String(!isCollapsed));
+            body?.setAttribute('aria-hidden', String(isCollapsed));
         }
     });
     
     document.getElementById('toggleHelp')?.addEventListener('click', () => {
         const panel = document.getElementById('helpPanel');
-        const routePanel = document.getElementById('routePointsPanel');
+        const body = document.getElementById('helpPanelBody');
         if (panel) {
-            panel.classList.toggle('hidden');
-            // Hide route points if help is shown
-            if (!panel.classList.contains('hidden')) {
-                routePanel?.classList.add('hidden');
-            }
+            panel.classList.toggle('collapsed');
+            const isCollapsed = panel.classList.contains('collapsed');
+            document.getElementById('toggleHelp')?.setAttribute('aria-expanded', String(!isCollapsed));
+            body?.setAttribute('aria-hidden', String(isCollapsed));
         }
     });
     

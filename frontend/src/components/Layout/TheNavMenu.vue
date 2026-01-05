@@ -118,7 +118,7 @@
       <div class="divider"></div>
       
       <!-- Status de Conexão -->
-      <div class="nav-item status-item" :class="connectionStatus.color">
+      <div class="nav-item status-item" :data-status="connectionStatus.status">
         <span class="nav-icon">
           <component :is="connectionStatus.icon" :size="22" weight="regular" />
         </span>
@@ -354,19 +354,19 @@ onBeforeMount(() => {
 const connectionStatus = computed(() => {
   if (wsConnected.value) {
     return { 
-      color: 'bg-green-500', 
+      status: 'online', 
       text: 'Conectado',
       icon: PhLightning
     };
   } else if (wsConnecting.value) {
     return { 
-      color: 'bg-yellow-500', 
+      status: 'connecting', 
       text: 'Conectando',
       icon: PhClock
     };
   } else {
     return { 
-      color: 'bg-red-500', 
+      status: 'offline', 
       text: 'Desconectado',
       icon: PhWifiSlash
     };
@@ -547,8 +547,10 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
   width: var(--nav-menu-width,280px) !important;
   min-width: var(--nav-menu-width,280px) !important;
   max-width: var(--nav-menu-width,280px) !important;
-  
-  background: linear-gradient(195deg, var(--menu-bg-start) 0%, var(--menu-bg-end) 100%);
+
+  background: var(--menu-bg);
+  background-color: var(--menu-bg) !important;
+  background-image: none !important;
   box-shadow: var(--shadow-accent);
   display: flex;
   flex-direction: column;
@@ -563,7 +565,7 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--border-primary);
+  border-bottom: 1px solid var(--menu-border-primary);
   min-height: 64px;
 }
 
@@ -595,7 +597,7 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
 }
 
 .logo-text {
-  color: var(--text-primary);
+  color: var(--menu-text-primary);
   font-weight: 600;
   font-size: 0.875rem;
   white-space: nowrap;
@@ -604,7 +606,7 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
 .toggle-btn {
   background: transparent;
   border: none;
-  color: var(--text-tertiary);
+  color: var(--menu-text-tertiary);
   cursor: pointer;
   padding: 0.25rem;
   display: flex;
@@ -615,7 +617,7 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
 }
 
 .toggle-btn:hover {
-  color: var(--text-primary);
+  color: var(--menu-text-primary);
 }
 
 .toggle-btn svg {
@@ -659,7 +661,7 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
 }
 
 .nav-items::-webkit-scrollbar-thumb {
-  background: var(--border-primary);
+  background: var(--menu-border-primary);
   border-radius: 4px;
 }
 
@@ -669,7 +671,7 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
   padding: 0.75rem 1rem;
   margin-bottom: 0.25rem;
   border-radius: 8px;
-  color: var(--text-secondary);
+  color: var(--menu-text-secondary);
   text-decoration: none;
   transition: all 0.2s;
   position: relative;
@@ -705,7 +707,7 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
 
 .nav-item-child.active {
   background: var(--menu-item-hover);
-  color: var(--text-primary);
+  color: var(--menu-text-primary);
 }
 
 .nav-menu-collapsed .nav-item {
@@ -715,7 +717,7 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
 
 .nav-item:hover {
   background: var(--menu-item-hover);
-  color: var(--text-primary);
+  color: var(--menu-text-primary);
 }
 
 .nav-item.router-link-active,
@@ -752,7 +754,7 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
 .nav-badge {
   margin-left: auto;
   background: var(--menu-item-hover);
-  color: var(--text-primary);
+  color: var(--menu-text-primary);
   border-radius: 999px;
   font-size: 0.75rem;
   font-weight: 600;
@@ -781,7 +783,7 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
 
 .nav-footer {
   padding: 1rem 0.5rem;
-  border-top: 1px solid var(--border-primary);
+  border-top: 1px solid var(--menu-border-primary);
 }
 
 .ws-status {
@@ -833,7 +835,7 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
 
 .ws-status-text {
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--menu-text-secondary);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -854,7 +856,7 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
   align-items: center;
   padding: 0.75rem 1rem;
   border-radius: 8px;
-  color: var(--text-secondary);
+  color: var(--menu-text-secondary);
   text-decoration: none;
   transition: all 0.2s;
   overflow: hidden;
@@ -874,7 +876,7 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
 
 .footer-item:hover {
   background: var(--menu-item-hover);
-  color: var(--text-primary);
+  color: var(--menu-text-primary);
 }
 
 .footer-item-icon {
@@ -906,7 +908,7 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
 }
 
 .nav-item.theme-toggle {
-  color: var(--text-secondary);
+  color: var(--menu-text-secondary);
   background: transparent;
   border: none;
   width: 100%;
@@ -930,7 +932,26 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
 
 .nav-item.theme-toggle:hover {
   background: var(--menu-item-hover);
-  color: var(--text-primary);
+  color: var(--menu-text-primary);
+}
+
+.status-item {
+  background: var(--menu-item-hover);
+}
+
+.status-item[data-status="online"] {
+  background: var(--status-online-light);
+  color: var(--menu-text-primary);
+}
+
+.status-item[data-status="connecting"] {
+  background: var(--status-warning-light);
+  color: var(--menu-text-primary);
+}
+
+.status-item[data-status="offline"] {
+  background: var(--status-offline-light);
+  color: var(--menu-text-primary);
 }
 
 .nav-item.theme-toggle .nav-icon {

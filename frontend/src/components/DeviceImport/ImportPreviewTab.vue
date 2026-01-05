@@ -2,25 +2,25 @@
   <div class="space-y-6">
     
     <!-- Header com Filtros e Ações -->
-    <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div class="app-surface p-4 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
       <div class="flex items-center gap-4 flex-1">
-        <div class="flex items-center space-x-2 px-3 py-2 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded-md">
-          <i class="fas fa-server text-indigo-600 dark:text-indigo-400"></i>
-          <span class="text-sm font-medium text-indigo-900 dark:text-indigo-200">
+        <div class="flex items-center space-x-2 app-badge app-badge-info">
+          <i class="fas fa-server"></i>
+          <span class="text-sm font-medium">
             {{ zabbixServerInfo }}
           </span>
         </div>
 
         <div class="flex-1">
-          <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Filtrar Hosts</label>
-          <div class="relative rounded-md shadow-sm">
+          <label class="block text-xs font-medium app-text-tertiary mb-1">Filtrar Hosts</label>
+          <div class="relative rounded-md">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <i class="fas fa-search text-gray-400 dark:text-gray-500"></i>
+              <i class="fas fa-search app-text-tertiary"></i>
             </div>
             <input 
               type="text" 
               v-model="searchQuery" 
-              class="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 rounded-md" 
+              class="block w-full pl-10 sm:text-sm app-input" 
               placeholder="Nome ou IP..."
             >
           </div>
@@ -30,12 +30,12 @@
       <div class="flex items-end gap-2">
         <button 
           @click="showIgnored = !showIgnored"
-          class="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none"
+          class="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md app-btn"
           :title="showIgnored ? 'Ocultar devices ignorados' : 'Mostrar devices ignorados'"
         >
           <i :class="showIgnored ? 'fas fa-eye-slash' : 'fas fa-eye'" class="mr-2"></i>
           {{ showIgnored ? 'Ocultar Ignorados' : 'Mostrar Ignorados' }}
-          <span v-if="ignoredCount > 0" class="ml-2 px-2 py-0.5 text-xs bg-gray-200 dark:bg-gray-700 rounded-full">
+          <span v-if="ignoredCount > 0" class="ml-2 px-2 py-0.5 text-xs rounded-full app-chip">
             {{ ignoredCount }}
           </span>
         </button>
@@ -43,7 +43,7 @@
         <button 
           @click="importSelected" 
           :disabled="selectedCount === 0"
-          class="w-full md:w-auto inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+          class="w-full md:w-auto inline-flex items-center px-4 py-2 text-sm font-medium rounded-md shadow-sm app-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <i class="fas fa-cloud-download-alt mr-2"></i>
           Importar Selecionados ({{ selectedCount }})
@@ -52,31 +52,32 @@
     </div>
 
     <!-- Lista de Grupos Hierárquica -->
-    <div class="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md max-h-[600px] overflow-y-auto">
-      <ul class="divide-y divide-gray-200 dark:divide-gray-700">
+    <div class="app-surface overflow-hidden sm:rounded-md max-h-[600px] overflow-y-auto">
+      <ul class="divide-y app-divide">
         <li v-for="group in filteredGroups" :key="group.zabbix_group_id" class="group-container">
           
           <!-- Cabeçalho do Grupo -->
           <div 
-            class="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
+            class="app-surface-muted px-4 py-3 flex items-center justify-between cursor-pointer app-row transition" 
             @click="toggleGroup(group.zabbix_group_id)"
           >
             <div class="flex items-center">
               <i 
-                class="fas fa-chevron-right text-gray-400 dark:text-gray-500 mr-3 transition-transform duration-200"
+                class="fas fa-chevron-right app-text-tertiary mr-3 transition-transform duration-200"
                 :class="{ 'rotate-90': expandedGroups.includes(group.zabbix_group_id) }"
               ></i>
-              <span class="text-sm font-bold text-gray-700 dark:text-gray-200">{{ group.name }}</span>
-              <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200">
+              <span class="text-sm font-bold app-text-primary">{{ group.name }}</span>
+              <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium app-chip">
                 {{ group.hosts.length }} hosts
               </span>
             </div>
             
             <div class="flex items-center" @click.stop>
-              <label class="inline-flex items-center text-xs text-gray-500 dark:text-gray-400 mr-3">
+              <label class="inline-flex items-center text-xs app-text-tertiary mr-3">
                 <input 
                   type="checkbox" 
-                  class="form-checkbox h-4 w-4 text-indigo-600 rounded border-gray-300 mr-1"
+                  class="form-checkbox h-4 w-4 rounded mr-1"
+                  style="accent-color: var(--accent-info);"
                   @change="toggleSelectGroup(group, $event.target.checked)"
                   :checked="isGroupFullySelected(group)"
                   :indeterminate.prop="isGroupPartiallySelected(group)"
@@ -87,15 +88,15 @@
           </div>
 
           <!-- Hosts dentro do Grupo -->
-          <div v-show="expandedGroups.includes(group.zabbix_group_id)" class="border-t border-gray-200 dark:border-gray-700">
-            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+          <div v-show="expandedGroups.includes(group.zabbix_group_id)" class="border-t app-divider">
+            <table class="min-w-full divide-y app-divide">
+              <tbody class="app-surface divide-y app-divide">
                 <tr 
                   v-for="host in group.hosts" 
                   :key="host.zabbix_id" 
                   :class="{
-                    'bg-green-50 dark:bg-green-900/20': host.is_imported && !ignoredDevices.has(host.zabbix_id),
-                    'bg-gray-100 dark:bg-gray-700/50 opacity-60': ignoredDevices.has(host.zabbix_id)
+                    'row-imported': host.is_imported && !ignoredDevices.has(host.zabbix_id),
+                    'row-ignored': ignoredDevices.has(host.zabbix_id)
                   }"
                 >
                   <td class="px-6 py-4 whitespace-nowrap w-10">
@@ -104,31 +105,32 @@
                       type="checkbox" 
                       v-model="selectedHosts" 
                       :value="host.zabbix_id"
-                      class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded"
+                      class="h-4 w-4 rounded"
+                      style="accent-color: var(--accent-info);"
                     >
-                    <i v-else class="fas fa-check-circle text-green-500 dark:text-green-400 text-lg" title="Já importado"></i>
+                    <i v-else class="fas fa-check-circle text-lg" style="color: var(--status-online);" title="Já importado"></i>
                   </td>
 
                   <td class="px-6 py-4 whitespace-nowrap">
                     <div class="flex items-center">
                       <div class="ml-0">
                         <div class="flex items-center gap-2">
-                          <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          <div class="text-sm font-medium app-text-primary">
                             {{ host.name }}
                           </div>
                           <!-- Badge de Drift (Desatualizado) -->
                           <span 
                             v-if="host.is_imported && host.has_drift"
-                            class="px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-400 cursor-help"
+                            class="app-badge app-badge-warning cursor-help"
                             :title="`Dados desatualizados: ${host.drift_fields?.join(', ')}`"
                           >
                             <i class="fas fa-exclamation-triangle mr-1"></i>
                             Desatualizado
                           </span>
                         </div>
-                        <div class="text-sm text-gray-500 dark:text-gray-400">
+                        <div class="text-sm app-text-tertiary">
                           {{ host.ip || '(sem IP)' }}
-                          <span v-if="host.mac" class="text-xs text-gray-400 dark:text-gray-500 ml-2">({{ host.mac }})</span>
+                          <span v-if="host.mac" class="text-xs app-text-tertiary ml-2">({{ host.mac }})</span>
                         </div>
                       </div>
                     </div>
@@ -137,20 +139,20 @@
                   <td class="px-6 py-4 whitespace-nowrap">
                     <span 
                       v-if="ignoredDevices.has(host.zabbix_id)"
-                      class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
+                      class="app-badge app-badge-muted"
                     >
                       <i class="fas fa-ban mr-1"></i>
                       Ignorado
                     </span>
                     <span 
                       v-else-if="host.is_imported"
-                      class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400"
+                      class="app-badge app-badge-success"
                     >
                       Importado
                     </span>
                     <span 
                       v-else
-                      class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400"
+                      class="app-badge app-badge-warning"
                     >
                       Novo Detectado
                     </span>
@@ -161,7 +163,7 @@
                     <div v-if="ignoredDevices.has(host.zabbix_id)" class="flex items-center justify-end gap-2">
                       <button 
                         @click="restoreDevice(host.zabbix_id)"
-                        class="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300"
+                        class="px-3 py-1 rounded app-btn-success"
                         title="Restaurar e voltar à lista de sincronização"
                       >
                         <i class="fas fa-undo mr-1"></i>
@@ -173,13 +175,13 @@
                     <div v-else-if="!host.is_imported" class="flex items-center justify-end gap-2">
                       <button 
                         @click="$emit('edit-device', host, true)" 
-                        class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300"
+                        class="px-3 py-1 rounded app-btn-primary"
                       >
                         Configurar e Importar
                       </button>
                       <button 
                         @click="ignoreDevice(host.zabbix_id)"
-                        class="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300"
+                        class="px-3 py-1 rounded app-btn"
                         title="Ignorar este device"
                       >
                         <i class="fas fa-ban mr-1"></i>
@@ -189,7 +191,7 @@
                     <div v-else class="flex items-center justify-end gap-2">
                       <button 
                         @click="viewDeviceDetails(host)"
-                        class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 hover:underline"
+                        class="px-3 py-1 rounded app-btn"
                       >
                         Ver Detalhes
                       </button>
@@ -197,7 +199,7 @@
                       <button 
                         v-if="host.has_drift"
                         @click="syncDeviceChanges(host)"
-                        class="text-orange-600 dark:text-orange-400 hover:text-orange-900 dark:hover:text-orange-300 hover:underline"
+                        class="px-3 py-1 rounded app-btn-warning"
                         title="Sincronizar com dados atuais do Zabbix"
                       >
                         <i class="fas fa-sync-alt mr-1"></i>
@@ -213,7 +215,7 @@
       </ul>
       
       <div v-if="filteredGroups.length === 0" class="text-center py-10">
-        <p class="text-gray-500 dark:text-gray-400">Nenhum grupo ou host encontrado com este filtro.</p>
+        <p class="app-text-tertiary">Nenhum grupo ou host encontrado com este filtro.</p>
       </div>
     </div>
 
@@ -556,6 +558,17 @@ onMounted(() => {
   }
 });
 </script>
+
+<style scoped>
+.row-imported {
+  background: var(--status-online-light);
+}
+
+.row-ignored {
+  background: var(--surface-highlight);
+  opacity: 0.7;
+}
+</style>
 
 <style scoped>
 /* Pequenos ajustes visuais */

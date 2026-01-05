@@ -8,7 +8,7 @@ const DarkMode = {
     init() {
         // Sincroniza com o tema do Vue (ui.theme no localStorage)
         const vueTheme = localStorage.getItem('ui.theme');
-        const saved = vueTheme || localStorage.getItem('theme') || 'light';
+        const saved = vueTheme || localStorage.getItem('ui.theme') || 'dark';
         this.setTheme(saved);
         
         // Observa mudanças no tema do Vue
@@ -22,7 +22,7 @@ const DarkMode = {
     setTheme(theme) {
         document.documentElement.classList.toggle('dark', theme === 'dark');
         // Salva em ambos os locais para compatibilidade
-        localStorage.setItem('theme', theme);
+        localStorage.setItem('ui.theme', theme);
         localStorage.setItem('ui.theme', theme);
     },
     

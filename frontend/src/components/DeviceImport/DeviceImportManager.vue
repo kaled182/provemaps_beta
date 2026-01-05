@@ -1,28 +1,28 @@
 <template>
-  <div class="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+  <div class="min-h-screen app-page p-6">
     <header class="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Gestão de Dispositivos</h1>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Sincronize com o Zabbix e configure alertas operacionais.</p>
+        <h1 class="text-2xl font-bold app-text-primary">Gestão de Dispositivos</h1>
+        <p class="text-sm app-text-tertiary mt-1">Sincronize com o Zabbix e configure alertas operacionais.</p>
       </div>
       <div class="mt-4 md:mt-0 flex space-x-3">
         <button 
           @click="showImportRulesModal = true"
-          class="inline-flex items-center px-4 py-2 border border-indigo-300 dark:border-indigo-600 rounded-md shadow-sm text-sm font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          class="inline-flex items-center px-4 py-2 rounded-md shadow-sm text-sm font-medium app-btn-primary"
         >
           <i class="fas fa-robot mr-2"></i>
           Configurar Regras
         </button>
         <button 
           @click="handleExportCSV"
-          class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+          class="inline-flex items-center px-4 py-2 rounded-md shadow-sm text-sm font-medium app-btn"
         >
           <i class="fas fa-file-csv mr-2"></i>
           Exportar CSV
         </button>
         <button 
           @click="refreshData" 
-          class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          class="inline-flex items-center px-4 py-2 rounded-md shadow-sm text-sm font-medium app-btn"
         >
           <i class="fas fa-sync-alt mr-2" :class="{ 'fa-spin': loading }"></i>
           Recarregar Dados
@@ -30,23 +30,21 @@
       </div>
     </header>
 
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
-      <div class="border-b border-gray-200 dark:border-gray-700">
+    <div class="app-surface rounded-lg mb-6">
+      <div class="border-b app-divider">
         <nav class="-mb-px flex" aria-label="Tabs">
           <button
             v-for="tab in tabs"
             :key="tab.id"
             @click="currentTab = tab.id"
             :class="[
-              currentTab === tab.id
-                ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600',
-              'w-1/2 py-4 px-1 text-center border-b-2 font-medium text-sm transition-colors duration-200'
+              'w-1/2 py-4 px-1 text-center font-medium text-sm transition-colors duration-200 app-tab-underline',
+              { 'is-active': currentTab === tab.id }
             ]"
           >
             <i :class="[tab.icon, 'mr-2']"></i>
             {{ tab.name }}
-            <span v-if="tab.count" class="ml-2 py-0.5 px-2.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+            <span v-if="tab.count" class="ml-2 py-0.5 px-2.5 rounded-full text-xs font-medium app-chip">
               {{ tab.count }}
             </span>
           </button>
@@ -103,33 +101,33 @@
     <!-- Interfaces Modal (Standalone) -->
     <div v-if="showInterfacesModal" class="fixed inset-0 z-[60] overflow-y-auto flex items-center justify-center">
       <div class="fixed inset-0 bg-black bg-opacity-60" @click="showInterfacesModal = false"></div>
-      <div class="bg-white dark:bg-gray-800 w-full max-w-3xl rounded-lg shadow-2xl relative z-[70] flex flex-col m-4 max-h-[80vh]">
-        <div class="p-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900 rounded-t-lg">
+      <div class="app-surface w-full max-w-3xl rounded-lg relative z-[70] flex flex-col m-4 max-h-[80vh]">
+        <div class="p-4 border-b app-divider flex justify-between items-center app-surface-muted rounded-t-lg">
           <div>
-            <h3 class="font-bold text-gray-800 dark:text-white flex items-center">
-              <i class="fas fa-network-wired text-blue-500 mr-2"></i>
+            <h3 class="font-bold app-text-primary flex items-center">
+              <i class="fas fa-network-wired mr-2" style="color: var(--accent-info);"></i>
               Interfaces do Dispositivo
             </h3>
-            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            <p class="text-xs app-text-tertiary mt-1">
               {{ selectedInterfaceDevice?.name || '' }}
             </p>
           </div>
-          <button @click="showInterfacesModal = false" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+          <button @click="showInterfacesModal = false" class="app-text-tertiary close-icon-btn">
             <i class="fas fa-times text-xl"></i>
           </button>
         </div>
         <div class="flex-1 overflow-y-auto p-4">
           <!-- Loading state -->
           <div v-if="loadingInterfaces" class="flex flex-col items-center justify-center py-12">
-            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-            <p class="text-sm text-gray-600 dark:text-gray-300">Carregando interfaces...</p>
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 app-spinner mb-4"></div>
+            <p class="text-sm app-text-secondary">Carregando interfaces...</p>
           </div>
 
           <!-- Empty state -->
           <div v-else-if="!interfacesData || interfacesData.length === 0" class="flex flex-col items-center justify-center py-12">
-            <i class="fas fa-inbox text-gray-300 dark:text-gray-600 text-5xl mb-4"></i>
-            <p class="text-gray-600 dark:text-gray-300 font-medium">Nenhuma interface encontrada</p>
-            <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">Este dispositivo não possui interfaces cadastradas.</p>
+            <i class="fas fa-inbox app-text-tertiary text-5xl mb-4"></i>
+            <p class="app-text-secondary font-medium">Nenhuma interface encontrada</p>
+            <p class="text-sm app-text-tertiary mt-2">Este dispositivo não possui interfaces cadastradas.</p>
           </div>
 
           <!-- Interfaces list -->
@@ -137,39 +135,39 @@
             <div 
               v-for="(iface, index) in interfacesData" 
               :key="index"
-              class="border dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-750 hover:shadow-md transition-shadow"
+              class="app-surface rounded-lg p-4 transition-shadow"
             >
               <div class="flex items-start justify-between">
                 <div class="flex-1">
                   <div class="flex items-center">
-                    <i class="fas fa-ethernet text-blue-500 mr-2"></i>
-                    <h4 class="font-medium text-gray-800 dark:text-white">{{ iface.name }}</h4>
+                    <i class="fas fa-ethernet mr-2" style="color: var(--accent-info);"></i>
+                    <h4 class="font-medium app-text-primary">{{ iface.name }}</h4>
                     <span 
                       v-if="iface.status === 'up'" 
-                      class="ml-2 px-2 py-0.5 text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-full"
+                      class="ml-2 app-badge app-badge-success"
                     >
                       <i class="fas fa-check-circle mr-1"></i>UP
                     </span>
                     <span 
                       v-else 
-                      class="ml-2 px-2 py-0.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full"
+                      class="ml-2 app-badge app-badge-muted"
                     >
                       <i class="fas fa-times-circle mr-1"></i>DOWN
                     </span>
                   </div>
-                  <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">{{ iface.description || 'Sem descrição' }}</p>
+                  <p class="text-sm app-text-tertiary mt-1">{{ iface.description || 'Sem descrição' }}</p>
                   
                   <!-- Signal levels -->
                   <div v-if="iface.rx_power || iface.tx_power" class="mt-3 grid grid-cols-2 gap-3">
-                    <div v-if="iface.rx_power" class="bg-blue-50 dark:bg-blue-900/20 p-2 rounded">
-                      <p class="text-xs text-gray-500 dark:text-gray-400">RX Power</p>
-                      <p class="text-sm font-medium text-gray-800 dark:text-white">
+                    <div v-if="iface.rx_power" class="app-surface-muted p-2 rounded">
+                      <p class="text-xs app-text-tertiary">RX Power</p>
+                      <p class="text-sm font-medium app-text-primary">
                         {{ iface.rx_power }} dBm
                       </p>
                     </div>
-                    <div v-if="iface.tx_power" class="bg-green-50 dark:bg-green-900/20 p-2 rounded">
-                      <p class="text-xs text-gray-500 dark:text-gray-400">TX Power</p>
-                      <p class="text-sm font-medium text-gray-800 dark:text-white">
+                    <div v-if="iface.tx_power" class="app-surface-muted p-2 rounded">
+                      <p class="text-xs app-text-tertiary">TX Power</p>
+                      <p class="text-sm font-medium app-text-primary">
                         {{ iface.tx_power }} dBm
                       </p>
                     </div>
@@ -177,9 +175,9 @@
 
                   <!-- Bandwidth -->
                   <div v-if="iface.speed" class="mt-2">
-                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                    <p class="text-xs app-text-tertiary">
                       <i class="fas fa-tachometer-alt mr-1"></i>
-                      Velocidade: <span class="font-medium text-gray-700 dark:text-gray-300">{{ iface.speed }}</span>
+                      Velocidade: <span class="font-medium app-text-secondary">{{ iface.speed }}</span>
                     </p>
                   </div>
                 </div>
@@ -187,8 +185,8 @@
             </div>
           </div>
         </div>
-        <div class="p-4 border-t dark:border-gray-700 bg-white dark:bg-gray-800 rounded-b-lg flex justify-end">
-          <button @click="showInterfacesModal = false" class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors">
+        <div class="p-4 border-t app-divider app-surface rounded-b-lg flex justify-end">
+          <button @click="showInterfacesModal = false" class="px-4 py-2 rounded app-btn">
             <i class="fas fa-times mr-2"></i>Fechar
           </button>
         </div>
@@ -555,3 +553,9 @@ const handleExportCSV = () => {
   }
 };
 </script>
+
+<style scoped>
+.close-icon-btn:hover {
+  color: var(--text-primary);
+}
+</style>

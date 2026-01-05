@@ -12,16 +12,16 @@
         <!-- Modal Container -->
         <div class="flex min-h-screen items-center justify-center p-4">
           <div
-            class="relative w-full max-w-3xl bg-white rounded-lg shadow-xl"
+            class="relative w-full max-w-3xl app-surface rounded-lg"
             @click.stop
           >
             <!-- Header -->
-            <div class="flex items-center justify-between p-6 border-b">
-              <h3 class="text-xl font-bold text-gray-900">
-                <i class="fas fa-flask mr-2 text-blue-600"></i>
+            <div class="flex items-center justify-between p-6 border-b app-divider">
+              <h3 class="text-xl font-bold app-text-primary">
+                <i class="fas fa-flask mr-2" style="color: var(--accent-info);"></i>
                 Testar Regex
               </h3>
-              <button @click="closeModal" class="text-gray-400 hover:text-gray-600">
+              <button @click="closeModal" class="app-text-tertiary close-icon-btn">
                 <i class="fas fa-times"></i>
               </button>
             </div>
@@ -30,27 +30,27 @@
             <div class="p-6 space-y-4">
               <!-- Pattern Display -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">
+                <label class="block text-sm font-medium app-text-secondary mb-1">
                   Padrão
                 </label>
-                <code class="block bg-gray-100 px-3 py-2 rounded font-mono text-sm">
+                <code class="block app-surface-muted px-3 py-2 rounded font-mono text-sm app-text-primary">
                   {{ rule?.pattern }}
                 </code>
-                <p v-if="rule?.description" class="text-xs text-gray-500 mt-1">
+                <p v-if="rule?.description" class="text-xs app-text-tertiary mt-1">
                   {{ rule.description }}
                 </p>
               </div>
 
               <!-- Sample Names Input -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">
+                <label class="block text-sm font-medium app-text-secondary mb-1">
                   Nomes de Teste
-                  <span class="text-xs text-gray-500">(um por linha)</span>
+                  <span class="text-xs app-text-tertiary">(um por linha)</span>
                 </label>
                 <textarea
                   v-model="sampleNamesText"
                   rows="6"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                  class="w-full px-3 py-2 rounded-lg font-mono text-sm app-input"
                   placeholder="OLT-HUAWEI-001&#10;SWITCH-CISCO-CORE&#10;RTR-MIKROTIK-EDGE-01&#10;ONU-FTTx-Cliente-456"
                 />
               </div>
@@ -59,7 +59,7 @@
               <button
                 @click="runTest"
                 :disabled="!sampleNamesText.trim()"
-                class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="w-full px-4 py-2 rounded-lg app-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <i class="fas fa-play mr-2"></i>
                 Executar Teste
@@ -69,17 +69,17 @@
               <div v-if="testResults" class="space-y-4">
                 <!-- Matches -->
                 <div v-if="testResults.matches.length > 0">
-                  <h4 class="text-sm font-semibold text-green-700 mb-2">
+                  <h4 class="text-sm font-semibold app-text-primary mb-2">
                     <i class="fas fa-check-circle mr-1"></i>
                     Correspondências ({{ testResults.matches.length }})
                   </h4>
-                  <div class="bg-green-50 border border-green-200 rounded-lg p-3 space-y-1">
+                  <div class="app-surface-muted border app-divider rounded-lg p-3 space-y-1">
                     <div
                       v-for="(match, index) in testResults.matches"
                       :key="`match-${index}`"
-                      class="text-sm font-mono text-green-800"
+                      class="text-sm font-mono app-text-secondary"
                     >
-                      <i class="fas fa-check text-green-600 mr-2"></i>
+                      <i class="fas fa-check mr-2" style="color: var(--status-online);"></i>
                       {{ match }}
                     </div>
                   </div>
@@ -87,17 +87,17 @@
 
                 <!-- Non-matches -->
                 <div v-if="testResults.non_matches.length > 0">
-                  <h4 class="text-sm font-semibold text-red-700 mb-2">
+                  <h4 class="text-sm font-semibold app-text-primary mb-2">
                     <i class="fas fa-times-circle mr-1"></i>
                     Não Corresponderam ({{ testResults.non_matches.length }})
                   </h4>
-                  <div class="bg-red-50 border border-red-200 rounded-lg p-3 space-y-1">
+                  <div class="app-surface-muted border app-divider rounded-lg p-3 space-y-1">
                     <div
                       v-for="(nonMatch, index) in testResults.non_matches"
                       :key="`non-match-${index}`"
-                      class="text-sm font-mono text-red-800"
+                      class="text-sm font-mono app-text-secondary"
                     >
-                      <i class="fas fa-times text-red-600 mr-2"></i>
+                      <i class="fas fa-times mr-2" style="color: var(--status-offline);"></i>
                       {{ nonMatch }}
                     </div>
                   </div>
@@ -105,7 +105,7 @@
 
                 <!-- Empty Results -->
                 <div v-if="testResults.matches.length === 0 && testResults.non_matches.length === 0">
-                  <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center text-gray-600">
+                  <div class="app-surface-muted border app-divider rounded-lg p-4 text-center app-text-tertiary">
                     <i class="fas fa-info-circle mr-2"></i>
                     Nenhum resultado
                   </div>
@@ -114,10 +114,10 @@
             </div>
 
             <!-- Footer -->
-            <div class="flex justify-end p-6 border-t bg-gray-50">
+            <div class="flex justify-end p-6 border-t app-divider app-surface-muted">
               <button
                 @click="closeModal"
-                class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100"
+                class="px-4 py-2 rounded-lg app-btn"
               >
                 Fechar
               </button>
@@ -200,5 +200,9 @@ const runTest = async () => {
 .modal-enter-from,
 .modal-leave-to {
   opacity: 0;
+}
+
+.close-icon-btn:hover {
+  color: var(--text-primary);
 }
 </style>
