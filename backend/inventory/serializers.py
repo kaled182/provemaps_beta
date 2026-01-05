@@ -92,6 +92,7 @@ class CableSegmentSerializer(serializers.ModelSerializer[CableSegment]):
     )
     start_infra_location = serializers.SerializerMethodField()
     end_infra_location = serializers.SerializerMethodField()
+    break_location = serializers.SerializerMethodField()  # Para segmentos BROKEN
     status_display = serializers.CharField(
         source="get_status_display", read_only=True
     )
@@ -116,6 +117,77 @@ class CableSegmentSerializer(serializers.ModelSerializer[CableSegment]):
                 return None
         return None
     
+    def get_break_location(self, obj: CableSegment) -> dict[str, float] | None:
+        """Calculate break location for BROKEN segments based on cable path"""
+        if obj.status != 'broken':
+            return None
+        
+        # Tentar usar localização da infraestrutura primeiro
+        if obj.start_infrastructure and obj.start_infrastructure.location:
+            try:
+                return {
+                    "lat": obj.start_infrastructure.location.y,
+                    "lng": obj.start_infrastructure.location.x
+                }
+            except Exception:
+                pass
+        
+        # Se CEO não tem localização, calcular do path do cabo
+        cable = obj.cable
+        if not cable or not cable.path:
+            return None
+        
+        try:
+            # Calcular distância acumulada até este segmento
+            previous_segments = cable.segments.filter(
+                segment_number__lt=obj.segment_number
+            ).order_by('segment_number')
+            
+            accumulated_meters = sum(
+                seg.length_meters for seg in previous_segments
+            )
+            
+            # Interpolar ponto ao longo do path
+            from django.contrib.gis.geos import LineString, Point
+            coords = list(cable.path.coords)
+            
+            # Calcular distância acumulada até encontrar o ponto
+            current_distance = 0.0
+            target_distance = accumulated_meters
+            
+            for i in range(len(coords) - 1):
+                p1 = Point(coords[i][0], coords[i][1], srid=4326)
+                p2 = Point(coords[i+1][0], coords[i+1][1], srid=4326)
+                
+                # Distância deste segmento (aprox: 1 grau ~ 111km)
+                segment_dist_km = p1.distance(p2) * 111
+                segment_dist_m = segment_dist_km * 1000
+                
+                if current_distance + segment_dist_m >= target_distance:
+                    # O ponto está neste segmento
+                    # Interpolar entre p1 e p2
+                    remaining = target_distance - current_distance
+                    ratio = remaining / segment_dist_m if segment_dist_m > 0 else 0
+                    
+                    lat = coords[i][1] + ratio * (coords[i+1][1] - coords[i][1])
+                    lng = coords[i][0] + ratio * (coords[i+1][0] - coords[i][0])
+                    
+                    return {"lat": lat, "lng": lng}
+                
+                current_distance += segment_dist_m
+            
+            # Se não encontrou, retornar último ponto
+            if coords:
+                return {"lat": coords[-1][1], "lng": coords[-1][0]}
+            
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error calculating break_location for segment {obj.id}: {e}")
+            return None
+        
+        return None
+    
     class Meta:
         model = CableSegment
         fields = [
@@ -130,6 +202,7 @@ class CableSegmentSerializer(serializers.ModelSerializer[CableSegment]):
             "end_infrastructure",
             "end_infra_name",
             "end_infra_location",
+            "break_location",  # Coordenadas calculadas para rompimentos
             "length_meters",
             "created_at",
             "updated_at",

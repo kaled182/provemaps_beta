@@ -132,24 +132,20 @@ class CableSplitV2View(APIView):
                 start_infrastructure=ceo,
                 end_infrastructure=ceo,  # CEO é tanto início quanto fim (ponto de corte)
                 length_meters=0,  # Comprimento zero (é um ponto de descontinuidade)
-                status=CableSegment.STATUS_BROKEN  # CRUCIAL: marca como BROKEN
+                status=CableSegment.STATUS_BROKEN,  # CRUCIAL: marca como BROKEN
+                has_loose_ends=True  # PONTAS SOLTAS: aguardando conexão manual
             )
             
             logger.info(f"[SPLIT V2] Segmento BROKEN criado: {broken_segment.name}")
-            logger.info(f"[SPLIT V2] Status: {broken_segment.status}")
+            logger.info(f"[SPLIT V2] Status: {broken_segment.status}, has_loose_ends: {broken_segment.has_loose_ends}")
             
-            # 4. Criar attachment do cabo original na CEO
-            attachment, created = InfrastructureCableAttachment.objects.get_or_create(
-                infrastructure=ceo,
-                cable=cable,
-                defaults={
-                    'port_type': 'oval',
-                    'is_pass_through': False  # Cabo é partido aqui, não passa direto
-                }
-            )
+            # 4. NÃO criar attachment automaticamente - deixar pontas soltas!
+            # O usuário deve arrastar manualmente cada ponta para a CEO
+            # REMOVIDO: InfrastructureCableAttachment.objects.get_or_create(...)
             
-            action_str = "criado" if created else "já existia"
-            logger.info(f"[SPLIT V2] Attachment {action_str}: {cable.name} → {ceo.name}")
+            logger.info("[SPLIT V2] PONTAS SOLTAS: Segmentos aguardando conexão manual")
+            logger.info(f"[SPLIT V2] Ponta A (Seg {seg_before.segment_number}): {seg_before.name}")
+            logger.info(f"[SPLIT V2] Ponta B (Seg {seg_after.segment_number}): {seg_after.name}")
             
             # 5. Marcar cabo original com nota sobre o split
             cable.notes = (
@@ -163,7 +159,7 @@ class CableSplitV2View(APIView):
         
         return Response({
             "status": "success",
-            "message": f"Cabo {cable.name} partido em segmentos na CEO {ceo.name}",
+            "message": f"Cabo {cable.name} partido. Arraste as pontas para conectá-las à CEO.",
             "cable": {
                 "id": cable.id,
                 "name": cable.name,
@@ -175,23 +171,49 @@ class CableSplitV2View(APIView):
                     "name": seg_before.name,
                     "length_m": seg_before.length_meters,
                     "status": seg_before.status,
+                    "segment_number": seg_before.segment_number,
                 },
                 "broken": {
                     "id": broken_segment.id,
                     "name": broken_segment.name,
                     "length_m": broken_segment.length_meters,
                     "status": broken_segment.status,
+                    "segment_number": broken_segment.segment_number,
                 },
                 "after": {
                     "id": seg_after.id,
                     "name": seg_after.name,
                     "length_m": seg_after.length_meters,
                     "status": seg_after.status,
+                    "segment_number": seg_after.segment_number,
                 },
             },
             "ceo": {
                 "id": ceo.id,
                 "name": ceo.name,
+            },
+            # NOVO: Informações para o frontend renderizar pontas soltas
+            "loose_ends": {
+                "end_a": {
+                    "segment_id": seg_before.id,
+                    "segment_number": seg_before.segment_number,
+                    "is_start": False,  # Ponta FIM do seg_before
+                    "location": {
+                        "lat": ceo.location.y,
+                        "lng": ceo.location.x
+                    } if ceo.location else None,
+                    "requires_attachment": True
+                },
+                "end_b": {
+                    "segment_id": seg_after.id,
+                    "segment_number": seg_after.segment_number,
+                    "is_start": True,  # Ponta INÍCIO do seg_after  
+                    "location": {
+                        "lat": ceo.location.y,
+                        "lng": ceo.location.x
+                    } if ceo.location else None,
+                    "requires_attachment": True
+                }
             }
         }, status=status.HTTP_201_CREATED)
     
