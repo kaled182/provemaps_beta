@@ -77,20 +77,20 @@
           <div class="mt-6 grid gap-4 md:grid-cols-2">
             <div class="md:col-span-2">
               <label class="label-custom">Zabbix API URL</label>
-              <input v-model="configForm.ZABBIX_API_URL" type="url" class="input-custom" placeholder="http://zabbix.exemplo.com/api_jsonrpc.php">
+              <input v-model="configForm.ZABBIX_API_URL" type="url" class="app-input input-custom" placeholder="http://zabbix.exemplo.com/api_jsonrpc.php">
             </div>
             <div>
               <label class="label-custom">Usuário</label>
-              <input v-model="configForm.ZABBIX_API_USER" type="text" class="input-custom">
+              <input v-model="configForm.ZABBIX_API_USER" type="text" class="app-input input-custom">
             </div>
             <div>
               <label class="label-custom">Senha</label>
-              <input v-model="configForm.ZABBIX_API_PASSWORD" type="password" class="input-custom">
+              <input v-model="configForm.ZABBIX_API_PASSWORD" type="password" class="app-input input-custom">
             </div>
             <div class="md:col-span-2">
               <label class="label-custom">Token API (opcional)</label>
-              <input v-model="configForm.ZABBIX_API_KEY" type="password" class="input-custom">
-              <p class="text-xs text-gray-500 mt-1">Se informado, substitui o login/senha.</p>
+              <input v-model="configForm.ZABBIX_API_KEY" type="password" class="app-input input-custom">
+              <p class="input-helper">Se informado, substitui o login/senha.</p>
             </div>
           </div>
 
@@ -147,19 +147,19 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label class="label-custom">Provedor de Mapa</label>
-                <select v-model="configForm.MAP_PROVIDER" class="input-custom">
+                <select v-model="configForm.MAP_PROVIDER" class="app-input input-custom">
                   <option value="google">Google Maps Platform</option>
                   <option value="mapbox">Mapbox GL</option>
                   <option value="osm">OpenStreetMap (Leaflet)</option>
                 </select>
-                <p class="text-xs text-gray-500 mt-2">Escolha o serviço base para renderização.</p>
+                <p class="input-helper">Escolha o serviço base para renderização.</p>
               </div>
             </div>
 
             <div v-if="configForm.MAP_PROVIDER === 'google'" class="animate-fade-in">
               <label class="label-custom">Google Maps API Key</label>
-              <input v-model="configForm.GOOGLE_MAPS_API_KEY" type="password" class="input-custom" placeholder="Cole sua chave API aqui...">
-              <div class="mt-2 text-xs text-gray-500 flex items-center gap-1">
+              <input v-model="configForm.GOOGLE_MAPS_API_KEY" type="password" class="app-input input-custom" placeholder="Cole sua chave API aqui...">
+              <div class="input-helper flex items-center gap-1">
                 <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 APIs necessárias: Maps JavaScript API, Places API, Geocoding API.
               </div>
@@ -167,7 +167,7 @@
 
             <div v-if="configForm.MAP_PROVIDER === 'mapbox'" class="animate-fade-in">
               <label class="label-custom">Mapbox Access Token</label>
-              <input v-model="configForm.MAPBOX_TOKEN" type="password" class="input-custom" placeholder="pk.eyJ...">
+              <input v-model="configForm.MAPBOX_TOKEN" type="password" class="app-input input-custom" placeholder="pk.eyJ...">
             </div>
           </div>
 
@@ -183,11 +183,11 @@
           <div class="grid gap-4 md:grid-cols-2">
             <div class="md:col-span-2">
               <label class="label-custom">SECRET_KEY</label>
-              <input v-model="configForm.SECRET_KEY" type="text" class="input-custom font-mono">
+              <input v-model="configForm.SECRET_KEY" type="text" class="app-input input-custom font-mono">
             </div>
             <div class="md:col-span-2">
               <label class="label-custom">ALLOWED_HOSTS</label>
-              <input v-model="configForm.ALLOWED_HOSTS" type="text" class="input-custom" placeholder="localhost,127.0.0.1">
+              <input v-model="configForm.ALLOWED_HOSTS" type="text" class="app-input input-custom" placeholder="localhost,127.0.0.1">
             </div>
             <div class="flex items-center gap-3">
               <input id="debug-toggle" v-model="configForm.DEBUG" type="checkbox" class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded">
@@ -211,23 +211,23 @@
           <div class="mt-6 grid gap-4 md:grid-cols-2">
             <div>
               <label class="label-custom">DB_HOST</label>
-              <input v-model="configForm.DB_HOST" type="text" class="input-custom">
+              <input v-model="configForm.DB_HOST" type="text" class="app-input input-custom">
             </div>
             <div>
               <label class="label-custom">DB_PORT</label>
-              <input v-model="configForm.DB_PORT" type="text" class="input-custom">
+              <input v-model="configForm.DB_PORT" type="text" class="app-input input-custom">
             </div>
             <div>
               <label class="label-custom">DB_NAME</label>
-              <input v-model="configForm.DB_NAME" type="text" class="input-custom">
+              <input v-model="configForm.DB_NAME" type="text" class="app-input input-custom">
             </div>
             <div>
               <label class="label-custom">DB_USER</label>
-              <input v-model="configForm.DB_USER" type="text" class="input-custom">
+              <input v-model="configForm.DB_USER" type="text" class="app-input input-custom">
             </div>
             <div class="md:col-span-2">
               <label class="label-custom">DB_PASSWORD</label>
-              <input v-model="configForm.DB_PASSWORD" type="password" class="input-custom">
+              <input v-model="configForm.DB_PASSWORD" type="password" class="app-input input-custom">
             </div>
           </div>
         </div>
@@ -242,14 +242,14 @@
           </div>
           <div class="mt-6">
             <label class="label-custom">REDIS_URL</label>
-            <input v-model="configForm.REDIS_URL" type="text" class="input-custom" placeholder="redis://redis:6379/0">
+            <input v-model="configForm.REDIS_URL" type="text" class="app-input input-custom" placeholder="redis://redis:6379/0">
           </div>
         </div>
 
         <div class="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
           <label class="label-custom">SERVICE_RESTART_COMMANDS</label>
-          <textarea v-model="configForm.SERVICE_RESTART_COMMANDS" class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:ring-primary-500 focus:border-primary-500 text-sm h-24 p-3 font-mono"></textarea>
-          <p class="text-xs text-gray-500 mt-2">Comandos executados após salvar configuração.</p>
+          <textarea v-model="configForm.SERVICE_RESTART_COMMANDS" class="app-input input-custom font-mono h-24"></textarea>
+          <p class="input-helper">Comandos executados após salvar configuração.</p>
         </div>
 
         <div class="flex justify-end">
@@ -302,11 +302,11 @@
           <div class="grid gap-4 md:grid-cols-2 mb-6">
             <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
               <label class="label-custom">Retenção (dias)</label>
-              <input v-model="backupSettings.retention_days" type="number" class="input-custom">
+              <input v-model="backupSettings.retention_days" type="number" class="app-input input-custom">
             </div>
             <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
               <label class="label-custom">Retenção (quantidade)</label>
-              <input v-model="backupSettings.retention_count" type="number" class="input-custom">
+              <input v-model="backupSettings.retention_count" type="number" class="app-input input-custom">
             </div>
             <div class="md:col-span-2 flex justify-end">
               <button @click="saveBackupSettings" class="btn-secondary">Salvar retenção</button>
@@ -360,11 +360,11 @@
         <div class="p-6 space-y-4">
           <div>
             <label class="label-custom">Nome Identificador</label>
-            <input v-model="serverForm.name" type="text" class="input-custom" placeholder="Ex: Zabbix Core">
+            <input v-model="serverForm.name" type="text" class="app-input input-custom" placeholder="Ex: Zabbix Core">
           </div>
           <div>
             <label class="label-custom">Tipo de Serviço</label>
-            <select v-model="serverForm.server_type" class="input-custom">
+            <select v-model="serverForm.server_type" class="app-input input-custom">
               <option value="zabbix">Zabbix</option>
               <option value="snmp">SNMP</option>
               <option value="prometheus">Prometheus</option>
@@ -373,15 +373,15 @@
           </div>
           <div>
             <label class="label-custom">URL de Acesso</label>
-            <input v-model="serverForm.url" type="url" class="input-custom" placeholder="http://192.168.1.100/zabbix">
+            <input v-model="serverForm.url" type="url" class="app-input input-custom" placeholder="http://192.168.1.100/zabbix">
           </div>
           <div>
             <label class="label-custom">Token de Autenticação / API Key</label>
-            <input v-model="serverForm.auth_token" type="password" class="input-custom">
+            <input v-model="serverForm.auth_token" type="password" class="app-input input-custom">
           </div>
           <div>
             <label class="label-custom">Configuração Extra (JSON)</label>
-            <textarea v-model="serverForm.extra_config_text" class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:ring-primary-500 focus:border-primary-500 text-sm h-24 p-3 font-mono"></textarea>
+            <textarea v-model="serverForm.extra_config_text" class="app-input input-custom font-mono h-24"></textarea>
           </div>
           <div class="pt-2">
             <label class="flex items-center space-x-2 cursor-pointer">
@@ -825,30 +825,82 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.btn-primary {
-  @apply px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500;
-}
-.btn-secondary {
-  @apply px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg text-sm font-medium transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500;
-}
+/* --- INPUTS & LABELS --- */
 .label-custom {
-  @apply block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide;
+  @apply text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider ml-1;
+  display: block;
+  margin-bottom: 0.5rem;
 }
+
 .input-custom {
-  @apply w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm h-10 px-3;
+  @apply w-full p-2.5 transition-all duration-200 ease-in-out;
+  display: block;
 }
+
+.input-custom:focus {
+  @apply outline-none;
+}
+
+select.input-custom {
+  @apply pr-10 appearance-none;
+}
+
+.input-helper {
+  @apply text-xs text-gray-500 dark:text-gray-400;
+  margin-top: 0.5rem;
+}
+
+/* --- BOTÕES --- */
+.btn-primary {
+  @apply inline-flex items-center justify-center px-4 py-2.5
+  bg-primary-600 hover:bg-primary-700 text-white
+  rounded-lg text-sm font-medium transition-all duration-200
+  shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500
+  disabled:opacity-60 disabled:cursor-not-allowed;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center px-4 py-2.5
+  bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600
+  hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200
+  rounded-lg text-sm font-medium transition-all duration-200
+  shadow-sm hover:shadow focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500;
+}
+
+/* --- ANIMAÇÕES --- */
 .animate-fade-in {
-  animation: fadeIn 0.3s ease-in-out;
+  animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(5px); }
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
-textarea::-webkit-scrollbar {
+
+/* --- SCROLLBARS PERSONALIZADAS --- */
+::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
-textarea::-webkit-scrollbar-thumb {
-  background: #4b5563;
-  border-radius: 4px;
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 dark:bg-gray-600 rounded-full border-[2px] border-transparent bg-clip-content;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400 dark:bg-gray-500;
+}
+
+textarea.font-mono {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace;
+  line-height: 1.6;
+}
+
+table {
+  @apply w-full border-collapse;
 }
 </style>
