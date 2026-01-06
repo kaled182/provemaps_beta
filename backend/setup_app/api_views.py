@@ -14,7 +14,8 @@ from typing import Any, Dict
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db import connection
-from django.http import HttpResponse, JsonResponse
+from django.http import FileResponse, HttpResponse, JsonResponse
+from django.core.management import call_command
 from django.views.decorators.http import require_http_methods, require_GET, require_POST
 
 from integrations.zabbix.zabbix_client import zabbix_request
@@ -33,6 +34,7 @@ def _staff_check(user):
 
 
 BACKUP_DIR = Path(settings.BASE_DIR) / "database" / "backups"
+_ALLOWED_BACKUP_EXTENSIONS = {".dump", ".sql", ".json"}
 
 
 def _get_db_settings() -> Dict[str, str]:
@@ -55,6 +57,65 @@ def _safe_backup_path(filename: str) -> Path:
 
 def _ensure_backup_dir() -> None:
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _detect_backup_type(filename: str) -> str:
+    lower = filename.lower()
+    if lower.endswith(".config.json"):
+        return "config"
+    if lower.startswith("manual_backup_") or "manual" in lower:
+        return "manual"
+    if "auto" in lower or "scheduled" in lower or "snapshot" in lower:
+        return "auto"
+    if "import" in lower or "upload" in lower:
+        return "upload"
+    return "unknown"
+
+
+def _apply_backup_retention() -> None:
+    retention_days = env_manager.read_values(["BACKUP_RETENTION_DAYS"]).get("BACKUP_RETENTION_DAYS", "")
+    retention_count = env_manager.read_values(["BACKUP_RETENTION_COUNT"]).get("BACKUP_RETENTION_COUNT", "")
+
+    try:
+        days = int(retention_days) if retention_days else None
+    except ValueError:
+        days = None
+
+    try:
+        count = int(retention_count) if retention_count else None
+    except ValueError:
+        count = None
+
+    if not days and not count:
+        return
+
+    _ensure_backup_dir()
+    files = []
+    for path in BACKUP_DIR.iterdir():
+        if not path.is_file() or path.suffix.lower() not in _ALLOWED_BACKUP_EXTENSIONS:
+            continue
+        try:
+            path.stat()
+        except FileNotFoundError:
+            continue
+        files.append(path)
+
+    if days:
+        cutoff = datetime.now().timestamp() - (days * 86400)
+        for path in files:
+            if path.stat().st_mtime < cutoff:
+                path.unlink(missing_ok=True)
+
+    if count:
+        sortable = []
+        for path in files:
+            try:
+                sortable.append((path.stat().st_mtime, path))
+            except FileNotFoundError:
+                continue
+        sorted_files = sorted(sortable, key=lambda item: item[0], reverse=True)
+        for _, path in sorted_files[count:]:
+            path.unlink(missing_ok=True)
 
 
 @require_POST
@@ -509,14 +570,40 @@ def get_configuration(request):
             "REDIS_URL",
             "SERVICE_RESTART_COMMANDS",
         ]
-        
         current_values = env_manager.read_values(editable_keys)
-        
-        # Convert boolean strings to actual booleans for JSON
+        runtime_config = runtime_settings.get_runtime_config()
+        allowed_hosts_fallback = ",".join(runtime_config.allowed_hosts)
+
+        fallback_values = {
+            "SECRET_KEY": getattr(settings, "SECRET_KEY", ""),
+            "DEBUG": getattr(settings, "DEBUG", False),
+            "ZABBIX_API_URL": runtime_config.zabbix_api_url,
+            "ZABBIX_API_USER": runtime_config.zabbix_api_user,
+            "ZABBIX_API_PASSWORD": runtime_config.zabbix_api_password,
+            "ZABBIX_API_KEY": runtime_config.zabbix_api_key,
+            "GOOGLE_MAPS_API_KEY": runtime_config.google_maps_api_key,
+            "ALLOWED_HOSTS": allowed_hosts_fallback,
+            "ENABLE_DIAGNOSTIC_ENDPOINTS": runtime_config.diagnostics_enabled,
+            "DB_HOST": runtime_config.db_host,
+            "DB_PORT": runtime_config.db_port,
+            "DB_NAME": runtime_config.db_name,
+            "DB_USER": runtime_config.db_user,
+            "DB_PASSWORD": runtime_config.db_password,
+            "REDIS_URL": runtime_config.redis_url,
+            "SERVICE_RESTART_COMMANDS": getattr(settings, "SERVICE_RESTART_COMMANDS", ""),
+        }
+
+        # Convert boolean strings to actual booleans for JSON, fallback to runtime/config defaults
         config_data = {}
-        for key, value in current_values.items():
+        for key in editable_keys:
+            value = current_values.get(key, "")
+            if value == "":
+                value = fallback_values.get(key, "")
             if key in ["DEBUG", "ENABLE_DIAGNOSTIC_ENDPOINTS"]:
-                config_data[key] = value.lower() == "true" if value else False
+                if isinstance(value, bool):
+                    config_data[key] = value
+                else:
+                    config_data[key] = str(value).lower() == "true" if value else False
             else:
                 config_data[key] = value or ""
         
@@ -744,6 +831,64 @@ def update_env_file(request):
         )
 
 
+@require_POST
+@login_required
+@user_passes_test(_staff_check)
+def import_env_backup(request):
+    """Restore .env content from a backup metadata file."""
+    try:
+        data = json.loads(request.body or "{}")
+        env_file = data.get("env_file", "")
+        if not isinstance(env_file, str):
+            return JsonResponse(
+                {"success": False, "message": "Invalid env file payload."},
+                status=400,
+            )
+        if len(env_file) > 512_000:
+            return JsonResponse(
+                {"success": False, "message": "Env content is too large."},
+                status=400,
+            )
+
+        env_path = env_manager.ENV_PATH
+        env_path.parent.mkdir(parents=True, exist_ok=True)
+        if env_file and not env_file.endswith("\n"):
+            env_file = f"{env_file}\n"
+        env_path.write_text(env_file, encoding="utf-8")
+
+        clear_runtime_config_cache()
+        runtime_settings.reload_config()
+        reload_diagnostics_flag_cache()
+
+        ConfigurationAudit.log_change(
+            user=request.user,
+            action="import",
+            section="Env File",
+            request=request,
+            success=True,
+        )
+
+        return JsonResponse({"success": True, "message": "Env file importado."})
+    except json.JSONDecodeError:
+        return JsonResponse(
+            {"success": False, "message": "Invalid JSON data"},
+            status=400,
+        )
+    except Exception as exc:
+        ConfigurationAudit.log_change(
+            user=request.user,
+            action="import",
+            section="Env File",
+            request=request,
+            success=False,
+            error_message=str(exc),
+        )
+        return JsonResponse(
+            {"success": False, "message": f"Env import failed: {exc}"},
+            status=500,
+        )
+
+
 @require_http_methods(["GET", "POST"])
 @login_required
 @user_passes_test(_staff_check)
@@ -751,73 +896,111 @@ def backups_manager(request):
     """List backups or trigger a new backup."""
     if request.method == "GET":
         _ensure_backup_dir()
+        retention_values = env_manager.read_values(
+            ["BACKUP_RETENTION_DAYS", "BACKUP_RETENTION_COUNT"]
+        )
         backups = []
         for file_path in BACKUP_DIR.iterdir():
             if not file_path.is_file():
                 continue
-            if file_path.suffix.lower() not in {".dump", ".sql", ".json"}:
+            if file_path.suffix.lower() not in _ALLOWED_BACKUP_EXTENSIONS:
                 continue
-            stat = file_path.stat()
+            try:
+                stat = file_path.stat()
+            except FileNotFoundError:
+                continue
             backups.append(
                 {
                     "name": file_path.name,
                     "size": stat.st_size,
                     "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    "type": _detect_backup_type(file_path.name),
                 }
             )
         backups.sort(key=lambda item: item["created_at"], reverse=True)
-        return JsonResponse({"success": True, "backups": backups})
+        return JsonResponse(
+            {
+                "success": True,
+                "backups": backups,
+                "settings": {
+                    "retention_days": retention_values.get("BACKUP_RETENTION_DAYS", ""),
+                    "retention_count": retention_values.get("BACKUP_RETENTION_COUNT", ""),
+                },
+            }
+        )
 
     try:
         _ensure_backup_dir()
+        if request.FILES.get("file"):
+            upload = request.FILES["file"]
+            safe_name = Path(upload.name).name
+            if not safe_name:
+                return JsonResponse(
+                    {"success": False, "message": "Invalid file name."},
+                    status=400,
+                )
+            suffix = Path(safe_name).suffix.lower()
+            if suffix not in _ALLOWED_BACKUP_EXTENSIONS:
+                return JsonResponse(
+                    {"success": False, "message": "Unsupported backup format."},
+                    status=400,
+                )
+
+            target = BACKUP_DIR / safe_name
+            if target.exists():
+                stamped = datetime.now().strftime("%Y%m%d_%H%M%S")
+                target = BACKUP_DIR / f"upload_{stamped}_{safe_name}"
+
+            with target.open("wb") as handler:
+                for chunk in upload.chunks():
+                    handler.write(chunk)
+
+            _apply_backup_retention()
+
+            ConfigurationAudit.log_change(
+                user=request.user,
+                action="import",
+                section="Backups",
+                new_value=target.name,
+                request=request,
+                success=True,
+            )
+
+            return JsonResponse(
+                {"success": True, "message": "Backup enviado", "filename": target.name},
+                status=201,
+            )
+
         if shutil.which("pg_dump") is None:
             return JsonResponse(
                 {"success": False, "message": "pg_dump is not available on the server."},
                 status=500,
             )
 
-        db_settings = _get_db_settings()
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"manual_backup_{timestamp}.dump"
-        backup_path = BACKUP_DIR / filename
+        filename = call_command("make_backup")
+        if not filename:
+            backups = [
+                path for path in BACKUP_DIR.iterdir()
+                if path.is_file() and path.suffix.lower() == ".dump"
+            ]
+            if backups:
+                latest = max(backups, key=lambda item: item.stat().st_mtime)
+                filename = latest.name
 
-        env = os.environ.copy()
-        if db_settings.get("DB_PASSWORD"):
-            env["PGPASSWORD"] = db_settings["DB_PASSWORD"]
-
-        command = [
-            "pg_dump",
-            "-Fc",
-            "-f",
-            str(backup_path),
-            "-h",
-            db_settings["DB_HOST"],
-            "-p",
-            db_settings["DB_PORT"],
-            "-U",
-            db_settings["DB_USER"],
-            db_settings["DB_NAME"],
-        ]
-
-        subprocess.run(command, check=True, env=env, capture_output=True, text=True)
+        _apply_backup_retention()
 
         ConfigurationAudit.log_change(
             user=request.user,
             action="create",
             section="Backups",
-            new_value=filename,
+            new_value=filename or "",
             request=request,
             success=True,
         )
 
         return JsonResponse(
-            {"success": True, "message": "Backup criado", "filename": filename},
+            {"success": True, "message": "Backup criado", "filename": filename or ""},
             status=202,
-        )
-    except subprocess.CalledProcessError as exc:
-        return JsonResponse(
-            {"success": False, "message": exc.stderr or "Backup failed."},
-            status=500,
         )
     except Exception as exc:
         return JsonResponse(
@@ -838,53 +1021,13 @@ def restore_backup(request):
         if not backup_path.exists():
             return JsonResponse({"success": False, "message": "File not found."}, status=404)
 
-        if shutil.which("pg_restore") is None or shutil.which("psql") is None:
+        if shutil.which("pg_restore") is None and shutil.which("psql") is None:
             return JsonResponse(
                 {"success": False, "message": "Database restore tools are not available."},
                 status=500,
             )
 
-        db_settings = _get_db_settings()
-        env = os.environ.copy()
-        if db_settings.get("DB_PASSWORD"):
-            env["PGPASSWORD"] = db_settings["DB_PASSWORD"]
-
-        if backup_path.suffix.lower() == ".dump":
-            command = [
-                "pg_restore",
-                "--clean",
-                "--if-exists",
-                "-h",
-                db_settings["DB_HOST"],
-                "-p",
-                db_settings["DB_PORT"],
-                "-U",
-                db_settings["DB_USER"],
-                "-d",
-                db_settings["DB_NAME"],
-                str(backup_path),
-            ]
-        elif backup_path.suffix.lower() == ".sql":
-            command = [
-                "psql",
-                "-h",
-                db_settings["DB_HOST"],
-                "-p",
-                db_settings["DB_PORT"],
-                "-U",
-                db_settings["DB_USER"],
-                "-d",
-                db_settings["DB_NAME"],
-                "-f",
-                str(backup_path),
-            ]
-        else:
-            return JsonResponse(
-                {"success": False, "message": "Unsupported backup format."},
-                status=400,
-            )
-
-        subprocess.run(command, check=True, env=env, capture_output=True, text=True)
+        call_command("restore_db", backup_path.name)
 
         ConfigurationAudit.log_change(
             user=request.user,
@@ -896,13 +1039,110 @@ def restore_backup(request):
         )
 
         return JsonResponse({"success": True, "message": "Restauração iniciada."})
-    except subprocess.CalledProcessError as exc:
-        return JsonResponse(
-            {"success": False, "message": exc.stderr or "Restore failed."},
-            status=500,
-        )
     except Exception as exc:
         return JsonResponse(
             {"success": False, "message": f"Restore failed: {exc}"},
             status=500,
         )
+
+
+@require_POST
+@login_required
+@user_passes_test(_staff_check)
+def delete_backup(request):
+    """Delete a backup file."""
+    try:
+        data = json.loads(request.body or "{}")
+        filename = data.get("filename", "")
+        backup_path = _safe_backup_path(filename)
+        if not backup_path.exists():
+            return JsonResponse({"success": False, "message": "File not found."}, status=404)
+
+        backup_path.unlink(missing_ok=True)
+
+        ConfigurationAudit.log_change(
+            user=request.user,
+            action="delete",
+            section="Backups",
+            new_value=filename,
+            request=request,
+            success=True,
+        )
+
+        return JsonResponse({"success": True, "message": "Backup removido."})
+    except json.JSONDecodeError:
+        return JsonResponse(
+            {"success": False, "message": "Invalid JSON data"},
+            status=400,
+        )
+    except Exception as exc:
+        return JsonResponse(
+            {"success": False, "message": f"Delete failed: {exc}"},
+            status=500,
+        )
+
+
+@require_http_methods(["POST"])
+@login_required
+@user_passes_test(_staff_check)
+def update_backup_settings(request):
+    """Update retention settings for backups."""
+    try:
+        data = json.loads(request.body or "{}")
+        retention_days = data.get("retention_days")
+        retention_count = data.get("retention_count")
+
+        payload = {
+            "BACKUP_RETENTION_DAYS": str(retention_days or ""),
+            "BACKUP_RETENTION_COUNT": str(retention_count or ""),
+        }
+
+        env_manager.write_values(payload)
+
+        _apply_backup_retention()
+
+        ConfigurationAudit.log_change(
+            user=request.user,
+            action="update",
+            section="Backups",
+            new_value=json.dumps(payload),
+            request=request,
+            success=True,
+        )
+
+        return JsonResponse(
+            {
+                "success": True,
+                "message": "Retenção atualizada.",
+                "settings": {
+                    "retention_days": payload.get("BACKUP_RETENTION_DAYS", ""),
+                    "retention_count": payload.get("BACKUP_RETENTION_COUNT", ""),
+                },
+            }
+        )
+    except json.JSONDecodeError:
+        return JsonResponse(
+            {"success": False, "message": "Invalid JSON data"},
+            status=400,
+        )
+    except Exception as exc:
+        return JsonResponse(
+            {"success": False, "message": f"Update failed: {exc}"},
+            status=500,
+        )
+
+
+@require_http_methods(["GET"])
+@login_required
+@user_passes_test(_staff_check)
+def download_backup(request, filename):
+    """Download a backup file."""
+    backup_path = _safe_backup_path(filename)
+    if not backup_path.exists():
+        return JsonResponse({"success": False, "message": "File not found."}, status=404)
+
+    return FileResponse(
+        backup_path.open("rb"),
+        as_attachment=True,
+        filename=backup_path.name,
+    )

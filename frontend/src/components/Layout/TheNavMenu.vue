@@ -630,6 +630,7 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
   padding: 1rem 0.5rem;
   overflow-y: auto;
   overflow-x: hidden;
+  min-height: 0;
 }
 
 .nav-group {

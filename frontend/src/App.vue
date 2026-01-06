@@ -4,7 +4,7 @@
     <TheNavMenu />
     
     <!-- Área de Conteúdo Principal (Dashboard com sidebar + mapa) -->
-    <main class="flex-1 relative overflow-hidden min-w-0">
+    <main class="flex-1 relative overflow-y-auto min-w-0">
       <router-view />
     </main>
 

@@ -54,7 +54,12 @@ export function useApi() {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
-      throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
+      const message =
+        error.message ||
+        error.error ||
+        error.detail ||
+        `HTTP ${response.status}: ${response.statusText}`;
+      throw new Error(message);
     }
 
     return response.json();
@@ -76,7 +81,12 @@ export function useApi() {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
-      throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
+      const message =
+        error.message ||
+        error.error ||
+        error.detail ||
+        `HTTP ${response.status}: ${response.statusText}`;
+      throw new Error(message);
     }
 
     return response.json();
@@ -101,7 +111,12 @@ export function useApi() {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
-      throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
+      const message =
+        error.message ||
+        error.error ||
+        error.detail ||
+        `HTTP ${response.status}: ${response.statusText}`;
+      throw new Error(message);
     }
 
     return response.json();
@@ -123,7 +138,12 @@ export function useApi() {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
-      throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
+      const message =
+        error.message ||
+        error.error ||
+        error.detail ||
+        `HTTP ${response.status}: ${response.statusText}`;
+      throw new Error(message);
     }
 
     return response.json();
@@ -143,7 +163,12 @@ export function useApi() {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
-      throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
+      const message =
+        error.message ||
+        error.error ||
+        error.detail ||
+        `HTTP ${response.status}: ${response.statusText}`;
+      throw new Error(message);
     }
 
     // Algumas deleções retornam 204 (sem corpo). Evitamos falha de JSON vazio.
@@ -167,7 +192,12 @@ export function useApi() {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
-      throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
+      const message =
+        error.message ||
+        error.error ||
+        error.detail ||
+        `HTTP ${response.status}: ${response.statusText}`;
+      throw new Error(message);
     }
 
     return response.json();

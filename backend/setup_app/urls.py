@@ -21,8 +21,12 @@ urlpatterns = [
     path('api/config/update/', api_views.update_configuration, name='update_config'),
     path('api/env/', api_views.get_env_file, name='get_env'),
     path('api/env/update/', api_views.update_env_file, name='update_env'),
+    path('api/env/import/', api_views.import_env_backup, name='import_env'),
     path('api/backups/', api_views.backups_manager, name='backups_manager'),
     path('api/backups/restore/', api_views.restore_backup, name='restore_backup'),
+    path('api/backups/delete/', api_views.delete_backup, name='delete_backup'),
+    path('api/backups/settings/', api_views.update_backup_settings, name='backup_settings'),
+    path('api/backups/download/<path:filename>/', api_views.download_backup, name='download_backup'),
 
     # Documentation endpoints
     path("docs/", views_docs.docs_index, name="docs_index"),

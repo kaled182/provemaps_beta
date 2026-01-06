@@ -10,6 +10,46 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 import json
 
+from core.models import UserProfile
+
+
+PROFILE_FIELDS = {
+    "phone_number",
+    "telegram_chat_id",
+    "notify_via_email",
+    "notify_via_whatsapp",
+    "notify_via_telegram",
+    "receive_critical_alerts",
+    "receive_warning_alerts",
+    "department",
+}
+
+
+def _get_or_create_profile(user):
+    try:
+        return user.profile
+    except UserProfile.DoesNotExist:
+        return UserProfile.objects.create(user=user)
+
+
+def _serialize_profile(profile):
+    return {
+        "phone_number": profile.phone_number,
+        "telegram_chat_id": profile.telegram_chat_id,
+        "notify_via_email": profile.notify_via_email,
+        "notify_via_whatsapp": profile.notify_via_whatsapp,
+        "notify_via_telegram": profile.notify_via_telegram,
+        "receive_critical_alerts": profile.receive_critical_alerts,
+        "receive_warning_alerts": profile.receive_warning_alerts,
+        "department": profile.department,
+    }
+
+
+def _apply_profile_updates(profile, data):
+    for field in PROFILE_FIELDS:
+        if field in data:
+            setattr(profile, field, data[field])
+    profile.save()
 
 def is_staff_or_superuser(user):
     """Check if user is staff or superuser."""
@@ -54,6 +94,7 @@ def list_users(request):
     # Serialize users
     users_data = []
     for user in users.distinct():
+        profile = _get_or_create_profile(user)
         users_data.append({
             'id': user.id,
             'username': user.username,
@@ -71,6 +112,7 @@ def list_users(request):
             'groups': [
                 {'id': g.id, 'name': g.name} for g in user.groups.all()
             ],
+            'profile': _serialize_profile(profile),
         })
     
     return JsonResponse({
@@ -93,6 +135,8 @@ def get_user(request, user_id):
             'error': 'User not found'
         }, status=404)
     
+    profile = _get_or_create_profile(user)
+
     return JsonResponse({
         'success': True,
         'user': {
@@ -112,6 +156,7 @@ def get_user(request, user_id):
             'groups': [
                 {'id': g.id, 'name': g.name} for g in user.groups.all()
             ],
+            'profile': _serialize_profile(profile),
         }
     })
 
@@ -191,6 +236,12 @@ def create_user(request):
     
     try:
         with transaction.atomic():
+            is_superuser = False
+            is_staff = data.get('is_staff', False)
+            if request.user.is_superuser:
+                is_superuser = bool(data.get('is_superuser', False))
+                is_staff = bool(is_staff) or is_superuser
+
             # Create user
             user = User.objects.create_user(
                 username=username,
@@ -199,7 +250,8 @@ def create_user(request):
                 first_name=data.get('first_name', ''),
                 last_name=data.get('last_name', ''),
                 is_active=data.get('is_active', True),
-                is_staff=data.get('is_staff', False),
+                is_staff=is_staff,
+                is_superuser=is_superuser,
             )
             
             # Assign groups
@@ -207,6 +259,11 @@ def create_user(request):
             if group_ids:
                 groups = Group.objects.filter(id__in=group_ids)
                 user.groups.set(groups)
+
+            profile = _get_or_create_profile(user)
+            profile_data = data.get('profile', {})
+            if isinstance(profile_data, dict):
+                _apply_profile_updates(profile, profile_data)
             
             return JsonResponse({
                 'success': True,
@@ -216,6 +273,9 @@ def create_user(request):
                     'username': user.username,
                     'email': user.email,
                     'full_name': user.get_full_name() or user.username,
+                    'is_superuser': user.is_superuser,
+                    'is_staff': user.is_staff,
+                    'profile': _serialize_profile(profile),
                 }
             })
     except Exception as e:
@@ -298,6 +358,21 @@ def update_user(request, user_id):
             
             if 'is_staff' in data and request.user.is_superuser:
                 user.is_staff = data['is_staff']
+
+            if 'is_superuser' in data and request.user.is_superuser:
+                user.is_superuser = data['is_superuser']
+                if user.is_superuser:
+                    user.is_staff = True
+
+            if 'password' in data:
+                if request.user.is_superuser or request.user.id == user.id:
+                    if data['password']:
+                        user.set_password(data['password'])
+                else:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Cannot update password for this user'
+                    }, status=403)
             
             user.save()
             
@@ -306,6 +381,12 @@ def update_user(request, user_id):
                 group_ids = data['groups']
                 groups = Group.objects.filter(id__in=group_ids)
                 user.groups.set(groups)
+
+            if 'profile' in data and isinstance(data['profile'], dict):
+                profile = _get_or_create_profile(user)
+                _apply_profile_updates(profile, data['profile'])
+            else:
+                profile = _get_or_create_profile(user)
             
             return JsonResponse({
                 'success': True,
@@ -316,10 +397,13 @@ def update_user(request, user_id):
                     'email': user.email,
                     'full_name': user.get_full_name() or user.username,
                     'is_active': user.is_active,
+                    'is_staff': user.is_staff,
+                    'is_superuser': user.is_superuser,
                     'groups': [
                         {'id': g.id, 'name': g.name}
                         for g in user.groups.all()
                     ],
+                    'profile': _serialize_profile(profile),
                 }
             })
     except Exception as e:
