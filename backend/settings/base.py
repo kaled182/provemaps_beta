@@ -414,6 +414,10 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BACKEND_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Avoid chmod issues on bind-mounted filesystems (WSL/NTFS)
+FILE_UPLOAD_PERMISSIONS = None
+FILE_UPLOAD_DIRECTORY_PERMISSIONS = None
+
 # Cache-busting version (overridden via STATIC_ASSET_VERSION in env)
 STATIC_ASSET_VERSION = os.getenv("STATIC_ASSET_VERSION", "20251113.2309")
 

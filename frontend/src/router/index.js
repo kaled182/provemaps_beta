@@ -106,6 +106,11 @@ const routes = [
     name: 'users-management',
     component: () => import('@/views/UsersManagement.vue'),
   },
+  {
+    path: '/profile',
+    name: 'user-profile',
+    component: () => import('@/views/UserProfile.vue'),
+  },
   // Legacy redirects
   {
     path: '/setup_app/config',

@@ -11,6 +11,12 @@ class UserProfile(models.Model):
         related_name="profile",
     )
 
+    avatar = models.ImageField(
+        "Foto de Perfil",
+        upload_to="avatars/",
+        blank=True,
+        null=True,
+    )
     phone_number = models.CharField(
         "Celular/WhatsApp",
         max_length=20,

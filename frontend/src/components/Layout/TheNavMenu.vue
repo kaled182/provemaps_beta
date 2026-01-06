@@ -169,6 +169,17 @@
             class="nav-children"
           >
             <RouterLink
+              to="/profile"
+              class="nav-item nav-item-child"
+              :class="{ 'active': isPathActive('/profile') }"
+              title="Meu Perfil"
+            >
+              <span class="nav-icon child-icon">
+                <PhUser :size="18" weight="regular" />
+              </span>
+              <span class="nav-label">Meu Perfil</span>
+            </RouterLink>
+            <RouterLink
               to="/system/users"
               class="nav-item nav-item-child"
               :class="{ 'active': isPathActive('/system/users') }"
@@ -281,6 +292,7 @@ import {
   PhCaretDown,
   PhCaretRight,
   PhUsers,
+  PhUser,
 } from '@phosphor-icons/vue';
 
 const uiStore = useUiStore();
