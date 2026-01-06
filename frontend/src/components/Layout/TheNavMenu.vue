@@ -301,6 +301,7 @@ const csrfToken = ref(window.CSRF_TOKEN || '');
 const wsConnected = ref(false);
 const wsConnecting = ref(false);
 let ws = null;
+const realtimePaths = ['/dashboard', '/monitoring'];
 
 // Estado de expansão dos grupos com submenu
 const expandedGroups = ref(new Set());
@@ -385,7 +386,26 @@ const connectionStatus = computed(() => {
   }
 });
 
+function shouldUseWebSocket() {
+  return realtimePaths.some((path) => route.path.startsWith(path));
+}
+
+function closeWebSocket() {
+  if (ws) {
+    ws.onopen = null;
+    ws.onclose = null;
+    ws.onerror = null;
+    ws.close();
+    ws = null;
+  }
+  wsConnected.value = false;
+  wsConnecting.value = false;
+}
+
 function connectWebSocket() {
+  if (!shouldUseWebSocket() || ws) {
+    return;
+  }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}/ws/dashboard/status/`;
   
@@ -402,9 +422,10 @@ function connectWebSocket() {
     ws.onclose = () => {
       wsConnected.value = false;
       wsConnecting.value = false;
+      ws = null;
       
       setTimeout(() => {
-        if (!wsConnected.value) {
+        if (!wsConnected.value && shouldUseWebSocket()) {
           connectWebSocket();
         }
       }, 5000);
@@ -417,11 +438,11 @@ function connectWebSocket() {
   } catch (err) {
     wsConnected.value = false;
     wsConnecting.value = false;
+    ws = null;
   }
 }
 
 onMounted(() => {
-  connectWebSocket();
   applyWidth(menuWidth.value);
   // Debug helper to inspect sidebar dimensions and state after navigation / refresh
   window.__navMenuDebug = () => {
@@ -440,10 +461,20 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  if (ws) {
-    ws.close();
-  }
+  closeWebSocket();
 });
+
+watch(
+  () => route.path,
+  () => {
+    if (shouldUseWebSocket()) {
+      connectWebSocket();
+    } else {
+      closeWebSocket();
+    }
+  },
+  { immediate: true },
+);
 
 const menuItems = [
   {
