@@ -69,6 +69,8 @@ urlpatterns: list[Any] = [
         api_users.delete_user,
         name='api_delete_user'
     ),
+    path('api/users/me/', api_users.me_user, name='api_me_user'),
+    path('api/users/me/avatar/', api_users.me_avatar, name='api_me_avatar'),
     path('api/groups/', api_users.list_groups, name='api_list_groups'),
     path('system/users', SPAView.as_view(), name='users_page'),
 

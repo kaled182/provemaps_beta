@@ -2,6 +2,7 @@
 User management API endpoints.
 """
 from django.contrib.auth.models import User, Group
+from django.conf import settings
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.views.decorators.http import require_http_methods
 from django.http import JsonResponse
@@ -32,8 +33,21 @@ def _get_or_create_profile(user):
         return UserProfile.objects.create(user=user)
 
 
-def _serialize_profile(profile):
+def _serialize_profile(profile, request=None):
+    avatar_url = None
+    if profile.avatar and profile.avatar.name:
+        try:
+            avatar_url = profile.avatar.url
+        except Exception:
+            media_base = settings.MEDIA_URL or "/media/"
+            avatar_path = profile.avatar.name.lstrip("/")
+            avatar_url = f"{media_base}{avatar_path}"
+
+        if request is not None and avatar_url:
+            avatar_url = request.build_absolute_uri(avatar_url)
+
     return {
+        "avatar_url": avatar_url,
         "phone_number": profile.phone_number,
         "telegram_chat_id": profile.telegram_chat_id,
         "notify_via_email": profile.notify_via_email,
@@ -50,6 +64,43 @@ def _apply_profile_updates(profile, data):
         if field in data:
             setattr(profile, field, data[field])
     profile.save()
+
+
+def _coerce_bool(value):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return None
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return value
+
+
+def _extract_profile_data(raw_data):
+    profile_data = {}
+
+    if isinstance(raw_data, dict) and isinstance(raw_data.get("profile"), dict):
+        profile_data.update(raw_data.get("profile", {}))
+
+    for key, value in raw_data.items():
+        if key.startswith("profile."):
+            profile_data[key.replace("profile.", "", 1)] = value
+
+    for key in list(profile_data.keys()):
+        if key in {
+            "notify_via_email",
+            "notify_via_whatsapp",
+            "notify_via_telegram",
+            "receive_critical_alerts",
+            "receive_warning_alerts",
+        }:
+            profile_data[key] = _coerce_bool(profile_data[key])
+
+    return profile_data
 
 def is_staff_or_superuser(user):
     """Check if user is staff or superuser."""
@@ -112,7 +163,7 @@ def list_users(request):
             'groups': [
                 {'id': g.id, 'name': g.name} for g in user.groups.all()
             ],
-            'profile': _serialize_profile(profile),
+            'profile': _serialize_profile(profile, request=request),
         })
     
     return JsonResponse({
@@ -156,7 +207,7 @@ def get_user(request, user_id):
             'groups': [
                 {'id': g.id, 'name': g.name} for g in user.groups.all()
             ],
-            'profile': _serialize_profile(profile),
+            'profile': _serialize_profile(profile, request=request),
         }
     })
 
@@ -275,9 +326,9 @@ def create_user(request):
                     'full_name': user.get_full_name() or user.username,
                     'is_superuser': user.is_superuser,
                     'is_staff': user.is_staff,
-                    'profile': _serialize_profile(profile),
-                }
-            })
+                'profile': _serialize_profile(profile, request=request),
+            }
+        })
     except Exception as e:
         return JsonResponse({
             'success': False,
@@ -403,7 +454,7 @@ def update_user(request, user_id):
                         {'id': g.id, 'name': g.name}
                         for g in user.groups.all()
                     ],
-                    'profile': _serialize_profile(profile),
+                    'profile': _serialize_profile(profile, request=request),
                 }
             })
     except Exception as e:
@@ -473,4 +524,131 @@ def list_groups(request):
     return JsonResponse({
         'success': True,
         'groups': groups_data,
+    })
+
+
+@login_required
+@require_http_methods(["GET", "POST", "PATCH", "PUT"])
+def me_user(request):
+    user = request.user
+    profile = _get_or_create_profile(user)
+
+    if request.method == "GET":
+        return JsonResponse({
+            "success": True,
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "full_name": user.get_full_name() or user.username,
+                "is_active": user.is_active,
+                "is_staff": user.is_staff,
+                "is_superuser": user.is_superuser,
+                "date_joined": user.date_joined.isoformat(),
+                "last_login": user.last_login.isoformat() if user.last_login else None,
+                "groups": [
+                    {"id": g.id, "name": g.name} for g in user.groups.all()
+                ],
+                "profile": _serialize_profile(profile),
+            },
+        })
+
+    data = {}
+    body = request.body or b""
+
+    if request.content_type and request.content_type.startswith("application/json"):
+        try:
+            data.update(json.loads(body or "{}"))
+        except json.JSONDecodeError:
+            return JsonResponse({
+                "success": False,
+                "error": "Invalid JSON"
+            }, status=400)
+    elif body:
+        try:
+            data.update(json.loads(body))
+        except json.JSONDecodeError:
+            pass
+
+    if request.POST:
+        data.update(dict(request.POST.items()))
+
+    profile_data = _extract_profile_data(data)
+    avatar_file = request.FILES.get("avatar") or request.FILES.get("profile.avatar")
+
+    if "first_name" in data:
+        user.first_name = data.get("first_name", "").strip()
+    if "last_name" in data:
+        user.last_name = data.get("last_name", "").strip()
+
+    if "email" in data:
+        email = data.get("email", "").strip()
+        if email and email != user.email:
+            try:
+                validate_email(email)
+            except ValidationError:
+                return JsonResponse({
+                    "success": False,
+                    "error": "Invalid email format"
+                }, status=400)
+
+            if User.objects.filter(email=email).exclude(id=user.id).exists():
+                return JsonResponse({
+                    "success": False,
+                    "error": "Email already exists"
+                }, status=400)
+            user.email = email
+
+    user.save()
+
+    if profile_data:
+        _apply_profile_updates(profile, profile_data)
+
+    if avatar_file:
+        profile.avatar = avatar_file
+        profile.save()
+
+    return JsonResponse({
+        "success": True,
+        "message": "Profile updated",
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "full_name": user.get_full_name() or user.username,
+            "is_active": user.is_active,
+            "is_staff": user.is_staff,
+            "is_superuser": user.is_superuser,
+            "date_joined": user.date_joined.isoformat(),
+            "last_login": user.last_login.isoformat() if user.last_login else None,
+            "groups": [
+                {"id": g.id, "name": g.name} for g in user.groups.all()
+            ],
+            "profile": _serialize_profile(profile, request=request),
+        },
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def me_avatar(request):
+    profile = _get_or_create_profile(request.user)
+    avatar_file = request.FILES.get("avatar")
+    if not avatar_file:
+        return JsonResponse({
+            "success": False,
+            "error": "Avatar file is required"
+        }, status=400)
+
+    profile.avatar = avatar_file
+    profile.save()
+
+    return JsonResponse({
+        "success": True,
+        "message": "Avatar updated",
+        "avatar_url": _serialize_profile(profile, request=request).get("avatar_url"),
     })

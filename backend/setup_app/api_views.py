@@ -20,7 +20,7 @@ from django.views.decorators.http import require_http_methods, require_GET, requ
 
 from integrations.zabbix.zabbix_client import zabbix_request
 from integrations.zabbix.guards import reload_diagnostics_flag_cache
-from .models import FirstTimeSetup
+from .models import FirstTimeSetup, MonitoringServer
 from .models_audit import ConfigurationAudit
 from .services import runtime_settings
 from .services.config_loader import clear_runtime_config_cache
@@ -389,6 +389,8 @@ def export_configuration(request):
             "ZABBIX_API_PASSWORD",
             "ZABBIX_API_KEY",
             "GOOGLE_MAPS_API_KEY",
+            "MAP_PROVIDER",
+            "MAPBOX_TOKEN",
             "ALLOWED_HOSTS",
             "ENABLE_DIAGNOSTIC_ENDPOINTS",
             "DB_HOST",
@@ -560,6 +562,8 @@ def get_configuration(request):
             "ZABBIX_API_PASSWORD",
             "ZABBIX_API_KEY",
             "GOOGLE_MAPS_API_KEY",
+            "MAP_PROVIDER",
+            "MAPBOX_TOKEN",
             "ALLOWED_HOSTS",
             "ENABLE_DIAGNOSTIC_ENDPOINTS",
             "DB_HOST",
@@ -582,6 +586,8 @@ def get_configuration(request):
             "ZABBIX_API_PASSWORD": runtime_config.zabbix_api_password,
             "ZABBIX_API_KEY": runtime_config.zabbix_api_key,
             "GOOGLE_MAPS_API_KEY": runtime_config.google_maps_api_key,
+            "MAP_PROVIDER": runtime_config.map_provider or "google",
+            "MAPBOX_TOKEN": runtime_config.mapbox_token,
             "ALLOWED_HOSTS": allowed_hosts_fallback,
             "ENABLE_DIAGNOSTIC_ENDPOINTS": runtime_config.diagnostics_enabled,
             "DB_HOST": runtime_config.db_host,
@@ -653,6 +659,8 @@ def update_configuration(request):
             "ZABBIX_API_PASSWORD": data.get("ZABBIX_API_PASSWORD", "").strip(),
             "ZABBIX_API_KEY": data.get("ZABBIX_API_KEY", "").strip(),
             "GOOGLE_MAPS_API_KEY": data.get("GOOGLE_MAPS_API_KEY", "").strip(),
+            "MAP_PROVIDER": data.get("MAP_PROVIDER", "google").strip() or "google",
+            "MAPBOX_TOKEN": data.get("MAPBOX_TOKEN", "").strip(),
             "ALLOWED_HOSTS": data.get("ALLOWED_HOSTS", "").strip(),
             "ENABLE_DIAGNOSTIC_ENDPOINTS": (
                 "True" if data.get("ENABLE_DIAGNOSTIC_ENDPOINTS", False) 
@@ -692,6 +700,8 @@ def update_configuration(request):
                     else None
                 ),
                 "maps_api_key": payload["GOOGLE_MAPS_API_KEY"],
+                "map_provider": payload["MAP_PROVIDER"],
+                "mapbox_token": payload["MAPBOX_TOKEN"],
                 "db_host": payload["DB_HOST"],
                 "db_port": payload["DB_PORT"],
                 "db_name": payload["DB_NAME"],
@@ -747,6 +757,112 @@ def update_configuration(request):
             {"success": False, "message": f"Server error: {str(e)}"}, 
             status=500
         )
+
+
+def _serialize_monitoring_server(server: MonitoringServer) -> Dict[str, Any]:
+    return {
+        "id": server.id,
+        "name": server.name,
+        "server_type": server.server_type,
+        "url": server.url,
+        "is_active": server.is_active,
+        "has_auth_token": bool(server.auth_token),
+        "auth_token": "",
+        "extra_config": server.extra_config or {},
+        "created_at": server.created_at.isoformat(),
+    }
+
+
+@require_http_methods(["GET", "POST"])
+@login_required
+@user_passes_test(_staff_check)
+def monitoring_servers(request):
+    if request.method == "GET":
+        servers = MonitoringServer.objects.all().order_by("-is_active", "name")
+        return JsonResponse({
+            "success": True,
+            "servers": [_serialize_monitoring_server(server) for server in servers],
+        })
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse(
+            {"success": False, "message": "Invalid JSON data"}, status=400
+        )
+
+    name = data.get("name", "").strip()
+    url = data.get("url", "").strip()
+    server_type = data.get("server_type", "zabbix").strip() or "zabbix"
+    auth_token = data.get("auth_token", "").strip()
+    extra_config = data.get("extra_config", {}) if isinstance(data.get("extra_config"), dict) else {}
+    is_active = bool(data.get("is_active", True))
+
+    if not name or not url:
+        return JsonResponse(
+            {"success": False, "message": "Name and URL are required."},
+            status=400,
+        )
+
+    server = MonitoringServer.objects.create(
+        name=name,
+        url=url,
+        server_type=server_type,
+        auth_token=auth_token or None,
+        is_active=is_active,
+        extra_config=extra_config,
+    )
+
+    return JsonResponse({
+        "success": True,
+        "server": _serialize_monitoring_server(server),
+    })
+
+
+@require_http_methods(["GET", "PATCH", "PUT", "DELETE"])
+@login_required
+@user_passes_test(_staff_check)
+def monitoring_server_detail(request, server_id: int):
+    try:
+        server = MonitoringServer.objects.get(id=server_id)
+    except MonitoringServer.DoesNotExist:
+        return JsonResponse({"success": False, "message": "Server not found."}, status=404)
+
+    if request.method == "GET":
+        return JsonResponse({"success": True, "server": _serialize_monitoring_server(server)})
+
+    if request.method == "DELETE":
+        server.delete()
+        return JsonResponse({"success": True, "message": "Server removed."})
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse(
+            {"success": False, "message": "Invalid JSON data"}, status=400
+        )
+
+    if "name" in data:
+        server.name = data.get("name", "").strip() or server.name
+    if "url" in data:
+        server.url = data.get("url", "").strip() or server.url
+    if "server_type" in data:
+        server.server_type = data.get("server_type", "zabbix").strip() or server.server_type
+    if "is_active" in data:
+        server.is_active = bool(data.get("is_active"))
+    if "extra_config" in data and isinstance(data.get("extra_config"), dict):
+        server.extra_config = data.get("extra_config") or {}
+
+    if "auth_token" in data:
+        token = data.get("auth_token", "")
+        if token == "":
+            server.auth_token = None
+        elif token != "********":
+            server.auth_token = token
+
+    server.save()
+
+    return JsonResponse({"success": True, "server": _serialize_monitoring_server(server)})
 
 
 @require_http_methods(["GET"])

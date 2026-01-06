@@ -86,8 +86,16 @@
               <tr v-for="user in filteredUsers" :key="user.id" class="app-row">
                 <td class="px-6 py-4">
                   <div class="flex items-center gap-3">
-                    <div class="h-10 w-10 rounded-full app-surface-muted flex items-center justify-center font-semibold app-text-primary">
-                      {{ getInitials(user.full_name || user.username) }}
+                    <div class="h-10 w-10 rounded-full app-surface-muted flex items-center justify-center font-semibold app-text-primary overflow-hidden">
+                      <img
+                        v-if="user.profile.avatar_url"
+                        :src="user.profile.avatar_url"
+                        class="w-full h-full object-cover"
+                        alt="Avatar"
+                      />
+                      <span v-else>
+                        {{ getInitials(user.full_name || user.username) }}
+                      </span>
                     </div>
                     <div>
                       <div class="text-sm font-medium app-text-primary">{{ user.full_name || user.username }}</div>
