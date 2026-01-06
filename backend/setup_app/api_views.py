@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
@@ -34,7 +35,8 @@ def _staff_check(user):
 
 
 BACKUP_DIR = Path(settings.BASE_DIR) / "database" / "backups"
-_ALLOWED_BACKUP_EXTENSIONS = {".dump", ".sql", ".json"}
+_ALLOWED_BACKUP_EXTENSIONS = {".zip"}
+_MIN_BACKUP_PASSWORD_LEN = 8
 
 
 def _get_db_settings() -> Dict[str, str]:
@@ -57,6 +59,16 @@ def _safe_backup_path(filename: str) -> Path:
 
 def _ensure_backup_dir() -> None:
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _get_backup_password() -> bytes:
+    values = env_manager.read_values(["BACKUP_ZIP_PASSWORD"])
+    password = values.get("BACKUP_ZIP_PASSWORD", "").strip()
+    if len(password) < _MIN_BACKUP_PASSWORD_LEN:
+        raise ValueError(
+            "A senha do backup precisa ter pelo menos 8 caracteres para criptografar."
+        )
+    return password.encode("utf-8")
 
 
 def _detect_backup_type(filename: str) -> str:
@@ -139,28 +151,119 @@ def test_zabbix_connection(request):
         # Test connection using direct requests (to test custom credentials)
         try:
             import requests
-            
-            # Try to get Zabbix API version (doesn't require auth)
+
+            def _post(payload, headers=None):
+                return requests.post(
+                    zabbix_url,
+                    json=payload,
+                    headers=headers or {"Content-Type": "application/json"},
+                    timeout=10,
+                )
+
+            # 1) Connectivity check (no auth required)
             payload = {
                 "jsonrpc": "2.0",
                 "method": "apiinfo.version",
                 "params": {},
-                "id": 1
+                "id": 1,
             }
-            
-            response = requests.post(
-                zabbix_url,
-                json=payload,
-                headers={"Content-Type": "application/json"},
-                timeout=10
-            )
+
+            response = _post(payload)
             response.raise_for_status()
             result = response.json()
-            
+
             if "error" in result:
                 raise Exception(result["error"].get("data", "API error"))
-            
+
             version = result.get("result", "Unknown")
+
+            # 2) Optional auth validation (token or login)
+            if auth_type == "token" and api_key:
+                auth_payload = {
+                    "jsonrpc": "2.0",
+                    "method": "user.get",
+                    "params": {"output": ["userid"]},
+                    "auth": api_key,
+                    "id": 2,
+                }
+                auth_response = _post(auth_payload)
+                auth_result = auth_response.json()
+
+                if "error" in auth_result and auth_result["error"].get("code") in (-32602, -32500):
+                    auth_response = _post(
+                        auth_payload,
+                        headers={
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {api_key}",
+                        },
+                    )
+                    auth_result = auth_response.json()
+
+                if "error" in auth_result:
+                    ConfigurationAudit.log_change(
+                        user=request.user,
+                        action="test",
+                        section="Zabbix",
+                        request=request,
+                        success=False,
+                        error_message="Invalid API token",
+                    )
+                    return JsonResponse(
+                        {
+                            "success": False,
+                            "message": "Conexão OK, mas o token do Zabbix é inválido.",
+                            "status": "auth_failed",
+                            "version": version,
+                        },
+                        status=400,
+                    )
+
+            if auth_type == "login":
+                if not username or not password:
+                    ConfigurationAudit.log_change(
+                        user=request.user,
+                        action="test",
+                        section="Zabbix",
+                        request=request,
+                        success=False,
+                        error_message="Missing username/password",
+                    )
+                    return JsonResponse(
+                        {
+                            "success": False,
+                            "message": "Conexão OK, mas usuário/senha não foram informados.",
+                            "status": "auth_missing",
+                            "version": version,
+                        },
+                        status=400,
+                    )
+
+                login_payload = {
+                    "jsonrpc": "2.0",
+                    "method": "user.login",
+                    "params": {"username": username, "password": password},
+                    "id": 2,
+                }
+                login_response = _post(login_payload)
+                login_result = login_response.json()
+                if "error" in login_result or not login_result.get("result"):
+                    ConfigurationAudit.log_change(
+                        user=request.user,
+                        action="test",
+                        section="Zabbix",
+                        request=request,
+                        success=False,
+                        error_message="Login failed",
+                    )
+                    return JsonResponse(
+                        {
+                            "success": False,
+                            "message": "Conexão OK, mas a autenticação falhou.",
+                            "status": "auth_failed",
+                            "version": version,
+                        },
+                        status=400,
+                    )
 
             # Log successful test
             ConfigurationAudit.log_change(
@@ -174,8 +277,9 @@ def test_zabbix_connection(request):
             return JsonResponse(
                 {
                     "success": True,
-                    "message": f"Connection successful! Zabbix version: {version}",
+                    "message": f"Serviço online. Zabbix v{version}.",
                     "version": version,
+                    "status": "online",
                 }
             )
 
@@ -190,7 +294,7 @@ def test_zabbix_connection(request):
                 error_message=error_msg,
             )
             return JsonResponse(
-                {"success": False, "message": f"Connection failed: {error_msg}"},
+                {"success": False, "message": f"Serviço offline: {error_msg}", "status": "offline"},
                 status=400,
             )
 
@@ -400,12 +504,19 @@ def export_configuration(request):
             "DB_PASSWORD",
             "REDIS_URL",
             "SERVICE_RESTART_COMMANDS",
+            "BACKUP_ZIP_PASSWORD",
         ]
 
         config_data = env_manager.read_values(editable_keys)
 
         # Sanitize sensitive data for export
-        sensitive_keys = ["SECRET_KEY", "ZABBIX_API_PASSWORD", "ZABBIX_API_KEY", "DB_PASSWORD"]
+        sensitive_keys = [
+            "SECRET_KEY",
+            "ZABBIX_API_PASSWORD",
+            "ZABBIX_API_KEY",
+            "DB_PASSWORD",
+            "BACKUP_ZIP_PASSWORD",
+        ]
         for key in sensitive_keys:
             if key in config_data and config_data[key]:
                 config_data[key] = "***EXPORTED_BUT_REDACTED***"
@@ -573,6 +684,7 @@ def get_configuration(request):
             "DB_PASSWORD",
             "REDIS_URL",
             "SERVICE_RESTART_COMMANDS",
+            "BACKUP_ZIP_PASSWORD",
         ]
         current_values = env_manager.read_values(editable_keys)
         runtime_config = runtime_settings.get_runtime_config()
@@ -597,6 +709,7 @@ def get_configuration(request):
             "DB_PASSWORD": runtime_config.db_password,
             "REDIS_URL": runtime_config.redis_url,
             "SERVICE_RESTART_COMMANDS": getattr(settings, "SERVICE_RESTART_COMMANDS", ""),
+            "BACKUP_ZIP_PASSWORD": current_values.get("BACKUP_ZIP_PASSWORD", ""),
         }
 
         # Convert boolean strings to actual booleans for JSON, fallback to runtime/config defaults
@@ -650,6 +763,21 @@ def update_configuration(request):
                 "message": f"Missing required fields: {', '.join(missing_fields)}"
             }, status=400)
 
+        existing_backup_password = env_manager.read_values(["BACKUP_ZIP_PASSWORD"]).get(
+            "BACKUP_ZIP_PASSWORD", ""
+        )
+        backup_zip_password = data.get("BACKUP_ZIP_PASSWORD", "").strip()
+        if backup_zip_password and len(backup_zip_password) < _MIN_BACKUP_PASSWORD_LEN:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "A senha do backup precisa ter pelo menos 8 caracteres.",
+                },
+                status=400,
+            )
+        if backup_zip_password == "":
+            backup_zip_password = existing_backup_password
+
         # Step 1: Write to .env file
         payload = {
             "SECRET_KEY": data.get("SECRET_KEY", "").strip(),
@@ -675,6 +803,7 @@ def update_configuration(request):
             "SERVICE_RESTART_COMMANDS": data.get(
                 "SERVICE_RESTART_COMMANDS", ""
             ).strip(),
+            "BACKUP_ZIP_PASSWORD": backup_zip_password,
         }
         
         env_manager.write_values(payload)
@@ -723,6 +852,28 @@ def update_configuration(request):
         if payload["SERVICE_RESTART_COMMANDS"]:
             trigger_restart()
 
+        backup_warning = ""
+        backup_created = False
+        backup_filename = ""
+        # Step 5: Trigger a new backup if the password changed
+        if backup_zip_password != existing_backup_password:
+            try:
+                backup_filename = call_command("make_backup") or ""
+                backup_created = True
+            except Exception as exc:
+                backup_warning = (
+                    "Senha atualizada, mas o backup não foi gerado automaticamente. "
+                    f"Motivo: {exc}"
+                )
+                ConfigurationAudit.log_change(
+                    user=request.user,
+                    action="backup",
+                    section="Backups",
+                    request=request,
+                    success=False,
+                    error_message=str(exc),
+                )
+
         # Log success
         ConfigurationAudit.log_change(
             user=request.user,
@@ -732,9 +883,17 @@ def update_configuration(request):
             success=True,
         )
 
+        message = "Configuration updated successfully"
+        if backup_warning:
+            message = f"{message}. {backup_warning}"
+
         return JsonResponse({
             "success": True,
-            "message": "Configuration updated successfully"
+            "message": message,
+            "backup_warning": bool(backup_warning),
+            "backup_message": backup_warning,
+            "backup_created": backup_created,
+            "backup_filename": backup_filename,
         })
 
     except json.JSONDecodeError:
@@ -1093,11 +1252,16 @@ def backups_manager(request):
                 status=500,
             )
 
+        try:
+            _get_backup_password()
+        except ValueError as exc:
+            return JsonResponse({"success": False, "message": str(exc)}, status=400)
+
         filename = call_command("make_backup")
         if not filename:
             backups = [
                 path for path in BACKUP_DIR.iterdir()
-                if path.is_file() and path.suffix.lower() == ".dump"
+                if path.is_file() and path.suffix.lower() == ".zip"
             ]
             if backups:
                 latest = max(backups, key=lambda item: item.stat().st_mtime)
@@ -1143,7 +1307,50 @@ def restore_backup(request):
                 status=500,
             )
 
-        call_command("restore_db", backup_path.name)
+        if backup_path.suffix.lower() == ".zip":
+            try:
+                import pyzipper
+            except ImportError as exc:
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "message": "pyzipper is required to restore encrypted backups.",
+                    },
+                    status=500,
+                )
+
+            try:
+                password = _get_backup_password()
+            except ValueError as exc:
+                return JsonResponse({"success": False, "message": str(exc)}, status=400)
+            extracted_path = None
+            with tempfile.TemporaryDirectory(dir=BACKUP_DIR) as temp_dir:
+                temp_dir_path = Path(temp_dir)
+                with pyzipper.AESZipFile(backup_path) as zipf:
+                    zipf.pwd = password
+                    zipf.extractall(temp_dir_path)
+
+                candidates = list(temp_dir_path.glob("*.dump")) + list(temp_dir_path.glob("*.sql"))
+                if not candidates:
+                    return JsonResponse(
+                        {
+                            "success": False,
+                            "message": "Backup zip does not contain a .dump or .sql file.",
+                        },
+                        status=400,
+                    )
+
+                extracted_path = candidates[0]
+                restore_name = f"restore_tmp_{datetime.now().strftime('%Y%m%d_%H%M%S')}{extracted_path.suffix}"
+                restore_path = BACKUP_DIR / restore_name
+                shutil.copy2(extracted_path, restore_path)
+
+                try:
+                    call_command("restore_db", restore_path.name)
+                finally:
+                    restore_path.unlink(missing_ok=True)
+        else:
+            call_command("restore_db", backup_path.name)
 
         ConfigurationAudit.log_change(
             user=request.user,
