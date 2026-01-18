@@ -77,28 +77,41 @@ def _build_ffmpeg_command(payload: StreamRequest) -> list[str]:
 
     cmd = [
         "ffmpeg",
-        "-loglevel",
-        "warning",
+        "-loglevel", "warning",
         "-hide_banner",
         "-nostdin",
+        # Gera PTS quando faltarem nos pacotes de entrada (ajuda a manter fluxo contínuo)
+        "-fflags", "+genpts",
+        # Leitura em tempo-real, evita sobrecarregar buffers quando fonte é ao vivo
         "-re",
     ]
     stream_type = payload.stream_type.lower().strip()
     if stream_type == "rtsp":
         cmd.extend(["-rtsp_transport", "tcp"])
+    # Entrada
+    cmd.extend(["-i", source_url])
+
+    # Saída de vídeo: reencode para garantir keyframes previsíveis e baixa latência
+    # Força keyframe ~ a cada 3s (alinha com hls_fragment=3s do nginx-rtmp)
     cmd.extend([
-        "-i",
-        source_url,
-        "-c:v",
-        "copy",
-        "-c:a",
-        "aac",
-        "-ar",
-        "44100",
-        "-f",
-        "flv",
-        target_url,
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-tune", "zerolatency",
+        # Evita detecção de cena que altera keyint
+        "-sc_threshold", "0",
+        # Força keyframes por tempo (independente do fps)
+        "-force_key_frames", "expr:gte(t,n_forced*3)",
     ])
+
+    # Áudio
+    cmd.extend([
+        "-c:a", "aac",
+        "-ar", "44100",
+        "-b:a", "128k",
+    ])
+
+    # Saída para RTMP (FLV)
+    cmd.extend(["-f", "flv", target_url])
     return cmd
 
 

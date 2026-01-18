@@ -50,6 +50,17 @@ def _get_hls_public_base_url(config: Optional[Dict[str, object]] = None) -> str:
 		return value.rstrip("/")
 	return _get_hls_probe_base_url()
 
+def _get_webrtc_public_base_url(config: Optional[Dict[str, object]] = None) -> Optional[str]:
+	if config:
+		override = (config.get("webrtc_public_base_url") or "").strip()
+		if override:
+			return override.rstrip("/")
+	value = getattr(settings, "VIDEO_WEBRTC_PUBLIC_BASE_URL", None) or os.environ.get(
+		"VIDEO_WEBRTC_PUBLIC_BASE_URL"
+	)
+	if value:
+		return str(value).rstrip("/")
+	return None
 
 def _get_stream_key(gateway: MessagingGateway) -> str:
 	config = gateway.config or {}
@@ -141,7 +152,12 @@ def ensure_stream_for_gateway(
 
 	stream_key = _get_stream_key(gateway)
 	public_base = _get_hls_public_base_url(config)
-	preview_url = f"{public_base}/{stream_key}.m3u8"
+	webrtc_base = _get_webrtc_public_base_url(config)
+	use_webrtc = bool(webrtc_base)
+	if use_webrtc:
+		preview_url = f"{webrtc_base}/stream/{stream_key}"
+	else:
+		preview_url = f"{public_base}/{stream_key}.m3u8"
 
 	# Verificar se stream já está ativo
 	stream_active = False
@@ -169,7 +185,7 @@ def ensure_stream_for_gateway(
 				{"preview_url": preview_url, "restream_key": stream_key, "preview_active": True},
 			)
 		# Validar manifesto mesmo se stream já estiver ativo
-		if wait_ready:
+		if wait_ready and not use_webrtc:
 			try:
 				_wait_for_manifest(stream_key, timeout=startup_timeout)
 			except PreviewStartTimeout:
@@ -202,7 +218,7 @@ def ensure_stream_for_gateway(
 			)
 			raise VideoGatewayError("Nao foi possivel iniciar o processo de restream.") from exc
 
-		if wait_ready:
+		if wait_ready and not use_webrtc:
 			try:
 				_wait_for_manifest(stream_key, timeout=startup_timeout)
 			except PreviewStartTimeout:
