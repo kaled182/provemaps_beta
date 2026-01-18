@@ -6,12 +6,20 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.views.decorators.http import require_http_methods
 from django.http import JsonResponse
-from django.db import transaction
+from django.db import transaction, IntegrityError
+from django.db.models import Q
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
+import base64
+import hashlib
+import hmac
 import json
+import secrets
+import struct
+import time
+import urllib.parse
 
-from core.models import UserProfile
+from core.models import UserProfile, Department
 
 
 PROFILE_FIELDS = {
@@ -46,6 +54,11 @@ def _serialize_profile(profile, request=None):
         if request is not None and avatar_url:
             avatar_url = request.build_absolute_uri(avatar_url)
 
+    departments = list(profile.departments.order_by("name").values("id", "name"))
+    department_name = profile.department
+    if not department_name and departments:
+        department_name = departments[0]["name"]
+
     return {
         "avatar_url": avatar_url,
         "phone_number": profile.phone_number,
@@ -55,15 +68,47 @@ def _serialize_profile(profile, request=None):
         "notify_via_telegram": profile.notify_via_telegram,
         "receive_critical_alerts": profile.receive_critical_alerts,
         "receive_warning_alerts": profile.receive_warning_alerts,
-        "department": profile.department,
+        "department": department_name or "",
+        "departments": departments,
+        "totp_enabled": profile.totp_enabled,
+        "totp_configured": bool(profile.totp_secret),
     }
 
 
 def _apply_profile_updates(profile, data):
+    departments_data = None
+    if "departments" in data:
+        departments_data = data.pop("departments")
     for field in PROFILE_FIELDS:
         if field in data:
             setattr(profile, field, data[field])
     profile.save()
+
+    if departments_data is not None:
+        if departments_data is None:
+            departments_data = []
+        if not isinstance(departments_data, (list, tuple)):
+            departments_data = []
+        department_ids = [value for value in departments_data if isinstance(value, int)]
+        departments = list(Department.objects.filter(id__in=department_ids))
+        profile.departments.set(departments)
+        if departments:
+            profile.department = departments[0].name
+        elif "department" in data:
+            profile.department = (data.get("department") or "").strip()
+        else:
+            profile.department = ""
+        profile.save()
+    elif "department" in data:
+        department_name = (data.get("department") or "").strip()
+        if department_name:
+            dept = Department.objects.filter(name__iexact=department_name).first()
+            if dept:
+                profile.departments.set([dept])
+            else:
+                profile.departments.clear()
+        else:
+            profile.departments.clear()
 
 
 def _coerce_bool(value):
@@ -102,9 +147,228 @@ def _extract_profile_data(raw_data):
 
     return profile_data
 
+
+def _generate_totp_secret() -> str:
+    return base64.b32encode(secrets.token_bytes(20)).decode("utf-8").rstrip("=")
+
+
+def _base32_decode(secret: str) -> bytes:
+    padding = "=" * ((8 - len(secret) % 8) % 8)
+    return base64.b32decode(f"{secret.upper()}{padding}")
+
+
+def _totp_at(secret: str, counter: int, digits: int = 6) -> int:
+    msg = struct.pack(">Q", counter)
+    digest = hmac.new(_base32_decode(secret), msg, hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    truncated = struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7FFFFFFF
+    return truncated % (10 ** digits)
+
+
+def _verify_totp(secret: str, code: str, step: int = 30, window: int = 1) -> bool:
+    if not code or not code.isdigit():
+        return False
+    counter = int(time.time() / step)
+    expected = int(code)
+    for offset in range(-window, window + 1):
+        if _totp_at(secret, counter + offset) == expected:
+            return True
+    return False
+
+
+def _build_otpauth_url(secret: str, username: str, issuer: str) -> str:
+    label = urllib.parse.quote(f"{issuer}:{username}")
+    issuer_value = urllib.parse.quote(issuer)
+    return (
+        f"otpauth://totp/{label}"
+        f"?secret={secret}&issuer={issuer_value}&algorithm=SHA1&digits=6&period=30"
+    )
+
 def is_staff_or_superuser(user):
     """Check if user is staff or superuser."""
     return user.is_staff or user.is_superuser
+
+
+def _department_user_qs(department):
+    return UserProfile.objects.filter(
+        Q(departments=department) | Q(department__iexact=department.name)
+    ).distinct()
+
+
+@login_required
+@user_passes_test(is_staff_or_superuser)
+@require_http_methods(["GET", "POST"])
+def list_departments(request):
+    if request.method == "GET":
+        departments = Department.objects.order_by("name")
+        return JsonResponse({
+            "success": True,
+            "departments": [
+                {
+                    "id": dept.id,
+                    "name": dept.name,
+                    "description": dept.description,
+                    "is_active": dept.is_active,
+                    "created_at": dept.created_at.isoformat(),
+                }
+                for dept in departments
+            ],
+        })
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
+
+    name = (data.get("name") or "").strip()
+    description = (data.get("description") or "").strip()
+    if not name:
+        return JsonResponse({"success": False, "error": "Nome obrigatorio"}, status=400)
+
+    try:
+        department = Department.objects.create(
+            name=name,
+            description=description,
+            is_active=bool(data.get("is_active", True)),
+        )
+    except IntegrityError:
+        return JsonResponse({"success": False, "error": "Departamento ja existe"}, status=400)
+    except Exception as exc:
+        return JsonResponse({"success": False, "error": str(exc)}, status=400)
+
+    return JsonResponse({
+        "success": True,
+        "department": {
+            "id": department.id,
+            "name": department.name,
+            "description": department.description,
+            "is_active": department.is_active,
+            "created_at": department.created_at.isoformat(),
+        },
+    })
+
+
+@login_required
+@user_passes_test(is_staff_or_superuser)
+@require_http_methods(["PATCH", "DELETE"])
+def department_detail(request, department_id):
+    try:
+        department = Department.objects.get(id=department_id)
+    except Department.DoesNotExist:
+        return JsonResponse({"success": False, "error": "Departamento nao encontrado"}, status=404)
+
+    if request.method == "DELETE":
+        if _department_user_qs(department).exists():
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": "Departamento possui usuarios",
+                },
+                status=400,
+            )
+        department.delete()
+        return JsonResponse({"success": True, "message": "Departamento removido"})
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
+
+    if "name" in data:
+        name = (data.get("name") or "").strip()
+        if not name:
+            return JsonResponse({"success": False, "error": "Nome obrigatorio"}, status=400)
+        department.name = name
+
+    if "description" in data:
+        department.description = (data.get("description") or "").strip()
+
+    if "is_active" in data:
+        department.is_active = bool(data.get("is_active"))
+
+    try:
+        department.save()
+    except IntegrityError:
+        return JsonResponse({"success": False, "error": "Departamento ja existe"}, status=400)
+    except Exception as exc:
+        return JsonResponse({"success": False, "error": str(exc)}, status=400)
+
+    return JsonResponse({
+        "success": True,
+        "department": {
+            "id": department.id,
+            "name": department.name,
+            "description": department.description,
+            "is_active": department.is_active,
+            "created_at": department.created_at.isoformat(),
+        },
+    })
+
+
+@login_required
+@user_passes_test(is_staff_or_superuser)
+@require_http_methods(["POST"])
+def remove_department(request, department_id):
+    try:
+        department = Department.objects.get(id=department_id)
+    except Department.DoesNotExist:
+        return JsonResponse({"success": False, "error": "Departamento nao encontrado"}, status=404)
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
+
+    users_qs = _department_user_qs(department)
+    users_count = users_qs.count()
+    move_to = data.get("move_to", "__missing__")
+    if users_count > 0 and move_to == "__missing__":
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "Informe o destino para os usuarios antes de remover.",
+                "users": users_count,
+            },
+            status=400,
+        )
+
+    new_department_name = ""
+    target = None
+    if move_to not in (None, ""):
+        try:
+            target = Department.objects.get(id=move_to)
+        except Department.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Departamento destino nao encontrado"}, status=404)
+        new_department_name = target.name
+
+    if users_count > 0:
+        for profile in users_qs:
+            if target:
+                if profile.departments.filter(id=department.id).exists():
+                    profile.departments.remove(department)
+                    profile.departments.add(target)
+                if profile.department.strip().lower() == department.name.lower():
+                    profile.department = new_department_name
+                elif profile.departments.exists() and not profile.department:
+                    profile.department = profile.departments.order_by("name").first().name
+            else:
+                if profile.departments.filter(id=department.id).exists():
+                    profile.departments.remove(department)
+                if profile.department.strip().lower() == department.name.lower():
+                    profile.department = ""
+                elif profile.departments.exists() and not profile.department:
+                    profile.department = profile.departments.order_by("name").first().name
+            profile.save()
+
+    department.delete()
+    return JsonResponse(
+        {
+            "success": True,
+            "message": "Departamento removido",
+            "moved_users": users_count,
+            "target_department": new_department_name,
+        }
+    )
 
 
 @login_required
@@ -651,4 +915,101 @@ def me_avatar(request):
         "success": True,
         "message": "Avatar updated",
         "avatar_url": _serialize_profile(profile, request=request).get("avatar_url"),
+    })
+
+
+@login_required
+@require_http_methods(["GET"])
+def me_totp(request):
+    profile = _get_or_create_profile(request.user)
+    setup = request.GET.get("setup", "").lower() in {"1", "true", "yes"}
+    reset = request.GET.get("reset", "").lower() in {"1", "true", "yes"}
+    issuer = getattr(settings, "TOTP_ISSUER", "ProveMaps")
+
+    if setup:
+        if reset or not profile.totp_secret:
+            profile.totp_secret = _generate_totp_secret()
+            profile.totp_enabled = False
+            profile.save()
+
+        secret = profile.totp_secret
+        return JsonResponse({
+            "success": True,
+            "enabled": profile.totp_enabled,
+            "configured": bool(secret),
+            "issuer": issuer,
+            "secret": secret,
+            "otpauth_url": _build_otpauth_url(
+                secret,
+                request.user.email or request.user.username,
+                issuer,
+            ) if secret else "",
+        })
+
+    return JsonResponse({
+        "success": True,
+        "enabled": profile.totp_enabled,
+        "configured": bool(profile.totp_secret),
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def me_totp_verify(request):
+    profile = _get_or_create_profile(request.user)
+    if not profile.totp_secret:
+        return JsonResponse({
+            "success": False,
+            "error": "TOTP not configured"
+        }, status=400)
+
+    data = {}
+    if request.body:
+        try:
+            data = json.loads(request.body.decode("utf-8"))
+        except json.JSONDecodeError:
+            return JsonResponse({
+                "success": False,
+                "error": "Invalid JSON"
+            }, status=400)
+
+    code = str(data.get("code", "")).strip()
+    if not _verify_totp(profile.totp_secret, code):
+        return JsonResponse({
+            "success": False,
+            "error": "Invalid code"
+        }, status=400)
+
+    profile.totp_enabled = True
+    profile.save()
+
+    return JsonResponse({
+        "success": True,
+        "message": "TOTP enabled",
+        "enabled": True,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def me_totp_disable(request):
+    profile = _get_or_create_profile(request.user)
+    data = {}
+    if request.body:
+        try:
+            data = json.loads(request.body.decode("utf-8"))
+        except json.JSONDecodeError:
+            data = {}
+
+    reset = str(data.get("reset", "")).lower() in {"1", "true", "yes"}
+    profile.totp_enabled = False
+    if reset:
+        profile.totp_secret = None
+    profile.save()
+
+    return JsonResponse({
+        "success": True,
+        "message": "TOTP disabled",
+        "enabled": False,
+        "configured": bool(profile.totp_secret),
     })

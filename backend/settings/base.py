@@ -120,7 +120,7 @@ CSP_STYLE_SRC = os.getenv(
 ).split()
 CSP_IMG_SRC = os.getenv(
     "CSP_IMG_SRC",
-    "'self' data: "
+    "'self' data: blob: "
     "https://maps.googleapis.com "
     "https://maps.gstatic.com "
     "https://*.googleapis.com "
@@ -135,7 +135,13 @@ CSP_CONNECT_SRC = os.getenv(
     "'self' "
     "https://maps.googleapis.com "
     "https://cdn.jsdelivr.net "
-    "https://maps.gstatic.com",
+    "https://maps.gstatic.com "
+    "http://localhost:8082 "
+    "http://video-hls:8080",
+).split()
+CSP_MEDIA_SRC = os.getenv(
+    "CSP_MEDIA_SRC",
+    "'self' blob: data: http://localhost:8082 http://video-hls:8080",
 ).split()
 CSP_FRAME_ANCESTORS = os.getenv("CSP_FRAME_ANCESTORS", "'none'").split()
 CONTENT_SECURITY_POLICY = {
@@ -145,6 +151,7 @@ CONTENT_SECURITY_POLICY = {
     "img-src": CSP_IMG_SRC,
     "font-src": CSP_FONT_SRC,
     "connect-src": CSP_CONNECT_SRC,
+    "media-src": CSP_MEDIA_SRC,
     "frame-ancestors": CSP_FRAME_ANCESTORS,
 }
 
@@ -435,6 +442,7 @@ TEMPLATES: list[Dict[str, Any]] = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "setup_app.context_processors.setup_logo",
                 "setup_app.context_processors.static_version",
             ],
         },

@@ -1,4 +1,6 @@
-from .models import FirstTimeSetup
+from types import SimpleNamespace
+
+from .models import CompanyProfile, FirstTimeSetup
 from django.conf import settings
 from pathlib import Path
 import json
@@ -39,8 +41,11 @@ def _load_vite_entry():
     return _vite_manifest_cache["entry"]
 
 def setup_logo(request):
-    setup = FirstTimeSetup.objects.filter(configured=True).order_by('-configured_at').first()
-    return {'setup_logo': setup}
+    profile = CompanyProfile.objects.order_by("-updated_at").first()
+    if profile and profile.assets_logo:
+        return {"setup_logo": SimpleNamespace(logo=profile.assets_logo)}
+    setup = FirstTimeSetup.objects.filter(configured=True).order_by("-configured_at").first()
+    return {"setup_logo": setup}
 
 def static_version(request):
     """Expose STATIC_ASSET_VERSION for cache bust in templates."""

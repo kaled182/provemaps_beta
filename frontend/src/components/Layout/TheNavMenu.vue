@@ -180,6 +180,17 @@
               <span class="nav-label">Meu Perfil</span>
             </RouterLink>
             <RouterLink
+              to="/meu-cadastro"
+              class="nav-item nav-item-child"
+              :class="{ 'active': isPathActive('/meu-cadastro') }"
+              title="Meu Cadastro"
+            >
+              <span class="nav-icon child-icon">
+                <PhUser :size="18" weight="regular" />
+              </span>
+              <span class="nav-label">Meu Cadastro</span>
+            </RouterLink>
+            <RouterLink
               to="/system/users"
               class="nav-item nav-item-child"
               :class="{ 'active': isPathActive('/system/users') }"
@@ -289,9 +300,11 @@ import {
   PhListBullets,
   PhTreeStructure,
   PhWaveform,
+  PhVideoCamera,
   PhCaretDown,
   PhCaretRight,
   PhUsers,
+  PhUsersThree,
   PhUser,
 } from '@phosphor-icons/vue';
 
@@ -387,7 +400,7 @@ const connectionStatus = computed(() => {
 });
 
 function shouldUseWebSocket() {
-  return realtimePaths.some((path) => route.path.startsWith(path));
+  return true;
 }
 
 function closeWebSocket() {
@@ -525,6 +538,24 @@ const menuItems = [
         label: 'Network Inventory',
         path: '/network/inventory',
         icon: PhListBullets,
+      },
+    ],
+  },
+  {
+    label: 'Video',
+    path: '/video/cameras',
+    icon: PhVideoCamera,
+    useRouter: true,
+    children: [
+      {
+        label: 'Câmeras',
+        path: '/video/cameras',
+        icon: PhVideoCamera,
+      },
+      {
+        label: 'Grupos',
+        path: '/video/groups',
+        icon: PhUsersThree,
       },
     ],
   },

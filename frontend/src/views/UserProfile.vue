@@ -107,9 +107,34 @@
                 <p class="text-sm app-text-tertiary">
                   Para alterar sua senha, utilize o fluxo de redefinicao via email.
                 </p>
-                <a href="/accounts/password_reset/" class="app-btn-primary inline-flex mt-3 px-4 py-2 rounded">
-                  Solicitar redefinicao
-                </a>
+                <div class="flex flex-wrap gap-3 mt-3">
+                  <a href="/accounts/password_change/" class="app-btn-primary inline-flex px-4 py-2 rounded">
+                    Alterar senha
+                  </a>
+                  <a href="/accounts/password_reset/" class="app-btn inline-flex px-4 py-2 rounded">
+                    Solicitar redefinicao
+                  </a>
+                </div>
+              </div>
+              <div class="app-surface-muted rounded-lg p-4">
+                <div class="flex flex-wrap items-start justify-between gap-4">
+                  <div class="space-y-2">
+                    <div class="text-sm font-semibold app-text-primary">Autenticador (TOTP)</div>
+                    <p class="text-xs app-text-tertiary">
+                      Use apps como Google Authenticator ou Authy (RFC 6238).
+                    </p>
+                    <span class="app-badge" :class="totpStatusClass">
+                      {{ totpStatusLabel }}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    class="app-btn-primary px-4 py-2 rounded"
+                    @click="openTotpModal"
+                  >
+                    Configurar TOTP
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -135,12 +160,125 @@
       </div>
     </div>
   </div>
+
+  <div v-if="showTotpModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="closeTotpModal"></div>
+    <div class="relative w-full max-w-xl app-surface rounded-lg shadow-2xl border border-white/10">
+      <div class="px-6 py-4 border-b app-divider flex items-center justify-between">
+        <div>
+          <h3 class="text-base font-semibold app-text-primary">Configurar TOTP</h3>
+          <p class="text-xs app-text-tertiary">Ative autenticacao em duas etapas com app.</p>
+        </div>
+        <button class="text-sm app-text-tertiary hover:text-white" @click="closeTotpModal">✕</button>
+      </div>
+      <div class="p-6 space-y-4">
+        <div class="flex items-center gap-2">
+          <span class="app-badge" :class="totpStatusClass">{{ totpStatusLabel }}</span>
+          <span v-if="totpSetup.configured" class="text-xs app-text-tertiary">Segredo configurado.</span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-4 items-start">
+          <div class="app-surface-muted rounded-lg p-3 flex items-center justify-center">
+            <img
+              v-if="totpQrDataUrl"
+              :src="totpQrDataUrl"
+              alt="QR Code TOTP"
+              class="w-40 h-40"
+            />
+            <div v-else class="text-xs app-text-tertiary text-center">
+              Gere o QR para configurar.
+            </div>
+          </div>
+          <div class="space-y-2 text-xs app-text-tertiary">
+            <p>Abra o app autenticador e escaneie o QR ao lado.</p>
+            <p>Se preferir, use a chave secreta manualmente.</p>
+          </div>
+        </div>
+        <div class="space-y-2">
+          <label class="field-label">Chave secreta</label>
+          <div class="flex flex-wrap gap-2">
+            <input
+              :value="totpSetup.secret || 'Gerar para configurar'"
+              type="text"
+              class="app-input w-full font-mono text-xs"
+              readonly
+            />
+            <button
+              type="button"
+              class="app-btn px-3 py-2 rounded text-xs"
+              @click="copyTotpValue(totpSetup.secret)"
+            >
+              Copiar chave
+            </button>
+            <button
+              type="button"
+              class="app-btn px-3 py-2 rounded text-xs"
+              :disabled="totpLoading"
+              @click="regenerateTotp"
+            >
+              Gerar novo
+            </button>
+          </div>
+        </div>
+        <div class="space-y-2">
+          <label class="field-label">URL de configuracao</label>
+          <div class="flex flex-wrap gap-2">
+            <input
+              :value="totpSetup.otpauth_url || 'Gerar para configurar'"
+              type="text"
+              class="app-input w-full font-mono text-xs"
+              readonly
+            />
+            <button
+              type="button"
+              class="app-btn px-3 py-2 rounded text-xs"
+              @click="copyTotpValue(totpSetup.otpauth_url)"
+            >
+              Copiar URL
+            </button>
+          </div>
+          <p class="text-xs app-text-tertiary">
+            Caso o app nao leia QR, cole a chave secreta manualmente.
+          </p>
+        </div>
+        <div class="space-y-2">
+          <label class="field-label">Codigo do app</label>
+          <input v-model="totpCode" type="text" class="app-input w-full" placeholder="000000" autocomplete="one-time-code" />
+        </div>
+      </div>
+      <div class="px-6 py-4 border-t app-divider flex flex-wrap items-center justify-between gap-3">
+        <button type="button" class="app-btn px-4 py-2 rounded" @click="closeTotpModal">
+          Cancelar
+        </button>
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-if="totpSetup.enabled"
+            type="button"
+            class="app-btn px-4 py-2 rounded"
+            :disabled="totpLoading"
+            @click="disableTotp"
+          >
+            Desativar
+          </button>
+          <button
+            v-if="!totpSetup.enabled"
+            type="button"
+            class="app-btn-primary px-4 py-2 rounded"
+            :disabled="totpLoading"
+            @click="verifyTotp"
+          >
+            Ativar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useApi } from '@/composables/useApi';
 import { useNotification } from '@/composables/useNotification';
+import QRCode from 'qrcode';
 
 const api = useApi();
 const { success, error: notifyError } = useNotification();
@@ -166,6 +304,8 @@ const defaultProfile = {
   receive_warning_alerts: false,
   department: '',
   avatar_url: null,
+  totp_enabled: false,
+  totp_configured: false,
 };
 
 const profile = ref({
@@ -187,6 +327,29 @@ const form = ref({
 const avatarSrc = computed(() => (
   previewImage.value || profile.value.profile.avatar_url || ''
 ));
+
+const totpStatusLabel = computed(() => {
+  if (profile.value.profile.totp_enabled) return 'Ativo';
+  if (profile.value.profile.totp_configured) return 'Configurado';
+  return 'Nao configurado';
+});
+
+const totpStatusClass = computed(() => {
+  if (profile.value.profile.totp_enabled) return 'app-badge-success';
+  if (profile.value.profile.totp_configured) return 'app-badge-warning';
+  return 'app-badge-muted';
+});
+
+const showTotpModal = ref(false);
+const totpSetup = ref({
+  enabled: false,
+  configured: false,
+  secret: '',
+  otpauth_url: '',
+});
+const totpCode = ref('');
+const totpLoading = ref(false);
+const totpQrDataUrl = ref('');
 
 const getInitials = (name) => {
   if (!name) return 'ME';
@@ -217,6 +380,107 @@ const handleFileUpload = (event) => {
   };
   reader.readAsDataURL(file);
 };
+
+const openTotpModal = async () => {
+  showTotpModal.value = true;
+  await loadTotpSetup(false);
+};
+
+const closeTotpModal = () => {
+  showTotpModal.value = false;
+  totpCode.value = '';
+};
+
+const loadTotpSetup = async (reset) => {
+  totpLoading.value = true;
+  try {
+    const params = new URLSearchParams({ setup: '1' });
+    if (reset) {
+      params.set('reset', '1');
+    }
+    const data = await api.get(`/api/users/me/totp/?${params.toString()}`);
+    totpSetup.value = {
+      enabled: Boolean(data.enabled),
+      configured: Boolean(data.configured),
+      secret: data.secret || '',
+      otpauth_url: data.otpauth_url || '',
+    };
+    await refreshTotpQr();
+    await fetchProfile();
+  } catch (err) {
+    notifyError('Erro ao carregar TOTP', err.message || String(err));
+  } finally {
+    totpLoading.value = false;
+  }
+};
+
+const regenerateTotp = async () => {
+  await loadTotpSetup(true);
+};
+
+const verifyTotp = async () => {
+  if (!totpCode.value.trim()) {
+    notifyError('Codigo obrigatorio', 'Informe o codigo do app autenticador.');
+    return;
+  }
+  totpLoading.value = true;
+  try {
+    await api.post('/api/users/me/totp/verify/', { code: totpCode.value.trim() });
+    totpCode.value = '';
+    await fetchProfile();
+    success('TOTP ativado', 'Autenticacao em duas etapas ativada.');
+  } catch (err) {
+    notifyError('Falha ao ativar', err.message || String(err));
+  } finally {
+    totpLoading.value = false;
+  }
+};
+
+const disableTotp = async () => {
+  totpLoading.value = true;
+  try {
+    await api.post('/api/users/me/totp/disable/', { reset: false });
+    await fetchProfile();
+    success('TOTP desativado', 'Autenticacao em duas etapas desativada.');
+  } catch (err) {
+    notifyError('Falha ao desativar', err.message || String(err));
+  } finally {
+    totpLoading.value = false;
+  }
+};
+
+const copyTotpValue = async (value) => {
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    success('Copiado', 'Valor copiado para a area de transferencia.');
+  } catch (err) {
+    notifyError('Erro ao copiar', err.message || String(err));
+  }
+};
+
+const refreshTotpQr = async () => {
+  if (!totpSetup.value.otpauth_url) {
+    totpQrDataUrl.value = '';
+    return;
+  }
+  try {
+    totpQrDataUrl.value = await QRCode.toDataURL(totpSetup.value.otpauth_url, {
+      margin: 1,
+      width: 180,
+      errorCorrectionLevel: 'M',
+    });
+  } catch (err) {
+    totpQrDataUrl.value = '';
+  }
+};
+
+watch(
+  () => totpSetup.value.otpauth_url,
+  () => {
+    refreshTotpQr();
+  }
+);
 
 
 const saveProfile = async () => {

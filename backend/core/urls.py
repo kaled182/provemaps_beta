@@ -16,6 +16,7 @@ from core import views_docs as docs_views
 from core import views as core_views
 # SPA views
 from core.views_spa import SPAView
+from core import views_auth
 # API views
 from core import views_api as api_views
 from core import api_users
@@ -30,6 +31,21 @@ admin.site.index_title = "Gerenciamento do Sistema"
 # Define API, Admin e Health routes FIRST
 urlpatterns: list[Any] = [
     path('admin/', admin.site.urls),
+    path(
+        'accounts/password_reset/',
+        views_auth.RuntimeEmailPasswordResetView.as_view(),
+        name='password_reset',
+    ),
+    path(
+        'accounts/login/',
+        views_auth.TwoStepLoginView.as_view(),
+        name='login',
+    ),
+    path(
+        'accounts/otp/',
+        views_auth.RuntimeOtpView.as_view(),
+        name='login_otp',
+    ),
     path(
         'accounts/',
         include('django.contrib.auth.urls'),
@@ -71,7 +87,21 @@ urlpatterns: list[Any] = [
     ),
     path('api/users/me/', api_users.me_user, name='api_me_user'),
     path('api/users/me/avatar/', api_users.me_avatar, name='api_me_avatar'),
+    path('api/users/me/totp/', api_users.me_totp, name='api_me_totp'),
+    path('api/users/me/totp/verify/', api_users.me_totp_verify, name='api_me_totp_verify'),
+    path('api/users/me/totp/disable/', api_users.me_totp_disable, name='api_me_totp_disable'),
     path('api/groups/', api_users.list_groups, name='api_list_groups'),
+    path('api/departments/', api_users.list_departments, name='api_list_departments'),
+    path(
+        'api/departments/<int:department_id>/',
+        api_users.department_detail,
+        name='api_department_detail'
+    ),
+    path(
+        'api/departments/<int:department_id>/remove/',
+        api_users.remove_department,
+        name='api_remove_department'
+    ),
     path('system/users', SPAView.as_view(), name='users_page'),
 
     # APIs

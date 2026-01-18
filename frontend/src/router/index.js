@@ -92,6 +92,16 @@ const routes = [
     component: () => import('@/views/ConfigurationPage.vue'),
   },
   {
+    path: '/video/cameras',
+    name: 'video-cameras',
+    component: () => import('@/views/video/VideoCamerasView.vue'),
+  },
+  {
+    path: '/video/groups',
+    name: 'video-groups',
+    component: () => import('@/views/video/VideoGroupsView.vue'),
+  },
+  {
     path: '/metrics/health',
     name: 'system-health',
     component: () => import('@/views/SystemHealthView.vue'),
@@ -110,6 +120,11 @@ const routes = [
     path: '/profile',
     name: 'user-profile',
     component: () => import('@/views/UserProfile.vue'),
+  },
+  {
+    path: '/meu-cadastro',
+    name: 'my-registration',
+    component: () => import('@/views/MyRegistration.vue'),
   },
   // Legacy redirects
   {
