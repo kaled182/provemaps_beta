@@ -67,6 +67,7 @@
       VIDEO_TRANSMUXER_URL: "http://video-transmuxer:9000"
       VIDEO_HLS_BASE_URL: "http://video-hls:8080/hls"
       VIDEO_HLS_PUBLIC_BASE_URL: "http://localhost:8082/hls"
+      VIDEO_WEBRTC_PUBLIC_BASE_URL: "http://localhost:8889"
       WHATSAPP_QR_SERVICE_URL: "http://whatsapp-qr:3000"
     depends_on:
       postgres:
@@ -330,16 +331,31 @@
       context: ../services/video-transmuxer
     container_name: docker-video-transmuxer-1
     environment:
-      VIDEO_HLS_RTMP_URL: "rtmp://video-hls:1935/live"
+      VIDEO_HLS_RTMP_URL: "rtmp://mediamtx:1935/stream"
       VIDEO_HLS_STORAGE_PATH: "/var/www/hls"
     depends_on:
       video-hls:
+        condition: service_started
+      mediamtx:
         condition: service_started
     ports:
       - "9000:9000"
     restart: unless-stopped
     volumes:
       - hls_cache:/var/www/hls
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: docker-mediamtx-1
+    environment:
+      - MTX_PROTOCOLS=tcp
+      - MTX_WEBRTC=yes
+    ports:
+      - "8554:8554"   # RTSP
+      - "8888:8888"   # HLS (LL-HLS)
+      - "8889:8889"   # WebRTC (HTTP signaling)
+      - "8189:8189/udp" # WebRTC ICE/UDP candidates
+    restart: unless-stopped
 
 volumes:
   redis_data:

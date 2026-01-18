@@ -1447,7 +1447,12 @@
                     </div>
                   </div>
                   <div class="relative h-52 bg-black rounded-md overflow-hidden flex items-center justify-center">
-                    <video ref="videoPreviewElement" class="w-full h-full object-cover" controls playsinline muted></video>
+                    <template v-if="isM3U8Url">
+                      <video ref="videoPreviewElement" class="w-full h-full object-cover" controls playsinline muted></video>
+                    </template>
+                    <template v-else>
+                      <iframe :src="videoPreview.url" class="w-full h-full border-0" allow="autoplay; fullscreen" />
+                    </template>
                     <div
                       v-if="isVideoPreviewLoading"
                       class="absolute inset-0 bg-gray-900/70 flex items-center justify-center text-sm text-gray-200"
@@ -1839,6 +1844,10 @@ const videoPreview = ref({
   loading: false,
 });
 const videoPreviewElement = ref(null);
+const isM3U8Url = computed(() => {
+  const url = videoPreview.value.url || videoGatewayForm.value.config.preview_url || '';
+  return url.trim().toLowerCase().endsWith('.m3u8');
+});
 const hlsInstance = ref(null);
 const videoElementListeners = ref([]);
 const autoPreviewHandle = ref(null);
@@ -2519,6 +2528,14 @@ const loadVideoPreview = async (url, { force = false } = {}) => {
     destroyHlsInstance();
     return;
   }
+  // Suporte a MediaMTX/WebRTC: quando não é .m3u8, renderiza via iframe e marca como "playing"
+  if (!url.toLowerCase().endsWith('.m3u8')) {
+    destroyHlsInstance();
+    videoPreview.value.loading = false;
+    videoPreview.value.status = 'playing';
+    videoPreview.value.error = '';
+    return;
+  }
   await nextTick();
   const element = videoPreviewElement.value;
   if (!element) return;
@@ -2662,9 +2679,16 @@ const loadVideoPreview = async (url, { force = false } = {}) => {
       throw new Error('O navegador não suporta reprodução HLS.');
     }
   } catch (error) {
-    videoPreview.value.status = 'error';
-    videoPreview.value.error = error?.message || 'Falha ao iniciar a pré-visualização.';
-    destroyHlsInstance();
+    // Se falhar o HLS por algum motivo mas a URL não for HLS, deixar iframe assumir
+    if (!isM3U8Url.value) {
+      videoPreview.value.loading = false;
+      videoPreview.value.status = 'playing';
+      videoPreview.value.error = '';
+    } else {
+      videoPreview.value.status = 'error';
+      videoPreview.value.error = error?.message || 'Falha ao iniciar a pré-visualização.';
+      destroyHlsInstance();
+    }
   }
 };
 
