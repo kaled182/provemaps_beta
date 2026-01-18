@@ -42,10 +42,18 @@
 
       {% if form.errors %}
         <div class="mb-4 text-sm text-red-200 bg-red-500/20 border border-red-400/50 rounded-md p-2 text-center">
-          Invalid username or password.
+          {% if form.non_field_errors %}
+            {{ form.non_field_errors|join:', ' }}
+          {% else %}
+            Invalid username or password.
+          {% endif %}
         </div>
       {% endif %}
-
+      {% if request.GET.otp == 'locked' %}
+        <div class="mb-4 text-sm text-yellow-200 bg-yellow-500/20 border border-yellow-400/50 rounded-md p-2 text-center">
+          Voce excedeu as tentativas de OTP. Faca login novamente.
+        </div>
+      {% endif %}
       {% if next %}
         {% if user.is_authenticated %}
           <p class="mb-4 text-sm text-gray-200 text-center">

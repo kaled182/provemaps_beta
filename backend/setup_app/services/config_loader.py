@@ -68,6 +68,92 @@ def _load_from_database() -> Dict[str, str]:
         config["DB_PASSWORD"] = record.db_password
     if record.redis_url:
         config["REDIS_URL"] = record.redis_url
+    if record.ftp_enabled is not None:
+        config["FTP_ENABLED"] = record.ftp_enabled
+    if record.ftp_host:
+        config["FTP_HOST"] = record.ftp_host
+    if record.ftp_port:
+        config["FTP_PORT"] = str(record.ftp_port)
+    if record.ftp_user:
+        config["FTP_USER"] = record.ftp_user
+    if record.ftp_password:
+        config["FTP_PASSWORD"] = record.ftp_password
+    if record.ftp_path:
+        config["FTP_PATH"] = record.ftp_path
+    if record.gdrive_enabled is not None:
+        config["GDRIVE_ENABLED"] = record.gdrive_enabled
+    if record.gdrive_credentials_json:
+        config["GDRIVE_CREDENTIALS_JSON"] = record.gdrive_credentials_json
+    if record.gdrive_folder_id:
+        config["GDRIVE_FOLDER_ID"] = record.gdrive_folder_id
+    if record.gdrive_shared_drive_id:
+        config["GDRIVE_SHARED_DRIVE_ID"] = record.gdrive_shared_drive_id
+    if record.gdrive_auth_mode:
+        config["GDRIVE_AUTH_MODE"] = record.gdrive_auth_mode
+    if record.gdrive_oauth_client_id:
+        config["GDRIVE_OAUTH_CLIENT_ID"] = record.gdrive_oauth_client_id
+    if record.gdrive_oauth_client_secret:
+        config["GDRIVE_OAUTH_CLIENT_SECRET"] = record.gdrive_oauth_client_secret
+    if record.gdrive_oauth_refresh_token:
+        config["GDRIVE_OAUTH_REFRESH_TOKEN"] = record.gdrive_oauth_refresh_token
+    if record.gdrive_oauth_user_email:
+        config["GDRIVE_OAUTH_USER_EMAIL"] = record.gdrive_oauth_user_email
+    if record.smtp_enabled is not None:
+        config["SMTP_ENABLED"] = record.smtp_enabled
+    if record.smtp_host:
+        config["SMTP_HOST"] = record.smtp_host
+    if record.smtp_port:
+        config["SMTP_PORT"] = record.smtp_port
+    if record.smtp_security:
+        config["SMTP_SECURITY"] = record.smtp_security
+    if record.smtp_user:
+        config["SMTP_USER"] = record.smtp_user
+    if record.smtp_password:
+        config["SMTP_PASSWORD"] = record.smtp_password
+    if record.smtp_auth_mode:
+        config["SMTP_AUTH_MODE"] = record.smtp_auth_mode
+    if record.smtp_oauth_client_id:
+        config["SMTP_OAUTH_CLIENT_ID"] = record.smtp_oauth_client_id
+    if record.smtp_oauth_client_secret:
+        config["SMTP_OAUTH_CLIENT_SECRET"] = record.smtp_oauth_client_secret
+    if record.smtp_oauth_refresh_token:
+        config["SMTP_OAUTH_REFRESH_TOKEN"] = record.smtp_oauth_refresh_token
+    if record.smtp_from_name:
+        config["SMTP_FROM_NAME"] = record.smtp_from_name
+    if record.smtp_from_email:
+        config["SMTP_FROM_EMAIL"] = record.smtp_from_email
+    if record.smtp_test_recipient:
+        config["SMTP_TEST_RECIPIENT"] = record.smtp_test_recipient
+    if record.sms_enabled is not None:
+        config["SMS_ENABLED"] = record.sms_enabled
+    if record.sms_provider:
+        config["SMS_PROVIDER"] = record.sms_provider
+    if record.sms_provider_rank:
+        config["SMS_PROVIDER_RANK"] = str(record.sms_provider_rank)
+    if record.sms_username:
+        config["SMS_USERNAME"] = record.sms_username
+    if record.sms_password:
+        config["SMS_PASSWORD"] = record.sms_password
+    if record.sms_api_token:
+        config["SMS_API_TOKEN"] = record.sms_api_token
+    if record.sms_api_url:
+        config["SMS_API_URL"] = record.sms_api_url
+    if record.sms_sender_id:
+        config["SMS_SENDER_ID"] = record.sms_sender_id
+    if record.sms_test_recipient:
+        config["SMS_TEST_RECIPIENT"] = record.sms_test_recipient
+    if record.sms_test_message:
+        config["SMS_TEST_MESSAGE"] = record.sms_test_message
+    if record.sms_priority:
+        config["SMS_PRIORITY"] = record.sms_priority
+    if record.sms_aws_region:
+        config["SMS_AWS_REGION"] = record.sms_aws_region
+    if record.sms_aws_access_key_id:
+        config["SMS_AWS_ACCESS_KEY_ID"] = record.sms_aws_access_key_id
+    if record.sms_aws_secret_access_key:
+        config["SMS_AWS_SECRET_ACCESS_KEY"] = record.sms_aws_secret_access_key
+    if record.sms_infobip_base_url:
+        config["SMS_INFOBIP_BASE_URL"] = record.sms_infobip_base_url
 
     return config
 

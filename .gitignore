@@ -175,6 +175,7 @@ logs/
 staticfiles/
 database/*.sqlite3
 database/backups/
+database/runtime.env
 htmlcov/
 dist/
 celerybeat-schedule

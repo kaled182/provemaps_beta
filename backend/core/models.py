@@ -35,9 +35,26 @@ class UserProfile(models.Model):
     receive_critical_alerts = models.BooleanField("Alertas Criticos", default=True)
     receive_warning_alerts = models.BooleanField("Alertas de Aviso", default=False)
     department = models.CharField("Departamento", max_length=100, blank=True)
+    departments = models.ManyToManyField(
+        "Department",
+        related_name="user_profiles",
+        blank=True,
+    )
+    totp_secret = models.CharField("TOTP Secret", max_length=64, blank=True, null=True)
+    totp_enabled = models.BooleanField("TOTP Ativo", default=False)
 
     def __str__(self) -> str:
         return f"Profile of {self.user.username}"
+
+
+class Department(models.Model):
+    name = models.CharField("Nome", max_length=120, unique=True)
+    description = models.CharField("Descricao", max_length=255, blank=True)
+    is_active = models.BooleanField("Ativo", default=True)
+    created_at = models.DateTimeField("Criado em", auto_now_add=True)
+
+    def __str__(self) -> str:
+        return self.name
 
 
 @receiver(post_save, sender=User)

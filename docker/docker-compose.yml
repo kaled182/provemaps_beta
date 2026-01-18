@@ -64,6 +64,10 @@
       SERVICE_ACCOUNT_WEBHOOK_CONNECT_TIMEOUT: "3"
       SERVICE_ACCOUNT_WEBHOOK_READ_TIMEOUT: "5"
       ENV_FILE_PATH: /app/database/runtime.env
+      VIDEO_TRANSMUXER_URL: "http://video-transmuxer:9000"
+      VIDEO_HLS_BASE_URL: "http://video-hls:8080/hls"
+      VIDEO_HLS_PUBLIC_BASE_URL: "http://localhost:8082/hls"
+      WHATSAPP_QR_SERVICE_URL: "http://whatsapp-qr:3000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -87,6 +91,19 @@
       - ../scripts:/app/scripts
       - ../.env:/app/.env:ro
       - ../logs:/app/backend/logs
+
+  whatsapp-qr:
+    build:
+      context: ../services/whatsapp-qr
+      dockerfile: Dockerfile
+    environment:
+      LOG_LEVEL: "info"
+      DATA_DIR: /data
+    ports:
+      - "3001:3000"
+    volumes:
+      - whatsapp_qr_data:/data
+    restart: unless-stopped
 
   celery:
     build:
@@ -232,28 +249,6 @@
       start_period: 30s
     restart: unless-stopped
 
-  db:
-    image: mariadb:11
-    environment:
-      MARIADB_DATABASE: app
-      MARIADB_USER: app
-      MARIADB_PASSWORD: app
-      MARIADB_ROOT_PASSWORD: root
-      MARIADB_INITDB_SKIP_TZINFO: 1
-    ports:
-      - "3307:3306"
-    volumes:
-      - mariadb_data:/var/lib/mysql
-      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-    profiles:
-      - mysql
-
   # Prometheus - Metrics collection and alerting
   prometheus:
     image: prom/prometheus:latest
@@ -312,9 +307,49 @@
       retries: 3
       start_period: 40s
 
+  video-hls:
+    build:
+      context: ./hls
+    image: docker-video-hls:latest
+    container_name: docker-video-hls-1
+    ports:
+      - "1935:1935"
+      - "8082:8080"
+    volumes:
+      - hls_cache:/var/www/hls
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  video-transmuxer:
+    build:
+      context: ../services/video-transmuxer
+    container_name: docker-video-transmuxer-1
+    environment:
+      VIDEO_HLS_RTMP_URL: "rtmp://video-hls:1935/live"
+      VIDEO_HLS_STORAGE_PATH: "/var/www/hls"
+    depends_on:
+      video-hls:
+        condition: service_started
+    ports:
+      - "9000:9000"
+    restart: unless-stopped
+    volumes:
+      - hls_cache:/var/www/hls
+
 volumes:
-  mariadb_data:
   redis_data:
   postgres_data:
   prometheus_data:
   grafana_data:
+  whatsapp_qr_data:
+  hls_cache:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=256m

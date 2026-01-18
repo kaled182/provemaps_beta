@@ -10,7 +10,9 @@ from django.http import HttpResponseForbidden
 from integrations.zabbix.guards import reload_diagnostics_flag_cache
 
 from .forms import EnvConfigForm, FirstTimeSetupForm
-from .models import FirstTimeSetup
+from types import SimpleNamespace
+
+from .models import CompanyProfile, FirstTimeSetup
 
 DEFAULT_SERVICE_RESTART_COMMANDS = (
     settings.SERVICE_RESTART_COMMANDS
@@ -20,6 +22,9 @@ DEFAULT_SERVICE_RESTART_COMMANDS = (
 
 
 def get_setup_logo():
+    profile = CompanyProfile.objects.order_by("-updated_at").first()
+    if profile and profile.assets_logo:
+        return SimpleNamespace(logo=profile.assets_logo)
     return FirstTimeSetup.objects.filter(configured=True).order_by("-configured_at").first()
 
 

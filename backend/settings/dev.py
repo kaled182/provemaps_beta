@@ -11,6 +11,40 @@ from typing import Any, Callable, Dict, TYPE_CHECKING
 
 from .base import *  # noqa
 
+
+def _load_runtime_email_env() -> None:
+    runtime_env_path = os.getenv("ENV_FILE_PATH")
+    if not runtime_env_path:
+        runtime_env_path = str(DATABASE_DIR / "runtime.env")
+    if not os.path.exists(runtime_env_path):
+        return
+
+    target_keys = {
+        "EMAIL_BACKEND",
+        "EMAIL_HOST",
+        "EMAIL_PORT",
+        "EMAIL_HOST_USER",
+        "EMAIL_HOST_PASSWORD",
+        "EMAIL_USE_TLS",
+        "EMAIL_USE_SSL",
+        "DEFAULT_FROM_EMAIL",
+        "SERVER_EMAIL",
+    }
+    with open(runtime_env_path, "r", encoding="utf-8-sig") as handler:
+        for raw_line in handler:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            if key not in target_keys or key in os.environ:
+                continue
+            value = value.strip().strip("\"'").strip()
+            os.environ[key] = value
+
+
+_load_runtime_email_env()
+
 if TYPE_CHECKING:  # pragma: no cover - assists type checkers only
     from .base import (
         BASE_DIR,
@@ -46,8 +80,24 @@ CSRF_TRUSTED_ORIGINS = [  # type: ignore[assignment]
     "http://web:8000",
 ]
 
-# Email is printed to the console
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+# Email defaults to console in dev, unless SMTP is configured in env
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend",
+)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587")) if EMAIL_HOST else None
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+
+if EMAIL_HOST:
+    EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "true").lower() == "true"
+    EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "false").lower() == "true"
+else:
+    EMAIL_USE_TLS = None
+    EMAIL_USE_SSL = None
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@localhost")
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
 # -----------------------------------------------------
 # Database (Dev optimizations)

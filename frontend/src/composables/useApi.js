@@ -43,8 +43,23 @@ export function useApi() {
    * @param {string} url - URL do endpoint
    * @returns {Promise<any>} Resposta da API
    */
-  async function get(url) {
-    const response = await fetch(url, {
+  async function get(url, params = null) {
+    let finalUrl = url;
+    if (params && typeof params === 'object') {
+      const search = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value === undefined || value === null || value === '') {
+          return;
+        }
+        search.append(key, String(value));
+      });
+      const query = search.toString();
+      if (query) {
+        finalUrl = `${url}${url.includes('?') ? '&' : '?'}${query}`;
+      }
+    }
+
+    const response = await fetch(finalUrl, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

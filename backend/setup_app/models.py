@@ -36,6 +36,68 @@ class FirstTimeSetup(models.Model):
     db_user = EncryptedCharField(max_length=512, blank=True, null=True)
     db_password = EncryptedCharField(max_length=512, blank=True, null=True)
     redis_url = EncryptedCharField(max_length=512, blank=True, null=True)
+    ftp_enabled = models.BooleanField(default=False)
+    ftp_host = EncryptedCharField(max_length=255, blank=True, null=True)
+    ftp_port = models.IntegerField(default=21)
+    ftp_user = EncryptedCharField(max_length=255, blank=True, null=True)
+    ftp_password = EncryptedCharField(max_length=255, blank=True, null=True)
+    ftp_path = EncryptedCharField(max_length=255, blank=True, null=True)
+    gdrive_enabled = models.BooleanField(default=False)
+    gdrive_credentials_json = EncryptedCharField(
+        max_length=4096, max_plain_length=4096, blank=True, null=True
+    )
+    gdrive_folder_id = EncryptedCharField(max_length=255, blank=True, null=True)
+    gdrive_shared_drive_id = EncryptedCharField(max_length=255, blank=True, null=True)
+    gdrive_auth_mode = models.CharField(
+        max_length=32,
+        default="service_account",
+        choices=[
+            ("service_account", "Service Account"),
+            ("oauth", "OAuth (Conta pessoal)"),
+        ],
+    )
+    gdrive_oauth_client_id = EncryptedCharField(max_length=255, blank=True, null=True)
+    gdrive_oauth_client_secret = EncryptedCharField(max_length=255, blank=True, null=True)
+    gdrive_oauth_refresh_token = EncryptedCharField(max_length=512, blank=True, null=True)
+    gdrive_oauth_user_email = EncryptedCharField(max_length=255, blank=True, null=True)
+    smtp_enabled = models.BooleanField(default=False)
+    smtp_host = EncryptedCharField(max_length=255, blank=True, null=True)
+    smtp_port = EncryptedCharField(max_length=32, blank=True, null=True)
+    smtp_security = EncryptedCharField(max_length=16, blank=True, null=True)
+    smtp_user = EncryptedCharField(max_length=255, blank=True, null=True)
+    smtp_password = EncryptedCharField(max_length=255, blank=True, null=True)
+    smtp_auth_mode = EncryptedCharField(max_length=32, blank=True, null=True)
+    smtp_oauth_client_id = EncryptedCharField(max_length=255, blank=True, null=True)
+    smtp_oauth_client_secret = EncryptedCharField(max_length=255, blank=True, null=True)
+    smtp_oauth_refresh_token = EncryptedCharField(max_length=512, blank=True, null=True)
+    smtp_from_name = EncryptedCharField(max_length=255, blank=True, null=True)
+    smtp_from_email = EncryptedCharField(max_length=255, blank=True, null=True)
+    smtp_test_recipient = EncryptedCharField(max_length=255, blank=True, null=True)
+    sms_enabled = models.BooleanField(default=False)
+    sms_provider = models.CharField(
+        max_length=32,
+        default="smsnet",
+        choices=[
+            ("smsnet", "SMSNET"),
+            ("zenvia", "Zenvia"),
+            ("totalvoice", "TotalVoice"),
+            ("aws_sns", "AWS SNS"),
+            ("infobip", "Infobip"),
+        ],
+    )
+    sms_provider_rank = models.IntegerField(default=1)
+    sms_username = EncryptedCharField(max_length=255, blank=True, null=True)
+    sms_password = EncryptedCharField(max_length=255, blank=True, null=True)
+    sms_api_token = EncryptedCharField(max_length=512, blank=True, null=True)
+    sms_api_url = EncryptedCharField(max_length=512, blank=True, null=True)
+    sms_sender_id = EncryptedCharField(max_length=64, blank=True, null=True)
+    sms_test_recipient = EncryptedCharField(max_length=64, blank=True, null=True)
+    sms_test_message = EncryptedCharField(max_length=255, blank=True, null=True)
+    sms_priority = EncryptedCharField(max_length=16, blank=True, null=True)
+    sms_aws_region = EncryptedCharField(max_length=64, blank=True, null=True)
+    sms_aws_access_key_id = EncryptedCharField(max_length=255, blank=True, null=True)
+    sms_aws_secret_access_key = EncryptedCharField(max_length=255, blank=True, null=True)
+    sms_infobip_base_url = EncryptedCharField(max_length=255, blank=True, null=True)
     configured = models.BooleanField(default=False)
     configured_at = models.DateTimeField(auto_now_add=True)
 
@@ -61,3 +123,63 @@ class MonitoringServer(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.server_type})"
+
+
+class MessagingGateway(models.Model):
+    GATEWAY_TYPES = [
+        ("sms", "SMS"),
+        ("whatsapp", "WhatsApp"),
+        ("telegram", "Telegram"),
+        ("smtp", "SMTP"),
+        ("video", "Videovigilância"),
+    ]
+
+    name = models.CharField(max_length=120)
+    gateway_type = models.CharField(max_length=16, choices=GATEWAY_TYPES)
+    provider = models.CharField(max_length=64, blank=True, null=True)
+    priority = models.IntegerField(default=1)
+    enabled = models.BooleanField(default=True)
+    config = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.gateway_type})"
+
+
+class CompanyProfile(models.Model):
+    company_legal_name = models.CharField(max_length=255, blank=True)
+    company_trade_name = models.CharField(max_length=255, blank=True)
+    company_doc = models.CharField(max_length=32, blank=True)
+    company_owner_name = models.CharField(max_length=255, blank=True)
+    company_owner_doc = models.CharField(max_length=32, blank=True)
+    company_owner_birth = models.CharField(max_length=32, blank=True)
+    company_state_reg = models.CharField(max_length=64, blank=True)
+    company_city_reg = models.CharField(max_length=64, blank=True)
+    company_fistel = models.CharField(max_length=64, blank=True)
+    company_created_date = models.CharField(max_length=32, blank=True)
+    company_active = models.BooleanField(default=True)
+    company_reports_active = models.BooleanField(default=True)
+
+    address_zip = models.CharField(max_length=16, blank=True)
+    address_street = models.CharField(max_length=255, blank=True)
+    address_number = models.CharField(max_length=32, blank=True)
+    address_district = models.CharField(max_length=128, blank=True)
+    address_city = models.CharField(max_length=128, blank=True)
+    address_state = models.CharField(max_length=8, blank=True)
+    address_country = models.CharField(max_length=64, blank=True, default="Brasil")
+    address_extra = models.CharField(max_length=255, blank=True)
+    address_reference = models.CharField(max_length=255, blank=True)
+    address_coords = models.CharField(max_length=64, blank=True)
+    address_complex = models.CharField(max_length=128, blank=True)
+    address_ibge = models.CharField(max_length=32, blank=True)
+
+    assets_logo = models.FileField(upload_to="setup_app/company/logo/", blank=True, null=True)
+    assets_cert_file = models.FileField(upload_to="setup_app/company/cert/", blank=True, null=True)
+    assets_cert_password = EncryptedCharField(max_length=255, blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return self.company_trade_name or self.company_legal_name or "Company Profile"

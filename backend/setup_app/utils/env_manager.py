@@ -9,6 +9,7 @@ from django.conf import settings
 
 _DEFAULT_ENV_PATH = Path(settings.BASE_DIR) / ".env"
 ENV_PATH = Path(os.environ.get("ENV_FILE_PATH", _DEFAULT_ENV_PATH))
+_RAW_JSON_KEYS = {"GDRIVE_CREDENTIALS_JSON"}
 
 
 def _normalize_value(value: str | None) -> str:
@@ -23,9 +24,17 @@ def _strip_quotes(value: str) -> str:
     return value
 
 
-def _quote(value: str) -> str:
+def _quote(value: str, use_single: bool = False) -> str:
+    if use_single and "'" not in value:
+        return f"'{value}'"
     escaped = value.replace('"', '\\"')
     return f'"{escaped}"'
+
+
+def _maybe_unescape_json(value: str) -> str:
+    if '\\"' in value:
+        return value.replace('\\"', '"')
+    return value
 
 
 def read_env() -> Dict[str, str]:
@@ -49,7 +58,16 @@ def read_env() -> Dict[str, str]:
 
 def read_values(keys: Iterable[str]) -> Dict[str, str]:
     env_map = read_env()
-    return {key: _normalize_value(env_map.get(key, "")) for key in keys}
+    values: Dict[str, str] = {}
+    for key in keys:
+        raw_value = env_map.get(key, "")
+        if not raw_value:
+            raw_value = os.environ.get(key, "")
+        value = _normalize_value(raw_value)
+        if key in _RAW_JSON_KEYS:
+            value = _maybe_unescape_json(value)
+        values[key] = value
+    return values
 
 
 def write_values(values: Dict[str, str]) -> None:
@@ -58,7 +76,11 @@ def write_values(values: Dict[str, str]) -> None:
     Missing keys are appended to the end.
     """
     ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
-    normalized_values = {key: _quote(_normalize_value(val)) for key, val in values.items()}
+    normalized_values = {}
+    for key, val in values.items():
+        normalized = _normalize_value(val)
+        use_single = key in _RAW_JSON_KEYS
+        normalized_values[key] = _quote(normalized, use_single=use_single)
     lines: list[str] = []
     seen = set()
 

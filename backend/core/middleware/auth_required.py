@@ -28,6 +28,7 @@ class AuthRequiredMiddleware:
         '/accounts/login/',
         '/accounts/logout/',
         '/accounts/password_reset/',
+        '/accounts/otp/',
         '/admin/',
         '/static/',
         '/media/',

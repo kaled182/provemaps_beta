@@ -25,6 +25,49 @@ class RuntimeConfig:
     redis_url: str
     allowed_hosts: list[str]
     diagnostics_enabled: bool
+    ftp_enabled: bool
+    ftp_host: str
+    ftp_port: str
+    ftp_user: str
+    ftp_password: str
+    ftp_path: str
+    gdrive_enabled: bool
+    gdrive_credentials_json: str
+    gdrive_folder_id: str
+    gdrive_shared_drive_id: str
+    gdrive_auth_mode: str
+    gdrive_oauth_client_id: str
+    gdrive_oauth_client_secret: str
+    gdrive_oauth_refresh_token: str
+    gdrive_oauth_user_email: str
+    smtp_enabled: bool
+    smtp_host: str
+    smtp_port: str
+    smtp_security: str
+    smtp_user: str
+    smtp_password: str
+    smtp_auth_mode: str
+    smtp_oauth_client_id: str
+    smtp_oauth_client_secret: str
+    smtp_oauth_refresh_token: str
+    smtp_from_name: str
+    smtp_from_email: str
+    smtp_test_recipient: str
+    sms_enabled: bool
+    sms_provider: str
+    sms_provider_rank: str
+    sms_username: str
+    sms_password: str
+    sms_api_token: str
+    sms_api_url: str
+    sms_sender_id: str
+    sms_test_recipient: str
+    sms_test_message: str
+    sms_priority: str
+    sms_aws_region: str
+    sms_aws_access_key_id: str
+    sms_aws_secret_access_key: str
+    sms_infobip_base_url: str
 
 
 def _fallback_config() -> RuntimeConfig:
@@ -47,6 +90,49 @@ def _fallback_config() -> RuntimeConfig:
         redis_url=redis_url,
         allowed_hosts=list(allowed_hosts),
         diagnostics_enabled=getattr(settings, "ENABLE_DIAGNOSTIC_ENDPOINTS", False),
+        ftp_enabled=getattr(settings, "FTP_ENABLED", False),
+        ftp_host=getattr(settings, "FTP_HOST", ""),
+        ftp_port=str(getattr(settings, "FTP_PORT", "")),
+        ftp_user=getattr(settings, "FTP_USER", ""),
+        ftp_password=getattr(settings, "FTP_PASSWORD", ""),
+        ftp_path=getattr(settings, "FTP_PATH", ""),
+        gdrive_enabled=getattr(settings, "GDRIVE_ENABLED", False),
+        gdrive_credentials_json=getattr(settings, "GDRIVE_CREDENTIALS_JSON", ""),
+        gdrive_folder_id=getattr(settings, "GDRIVE_FOLDER_ID", ""),
+        gdrive_shared_drive_id=getattr(settings, "GDRIVE_SHARED_DRIVE_ID", ""),
+        gdrive_auth_mode=getattr(settings, "GDRIVE_AUTH_MODE", "service_account"),
+        gdrive_oauth_client_id=getattr(settings, "GDRIVE_OAUTH_CLIENT_ID", ""),
+        gdrive_oauth_client_secret=getattr(settings, "GDRIVE_OAUTH_CLIENT_SECRET", ""),
+        gdrive_oauth_refresh_token=getattr(settings, "GDRIVE_OAUTH_REFRESH_TOKEN", ""),
+        gdrive_oauth_user_email=getattr(settings, "GDRIVE_OAUTH_USER_EMAIL", ""),
+        smtp_enabled=getattr(settings, "SMTP_ENABLED", False),
+        smtp_host=getattr(settings, "SMTP_HOST", ""),
+        smtp_port=str(getattr(settings, "SMTP_PORT", "")),
+        smtp_security=getattr(settings, "SMTP_SECURITY", ""),
+        smtp_user=getattr(settings, "SMTP_USER", ""),
+        smtp_password=getattr(settings, "SMTP_PASSWORD", ""),
+        smtp_auth_mode=getattr(settings, "SMTP_AUTH_MODE", "password"),
+        smtp_oauth_client_id=getattr(settings, "SMTP_OAUTH_CLIENT_ID", ""),
+        smtp_oauth_client_secret=getattr(settings, "SMTP_OAUTH_CLIENT_SECRET", ""),
+        smtp_oauth_refresh_token=getattr(settings, "SMTP_OAUTH_REFRESH_TOKEN", ""),
+        smtp_from_name=getattr(settings, "SMTP_FROM_NAME", ""),
+        smtp_from_email=getattr(settings, "SMTP_FROM_EMAIL", ""),
+        smtp_test_recipient=getattr(settings, "SMTP_TEST_RECIPIENT", ""),
+        sms_enabled=getattr(settings, "SMS_ENABLED", False),
+        sms_provider=getattr(settings, "SMS_PROVIDER", "smsnet"),
+        sms_provider_rank=str(getattr(settings, "SMS_PROVIDER_RANK", "1")),
+        sms_username=getattr(settings, "SMS_USERNAME", ""),
+        sms_password=getattr(settings, "SMS_PASSWORD", ""),
+        sms_api_token=getattr(settings, "SMS_API_TOKEN", ""),
+        sms_api_url=getattr(settings, "SMS_API_URL", ""),
+        sms_sender_id=getattr(settings, "SMS_SENDER_ID", ""),
+        sms_test_recipient=getattr(settings, "SMS_TEST_RECIPIENT", ""),
+        sms_test_message=getattr(settings, "SMS_TEST_MESSAGE", ""),
+        sms_priority=getattr(settings, "SMS_PRIORITY", ""),
+        sms_aws_region=getattr(settings, "SMS_AWS_REGION", ""),
+        sms_aws_access_key_id=getattr(settings, "SMS_AWS_ACCESS_KEY_ID", ""),
+        sms_aws_secret_access_key=getattr(settings, "SMS_AWS_SECRET_ACCESS_KEY", ""),
+        sms_infobip_base_url=getattr(settings, "SMS_INFOBIP_BASE_URL", ""),
     )
 
 
@@ -74,6 +160,49 @@ def get_runtime_config() -> RuntimeConfig:
         redis_url=record.redis_url or getattr(settings, "REDIS_URL", ""),
         allowed_hosts=list(allowed_hosts_env),
         diagnostics_enabled=getattr(settings, "ENABLE_DIAGNOSTIC_ENDPOINTS", False),
+        ftp_enabled=record.ftp_enabled if record.ftp_enabled is not None else getattr(settings, "FTP_ENABLED", False),
+        ftp_host=record.ftp_host or getattr(settings, "FTP_HOST", ""),
+        ftp_port=str(record.ftp_port or getattr(settings, "FTP_PORT", "")),
+        ftp_user=record.ftp_user or getattr(settings, "FTP_USER", ""),
+        ftp_password=record.ftp_password or getattr(settings, "FTP_PASSWORD", ""),
+        ftp_path=record.ftp_path or getattr(settings, "FTP_PATH", ""),
+        gdrive_enabled=record.gdrive_enabled if record.gdrive_enabled is not None else getattr(settings, "GDRIVE_ENABLED", False),
+        gdrive_credentials_json=record.gdrive_credentials_json or getattr(settings, "GDRIVE_CREDENTIALS_JSON", ""),
+        gdrive_folder_id=record.gdrive_folder_id or getattr(settings, "GDRIVE_FOLDER_ID", ""),
+        gdrive_shared_drive_id=record.gdrive_shared_drive_id or getattr(settings, "GDRIVE_SHARED_DRIVE_ID", ""),
+        gdrive_auth_mode=record.gdrive_auth_mode or getattr(settings, "GDRIVE_AUTH_MODE", "service_account"),
+        gdrive_oauth_client_id=record.gdrive_oauth_client_id or getattr(settings, "GDRIVE_OAUTH_CLIENT_ID", ""),
+        gdrive_oauth_client_secret=record.gdrive_oauth_client_secret or getattr(settings, "GDRIVE_OAUTH_CLIENT_SECRET", ""),
+        gdrive_oauth_refresh_token=record.gdrive_oauth_refresh_token or getattr(settings, "GDRIVE_OAUTH_REFRESH_TOKEN", ""),
+        gdrive_oauth_user_email=record.gdrive_oauth_user_email or getattr(settings, "GDRIVE_OAUTH_USER_EMAIL", ""),
+        smtp_enabled=record.smtp_enabled if record.smtp_enabled is not None else getattr(settings, "SMTP_ENABLED", False),
+        smtp_host=record.smtp_host or getattr(settings, "SMTP_HOST", ""),
+        smtp_port=record.smtp_port or str(getattr(settings, "SMTP_PORT", "")),
+        smtp_security=record.smtp_security or getattr(settings, "SMTP_SECURITY", ""),
+        smtp_user=record.smtp_user or getattr(settings, "SMTP_USER", ""),
+        smtp_password=record.smtp_password or getattr(settings, "SMTP_PASSWORD", ""),
+        smtp_auth_mode=record.smtp_auth_mode or getattr(settings, "SMTP_AUTH_MODE", "password"),
+        smtp_oauth_client_id=record.smtp_oauth_client_id or getattr(settings, "SMTP_OAUTH_CLIENT_ID", ""),
+        smtp_oauth_client_secret=record.smtp_oauth_client_secret or getattr(settings, "SMTP_OAUTH_CLIENT_SECRET", ""),
+        smtp_oauth_refresh_token=record.smtp_oauth_refresh_token or getattr(settings, "SMTP_OAUTH_REFRESH_TOKEN", ""),
+        smtp_from_name=record.smtp_from_name or getattr(settings, "SMTP_FROM_NAME", ""),
+        smtp_from_email=record.smtp_from_email or getattr(settings, "SMTP_FROM_EMAIL", ""),
+        smtp_test_recipient=record.smtp_test_recipient or getattr(settings, "SMTP_TEST_RECIPIENT", ""),
+        sms_enabled=record.sms_enabled if record.sms_enabled is not None else getattr(settings, "SMS_ENABLED", False),
+        sms_provider=record.sms_provider or getattr(settings, "SMS_PROVIDER", "smsnet"),
+        sms_provider_rank=str(record.sms_provider_rank or getattr(settings, "SMS_PROVIDER_RANK", "1")),
+        sms_username=record.sms_username or getattr(settings, "SMS_USERNAME", ""),
+        sms_password=record.sms_password or getattr(settings, "SMS_PASSWORD", ""),
+        sms_api_token=record.sms_api_token or getattr(settings, "SMS_API_TOKEN", ""),
+        sms_api_url=record.sms_api_url or getattr(settings, "SMS_API_URL", ""),
+        sms_sender_id=record.sms_sender_id or getattr(settings, "SMS_SENDER_ID", ""),
+        sms_test_recipient=record.sms_test_recipient or getattr(settings, "SMS_TEST_RECIPIENT", ""),
+        sms_test_message=record.sms_test_message or getattr(settings, "SMS_TEST_MESSAGE", ""),
+        sms_priority=record.sms_priority or getattr(settings, "SMS_PRIORITY", ""),
+        sms_aws_region=record.sms_aws_region or getattr(settings, "SMS_AWS_REGION", ""),
+        sms_aws_access_key_id=record.sms_aws_access_key_id or getattr(settings, "SMS_AWS_ACCESS_KEY_ID", ""),
+        sms_aws_secret_access_key=record.sms_aws_secret_access_key or getattr(settings, "SMS_AWS_SECRET_ACCESS_KEY", ""),
+        sms_infobip_base_url=record.sms_infobip_base_url or getattr(settings, "SMS_INFOBIP_BASE_URL", ""),
     )
 
 
