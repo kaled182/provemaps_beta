@@ -50,6 +50,32 @@ def _get_hls_public_base_url(config: Optional[Dict[str, object]] = None) -> str:
 		return value.rstrip("/")
 	return _get_hls_probe_base_url()
 
+
+def build_playback_url(gateway: MessagingGateway) -> str:
+	"""Resolve the best playback URL for the gateway preview.
+
+	Se o preview atual já for HLS, retorna-o. Caso contrário, tenta construir
+	um manifesto HLS público usando a base configurada e a stream key.
+	"""
+	config = gateway.config or {}
+	stored = str(config.get("preview_playback_url") or "").strip()
+	if stored:
+		return stored
+	preview_url = str(config.get("preview_url") or "").strip()
+	if preview_url.lower().endswith(".m3u8"):
+		return preview_url
+	stream_url = str(config.get("stream_url") or "").strip()
+	if stream_url.lower().startswith("http"):
+		# Streams HTTP diretos não passam pelo transmuxer; usar URL original.
+		return preview_url or stream_url
+	stream_key = _get_stream_key(gateway)
+	if not stream_key:
+		return preview_url
+	public_base = _get_hls_public_base_url(config)
+	if public_base:
+		return f"{public_base}/{stream_key}.m3u8"
+	return preview_url
+
 def _get_webrtc_public_base_url(config: Optional[Dict[str, object]] = None) -> Optional[str]:
 	if config:
 		override = (config.get("webrtc_public_base_url") or "").strip()
@@ -105,6 +131,7 @@ def stop_stream_for_gateway(
 	updates: Dict[str, object] = {"preview_active": False}
 	if clear_preview:
 		updates["preview_url"] = None
+		updates["preview_playback_url"] = None
 	_persist_config(gateway, updates)
 
 
@@ -147,7 +174,14 @@ def ensure_stream_for_gateway(
 
 	if stream_url.lower().startswith("http"):
 		stop_stream_for_gateway(gateway, clear_preview=False)
-		_persist_config(gateway, {"preview_url": stream_url, "preview_active": True})
+		_persist_config(
+			gateway,
+			{
+				"preview_url": stream_url,
+				"preview_playback_url": stream_url,
+				"preview_active": True,
+			},
+		)
 		return
 
 	stream_key = _get_stream_key(gateway)
@@ -155,9 +189,16 @@ def ensure_stream_for_gateway(
 	webrtc_base = _get_webrtc_public_base_url(config)
 	use_webrtc = bool(webrtc_base)
 	if use_webrtc:
-		preview_url = f"{webrtc_base}/stream/{stream_key}"
+		# MediaMTX WebRTC player page (barra final obrigatória)
+		preview_url = f"{webrtc_base}/{stream_key}/"
 	else:
 		preview_url = f"{public_base}/{stream_key}.m3u8"
+	hls_candidate: Optional[str] = None
+	if not use_webrtc:
+		hls_candidate = preview_url
+	elif public_base:
+		hls_candidate = f"{public_base}/{stream_key}.m3u8"
+	playback_url = hls_candidate or preview_url
 
 	# Verificar se stream já está ativo
 	stream_active = False
@@ -172,6 +213,10 @@ def ensure_stream_for_gateway(
 	except Exception:
 		stream_active = False
 
+	should_wait_hls = bool(hls_candidate)
+	manifest_timeout = startup_timeout
+	if use_webrtc and should_wait_hls:
+		manifest_timeout = min(startup_timeout, 6.0)
 	if stream_active:
 		logger.debug("Stream %s já está ativo, reutilizando.", stream_key)
 		# Garantir que preview_url e restream_key estão salvos
@@ -179,20 +224,47 @@ def ensure_stream_for_gateway(
 			config.get("preview_url") != preview_url
 			or config.get("restream_key") != stream_key
 			or config.get("preview_active") is not True
+			or config.get("preview_playback_url") != playback_url
 		):
-			_persist_config(
+			config = _persist_config(
 				gateway,
-				{"preview_url": preview_url, "restream_key": stream_key, "preview_active": True},
+				{
+					"preview_url": preview_url,
+					"preview_playback_url": playback_url,
+					"restream_key": stream_key,
+					"preview_active": True,
+				},
 			)
+		hls_ready = True
 		# Validar manifesto mesmo se stream já estiver ativo
-		if wait_ready and not use_webrtc:
+		if wait_ready and should_wait_hls:
 			try:
-				_wait_for_manifest(stream_key, timeout=startup_timeout)
-			except PreviewStartTimeout:
-				# Stream está ativo mas manifesto não disponível, recriar
-				logger.warning("Stream %s ativo mas sem manifesto, recriando.", stream_key)
-				stop_stream_for_gateway(gateway, clear_preview=False)
-				stream_active = False
+				_wait_for_manifest(stream_key, timeout=manifest_timeout)
+			except PreviewStartTimeout as exc:
+				if use_webrtc:
+					logger.warning(
+						"Stream %s ativo sem manifesto HLS. Mantendo preview via WebRTC: %s",
+						stream_key,
+						exc,
+					)
+					hls_ready = False
+				else:
+					logger.warning(
+						"Stream %s ativo mas sem manifesto HLS, recriando.",
+						stream_key,
+					)
+					stop_stream_for_gateway(gateway, clear_preview=False)
+					stream_active = False
+		if not hls_ready:
+			playback_url = preview_url
+			should_wait_hls = False
+			config = _persist_config(
+				gateway,
+				{
+					"preview_playback_url": playback_url,
+					"preview_active": True,
+				},
+			)
 
 	if not stream_active:
 		_persist_config(gateway, {"restream_key": stream_key})
@@ -218,16 +290,32 @@ def ensure_stream_for_gateway(
 			)
 			raise VideoGatewayError("Nao foi possivel iniciar o processo de restream.") from exc
 
-		if wait_ready and not use_webrtc:
+		hls_ready = True
+		if wait_ready and should_wait_hls:
 			try:
-				_wait_for_manifest(stream_key, timeout=startup_timeout)
-			except PreviewStartTimeout:
-				stop_stream_for_gateway(gateway, clear_preview=False)
-				raise
+				_wait_for_manifest(stream_key, timeout=manifest_timeout)
+			except PreviewStartTimeout as exc:
+				if use_webrtc:
+					logger.warning(
+						"Manifesto HLS indisponivel para stream %s. Recuando para WebRTC: %s",
+						stream_key,
+						exc,
+					)
+					hls_ready = False
+				else:
+					stop_stream_for_gateway(gateway, clear_preview=False)
+					raise
+		if not hls_ready:
+			playback_url = preview_url
+			should_wait_hls = False
 
-		_persist_config(
+		config = _persist_config(
 			gateway,
-			{"preview_url": preview_url, "preview_active": True},
+			{
+				"preview_url": preview_url,
+				"preview_playback_url": playback_url,
+				"preview_active": True,
+			},
 		)
 
 

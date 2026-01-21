@@ -48,6 +48,10 @@ urlpatterns = [
     path('api/backups/settings/', api_views.update_backup_settings, name='backup_settings'),
     path('api/backups/download/<path:filename>/', api_views.download_backup, name='download_backup'),
 
+    # Video mosaics endpoints
+    path('video/api/mosaics/', api_views.video_mosaics_list, name='video_mosaics_list'),
+    path('video/api/mosaics/<int:mosaic_id>/', api_views.video_mosaic_detail, name='video_mosaic_detail'),
+
     # Documentation endpoints
     path("docs/", views_docs.docs_index, name="docs_index"),
     path("docs/<path:filename>/", views_docs.docs_view, name="docs_view"),

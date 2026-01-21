@@ -183,3 +183,40 @@ class CompanyProfile(models.Model):
 
     def __str__(self) -> str:
         return self.company_trade_name or self.company_legal_name or "Company Profile"
+
+
+class VideoMosaic(models.Model):
+    """
+    Modelo para armazenar configurações de mosaicos de câmeras.
+    Permite agrupar múltiplas câmeras em layouts de grade (2x2, 3x2, etc).
+    """
+    LAYOUT_CHOICES = [
+        ("2x2", "2×2 (4 câmeras)"),
+        ("3x2", "3×2 (6 câmeras)"),
+        ("3x3", "3×3 (9 câmeras)"),
+        ("4x3", "4×3 (12 câmeras)"),
+        ("4x4", "4×4 (16 câmeras)"),
+    ]
+
+    name = models.CharField(max_length=120, help_text="Nome do mosaico")
+    layout = models.CharField(
+        max_length=8,
+        choices=LAYOUT_CHOICES,
+        default="2x2",
+        help_text="Layout da grade de vídeos"
+    )
+    cameras = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Lista de IDs dos gateways de vídeo (MessagingGateway)"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = "Mosaico de Vídeo"
+        verbose_name_plural = "Mosaicos de Vídeo"
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.layout})"
