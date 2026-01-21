@@ -6,6 +6,7 @@
 """
 
 import os
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import Any, Dict
 
@@ -137,13 +138,18 @@ CSP_CONNECT_SRC = os.getenv(
     "https://cdn.jsdelivr.net "
     "https://maps.gstatic.com "
     "http://localhost:8082 "
-    "http://video-hls:8080",
+    "http://video-hls:8080 "
+    "http://localhost:8889",
 ).split()
 CSP_MEDIA_SRC = os.getenv(
     "CSP_MEDIA_SRC",
-    "'self' blob: data: http://localhost:8082 http://video-hls:8080",
+    "'self' blob: data: http://localhost:8082 http://video-hls:8080 http://localhost:8889",
 ).split()
 CSP_FRAME_ANCESTORS = os.getenv("CSP_FRAME_ANCESTORS", "'none'").split()
+CSP_FRAME_SRC = os.getenv(
+    "CSP_FRAME_SRC",
+    "'self' http://localhost:8889 http://localhost:8888"
+).split()
 CONTENT_SECURITY_POLICY = {
     "default-src": CSP_DEFAULT_SRC,
     "script-src": CSP_SCRIPT_SRC,
@@ -152,8 +158,37 @@ CONTENT_SECURITY_POLICY = {
     "font-src": CSP_FONT_SRC,
     "connect-src": CSP_CONNECT_SRC,
     "media-src": CSP_MEDIA_SRC,
+    "frame-src": CSP_FRAME_SRC,
     "frame-ancestors": CSP_FRAME_ANCESTORS,
 }
+
+# Dynamically allow video origins configured via environment variables.
+def _origin_from_env(env_name: str) -> str | None:
+    raw = os.getenv(env_name, "").strip()
+    if not raw:
+        return None
+    try:
+        p = urlparse(raw)
+        if p.scheme and p.netloc:
+            return f"{p.scheme}://{p.netloc}"
+    except Exception:
+        return None
+    return None
+
+_extra_video_origins = set()
+for _env in ("VIDEO_HLS_PUBLIC_BASE_URL", "VIDEO_WEBRTC_PUBLIC_BASE_URL"):
+    _origin = _origin_from_env(_env)
+    if _origin:
+        _extra_video_origins.add(_origin)
+
+if _extra_video_origins:
+    for _origin in _extra_video_origins:
+        if _origin not in CSP_CONNECT_SRC:
+            CSP_CONNECT_SRC.append(_origin)
+        if _origin not in CSP_MEDIA_SRC:
+            CSP_MEDIA_SRC.append(_origin)
+        if _origin not in CSP_FRAME_SRC:
+            CSP_FRAME_SRC.append(_origin)
 
 # -----------------------------------------------------
 # Apps

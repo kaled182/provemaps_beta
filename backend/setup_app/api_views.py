@@ -2360,7 +2360,7 @@ def monitoring_server_detail(request, server_id: int):
 
 
 def _serialize_gateway(gateway: MessagingGateway) -> Dict[str, Any]:
-    return {
+    serialized = {
         "id": gateway.id,
         "name": gateway.name,
         "gateway_type": gateway.gateway_type,
@@ -2371,6 +2371,17 @@ def _serialize_gateway(gateway: MessagingGateway) -> Dict[str, Any]:
         "created_at": gateway.created_at.isoformat(),
         "updated_at": gateway.updated_at.isoformat(),
     }
+    
+    # Para gateways de vídeo, adicionar playback_url automaticamente
+    if gateway.gateway_type == "video":
+        try:
+            playback_url = video_gateway_service.build_playback_url(gateway)
+            if playback_url:
+                serialized["playback_url"] = playback_url
+        except Exception:
+            pass  # Se falhar, apenas não adiciona o campo
+    
+    return serialized
 
 
 def _ensure_default_gateways() -> None:
@@ -3105,7 +3116,14 @@ def start_video_gateway_preview(request, gateway_id: int):
 
     gateway.refresh_from_db(fields=["config", "updated_at"])
     preview_url = (gateway.config or {}).get("preview_url", "")
-    return JsonResponse({"success": True, "preview_url": preview_url})
+    playback_url = video_gateway_service.build_playback_url(gateway)
+    return JsonResponse(
+        {
+            "success": True,
+            "preview_url": preview_url,
+            "playback_url": playback_url,
+        }
+    )
 
 
 @require_http_methods(["POST"])
@@ -3635,3 +3653,169 @@ def download_backup(request, filename):
         as_attachment=True,
         filename=backup_path.name,
     )
+
+
+# ============================================================================
+# Video Mosaics API
+# ============================================================================
+
+
+@require_http_methods(["GET", "POST"])
+@login_required
+@user_passes_test(_staff_check)
+def video_mosaics_list(request):
+    """List all video mosaics or create a new one."""
+    from .models import VideoMosaic
+    
+    if request.method == "GET":
+        try:
+            mosaics = VideoMosaic.objects.all().order_by('name')
+            mosaic_list = [
+                {
+                    "id": m.id,
+                    "name": m.name,
+                    "layout": m.layout,
+                    "cameras": m.cameras or [],
+                    "created_at": m.created_at.isoformat() if m.created_at else None,
+                    "updated_at": m.updated_at.isoformat() if m.updated_at else None,
+                }
+                for m in mosaics
+            ]
+            return JsonResponse({"success": True, "mosaics": mosaic_list})
+        except Exception as exc:
+            logger.exception("Error listing video mosaics")
+            return JsonResponse(
+                {"success": False, "message": f"Failed to list mosaics: {exc}"},
+                status=500,
+            )
+    
+    elif request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            name = data.get("name", "").strip()
+            layout = data.get("layout", "2x2")
+            cameras = data.get("cameras", [])
+            
+            if not name:
+                return JsonResponse(
+                    {"success": False, "message": "Nome do mosaico é obrigatório"},
+                    status=400,
+                )
+            
+            mosaic = VideoMosaic.objects.create(
+                name=name,
+                layout=layout,
+                cameras=cameras,
+            )
+            
+            return JsonResponse({
+                "success": True,
+                "message": "Mosaico criado com sucesso",
+                "mosaic": {
+                    "id": mosaic.id,
+                    "name": mosaic.name,
+                    "layout": mosaic.layout,
+                    "cameras": mosaic.cameras,
+                    "created_at": mosaic.created_at.isoformat(),
+                    "updated_at": mosaic.updated_at.isoformat(),
+                },
+            })
+        except json.JSONDecodeError:
+            return JsonResponse(
+                {"success": False, "message": "Invalid JSON data"},
+                status=400,
+            )
+        except Exception as exc:
+            logger.exception("Error creating video mosaic")
+            return JsonResponse(
+                {"success": False, "message": f"Failed to create mosaic: {exc}"},
+                status=500,
+            )
+
+
+@require_http_methods(["GET", "PATCH", "DELETE"])
+@login_required
+@user_passes_test(_staff_check)
+def video_mosaic_detail(request, mosaic_id: int):
+    """Get, update or delete a specific video mosaic."""
+    from .models import VideoMosaic
+    
+    try:
+        mosaic = VideoMosaic.objects.get(pk=mosaic_id)
+    except VideoMosaic.DoesNotExist:
+        return JsonResponse(
+            {"success": False, "message": "Mosaico não encontrado"},
+            status=404,
+        )
+    
+    if request.method == "GET":
+        return JsonResponse({
+            "success": True,
+            "mosaic": {
+                "id": mosaic.id,
+                "name": mosaic.name,
+                "layout": mosaic.layout,
+                "cameras": mosaic.cameras,
+                "created_at": mosaic.created_at.isoformat() if mosaic.created_at else None,
+                "updated_at": mosaic.updated_at.isoformat() if mosaic.updated_at else None,
+            },
+        })
+    
+    elif request.method == "PATCH":
+        try:
+            data = json.loads(request.body)
+            
+            if "name" in data:
+                name = data["name"].strip()
+                if not name:
+                    return JsonResponse(
+                        {"success": False, "message": "Nome do mosaico não pode ser vazio"},
+                        status=400,
+                    )
+                mosaic.name = name
+            
+            if "layout" in data:
+                mosaic.layout = data["layout"]
+            
+            if "cameras" in data:
+                mosaic.cameras = data["cameras"]
+            
+            mosaic.save()
+            
+            return JsonResponse({
+                "success": True,
+                "message": "Mosaico atualizado com sucesso",
+                "mosaic": {
+                    "id": mosaic.id,
+                    "name": mosaic.name,
+                    "layout": mosaic.layout,
+                    "cameras": mosaic.cameras,
+                    "updated_at": mosaic.updated_at.isoformat(),
+                },
+            })
+        except json.JSONDecodeError:
+            return JsonResponse(
+                {"success": False, "message": "Invalid JSON data"},
+                status=400,
+            )
+        except Exception as exc:
+            logger.exception("Error updating video mosaic")
+            return JsonResponse(
+                {"success": False, "message": f"Failed to update mosaic: {exc}"},
+                status=500,
+            )
+    
+    elif request.method == "DELETE":
+        try:
+            mosaic_name = mosaic.name
+            mosaic.delete()
+            return JsonResponse({
+                "success": True,
+                "message": f"Mosaico '{mosaic_name}' removido com sucesso",
+            })
+        except Exception as exc:
+            logger.exception("Error deleting video mosaic")
+            return JsonResponse(
+                {"success": False, "message": f"Failed to delete mosaic: {exc}"},
+                status=500,
+            )

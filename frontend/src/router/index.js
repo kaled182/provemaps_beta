@@ -97,6 +97,16 @@ const routes = [
     component: () => import('@/views/video/VideoCamerasView.vue'),
   },
   {
+    path: '/video/mosaics',
+    name: 'video-mosaics',
+    component: () => import('@/views/video/VideoMosaicsView.vue'),
+  },
+  {
+    path: '/video/mosaics/:id',
+    name: 'mosaic-viewer',
+    component: () => import('@/views/video/MosaicViewerView.vue'),
+  },
+  {
     path: '/video/groups',
     name: 'video-groups',
     component: () => import('@/views/video/VideoGroupsView.vue'),

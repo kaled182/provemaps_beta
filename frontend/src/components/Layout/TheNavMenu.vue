@@ -306,6 +306,7 @@ import {
   PhUsers,
   PhUsersThree,
   PhUser,
+  PhSquaresFour,
 } from '@phosphor-icons/vue';
 
 const uiStore = useUiStore();
@@ -551,6 +552,11 @@ const menuItems = [
         label: 'Câmeras',
         path: '/video/cameras',
         icon: PhVideoCamera,
+      },
+      {
+        label: 'Mosaicos',
+        path: '/video/mosaics',
+        icon: PhSquaresFour,
       },
       {
         label: 'Grupos',
