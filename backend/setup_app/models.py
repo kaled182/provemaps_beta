@@ -139,7 +139,14 @@ class MessagingGateway(models.Model):
     provider = models.CharField(max_length=64, blank=True, null=True)
     priority = models.IntegerField(default=1)
     enabled = models.BooleanField(default=True)
+    site_name = models.CharField(max_length=255, blank=True, null=True, help_text="Nome do site onde o dispositivo está localizado (apenas para gateways de vídeo)")
     config = models.JSONField(default=dict, blank=True)
+    departments = models.ManyToManyField(
+        'core.Department',
+        related_name='video_cameras',
+        blank=True,
+        help_text="Departamentos com permissão para visualizar esta câmera. Deixe vazio para acesso público (todos departamentos)."
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -209,6 +216,12 @@ class VideoMosaic(models.Model):
         default=list,
         blank=True,
         help_text="Lista de IDs dos gateways de vídeo (MessagingGateway)"
+    )
+    departments = models.ManyToManyField(
+        'core.Department',
+        related_name='video_mosaics',
+        blank=True,
+        help_text="Departamentos com permissão para visualizar este mosaico. Deixe vazio para acesso público (todos departamentos)."
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

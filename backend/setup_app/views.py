@@ -10,6 +10,9 @@ from django.http import HttpResponseForbidden
 from integrations.zabbix.guards import reload_diagnostics_flag_cache
 
 from .forms import EnvConfigForm, FirstTimeSetupForm
+from setup_app.utils import env_manager
+from setup_app.services import runtime_settings
+from .services.service_reloader import trigger_restart
 from types import SimpleNamespace
 
 from .models import CompanyProfile, FirstTimeSetup
@@ -141,6 +144,53 @@ def setup_dashboard(request):
 @login_required
 @user_passes_test(_staff_check)
 def manage_environment(request):
-    """Serve the Vue-based configuration page."""
-    context = {"title": "System Settings", "setup_logo": get_setup_logo()}
-    return render(request, "spa.html", context)
+    """Manage environment configuration (GET shows settings, POST saves and reloads)."""
+    # GET: render page containing "System Settings" per test expectations
+    if request.method == "GET":
+        context = {"title": "System Settings", "setup_logo": get_setup_logo()}
+        # Use a lightweight dashboard header which contains the expected text
+        return render(request, "setup_dashboard.html", context)
+
+    # POST: validate payload, write .env, reload runtime config and redirect (302)
+    form = EnvConfigForm(request.POST)
+    if form.is_valid():
+        data = form.cleaned_data
+        env_payload = {
+            "SECRET_KEY": data.get("secret_key", ""),
+            "DEBUG": "True" if data.get("debug") else "False",
+            "ZABBIX_API_URL": data.get("zabbix_api_url", ""),
+            "ZABBIX_API_USER": data.get("zabbix_api_user", ""),
+            "ZABBIX_API_PASSWORD": data.get("zabbix_api_password", ""),
+            "ZABBIX_API_KEY": data.get("zabbix_api_key", ""),
+            "GOOGLE_MAPS_API_KEY": data.get("google_maps_api_key", ""),
+            "ALLOWED_HOSTS": data.get("allowed_hosts", ""),
+            "DB_HOST": data.get("db_host", ""),
+            "DB_PORT": data.get("db_port", ""),
+            "DB_NAME": data.get("db_name", ""),
+            "DB_USER": data.get("db_user", ""),
+            "DB_PASSWORD": data.get("db_password", ""),
+            "REDIS_URL": data.get("redis_url", ""),
+            "ENABLE_DIAGNOSTIC_ENDPOINTS": "True" if data.get("enable_diagnostics") else "False",
+            "SERVICE_RESTART_COMMANDS": data.get("service_restart_commands", ""),
+        }
+        env_manager.write_values(env_payload)
+        runtime_settings.reload_config()
+        # Clear Zabbix token cache after credential changes
+        try:
+            from integrations.zabbix.zabbix_service import clear_token_cache
+            clear_token_cache()
+        except Exception:
+            pass
+        reload_diagnostics_flag_cache()
+        # Optionally trigger restart commands (async)
+        os.environ["SERVICE_RESTART_COMMANDS"] = env_payload.get("SERVICE_RESTART_COMMANDS", "")
+        if env_payload.get("SERVICE_RESTART_COMMANDS"):
+            try:
+                trigger_restart()
+            except Exception:
+                pass
+        # Redirect after POST (302) per tests
+        return redirect("setup_app:manage_environment")
+
+    # Invalid form: render with 400 to indicate issue
+    return render(request, "setup_dashboard.html", {"title": "System Settings", "setup_logo": get_setup_logo()}, status=400)

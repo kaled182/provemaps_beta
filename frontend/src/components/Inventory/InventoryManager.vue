@@ -79,6 +79,7 @@
                 <th class="p-4 text-xs font-semibold app-text-tertiary uppercase">Tipo</th>
                 <th class="p-4 text-xs font-semibold app-text-tertiary uppercase">Endereço</th>
                 <th class="p-4 text-xs font-semibold app-text-tertiary uppercase text-center">Devices</th>
+                <th class="p-4 text-xs font-semibold app-text-tertiary uppercase text-center">Câmeras</th>
                 <th class="p-4 text-xs font-semibold app-text-tertiary uppercase text-right">Ações</th>
               </tr>
             </thead>
@@ -95,6 +96,16 @@
                   <span class="app-chip px-2 py-0.5 rounded text-xs font-bold">
                     {{ site.device_count || 0 }}
                   </span>
+                </td>
+                <td class="p-4 text-center">
+                  <div class="inline-flex items-center gap-1.5">
+                    <svg v-if="(site.camera_count || 0) > 0" class="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                    </svg>
+                    <span class="app-chip px-2 py-0.5 rounded text-xs font-bold" :class="(site.camera_count || 0) > 0 ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : ''">
+                      {{ site.camera_count || 0 }}
+                    </span>
+                  </div>
                 </td>
                 <td class="p-4 text-right space-x-2">
                   <button @click="goToDetails(site)" class="app-text-secondary hover:text-[var(--accent-info)] p-1">
@@ -219,6 +230,7 @@ const mapFromApi = (payload) => {
     lat: payload.latitude,
     lng: payload.longitude,
     device_count: payload.device_count ?? 0,
+    camera_count: payload.camera_count ?? 0,
     status: payload.status || 'active',
     slug: payload.slug,
   };

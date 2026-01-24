@@ -577,7 +577,9 @@ if os.getenv("ENABLE_DB_QUERY_LOG", "false").lower() == "true":
 # Monitoring (Sentry - optional)
 # -----------------------------------------------------
 SENTRY_DSN = os.getenv("SENTRY_DSN", "")
-if SENTRY_DSN:
+# Skip Sentry initialization during pytest runs to keep output clean
+_PYTEST_ACTIVE = bool(os.getenv("PYTEST_CURRENT_TEST"))
+if SENTRY_DSN and not _PYTEST_ACTIVE:
     try:
         import sentry_sdk  # type: ignore
         import sentry_sdk.integrations.celery as sentry_celery  # type: ignore

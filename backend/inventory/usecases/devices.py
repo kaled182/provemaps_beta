@@ -37,6 +37,7 @@ from inventory.domain.optical import (
 from inventory.models import Device, FiberCable, Port, Site
 from inventory.services.device_groups import sync_device_groups_for_device
 from integrations.zabbix.zabbix_service import zabbix_request
+from setup_app.models import MessagingGateway
 
 ZABBIX_REQUEST = zabbix_request
 
@@ -1105,14 +1106,16 @@ def get_device_ports_with_optical(device_id: int) -> Dict[str, Any]:
         duration,
     )
 
-    # Fetch uptime and CPU values from Zabbix
+    # Fetch uptime, CPU and Memory values from Zabbix
     uptime_value = None
     cpu_value = None
+    memory_value = None
     
     uptime_key = getattr(cast(Any, device), "uptime_item_key", "")
     cpu_key = getattr(cast(Any, device), "cpu_usage_item_key", "")
+    memory_key = getattr(cast(Any, device), "memory_usage_item_key", "")
     
-    if uptime_key or cpu_key:
+    if uptime_key or cpu_key or memory_key:
         try:
             # Fetch item values from Zabbix
             items_to_fetch = []
@@ -1120,6 +1123,8 @@ def get_device_ports_with_optical(device_id: int) -> Dict[str, Any]:
                 items_to_fetch.append(uptime_key)
             if cpu_key:
                 items_to_fetch.append(cpu_key)
+            if memory_key:
+                items_to_fetch.append(memory_key)
             
             item_values = zabbix_request(
                 "item.get",
@@ -1163,16 +1168,38 @@ def get_device_ports_with_optical(device_id: int) -> Dict[str, Any]:
                         cpu_value = f"{cpu_float:.1f}%"
                     except (ValueError, TypeError):
                         cpu_value = f"{lastvalue}{units}" if units else lastvalue
+
+                elif key == memory_key and lastvalue:
+                    # Format Memory value
+                    try:
+                        mem_float = float(lastvalue)
+                        memory_value = f"{mem_float:.1f}%"
+                    except (ValueError, TypeError):
+                        memory_value = f"{lastvalue}{units}" if units else lastvalue
         
         except Exception as e:
             logger.warning(f"Failed to fetch Zabbix values for device {device.id}: {e}")
     
+    # Fallback to manual overrides when Zabbix absent
+    try:
+        if not cpu_value:
+            manual_cpu = getattr(cast(Any, device), "cpu_usage_manual_percent", None)
+            if manual_cpu is not None:
+                cpu_value = f"{float(manual_cpu):.1f}%"
+        if not memory_value:
+            manual_mem = getattr(cast(Any, device), "memory_usage_manual_percent", None)
+            if manual_mem is not None:
+                memory_value = f"{float(manual_mem):.1f}%"
+    except Exception:
+        pass
+
     return {
         "device_id": cast(int, getattr(cast(Any, device), "id", device.pk)),
         "device_name": cast(str, getattr(cast(Any, device), "name", "")),
         "primary_ip": cast(Optional[str], getattr(cast(Any, device), "primary_ip", None)),
         "uptime_value": uptime_value,
         "cpu_value": cpu_value,
+        "memory_value": memory_value,
         "ports": ports_with_optical,
     }
 
@@ -1441,9 +1468,10 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
     )
     host_items: HostItemList = _coerce_host_items(raw_host_items)
 
-    # Buscar item keys para uptime e CPU usage
+    # Buscar item keys para uptime, CPU e Memory usage
     uptime_key = None
     cpu_key = None
+    memory_key = None
     
     for item in host_items:
         key = item.get("key_") or ""
@@ -1473,6 +1501,15 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
                 cpu_key = key
             elif "cpu" in name_lower and any(pattern in name_lower for pattern in ["uso", "usage", "util", "duty", "utiliza"]):
                 cpu_key = key
+
+        # Identificar item key de Memory usage - aceita: vm.memory.size[percent], mem.util, memory.usage
+        if not memory_key:
+            if any(pattern in key_lower for pattern in ["vm.memory", "mem.util", "memory.util", "memory.usage", "mem.usage"]):
+                memory_key = key
+            elif "memory" in key_lower and any(pattern in key_lower for pattern in ["percent", "util", "usage", "used"]):
+                memory_key = key
+            elif "mem" in key_lower and any(pattern in key_lower for pattern in ["percent", "util", "usage", "used"]):
+                memory_key = key
 
     device_created = False
     if existing_device:
@@ -1520,6 +1557,10 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
         if update_identity and cpu_key and device.cpu_usage_item_key != cpu_key:
             device.cpu_usage_item_key = cpu_key
             update_fields.append("cpu_usage_item_key")
+        # Atualizar memory_usage_item_key se mudou
+        if update_identity and memory_key and getattr(device, "memory_usage_item_key", "") != memory_key:
+            device.memory_usage_item_key = memory_key
+            update_fields.append("memory_usage_item_key")
         if update_fields:
             device.save(update_fields=update_fields)
     else:
@@ -1535,6 +1576,7 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
             "primary_ip": primary_ip,
             "uptime_item_key": uptime_key or "",
             "cpu_usage_item_key": cpu_key or "",
+            "memory_usage_item_key": memory_key or "",
         }
         
         # Apply rule if matched
@@ -1576,6 +1618,9 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> Dict[str, Any]:
             if update_identity and cpu_key and device.cpu_usage_item_key != cpu_key:
                 device.cpu_usage_item_key = cpu_key
                 update_fields_list.append("cpu_usage_item_key")
+            if update_identity and memory_key and getattr(device, "memory_usage_item_key", "") != memory_key:
+                device.memory_usage_item_key = memory_key
+                update_fields_list.append("memory_usage_item_key")
             device.save(update_fields=update_fields_list)
 
     # Sync device groups from Zabbix automatically
@@ -2074,6 +2119,26 @@ def list_sites() -> Dict[str, Any]:
     sites_qs = Site.objects.prefetch_related(
         Prefetch("devices", queryset=Device.objects.only("id", "name", "zabbix_hostid", "site", "device_icon"))
     )
+    
+    # Buscar contagem de câmeras por site
+    cameras_by_site = {}
+    try:
+        video_gateways = MessagingGateway.objects.filter(
+            gateway_type='video',
+            site_name__isnull=False
+        ).values('site_name').distinct()
+        
+        for gateway in video_gateways:
+            site_name = gateway['site_name']
+            count = MessagingGateway.objects.filter(
+                gateway_type='video',
+                site_name=site_name
+            ).count()
+            cameras_by_site[site_name] = count
+    except Exception as exc:
+        logger.warning("Failed to count cameras by site: %s", exc)
+        cameras_by_site = {}
+    
     data: List[Dict[str, Any]] = []
     for site_obj in sites_qs:
         site_like = cast(SiteLike, site_obj)
@@ -2097,6 +2162,17 @@ def list_sites() -> Dict[str, Any]:
                     "icon_url": icon_url,
                 }
             )
+        
+        # Buscar contagem de câmeras para este site
+        # Tenta primeiro pelo display_name, depois pelo name
+        camera_count = (
+            cameras_by_site.get(site_like.display_name, 0) if site_like.display_name 
+            else cameras_by_site.get(site_like.name, 0)
+        )
+        # Se não encontrou, tenta pelo name também
+        if camera_count == 0 and site_like.display_name != site_like.name:
+            camera_count = cameras_by_site.get(site_like.name, 0)
+        
         data.append(
             {
                 "id": site_like.id,
@@ -2106,6 +2182,7 @@ def list_sites() -> Dict[str, Any]:
                 "lat": float(site_like.latitude) if site_like.latitude else None,
                 "lng": float(site_like.longitude) if site_like.longitude else None,
                 "devices": devices_payload,
+                "camera_count": camera_count,
             }
         )
     return {"sites": data}

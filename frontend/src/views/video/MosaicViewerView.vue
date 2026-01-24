@@ -9,9 +9,14 @@
         <h1 class="text-white font-semibold">{{ mosaic?.name || 'Mosaico' }}</h1>
         <span class="text-xs text-gray-400">{{ getLayoutLabel(mosaic?.layout) }}</span>
       </div>
-      <button @click="goBack" class="text-gray-400 hover:text-white transition-colors text-sm">
-        Fechar
-      </button>
+      <div class="flex items-center gap-3">
+        <span class="text-xs text-gray-400">
+          {{ Object.keys(connections).length }}/{{ activeCameras.filter(c => c).length }} conectadas
+        </span>
+        <button @click="goBack" class="text-gray-400 hover:text-white transition-colors text-sm">
+          Fechar
+        </button>
+      </div>
     </div>
 
     <!-- Grid de Vídeos -->
@@ -27,39 +32,112 @@
       </div>
 
       <div v-else class="h-full grid gap-2" :class="getGridClass(mosaic.layout)">
-        <div v-for="(camera, idx) in activeCameras" :key="camera?.id || `empty-${idx}`" class="relative bg-gray-900 rounded overflow-hidden border border-gray-800">
+        <div
+          v-for="(camera, idx) in activeCameras"
+          :key="camera?.id || `empty-${idx}`"
+          class="mosaic-cell relative bg-gray-900 rounded overflow-hidden border border-gray-800"
+        >
           <template v-if="camera">
-            <!-- Player de Vídeo: iframe para MediaMTX WebRTC, video para HLS -->
-            <div class="absolute inset-0">
-              <template v-if="isMediaMtxUrl(getVideoUrl(camera))">
-                <!-- Usar iframe para MediaMTX WebRTC player -->
-                <iframe 
-                  :src="getVideoUrl(camera)"
-                  class="absolute inset-0 w-full h-full border-0"
-                  allow="autoplay; fullscreen"
-                  style="display: block; margin: 0; padding: 0;"
-                ></iframe>
-              </template>
-              <template v-else-if="isHlsUrl(preferHlsUrl(camera))">
-                <!-- Usar video element apenas para URLs HLS (.m3u8) -->
-                <video 
-                  :ref="el => { if (el) videoRefs[idx] = el }"
-                  class="absolute inset-0 w-full h-full object-cover bg-black"
-                  muted
-                  playsinline
-                  autoplay
-                  controls
-                ></video>
-              </template>
-              <div v-else class="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">
-                Stream não disponível
+            <div 
+              class="video-wrapper absolute inset-0"
+              :ref="el => { if (el) videoContainerRefs[camera.id] = el }"
+              @dblclick="toggleFullscreen(camera.id)"
+            >
+              <!-- Tag video pura com WebRTC direto via WHEP -->
+              <video 
+                :ref="el => { if (el) videoRefs[camera.id] = el }"
+                class="video-player w-full h-full object-cover bg-black"
+                autoplay
+                muted
+                playsinline
+              ></video>
+              
+              <!-- Controles de Áudio e Fullscreen -->
+              <div class="absolute top-2 right-2 z-30 flex gap-2">
+                <!-- Botão Fullscreen -->
+                <button
+                  @click="toggleFullscreen(camera.id)"
+                  class="bg-black/60 hover:bg-black/80 text-white p-2 rounded transition-colors"
+                  :title="fullscreenCameraId === camera.id ? 'Sair da tela cheia (ESC)' : 'Tela cheia (duplo clique)'"
+                >
+                  <svg v-if="fullscreenCameraId !== camera.id" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                  </svg>
+                  <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                </button>
+                
+                <!-- Botão Unmute (apenas se muted) -->
+                <button
+                  v-if="!unmutedCameraId || unmutedCameraId !== camera.id"
+                  @click="toggleAudio(camera.id)"
+                  class="bg-black/60 hover:bg-black/80 text-white p-2 rounded transition-colors"
+                  title="Ativar áudio desta câmera"
+                >
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" clip-rule="evenodd"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"/>
+                  </svg>
+                </button>
+                
+                <!-- Botão Mute (se esta estiver com áudio) -->
+                <button
+                  v-if="unmutedCameraId === camera.id"
+                  @click="toggleAudio(null)"
+                  class="bg-green-600 hover:bg-green-700 text-white p-2 rounded transition-colors"
+                  title="Desativar áudio"
+                >
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+                  </svg>
+                </button>
+              </div>
+
+              <!-- Indicador de Qualidade de Rede -->
+              <div 
+                v-if="connections[camera.id]?.stats?.networkQuality && connections[camera.id].stats.networkQuality !== 'good'"
+                class="absolute top-2 left-2 z-30"
+                :title="`FPS: ${connections[camera.id].stats.framesPerSecond}, Packets Lost: ${connections[camera.id].stats.packetsLost}`"
+              >
+                <div 
+                  class="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium"
+                  :class="{
+                    'bg-yellow-600 text-white': connections[camera.id].stats.networkQuality === 'degraded',
+                    'bg-red-600 text-white': connections[camera.id].stats.networkQuality === 'poor'
+                  }"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                  </svg>
+                  <span>{{ connections[camera.id].stats.networkQuality === 'degraded' ? 'Rede Instável' : 'Rede Ruim' }}</span>
+                </div>
+              </div>
+              
+              <!-- Loading overlay -->
+              <div v-if="connections[camera.id]?.isConnecting" class="absolute inset-0 flex items-center justify-center bg-black/50 z-10 pointer-events-none">
+                <svg class="animate-spin h-6 w-6 text-white" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              </div>
+
+              <!-- Erro overlay -->
+              <div v-if="connections[camera.id]?.error" class="absolute inset-0 flex items-center justify-center bg-black/70 z-10">
+                <div class="text-center px-4">
+                  <svg class="w-8 h-8 text-red-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                  <p class="text-white text-sm">{{ connections[camera.id].error }}</p>
+                </div>
               </div>
             </div>
+
             <!-- Overlay com Nome -->
-            <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 pointer-events-none">
+            <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 pointer-events-none z-20">
               <p class="text-white text-sm font-medium truncate">{{ camera.name }}</p>
             </div>
           </template>
+          
           <template v-else>
             <div class="absolute inset-0 flex items-center justify-center border-2 border-dashed border-gray-800">
               <span class="text-gray-600 text-sm">Sem câmera</span>
@@ -72,11 +150,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useApi } from '@/composables/useApi';
 import { useNotification } from '@/composables/useNotification';
-import Hls from 'hls.js';
+import { useWebRTC } from '@/composables/useWebRTC';
 
 const router = useRouter();
 const route = useRoute();
@@ -85,43 +163,137 @@ const notify = useNotification();
 
 const mosaic = ref(null);
 const cameras = ref([]);
-const videoRefs = ref([]);
-const hlsInstances = ref([]);
-const startedStreams = ref(new Set()); // Cache de streams já iniciados
-const streamStartAttempts = ref(new Map()); // Contador de tentativas por câmera
+const videoRefs = ref({});
+const videoContainerRefs = ref({});
+const connections = ref({});
+const unmutedCameraId = ref(null);
+const fullscreenCameraId = ref(null);
 
 const activeCameras = computed(() => {
   if (!mosaic.value) return [];
   const capacity = getLayoutCapacity(mosaic.value.layout);
   const selected = (mosaic.value.cameras || []).map(id => cameras.value.find(c => c.id === id)).filter(Boolean);
   
-  // Preencher slots vazios até a capacidade
   while (selected.length < capacity) {
     selected.push(null);
   }
-  
   return selected.slice(0, capacity);
 });
 
+// Gerenciamento de áudio exclusivo
+const toggleAudio = (cameraId) => {
+  // Se clicar na mesma câmera, desligar
+  if (unmutedCameraId.value === cameraId) {
+    unmutedCameraId.value = null;
+    return;
+  }
+  
+  // Desmutar apenas esta câmera
+  unmutedCameraId.value = cameraId;
+};
+
+// Gerenciamento de tela cheia
+const toggleFullscreen = async (cameraId) => {
+  const container = videoContainerRefs.value[cameraId];
+  if (!container) return;
+
+  try {
+    // Se já está em fullscreen, sair
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+      fullscreenCameraId.value = null;
+      return;
+    }
+
+    // Entrar em fullscreen
+    if (container.requestFullscreen) {
+      await container.requestFullscreen();
+    } else if (container.webkitRequestFullscreen) {
+      await container.webkitRequestFullscreen();
+    } else if (container.mozRequestFullScreen) {
+      await container.mozRequestFullScreen();
+    } else if (container.msRequestFullscreen) {
+      await container.msRequestFullscreen();
+    }
+    
+    fullscreenCameraId.value = cameraId;
+  } catch (err) {
+    console.error('[Fullscreen] Erro ao alternar tela cheia:', err);
+  }
+};
+
+// Listener para detectar quando sai do fullscreen via ESC
+const handleFullscreenChange = () => {
+  if (!document.fullscreenElement) {
+    fullscreenCameraId.value = null;
+  }
+};
+
+// Watch para aplicar mute/unmute nos elementos de vídeo
+watch(unmutedCameraId, (newId, oldId) => {
+  // Mutar a câmera anterior
+  if (oldId && videoRefs.value[oldId]) {
+    videoRefs.value[oldId].muted = true;
+  }
+  
+  // Desmutar a nova câmera
+  if (newId && videoRefs.value[newId]) {
+    videoRefs.value[newId].muted = false;
+  }
+});
+
+const initWebRTCForCamera = async (camera) => {
+  if (!camera) return;
+  
+  const streamUrl = getVideoUrl(camera);
+  if (!streamUrl) {
+    console.warn(`[Mosaico] URL indisponível para ${camera.name}`);
+    return;
+  }
+  
+  const whepUrl = streamUrl.endsWith('/') ? `${streamUrl}whep` : `${streamUrl}/whep`;
+  
+  // Criar instância do composable para esta câmera
+  const rtc = useWebRTC({
+    maxRetries: 5,
+    maxBackoff: 30000,
+    onStatsUpdate: (stats) => {
+      // Atualizar stats para exibir alertas de rede
+      if (connections.value[camera.id]) {
+        connections.value[camera.id].stats = stats;
+      }
+    }
+  });
+  
+  // Armazenar conexão
+  connections.value[camera.id] = rtc;
+  
+  // Conectar
+  await rtc.connect(whepUrl);
+  
+  // Vincular stream ao elemento de vídeo
+  watch(rtc.stream, (newStream) => {
+    if (newStream && videoRefs.value[camera.id]) {
+      videoRefs.value[camera.id].srcObject = newStream;
+    }
+  }, { immediate: true });
+};
+
+const initPlayers = () => {
+  activeCameras.value.forEach((camera) => {
+    if (camera) {
+      initWebRTCForCamera(camera);
+    }
+  });
+};
+
 const getLayoutLabel = (layout) => {
-  const labels = {
-    '2x2': '2×2',
-    '3x2': '3×2',
-    '3x3': '3×3',
-    '4x3': '4×3',
-    '4x4': '4×4',
-  };
+  const labels = { '2x2': '2×2', '3x2': '3×2', '3x3': '3×3', '4x3': '4×3', '4x4': '4×4' };
   return labels[layout] || layout;
 };
 
 const getLayoutCapacity = (layout) => {
-  const capacities = {
-    '2x2': 4,
-    '3x2': 6,
-    '3x3': 9,
-    '4x3': 12,
-    '4x4': 16,
-  };
+  const capacities = { '2x2': 4, '3x2': 6, '3x3': 9, '4x3': 12, '4x4': 16 };
   return capacities[layout] || 4;
 };
 
@@ -136,126 +308,23 @@ const getGridClass = (layout) => {
   return classes[layout] || 'grid-cols-2 grid-rows-2';
 };
 
-const isMediaMtxUrl = (url) => {
-  if (!url) return false;
-  // URLs do MediaMTX WebRTC player (porta 8889)
-  return url.includes(':8889/') || url.includes('localhost:8889');
-};
-
-const isHlsUrl = (url) => {
-  return url && url.toLowerCase().endsWith('.m3u8');
-};
-
-// Converte URL de player WebRTC do MediaMTX (porta 8889) para manifesto HLS (porta 8888)
-// Ex.: http://localhost:8889/gateway_29/ -> http://localhost:8888/gateway_29/index.m3u8
-const mediaMtxToHls = (url) => {
-  if (!isMediaMtxUrl(url)) return null;
-  try {
-    const u = new URL(url);
-    // Trocar para porta HLS
-    const host = u.hostname;
-    const hlsPort = '8888';
-    // Normalizar path e acrescentar index.m3u8
-    const path = u.pathname.replace(/\/+$/g, '');
-    const hlsPath = `${path}/index.m3u8`;
-    const hlsUrl = `${u.protocol}//${host}:${hlsPort}${hlsPath}`;
-    return hlsUrl;
-  } catch (e) {
-    console.warn('[Mosaico] Falha ao converter MediaMTX URL para HLS:', e);
-    return null;
-  }
-};
-
-// Prefere HLS quando possível (para permitir object-fit: cover); fallback para WebRTC (iframe)
-const preferHlsUrl = (camera) => {
-  const url = getVideoUrl(camera);
-  if (!url) return null;
-  if (isHlsUrl(url)) return url;
-  if (isMediaMtxUrl(url)) {
-    const hls = mediaMtxToHls(url);
-    if (hls) return hls;
-  }
-  return null;
-};
-
-const resolvePreviewUrl = (camera) => {
-  // Mesma lógica do VideoCamerasView
-  try {
-    const cfg = camera.config || {};
-    const base = (cfg.hls_public_base_url || '').trim();
-    const key = (cfg.restream_key || '').trim();
-    const type = (cfg.stream_type || '').toLowerCase();
-    
-    console.log(`[Mosaico] Resolvendo URL para ${camera.name}:`, { base, key, type, config: cfg });
-    
-    if (base && key && (type === 'rtmp' || type === 'rtsp')) {
-      const normalizedBase = base.replace(/\/+$/g, '');
-      const resolved = `${normalizedBase}/${key}.m3u8`;
-      console.log(`[Mosaico] Resolved HLS URL para ${camera.name}:`, resolved);
-      return resolved;
-    }
-  } catch (error) {
-    console.warn('[Mosaico] Failed to resolve HLS URL', error);
-  }
-  return null;
-};
-
 const getVideoUrl = (camera) => {
-  console.log(`[Mosaico] getVideoUrl para ${camera.name}:`, {
-    playback_url: camera.playback_url,
-    preview_playback_url: camera.config?.preview_playback_url,
-    preview_url: camera.preview_url,
-    config_preview_url: camera.config?.preview_url,
-    has_hls_config: !!(camera.config?.hls_public_base_url && camera.config?.restream_key),
-    stream_url: camera.config?.stream_url
-  });
-  
-  // 1. PRIORIDADE MÁXIMA: playback_url direto do gateway (construído pelo backend)
   if (camera.playback_url) {
-    console.log(`[Mosaico] Usando playback_url do gateway (BACKEND) para ${camera.name}:`, camera.playback_url);
+    console.log(`[Mosaico] Usando playback_url para ${camera.name}:`, camera.playback_url);
     return camera.playback_url;
   }
   
-  // 2. Tentar resolver URL HLS via config (hls_public_base_url + restream_key)
-  const resolved = resolvePreviewUrl(camera);
-  if (resolved) {
-    console.log(`[Mosaico] Usando URL resolvida (HLS config) para ${camera.name}`);
-    return resolved;
+  if (camera.config?.stream_url && camera.config.stream_url.startsWith('http')) {
+    console.log(`[Mosaico] Usando stream_url para ${camera.name}:`, camera.config.stream_url);
+    return camera.config.stream_url;
   }
   
-  // 3. Tentar preview_playback_url (URL já resolvida e salva)
-  if (camera.config && camera.config.preview_playback_url) {
-    console.log(`[Mosaico] Usando preview_playback_url para ${camera.name}`);
-    return camera.config.preview_playback_url;
-  }
-  
-  // 4. Tentar preview_url
-  if (camera.preview_url) {
-    console.log(`[Mosaico] Usando preview_url para ${camera.name}`);
-    return camera.preview_url;
-  }
-  
-  // 5. Tentar config.preview_url
-  if (camera.config && camera.config.preview_url) {
-    console.log(`[Mosaico] Usando config.preview_url para ${camera.name}`);
-    return camera.config.preview_url;
-  }
-  
-  // 6. Se tiver stream_url e for HTTP/HTTPS, usar direto
-  if (camera.config && camera.config.stream_url) {
-    const streamUrl = camera.config.stream_url;
-    if (streamUrl.toLowerCase().startsWith('http')) {
-      console.log(`[Mosaico] Usando stream_url HTTP para ${camera.name}`);
-      return streamUrl;
-    }
-  }
-  
-  console.warn(`[Mosaico] Nenhuma URL válida encontrada para ${camera.name}`);
+  console.warn(`[Mosaico] Nenhuma URL válida para ${camera.name}`);
   return null;
 };
 
 const goBack = () => {
-  router.push({ name: 'video-mosaics' });
+  router.push({ path: '/video', query: { tab: 'mosaics' } });
 };
 
 const fetchMosaic = async () => {
@@ -273,66 +342,12 @@ const fetchMosaic = async () => {
   }
 };
 
-const startStreamForCamera = async (camera) => {
-  if (!camera || !camera.id) {
-    console.warn('[Mosaico] Camera inválida:', camera);
-    return null;
-  }
-  
-  // Verificar se já tentamos iniciar este stream
-  const attempts = streamStartAttempts.value.get(camera.id) || 0;
-  if (attempts >= 2) {
-    console.warn(`[Mosaico] Limite de tentativas atingido para ${camera.name}, pulando`);
-    return null;
-  }
-  
-  // Verificar se já iniciamos este stream
-  if (startedStreams.value.has(camera.id)) {
-    console.log(`[Mosaico] Stream já iniciado para ${camera.name}, reutilizando`);
-    return camera.playback_url || null;
-  }
-  
-  try {
-    streamStartAttempts.value.set(camera.id, attempts + 1);
-    
-    const endpoint = `/setup_app/api/gateways/${camera.id}/video/preview/start/`;
-    console.log(`[Mosaico] POST ${endpoint} para ${camera.name}...`);
-    
-    const res = await api.post(endpoint);
-    
-    console.log(`[Mosaico] Resposta completa para ${camera.name}:`, JSON.stringify(res, null, 2));
-    
-    if (res && res.success) {
-      if (res.playback_url) {
-        console.log(`[Mosaico] ✓ Stream iniciado: ${camera.name} -> ${res.playback_url}`);
-        camera.playback_url = res.playback_url;
-        if (res.preview_url) {
-          camera.preview_url = res.preview_url;
-        }
-        startedStreams.value.add(camera.id); // Marcar como iniciado
-        return res.playback_url;
-      } else {
-        console.warn(`[Mosaico] ⚠ Success mas sem playback_url para ${camera.name}`);
-      }
-    } else {
-      console.error(`[Mosaico] ✗ Falha na resposta para ${camera.name}:`, res);
-    }
-  } catch (e) {
-    console.error(`[Mosaico] ✗ Exceção ao iniciar ${camera.name}:`, e);
-    if (e.response) {
-      console.error(`[Mosaico]   HTTP ${e.response.status}:`, e.response.data);
-    }
-  }
-  return null;
-};
-
 const fetchCameras = async () => {
   try {
     const res = await api.get('/setup_app/api/gateways/');
     if (res.success) {
       cameras.value = (res.gateways || []).filter(gw => gw.gateway_type === 'video');
       
-      // FILTRAR apenas câmeras válidas (não-null) antes de iniciar streams
       const validCameras = activeCameras.value.filter(cam => cam !== null);
       
       if (validCameras.length === 0) {
@@ -341,163 +356,106 @@ const fetchCameras = async () => {
         return;
       }
       
-      console.log(`[Mosaico] Iniciando ${validCameras.length} streams (com rate limiting)...`);
+      console.log(`[Mosaico] Iniciando ${validCameras.length} streams no backend em paralelo...`);
       
-      // Rate limiting: iniciar streams sequencialmente com 800ms de delay
-      const results = [];
-      for (const camera of validCameras) {
-        results.push(await startStreamForCamera(camera));
-        if (validCameras.indexOf(camera) < validCameras.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 800));
+      const startPromises = validCameras.map(async (camera) => {
+        try {
+          const endpoint = `/setup_app/api/gateways/${camera.id}/video/preview/start/`;
+          const res = await api.post(endpoint);
+          
+          if (res && res.success && res.playback_url) {
+            camera.playback_url = res.playback_url;
+            console.log(`[Mosaico] ✓ Stream backend iniciado: ${camera.name}`);
+          } else {
+            console.warn(`[Mosaico] Falha ao iniciar stream para ${camera.name}`);
+          }
+        } catch (e) {
+          console.error(`[Mosaico] Erro ao iniciar backend stream para ${camera.name}:`, e);
         }
-      }
+      });
       
-      const successCount = results.filter(r => r !== null).length;
-      console.log(`[Mosaico] ${successCount}/${validCameras.length} streams iniciados com sucesso`);
+      await Promise.all(startPromises);
       
-      // Aguardar 2s para os iframes/players carregarem
-      console.log('[Mosaico] Aguardando 2s para players ficarem prontos...');
-      await new Promise(resolve => setTimeout(resolve, 2000));
       await nextTick();
+      console.log('[Mosaico] Aguardando 2s para MediaMTX publicar streams antes de iniciar WHEP...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // Inicializar HLS apenas para câmeras com URLs HLS (.m3u8)
-      initializeHlsPlayers();
+      initPlayers();
     }
   } catch (e) {
-    console.error('Erro ao carregar câmeras', e);
+    console.error('[Mosaico] Erro ao carregar câmeras:', e);
   }
 };
 
-const initializeHlsPlayers = () => {
-  videoRefs.value.forEach((videoEl, idx) => {
-    if (!videoEl) return;
-    
-    const camera = activeCameras.value[idx];
-    if (!camera) return;
-    
-    const url = preferHlsUrl(camera);
-    if (!url) return;
-    
-    // Processar APENAS URLs HLS (.m3u8)
-    // URLs MediaMTX são renderizadas via iframe no template
-    if (!isHlsUrl(url)) {
-      console.log(`[Mosaico] Não é HLS, será renderizado via iframe: ${getVideoUrl(camera)}`);
-      return;
-    }
-    
-    console.log(`[Mosaico] Iniciando HLS.js para ${camera.name}: ${url}`);
-    
-    if (Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: true,
-        backBufferLength: 0,
-        maxBufferLength: 6,
-        maxMaxBufferLength: 8,
-        manifestLoadingMaxRetry: 3,
-        levelLoadingMaxRetry: 3,
-        fragLoadingMaxRetry: 3,
-        manifestLoadingRetryDelay: 2000,
-        levelLoadingRetryDelay: 2000,
-      });
-      
-      hls.loadSource(url);
-      hls.attachMedia(videoEl);
-      
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        console.log(`[Mosaico] ✓ HLS pronto para ${camera.name}`);
-        videoEl.play().catch(e => console.warn('Play failed:', e));
-      });
-      
-      hls.on(Hls.Events.ERROR, (event, data) => {
-        if (data.fatal) {
-          console.error(`[Mosaico] HLS fatal error para ${camera.name}:`, data.type, data.details);
-          // NÃO fazer retry automático para evitar loops infinitos
-          // Deixar HLS.js gerenciar retries através das configs
-          if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-            try {
-              hls.recoverMediaError();
-            } catch (e) {
-              console.error(`[Mosaico] Falha ao recuperar de media error:`, e);
-            }
-          }
-        }
-      });
-      
-      hlsInstances.value[idx] = hls;
-    } else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
-      videoEl.src = url;
-      videoEl.play().catch(e => console.warn('Play failed:', e));
-    }
-  });
-};
-
-const destroyHlsPlayers = () => {
-  hlsInstances.value.forEach(hls => {
-    if (hls) {
-      try {
-        hls.destroy();
-      } catch (e) {
-        console.warn('Erro ao destruir HLS:', e);
-      }
-    }
-  });
-  hlsInstances.value = [];
-  videoRefs.value = [];
-};
-
+// Registrar listener de fullscreen
 onMounted(async () => {
+  document.addEventListener('fullscreenchange', handleFullscreenChange);
+  document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+  document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+  document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+  
   await fetchMosaic();
   await fetchCameras();
 });
 
 onUnmounted(async () => {
   const timestamp = new Date().toISOString();
-  console.log(`[Mosaico] ${timestamp} - INICIANDO CLEANUP (onUnmounted)`);
+  console.log(`[Mosaico] ${timestamp} - INICIANDO CLEANUP`);
   
-  // Destruir players HLS
-  destroyHlsPlayers();
+  // Remover listeners de fullscreen
+  document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+  document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+  document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
   
-  // Parar streams no backend para liberar recursos do transmuxer
+  // Fechar todas as conexões WebRTC via composable
+  Object.keys(connections.value).forEach((cameraId) => {
+    console.log(`[WHEP] Fechando conexão para câmera ${cameraId}`);
+    connections.value[cameraId].close();
+  });
+  connections.value = {};
+  
+  // Parar streams no backend
   const validCameras = activeCameras.value.filter(cam => cam !== null);
-  console.log(`[Mosaico] ${validCameras.length} cameras para parar:`, validCameras.map(c => ({ id: c.id, name: c.name })));
-  
   const stopPromises = validCameras.map(async camera => {
     try {
       console.log(`[Mosaico] Parando stream gateway ${camera.id} (${camera.name})...`);
       await api.post(`/setup_app/api/gateways/${camera.id}/video/preview/stop/`);
-      console.log(`[Mosaico] ✓ Stream parado com sucesso: ${camera.name}`);
+      console.log(`[Mosaico] ✓ Stream parado: ${camera.name}`);
     } catch (e) {
-      console.warn(`[Mosaico] ✗ Erro ao parar stream ${camera.name}:`, e);
+      console.warn(`[Mosaico] Erro ao parar stream ${camera.name}:`, e);
     }
   });
   
   await Promise.all(stopPromises);
-  
-  // Limpar caches
-  startedStreams.value.clear();
-  streamStartAttempts.value.clear();
   
   console.log(`[Mosaico] ${timestamp} - CLEANUP CONCLUÍDO`);
 });
 </script>
 
 <style scoped>
-/* Garantir que o grid ocupe todo o espaço */
 .grid {
   height: 100%;
 }
 
-/* Garantir que vídeo cubra todo o quadro do mosaico */
-video {
-  object-fit: cover;
-}
-
-/* Iframe ocupa todo o quadro; conteúdo interno pode ter letterboxing do player */
-iframe {
+.mosaic-cell {
+  position: relative;
   width: 100%;
   height: 100%;
-  border: 0;
+  overflow: hidden;
+  background-color: black;
+}
+
+.video-wrapper {
+  position: absolute;
+  inset: 0;
+}
+
+.video-player {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   display: block;
+  background: black;
 }
 </style>

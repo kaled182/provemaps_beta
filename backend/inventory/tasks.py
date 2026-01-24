@@ -236,7 +236,7 @@ def update_all_port_optical_levels() -> dict[str, Any]:
             rx_dbm = snapshot.get("rx_dbm")
             tx_dbm = snapshot.get("tx_dbm")
 
-            # Apenas atualiza se houve algum valor retornado
+            # Apenas atualiza campos de cache na porta (não persiste snapshots)
             update_fields: list[str] = []
             if rx_dbm is not None:
                 port.last_rx_power = rx_dbm
@@ -595,4 +595,10 @@ def refresh_radius_search_cache(
             "error": str(exc),
             "error_type": exc.__class__.__name__
         }
+
+
+    return result
+
+
+# === Fim das tasks de optical power ===
 

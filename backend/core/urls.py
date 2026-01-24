@@ -156,9 +156,10 @@ if settings.DEBUG:
 # Vue SPA Catch-All Route
 # This MUST be the last route. It captures any URL not matched above
 # (by API, Admin, or Static) and serves the Vue SPA.
+# IMPORTANT: Must NOT match API routes (api/), admin routes (admin/), or static files
 urlpatterns.append(
     re_path(
-        r"^.*$",  # Matches everything
+        r"^(?!api/)(?!admin/)(?!static/)(?!media/).*$",  # Negative lookahead to exclude API, admin, static, media
         SPAView.as_view(),
         name="spa",
     )

@@ -249,6 +249,142 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                 status=500,
             )
 
+    @action(detail=True, methods=["get"], url_path="metrics")
+    def metrics(self, request, pk=None):
+        """
+        Return basic metrics for a device (CPU %, Memory %, Uptime).
+        Falls back to manual overrides when Zabbix data is unavailable.
+        """
+        try:
+            device = self.get_object()
+        except Device.DoesNotExist:
+            return Response({"error": "Device not found"}, status=404)
+
+        cpu_val = None
+        mem_val = None
+        uptime_sec = None
+        uptime_human = None
+
+        try:
+            from integrations.zabbix.zabbix_service import zabbix_request
+            hostid = device.zabbix_hostid
+            items = []
+            if device.uptime_item_key:
+                items.append(device.uptime_item_key)
+            if device.cpu_usage_item_key:
+                items.append(device.cpu_usage_item_key)
+            if getattr(device, "memory_usage_item_key", ""):
+                items.append(device.memory_usage_item_key)
+
+            if hostid and items:
+                raw = zabbix_request(
+                    "item.get",
+                    {
+                        "output": ["key_", "lastvalue", "units"],
+                        "hostids": [hostid],
+                        "filter": {"key_": items},
+                    },
+                )
+                # Proteger contra None - zabbix_request pode retornar None em caso de erro
+                if raw is not None:
+                    for it in raw:
+                        key = it.get("key_", "")
+                        last = it.get("lastvalue", "")
+                        units = it.get("units", "")
+                        if key == device.uptime_item_key and last:
+                            try:
+                                uptime_sec = int(float(last))
+                                days = uptime_sec // 86400
+                                hours = (uptime_sec % 86400) // 3600
+                                minutes = (uptime_sec % 3600) // 60
+                                parts = []
+                                if days > 0:
+                                    parts.append(f"{days}d")
+                                if hours > 0:
+                                    parts.append(f"{hours}h")
+                                if minutes > 0:
+                                    parts.append(f"{minutes}m")
+                                uptime_human = " ".join(parts) if parts else "< 1m"
+                            except Exception:
+                                uptime_human = str(last)
+                        elif key == device.cpu_usage_item_key and last:
+                            try:
+                                cpu_val = float(last)
+                            except Exception:
+                                try:
+                                    cpu_val = float(str(last).replace("%", ""))
+                                except Exception:
+                                    cpu_val = None
+                        elif key == getattr(device, "memory_usage_item_key", "") and last:
+                            try:
+                                mem_val = float(last)
+                            except Exception:
+                                try:
+                                    mem_val = float(str(last).replace("%", ""))
+                                except Exception:
+                                    mem_val = None
+                # Fallback: quando uptime não veio mas o host está disponível no Zabbix
+                if uptime_sec is None and hostid:
+                    try:
+                        host_info = zabbix_request(
+                            "host.get",
+                            {"hostids": [hostid], "output": ["available"]},
+                        )
+                        if isinstance(host_info, list) and host_info:
+                            available = host_info[0].get("available")
+                            if str(available) == "1":
+                                uptime_sec = 1
+                                uptime_human = "unknown"
+                    except Exception:
+                        logger.warning(
+                            "Zabbix availability fallback failed for device %s",
+                            device.pk,
+                            exc_info=True,
+                        )
+                # Fallback via icmpping (ping) quando uptime não está disponível
+                if uptime_sec is None and hostid:
+                    try:
+                        ping_items = zabbix_request(
+                            "item.get",
+                            {
+                                "hostids": [hostid],
+                                "filter": {"key_": "icmpping"},
+                                "output": ["key_", "lastvalue"],
+                            },
+                        )
+                        if isinstance(ping_items, list):
+                            for it in ping_items:
+                                if it.get("key_") == "icmpping" and str(it.get("lastvalue")) == "1":
+                                    uptime_sec = 1
+                                    uptime_human = "unknown"
+                                    break
+                    except Exception:
+                        logger.warning(
+                            "Zabbix icmpping fallback failed for device %s",
+                            device.pk,
+                            exc_info=True,
+                        )
+        except Exception as exc:
+            logger.warning(
+                "Metrics fetch failed for device %s: %s",
+                device.pk,
+                exc,
+                exc_info=True,
+            )
+
+        # Fallbacks to manual overrides
+        if cpu_val is None and device.cpu_usage_manual_percent is not None:
+            cpu_val = float(device.cpu_usage_manual_percent)
+        if mem_val is None and device.memory_usage_manual_percent is not None:
+            mem_val = float(device.memory_usage_manual_percent)
+
+        return Response({
+            "cpu": cpu_val,
+            "memory": mem_val,
+            "uptime_seconds": uptime_sec,
+            "uptime_human": uptime_human,
+        })
+
 
 class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
     """ViewSet for Port CRUD operations with device filtering"""
@@ -266,6 +402,244 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             queryset = queryset.filter(device_id=device_id)
         
         return queryset
+
+    @action(detail=True, methods=["get"], permission_classes=[AllowAny])
+    def optical_history(self, request, pk=None):
+        """
+        Return historical optical power data from Zabbix history.get API.
+        
+        Busca últimas 24 horas de dados RX/TX diretamente do Zabbix
+        sem persistir no banco local.
+        
+        Query params:
+            hours: número de horas de histórico (default=24, max=168)
+        """
+        from datetime import datetime, timedelta
+        from django.utils import timezone
+        from integrations.zabbix.zabbix_service import zabbix_request
+        from inventory.domain.optical import _discover_optical_keys_by_portname
+        
+        port = self.get_object()
+        
+        # Buscar chaves ópticas do item no Zabbix
+        hostid = port.device.zabbix_hostid if port.device else None
+        if not hostid:
+            return Response({"error": "Device não possui hostid configurado"}, status=400)
+        
+        # Usar chaves configuradas na porta ou descobrir dinamicamente
+        rx_key = port.rx_power_item_key or None
+        tx_key = port.tx_power_item_key or None
+        
+        # Se não tiver chaves configuradas, tentar descobrir
+        if not rx_key and not tx_key:
+            optical_keys = _discover_optical_keys_by_portname(
+                hostid=hostid,
+                port_name=port.name,
+            )
+            rx_key = optical_keys.get("rx")
+            tx_key = optical_keys.get("tx")
+        
+        if not rx_key and not tx_key:
+            return Response({"error": "Nenhum item óptico encontrado no Zabbix para esta porta"}, status=404)
+        
+        # Obter período de consulta
+        hours = int(request.query_params.get("hours", 24))
+        hours = min(hours, 168)  # Máximo 7 dias
+        
+        time_from = int((timezone.now() - timedelta(hours=hours)).timestamp())
+        time_till = int(timezone.now().timestamp())
+        
+        history_data = []
+        
+        # Buscar RX history
+        if rx_key:
+            rx_items = zabbix_request("item.get", {
+                "hostids": [str(hostid)],
+                "filter": {"key_": rx_key},
+                "output": ["itemid", "value_type"]
+            })
+            if rx_items:
+                rx_item = rx_items[0]
+                rx_history = zabbix_request("history.get", {
+                    "itemids": [rx_item["itemid"]],
+                    "history": int(rx_item.get("value_type", 0)),
+                    "time_from": time_from,
+                    "time_till": time_till,
+                    "sortfield": "clock",
+                    "sortorder": "ASC",
+                })
+                if rx_history:
+                    for entry in rx_history:
+                        timestamp = datetime.fromtimestamp(int(entry["clock"]), tz=timezone.utc)
+                        history_data.append({
+                            "timestamp": timestamp.isoformat(),
+                            "rx_power": float(entry.get("value", 0)),
+                            "tx_power": None,
+                        })
+        
+        # Buscar TX history
+        if tx_key:
+            tx_items = zabbix_request("item.get", {
+                "hostids": [str(hostid)],
+                "filter": {"key_": tx_key},
+                "output": ["itemid", "value_type"]
+            })
+            if tx_items:
+                tx_item = tx_items[0]
+                tx_history = zabbix_request("history.get", {
+                    "itemids": [tx_item["itemid"]],
+                    "history": int(tx_item.get("value_type", 0)),
+                    "time_from": time_from,
+                    "time_till": time_till,
+                    "sortfield": "clock",
+                    "sortorder": "ASC",
+                })
+                if tx_history:
+                    # Mesclar com RX history baseado em timestamp
+                    tx_by_time = {int(e["clock"]): float(e.get("value", 0)) for e in tx_history}
+                    
+                    # Atualizar registros existentes ou criar novos
+                    existing_times = {datetime.fromisoformat(d["timestamp"]).timestamp() for d in history_data}
+                    
+                    for entry in history_data:
+                        ts = datetime.fromisoformat(entry["timestamp"]).timestamp()
+                        if int(ts) in tx_by_time:
+                            entry["tx_power"] = tx_by_time[int(ts)]
+                    
+                    # Adicionar TX-only entries
+                    for clock, tx_value in tx_by_time.items():
+                        if clock not in existing_times:
+                            timestamp = datetime.fromtimestamp(clock, tz=timezone.utc)
+                            history_data.append({
+                                "timestamp": timestamp.isoformat(),
+                                "rx_power": None,
+                                "tx_power": tx_value,
+                            })
+        
+        # Ordenar por timestamp
+        history_data.sort(key=lambda x: x["timestamp"])
+        
+        return Response(history_data)
+
+    @action(detail=True, methods=["get"], permission_classes=[AllowAny])
+    def traffic_history(self, request, pk=None):
+        """
+        Return traffic history with 95th percentile calculation.
+        
+        Query params:
+            hours: número de horas de histórico (default=24, max=168)
+        """
+        from datetime import datetime, timedelta, timezone as dt_timezone
+        from django.utils import timezone
+        from integrations.zabbix.zabbix_service import zabbix_request
+        import statistics
+        
+        port = self.get_object()
+        
+        hostid = port.device.zabbix_hostid if port.device else None
+        if not hostid:
+            return Response({"error": "Device não possui hostid configurado"}, status=400)
+        
+        # Item IDs de tráfego
+        traffic_in_id = port.zabbix_item_id_traffic_in
+        traffic_out_id = port.zabbix_item_id_traffic_out
+        
+        if not traffic_in_id and not traffic_out_id:
+            return Response({"error": "Porta não possui items de tráfego configurados"}, status=404)
+        
+        # Período de consulta
+        hours = int(request.query_params.get("hours", 24))
+        hours = min(hours, 168)  # Máximo 7 dias
+        
+        time_from = int((timezone.now() - timedelta(hours=hours)).timestamp())
+        time_till = int(timezone.now().timestamp())
+        
+        traffic_data = []
+        in_values = []
+        out_values = []
+        
+        # Buscar tráfego IN
+        if traffic_in_id:
+            in_history = zabbix_request("history.get", {
+                "itemids": [traffic_in_id],
+                "history": 3,  # Numeric (unsigned) - típico para contadores de tráfego
+                "time_from": time_from,
+                "time_till": time_till,
+                "sortfield": "clock",
+                "sortorder": "ASC",
+            })
+            if in_history:
+                for entry in in_history:
+                    timestamp = datetime.fromtimestamp(int(entry["clock"]), tz=dt_timezone.utc)
+                    value_bps = float(entry.get("value", 0))
+                    in_values.append(value_bps)
+                    traffic_data.append({
+                        "timestamp": timestamp.isoformat(),
+                        "traffic_in": value_bps,
+                        "traffic_out": None,
+                    })
+        
+        # Buscar tráfego OUT
+        if traffic_out_id:
+            out_history = zabbix_request("history.get", {
+                "itemids": [traffic_out_id],
+                "history": 3,
+                "time_from": time_from,
+                "time_till": time_till,
+                "sortfield": "clock",
+                "sortorder": "ASC",
+            })
+            if out_history:
+                out_by_time = {int(e["clock"]): float(e.get("value", 0)) for e in out_history}
+                out_values = list(out_by_time.values())
+                
+                # Mesclar com IN data
+                existing_times = {datetime.fromisoformat(d["timestamp"]).timestamp() for d in traffic_data}
+                
+                for entry in traffic_data:
+                    ts = datetime.fromisoformat(entry["timestamp"]).timestamp()
+                    if int(ts) in out_by_time:
+                        entry["traffic_out"] = out_by_time[int(ts)]
+                
+                # Adicionar OUT-only entries
+                for clock, out_value in out_by_time.items():
+                    if clock not in existing_times:
+                        timestamp = datetime.fromtimestamp(clock, tz=dt_timezone.utc)
+                        traffic_data.append({
+                            "timestamp": timestamp.isoformat(),
+                            "traffic_in": None,
+                            "traffic_out": out_value,
+                        })
+        
+        # Ordenar por timestamp
+        traffic_data.sort(key=lambda x: x["timestamp"])
+        
+        # Calcular 95º percentil
+        percentile_95_in = None
+        percentile_95_out = None
+        
+        if in_values:
+            in_values_sorted = sorted(in_values)
+            idx_95 = int(len(in_values_sorted) * 0.95)
+            percentile_95_in = in_values_sorted[idx_95] if idx_95 < len(in_values_sorted) else in_values_sorted[-1]
+        
+        if out_values:
+            out_values_sorted = sorted(out_values)
+            idx_95 = int(len(out_values_sorted) * 0.95)
+            percentile_95_out = out_values_sorted[idx_95] if idx_95 < len(out_values_sorted) else out_values_sorted[-1]
+        
+        return Response({
+            "history": traffic_data,
+            "statistics": {
+                "percentile_95_in": percentile_95_in,
+                "percentile_95_out": percentile_95_out,
+                "avg_in": statistics.mean(in_values) if in_values else None,
+                "avg_out": statistics.mean(out_values) if out_values else None,
+                "max_in": max(in_values) if in_values else None,
+                "max_out": max(out_values) if out_values else None,
+                "period_hours": hours,
+            }
+        })
 
 
 class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
@@ -320,6 +694,142 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
 
         serializer = FiberCableStructureSerializer(cable)
         return Response(serializer.data)
+
+    @action(detail=True, methods=["get"], url_path="metrics")
+    def metrics(self, request, pk=None):
+        """
+        Return basic metrics for a device (CPU %, Memory %, Uptime).
+        Falls back to manual overrides when Zabbix data is unavailable.
+        """
+        try:
+            device = Device.objects.get(pk=pk)
+        except Device.DoesNotExist:
+            return Response({"error": "Device not found"}, status=404)
+
+        cpu_val = None
+        mem_val = None
+        uptime_sec = None
+        uptime_human = None
+
+        try:
+            from integrations.zabbix.zabbix_service import zabbix_request
+            hostid = device.zabbix_hostid
+            items = []
+            if device.uptime_item_key:
+                items.append(device.uptime_item_key)
+            if device.cpu_usage_item_key:
+                items.append(device.cpu_usage_item_key)
+            if getattr(device, "memory_usage_item_key", ""):
+                items.append(device.memory_usage_item_key)
+
+            if hostid and items:
+                raw = zabbix_request(
+                    "item.get",
+                    {
+                        "output": ["key_", "lastvalue", "units"],
+                        "hostids": [hostid],
+                        "filter": {"key_": items},
+                    },
+                )
+                # Proteger contra None - zabbix_request pode retornar None em caso de erro
+                if raw is not None:
+                    for it in raw:
+                        key = it.get("key_", "")
+                        last = it.get("lastvalue", "")
+                        units = it.get("units", "")
+                        if key == device.uptime_item_key and last:
+                            try:
+                                uptime_sec = int(float(last))
+                                days = uptime_sec // 86400
+                                hours = (uptime_sec % 86400) // 3600
+                                minutes = (uptime_sec % 3600) // 60
+                                parts = []
+                                if days > 0:
+                                    parts.append(f"{days}d")
+                                if hours > 0:
+                                    parts.append(f"{hours}h")
+                                if minutes > 0:
+                                    parts.append(f"{minutes}m")
+                                uptime_human = " ".join(parts) if parts else "< 1m"
+                            except Exception:
+                                uptime_human = str(last)
+                        elif key == device.cpu_usage_item_key and last:
+                            try:
+                                cpu_val = float(last)
+                            except Exception:
+                                try:
+                                    cpu_val = float(str(last).replace("%", ""))
+                                except Exception:
+                                    cpu_val = None
+                        elif key == getattr(device, "memory_usage_item_key", "") and last:
+                            try:
+                                mem_val = float(last)
+                            except Exception:
+                                try:
+                                    mem_val = float(str(last).replace("%", ""))
+                                except Exception:
+                                    mem_val = None
+                # Fallback: quando uptime não veio mas o host está disponível no Zabbix
+                if uptime_sec is None and hostid:
+                    try:
+                        host_info = zabbix_request(
+                            "host.get",
+                            {"hostids": [hostid], "output": ["available"]},
+                        )
+                        if isinstance(host_info, list) and host_info:
+                            available = host_info[0].get("available")
+                            if str(available) == "1":
+                                uptime_sec = 1
+                                uptime_human = "unknown"
+                    except Exception:
+                        logger.warning(
+                            "Zabbix availability fallback failed for device %s",
+                            device.pk,
+                            exc_info=True,
+                        )
+                # Fallback via icmpping (ping) quando uptime não está disponível
+                if uptime_sec is None and hostid:
+                    try:
+                        ping_items = zabbix_request(
+                            "item.get",
+                            {
+                                "hostids": [hostid],
+                                "filter": {"key_": "icmpping"},
+                                "output": ["key_", "lastvalue"],
+                            },
+                        )
+                        if isinstance(ping_items, list):
+                            for it in ping_items:
+                                if it.get("key_") == "icmpping" and str(it.get("lastvalue")) == "1":
+                                    uptime_sec = 1
+                                    uptime_human = "unknown"
+                                    break
+                    except Exception:
+                        logger.warning(
+                            "Zabbix icmpping fallback failed for device %s",
+                            device.pk,
+                            exc_info=True,
+                        )
+        except Exception as exc:
+            logger.warning(
+                "Metrics fetch failed for device %s: %s",
+                device.pk,
+                exc,
+                exc_info=True,
+            )
+
+        # Fallbacks to manual overrides
+        if cpu_val is None and device.cpu_usage_manual_percent is not None:
+            cpu_val = float(device.cpu_usage_manual_percent)
+        if mem_val is None and device.memory_usage_manual_percent is not None:
+            mem_val = float(device.memory_usage_manual_percent)
+
+        return Response({
+            "cpu": cpu_val,
+            "memory": mem_val,
+            "uptime_seconds": uptime_sec,
+            "uptime_human": uptime_human,
+        })
 
     @action(detail=False, methods=["get"])
     def profiles(self, request):

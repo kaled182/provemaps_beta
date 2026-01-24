@@ -16,6 +16,7 @@ from typing import Any, Dict
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db import connection
+from django.db.models import Q
 from django.http import FileResponse, HttpResponse, JsonResponse
 from django.core.management import call_command
 from django.views.decorators.http import require_http_methods, require_GET, require_POST
@@ -1668,6 +1669,9 @@ def get_configuration(request):
             "SMS_AWS_ACCESS_KEY_ID",
             "SMS_AWS_SECRET_ACCESS_KEY",
             "SMS_INFOBIP_BASE_URL",
+            # Network thresholds
+            "OPTICAL_RX_WARNING_THRESHOLD",
+            "OPTICAL_RX_CRITICAL_THRESHOLD",
         ]
         current_values = env_manager.read_values(editable_keys)
         runtime_config = runtime_settings.get_runtime_config()
@@ -1735,6 +1739,9 @@ def get_configuration(request):
             "SMS_AWS_ACCESS_KEY_ID": runtime_config.sms_aws_access_key_id,
             "SMS_AWS_SECRET_ACCESS_KEY": runtime_config.sms_aws_secret_access_key,
             "SMS_INFOBIP_BASE_URL": runtime_config.sms_infobip_base_url,
+            # Defaults for network thresholds if not configured
+            "OPTICAL_RX_WARNING_THRESHOLD": "-24",
+            "OPTICAL_RX_CRITICAL_THRESHOLD": "-27",
         }
 
         # Convert boolean strings to actual booleans for JSON, fallback to runtime/config defaults
@@ -1958,6 +1965,14 @@ def update_configuration(request):
         if sms_aws_secret_access_key == "":
             sms_aws_secret_access_key = existing_sms.get("SMS_AWS_SECRET_ACCESS_KEY", "")
 
+        # Parse thresholds (optional numbers)
+        def _parse_float_str(value, default):
+            try:
+                v = float(str(value).strip())
+                return str(v)
+            except Exception:
+                return str(default)
+
         payload = {
             "SECRET_KEY": data.get("SECRET_KEY", "").strip(),
             "DEBUG": "True" if _to_bool(data.get("DEBUG", False)) else "False",
@@ -2032,6 +2047,13 @@ def update_configuration(request):
             "SMS_AWS_ACCESS_KEY_ID": data.get("SMS_AWS_ACCESS_KEY_ID", "").strip(),
             "SMS_AWS_SECRET_ACCESS_KEY": sms_aws_secret_access_key,
             "SMS_INFOBIP_BASE_URL": data.get("SMS_INFOBIP_BASE_URL", "").strip(),
+            # Network thresholds
+            "OPTICAL_RX_WARNING_THRESHOLD": _parse_float_str(
+                data.get("OPTICAL_RX_WARNING_THRESHOLD", "-24"), -24
+            ),
+            "OPTICAL_RX_CRITICAL_THRESHOLD": _parse_float_str(
+                data.get("OPTICAL_RX_CRITICAL_THRESHOLD", "-27"), -27
+            ),
         }
 
         smtp_enabled = _to_bool(payload["SMTP_ENABLED"])
@@ -2367,6 +2389,7 @@ def _serialize_gateway(gateway: MessagingGateway) -> Dict[str, Any]:
         "provider": gateway.provider or "",
         "priority": gateway.priority,
         "enabled": gateway.enabled,
+        "site_name": gateway.site_name or "",
         "config": gateway.config or {},
         "created_at": gateway.created_at.isoformat(),
         "updated_at": gateway.updated_at.isoformat(),
@@ -2534,7 +2557,23 @@ def _sync_gateway_env(gateway_type: str) -> None:
 def messaging_gateways(request):
     if request.method == "GET":
         _ensure_default_gateways()
-        gateways = MessagingGateway.objects.all().order_by("gateway_type", "priority", "name")
+        
+        # Filtrar por departamentos do usuário (apenas para câmeras de vídeo)
+        if request.user.is_superuser:
+            # Superuser vê todos os gateways
+            gateways = MessagingGateway.objects.all().order_by("gateway_type", "priority", "name")
+        else:
+            # Usuários normais veem:
+            # - Todos os gateways que NÃO são de vídeo (sms, whatsapp, telegram, smtp)
+            # - Câmeras de vídeo dos seus departamentos OU públicas (sem departamento)
+            user_depts = request.user.profile.departments.all()
+            
+            gateways = MessagingGateway.objects.filter(
+                Q(gateway_type__in=['sms', 'whatsapp', 'telegram', 'smtp']) |  # Não-vídeo: sempre visível
+                Q(gateway_type='video', departments__in=user_depts) |  # Vídeo: departamentos do usuário
+                Q(gateway_type='video', departments__isnull=True)  # Vídeo: público
+            ).distinct().order_by("gateway_type", "priority", "name")
+        
         return JsonResponse(
             {"success": True, "gateways": [_serialize_gateway(gw) for gw in gateways]}
         )
@@ -2572,6 +2611,7 @@ def messaging_gateways(request):
         provider=data.get("provider", "").strip() or None,
         priority=priority,
         enabled=bool(data.get("enabled", True)),
+        site_name=data.get("site_name", "").strip() or None,
         config=config,
     )
 
@@ -2969,6 +3009,22 @@ def messaging_gateway_detail(request, gateway_id: int):
         return JsonResponse(
             {"success": False, "message": "Gateway não encontrado."}, status=404
         )
+    
+    # Validar permissões RBAC para câmeras de vídeo
+    if gateway.gateway_type == "video" and not request.user.is_superuser:
+        user_depts = request.user.profile.departments.all()
+        
+        # Verificar se a câmera pertence aos departamentos do usuário OU é pública
+        has_access = (
+            gateway.departments.exists() == False or  # Pública (sem departamentos)
+            gateway.departments.filter(id__in=[d.id for d in user_depts]).exists()  # Ou pertence aos departamentos do usuário
+        )
+        
+        if not has_access:
+            return JsonResponse(
+                {"success": False, "message": "Sem permissão para acessar esta câmera."},
+                status=403
+            )
 
     original_config = dict(gateway.config or {})
     original_enabled = gateway.enabled
@@ -2995,6 +3051,8 @@ def messaging_gateway_detail(request, gateway_id: int):
         gateway.name = data.get("name", "").strip() or gateway.name
     if "provider" in data:
         gateway.provider = data.get("provider", "").strip() or gateway.provider
+    if "site_name" in data:
+        gateway.site_name = data.get("site_name", "").strip() or None
     if "priority" in data:
         try:
             priority = int(data.get("priority", gateway.priority))
@@ -3669,13 +3727,27 @@ def video_mosaics_list(request):
     
     if request.method == "GET":
         try:
-            mosaics = VideoMosaic.objects.all().order_by('name')
+            # Filtrar por departamentos do usuário
+            if request.user.is_superuser:
+                # Superuser vê todos os mosaicos
+                mosaics = VideoMosaic.objects.all().order_by('name')
+            else:
+                # Usuários normais veem apenas mosaicos de seus departamentos
+                user_depts = request.user.profile.departments.all()
+                
+                # Mosaicos sem departamento (públicos) OU mosaicos dos departamentos do usuário
+                mosaics = VideoMosaic.objects.filter(
+                    Q(departments__in=user_depts) | 
+                    Q(departments__isnull=True)
+                ).distinct().order_by('name')
+            
             mosaic_list = [
                 {
                     "id": m.id,
                     "name": m.name,
                     "layout": m.layout,
                     "cameras": m.cameras or [],
+                    "departments": [{"id": d.id, "name": d.name} for d in m.departments.all()],
                     "created_at": m.created_at.isoformat() if m.created_at else None,
                     "updated_at": m.updated_at.isoformat() if m.updated_at else None,
                 }
@@ -3695,6 +3767,7 @@ def video_mosaics_list(request):
             name = data.get("name", "").strip()
             layout = data.get("layout", "2x2")
             cameras = data.get("cameras", [])
+            department_ids = data.get("department_ids", [])
             
             if not name:
                 return JsonResponse(
@@ -3702,11 +3775,27 @@ def video_mosaics_list(request):
                     status=400,
                 )
             
+            # Validar permissões: usuários normais só podem criar mosaicos em seus departamentos
+            if not request.user.is_superuser and department_ids:
+                user_dept_ids = set(request.user.profile.departments.values_list('id', flat=True))
+                requested_dept_ids = set(department_ids)
+                
+                if not requested_dept_ids.issubset(user_dept_ids):
+                    return JsonResponse(
+                        {"success": False, "message": "Você só pode criar mosaicos em departamentos aos quais pertence."},
+                        status=403,
+                    )
+            
             mosaic = VideoMosaic.objects.create(
                 name=name,
                 layout=layout,
                 cameras=cameras,
             )
+            
+            # Adicionar departamentos se fornecidos
+            if department_ids:
+                from core.models import Department
+                mosaic.departments.set(Department.objects.filter(id__in=department_ids))
             
             return JsonResponse({
                 "success": True,
@@ -3716,6 +3805,7 @@ def video_mosaics_list(request):
                     "name": mosaic.name,
                     "layout": mosaic.layout,
                     "cameras": mosaic.cameras,
+                    "departments": [{"id": d.id, "name": d.name} for d in mosaic.departments.all()],
                     "created_at": mosaic.created_at.isoformat(),
                     "updated_at": mosaic.updated_at.isoformat(),
                 },
@@ -3748,6 +3838,22 @@ def video_mosaic_detail(request, mosaic_id: int):
             status=404,
         )
     
+    # Validar permissões RBAC
+    if not request.user.is_superuser:
+        user_depts = request.user.profile.departments.all()
+        
+        # Verificar se o mosaico pertence aos departamentos do usuário OU é público
+        has_access = (
+            mosaic.departments.exists() == False or  # Público (sem departamentos)
+            mosaic.departments.filter(id__in=[d.id for d in user_depts]).exists()  # Ou pertence aos departamentos do usuário
+        )
+        
+        if not has_access:
+            return JsonResponse(
+                {"success": False, "message": "Sem permissão para acessar este mosaico."},
+                status=403
+            )
+    
     if request.method == "GET":
         return JsonResponse({
             "success": True,
@@ -3756,6 +3862,7 @@ def video_mosaic_detail(request, mosaic_id: int):
                 "name": mosaic.name,
                 "layout": mosaic.layout,
                 "cameras": mosaic.cameras,
+                "departments": [{"id": d.id, "name": d.name} for d in mosaic.departments.all()],
                 "created_at": mosaic.created_at.isoformat() if mosaic.created_at else None,
                 "updated_at": mosaic.updated_at.isoformat() if mosaic.updated_at else None,
             },
@@ -3780,6 +3887,24 @@ def video_mosaic_detail(request, mosaic_id: int):
             if "cameras" in data:
                 mosaic.cameras = data["cameras"]
             
+            # Atualizar departamentos se fornecidos
+            if "department_ids" in data:
+                department_ids = data["department_ids"]
+                
+                # Validar permissões: usuários normais só podem atribuir seus próprios departamentos
+                if not request.user.is_superuser and department_ids:
+                    user_dept_ids = set(request.user.profile.departments.values_list('id', flat=True))
+                    requested_dept_ids = set(department_ids)
+                    
+                    if not requested_dept_ids.issubset(user_dept_ids):
+                        return JsonResponse(
+                            {"success": False, "message": "Você só pode atribuir departamentos aos quais pertence."},
+                            status=403,
+                        )
+                
+                from core.models import Department
+                mosaic.departments.set(Department.objects.filter(id__in=department_ids))
+            
             mosaic.save()
             
             return JsonResponse({
@@ -3790,6 +3915,7 @@ def video_mosaic_detail(request, mosaic_id: int):
                     "name": mosaic.name,
                     "layout": mosaic.layout,
                     "cameras": mosaic.cameras,
+                    "departments": [{"id": d.id, "name": d.name} for d in mosaic.departments.all()],
                     "updated_at": mosaic.updated_at.isoformat(),
                 },
             })

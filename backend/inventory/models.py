@@ -198,6 +198,28 @@ class Device(models.Model):
             "(e.g. system.cpu.util[,user])"
         ),
     )
+    memory_usage_item_key = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=(
+            "Zabbix item key for Memory usage "
+            "(e.g. vm.memory.size[percent] or mem.util)"
+        ),
+    )
+    cpu_usage_manual_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Manual CPU usage percent when Zabbix data is unavailable",
+    )
+    memory_usage_manual_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Manual Memory usage percent when Zabbix data is unavailable",
+    )
     groups = models.ManyToManyField(
         DeviceGroup,
         related_name="devices",
@@ -340,6 +362,32 @@ class Port(models.Model):
         null=True,
         blank=True,
         help_text="Timestamp da última coleta óptica assíncrona",
+    )
+
+    # Alarm configuration fields
+    alarm_enabled = models.BooleanField(
+        default=False,
+        help_text="Se verdadeiro, alarmes serão disparados quando limiares forem ultrapassados",
+    )
+    alarm_warning_threshold = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Limiar de atenção (dBm) - dispara alerta quando RX ficar abaixo deste valor",
+    )
+    alarm_critical_threshold = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Limiar crítico (dBm) - dispara alarme quando RX ficar abaixo deste valor",
+    )
+    alarm_notifications = models.JSONField(
+        null=True,
+        blank=True,
+        default=dict,
+        help_text="Configuração de canais de notificação (email, dashboard, whatsapp, telegram, webhook)",
     )
 
     class Meta:
@@ -1166,6 +1214,106 @@ class ImportRule(models.Model):
     def __str__(self) -> str:
         status = "✓" if self.is_active else "✗"
         return f"[{status}] P{self.priority}: {self.pattern} → {self.category}"
+
+
+class CustomMap(models.Model):
+    """
+    Mapa personalizado com seleção customizada de equipamentos.
+    Permite criar múltiplos mapas, cada um com sua própria seleção de
+    dispositivos, cabos, câmeras e racks para visualização.
+    """
+    name = models.CharField(
+        max_length=200,
+        help_text="Nome do mapa personalizado"
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Descrição do propósito deste mapa"
+    )
+    category = models.CharField(
+        max_length=50,
+        choices=[
+            ('backbone', 'Backbone'),
+            ('gpon', 'GPON'),
+            ('dwdm', 'DWDM'),
+            ('custom', 'Personalizado')
+        ],
+        default='backbone',
+        help_text="Categoria do mapa"
+    )
+    is_public = models.BooleanField(
+        default=True,
+        help_text="Se True, mapa visível para todos os usuários"
+    )
+    created_by = models.ForeignKey(
+        'auth.User',
+        on_delete=models.CASCADE,
+        related_name='custom_maps',
+        help_text="Usuário que criou o mapa"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    # JSON com os IDs dos itens selecionados
+    selected_devices = LenientJSONField(
+        default=list,
+        blank=True,
+        help_text="IDs dos dispositivos incluídos neste mapa"
+    )
+    selected_cables = LenientJSONField(
+        default=list,
+        blank=True,
+        help_text="IDs dos cabos incluídos neste mapa"
+    )
+    selected_cameras = LenientJSONField(
+        default=list,
+        blank=True,
+        help_text="IDs das câmeras incluídas neste mapa"
+    )
+    selected_racks = LenientJSONField(
+        default=list,
+        blank=True,
+        help_text="IDs dos racks incluídos neste mapa"
+    )
+    
+    class Meta:
+        db_table = 'custom_maps'
+        ordering = ['-created_at']
+        verbose_name = "Mapa Personalizado"
+        verbose_name_plural = "Mapas Personalizados"
+    
+    def __str__(self) -> str:
+        return f"{self.name} ({self.category})"
+    
+    @property
+    def items_count(self) -> int:
+        """Total de itens selecionados neste mapa"""
+        return (
+            len(self.selected_devices) +
+            len(self.selected_cables) +
+            len(self.selected_cameras) +
+            len(self.selected_racks)
+        )
+    
+    @property
+    def devices_count(self) -> int:
+        """Quantidade de dispositivos no mapa"""
+        return len(self.selected_devices)
+    
+    @property
+    def cables_count(self) -> int:
+        """Quantidade de cabos no mapa"""
+        return len(self.selected_cables)
+    
+    @property
+    def cameras_count(self) -> int:
+        """Quantidade de câmeras no mapa"""
+        return len(self.selected_cameras)
+    
+    @property
+    def racks_count(self) -> int:
+        """Quantidade de racks no mapa"""
+        return len(self.selected_racks)
 
 
 # Route models now live in inventory.models_routes. Import them dynamically to

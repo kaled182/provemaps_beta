@@ -46,7 +46,12 @@ const routes = [
   {
     path: '/monitoring/backbone',
     name: 'monitoring-backbone',
-    component: () => import('@/components/Dashboard/DashboardView.vue'),
+    component: () => import('@/views/monitoring/CustomMapsManager.vue'),
+  },
+  {
+    path: '/monitoring/:category/map/:mapId',
+    name: 'custom-map-viewer',
+    component: () => import('@/views/monitoring/CustomMapViewer.vue'),
   },
   {
     path: '/monitoring/gpon',

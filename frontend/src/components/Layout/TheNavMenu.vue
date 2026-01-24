@@ -540,28 +540,10 @@ const menuItems = [
         path: '/network/inventory',
         icon: PhListBullets,
       },
-    ],
-  },
-  {
-    label: 'Video',
-    path: '/video/cameras',
-    icon: PhVideoCamera,
-    useRouter: true,
-    children: [
       {
-        label: 'Câmeras',
-        path: '/video/cameras',
+        label: 'Monitoramento Visual',
+        path: '/video',
         icon: PhVideoCamera,
-      },
-      {
-        label: 'Mosaicos',
-        path: '/video/mosaics',
-        icon: PhSquaresFour,
-      },
-      {
-        label: 'Grupos',
-        path: '/video/groups',
-        icon: PhUsersThree,
       },
     ],
   },

@@ -1,7 +1,7 @@
 <template>
-  <div class="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col h-[calc(100vh-64px)] overflow-hidden transition-colors duration-300">
+  <div :class="embedded ? '' : 'min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col h-[calc(100vh-64px)] overflow-hidden transition-colors duration-300'">
     
-    <div class="flex-none px-6 py-5 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 z-10">
+    <div v-if="!embedded" class="flex-none px-6 py-5 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 z-10">
       <div class="flex justify-between items-center">
         <div>
           <h1 class="text-xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-2">
@@ -20,9 +20,24 @@
       </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto custom-scrollbar p-6 bg-gray-50 dark:bg-gray-900">
-      <div class="max-w-6xl mx-auto">
+    <div :class="embedded ? '' : 'flex-1 overflow-y-auto custom-scrollbar bg-gray-50 dark:bg-gray-900'">
+      <div :class="embedded ? '' : ''">
         
+        <!-- Campo de Busca -->
+        <div class="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900 px-6 pt-4 pb-3">
+          <div class="relative">
+            <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+            <input 
+              v-model="searchQuery" 
+              type="text" 
+              placeholder="Filtrar câmeras ou sites..." 
+              class="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
+            />
+          </div>
+        </div>
+
         <div v-if="gatewayLoading" class="text-center py-12">
           <svg class="animate-spin h-8 w-8 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -31,7 +46,7 @@
           <p class="text-sm text-gray-500 mt-2">Carregando...</p>
         </div>
 
-        <div v-else-if="videoGateways.length === 0" class="text-center py-12 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
+        <div v-else-if="videoGateways.length === 0" class="text-center py-12 mx-6 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
           <svg class="w-12 h-12 mx-auto text-gray-400 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
           </svg>
@@ -42,32 +57,120 @@
           </button>
         </div>
 
-        <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <div v-for="gateway in videoGatewaysSorted" :key="gateway.id" class="group bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-all">
-            <div class="flex justify-between items-start mb-3">
-              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wide bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                {{ gateway.provider || 'RTMP' }}
-              </span>
-              <div class="flex items-center gap-2">
-                <span class="flex h-2.5 w-2.5 relative">
-                  <span v-if="getVideoGatewayStatusColor(gateway) === 'bg-emerald-400'" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span class="relative inline-flex rounded-full h-2.5 w-2.5" :class="getVideoGatewayStatusColor(gateway)"></span>
+        <!-- Lista Agrupada por Site -->
+        <div v-else class="space-y-2 px-6 pb-6">
+          <div 
+            v-for="(cameras, siteName) in camerasBySite" 
+            :key="siteName"
+            class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800"
+          >
+            <!-- Header do Grupo (colapsável) -->
+            <button
+              @click="toggleSiteGroup(siteName)"
+              class="w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
+            >
+              <div class="flex items-center gap-3">
+                <svg 
+                  class="w-4 h-4 text-gray-400 transition-transform"
+                  :class="{ 'rotate-90': expandedSites[siteName] }"
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+                <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ siteName }}</span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                  {{ cameras.length }}
                 </span>
               </div>
-            </div>
-            <h4 class="font-bold text-gray-900 dark:text-white truncate">{{ gateway.name }}</h4>
-            <p class="text-xs text-gray-500 mt-1">{{ getVideoGatewayStatusLabel(gateway) }}</p>
-            <p class="text-xs text-gray-400 font-mono mt-1 truncate bg-gray-50 dark:bg-gray-900/50 p-1 rounded">
-              {{ gateway.config?.stream_url || 'Sem URL configurada' }}
-            </p>
-            
-            <div class="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
-              <button @click="openVideoGatewayModal(gateway)" class="p-1 text-gray-400 hover:text-blue-600 rounded transition-colors" title="Editar">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-              </button>
-              <button @click="confirmDeleteGateway(gateway)" class="p-1 text-gray-400 hover:text-red-600 rounded transition-colors" title="Excluir">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-              </button>
+              <svg 
+                class="w-5 h-5 text-gray-400"
+                :class="{ 'rotate-180': expandedSites[siteName] }"
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </button>
+
+            <!-- Tabela de Câmeras -->
+            <div v-show="expandedSites[siteName]" class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/30">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-16">Status</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Nome / Endereço</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tipo</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-48">Ações</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                  <tr 
+                    v-for="camera in cameras" 
+                    :key="camera.id"
+                    class="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
+                  >
+                    <!-- Status -->
+                    <td class="px-4 py-3">
+                      <span class="flex h-2.5 w-2.5 relative">
+                        <span 
+                          v-if="getVideoGatewayStatusColor(camera) === 'bg-emerald-400'" 
+                          class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"
+                        ></span>
+                        <span 
+                          class="relative inline-flex rounded-full h-2.5 w-2.5" 
+                          :class="getVideoGatewayStatusColor(camera)"
+                        ></span>
+                      </span>
+                    </td>
+
+                    <!-- Nome / IP -->
+                    <td class="px-4 py-3">
+                      <div class="flex flex-col">
+                        <span class="font-semibold text-gray-900 dark:text-gray-100">{{ camera.name }}</span>
+                        <span class="text-xs text-gray-500 dark:text-gray-400 font-mono truncate max-w-md">
+                          {{ camera.config?.stream_url || 'Sem URL configurada' }}
+                        </span>
+                      </div>
+                    </td>
+
+                    <!-- Tipo -->
+                    <td class="px-4 py-3">
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                        {{ camera.provider || 'RTMP' }}
+                      </span>
+                    </td>
+
+                    <!-- Ações -->
+                    <td class="px-4 py-3">
+                      <div class="flex items-center justify-end gap-2">
+                        <button 
+                          @click="openVideoGatewayModal(camera)" 
+                          class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                          title="Configurar"
+                        >
+                          <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                          </svg>
+                          Configurar
+                        </button>
+                        <button 
+                          @click="confirmDeleteGateway(camera)" 
+                          class="p-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                          title="Excluir"
+                        >
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -90,15 +193,31 @@
             </div>
             <form class="p-6 space-y-4" autocomplete="off" @submit.prevent>
               <div v-if="activeGateway === 'video'" class="space-y-4">
-                <div class="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <label class="label-custom">Nome do Gateway</label>
+                <div class="grid gap-4 md:grid-cols-3">
+                  <div class="md:col-span-2">
+                    <label class="label-custom">Nome da Câmera</label>
                     <input v-model="videoGatewayForm.name" type="text" class="input-custom font-mono" autocomplete="off">
                   </div>
                   <div>
                     <label class="label-custom">Prioridade</label>
                     <input v-model.number="videoGatewayForm.priority" type="number" min="1" class="input-custom font-mono" autocomplete="off">
                   </div>
+                </div>
+
+                <div>
+                  <label class="label-custom">Site</label>
+                  <input 
+                    v-model="videoGatewayForm.site_name" 
+                    type="text" 
+                    class="input-custom" 
+                    placeholder="Digite o nome do site onde a câmera está instalada"
+                    autocomplete="off"
+                    list="site-suggestions"
+                  >
+                  <datalist id="site-suggestions">
+                    <option v-for="site in availableSites" :key="site" :value="site"></option>
+                  </datalist>
+                  <p class="text-xs text-gray-400 mt-2">Local físico onde a câmera está instalada. As câmeras serão agrupadas por site.</p>
                 </div>
 
                 <div class="grid gap-4 md:grid-cols-2">
@@ -270,6 +389,13 @@ import Hls from 'hls.js';
 import { useApi } from '@/composables/useApi';
 import { useNotification } from '@/composables/useNotification';
 
+const props = defineProps({
+  embedded: {
+    type: Boolean,
+    default: false
+  }
+});
+
 const api = useApi();
 const notify = useNotification();
 
@@ -279,6 +405,9 @@ const showGatewayModal = ref(false);
 const showDeleteConfirm = ref(false);
 const gatewayToDelete = ref(null);
 const activeGateway = ref('video');
+const searchQuery = ref('');
+const expandedSites = ref({});
+const inventorySites = ref([]);
 
 const videoGatewayForm = ref({
   id: null,
@@ -286,6 +415,7 @@ const videoGatewayForm = ref({
   provider: 'restreamer',
   priority: 1,
   enabled: false,
+  site_name: '',
   config: {
     stream_type: 'rtmp',
     stream_url: '',
@@ -319,6 +449,48 @@ const iframeReady = ref(false);
 
 const videoGateways = computed(() => gateways.value.filter((gw) => gw.gateway_type === 'video'));
 const videoGatewaysSorted = computed(() => [...videoGateways.value].sort((a, b) => a.priority - b.priority));
+
+// Agrupar câmeras por Site com busca
+const camerasBySite = computed(() => {
+  const filtered = videoGatewaysSorted.value.filter(camera => {
+    if (!searchQuery.value) return true;
+    const query = searchQuery.value.toLowerCase();
+    const siteName = (camera.site_name || 'Sem Site').toLowerCase();
+    const cameraName = (camera.name || '').toLowerCase();
+    const streamUrl = (camera.config?.stream_url || '').toLowerCase();
+    return siteName.includes(query) || cameraName.includes(query) || streamUrl.includes(query);
+  });
+
+  const grouped = {};
+  filtered.forEach(camera => {
+    const site = camera.site_name || 'Sem Site';
+    if (!grouped[site]) {
+      grouped[site] = [];
+    }
+    grouped[site].push(camera);
+  });
+
+  // Ordenar sites alfabeticamente
+  return Object.keys(grouped)
+    .sort((a, b) => {
+      if (a === 'Sem Site') return 1;
+      if (b === 'Sem Site') return -1;
+      return a.localeCompare(b);
+    })
+    .reduce((acc, key) => {
+      acc[key] = grouped[key];
+      return acc;
+    }, {});
+});
+
+// Sites disponíveis para autocomplete (do inventário)
+const availableSites = computed(() => {
+  return inventorySites.value
+    .map(site => site.name || site.display_name)
+    .filter(name => name) // Remove nulos/vazios
+    .sort();
+});
+
 const isM3U8Url = computed(() => {
   const url = videoPreview.value.url || '';
   return url.toLowerCase().endsWith('.m3u8');
@@ -386,12 +558,51 @@ const fetchGateways = async () => {
     const res = await api.get('/setup_app/api/gateways/');
     if (res.success) {
       gateways.value = res.gateways || [];
+      // Inicializar todos os sites expandidos
+      initializeExpandedSites();
     }
   } catch (e) {
     notify.error('Câmeras', e.message || 'Erro ao carregar câmeras.');
   } finally {
     gatewayLoading.value = false;
   }
+};
+
+const fetchInventorySites = async () => {
+  try {
+    let url = '/api/v1/sites/?page_size=500';
+    const collection = [];
+    
+    while (url) {
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) {
+        console.warn('Erro ao buscar sites do inventário:', response.status);
+        break;
+      }
+      const data = await response.json();
+      const pageItems = Array.isArray(data) ? data : data.results || [];
+      collection.push(...pageItems);
+      url = data.next || null;
+    }
+    
+    inventorySites.value = collection;
+  } catch (e) {
+    console.warn('Erro ao carregar sites do inventário:', e);
+    inventorySites.value = [];
+  }
+};
+
+const initializeExpandedSites = () => {
+  const sites = {};
+  videoGateways.value.forEach(camera => {
+    const site = camera.site_name || 'Sem Site';
+    sites[site] = true; // Todos expandidos por padrão
+  });
+  expandedSites.value = sites;
+};
+
+const toggleSiteGroup = (siteName) => {
+  expandedSites.value[siteName] = !expandedSites.value[siteName];
 };
 
 const syncVideoGatewayInList = (gatewayId, configUpdates = {}) => {
@@ -848,6 +1059,7 @@ const openVideoGatewayModal = (gateway = null) => {
       provider: gateway.provider || 'restreamer',
       priority: gateway.priority || 1,
       enabled: !!gateway.enabled,
+      site_name: gateway.site_name || '',
       config: {
         stream_type: gateway.config?.stream_type || 'rtmp',
         stream_url: gateway.config?.stream_url || '',
@@ -866,6 +1078,7 @@ const openVideoGatewayModal = (gateway = null) => {
       provider: 'restreamer',
       priority: 1,
       enabled: false,
+      site_name: '',
       config: {
         stream_type: 'rtmp',
         stream_url: '',
@@ -896,6 +1109,7 @@ const saveGateway = async () => {
       provider: videoGatewayForm.value.provider,
       priority: videoGatewayForm.value.priority,
       enabled: videoGatewayForm.value.enabled,
+      site_name: videoGatewayForm.value.site_name || null,
       config: videoGatewayForm.value.config,
     };
 
@@ -998,6 +1212,7 @@ watch(
 
 onMounted(() => {
   fetchGateways();
+  fetchInventorySites();
 });
 
 onUnmounted(() => {
