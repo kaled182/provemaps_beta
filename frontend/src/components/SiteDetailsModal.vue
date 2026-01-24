@@ -14,9 +14,19 @@
                 <p class="site-location">{{ site?.location || 'N/A' }}</p>
               </div>
             </div>
-            <button class="close-button" @click="close">
-              <i class="fas fa-times"></i>
-            </button>
+            <div class="header-actions">
+              <button 
+                class="action-button camera-button" 
+                @click="openMosaic"
+                title="Ver Mosaico de Câmeras"
+              >
+                <i class="fas fa-video"></i>
+                <span>Câmeras</span>
+              </button>
+              <button class="close-button" @click="close">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
           </div>
 
           <!-- Site Summary -->
@@ -270,6 +280,7 @@
 
 <script setup>
 import { ref, computed, watch, reactive, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useApi } from '@/composables/useApi'
 import { useNotification } from '@/composables/useNotification'
 import { useUiStore } from '@/stores/ui'
@@ -289,6 +300,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close'])
 
+const router = useRouter()
 const { get, patch } = useApi()
 const { success, error: notifyError } = useNotification()
 const uiStore = useUiStore()
@@ -554,6 +566,24 @@ const closeDeviceDetails = () => {
   selectedDeviceForDetails.value = null
 }
 
+const openMosaic = () => {
+  if (!props.site) return
+  
+  console.log('[SiteDetailsModal] Abrindo mosaico para site:', props.site.name)
+  
+  // Fechar o modal atual
+  close()
+  
+  // Navegar para a página de visualização de mosaico com filtro por site
+  router.push({
+    name: 'MosaicViewer',
+    query: {
+      site: props.site.id,
+      siteName: props.site.name
+    }
+  })
+}
+
 const saveDevice = async () => {
   if (!editForm.id) return
   
@@ -746,6 +776,49 @@ watch(() => props.isOpen, (isOpen) => {
   margin: 0;
   opacity: 0.9;
   color: white;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.action-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+  backdrop-filter: blur(10px);
+}
+
+.action-button:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.action-button i {
+  font-size: 16px;
+}
+
+.camera-button {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.9) 0%, rgba(37, 99, 235, 0.9) 100%);
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+.camera-button:hover {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 1) 0%, rgba(37, 99, 235, 1) 100%);
+  border-color: rgba(59, 130, 246, 0.7);
 }
 
 .close-button {
