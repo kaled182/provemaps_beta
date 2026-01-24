@@ -14,19 +14,9 @@
                 <p class="site-location">{{ site?.location || 'N/A' }}</p>
               </div>
             </div>
-            <div class="header-actions">
-              <button 
-                class="action-button camera-button" 
-                @click="openMosaic"
-                title="Ver Mosaico de Câmeras"
-              >
-                <i class="fas fa-video"></i>
-                <span>Câmeras</span>
-              </button>
-              <button class="close-button" @click="close">
-                <i class="fas fa-times"></i>
-              </button>
-            </div>
+            <button class="close-button" @click="close">
+              <i class="fas fa-times"></i>
+            </button>
           </div>
 
           <!-- Site Summary -->
@@ -65,6 +55,15 @@
               <div class="summary-content">
                 <span class="summary-label">Offline</span>
                 <span class="summary-value">{{ deviceStats.offline }}</span>
+              </div>
+            </div>
+            <div class="summary-card camera-card" @click="openCameraModal" style="cursor: pointer;">
+              <div class="summary-icon cameras">
+                <i class="fas fa-video"></i>
+              </div>
+              <div class="summary-content">
+                <span class="summary-label">Câmeras</span>
+                <span class="summary-value">{{ cameraCount }}</span>
               </div>
             </div>
           </div>
@@ -276,6 +275,57 @@
       </div>
     </Transition>
   </Teleport>
+
+  <!-- Camera Mosaic Modal -->
+  <Teleport to="body">
+    <Transition name="modal">
+      <div v-if="showCameraModal" class="camera-modal-overlay" @click.self="closeCameraModal">
+        <div class="camera-modal-container">
+          <div class="camera-modal-header">
+            <h3>
+              <i class="fas fa-video"></i>
+              Câmeras - {{ site?.name }}
+            </h3>
+            <button class="camera-close-btn" @click="closeCameraModal">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div class="camera-modal-body">
+            <div v-if="loadingCameras" class="camera-loading">
+              <i class="fas fa-spinner fa-spin"></i>
+              <span>Carregando câmeras...</span>
+            </div>
+            <div v-else-if="cameras.length === 0" class="camera-empty">
+              <i class="fas fa-video-slash"></i>
+              <span>Nenhuma câmera encontrada para este site</span>
+            </div>
+            <div v-else class="camera-grid" :class="getCameraGridClass">
+              <div v-for="camera in cameras" :key="camera.id" class="camera-cell">
+                <div class="camera-video-container">
+                  <video 
+                    :ref="el => { if (el) cameraVideoRefs[camera.id] = el }"
+                    class="camera-video"
+                    autoplay
+                    muted
+                    playsinline
+                  ></video>
+                  <div class="camera-overlay">
+                    <span class="camera-name">{{ camera.name }}</span>
+                    <span v-if="cameraConnections[camera.id]" class="camera-status connected">
+                      <i class="fas fa-circle"></i> Ao vivo
+                    </span>
+                    <span v-else class="camera-status connecting">
+                      <i class="fas fa-spinner fa-spin"></i> Conectando...
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup>
@@ -311,6 +361,12 @@ const showEditModal = ref(false)
 const showDeviceDetailsModal = ref(false)
 const selectedDeviceForDetails = ref(null)
 const saving = ref(false)
+const showCameraModal = ref(false)
+const cameras = ref([])
+const loadingCameras = ref(false)
+const cameraVideoRefs = ref({})
+const cameraConnections = ref({})
+const cameraCount = ref(0)
 const editForm = reactive({
   id: null,
   name: '',
@@ -566,23 +622,105 @@ const closeDeviceDetails = () => {
   selectedDeviceForDetails.value = null
 }
 
-const openMosaic = () => {
+const openCameraModal = async () => {
+  showCameraModal.value = true
+  await loadCameras()
+}
+
+const closeCameraModal = () => {
+  showCameraModal.value = false
+  // Limpar conexões WebRTC
+  Object.values(cameraConnections.value).forEach(pc => {
+    if (pc) pc.close()
+  })
+  cameraConnections.value = {}
+  cameraVideoRefs.value = {}
+  cameras.value = []
+}
+
+const loadCameras = async () => {
   if (!props.site) return
   
-  console.log('[SiteDetailsModal] Abrindo mosaico para site:', props.site.name)
-  
-  // Fechar o modal atual
-  close()
-  
-  // Navegar para a página de visualização de mosaico com filtro por site
-  router.push({
-    name: 'MosaicViewer',
-    query: {
-      site: props.site.id,
-      siteName: props.site.name
+  loadingCameras.value = true
+  try {
+    // Buscar câmeras do site
+    const response = await get(`/api/v1/cameras/?site=${props.site.id}`)
+    cameras.value = response.results || []
+    console.log('[SiteDetailsModal] Câmeras carregadas:', cameras.value.length)
+    
+    // Iniciar conexões WebRTC para cada câmera
+    for (const camera of cameras.value) {
+      await connectCamera(camera)
     }
-  })
+  } catch (error) {
+    console.error('[SiteDetailsModal] Erro ao carregar câmeras:', error)
+    notifyError('Erro', 'Não foi possível carregar as câmeras')
+  } finally {
+    loadingCameras.value = false
+  }
 }
+
+const connectCamera = async (camera) => {
+  if (!camera.whep_url) {
+    console.warn('[SiteDetailsModal] Câmera sem WHEP URL:', camera.name)
+    return
+  }
+  
+  try {
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    })
+    
+    pc.addTransceiver('video', { direction: 'recvonly' })
+    pc.addTransceiver('audio', { direction: 'recvonly' })
+    
+    pc.ontrack = (event) => {
+      const video = cameraVideoRefs.value[camera.id]
+      if (video && event.streams[0]) {
+        video.srcObject = event.streams[0]
+        cameraConnections.value[camera.id] = pc
+      }
+    }
+    
+    const offer = await pc.createOffer()
+    await pc.setLocalDescription(offer)
+    
+    const response = await fetch(camera.whep_url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/sdp' },
+      body: offer.sdp
+    })
+    
+    if (response.ok) {
+      const answerSdp = await response.text()
+      await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp })
+      console.log('[SiteDetailsModal] Câmera conectada:', camera.name)
+    }
+  } catch (error) {
+    console.error('[SiteDetailsModal] Erro ao conectar câmera:', camera.name, error)
+  }
+}
+
+const loadCameraCount = async () => {
+  if (!props.site) return
+  
+  try {
+    const response = await get(`/api/v1/cameras/?site=${props.site.id}`)
+    cameraCount.value = response.count || response.results?.length || 0
+  } catch (error) {
+    console.error('[SiteDetailsModal] Erro ao contar câmeras:', error)
+    cameraCount.value = 0
+  }
+}
+
+const getCameraGridClass = computed(() => {
+  const count = cameras.value.length
+  if (count === 1) return 'grid-cols-1'
+  if (count === 2) return 'grid-cols-2'
+  if (count <= 4) return 'grid-cols-2'
+  if (count <= 6) return 'grid-cols-3'
+  return 'grid-cols-4'
+})
 
 const saveDevice = async () => {
   if (!editForm.id) return
@@ -614,6 +752,7 @@ const saveDevice = async () => {
 watch(() => props.isOpen, (newVal) => {
   if (newVal && props.site) {
     loadDevices()
+    loadCameraCount()
   }
 })
 
@@ -897,6 +1036,21 @@ watch(() => props.isOpen, (isOpen) => {
 .summary-icon.offline {
   background: rgba(107, 114, 128, 0.1);
   color: #6b7280;
+}
+
+.summary-icon.cameras {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.camera-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+}
+
+.camera-card:hover .summary-icon.cameras {
+  background: rgba(59, 130, 246, 0.2);
+  transform: scale(1.1);
 }
 
 .summary-content {
@@ -1512,4 +1666,192 @@ watch(() => props.isOpen, (isOpen) => {
   .site-summary {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+/* Camera Modal Styles */
+.camera-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 14000;
+  padding: 20px;
+}
+
+.camera-modal-container {
+  background: #1e293b;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 1600px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+}
+
+.camera-modal-header {
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.camera-modal-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.camera-close-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.camera-close-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
+.camera-modal-body {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.camera-loading,
+.camera-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 60px 20px;
+  color: #94a3b8;
+}
+
+.camera-loading i,
+.camera-empty i {
+  font-size: 48px;
+  color: #3b82f6;
+}
+
+.camera-grid {
+  display: grid;
+  gap: 16px;
+  height: 100%;
+}
+
+.camera-grid.grid-cols-1 {
+  grid-template-columns: 1fr;
+}
+
+.camera-grid.grid-cols-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.camera-grid.grid-cols-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.camera-grid.grid-cols-4 {
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+}
+
+@media (min-width: 1400px) {
+  .camera-grid.grid-cols-4 {
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: 1fr;
+  }
+}
+
+.camera-cell {
+  background: #0f172a;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid #334155;
+  transition: all 0.3s;
+  min-height: 280px;
+}
+
+.camera-cell:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3);
+}
+
+.camera-video-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 280px;
+}
+
+.camera-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+
+.camera-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, transparent 100%);
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.camera-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+}
+
+.camera-status {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.camera-status.connected {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.camera-status.connecting {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.camera-status i {
+  font-size: 8px;
 }
