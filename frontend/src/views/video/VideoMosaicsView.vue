@@ -1,7 +1,19 @@
 <template>
-  <div class="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col h-[calc(100vh-64px)] overflow-hidden transition-colors duration-300">
+  <div :class="embedded ? '' : 'min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col h-[calc(100vh-64px)] overflow-hidden transition-colors duration-300'">
     
-    <div class="flex-none px-6 py-5 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 z-10">
+    <!-- Header para modo embedded -->
+    <div v-if="embedded" class="flex-none px-4 py-3 border-b app-divider flex justify-between items-center">
+      <div>
+        <h2 class="text-lg font-bold app-text-primary">Mosaicos</h2>
+        <p class="text-xs app-text-tertiary">Visualização em grade de múltiplas câmeras</p>
+      </div>
+      <button @click="openMosaicModal()" class="px-3 py-2 rounded-lg shadow-md transition-colors flex items-center gap-2 text-sm app-btn-primary">
+        <i class="fas fa-plus"></i>
+        <span>Novo Mosaico</span>
+      </button>
+    </div>
+    
+    <div v-if="!embedded" class="flex-none px-6 py-5 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 z-10">
       <div class="flex justify-between items-center">
         <div>
           <h1 class="text-xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-2">
@@ -20,8 +32,8 @@
       </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto custom-scrollbar p-6 bg-gray-50 dark:bg-gray-900">
-      <div class="max-w-7xl mx-auto">
+    <div :class="embedded ? 'flex-1 overflow-y-auto p-4' : 'flex-1 overflow-y-auto custom-scrollbar p-6 bg-gray-50 dark:bg-gray-900'">
+      <div :class="embedded ? '' : 'max-w-7xl mx-auto'">
         
         <div v-if="mosaicsLoading" class="text-center py-12">
           <svg class="animate-spin h-8 w-8 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24">
@@ -48,6 +60,21 @@
               <div class="flex-1">
                 <h4 class="font-bold text-gray-900 dark:text-white">{{ mosaic.name }}</h4>
                 <p class="text-xs text-gray-500 mt-1">{{ getLayoutLabel(mosaic.layout) }}</p>
+                <div class="flex flex-wrap gap-1 mt-2">
+                  <span 
+                    v-if="!mosaic.departments || mosaic.departments.length === 0" 
+                    class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                  >
+                    <i class="fas fa-globe mr-1"></i> Público
+                  </span>
+                  <span 
+                    v-for="dept in mosaic.departments" 
+                    :key="dept.id"
+                    class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
+                  >
+                    {{ dept.name }}
+                  </span>
+                </div>
               </div>
               <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wide bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400">
                 {{ mosaic.cameras?.length || 0 }} câm.
@@ -109,6 +136,27 @@
                 </div>
 
                 <div>
+                  <label class="label-custom">Departamentos com Acesso</label>
+                  <select 
+                    v-model="mosaicForm.department_ids" 
+                    multiple 
+                    class="input-custom min-h-[100px]"
+                    @change="() => {}"
+                  >
+                    <option v-if="departments.length === 0" disabled value="">Carregando departamentos...</option>
+                    <option v-for="dept in departments" :key="dept.id" :value="dept.id">
+                      {{ dept.name }}
+                    </option>
+                  </select>
+                  <p class="text-xs text-gray-400 mt-2">
+                    Selecione os departamentos que podem visualizar este mosaico. 
+                    Deixe vazio para acesso público (todos departamentos). 
+                    Use Ctrl/Cmd para selecionar múltiplos.
+                    <span v-if="departments.length > 0" class="block mt-1">{{ departments.length }} departamento(s) disponível(is)</span>
+                  </p>
+                </div>
+
+                <div>
                   <label class="label-custom">Câmeras Selecionadas</label>
                   <div class="border border-gray-200 dark:border-gray-700 rounded-md p-3 bg-gray-50 dark:bg-gray-900/50 min-h-[120px] max-h-[200px] overflow-y-auto custom-scrollbar">
                     <div v-if="selectedCameras.length === 0" class="text-center py-6 text-sm text-gray-400">
@@ -128,14 +176,53 @@
 
                 <div>
                   <label class="label-custom">Câmeras Disponíveis</label>
-                  <div class="border border-gray-200 dark:border-gray-700 rounded-md max-h-[240px] overflow-y-auto custom-scrollbar">
-                    <div v-if="availableCameras.length === 0" class="text-center py-6 text-sm text-gray-400">
+                  <div class="border border-gray-200 dark:border-gray-700 rounded-md max-h-[320px] overflow-y-auto custom-scrollbar">
+                    <div v-if="availableCamerasBySite.length === 0" class="text-center py-6 text-sm text-gray-400">
                       Nenhuma câmera disponível
                     </div>
-                    <button v-for="camera in availableCameras" :key="camera.id" @click="addCameraToSelection(camera)" type="button" class="w-full px-4 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700 last:border-b-0 transition-colors flex items-center justify-between group">
-                      <span class="text-sm text-gray-900 dark:text-gray-100">{{ camera.name }}</span>
-                      <svg class="w-4 h-4 text-gray-400 group-hover:text-primary-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-                    </button>
+                    <div v-else>
+                      <div v-for="siteGroup in availableCamerasBySite" :key="siteGroup.siteName" class="border-b border-gray-100 dark:border-gray-700/50 last:border-b-0">
+                        <button
+                          type="button"
+                          @click="toggleSite(siteGroup.siteName)"
+                          class="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700/30 sticky top-0 z-10 hover:bg-gray-200 dark:hover:bg-gray-700/50 transition-colors"
+                        >
+                          <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                              <svg 
+                                class="w-4 h-4 text-gray-500 dark:text-gray-400 transition-transform"
+                                :class="{ 'rotate-90': !isSiteCollapsed(siteGroup.siteName) }"
+                                fill="none" 
+                                stroke="currentColor" 
+                                viewBox="0 0 24 24"
+                              >
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                              </svg>
+                              <span class="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+                                {{ siteGroup.siteName }}
+                              </span>
+                            </div>
+                            <span class="text-xs text-gray-500 dark:text-gray-400">
+                              {{ siteGroup.cameras.length }}
+                            </span>
+                          </div>
+                        </button>
+                        <div v-show="!isSiteCollapsed(siteGroup.siteName)">
+                          <button 
+                            v-for="camera in siteGroup.cameras" 
+                            :key="camera.id" 
+                            @click="addCameraToSelection(camera)" 
+                            type="button" 
+                            class="w-full px-4 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b border-gray-50 dark:border-gray-700/30 last:border-b-0 transition-colors flex items-center justify-between group"
+                          >
+                            <span class="text-sm text-gray-900 dark:text-gray-100">{{ camera.name }}</span>
+                            <svg class="w-4 h-4 text-gray-400 group-hover:text-primary-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -185,6 +272,10 @@ import { useRouter } from 'vue-router';
 import { useApi } from '@/composables/useApi';
 import { useNotification } from '@/composables/useNotification';
 
+const props = defineProps({
+  embedded: { type: Boolean, default: false }
+});
+
 const router = useRouter();
 const api = useApi();
 const notify = useNotification();
@@ -192,15 +283,18 @@ const notify = useNotification();
 const mosaicsLoading = ref(false);
 const mosaics = ref([]);
 const cameras = ref([]);
+const departments = ref([]);
 const showMosaicModal = ref(false);
 const showDeleteConfirm = ref(false);
 const mosaicToDelete = ref(null);
+const collapsedSites = ref(new Set());
 
 const mosaicForm = ref({
   id: null,
   name: '',
   layout: '2x2',
   cameras: [],
+  department_ids: [],
 });
 
 const mosaicsSorted = computed(() => [...mosaics.value].sort((a, b) => a.name.localeCompare(b.name)));
@@ -213,6 +307,29 @@ const selectedCameras = computed(() => {
 const availableCameras = computed(() => {
   const selectedIds = new Set(mosaicForm.value.cameras || []);
   return cameras.value.filter(c => !selectedIds.has(c.id) && c.enabled);
+});
+
+const availableCamerasBySite = computed(() => {
+  const selectedIds = new Set(mosaicForm.value.cameras || []);
+  const available = cameras.value.filter(c => !selectedIds.has(c.id) && c.enabled);
+  
+  // Agrupar por site
+  const grouped = {};
+  available.forEach(camera => {
+    const siteName = camera.site_name || 'Sem Site';
+    if (!grouped[siteName]) {
+      grouped[siteName] = [];
+    }
+    grouped[siteName].push(camera);
+  });
+  
+  // Ordenar sites alfabeticamente e câmeras dentro de cada site
+  return Object.keys(grouped)
+    .sort((a, b) => a.localeCompare(b))
+    .map(siteName => ({
+      siteName,
+      cameras: grouped[siteName].sort((a, b) => a.name.localeCompare(b.name))
+    }));
 });
 
 const deleteMessage = computed(() => {
@@ -283,6 +400,25 @@ const fetchCameras = async () => {
   }
 };
 
+const fetchDepartments = async () => {
+  try {
+    console.log('[VideoMosaics] Buscando departamentos...');
+    const res = await api.get('/api/departments/');
+    console.log('[VideoMosaics] Resposta da API de departamentos:', res);
+    if (res && res.success) {
+      departments.value = res.departments || [];
+      console.log('[VideoMosaics] Departamentos carregados:', departments.value.length, departments.value);
+    } else {
+      console.warn('[VideoMosaics] Resposta da API sem success:', res);
+      departments.value = [];
+    }
+  } catch (e) {
+    console.error('[VideoMosaics] Erro ao carregar departamentos:', e);
+    notify.error('Departamentos', 'Erro ao carregar lista de departamentos.');
+    departments.value = [];
+  }
+};
+
 const openMosaicModal = (mosaic = null) => {
   if (mosaic) {
     mosaicForm.value = {
@@ -290,6 +426,7 @@ const openMosaicModal = (mosaic = null) => {
       name: mosaic.name,
       layout: mosaic.layout || '2x2',
       cameras: mosaic.cameras || [],
+      department_ids: (mosaic.departments || []).map(d => d.id),
     };
   } else {
     mosaicForm.value = {
@@ -297,6 +434,7 @@ const openMosaicModal = (mosaic = null) => {
       name: '',
       layout: '2x2',
       cameras: [],
+      department_ids: [],
     };
   }
   showMosaicModal.value = true;
@@ -304,6 +442,19 @@ const openMosaicModal = (mosaic = null) => {
 
 const closeMosaicModal = () => {
   showMosaicModal.value = false;
+  collapsedSites.value.clear();
+};
+
+const toggleSite = (siteName) => {
+  if (collapsedSites.value.has(siteName)) {
+    collapsedSites.value.delete(siteName);
+  } else {
+    collapsedSites.value.add(siteName);
+  }
+};
+
+const isSiteCollapsed = (siteName) => {
+  return collapsedSites.value.has(siteName);
 };
 
 const addCameraToSelection = (camera) => {
@@ -326,6 +477,7 @@ const saveMosaic = async () => {
       name: mosaicForm.value.name,
       layout: mosaicForm.value.layout,
       cameras: mosaicForm.value.cameras,
+      department_ids: mosaicForm.value.department_ids || [],
     };
 
     let res;
@@ -386,9 +538,14 @@ const viewMosaic = (mosaic) => {
   router.push({ name: 'mosaic-viewer', params: { id: mosaic.id } });
 };
 
-onMounted(() => {
-  fetchMosaics();
-  fetchCameras();
+onMounted(async () => {
+  console.log('[VideoMosaics] Component mounted, iniciando carregamento...');
+  await Promise.all([
+    fetchMosaics(),
+    fetchCameras(),
+    fetchDepartments()
+  ]);
+  console.log('[VideoMosaics] Carregamento concluído. Departamentos:', departments.value);
 });
 </script>
 

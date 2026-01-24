@@ -211,11 +211,12 @@ def process_host_status(
         if iface_available is not None:
             interface_data["available"] = str(iface_available)
 
-    # Fetch uptime and CPU values from Zabbix if item keys are configured
+    # Fetch uptime, CPU and Memory values from Zabbix if item keys are configured
     uptime_value = None
     cpu_value = None
+    memory_value = None
     
-    if device.uptime_item_key or device.cpu_usage_item_key:
+    if device.uptime_item_key or device.cpu_usage_item_key or getattr(device, "memory_usage_item_key", ""):
         try:
             from integrations.zabbix.zabbix_service import zabbix_request
             
@@ -224,6 +225,9 @@ def process_host_status(
                 items_to_fetch.append(device.uptime_item_key)
             if device.cpu_usage_item_key:
                 items_to_fetch.append(device.cpu_usage_item_key)
+            mem_key = getattr(device, "memory_usage_item_key", "")
+            if mem_key:
+                items_to_fetch.append(mem_key)
             
             item_values = zabbix_request(
                 "item.get",
@@ -263,6 +267,12 @@ def process_host_status(
                         cpu_value = f"{cpu_float:.1f}%"
                     except (ValueError, TypeError):
                         cpu_value = lastvalue
+                elif key == mem_key and lastvalue:
+                    try:
+                        mem_float = float(lastvalue)
+                        memory_value = f"{mem_float:.1f}%"
+                    except (ValueError, TypeError):
+                        memory_value = lastvalue
         
         except Exception as e:
             logger.warning(
@@ -313,6 +323,7 @@ def process_host_status(
         "primary_ip": interface_data["ip"],
         "uptime_value": uptime_value,
         "cpu_value": cpu_value,
+        "memory_value": memory_value,
         "device_type": device_type,
         "status": str(host_data.get("status", "0")),
         "status_text": HostStatusProcessor.STATUS_MAP.get(

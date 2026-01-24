@@ -425,6 +425,97 @@
                   </span>
                 </div>
               </div>
+
+              <!-- Zabbix & Métricas: edição de chaves e overrides (somente modo single) -->
+              <div v-if="!isBatch" class="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+                <h4 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Zabbix & Métricas
+                </h4>
+
+                <div class="space-y-3">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                      Uptime item key
+                    </label>
+                    <input 
+                      v-model="zabbixForm.uptime_item_key" 
+                      type="text" 
+                      class="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2 px-3" 
+                      placeholder="ex: sysUpTime | system.uptime" 
+                    />
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Zabbix item key para uptime (e.g. system.uptime)</p>
+                  </div>
+
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                      Cpu usage item key
+                    </label>
+                    <input 
+                      v-model="zabbixForm.cpu_usage_item_key" 
+                      type="text" 
+                      class="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2 px-3" 
+                      placeholder="ex: system.cpu.util[,user]" 
+                    />
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Zabbix item key para CPU usage (e.g. system.cpu.util[,user])</p>
+                  </div>
+
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                      Memory usage item key
+                    </label>
+                    <input 
+                      v-model="zabbixForm.memory_usage_item_key" 
+                      type="text" 
+                      class="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2 px-3" 
+                      placeholder="ex: vm.memory.size[percent] | mem.util" 
+                    />
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Zabbix item key para Memory usage (e.g. vm.memory.size[percent] ou mem.util)</p>
+                  </div>
+
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                        Cpu usage manual percent
+                      </label>
+                      <input 
+                        v-model.number="zabbixForm.cpu_usage_manual_percent" 
+                        type="number" 
+                        step="0.1" 
+                        min="0" 
+                        max="100" 
+                        class="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2 px-3" 
+                        placeholder="ex: 30" 
+                      />
+                      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Valor manual quando Zabbix estiver indisponível</p>
+                    </div>
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                        Memory usage manual percent
+                      </label>
+                      <input 
+                        v-model.number="zabbixForm.memory_usage_manual_percent" 
+                        type="number" 
+                        step="0.1" 
+                        min="0" 
+                        max="100" 
+                        class="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2 px-3" 
+                        placeholder="ex: 55" 
+                      />
+                      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Valor manual quando Zabbix estiver indisponível</p>
+                    </div>
+                  </div>
+
+                  <div class="flex justify-end pt-2">
+                    <button 
+                      @click="saveZabbixFields" 
+                      type="button" 
+                      class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none transition-colors"
+                    >
+                      <i class="fas fa-save mr-2"></i> Salvar Device
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
 
           </div>
@@ -743,6 +834,7 @@
 import { reactive, ref, computed, watch, nextTick, onUnmounted } from 'vue';
 import { loadGoogleMaps } from '@/utils/googleMapsLoader';
 import { useApi } from '@/composables/useApi';
+import { useNotification } from '@/composables/useNotification';
 
 // Props polimórficas: suporta array (batch) OU objeto único (legacy)
 const props = defineProps({
@@ -756,8 +848,9 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'save', 'edit']);
 
-// API composable
+// API & notifications
 const api = useApi();
+const { success, error: notifyError } = useNotification();
 
 // Estado do Formulário (compartilhado entre single e batch)
 const formState = reactive({
@@ -767,6 +860,15 @@ const formState = reactive({
   alerts: { screen: true, whatsapp: false },
   name: '',       // Apenas para single mode
   ip_address: ''  // Apenas para single mode
+});
+
+// Zabbix & Métricas (somente single)
+const zabbixForm = reactive({
+  uptime_item_key: '',
+  cpu_usage_item_key: '',
+  memory_usage_item_key: '',
+  cpu_usage_manual_percent: null,
+  memory_usage_manual_percent: null,
 });
 
 // Variáveis de Controle de Interface - Grupo
@@ -931,6 +1033,13 @@ watch(() => [props.device, props.devices], () => {
     
     selectedSiteProxy.value = siteId;
     selectedGroupProxy.value = groupName;
+
+    // Preenche formulário Zabbix/Métricas
+    zabbixForm.uptime_item_key = singleDev.uptime_item_key || '';
+    zabbixForm.cpu_usage_item_key = singleDev.cpu_usage_item_key || '';
+    zabbixForm.memory_usage_item_key = singleDev.memory_usage_item_key || '';
+    zabbixForm.cpu_usage_manual_percent = singleDev.cpu_usage_manual_percent ?? null;
+    zabbixForm.memory_usage_manual_percent = singleDev.memory_usage_manual_percent ?? null;
   }
 }, { immediate: true });
 
@@ -1197,6 +1306,29 @@ onUnmounted(() => {
 });
 
 // --- SALVAMENTO ---
+
+const saveZabbixFields = async () => {
+  try {
+    const device = activeDevices.value[0];
+    if (!device || !device.id) {
+      alert('Dispositivo sem ID válido para salvar.');
+      return;
+    }
+    const payload = {
+      uptime_item_key: zabbixForm.uptime_item_key || null,
+      cpu_usage_item_key: zabbixForm.cpu_usage_item_key || null,
+      memory_usage_item_key: zabbixForm.memory_usage_item_key || null,
+      cpu_usage_manual_percent: zabbixForm.cpu_usage_manual_percent ?? null,
+      memory_usage_manual_percent: zabbixForm.memory_usage_manual_percent ?? null,
+    };
+    const resp = await api.patch(`/api/v1/devices/${device.id}/`, payload);
+    console.log('[DeviceEditModal] Device patched:', resp?.id || device.id);
+    success('Device atualizado', 'Campos de Zabbix e métricas salvos.');
+  } catch (e) {
+    console.error('[DeviceEditModal] Patch failed:', e);
+    notifyError('Erro ao salvar', e?.message || 'Não foi possível atualizar o device.');
+  }
+};
 
 // Função para abrir dashboard do dispositivo (modo readonly)
 const openDashboard = () => {

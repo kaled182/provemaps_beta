@@ -60,6 +60,25 @@ class SiteSerializer(serializers.ModelSerializer[Site]):
         allow_null=True,
     )
     device_count = serializers.IntegerField(read_only=True)
+    camera_count = serializers.SerializerMethodField()
+    
+    def get_camera_count(self, obj: Site) -> int:
+        """Count video cameras assigned to this site"""
+        try:
+            from setup_app.models import MessagingGateway
+            # Try matching by display_name first, then name
+            count = MessagingGateway.objects.filter(
+                gateway_type='video',
+                site_name=obj.display_name
+            ).count()
+            if count == 0 and obj.display_name != obj.name:
+                count = MessagingGateway.objects.filter(
+                    gateway_type='video',
+                    site_name=obj.name
+                ).count()
+            return count
+        except Exception:
+            return 0
 
     class Meta:
         model = Site
@@ -77,6 +96,7 @@ class SiteSerializer(serializers.ModelSerializer[Site]):
             "latitude",
             "longitude",
             "device_count",
+            "camera_count",
         ]
         read_only_fields = ["id", "slug"]
 
@@ -249,6 +269,9 @@ class DeviceSerializer(serializers.ModelSerializer[Device]):
             "zabbix_hostid",
             "uptime_item_key",
             "cpu_usage_item_key",
+            "memory_usage_item_key",
+            "cpu_usage_manual_percent",
+            "memory_usage_manual_percent",
             # Device Import System Fields
             "category",
             "role",
@@ -306,6 +329,10 @@ class PortSerializer(serializers.ModelSerializer[Port]):
             "last_rx_power",
             "last_tx_power",
             "last_optical_check",
+            "alarm_enabled",
+            "alarm_warning_threshold",
+            "alarm_critical_threshold",
+            "alarm_notifications",
         ]
         read_only_fields = ["id", "device_id", "site_id"]
 

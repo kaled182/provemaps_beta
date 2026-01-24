@@ -73,19 +73,26 @@ export const useUiStore = defineStore('ui', () => {
     console.log('[UI Store] Theme applied:', theme.value);
   }
   
-  // Aplicar tema imediatamente ao carregar a store
-  applyTheme();
-  
   // Actions - Nav Menu
   function toggleNavMenu() {
     isNavMenuOpen.value = !isNavMenuOpen.value;
     localStorage.setItem(STORAGE_KEYS.navMenuOpen, isNavMenuOpen.value);
+    applyNavMenuState();
   }
   
   function setNavMenuOpen(value) {
     isNavMenuOpen.value = value;
     localStorage.setItem(STORAGE_KEYS.navMenuOpen, value);
+    applyNavMenuState();
   }
+  
+  function applyNavMenuState() {
+    document.documentElement.setAttribute('data-nav-menu-open', isNavMenuOpen.value);
+  }
+  
+  // Aplicar estados imediatamente ao carregar a store
+  applyTheme();
+  applyNavMenuState();
   
   // Actions - Sidebar
   function toggleSidebar() {
@@ -155,6 +162,7 @@ export const useUiStore = defineStore('ui', () => {
     // Actions - Nav Menu
     toggleNavMenu,
     setNavMenuOpen,
+    applyNavMenuState,
     
     // Actions - Sidebar
     toggleSidebar,

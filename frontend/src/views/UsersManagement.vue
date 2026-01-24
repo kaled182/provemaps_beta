@@ -116,8 +116,20 @@
                       <div>
                         <div class="text-sm font-medium app-text-primary">{{ user.full_name || user.username }}</div>
                         <div class="text-xs app-text-tertiary">@{{ user.username }}</div>
-                        <div class="text-xs app-text-tertiary">
-                          {{ formatDepartmentLabel(user.profile) }}
+                        <div class="flex flex-wrap gap-1 mt-1">
+                          <span 
+                            v-if="!user.profile.departments || user.profile.departments.length === 0"
+                            class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-gray-100 dark:bg-gray-700/30 text-gray-600 dark:text-gray-400"
+                          >
+                            Sem Depto
+                          </span>
+                          <span 
+                            v-for="dept in user.profile.departments"
+                            :key="dept.id"
+                            class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400"
+                          >
+                            {{ dept.name }}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -432,6 +444,14 @@
           >
             Seguranca
           </button>
+          <button
+            v-if="isEditing"
+            class="flex-1 py-2 text-sm font-medium"
+            :class="activeTab === 'access' ? 'app-text-primary border-b-2 border-sky-400' : 'app-text-tertiary'"
+            @click="activeTab = 'access'"
+          >
+            Mapa de Acesso
+          </button>
         </div>
 
         <form class="p-6 space-y-4" @submit.prevent="saveUser">
@@ -545,6 +565,119 @@
             <div class="app-surface-muted rounded-lg p-4 flex items-center justify-between">
               <span class="text-sm app-text-secondary">Conta ativa</span>
               <input type="checkbox" v-model="form.is_active" class="field-checkbox-input" />
+            </div>
+          </div>
+
+          <div v-if="activeTab === 'access' && isEditing" class="space-y-4">
+            <div class="app-surface-muted rounded-lg p-4 space-y-3">
+              <div>
+                <div class="text-sm font-semibold app-text-primary mb-2">Departamentos</div>
+                <div class="flex flex-wrap gap-2">
+                  <span 
+                    v-if="!form.profile.departments || form.profile.departments.length === 0"
+                    class="inline-flex items-center px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wide bg-gray-100 dark:bg-gray-700/30 text-gray-600 dark:text-gray-400"
+                  >
+                    Sem Departamento
+                  </span>
+                  <span 
+                    v-for="deptId in form.profile.departments"
+                    :key="deptId"
+                    class="inline-flex items-center px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wide bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400"
+                  >
+                    {{ getDepartmentName(deptId) }}
+                  </span>
+                </div>
+                <p class="text-xs app-text-tertiary mt-2">
+                  Os departamentos determinam automaticamente quais recursos o usuário pode acessar.
+                </p>
+              </div>
+            </div>
+
+            <div class="app-surface-muted rounded-lg p-4 space-y-3">
+              <div>
+                <div class="text-sm font-semibold app-text-primary mb-2">Sites Visíveis</div>
+                <div class="text-xs app-text-tertiary mb-2">
+                  Sites dos departamentos do usuário (baseado no inventário)
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <span 
+                    v-if="!form.profile.departments || form.profile.departments.length === 0"
+                    class="text-xs app-text-tertiary italic"
+                  >
+                    Nenhum site disponível (sem departamento)
+                  </span>
+                  <span 
+                    v-else
+                    class="inline-flex items-center px-3 py-1.5 rounded text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
+                  >
+                    Baseado nos departamentos atribuídos
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div class="app-surface-muted rounded-lg p-4 space-y-3">
+              <div>
+                <div class="text-sm font-semibold app-text-primary mb-2">Mosaicos Liberados</div>
+                <div class="text-xs app-text-tertiary mb-2">
+                  Mosaicos de vídeo acessíveis através dos departamentos
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <span 
+                    v-if="!form.profile.departments || form.profile.departments.length === 0"
+                    class="text-xs app-text-tertiary italic"
+                  >
+                    Nenhum mosaico disponível (sem departamento)
+                  </span>
+                  <span 
+                    v-else
+                    class="inline-flex items-center px-3 py-1.5 rounded text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400"
+                  >
+                    Herdado automaticamente dos departamentos
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div class="app-surface-muted rounded-lg p-4">
+              <div>
+                <div class="text-sm font-semibold app-text-primary mb-2">Nível de Operação</div>
+                <div class="space-y-2 mt-3">
+                  <div class="flex items-center gap-2">
+                    <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                    </svg>
+                    <span class="text-sm app-text-secondary">
+                      <span class="font-semibold">Visualizador:</span> Pode ver dashboards, mapas e câmeras
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <svg v-if="form.is_staff" class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                    </svg>
+                    <svg v-else class="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                    </svg>
+                    <span class="text-sm app-text-secondary">
+                      <span class="font-semibold">Operador (Staff):</span> Pode criar/editar recursos do sistema
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <svg v-if="form.is_superuser" class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                    </svg>
+                    <svg v-else class="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                    </svg>
+                    <span class="text-sm app-text-secondary">
+                      <span class="font-semibold">Administrador:</span> Acesso total sem restrições de departamento
+                    </span>
+                  </div>
+                </div>
+                <p class="text-xs app-text-tertiary mt-3">
+                  Configure na aba "Permissões" para alterar o nível de operação.
+                </p>
+              </div>
             </div>
           </div>
 
@@ -1229,6 +1362,11 @@ const getDepartmentNames = (profile) => {
 const formatDepartmentLabel = (profile) => {
   const names = getDepartmentNames(profile);
   return names.length ? names.join(', ') : 'Sem departamento';
+};
+
+const getDepartmentName = (deptId) => {
+  const dept = departments.value.find(d => d.id === deptId);
+  return dept ? dept.name : 'Desconhecido';
 };
 
 const getDepartmentIds = (profile) => {

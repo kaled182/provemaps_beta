@@ -11,6 +11,10 @@ from typing import Any, Callable, Dict, TYPE_CHECKING
 
 from .base import *  # noqa
 
+# Prevent sentry_sdk initialization during pytest to avoid atexit log noise
+if "PYTEST_CURRENT_TEST" in os.environ:
+    os.environ.pop("SENTRY_DSN", None)
+
 
 def _load_runtime_email_env() -> None:
     runtime_env_path = os.getenv("ENV_FILE_PATH")

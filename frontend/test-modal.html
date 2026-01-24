@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste PortTrafficModal</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.75);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        .modal-container {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="test-container">
+            <h1>Teste PortTrafficModal</h1>
+            <p>showModal: {{ showModal }}</p>
+            <button @click="toggleModal">Toggle Modal</button>
+            
+            <teleport to="body">
+                <transition name="modal-fade">
+                    <div v-if="showModal" class="modal-overlay" @click="closeModal">
+                        <div class="modal-container" @click.stop>
+                            <h2>Modal de Teste</h2>
+                            <p>Se você está vendo isso, o Teleport e Transition estão funcionando!</p>
+                            <p>v-if showModal: {{ showModal }}</p>
+                            <button @click="closeModal">Fechar</button>
+                        </div>
+                    </div>
+                </transition>
+            </teleport>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref } = Vue;
+
+        createApp({
+            setup() {
+                const showModal = ref(false);
+
+                const toggleModal = () => {
+                    console.log('Toggle modal - before:', showModal.value);
+                    showModal.value = !showModal.value;
+                    console.log('Toggle modal - after:', showModal.value);
+                };
+
+                const closeModal = () => {
+                    console.log('Close modal');
+                    showModal.value = false;
+                };
+
+                return {
+                    showModal,
+                    toggleModal,
+                    closeModal
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

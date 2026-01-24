@@ -59,7 +59,7 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-800/40 flex items-center justify-between">
             <div>
               <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Racks</p>
@@ -76,8 +76,24 @@
               <p class="text-lg font-bold text-gray-900 dark:text-white">{{ site.device_count || 0 }}</p>
               <p class="text-xs text-gray-500 dark:text-gray-400">Integre com o endpoint de devices do site.</p>
             </div>
-            <button class="px-3 py-2 text-xs bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 transition">
+            <button @click="goToDevices" class="px-3 py-2 text-xs bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 transition">
               Ver Devices
+            </button>
+          </div>
+          <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-800/40 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                <svg class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                </svg>
+              </div>
+              <div>
+                <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Câmeras</p>
+                <p class="text-lg font-bold text-gray-900 dark:text-white">{{ site.camera_count || 0 }}</p>
+              </div>
+            </div>
+            <button @click="goToCameras" class="px-3 py-2 text-xs bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 transition">
+              Ver Câmeras
             </button>
           </div>
         </div>
@@ -253,6 +269,7 @@ const mapFromApi = (payload) => {
     lat: payload.latitude,
     lng: payload.longitude,
     device_count: payload.device_count ?? 0,
+    camera_count: payload.camera_count ?? 0,
     status: payload.status || 'active',
     slug: payload.slug,
   };
@@ -310,6 +327,19 @@ const fetchSitesOptions = async () => {
 
 const goBack = () => {
   router.push({ name: 'inventory' });
+};
+
+const goToDevices = () => {
+  router.push({ name: 'inventory-devices' });
+};
+
+const goToCameras = () => {
+  const siteName = site.value.name || site.value.display_name;
+  if (siteName) {
+    router.push({ name: 'video', query: { tab: 'cameras', search: siteName } });
+  } else {
+    router.push({ name: 'video', query: { tab: 'cameras' } });
+  }
 };
 
 const handleEdit = () => {

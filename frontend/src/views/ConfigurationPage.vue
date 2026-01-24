@@ -878,6 +878,63 @@
           </div>
         </div>
 
+        <!-- Network Tab -->
+        <div v-if="activeTab === 'network'" class="space-y-6">
+          <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div class="px-6 py-5 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+              <div>
+                <h3 class="text-base font-bold text-gray-900 dark:text-white">Configurações de Rede</h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Limiares de alerta para nível de sinal óptico (RX dBm).</p>
+              </div>
+              <button @click="saveConfiguration" class="btn-primary">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                Salvar
+              </button>
+            </div>
+
+            <div class="p-6">
+              <div class="grid gap-6 md:grid-cols-2">
+                <div>
+                  <label class="label-custom">Limiar de Atenção (RX dBm)</label>
+                  <input 
+                    v-model="configForm.OPTICAL_RX_WARNING_THRESHOLD" 
+                    type="number" 
+                    step="0.5" 
+                    class="input-custom font-mono" 
+                    placeholder="-24" 
+                    autocomplete="off"
+                  >
+                  <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Dispara aviso quando o sinal RX ficar abaixo deste valor (ex: -24 dBm).
+                  </p>
+                </div>
+                <div>
+                  <label class="label-custom">Limiar Crítico (RX dBm)</label>
+                  <input 
+                    v-model="configForm.OPTICAL_RX_CRITICAL_THRESHOLD" 
+                    type="number" 
+                    step="0.5" 
+                    class="input-custom font-mono" 
+                    placeholder="-27" 
+                    autocomplete="off"
+                  >
+                  <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Dispara alarme crítico quando o sinal RX ficar abaixo deste valor (ex: -27 dBm).
+                  </p>
+                </div>
+              </div>
+              
+              <!-- DEBUG INFO -->
+              <div class="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800">
+                <p class="text-xs font-mono text-blue-900 dark:text-blue-200">
+                  <strong>Debug:</strong> Warning={{ configForm.OPTICAL_RX_WARNING_THRESHOLD }}, 
+                  Critical={{ configForm.OPTICAL_RX_CRITICAL_THRESHOLD }}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -1624,6 +1681,7 @@ import ConfirmDialog from '@/components/Common/ConfirmDialog.vue';
 const Icons = {
   Cog: { template: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>' },
   Server: { template: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>' },
+  Network: { template: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/></svg>' },
   Map: { template: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>' },
   Terminal: { template: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>' },
   Database: { template: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>' },
@@ -1644,6 +1702,7 @@ const showWhatsappResetConfirm = ref(false);
 const navItems = [
   { id: 'system', label: 'Sistema', icon: Icons.Terminal },
   { id: 'gateways', label: 'Gateway', icon: Icons.Chat },
+  { id: 'network', label: 'Network', icon: Icons.Network },
 ];
 
 const configForm = ref({
@@ -1709,6 +1768,9 @@ const configForm = ref({
   SMS_AWS_ACCESS_KEY_ID: '',
   SMS_AWS_SECRET_ACCESS_KEY: '',
   SMS_INFOBIP_BASE_URL: '',
+  // Network: optical signal thresholds (RX)
+  OPTICAL_RX_WARNING_THRESHOLD: '-24',
+  OPTICAL_RX_CRITICAL_THRESHOLD: '-27',
 });
 
 const servers = ref([]);

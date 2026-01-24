@@ -50,9 +50,15 @@
       </div>
 
       <div class="mt-4 pt-3 border-t app-divider flex justify-between items-center">
-        <div class="flex items-center gap-2 text-sm font-medium app-text-secondary">
-          <i class="fas fa-server app-text-tertiary"></i>
-          {{ site.device_count }} <span class="text-xs font-normal app-text-tertiary">Devices</span>
+        <div class="flex items-center gap-4 text-sm">
+          <div class="flex items-center gap-2 font-medium app-text-secondary">
+            <i class="fas fa-server app-text-tertiary"></i>
+            {{ site.device_count }} <span class="text-xs font-normal app-text-tertiary">Devices</span>
+          </div>
+          <div v-if="(site.camera_count || 0) > 0" class="flex items-center gap-2 font-medium" style="color: var(--accent-info);">
+            <i class="fas fa-video app-text-tertiary"></i>
+            {{ site.camera_count }} <span class="text-xs font-normal app-text-tertiary">Câmeras</span>
+          </div>
         </div>
         <button
           @click.stop="$emit('view', site)"
