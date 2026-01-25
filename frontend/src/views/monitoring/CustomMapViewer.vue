@@ -138,7 +138,80 @@
                 </div>
               </template>
               
-              <!-- Lista simples para outras categorias -->
+              <!-- Hierarquia de Sites para Câmeras -->
+              <template v-else-if="activeCategory === 'cameras'">
+                <div v-for="siteGroup in camerasBySite" :key="'camera-site-' + siteGroup.site_name" class="site-group">
+                  <!-- Linha do Site -->
+                  <div class="site-row">
+                    <button 
+                      @click="toggleCameraSiteExpansion(siteGroup.site_name)" 
+                      class="btn-expand"
+                      :title="isCameraSiteExpanded(siteGroup.site_name) ? 'Colapsar' : 'Expandir'"
+                    >
+                      <i :class="isCameraSiteExpanded(siteGroup.site_name) ? 'fas fa-chevron-down' : 'fas fa-chevron-right'"></i>
+                    </button>
+                    
+                    <label class="site-checkbox">
+                      <input 
+                        type="checkbox" 
+                        :checked="isCameraSiteSelected(siteGroup.site_name, siteGroup.cameras)"
+                        :indeterminate.prop="isCameraSitePartiallySelected(siteGroup.site_name, siteGroup.cameras)"
+                        @change="toggleCameraSite(siteGroup.site_name, siteGroup.cameras)"
+                      >
+                      <div class="site-details">
+                        <span class="site-name">
+                          <i class="fas fa-map-marker-alt"></i>
+                          {{ siteGroup.site_name }}
+                        </span>
+                        <span class="site-count">{{ siteGroup.cameras.length }} câmera(s)</span>
+                      </div>
+                    </label>
+                    
+                    <div class="site-status-summary">
+                      <template v-for="(count, status) in getCameraSiteStatusSummary(siteGroup.cameras)" :key="status">
+                        <span v-if="count > 0" :class="['status-dot', status]" :title="`${count} ${status === 'online' ? 'ONLINE' : 'OFFLINE'}`">
+                          {{ count }}
+                        </span>
+                      </template>
+                    </div>
+                  </div>
+                  
+                  <!-- Câmeras do Site (colapsável) -->
+                  <transition name="expand">
+                    <div v-if="isCameraSiteExpanded(siteGroup.site_name)" class="devices-list">
+                      <div 
+                        v-for="camera in siteGroup.cameras" 
+                        :key="camera.id"
+                        class="device-row"
+                      >
+                        <label class="device-checkbox">
+                          <input 
+                            type="checkbox" 
+                            :checked="isItemSelected(camera.id)"
+                            @change="toggleItem(camera.id)"
+                          >
+                          <div class="device-details">
+                            <span class="device-name">{{ camera.name }}</span>
+                          </div>
+                        </label>
+                        <div class="device-info">
+                          <span v-if="camera.status" :class="['status-badge', camera.status]">
+                            {{ getStatusLabel(camera.status) }}
+                          </span>
+                          <span v-else class="status-badge offline">
+                            Offline
+                          </span>
+                          <button @click="focusOnItem(camera)" class="btn-focus">
+                            <i class="fas fa-crosshairs"></i>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </transition>
+                </div>
+              </template>
+              
+              <!-- Lista simples para outras categorias (cabos, racks) -->
               <template v-else>
                 <div 
                   v-for="item in filteredItems" 
@@ -238,6 +311,8 @@ const selectedItems = ref({
 
 const expandedSites = ref(new Set())
 const selectedSites = ref(new Set())
+const expandedCameraSites = ref(new Set())
+const selectedCameraSites = ref(new Set())
 
 const inventoryCategories = [
   { key: 'devices', label: 'Equipamentos', icon: 'fas fa-server' },
@@ -287,6 +362,28 @@ const devicesBySite = computed(() => {
       })
     }
     siteMap.get(siteKey).devices.push(device)
+  })
+  
+  return Array.from(siteMap.values()).sort((a, b) => 
+    a.site_name.localeCompare(b.site_name)
+  )
+})
+
+const camerasBySite = computed(() => {
+  if (activeCategory.value !== 'cameras') return []
+  
+  const cameras = filteredItems.value
+  const siteMap = new Map()
+  
+  cameras.forEach(camera => {
+    const siteName = camera.site_name || 'Sem Site'
+    if (!siteMap.has(siteName)) {
+      siteMap.set(siteName, {
+        site_name: siteName,
+        cameras: []
+      })
+    }
+    siteMap.get(siteName).cameras.push(camera)
   })
   
   return Array.from(siteMap.values()).sort((a, b) => 
@@ -387,6 +484,69 @@ const getSiteStatusSummary = (devices) => {
   devices.forEach(device => {
     if (statusCount.hasOwnProperty(device.status)) {
       statusCount[device.status]++
+    }
+  })
+  
+  return statusCount
+}
+
+// Funções específicas para câmeras
+const toggleCameraSiteExpansion = (siteName) => {
+  if (expandedCameraSites.value.has(siteName)) {
+    expandedCameraSites.value.delete(siteName)
+  } else {
+    expandedCameraSites.value.add(siteName)
+  }
+}
+
+const isCameraSiteExpanded = (siteName) => {
+  return expandedCameraSites.value.has(siteName)
+}
+
+const toggleCameraSite = (siteName, cameras) => {
+  const cameraIds = cameras.map(c => c.id)
+  const allSelected = cameraIds.every(id => selectedItems.value.cameras.includes(id))
+  
+  if (allSelected) {
+    selectedItems.value.cameras = selectedItems.value.cameras.filter(
+      id => !cameraIds.includes(id)
+    )
+    selectedCameraSites.value.delete(siteName)
+  } else {
+    cameraIds.forEach(id => {
+      if (!selectedItems.value.cameras.includes(id)) {
+        selectedItems.value.cameras.push(id)
+      }
+    })
+    selectedCameraSites.value.add(siteName)
+  }
+  
+  updateMap()
+}
+
+const isCameraSiteSelected = (siteName, cameras) => {
+  const cameraIds = cameras.map(c => c.id)
+  return cameraIds.length > 0 && cameraIds.every(id => selectedItems.value.cameras.includes(id))
+}
+
+const isCameraSitePartiallySelected = (siteName, cameras) => {
+  const cameraIds = cameras.map(c => c.id)
+  const selectedCount = cameraIds.filter(id => selectedItems.value.cameras.includes(id)).length
+  return selectedCount > 0 && selectedCount < cameraIds.length
+}
+
+const getCameraSiteStatusSummary = (cameras) => {
+  const statusCount = {
+    online: 0,
+    offline: 0
+  }
+  
+  cameras.forEach(camera => {
+    const status = String(camera.status || 'offline').toLowerCase()
+    if (status === 'online' || status === 'active' || status === 'streaming') {
+      statusCount.online++
+    } else {
+      statusCount.offline++
     }
   })
   
