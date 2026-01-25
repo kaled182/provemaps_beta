@@ -77,6 +77,7 @@
 import { ref, computed, watch } from 'vue'
 import { useApi } from '@/composables/useApi'
 import { useNotification } from '@/composables/useNotification'
+import { useEscapeKey } from '@/composables/useEscapeKey'
 import { useUiStore } from '@/stores/ui'
 
 const props = defineProps({
@@ -96,6 +97,13 @@ const { patch, get } = useApi()
 const { success, error: notifyError } = useNotification()
 const uiStore = useUiStore()
 
+const close = () => {
+  emit('close')
+}
+
+// Gerenciar ESC key
+useEscapeKey(() => close(), { isOpen: computed(() => props.isOpen) })
+
 const editedDescription = ref('')
 const saving = ref(false)
 const resetting = ref(false)
@@ -103,10 +111,6 @@ const logs = ref([])
 const loadingLogs = ref(false)
 
 const isDark = computed(() => uiStore.theme === 'dark')
-
-const close = () => {
-  emit('close')
-}
 
 const saveDescription = async () => {
   if (!props.port?.id) return

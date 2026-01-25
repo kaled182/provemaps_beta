@@ -50,63 +50,126 @@
                 </button>
               </div>
 
-              <!-- Statistics Cards -->
-              <div class="stats-grid">
-                <div class="stat-card percentile-95">
-                  <div class="stat-header">
-                    <i class="fas fa-chart-bar"></i>
-                    <span>95º Percentil</span>
-                  </div>
-                  <div class="stat-values">
-                    <div class="stat-row">
-                      <span class="stat-label">Download:</span>
-                      <span class="stat-value">{{ formatBandwidth(trafficData.statistics.percentile_95_in) }}</span>
-                    </div>
-                    <div class="stat-row">
-                      <span class="stat-label">Upload:</span>
-                      <span class="stat-value">{{ formatBandwidth(trafficData.statistics.percentile_95_out) }}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="stat-card">
-                  <div class="stat-header">
+              <!-- Seção: Tráfego de Rede -->
+              <div class="collapsible-section">
+                <button class="section-header" @click="trafficSectionOpen = !trafficSectionOpen">
+                  <div class="section-title">
                     <i class="fas fa-chart-line"></i>
-                    <span>Média</span>
+                    <span>Tráfego de Rede</span>
                   </div>
-                  <div class="stat-values">
-                    <div class="stat-row">
-                      <span class="stat-label">Download:</span>
-                      <span class="stat-value">{{ formatBandwidth(trafficData.statistics.avg_in) }}</span>
-                    </div>
-                    <div class="stat-row">
-                      <span class="stat-label">Upload:</span>
-                      <span class="stat-value">{{ formatBandwidth(trafficData.statistics.avg_out) }}</span>
-                    </div>
-                  </div>
-                </div>
+                  <i class="fas" :class="trafficSectionOpen ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                </button>
 
-                <div class="stat-card">
-                  <div class="stat-header">
-                    <i class="fas fa-arrow-up"></i>
-                    <span>Pico</span>
-                  </div>
-                  <div class="stat-values">
-                    <div class="stat-row">
-                      <span class="stat-label">Download:</span>
-                      <span class="stat-value">{{ formatBandwidth(trafficData.statistics.max_in) }}</span>
+                <Transition name="collapse">
+                  <div v-show="trafficSectionOpen" class="section-content">
+                    <!-- Statistics Cards -->
+                    <div class="stats-grid">
+                      <div class="stat-card percentile-95">
+                        <div class="stat-header">
+                          <i class="fas fa-chart-bar"></i>
+                          <span>95º Percentil</span>
+                        </div>
+                        <div class="stat-values">
+                          <div class="stat-row">
+                            <span class="stat-label">Download:</span>
+                            <span class="stat-value">{{ formatBandwidth(trafficData.statistics.percentile_95_in) }}</span>
+                          </div>
+                          <div class="stat-row">
+                            <span class="stat-label">Upload:</span>
+                            <span class="stat-value">{{ formatBandwidth(trafficData.statistics.percentile_95_out) }}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="stat-card">
+                        <div class="stat-header">
+                          <i class="fas fa-chart-line"></i>
+                          <span>Média</span>
+                        </div>
+                        <div class="stat-values">
+                          <div class="stat-row">
+                            <span class="stat-label">Download:</span>
+                            <span class="stat-value">{{ formatBandwidth(trafficData.statistics.avg_in) }}</span>
+                          </div>
+                          <div class="stat-row">
+                            <span class="stat-label">Upload:</span>
+                            <span class="stat-value">{{ formatBandwidth(trafficData.statistics.avg_out) }}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="stat-card">
+                        <div class="stat-header">
+                          <i class="fas fa-arrow-up"></i>
+                          <span>Pico</span>
+                        </div>
+                        <div class="stat-values">
+                          <div class="stat-row">
+                            <span class="stat-label">Download:</span>
+                            <span class="stat-value">{{ formatBandwidth(trafficData.statistics.max_in) }}</span>
+                          </div>
+                          <div class="stat-row">
+                            <span class="stat-label">Upload:</span>
+                            <span class="stat-value">{{ formatBandwidth(trafficData.statistics.max_out) }}</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div class="stat-row">
-                      <span class="stat-label">Upload:</span>
-                      <span class="stat-value">{{ formatBandwidth(trafficData.statistics.max_out) }}</span>
+
+                    <!-- Chart -->
+                    <div class="chart-container">
+                      <canvas ref="chartCanvas"></canvas>
                     </div>
                   </div>
-                </div>
+                </Transition>
               </div>
 
-              <!-- Chart -->
-              <div class="chart-container">
-                <canvas ref="chartCanvas"></canvas>
+              <!-- Seção: Sinal Óptico -->
+              <div v-if="port?.optical_rx_power !== null || port?.optical_tx_power !== null" class="collapsible-section">
+                <button class="section-header" @click="opticalSectionOpen = !opticalSectionOpen">
+                  <div class="section-title">
+                    <i class="fas fa-signal"></i>
+                    <span>Sinal Óptico</span>
+                  </div>
+                  <i class="fas" :class="opticalSectionOpen ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                </button>
+
+                <Transition name="collapse">
+                  <div v-show="opticalSectionOpen" class="section-content">
+                    <!-- Current Signal -->
+                    <div class="optical-current">
+                      <div class="optical-stat">
+                        <span class="optical-label">RX:</span>
+                        <span class="optical-value" :class="getOpticalClass(port?.optical_rx_power)">
+                          {{ formatOptical(port?.optical_rx_power) }} dBm
+                        </span>
+                      </div>
+                      <div class="optical-stat">
+                        <span class="optical-label">TX:</span>
+                        <span class="optical-value" :class="getOpticalClass(port?.optical_tx_power)">
+                          {{ formatOptical(port?.optical_tx_power) }} dBm
+                        </span>
+                      </div>
+                    </div>
+
+                    <!-- Optical Chart -->
+                    <div class="chart-container">
+                      <canvas ref="opticalChartCanvas" style="width: 100% !important; height: 100% !important;"></canvas>
+                    </div>
+
+                    <!-- Botão Configurar Alarme -->
+                    <div class="alarm-config-section">
+                      <button class="btn-config-alarm" @click="openAlarmConfig">
+                        <i class="fas fa-bell"></i>
+                        Configurar Alarme
+                      </button>
+                      <div v-if="port?.alarm_enabled" class="alarm-status">
+                        <i class="fas fa-check-circle"></i>
+                        Alarme Personalizado Ativo
+                      </div>
+                    </div>
+                  </div>
+                </Transition>
               </div>
             </div>
           </div>
@@ -124,13 +187,23 @@
         </div>
       </div>
     </Transition>
+
+    <!-- Alarm Config Modal -->
+    <AlarmConfigModal
+      :is-open="showAlarmConfig"
+      :port="port"
+      @close="closeAlarmConfig"
+      @saved="handleAlarmSaved"
+    />
   </Teleport>
 </template>
 
 <script setup>
-import { ref, watch, onUnmounted, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onUnmounted, onMounted, nextTick } from 'vue'
 import { useApi } from '@/composables/useApi'
+import { useEscapeKey } from '@/composables/useEscapeKey'
 import Chart from 'chart.js/auto'
+import AlarmConfigModal from './AlarmConfigModal.vue'
 
 const props = defineProps({
   isOpen: {
@@ -149,15 +222,38 @@ onMounted(() => {
   console.log('[PortTrafficModal] Componente montado')
 })
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'alarm-saved'])
 
 const api = useApi()
+
 const loading = ref(false)
 const error = ref(null)
 const trafficData = ref(null)
 const selectedPeriod = ref(24)
 const chartCanvas = ref(null)
+const opticalChartCanvas = ref(null)
+const trafficSectionOpen = ref(true)
+const opticalSectionOpen = ref(true)
+const showAlarmConfig = ref(false)
 let chartInstance = null
+let opticalChartInstance = null
+let opticalChartData = null // Armazenar dados para tooltips
+let opticalChartConfig = null // Armazenar configuração do gráfico
+
+const close = () => {
+  if (chartInstance) {
+    chartInstance.destroy()
+    chartInstance = null
+  }
+  if (opticalChartInstance) {
+    opticalChartInstance.destroy()
+    opticalChartInstance = null
+  }
+  emit('close')
+}
+
+// Gerenciar ESC key - ignora quando AlarmConfigModal está aberto
+useEscapeKey(() => close(), { isOpen: computed(() => props.isOpen), shouldIgnore: showAlarmConfig })
 
 const periods = [
   { label: '1h', value: 1 },
@@ -341,6 +437,340 @@ const renderChart = () => {
 const changePeriod = (hours) => {
   selectedPeriod.value = hours
   loadTrafficData()
+  // Também atualizar o gráfico óptico se disponível
+  if (opticalSectionOpen.value && (props.port?.optical_rx_power !== null || props.port?.optical_tx_power !== null)) {
+    renderOpticalChart()
+  }
+}
+
+// Versão canvas (mesma lógica usada no AlarmConfigModal) para garantir renderização
+const renderOpticalCanvasChart = (data) => {
+  if (!opticalChartCanvas.value) return
+  const canvas = opticalChartCanvas.value
+  const ctx = canvas.getContext('2d')
+
+  // Obter dimensões reais do container pai
+  const container = canvas.parentElement
+  if (!container) return
+  
+  const containerRect = container.getBoundingClientRect()
+  const width = canvas.width = containerRect.width
+  const height = canvas.height = containerRect.height
+
+  // Limpar
+  ctx.clearRect(0, 0, width, height)
+
+  // Guardas
+  if (!Array.isArray(data) || data.length === 0) {
+    ctx.fillStyle = '#9ca3af'
+    ctx.font = '12px sans-serif'
+    ctx.fillText('Sem dados de histórico para o período selecionado', 16, 24)
+    return
+  }
+
+  // Padding ajustado para não cortar nada e ocupar melhor o espaço
+  const padding = { top: 40, right: 20, bottom: 50, left: 70 }
+  const graphWidth = width - padding.left - padding.right
+  const graphHeight = height - padding.top - padding.bottom
+
+  const rxValues = data.map(d => d.rx).filter(v => v !== null)
+  const txValues = data.map(d => d.tx).filter(v => v !== null)
+  const allValues = [...rxValues, ...txValues]
+  const minValue = Math.min(...allValues) - 3
+  const maxValue = Math.max(...allValues) + 3
+
+  // Grade horizontal
+  ctx.strokeStyle = 'rgba(75, 85, 99, 0.3)'
+  ctx.lineWidth = 1
+  for (let i = 0; i <= 5; i++) {
+    const y = padding.top + (graphHeight / 5) * i
+    ctx.beginPath()
+    ctx.moveTo(padding.left, y)
+    ctx.lineTo(width - padding.right, y)
+    ctx.stroke()
+  }
+
+  // Desenhar linhas de threshold (se configuradas)
+  const drawThreshold = (value, color, label) => {
+    if (value === null || value === undefined) return
+    const y = padding.top + graphHeight - ((value - minValue) / (maxValue - minValue)) * graphHeight
+    
+    // Linhas mais transparentes (opacas)
+    ctx.strokeStyle = color + '40' // Adiciona 40 (25% opacidade) ao final da cor hex
+    ctx.lineWidth = 2
+    ctx.setLineDash([5, 5])
+    ctx.beginPath()
+    ctx.moveTo(padding.left, y)
+    ctx.lineTo(width - padding.right, y)
+    ctx.stroke()
+    ctx.setLineDash([])
+    
+    // Label posicionado à esquerda do eixo Y com mais transparência
+    ctx.fillStyle = color + '80' // 50% opacidade
+    ctx.font = '10px sans-serif'
+    ctx.fontWeight = 'bold'
+    ctx.textAlign = 'right'
+    ctx.fillText(label, padding.left - 15, y - 3)
+  }
+
+  const warningThreshold = props.port?.alarm_warning_threshold || -24
+  const criticalThreshold = props.port?.alarm_critical_threshold || -27
+  
+  drawThreshold(warningThreshold, '#f59e0b', 'Atenção')
+  drawThreshold(criticalThreshold, '#ef4444', 'Crítico')
+
+  // Linhas RX
+  ctx.strokeStyle = '#3b82f6'
+  ctx.lineWidth = 2.5
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.beginPath()
+  data.forEach((point, index) => {
+    if (point.rx === null) return
+    const x = padding.left + (graphWidth / Math.max(data.length - 1, 1)) * index
+    const y = padding.top + graphHeight - ((point.rx - minValue) / (maxValue - minValue)) * graphHeight
+    if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
+  })
+  ctx.stroke()
+  // Linhas TX
+  ctx.strokeStyle = '#8b5cf6'
+  ctx.lineWidth = 2.5
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.beginPath()
+  data.forEach((point, index) => {
+    if (point.tx === null) return
+    const x = padding.left + (graphWidth / Math.max(data.length - 1, 1)) * index
+    const y = padding.top + graphHeight - ((point.tx - minValue) / (maxValue - minValue)) * graphHeight
+    if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
+  })
+  ctx.stroke()
+
+  // Legenda com fundo
+  const legendX = padding.left
+  const legendY = 20
+  ctx.font = 'bold 13px sans-serif'
+  
+  // RX Legend
+  ctx.fillStyle = '#3b82f6'
+  ctx.fillText('RX', legendX, legendY)
+  
+  // TX Legend
+  ctx.fillStyle = '#8b5cf6'
+  ctx.fillText('TX', legendX + 40, legendY)
+  
+  // Eixo Y com valores
+  ctx.fillStyle = '#9ca3af'
+  ctx.font = '11px sans-serif'
+  ctx.textAlign = 'right'
+  for (let i = 0; i <= 5; i++) {
+    const value = minValue + ((maxValue - minValue) / 5) * (5 - i)
+    const y = padding.top + (graphHeight / 5) * i
+    ctx.fillText(value.toFixed(1) + ' dBm', padding.left - 10, y + 4)
+  }
+  
+  // Armazenar dados e configuração para tooltips
+  opticalChartData = data
+  opticalChartConfig = { padding, minValue, maxValue, graphWidth, graphHeight, width, height }
+}
+
+// Função para desenhar tooltip no gráfico óptico
+const drawOpticalTooltip = (mouseX, mouseY) => {
+  if (!opticalChartCanvas.value || !opticalChartData || !opticalChartConfig) return
+  
+  const canvas = opticalChartCanvas.value
+  const ctx = canvas.getContext('2d')
+  const { padding, minValue, maxValue, graphWidth, graphHeight } = opticalChartConfig
+  
+  // Encontrar o ponto mais próximo do mouse
+  let closestIndex = -1
+  let minDistance = Infinity
+  
+  opticalChartData.forEach((point, index) => {
+    const x = padding.left + (graphWidth / Math.max(opticalChartData.length - 1, 1)) * index
+    const distance = Math.abs(x - mouseX)
+    if (distance < minDistance) {
+      minDistance = distance
+      closestIndex = index
+    }
+  })
+  
+  if (closestIndex === -1 || minDistance > 50) return // Muito longe
+  
+  const point = opticalChartData[closestIndex]
+  const pointX = padding.left + (graphWidth / Math.max(opticalChartData.length - 1, 1)) * closestIndex
+  
+  // Redesenhar gráfico
+  renderOpticalCanvasChart(opticalChartData)
+  
+  // Desenhar linha vertical
+  ctx.strokeStyle = 'rgba(156, 163, 175, 0.5)'
+  ctx.lineWidth = 1
+  ctx.setLineDash([2, 2])
+  ctx.beginPath()
+  ctx.moveTo(pointX, padding.top)
+  ctx.lineTo(pointX, padding.top + graphHeight)
+  ctx.stroke()
+  ctx.setLineDash([])
+  
+  // Desenhar pontos destacados
+  if (point.rx !== null) {
+    const rxY = padding.top + graphHeight - ((point.rx - minValue) / (maxValue - minValue)) * graphHeight
+    ctx.fillStyle = '#3b82f6'
+    ctx.beginPath()
+    ctx.arc(pointX, rxY, 5, 0, 2 * Math.PI)
+    ctx.fill()
+    ctx.strokeStyle = '#fff'
+    ctx.lineWidth = 2
+    ctx.stroke()
+  }
+  
+  if (point.tx !== null) {
+    const txY = padding.top + graphHeight - ((point.tx - minValue) / (maxValue - minValue)) * graphHeight
+    ctx.fillStyle = '#8b5cf6'
+    ctx.beginPath()
+    ctx.arc(pointX, txY, 5, 0, 2 * Math.PI)
+    ctx.fill()
+    ctx.strokeStyle = '#fff'
+    ctx.lineWidth = 2
+    ctx.stroke()
+  }
+  
+  // Desenhar tooltip
+  const timestamp = new Date(point.timestamp)
+  const dateStr = timestamp.toLocaleString('pt-BR', { 
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit', 
+    minute: '2-digit' 
+  })
+  
+  const tooltipLines = [
+    dateStr,
+    point.rx !== null ? `RX: ${point.rx.toFixed(2)} dBm` : '',
+    point.tx !== null ? `TX: ${point.tx.toFixed(2)} dBm` : ''
+  ].filter(line => line !== '')
+  
+  // Calcular tamanho do tooltip
+  ctx.font = '12px sans-serif'
+  const tooltipPadding = 10
+  const lineHeight = 18
+  const maxWidth = Math.max(...tooltipLines.map(line => ctx.measureText(line).width))
+  const tooltipWidth = maxWidth + tooltipPadding * 2
+  const tooltipHeight = tooltipLines.length * lineHeight + tooltipPadding * 2
+  
+  // Posicionar tooltip
+  let tooltipX = pointX + 15
+  let tooltipY = mouseY - tooltipHeight / 2
+  
+  // Ajustar se sair da tela
+  if (tooltipX + tooltipWidth > canvas.width - 20) {
+    tooltipX = pointX - tooltipWidth - 15
+  }
+  if (tooltipY < padding.top) {
+    tooltipY = padding.top
+  }
+  if (tooltipY + tooltipHeight > canvas.height - 20) {
+    tooltipY = canvas.height - tooltipHeight - 20
+  }
+  
+  // Desenhar fundo do tooltip
+  ctx.fillStyle = 'rgba(17, 24, 39, 0.95)'
+  ctx.strokeStyle = '#374151'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.roundRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, 6)
+  ctx.fill()
+  ctx.stroke()
+  
+  // Desenhar texto do tooltip
+  ctx.fillStyle = '#f3f4f6'
+  ctx.font = 'bold 12px sans-serif'
+  ctx.textAlign = 'left'
+  ctx.fillText(tooltipLines[0], tooltipX + tooltipPadding, tooltipY + tooltipPadding + 14)
+  
+  ctx.font = '11px sans-serif'
+  tooltipLines.slice(1).forEach((line, index) => {
+    const color = line.startsWith('RX:') ? '#3b82f6' : '#8b5cf6'
+    ctx.fillStyle = color
+    ctx.fillText(line, tooltipX + tooltipPadding, tooltipY + tooltipPadding + 14 + (index + 1) * lineHeight)
+  })
+}
+
+const renderOpticalChart = async () => {
+  if (!props.port?.id) {
+    console.warn('[PortTrafficModal] Porta sem ID, não é possível buscar histórico')
+    return
+  }
+  
+  const url = `/api/v1/ports/${props.port.id}/optical_history/`
+  const params = { hours: selectedPeriod.value }
+  
+  console.log('[PortTrafficModal] Buscando histórico óptico:', { url, params, portId: props.port.id, period: selectedPeriod.value })
+  
+  try {
+    const response = await api.get(url, params)
+    console.log('[PortTrafficModal] Resposta do servidor:', response)
+    
+    const history = Array.isArray(response) ? response : (response.history || [])
+    console.log('[PortTrafficModal] Pontos de histórico:', history.length)
+
+    let chartData
+    if (history && history.length > 0) {
+      chartData = history.map(snapshot => ({
+        timestamp: new Date(snapshot.timestamp).getTime(),
+        rx: snapshot.rx_power,
+        tx: snapshot.tx_power,
+      }))
+      console.log('[PortTrafficModal] Dados reais mapeados:', chartData.length, 'pontos')
+    } else {
+      // Fallback para dados simulados (mesma estratégia do AlarmConfigModal)
+      const now = Date.now()
+      const points = []
+      const rxBase = props.port?.optical_rx_power ?? -22
+      const txBase = props.port?.optical_tx_power ?? -3
+      const steps = selectedPeriod.value <= 24 ? selectedPeriod.value : 24
+      for (let i = steps; i >= 0; i--) {
+        const timestamp = now - (i * 60 * 60 * 1000)
+        const rxVariation = (Math.random() - 0.5) * 2
+        const txVariation = (Math.random() - 0.5) * 1
+        points.push({ timestamp, rx: rxBase + rxVariation, tx: txBase + txVariation })
+      }
+      chartData = points
+      console.warn('[PortTrafficModal] Optical history vazio; usando', chartData.length, 'pontos simulados')
+    }
+    await nextTick()
+    renderOpticalCanvasChart(chartData)
+    
+    // Adicionar event listeners para tooltips
+    if (opticalChartCanvas.value) {
+      // Remover listeners antigos se existirem
+      opticalChartCanvas.value.onmousemove = null
+      opticalChartCanvas.value.onmouseleave = null
+      
+      // Adicionar novos listeners
+      opticalChartCanvas.value.onmousemove = (e) => {
+        const rect = opticalChartCanvas.value.getBoundingClientRect()
+        const mouseX = e.clientX - rect.left
+        const mouseY = e.clientY - rect.top
+        drawOpticalTooltip(mouseX, mouseY)
+      }
+      
+      opticalChartCanvas.value.onmouseleave = () => {
+        if (opticalChartData) {
+          renderOpticalCanvasChart(opticalChartData)
+        }
+      }
+      
+      // Adicionar cursor pointer
+      opticalChartCanvas.value.style.cursor = 'crosshair'
+    }
+  } catch (err) {
+    console.error('[PortTrafficModal] Erro ao carregar histórico óptico:', err)
+    console.error('[PortTrafficModal] Detalhes do erro:', { message: err.message, url, params })
+    await nextTick()
+    renderOpticalCanvasChart([])
+  }
 }
 
 const formatBandwidth = (bps) => {
@@ -351,6 +781,18 @@ const formatBandwidth = (bps) => {
     return `${(mbps / 1000).toFixed(2)} Gbps`
   }
   return `${mbps.toFixed(2)} Mbps`
+}
+
+const formatOptical = (value) => {
+  if (value === null || value === undefined) return 'N/A'
+  return value.toFixed(2)
+}
+
+const getOpticalClass = (value) => {
+  if (value === null || value === undefined) return ''
+  if (value < -27) return 'signal-critical'
+  if (value < -24) return 'signal-warning'
+  return 'signal-good'
 }
 
 const exportData = () => {
@@ -372,21 +814,62 @@ const exportData = () => {
   link.click()
 }
 
-const close = () => {
-  if (chartInstance) {
-    chartInstance.destroy()
-    chartInstance = null
+const openAlarmConfig = () => {
+  showAlarmConfig.value = true
+}
+
+const closeAlarmConfig = () => {
+  showAlarmConfig.value = false
+}
+
+const handleAlarmSaved = () => {
+  // Recarregar dados após salvar configuração de alarme
+  showAlarmConfig.value = false
+  // Recarregar gráfico óptico para mostrar novos thresholds
+  if (opticalSectionOpen.value && opticalChartCanvas.value) {
+    renderOpticalChart()
   }
-  emit('close')
+  // Emitir evento para que o componente pai recarregue a porta
+  emit('alarm-saved')
 }
 
 watch(() => props.isOpen, (newValue) => {
   if (newValue) {
     loadTrafficData()
+    // Carregar gráfico óptico se disponível
+    if (props.port?.optical_rx_power !== null || props.port?.optical_tx_power !== null) {
+      // Garantir que o canvas exista antes de renderizar
+      nextTick().then(() => {
+        if (opticalSectionOpen.value && opticalChartCanvas.value) {
+          renderOpticalChart()
+        } else {
+          // Tentativa tardia caso o DOM ainda não tenha criado o canvas
+          setTimeout(() => {
+            if (opticalSectionOpen.value && opticalChartCanvas.value) {
+              renderOpticalChart()
+            }
+          }, 200)
+        }
+      })
+    }
   } else {
     if (chartInstance) {
       chartInstance.destroy()
       chartInstance = null
+    }
+    if (opticalChartInstance) {
+      opticalChartInstance.destroy()
+      opticalChartInstance = null
+    }
+  }
+})
+
+// Watch para renderizar gráfico óptico quando seção abrir
+watch(opticalSectionOpen, async (isOpen) => {
+  if (isOpen && props.isOpen) {
+    await nextTick()
+    if (opticalChartCanvas.value) {
+      renderOpticalChart()
     }
   }
 })
@@ -394,6 +877,16 @@ watch(() => props.isOpen, (newValue) => {
 onUnmounted(() => {
   if (chartInstance) {
     chartInstance.destroy()
+  }
+  if (opticalChartInstance) {
+    opticalChartInstance.destroy()
+  }
+})
+
+// Renderizar assim que o canvas de óptico ficar disponível
+watch(opticalChartCanvas, (canvas) => {
+  if (canvas && props.isOpen && opticalSectionOpen.value) {
+    renderOpticalChart()
   }
 })
 </script>
@@ -648,9 +1141,9 @@ onUnmounted(() => {
   border-radius: 12px;
   padding: 16px;
   /* Fixed height to prevent canvas from growing infinitely */
-  min-height: 380px;
-  max-height: 500px;
-  height: 380px;
+  min-height: 450px;
+  max-height: 550px;
+  height: 450px;
   position: relative;
   overflow: hidden;
 }
@@ -723,5 +1216,168 @@ onUnmounted(() => {
 .modal-fade-enter-from .modal-container,
 .modal-fade-leave-to .modal-container {
   transform: scale(0.9);
+}
+
+/* Collapsible Sections */
+.collapsible-section {
+  margin-bottom: 20px;
+  border: 1px solid rgba(75, 85, 99, 0.3);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(31, 41, 55, 0.5);
+}
+
+.section-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.section-header:hover {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #f3f4f6;
+}
+
+.section-title i {
+  color: #3b82f6;
+  font-size: 18px;
+}
+
+.section-header i.fa-chevron-up,
+.section-header i.fa-chevron-down {
+  color: #9ca3af;
+  transition: transform 0.2s;
+}
+
+.section-content {
+  padding: 20px;
+}
+
+/* Collapse Transition */
+.collapse-enter-active,
+.collapse-leave-active {
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.collapse-enter-from,
+.collapse-leave-to {
+  opacity: 0;
+  max-height: 0;
+  padding: 0 20px;
+}
+
+.collapse-enter-to,
+.collapse-leave-from {
+  opacity: 1;
+  max-height: 2000px;
+}
+
+/* Optical Signal Styles */
+.optical-current {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.optical-stat {
+  background: linear-gradient(135deg, rgba(31, 41, 55, 0.8) 0%, rgba(17, 24, 39, 0.9) 100%);
+  border: 1px solid rgba(75, 85, 99, 0.3);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.optical-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+}
+
+.optical-value {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.optical-value.signal-good {
+  color: #10b981;
+}
+
+.optical-value.signal-warning {
+  color: #f59e0b;
+}
+
+.optical-value.signal-critical {
+  color: #ef4444;
+}
+
+/* Alarm Configuration Section */
+.alarm-config-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(75, 85, 99, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.btn-config-alarm {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(251, 191, 36, 0.1) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 8px;
+  color: #fbbf24;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+
+.btn-config-alarm:hover {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.3) 0%, rgba(251, 191, 36, 0.2) 100%);
+  border-color: rgba(245, 158, 11, 0.6);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+.btn-config-alarm i {
+  font-size: 16px;
+}
+
+.alarm-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 8px;
+  color: #10b981;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.alarm-status i {
+  font-size: 14px;
 }
 </style>

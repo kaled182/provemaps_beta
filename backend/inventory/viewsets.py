@@ -414,7 +414,7 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         Query params:
             hours: número de horas de histórico (default=24, max=168)
         """
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone as dt_timezone
         from django.utils import timezone
         from integrations.zabbix.zabbix_service import zabbix_request
         from inventory.domain.optical import _discover_optical_keys_by_portname
@@ -470,7 +470,7 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                 })
                 if rx_history:
                     for entry in rx_history:
-                        timestamp = datetime.fromtimestamp(int(entry["clock"]), tz=timezone.utc)
+                        timestamp = datetime.fromtimestamp(int(entry["clock"]), tz=dt_timezone.utc)
                         history_data.append({
                             "timestamp": timestamp.isoformat(),
                             "rx_power": float(entry.get("value", 0)),
@@ -509,7 +509,7 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                     # Adicionar TX-only entries
                     for clock, tx_value in tx_by_time.items():
                         if clock not in existing_times:
-                            timestamp = datetime.fromtimestamp(clock, tz=timezone.utc)
+                            timestamp = datetime.fromtimestamp(clock, tz=dt_timezone.utc)
                             history_data.append({
                                 "timestamp": timestamp.isoformat(),
                                 "rx_power": None,

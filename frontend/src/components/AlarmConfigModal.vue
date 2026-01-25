@@ -138,9 +138,10 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useApi } from '@/composables/useApi'
 import { useNotification } from '@/composables/useNotification'
+import { useEscapeKey } from '@/composables/useEscapeKey'
 import { useUiStore } from '@/stores/ui'
 
 const props = defineProps({
@@ -159,6 +160,9 @@ const emit = defineEmits(['close', 'saved'])
 const { get, patch } = useApi()
 const { success, error: notifyError } = useNotification()
 const uiStore = useUiStore()
+
+// Gerenciar ESC key
+useEscapeKey(() => close(), { isOpen: computed(() => props.isOpen) })
 
 const alarmEnabled = ref(false)
 const warningThreshold = ref(-24)
@@ -214,8 +218,8 @@ const loadHistoricalData = async () => {
   if (!props.port?.id) return
   
   try {
-    // Tentar buscar dados reais do endpoint
-    const response = await get(`/api/v1/ports/${props.port.id}/optical_history/`)
+    // Tentar buscar dados reais do endpoint com período de 24h
+    const response = await get(`/api/v1/ports/${props.port.id}/optical_history/`, { hours: 24 })
     
     if (response && Array.isArray(response) && response.length > 0) {
       // Converter formato do backend para formato do gráfico
@@ -223,7 +227,7 @@ const loadHistoricalData = async () => {
         timestamp: new Date(snapshot.timestamp).getTime(),
         rx: snapshot.rx_power,
         tx: snapshot.tx_power
-      })).reverse() // Reverter para ordem cronológica (mais antigo primeiro)
+      }))
       
       await nextTick()
       renderChart(chartData)
@@ -434,7 +438,7 @@ watch([warningThreshold, criticalThreshold], () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 12000;
+  z-index: 14000;
   padding: 20px;
 }
 
