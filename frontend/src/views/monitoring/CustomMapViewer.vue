@@ -315,13 +315,19 @@ const getStatusLabel = (status) => {
     'warning': 'ATENÇÃO',
     'critical': 'CRÍTICO',
     'offline': 'OFFLINE',
-    'unknown': 'SEM STATUS',
+    'unknown': 'DESCONHECIDO',
     '0': 'OFFLINE',
     'null': 'OFFLINE',
-    'undefined': 'OFFLINE'
+    'undefined': 'OFFLINE',
+    // Aliases para status de cabos
+    'up': 'ONLINE',
+    'down': 'OFFLINE',
+    'degraded': 'ATENÇÃO',
+    'operational': 'ONLINE',
+    'unavailable': 'OFFLINE'
   }
   
-  return labels[statusStr] || 'OFFLINE'
+  return labels[statusStr] || 'DESCONHECIDO'
 }
 
 const toggleSiteExpansion = (siteId) => {
@@ -465,9 +471,28 @@ const clearAllOverlays = () => {
 }
 
 const focusOnItem = (item) => {
-  if (item.lat && item.lng && googleMap.value) {
-    googleMap.value.setCenter({ lat: item.lat, lng: item.lng })
+  if (!googleMap.value) return
+  
+  // Para devices e cameras que têm lat/lng diretamente
+  if (item.lat && item.lng) {
+    googleMap.value.setCenter({ lat: parseFloat(item.lat), lng: parseFloat(item.lng) })
     googleMap.value.setZoom(15)
+    return
+  }
+  
+  // Para cabos que têm path_coordinates
+  if (item.path_coordinates && item.path_coordinates.length > 0) {
+    // Centralizar no ponto médio do cabo
+    const midIndex = Math.floor(item.path_coordinates.length / 2)
+    const midPoint = item.path_coordinates[midIndex]
+    
+    if (midPoint && midPoint.lat && midPoint.lng) {
+      googleMap.value.setCenter({ 
+        lat: parseFloat(midPoint.lat), 
+        lng: parseFloat(midPoint.lng) 
+      })
+      googleMap.value.setZoom(13) // Zoom menor para ver mais da rota
+    }
   }
 }
 
@@ -761,26 +786,65 @@ const loadInventoryItems = async () => {
         
         console.log('[CustomMapViewer] Raw cables data:', cables.slice(0, 2))
         
+        // Mapear status dos cabos de fibra
         availableItems.value.cables = cables.map(cable => {
           const pathCoords = cable.path_coordinates || []
-          console.log(`[CustomMapViewer] Cabo ${cable.name}:`, {
-            id: cable.id,
-            has_path: !!cable.path_coordinates,
-            path_length: pathCoords.length,
-            first_coord: pathCoords[0]
-          })
+          
+          // Normalizar status do cabo para formato UI
+          // Backend retorna: "up", "down", "degraded", "unknown"
+          // UI usa: "online", "offline", "warning", "critical", "unknown"
+          let uiStatus = 'unknown'
+          const backendStatus = (cable.status || 'unknown').toLowerCase()
+          
+          switch (backendStatus) {
+            case 'up':
+            case 'operational':
+              uiStatus = 'online'
+              break
+            case 'down':
+            case 'unavailable':
+              uiStatus = 'offline'
+              break
+            case 'degraded':
+            case 'warning':
+              uiStatus = 'warning'
+              break
+            case 'critical':
+              uiStatus = 'critical'
+              break
+            default:
+              uiStatus = 'unknown'
+          }
           
           return {
             id: cable.id,
             name: cable.name,
-            status: cable.status || 'unknown',
+            status: uiStatus,
+            original_status: cable.status,
             description: cable.description || '',
             path_coordinates: pathCoords,
             site_a_name: cable.site_a_name,
             site_b_name: cable.site_b_name,
-            length_km: cable.length_km
+            length_km: cable.length_km,
+            is_connected: cable.is_connected,
+            connection_status: cable.connection_status
           }
         })
+        
+        // DEBUG: Resumo de status dos cabos
+        console.log('═══════════════════════════════════════════════════════')
+        console.log('📡 RESUMO DE STATUS DOS CABOS:')
+        console.log('═══════════════════════════════════════════════════════')
+        const cableStatusSummary = availableItems.value.cables.reduce((acc, cable) => {
+          acc[cable.status] = (acc[cable.status] || 0) + 1
+          return acc
+        }, {})
+        console.log('Distribuição de status:', cableStatusSummary)
+        console.log('Total cabos:', availableItems.value.cables.length)
+        if (availableItems.value.cables.length > 0) {
+          console.log('Exemplo do primeiro cabo:', availableItems.value.cables[0])
+        }
+        console.log('═══════════════════════════════════════════════════════')
         
         console.log(`[CustomMapViewer] ${availableItems.value.cables.length} cabos carregados`)
       }
@@ -910,12 +974,13 @@ const updateCablePolylines = () => {
       return
     }
     
-    // Cor baseada no status
+    // Cor baseada no status normalizado da UI
     const statusColors = {
-      up: '#10b981',
-      down: '#ef4444',
-      degraded: '#f59e0b',
-      unknown: '#6b7280'
+      online: '#10b981',      // Verde - online/up/operational
+      offline: '#ef4444',     // Vermelho - offline/down/unavailable
+      warning: '#f59e0b',     // Amarelo - warning/degraded
+      critical: '#dc2626',    // Vermelho escuro - critical
+      unknown: '#6b7280'      // Cinza - unknown/sem status
     }
     
     const polyline = new google.maps.Polyline({
@@ -928,15 +993,17 @@ const updateCablePolylines = () => {
     })
     
     // InfoWindow para o cabo
+    const statusLabel = getStatusLabel(cable.status)
     const infoContent = `
       <div style="color: #000; padding: 12px; max-width: 250px;">
         <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 700;">${cable.name}</h3>
         <div style="font-size: 14px; line-height: 1.6;">
           <p style="margin: 4px 0;"><strong>De:</strong> ${cable.site_a_name || 'N/A'}</p>
           <p style="margin: 4px 0;"><strong>Para:</strong> ${cable.site_b_name || 'N/A'}</p>
-          <p style="margin: 4px 0;"><strong>Status:</strong> <span style="color: ${statusColors[cable.status] || statusColors.unknown}; font-weight: 700;">${cable.status || 'N/A'}</span></p>
+          <p style="margin: 4px 0;"><strong>Status:</strong> <span style="color: ${statusColors[cable.status] || statusColors.unknown}; font-weight: 700;">${statusLabel}</span></p>
+          <p style="margin: 4px 0;"><strong>Status backend:</strong> ${cable.original_status || 'N/A'}</p>
           <p style="margin: 4px 0;"><strong>Comprimento:</strong> ${cable.length_km ? cable.length_km + ' km' : 'N/A'}</p>
-          <p style="margin: 4px 0;"><strong>Pontos:</strong> ${validPath.length}</p>
+          <p style="margin: 4px 0;"><strong>Pontos de rota:</strong> ${validPath.length}</p>
         </div>
       </div>
     `
