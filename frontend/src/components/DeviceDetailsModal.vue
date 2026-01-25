@@ -239,6 +239,8 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useApi } from '@/composables/useApi'
+import { useNotification } from '@/composables/useNotification'
+import { useEscapeKey } from '@/composables/useEscapeKey'
 import { useUiStore } from '@/stores/ui'
 import PortActionsModal from './PortActionsModal.vue'
 import AlarmConfigModal from './AlarmConfigModal.vue'
@@ -259,6 +261,7 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const { get } = useApi()
+const { success, error: notifyError } = useNotification()
 const uiStore = useUiStore()
 
 const ports = ref([])
@@ -270,6 +273,16 @@ const showPortActions = ref(false)
 const showAlarmConfig = ref(false)
 const showConnectivityMap = ref(false)
 const showTrafficModal = ref(false)
+
+const close = () => {
+  emit('close')
+}
+
+// Gerenciar ESC key - ignora quando algum modal filho está aberto
+const hasChildModalOpen = computed(() => 
+  showPortActions.value || showAlarmConfig.value || showConnectivityMap.value || showTrafficModal.value
+)
+useEscapeKey(() => close(), { isOpen: computed(() => props.isOpen), shouldIgnore: hasChildModalOpen })
 
 const isDark = computed(() => uiStore.theme === 'dark')
 
@@ -353,10 +366,6 @@ const loadPorts = async () => {
   } finally {
     loadingPorts.value = false
   }
-}
-
-const close = () => {
-  emit('close')
 }
 
 const getDeviceIcon = (type) => {

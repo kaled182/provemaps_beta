@@ -57,7 +57,7 @@
                 <span class="summary-value">{{ deviceStats.offline }}</span>
               </div>
             </div>
-            <div class="summary-card camera-card" @click="openCameraModal" style="cursor: pointer;">
+            <div class="summary-card camera-card" @click="openSiteMosaicModal" style="cursor: pointer;">
               <div class="summary-icon cameras">
                 <i class="fas fa-video"></i>
               </div>
@@ -300,10 +300,10 @@
               <span>Nenhuma câmera encontrada para este site</span>
             </div>
             <div v-else class="camera-grid" :class="getCameraGridClass">
-              <div v-for="camera in cameras" :key="camera.id" class="camera-cell">
+              <div v-for="camera in cameras" :key="camera.connectionKey ?? camera.id" class="camera-cell">
                 <div class="camera-video-container">
                   <video 
-                    :ref="el => { if (el) cameraVideoRefs[camera.id] = el }"
+                    :ref="el => { if (el) cameraVideoRefs[camera.connectionKey ?? camera.id] = el }"
                     class="camera-video"
                     autoplay
                     muted
@@ -311,7 +311,7 @@
                   ></video>
                   <div class="camera-overlay">
                     <span class="camera-name">{{ camera.name }}</span>
-                    <span v-if="cameraConnections[camera.id]" class="camera-status connected">
+                    <span v-if="cameraConnections[camera.connectionKey ?? camera.id]" class="camera-status connected">
                       <i class="fas fa-circle"></i> Ao vivo
                     </span>
                     <span v-else class="camera-status connecting">
@@ -326,15 +326,70 @@
       </div>
     </Transition>
   </Teleport>
+
+  <!-- Mosaic Viewer Modal -->
+  <Teleport to="body">
+    <div v-if="showMosaicModal" class="mosaic-modal-overlay" @click.self="closeMosaicModal">
+      <div class="mosaic-modal-container">
+          <div class="mosaic-modal-header">
+            <h3>
+              <i class="fas fa-th"></i>
+              {{ currentMosaic?.name || 'Mosaico' }} - {{ site?.name }}
+            </h3>
+            <button class="mosaic-close-btn" @click="closeMosaicModal">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div class="mosaic-modal-body">
+            <div v-if="loadingMosaic" class="mosaic-loading">
+              <i class="fas fa-spinner fa-spin"></i>
+              <span>Carregando mosaico...</span>
+            </div>
+            <div v-else-if="mosaicCameras.length === 0" class="mosaic-empty">
+              <i class="fas fa-video-slash"></i>
+              <span>Nenhuma câmera no mosaico</span>
+            </div>
+            <div v-else class="mosaic-grid" :class="getMosaicGridClass">
+              <!-- DEBUG: Verificar se esta div renderiza -->
+              {{ (console.log('[TEMPLATE] Renderizando mosaic-grid, cameras:', mosaicCameras.length), '') }}
+              <div v-for="(camera, idx) in mosaicCameras" :key="camera.connectionKey ?? camera.id ?? camera.camera_id ?? idx" class="mosaic-cell">
+                <!-- DEBUG: Verificar se células renderizam -->
+                {{ (console.log('[TEMPLATE] Renderizando cell', idx, camera.connectionKey), '') }}
+                <div class="mosaic-video-container">
+                  <video 
+                    :ref="el => { if (el) { console.log('[TEMPLATE] Criando ref para', camera.connectionKey); mosaicVideoRefs[camera.connectionKey ?? camera.id ?? camera.camera_id ?? idx] = el } }"
+                    class="mosaic-video"
+                    autoplay
+                    muted
+                    playsinline
+                  ></video>
+                  <div class="mosaic-overlay">
+                    <span class="mosaic-camera-name">{{ camera.name }}</span>
+                    <span v-if="mosaicConnections[camera.connectionKey ?? camera.id]" class="mosaic-status connected">
+                      <i class="fas fa-circle"></i> Ao vivo
+                    </span>
+                    <span v-else class="mosaic-status connecting">
+                      <i class="fas fa-spinner fa-spin"></i> Conectando...
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 </template>
 
 <script setup>
-import { ref, computed, watch, reactive, onUnmounted } from 'vue'
+import { ref, computed, watch, reactive, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApi } from '@/composables/useApi'
 import { useNotification } from '@/composables/useNotification'
+import { useEscapeKey } from '@/composables/useEscapeKey'
 import { useUiStore } from '@/stores/ui'
 import { useWebSocket } from '@/composables/useWebSocket'
+import { useWebRTC } from '@/composables/useWebRTC'
 import DeviceDetailsModal from './DeviceDetailsModal.vue'
 
 const props = defineProps({
@@ -351,7 +406,7 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const router = useRouter()
-const { get, patch } = useApi()
+const { get, patch, post } = useApi()
 const { success, error: notifyError } = useNotification()
 const uiStore = useUiStore()
 
@@ -367,6 +422,13 @@ const loadingCameras = ref(false)
 const cameraVideoRefs = ref({})
 const cameraConnections = ref({})
 const cameraCount = ref(0)
+const showMosaicModal = ref(false)
+const currentMosaic = ref(null)
+const mosaicCameras = ref([])
+const loadingMosaic = ref(false)
+const mosaicVideoRefs = ref({})
+const mosaicConnections = ref({})
+const hasConnectedMosaic = ref(false)
 const editForm = reactive({
   id: null,
   name: '',
@@ -378,6 +440,457 @@ const editForm = reactive({
   cpu_usage_manual_percent: null,
   memory_usage_manual_percent: null,
 })
+
+const resolveConnectionKey = (cameraLike, fallback) => {
+  const candidates = [
+    cameraLike?.connectionKey,
+    cameraLike?.connection_key,
+    cameraLike?.restream_key,
+    cameraLike?.stream_key,
+    cameraLike?.id,
+    cameraLike?.camera_id,
+    cameraLike?.pk,
+    fallback
+  ]
+  for (const candidate of candidates) {
+    if (candidate !== undefined && candidate !== null && candidate !== '') {
+      return String(candidate)
+    }
+  }
+  return null
+}
+
+const assignConnectionKey = (cameraLike, fallback) => {
+  const key = resolveConnectionKey(cameraLike, fallback)
+  if (key) {
+    cameraLike.connectionKey = key
+  }
+  return cameraLike
+}
+
+const deriveWhepUrl = (playbackUrl) => {
+  if (!playbackUrl) return null
+  try {
+    const parsed = new URL(playbackUrl, window.location.origin)
+    const sanitizedPath = parsed.pathname.replace(/\/+$/, '')
+    const segments = sanitizedPath.split('/').filter(Boolean)
+    if (!segments.length) return null
+
+    const cleanup = (value) => value?.replace(/\.m3u8$/i, '')
+    let possibleKey = cleanup(segments[segments.length - 1])
+    if (!possibleKey || ['index', 'playlist', 'master', 'stream'].includes(possibleKey.toLowerCase())) {
+      possibleKey = cleanup(segments[segments.length - 2])
+    }
+
+    if (!possibleKey) return null
+    return `${parsed.origin}/whep/${possibleKey}`
+  } catch (err) {
+    console.warn('[SiteDetailsModal] Falha ao derivar WHEP a partir de playback_url:', playbackUrl, err)
+    return null
+  }
+}
+
+const reorderWhepPath = (candidate) => {
+  if (!candidate) return null
+  try {
+    const parsed = new URL(candidate, window.location.origin)
+    const segments = parsed.pathname.split('/').filter(Boolean)
+    const whepIndex = segments.indexOf('whep')
+    if (whepIndex === -1) return null
+    if (segments.length < 2) return null
+
+    if (whepIndex === segments.length - 1) {
+      // .../key/whep => .../whep/key
+      const keySegment = segments[whepIndex - 1]
+      const prefix = segments.slice(0, Math.max(0, whepIndex - 1))
+      if (!keySegment) return null
+      parsed.pathname = `/${[...prefix, 'whep', keySegment].join('/')}`
+      return parsed.toString()
+    }
+
+    const keySegment = segments[whepIndex + 1]
+    if (!keySegment) return null
+    const prefix = segments.slice(0, whepIndex)
+    const suffix = segments.slice(whepIndex + 2)
+    parsed.pathname = `/${[...prefix, keySegment, 'whep', ...suffix].join('/')}`
+    return parsed.toString()
+  } catch (err) {
+    console.warn('[SiteDetailsModal] Falha ao reordenar caminho WHEP:', candidate, err)
+    return null
+  }
+}
+
+const buildWhepCandidates = (camera) => {
+  const candidates = []
+  const origins = new Set()
+
+  const pushCandidate = (value) => {
+    if (!value) return
+    try {
+      const normalized = new URL(value, window.location.origin).toString()
+      if (!candidates.includes(normalized)) {
+        candidates.push(normalized)
+        origins.add(new URL(normalized).origin)
+      }
+    } catch (err) {
+      console.warn('[SiteDetailsModal] Ignorando WHEP inválido:', value, err)
+    }
+  }
+
+  const recordOrigin = (value) => {
+    if (!value) return
+    try {
+      origins.add(new URL(value, window.location.origin).origin)
+    } catch (err) {
+      console.warn('[SiteDetailsModal] Falha ao registrar origem WHEP:', value, err)
+    }
+  }
+
+  pushCandidate(camera?.whep_url)
+  const derived = deriveWhepUrl(camera?.playback_url)
+  if (!camera?.whep_url && derived) {
+    camera.whep_url = derived
+  }
+  pushCandidate(derived)
+
+  recordOrigin(camera?.playback_url)
+  recordOrigin(camera?.whep_url)
+  recordOrigin(camera?.webrtc_public_base_url)
+  recordOrigin(camera?.webrtc_base_url)
+
+  const snapshot = [...candidates]
+  snapshot.forEach((value) => {
+    const reordered = reorderWhepPath(value)
+    if (reordered) pushCandidate(reordered)
+  })
+
+  const originList = origins.size ? Array.from(origins) : []
+  if (!originList.length && camera?.playback_url) {
+    try {
+      originList.push(new URL(camera.playback_url, window.location.origin).origin)
+    } catch (err) {
+      console.warn('[SiteDetailsModal] Falha ao obter origem do playback_url:', camera?.playback_url, err)
+    }
+  }
+  if (!originList.length && camera?.whep_url) {
+    try {
+      originList.push(new URL(camera.whep_url, window.location.origin).origin)
+    } catch (err) {
+      console.warn('[SiteDetailsModal] Falha ao obter origem do whep_url:', camera?.whep_url, err)
+    }
+  }
+
+  const keySet = new Set()
+  const potentialKeys = [
+    camera?.restream_key,
+    camera?.stream_key,
+    camera?.connection_key,
+    camera?.connectionKey,
+    camera?.id,
+    camera?.camera_id,
+    camera?.pk,
+  ]
+  potentialKeys.forEach((value) => {
+    if (value !== undefined && value !== null && value !== '') {
+      keySet.add(String(value).replace(/^\/+|\/+$/g, ''))
+    }
+  })
+
+  const numericId = Number(camera?.id)
+  if (!Number.isNaN(numericId)) {
+    keySet.add(String(numericId))
+    keySet.add(`gateway_${numericId}`)
+  }
+
+  const connectionKey = camera?.connectionKey
+  if (connectionKey) {
+    keySet.add(String(connectionKey))
+    if (!String(connectionKey).startsWith('gateway_')) {
+      keySet.add(`gateway_${connectionKey}`)
+    }
+  }
+
+  // Adicionar fallback para proxy /camera-stream (ex.: nginx 8082) quando detectamos porta 8889
+  const orderedOrigins = []
+  const seenOrigins = new Set()
+
+  const pushOrigin = (value, priority = false) => {
+    if (!value) return
+    if (seenOrigins.has(value)) return
+    seenOrigins.add(value)
+    if (priority) {
+      orderedOrigins.unshift(value)
+    } else {
+      orderedOrigins.push(value)
+    }
+  }
+
+  originList.forEach((origin) => {
+    pushOrigin(origin)
+    try {
+      const parsed = new URL(origin)
+      if (parsed.port === '8889') {
+        const proxyOrigin = `${parsed.protocol}//${parsed.hostname}:8082`
+        pushOrigin(proxyOrigin, true)
+        pushOrigin(`${proxyOrigin}/camera-stream`, true)
+      }
+    } catch (err) {
+      console.warn('[SiteDetailsModal] Falha ao analisar origem para fallback proxy:', origin, err)
+    }
+  })
+
+  if (!orderedOrigins.length) {
+    pushOrigin(window.location.origin)
+  }
+
+  orderedOrigins.forEach((origin) => {
+    keySet.forEach((keyCandidate) => {
+      const sanitized = keyCandidate.replace(/^\/+|\/+$/g, '')
+      if (!sanitized) return
+      try {
+        const normalizedOrigin = new URL(origin, window.location.origin).toString().replace(/\/+$/, '')
+        pushCandidate(`${normalizedOrigin}/whep/${sanitized}`)
+        pushCandidate(`${normalizedOrigin}/${sanitized}/whep`)
+        if (!normalizedOrigin.includes('/camera-stream/')) {
+          pushCandidate(`${normalizedOrigin}/camera-stream/${sanitized}/whep`)
+        }
+      } catch (err) {
+        pushCandidate(`${origin}/whep/${sanitized}`)
+        pushCandidate(`${origin}/${sanitized}/whep`)
+      }
+    })
+  })
+
+  return candidates
+}
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+const previewWarmups = new Map()
+const previewRecentSuccess = new Map()
+const PREVIEW_CACHE_MS = 45_000
+
+const ensurePreviewReady = async (camera, label) => {
+  const cameraId = Number(camera?.id)
+  if (!cameraId || Number.isNaN(cameraId)) return
+
+  const now = Date.now()
+  const lastSuccess = previewRecentSuccess.get(cameraId)
+  if (lastSuccess && now - lastSuccess < PREVIEW_CACHE_MS) {
+    return
+  }
+
+  if (previewWarmups.has(cameraId)) {
+    return previewWarmups.get(cameraId)
+  }
+
+  const warmup = (async () => {
+    try {
+      console.log(`[SiteDetailsModal] Iniciando preview backend (${label}) para câmera ${cameraId}`)
+      const response = await post(`/setup_app/api/gateways/${cameraId}/video/preview/start/`)
+      if (response?.success) {
+        if (response.playback_url) {
+          camera.playback_url = response.playback_url
+        }
+        if (response.preview_url) {
+          camera.preview_url = response.preview_url
+        }
+        previewRecentSuccess.set(cameraId, Date.now())
+        console.log(`[SiteDetailsModal] ✓ Preview backend iniciado para ${label}, aguardando 2s para MediaMTX publicar...`)
+        await delay(2000)
+      } else {
+        console.warn(`[SiteDetailsModal] Preview backend respondeu sem sucesso (${label})`, response)
+      }
+    } catch (error) {
+      console.error(`[SiteDetailsModal] Erro ao iniciar preview backend (${label})`, error)
+    } finally {
+      previewWarmups.delete(cameraId)
+    }
+  })()
+
+  previewWarmups.set(cameraId, warmup)
+  return warmup
+}
+
+const attemptWhepConnectionViaComposable = async (camera, refsMap, connectionsMap, label) => {
+  const connectionKey = camera.connectionKey ?? resolveConnectionKey(camera)
+  if (!connectionKey) {
+    console.warn('[SiteDetailsModal] Não foi possível determinar a chave da câmera', camera)
+    return false
+  }
+
+  const playbackUrl = camera.playback_url || camera.preview_url
+  if (!playbackUrl) {
+    console.warn(`[SiteDetailsModal] Sem playback_url para ${label}`)
+    return false
+  }
+
+  const whepUrl = playbackUrl.endsWith('/') ? `${playbackUrl}whep` : `${playbackUrl}/whep`
+  
+  console.log(`[SiteDetailsModal] Conectando ${label} via useWebRTC composable:`, whepUrl)
+
+  if (!connectionsMap.value) {
+    connectionsMap.value = {}
+  }
+
+  const existing = connectionsMap.value?.[connectionKey]
+  if (existing?.close) {
+    try {
+      existing.close()
+    } catch (err) {
+      console.warn('[SiteDetailsModal] Falha ao encerrar conexão prévia:', err)
+    }
+  }
+
+  try {
+    const rtc = useWebRTC({
+      maxRetries: 5,
+      maxBackoff: 30000
+    })
+
+    await rtc.connect(whepUrl)
+    connectionsMap.value[connectionKey] = rtc
+
+    // Aguardar próximo tick para garantir que o elemento video existe
+    await nextTick()
+    
+    console.log(`[SiteDetailsModal] Tentando vincular stream para ${label}, connectionKey:`, connectionKey)
+    console.log(`[SiteDetailsModal] refsMap.value disponível:`, Object.keys(refsMap.value))
+    
+    // Polling para encontrar o elemento video (pode levar alguns frames)
+    const maxAttempts = 10
+    for (let i = 0; i < maxAttempts; i++) {
+      const videoEl = refsMap.value[connectionKey]
+      console.log(`[SiteDetailsModal] Tentativa ${i + 1}/${maxAttempts} - videoEl:`, !!videoEl, 'stream:', !!rtc.stream.value)
+      if (videoEl && rtc.stream.value) {
+        videoEl.srcObject = rtc.stream.value
+        console.log(`[SiteDetailsModal] ✓ Stream vinculado ao vídeo para ${label}`)
+        break
+      }
+      await delay(100)
+    }
+
+    // Watch para streams que chegam depois
+    const stopWatch = watch(rtc.stream, (newStream) => {
+      console.log(`[SiteDetailsModal] 🔄 Watch disparado para ${label}:`, {
+        hasStream: !!newStream,
+        hasVideoEl: !!refsMap.value[connectionKey],
+        connectionKey,
+        streamTracks: newStream?.getTracks().length
+      })
+      
+      if (newStream && refsMap.value[connectionKey]) {
+        const videoEl = refsMap.value[connectionKey]
+        if (videoEl.srcObject !== newStream) {
+          videoEl.srcObject = newStream
+          console.log(`[SiteDetailsModal] ✓ Stream atualizado para ${label}`)
+        } else {
+          console.log(`[SiteDetailsModal] ℹ️ Stream já vinculado para ${label}`)
+        }
+      } else if (newStream && !refsMap.value[connectionKey]) {
+        console.error(`[SiteDetailsModal] ❌ Stream disponível mas videoEl não encontrado para ${label}, key:`, connectionKey)
+        console.error(`[SiteDetailsModal] Keys disponíveis:`, Object.keys(refsMap.value))
+      } else if (!newStream) {
+        console.warn(`[SiteDetailsModal] ⚠️ Watch disparado mas stream vazio para ${label}`)
+      }
+    }, { immediate: true })
+
+    const originalClose = rtc.close.bind(rtc)
+    rtc.close = () => {
+      stopWatch()
+      originalClose()
+    }
+
+    console.log(`[SiteDetailsModal] ✓ Câmera conectada (${label}) via ${whepUrl}`)
+    return true
+  } catch (error) {
+    console.error('[SiteDetailsModal] Erro ao conectar via useWebRTC:', label, whepUrl, error)
+    return false
+  }
+}
+
+const attemptWhepConnection = async (camera, whepUrl, refsMap, connectionsMap, label) => {
+  const connectionKey = camera.connectionKey ?? resolveConnectionKey(camera)
+  if (!connectionKey) {
+    console.warn('[SiteDetailsModal] Não foi possível determinar a chave da câmera', camera)
+    return false
+  }
+
+  if (!connectionsMap.value) {
+    connectionsMap.value = {}
+  }
+
+  const existing = connectionsMap.value?.[connectionKey]
+  if (existing) {
+    try {
+      existing.close()
+    } catch (err) {
+      console.warn('[SiteDetailsModal] Falha ao encerrar conexão prévia:', err)
+    }
+    delete connectionsMap.value[connectionKey]
+  }
+
+  const pc = new RTCPeerConnection({
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+  })
+
+  pc.addTransceiver('video', { direction: 'recvonly' })
+  pc.addTransceiver('audio', { direction: 'recvonly' })
+
+  pc.ontrack = (event) => {
+    if (!refsMap.value) {
+      refsMap.value = {}
+    }
+    const refs = refsMap.value || {}
+    const videoEl = refs[connectionKey]
+    if (videoEl && event.streams[0]) {
+      videoEl.srcObject = event.streams[0]
+      videoEl.muted = true
+      const playPromise = videoEl.play?.()
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise.catch((err) => {
+          console.warn('[SiteDetailsModal] Falha ao iniciar reprodução automática do vídeo:', err)
+        })
+      }
+    }
+  }
+
+  try {
+    const offer = await pc.createOffer()
+    await pc.setLocalDescription(offer)
+
+    const response = await fetch(whepUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/sdp' },
+      body: offer.sdp
+    })
+
+    if (!response.ok) {
+      console.warn(`[SiteDetailsModal] WHEP ${label} respondeu ${response.status}`, whepUrl)
+      pc.close()
+      return false
+    }
+
+    const answerSdp = await response.text()
+    await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp })
+    connectionsMap.value[connectionKey] = pc
+    console.log(`[SiteDetailsModal] Câmera conectada (${label}) via ${whepUrl}`)
+    return true
+  } catch (error) {
+    pc.close()
+    console.error('[SiteDetailsModal] Erro ao negociar WHEP:', label, whepUrl, error)
+    return false
+  }
+}
+
+const connectCameraWithFallback = async (camera, refsMap, connectionsMap, label) => {
+  await ensurePreviewReady(camera, label)
+  
+  const success = await attemptWhepConnectionViaComposable(camera, refsMap, connectionsMap, label)
+  
+  if (!success) {
+    console.error('[SiteDetailsModal] Falha ao conectar WHEP para', label)
+  }
+}
 
 const isDark = computed(() => uiStore.theme === 'dark')
 
@@ -516,6 +1029,12 @@ const close = () => {
   emit('close')
 }
 
+// Gerenciar ESC key - ignora quando algum modal filho está aberto
+const hasChildModalOpen = computed(() => 
+  showEditModal.value || showDeviceDetailsModal.value || showMosaicModal.value || showCameraModal.value
+)
+useEscapeKey(() => close(), { isOpen: computed(() => props.isOpen), shouldIgnore: hasChildModalOpen })
+
 const getStatusClass = (status) => {
   return status?.toLowerCase() || 'offline'
 }
@@ -611,6 +1130,9 @@ const closeEditModal = () => {
   showEditModal.value = false
 }
 
+// ESC para fechar modal de edição
+useEscapeKey(() => closeEditModal(), { isOpen: showEditModal })
+
 const openDeviceDetails = (device) => {
   console.log('[SiteDetailsModal] Abrindo detalhes do dispositivo:', device?.id, device?.name)
   selectedDeviceForDetails.value = device
@@ -627,6 +1149,179 @@ const openCameraModal = async () => {
   await loadCameras()
 }
 
+// Abre o mosaico existente do site; se não existir, abre criação já com site
+const openSiteMosaicModal = async () => {
+  if (!props.site || !props.site.id) return
+  try {
+    // Tenta buscar mosaicos filtrando por site (se a API suportar)
+    let res = await get(`/setup_app/video/api/mosaics/?site_id=${props.site.id}`)
+    let mosaics = []
+    if (res && res.success) {
+      mosaics = res.mosaics || res.results || []
+    }
+    // Se a API não suportar filtro, buscar todos e filtrar client-side
+    if (!mosaics || mosaics.length === 0) {
+      res = await get('/setup_app/video/api/mosaics/')
+      if (res && res.success) {
+        const all = res.mosaics || res.results || []
+        mosaics = all.filter(m => m.site_id === props.site.id)
+      }
+    }
+
+    if (mosaics && mosaics.length > 0) {
+      // Abrir o primeiro mosaico do site em modal inline
+      const mosaic = mosaics[0]
+      await openMosaicViewer(mosaic.id)
+      return
+    }
+  } catch (e) {
+    console.warn('[SiteDetailsModal] Falha ao buscar mosaicos do site:', e)
+  }
+
+  // Fallback: sem mosaico para este site
+  notifyError('Sem Mosaico', 'Nenhum mosaico de câmeras configurado para este site. Configure em Configurações > Câmeras.')
+}
+
+const openMosaicViewer = async (mosaicId) => {
+  console.log('[SiteDetailsModal] ========== openMosaicViewer iniciado ==========')
+  console.log('[SiteDetailsModal] Setando showMosaicModal = true')
+  showMosaicModal.value = true
+  loadingMosaic.value = true
+  hasConnectedMosaic.value = false
+  
+  try {
+    const response = await get(`/setup_app/video/api/mosaics/${mosaicId}/`)
+    if (response && response.success) {
+      currentMosaic.value = response.mosaic || response.data
+      const camerasFromMosaic = currentMosaic.value.cameras || []
+      
+      console.log('[SiteDetailsModal] Mosaico carregado:', currentMosaic.value.name)
+      console.log('[SiteDetailsModal] Câmeras no mosaico:', camerasFromMosaic.length)
+      console.log('[SiteDetailsModal] currentMosaic:', currentMosaic.value)
+      console.log('[SiteDetailsModal] showMosaicModal atual:', showMosaicModal.value)
+      
+      // Buscar câmeras com WHEP URLs da API de câmeras
+      try {
+        const camerasResponse = await get(`/api/v1/cameras/?site=${props.site.id}`)
+        const camerasWithWhep = camerasResponse.results || []
+        console.log('[SiteDetailsModal] Câmeras da API:', camerasWithWhep.length)
+        
+        mosaicCameras.value = camerasFromMosaic.map((mosaicCam, idx) => {
+          // Se o item do mosaico for número, criar objeto base
+          if (typeof mosaicCam === 'number' || typeof mosaicCam === 'string') {
+            const camId = Number(mosaicCam)
+            const fullCam = camerasWithWhep.find(c => Number(c.id) === camId)
+            const obj = fullCam ? { ...fullCam } : { id: camId, name: `Camera ${camId}` }
+            if (!obj.whep_url) {
+              const fallbackWhep = deriveWhepUrl(obj.playback_url)
+              if (fallbackWhep) obj.whep_url = fallbackWhep
+            }
+            assignConnectionKey(obj, `mosaic-${mosaicId}-${idx}`)
+            console.log('[SiteDetailsModal] Mapeando câmera (num):', camId, '→', obj?.name, 'key:', obj?.connectionKey, 'whep:', obj?.whep_url)
+            return obj
+          }
+          // Caso seja objeto
+          const camId = mosaicCam.id ?? mosaicCam.camera_id ?? mosaicCam.pk ?? mosaicCam.camera?.id ?? idx
+          const fullCam = camerasWithWhep.find(c => Number(c.id) === Number(camId) || c.name === mosaicCam.name)
+          const merged = fullCam ? { ...fullCam, ...mosaicCam, id: Number(camId) } : { ...mosaicCam, id: Number(camId) }
+          if (!merged.whep_url) {
+            const fallbackWhep = deriveWhepUrl(merged.playback_url)
+            if (fallbackWhep) merged.whep_url = fallbackWhep
+          }
+          assignConnectionKey(merged, `mosaic-${mosaicId}-${idx}`)
+          console.log('[SiteDetailsModal] Mapeando câmera (obj):', camId, '→', merged?.name, 'key:', merged?.connectionKey, 'whep:', merged?.whep_url)
+          return merged
+        })
+        
+        console.log('[SiteDetailsModal] Câmeras enriquecidas:', mosaicCameras.value.length)
+        console.log('[SiteDetailsModal] Abrindo modal, watcher vai conectar câmeras...')
+        
+        // NÃO conectar aqui! O watcher vai conectar quando o template renderizar
+        // showMosaicModal = true dispara o watcher que aguarda refs e conecta
+        
+      } catch (cameraError) {
+        console.error('[SiteDetailsModal] Erro ao buscar câmeras:', cameraError)
+        // Fallback: construir objetos básicos a partir dos IDs
+        mosaicCameras.value = camerasFromMosaic.map((mosaicCam, idx) => {
+          const base = typeof mosaicCam === 'number' || typeof mosaicCam === 'string'
+            ? { id: Number(mosaicCam), name: `Camera ${mosaicCam}` }
+            : { ...mosaicCam, id: mosaicCam.id ?? idx }
+          return assignConnectionKey(base, `mosaic-${mosaicId}-${idx}`)
+        })
+        
+        console.log('[SiteDetailsModal] Câmeras fallback preparadas, watcher vai conectar...')
+        // NÃO conectar aqui! O watcher cuida disso
+      }
+    }
+  } catch (error) {
+    console.error('[SiteDetailsModal] Erro ao carregar mosaico:', error)
+    notifyError('Erro', 'Não foi possível carregar o mosaico')
+    showMosaicModal.value = false
+  } finally {
+    loadingMosaic.value = false
+    console.log('[SiteDetailsModal] ========== openMosaicViewer finalizado ==========')
+    console.log('[SiteDetailsModal] showMosaicModal final:', showMosaicModal.value)
+    console.log('[SiteDetailsModal] loadingMosaic final:', loadingMosaic.value)
+    console.log('[SiteDetailsModal] mosaicCameras final:', mosaicCameras.value.length)
+  }
+}
+
+const closeMosaicModal = () => {
+  showMosaicModal.value = false
+  hasConnectedMosaic.value = false
+  // Limpar conexões WebRTC
+  Object.values(mosaicConnections.value).forEach(pc => {
+    if (pc) pc.close()
+  })
+  mosaicConnections.value = {}
+  mosaicVideoRefs.value = {}
+  mosaicCameras.value = []
+  currentMosaic.value = null
+}
+
+// ESC para fechar modal de mosaico
+useEscapeKey(() => closeMosaicModal(), { isOpen: showMosaicModal })
+
+const connectMosaicCamera = async (camera, idx) => {
+  // NÃO reassinar connectionKey aqui - já foi feito em openMosaicViewer
+  // assignConnectionKey(camera, `mosaic-${currentMosaic.value?.id ?? 'site'}-${idx}`)
+  
+  // Usar a mesma key que foi usada no template
+  const key = camera.connectionKey ?? camera.id ?? camera.camera_id ?? idx
+  
+  console.log(`[SiteDetailsModal] 🎥 Conectando câmera:`, {
+    name: camera.name,
+    id: camera.id,
+    connectionKey: camera.connectionKey,
+    key: key,
+    playback_url: camera.playback_url,
+    whep_url: camera.whep_url
+  })
+  
+  const videoEl = mosaicVideoRefs.value[key]
+  if (!videoEl) {
+    console.error(`[SiteDetailsModal] ERRO: Elemento <video> não encontrado para ${camera.name}, key:`, key)
+    console.error('[SiteDetailsModal] Keys disponíveis:', Object.keys(mosaicVideoRefs.value))
+    return
+  }
+  
+  console.log(`[SiteDetailsModal] ✓ Elemento <video> encontrado para ${camera.name}, key:`, key)
+  
+  await connectCameraWithFallback(
+    camera,
+    mosaicVideoRefs,
+    mosaicConnections,
+    `mosaico:${camera.name || key}`
+  )
+}
+
+const getMosaicGridClass = computed(() => {
+  if (!currentMosaic.value) return 'grid-cols-2'
+  const layout = currentMosaic.value.layout || '2x2'
+  const cols = parseInt(layout.split('x')[0]) || 2
+  return `grid-cols-${cols}`
+})
+
 const closeCameraModal = () => {
   showCameraModal.value = false
   // Limpar conexões WebRTC
@@ -638,6 +1333,9 @@ const closeCameraModal = () => {
   cameras.value = []
 }
 
+// ESC para fechar modal de câmeras
+useEscapeKey(() => closeCameraModal(), { isOpen: showCameraModal })
+
 const loadCameras = async () => {
   if (!props.site) return
   
@@ -645,12 +1343,13 @@ const loadCameras = async () => {
   try {
     // Buscar câmeras do site
     const response = await get(`/api/v1/cameras/?site=${props.site.id}`)
-    cameras.value = response.results || []
+    const fetched = response.results || []
+    cameras.value = fetched.map((cam, idx) => assignConnectionKey({ ...cam }, `camera-${idx}`))
     console.log('[SiteDetailsModal] Câmeras carregadas:', cameras.value.length)
     
     // Iniciar conexões WebRTC para cada câmera
-    for (const camera of cameras.value) {
-      await connectCamera(camera)
+    for (const [index, camera] of cameras.value.entries()) {
+      await connectCamera(camera, index)
     }
   } catch (error) {
     console.error('[SiteDetailsModal] Erro ao carregar câmeras:', error)
@@ -660,45 +1359,14 @@ const loadCameras = async () => {
   }
 }
 
-const connectCamera = async (camera) => {
-  if (!camera.whep_url) {
-    console.warn('[SiteDetailsModal] Câmera sem WHEP URL:', camera.name)
-    return
-  }
-  
-  try {
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-    })
-    
-    pc.addTransceiver('video', { direction: 'recvonly' })
-    pc.addTransceiver('audio', { direction: 'recvonly' })
-    
-    pc.ontrack = (event) => {
-      const video = cameraVideoRefs.value[camera.id]
-      if (video && event.streams[0]) {
-        video.srcObject = event.streams[0]
-        cameraConnections.value[camera.id] = pc
-      }
-    }
-    
-    const offer = await pc.createOffer()
-    await pc.setLocalDescription(offer)
-    
-    const response = await fetch(camera.whep_url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/sdp' },
-      body: offer.sdp
-    })
-    
-    if (response.ok) {
-      const answerSdp = await response.text()
-      await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp })
-      console.log('[SiteDetailsModal] Câmera conectada:', camera.name)
-    }
-  } catch (error) {
-    console.error('[SiteDetailsModal] Erro ao conectar câmera:', camera.name, error)
-  }
+const connectCamera = async (camera, idx = 0) => {
+  assignConnectionKey(camera, `camera-${idx}`)
+  await connectCameraWithFallback(
+    camera,
+    cameraVideoRefs,
+    cameraConnections,
+    camera.name || camera.connectionKey || `camera-${idx}`
+  )
 }
 
 const loadCameraCount = async () => {
@@ -753,6 +1421,10 @@ watch(() => props.isOpen, (newVal) => {
   if (newVal && props.site) {
     loadDevices()
     loadCameraCount()
+  } else if (!newVal) {
+    // Limpar conexões quando fechar
+    closeCameraModal()
+    closeMosaicModal()
   }
 })
 
@@ -828,6 +1500,52 @@ watch(() => props.isOpen, (isOpen) => {
     // Store reference for cleanup if needed
   }
 })
+
+// CRÍTICO: Aguardar template renderizar antes de conectar câmeras do mosaico
+watch(() => [showMosaicModal.value, mosaicCameras.value.length], async ([isOpen, count]) => {
+  if (!isOpen || count === 0) return
+  if (hasConnectedMosaic.value) {
+    console.log('[SiteDetailsModal] WATCHER: Conexões já iniciadas, ignorando...')
+    return
+  }
+
+  console.log('[SiteDetailsModal] 🎬 WATCHER: Modal mosaico aberto e câmeras carregadas, aguardando refs...')
+
+  const maxRetries = 20
+  const delayMs = 200
+
+  for (let i = 0; i < maxRetries; i++) {
+    await nextTick()
+    const refCount = Object.keys(mosaicVideoRefs.value).length
+    const needed = mosaicCameras.value.length
+
+    console.log(`[SiteDetailsModal] WATCHER tentativa ${i+1}/${maxRetries}: ${refCount}/${needed} refs prontas`)
+
+    if (refCount >= needed) {
+      hasConnectedMosaic.value = true
+      console.log(`[SiteDetailsModal] ✅ WATCHER: Todas as ${refCount} refs prontas! Iniciando conexões...`)
+      const connectionPromises = mosaicCameras.value.map((camera, index) => 
+        connectMosaicCamera(camera, index)
+      )
+      await Promise.all(connectionPromises)
+      console.log('[SiteDetailsModal] 🎉 WATCHER: Todas as conexões finalizadas')
+      return
+    }
+
+    await delay(delayMs)
+  }
+
+  const finalRefCount = Object.keys(mosaicVideoRefs.value).length
+  console.error(`[SiteDetailsModal] ❌ WATCHER TIMEOUT: Apenas ${finalRefCount}/${mosaicCameras.value.length} refs após ${maxRetries * delayMs}ms`)
+  console.error('[SiteDetailsModal] Refs disponíveis:', Object.keys(mosaicVideoRefs.value))
+  console.error('[SiteDetailsModal] Câmeras esperadas:', mosaicCameras.value.map(c => c.connectionKey ?? c.id))
+})
+
+// Cleanup on unmount
+onUnmounted(() => {
+  closeCameraModal()
+  closeMosaicModal()
+})
 </script>
 
 <style>
@@ -842,8 +1560,7 @@ watch(() => props.isOpen, (isOpen) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10000;
-  padding: 20px;
+  z-index: 1040;
   backdrop-filter: blur(4px);
 }
 
@@ -1501,25 +2218,6 @@ watch(() => props.isOpen, (isOpen) => {
 .btn-primary:active:not(:disabled) {
   transform: translateY(0);
 }
-</style>
-  color: #10b981;
-}
-
-.status-badge.warning {
-  background: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
-}
-
-.status-badge.critical {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-}
-
-.status-badge.offline {
-  background: rgba(107, 114, 128, 0.1);
-  color: #6b7280;
-}
-
 /* Device Metrics */
 .device-metrics {
   display: grid;
@@ -1674,11 +2372,11 @@ watch(() => props.isOpen, (isOpen) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.9);
+  background: rgba(0, 0, 0, 0.75);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 14000;
+  z-index: 1060;
   padding: 20px;
 }
 
@@ -1855,3 +2553,199 @@ watch(() => props.isOpen, (isOpen) => {
 .camera-status i {
   font-size: 8px;
 }
+
+/* Mosaic Modal Styles */
+.mosaic-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: 20px;
+}
+
+.mosaic-modal-container {
+  background: #1e293b;
+  border-radius: 16px;
+  width: 95vw;
+  height: 95vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9);
+}
+
+.mosaic-modal-header {
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.mosaic-modal-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mosaic-close-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.mosaic-close-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
+.mosaic-modal-body {
+  flex: 1;
+  padding: 24px;
+  overflow: hidden;
+  background: #0f172a;
+  display: flex;
+  flex-direction: column;
+}
+
+.mosaic-loading,
+.mosaic-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 80px 20px;
+  color: #94a3b8;
+}
+
+.mosaic-loading i,
+.mosaic-empty i {
+  font-size: 56px;
+  color: #8b5cf6;
+}
+
+.mosaic-grid {
+  display: grid;
+  gap: 16px;
+  height: 100%;
+  width: 100%;
+  flex: 1;
+}
+
+.mosaic-grid.grid-cols-1 {
+  grid-template-columns: 1fr;
+}
+
+.mosaic-grid.grid-cols-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.mosaic-grid.grid-cols-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.mosaic-grid.grid-cols-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.mosaic-cell {
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 3px solid #334155;
+  transition: all 0.3s;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.mosaic-cell:hover {
+  border-color: #8b5cf6;
+  box-shadow: 0 12px 32px rgba(139, 92, 246, 0.4);
+  transform: translateY(-2px);
+}
+
+.mosaic-video-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mosaic-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+
+.mosaic-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, transparent 100%);
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mosaic-camera-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.mosaic-status {
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.mosaic-status.connected {
+  background: rgba(16, 185, 129, 0.3);
+  color: #10b981;
+  border: 2px solid rgba(16, 185, 129, 0.5);
+}
+
+.mosaic-status.connecting {
+  background: rgba(251, 191, 36, 0.3);
+  color: #fbbf24;
+  border: 2px solid rgba(251, 191, 36, 0.5);
+}
+
+.mosaic-status i {
+  font-size: 10px;
+}
+
+</style>
