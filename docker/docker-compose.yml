@@ -67,7 +67,7 @@
       VIDEO_TRANSMUXER_URL: "http://video-transmuxer:9000"
       VIDEO_HLS_BASE_URL: "http://video-hls:8080/hls"
       VIDEO_HLS_PUBLIC_BASE_URL: "http://localhost:8082/hls"
-      VIDEO_WEBRTC_PUBLIC_BASE_URL: "http://localhost:8889"
+      VIDEO_WEBRTC_PUBLIC_BASE_URL: "http://localhost:8082/camera-stream"
       WHATSAPP_QR_SERVICE_URL: "http://whatsapp-qr:3000"
     depends_on:
       postgres:
@@ -357,6 +357,41 @@
       - "8889:8889"   # WebRTC (HTTP signaling)
       - "8189:8189/udp" # WebRTC ICE/UDP candidates
     restart: unless-stopped
+
+  # Serviço para testes E2E (Playwright)
+  test-e2e:
+    build:
+      context: ..
+      dockerfile: docker/dockerfile
+    command: pytest /app/test_mosaic_rendering.py -v --headed
+    entrypoint: []
+    env_file:
+      - ../.env
+    working_dir: /app
+    environment:
+      DB_ENGINE: postgis
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: app
+      DB_USER: app
+      DB_PASSWORD: app
+      DJANGO_SETTINGS_MODULE: settings.test
+      SECRET_KEY: "django-insecure-test-key"
+      PYTHONPATH: "/app/backend:/app"
+      PYTHONUNBUFFERED: 1
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      # Apontar para o serviço web
+      TEST_BASE_URL: "http://web:8000"
+    depends_on:
+      web:
+        condition: service_healthy
+    profiles:
+      - testing
+    volumes:
+      - ../backend:/app/backend
+      - ../test_mosaic_rendering.py:/app/test_mosaic_rendering.py
+      - ../frontend:/app/frontend
+      - ../.env:/app/.env:ro
 
 volumes:
   redis_data:

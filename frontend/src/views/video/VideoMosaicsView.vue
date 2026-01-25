@@ -154,6 +154,19 @@
                     Use Ctrl/Cmd para selecionar múltiplos.
                     <span v-if="departments.length > 0" class="block mt-1">{{ departments.length }} departamento(s) disponível(is)</span>
                   </p>
+
+                <div>
+                  <label class="label-custom">Site</label>
+                  <select v-model="mosaicForm.site_id" class="input-custom">
+                    <option :value="null">Todos os sites</option>
+                    <option v-for="site in sites" :key="site.id" :value="site.id">
+                      {{ site.name }}
+                    </option>
+                  </select>
+                  <p class="text-xs text-gray-400 mt-2">
+                    Selecione um site específico ou deixe "Todos os sites" para exibir câmeras de todos os locais.
+                  </p>
+                </div>
                 </div>
 
                 <div>
@@ -268,7 +281,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { useApi } from '@/composables/useApi';
 import { useNotification } from '@/composables/useNotification';
 
@@ -284,6 +297,7 @@ const mosaicsLoading = ref(false);
 const mosaics = ref([]);
 const cameras = ref([]);
 const departments = ref([]);
+const sites = ref([]);
 const showMosaicModal = ref(false);
 const showDeleteConfirm = ref(false);
 const mosaicToDelete = ref(null);
@@ -295,6 +309,7 @@ const mosaicForm = ref({
   layout: '2x2',
   cameras: [],
   department_ids: [],
+  site_id: null,
 });
 
 const mosaicsSorted = computed(() => [...mosaics.value].sort((a, b) => a.name.localeCompare(b.name)));
@@ -324,12 +339,19 @@ const availableCamerasBySite = computed(() => {
   });
   
   // Ordenar sites alfabeticamente e câmeras dentro de cada site
-  return Object.keys(grouped)
+  const groups = Object.keys(grouped)
     .sort((a, b) => a.localeCompare(b))
     .map(siteName => ({
       siteName,
       cameras: grouped[siteName].sort((a, b) => a.name.localeCompare(b.name))
     }));
+
+  // Se um site foi selecionado no formulário, retornar apenas seu grupo
+  const selectedSite = sites.value.find(s => s.id === mosaicForm.value.site_id);
+  if (selectedSite) {
+    return groups.filter(g => g.siteName === selectedSite.name);
+  }
+  return groups;
 });
 
 const deleteMessage = computed(() => {
@@ -419,6 +441,25 @@ const fetchDepartments = async () => {
   }
 };
 
+const fetchSites = async () => {
+  try {
+    const res = await api.get('/api/v1/inventory/sites/');
+    // Aceitar múltiplos formatos: { success, data }, { success, results }, { sites }, array direta
+    let list = [];
+    if (res) {
+      if (res.success && Array.isArray(res.data)) list = res.data;
+      else if (res.success && Array.isArray(res.results)) list = res.results;
+      else if (Array.isArray(res.sites)) list = res.sites;
+      else if (Array.isArray(res)) list = res;
+    }
+    sites.value = Array.isArray(list) ? list : [];
+  } catch (e) {
+    console.error('[VideoMosaics] Erro ao carregar sites:', e);
+    notify.error('Sites', 'Erro ao carregar lista de sites.');
+    sites.value = [];
+  }
+};
+
 const openMosaicModal = (mosaic = null) => {
   if (mosaic) {
     mosaicForm.value = {
@@ -427,6 +468,7 @@ const openMosaicModal = (mosaic = null) => {
       layout: mosaic.layout || '2x2',
       cameras: mosaic.cameras || [],
       department_ids: (mosaic.departments || []).map(d => d.id),
+      site_id: mosaic.site_id || null,
     };
   } else {
     mosaicForm.value = {
@@ -435,6 +477,7 @@ const openMosaicModal = (mosaic = null) => {
       layout: '2x2',
       cameras: [],
       department_ids: [],
+      site_id: null,
     };
   }
   showMosaicModal.value = true;
@@ -478,6 +521,7 @@ const saveMosaic = async () => {
       layout: mosaicForm.value.layout,
       cameras: mosaicForm.value.cameras,
       department_ids: mosaicForm.value.department_ids || [],
+      site_id: mosaicForm.value.site_id,
     };
 
     let res;
@@ -538,13 +582,25 @@ const viewMosaic = (mosaic) => {
   router.push({ name: 'mosaic-viewer', params: { id: mosaic.id } });
 };
 
+// Query handling to prefill site and open modal when coming from SiteDetails
+const route = useRoute ? useRoute() : null;
+
 onMounted(async () => {
   console.log('[VideoMosaics] Component mounted, iniciando carregamento...');
   await Promise.all([
     fetchMosaics(),
     fetchCameras(),
-    fetchDepartments()
+    fetchDepartments(),
+    fetchSites()
   ]);
+  if (route && route.query) {
+    const siteIdFromQuery = route.query.site_id;
+    const openModal = route.query.open_modal;
+    if (openModal && (openModal === '1' || openModal === 'true')) {
+      mosaicForm.value.site_id = siteIdFromQuery ? parseInt(siteIdFromQuery) : null;
+      openMosaicModal();
+    }
+  }
   console.log('[VideoMosaics] Carregamento concluído. Departamentos:', departments.value);
 });
 </script>

@@ -217,6 +217,14 @@ class VideoMosaic(models.Model):
         blank=True,
         help_text="Lista de IDs dos gateways de vídeo (MessagingGateway)"
     )
+    site = models.ForeignKey(
+        'inventory.Site',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='video_mosaics',
+        help_text="Site associado a este mosaico (filtra câmeras por local)"
+    )
     departments = models.ManyToManyField(
         'core.Department',
         related_name='video_mosaics',

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Teste: Vue 3 Template Refs</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+</head>
+<body>
+  <div id="app"></div>
+  
+  <script>
+    const { createApp, ref, nextTick } = Vue;
+    
+    createApp({
+      setup() {
+        const items = ref([
+          { id: 1, name: 'Item 1' },
+          { id: 2, name: 'Item 2' }
+        ]);
+        const itemRefs = ref({});
+        
+        const testRefs = async () => {
+          console.log('=== TESTE 1: Antes do nextTick ===');
+          console.log('itemRefs (sem .value):', Object.keys(itemRefs));
+          console.log('itemRefs.value:', Object.keys(itemRefs.value));
+          
+          await nextTick();
+          
+          console.log('\n=== TESTE 2: Depois do nextTick ===');
+          console.log('itemRefs (sem .value):', Object.keys(itemRefs));
+          console.log('itemRefs.value:', Object.keys(itemRefs.value));
+          
+          // Teste de acesso
+          console.log('\n=== TESTE 3: Acesso aos elementos ===');
+          console.log('itemRefs[1]:', itemRefs[1]); // undefined (errado)
+          console.log('itemRefs.value[1]:', itemRefs.value[1]); // HTMLVideoElement (correto)
+        };
+        
+        setTimeout(testRefs, 100);
+        
+        return {
+          items,
+          itemRefs
+        };
+      },
+      template: `
+        <div>
+          <h2>Teste de Template Refs</h2>
+          <div v-for="item in items" :key="item.id">
+            <video 
+              :ref="el => { if (el) itemRefs[item.id] = el }"
+              style="width: 100px; height: 100px; background: #333;"
+            ></video>
+            <p>{{ item.name }}</p>
+          </div>
+          <pre>Abra o console para ver os resultados</pre>
+        </div>
+      `
+    }).mount('#app');
+  </script>
+</body>
+</html>

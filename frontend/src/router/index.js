@@ -97,6 +97,11 @@ const routes = [
     component: () => import('@/views/ConfigurationPage.vue'),
   },
   {
+    path: '/video',
+    name: 'video-management',
+    component: () => import('@/views/video/VideoManagementView.vue'),
+  },
+  {
     path: '/video/cameras',
     name: 'video-cameras',
     component: () => import('@/views/video/VideoCamerasView.vue'),
