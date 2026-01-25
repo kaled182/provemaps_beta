@@ -3718,6 +3718,77 @@ def download_backup(request, filename):
 # ============================================================================
 
 
+@require_http_methods(["GET"])
+@login_required
+@user_passes_test(_staff_check)
+def video_cameras_list(request):
+    """Listar câmeras (MessagingGateway) com filtro opcional por site.
+
+    Query params:
+      - site: ID do Site (inventory.Site.id). Quando fornecido, filtra por `site_name` do gateway
+        igual ao `display_name` do Site.
+    """
+    import os
+    from django.conf import settings
+    from django.http import JsonResponse
+    from django.db.models import Q
+    from setup_app.models import MessagingGateway
+    from inventory.models import Site
+    from .services import video_gateway as video_gateway_service
+
+    try:
+        qs = MessagingGateway.objects.filter(gateway_type="video", enabled=True)
+
+        # RBAC: usuários não superuser só veem câmeras públicas ou dos seus departamentos
+        if not request.user.is_superuser:
+            user_depts = request.user.profile.departments.all()
+            qs = qs.filter(Q(departments__in=user_depts) | Q(departments__isnull=True)).distinct()
+
+        site_param = request.GET.get("site") or request.GET.get("site_id")
+        site_name = None
+        if site_param:
+            try:
+                site_obj = Site.objects.get(pk=int(site_param))
+                site_name = site_obj.display_name
+            except Exception:
+                site_name = None
+        if site_name:
+            qs = qs.filter(site_name=site_name)
+
+        gateways = list(qs.order_by("name"))
+
+        def _whep_url(gw: MessagingGateway) -> str | None:
+            cfg = gw.config or {}
+            webrtc_base = (cfg.get("webrtc_public_base_url") or "").strip()
+            if not webrtc_base:
+                webrtc_base = getattr(settings, "VIDEO_WEBRTC_PUBLIC_BASE_URL", None) or os.environ.get("VIDEO_WEBRTC_PUBLIC_BASE_URL")
+            if not webrtc_base:
+                return None
+            restream_key = (cfg.get("restream_key") or f"gateway_{gw.id}")
+            base = str(webrtc_base).rstrip('/')
+            return f"{base}/whep/{restream_key}"
+
+        results = []
+        for gw in gateways:
+            playback_url = video_gateway_service.build_playback_url(gw)
+            results.append({
+                "id": gw.id,
+                "name": gw.name,
+                "enabled": gw.enabled,
+                "site_name": gw.site_name,
+                "playback_url": playback_url,
+                "whep_url": _whep_url(gw),
+            })
+
+        return JsonResponse({
+            "success": True,
+            "count": len(results),
+            "results": results,
+        })
+    except Exception as exc:
+        logger.exception("Error listing video cameras")
+        return JsonResponse({"success": False, "message": str(exc)}, status=500)
+
 @require_http_methods(["GET", "POST"])
 @login_required
 @user_passes_test(_staff_check)
@@ -3727,6 +3798,9 @@ def video_mosaics_list(request):
     
     if request.method == "GET":
         try:
+            # Filtro opcional por site_id
+            site_id_param = request.GET.get('site_id') or request.GET.get('site')
+
             # Filtrar por departamentos do usuário
             if request.user.is_superuser:
                 # Superuser vê todos os mosaicos
@@ -3740,6 +3814,11 @@ def video_mosaics_list(request):
                     Q(departments__in=user_depts) | 
                     Q(departments__isnull=True)
                 ).distinct().order_by('name')
+            if site_id_param:
+                try:
+                    mosaics = mosaics.filter(site_id=int(site_id_param))
+                except ValueError:
+                    pass
             
             mosaic_list = [
                 {
@@ -3747,6 +3826,7 @@ def video_mosaics_list(request):
                     "name": m.name,
                     "layout": m.layout,
                     "cameras": m.cameras or [],
+                    "site_id": m.site_id,
                     "departments": [{"id": d.id, "name": d.name} for d in m.departments.all()],
                     "created_at": m.created_at.isoformat() if m.created_at else None,
                     "updated_at": m.updated_at.isoformat() if m.updated_at else None,
@@ -3768,6 +3848,7 @@ def video_mosaics_list(request):
             layout = data.get("layout", "2x2")
             cameras = data.get("cameras", [])
             department_ids = data.get("department_ids", [])
+            site_id = data.get("site_id")
             
             if not name:
                 return JsonResponse(
@@ -3790,6 +3871,7 @@ def video_mosaics_list(request):
                 name=name,
                 layout=layout,
                 cameras=cameras,
+                site_id=site_id if isinstance(site_id, int) else None,
             )
             
             # Adicionar departamentos se fornecidos
@@ -3805,6 +3887,7 @@ def video_mosaics_list(request):
                     "name": mosaic.name,
                     "layout": mosaic.layout,
                     "cameras": mosaic.cameras,
+                    "site_id": mosaic.site_id,
                     "departments": [{"id": d.id, "name": d.name} for d in mosaic.departments.all()],
                     "created_at": mosaic.created_at.isoformat(),
                     "updated_at": mosaic.updated_at.isoformat(),
@@ -3862,6 +3945,7 @@ def video_mosaic_detail(request, mosaic_id: int):
                 "name": mosaic.name,
                 "layout": mosaic.layout,
                 "cameras": mosaic.cameras,
+                "site_id": mosaic.site_id,
                 "departments": [{"id": d.id, "name": d.name} for d in mosaic.departments.all()],
                 "created_at": mosaic.created_at.isoformat() if mosaic.created_at else None,
                 "updated_at": mosaic.updated_at.isoformat() if mosaic.updated_at else None,
@@ -3886,6 +3970,10 @@ def video_mosaic_detail(request, mosaic_id: int):
             
             if "cameras" in data:
                 mosaic.cameras = data["cameras"]
+
+            if "site_id" in data:
+                raw_site_id = data["site_id"]
+                mosaic.site_id = raw_site_id if isinstance(raw_site_id, int) else None
             
             # Atualizar departamentos se fornecidos
             if "department_ids" in data:
@@ -3915,6 +4003,7 @@ def video_mosaic_detail(request, mosaic_id: int):
                     "name": mosaic.name,
                     "layout": mosaic.layout,
                     "cameras": mosaic.cameras,
+                    "site_id": mosaic.site_id,
                     "departments": [{"id": d.id, "name": d.name} for d in mosaic.departments.all()],
                     "updated_at": mosaic.updated_at.isoformat(),
                 },

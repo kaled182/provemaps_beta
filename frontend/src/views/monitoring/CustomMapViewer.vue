@@ -46,7 +46,7 @@
             >
               <i :class="category.icon"></i>
               {{ category.label }}
-              <span class="badge">{{ getSelectedCount(category.key) }}</span>
+              <span class="badge">{{ getAvailableCount(category.key) }}</span>
             </button>
           </div>
 
@@ -62,28 +62,107 @@
 
             <!-- Lista de Itens -->
             <div class="items-list">
-              <div 
-                v-for="item in filteredItems" 
-                :key="item.id"
-                class="item-row"
-              >
-                <label class="item-checkbox">
-                  <input 
-                    type="checkbox" 
-                    :checked="isItemSelected(item.id)"
-                    @change="toggleItem(item.id)"
-                  >
-                  <span class="item-name">{{ item.name }}</span>
-                </label>
-                <div class="item-info">
-                  <span v-if="item.status" :class="['status-badge', item.status]">
-                    {{ item.status }}
-                  </span>
-                  <button @click="focusOnItem(item)" class="btn-focus">
-                    <i class="fas fa-crosshairs"></i>
-                  </button>
+              <!-- Hierarquia de Sites (apenas para devices) -->
+              <template v-if="activeCategory === 'devices'">
+                <div v-for="siteGroup in devicesBySite" :key="'site-' + siteGroup.site_id" class="site-group">
+                  <!-- Linha do Site -->
+                  <div class="site-row">
+                    <button 
+                      @click="toggleSiteExpansion(siteGroup.site_id)" 
+                      class="btn-expand"
+                      :title="isSiteExpanded(siteGroup.site_id) ? 'Colapsar' : 'Expandir'"
+                    >
+                      <i :class="isSiteExpanded(siteGroup.site_id) ? 'fas fa-chevron-down' : 'fas fa-chevron-right'"></i>
+                    </button>
+                    
+                    <label class="site-checkbox">
+                      <input 
+                        type="checkbox" 
+                        :checked="isSiteSelected(siteGroup.site_id, siteGroup.devices)"
+                        :indeterminate.prop="isSitePartiallySelected(siteGroup.site_id, siteGroup.devices)"
+                        @change="toggleSite(siteGroup.site_id, siteGroup.devices)"
+                      >
+                      <div class="site-details">
+                        <span class="site-name">
+                          <i class="fas fa-map-marker-alt"></i>
+                          {{ siteGroup.site_name }}
+                        </span>
+                        <span class="site-count">{{ siteGroup.devices.length }} equipamento(s)</span>
+                      </div>
+                    </label>
+                    
+                    <div class="site-status-summary">
+                      <template v-for="(count, status) in getSiteStatusSummary(siteGroup.devices)" :key="status">
+                        <span v-if="count > 0" :class="['status-dot', status]" :title="`${count} ${getStatusLabel(status)}`">
+                          {{ count }}
+                        </span>
+                      </template>
+                    </div>
+                  </div>
+                  
+                  <!-- Devices do Site (colapsável) -->
+                  <transition name="expand">
+                    <div v-if="isSiteExpanded(siteGroup.site_id)" class="devices-list">
+                      <div 
+                        v-for="device in siteGroup.devices" 
+                        :key="device.id"
+                        class="device-row"
+                      >
+                        <label class="device-checkbox">
+                          <input 
+                            type="checkbox" 
+                            :checked="isItemSelected(device.id)"
+                            @change="toggleItem(device.id)"
+                          >
+                          <div class="device-details">
+                            <span class="device-name">{{ device.name }}</span>
+                            <span v-if="device.ip && device.ip !== 'N/A'" class="device-ip">
+                              <i class="fas fa-network-wired"></i> {{ device.ip }}
+                            </span>
+                          </div>
+                        </label>
+                        <div class="device-info">
+                          <span v-if="device.status" :class="['status-badge', device.status]">
+                            {{ getStatusLabel(device.status) }}
+                          </span>
+                          <span v-else class="status-badge offline">
+                            Offline
+                          </span>
+                          <button @click="focusOnItem(device)" class="btn-focus">
+                            <i class="fas fa-crosshairs"></i>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </transition>
                 </div>
-              </div>
+              </template>
+              
+              <!-- Lista simples para outras categorias -->
+              <template v-else>
+                <div 
+                  v-for="item in filteredItems" 
+                  :key="item.id"
+                  class="item-row"
+                >
+                  <label class="item-checkbox">
+                    <input 
+                      type="checkbox" 
+                      :checked="isItemSelected(item.id)"
+                      @change="toggleItem(item.id)"
+                    >
+                    <span class="item-name">{{ item.name }}</span>
+                  </label>
+                  <div class="item-info">
+                    <span v-if="item.status" :class="['status-badge', item.status]">
+                      {{ getStatusLabel(item.status) }}
+                    </span>
+                    <button @click="focusOnItem(item)" class="btn-focus">
+                      <i class="fas fa-crosshairs"></i>
+                    </button>
+                  </div>
+                </div>
+              </template>
             </div>
 
             <div class="panel-footer">
@@ -157,8 +236,11 @@ const selectedItems = ref({
   racks: []
 })
 
+const expandedSites = ref(new Set())
+const selectedSites = ref(new Set())
+
 const inventoryCategories = [
-  { key: 'devices', label: 'Sites', icon: 'fas fa-map-marker-alt' },
+  { key: 'devices', label: 'Equipamentos', icon: 'fas fa-server' },
   { key: 'cables', label: 'Cabos', icon: 'fas fa-network-wired' },
   { key: 'cameras', label: 'Câmeras', icon: 'fas fa-video' },
   { key: 'racks', label: 'Racks', icon: 'fas fa-database' }
@@ -189,12 +271,120 @@ const filteredItems = computed(() => {
   )
 })
 
+const devicesBySite = computed(() => {
+  if (activeCategory.value !== 'devices') return []
+  
+  const devices = filteredItems.value
+  const siteMap = new Map()
+  
+  devices.forEach(device => {
+    const siteKey = device.site_id
+    if (!siteMap.has(siteKey)) {
+      siteMap.set(siteKey, {
+        site_id: siteKey,
+        site_name: device.site_name,
+        devices: []
+      })
+    }
+    siteMap.get(siteKey).devices.push(device)
+  })
+  
+  return Array.from(siteMap.values()).sort((a, b) => 
+    a.site_name.localeCompare(b.site_name)
+  )
+})
+
 const getSelectedCount = (category) => {
   return selectedItems.value[category]?.length || 0
 }
 
+const getAvailableCount = (category) => {
+  return availableItems.value[category]?.length || 0
+}
+
 const isItemSelected = (itemId) => {
   return selectedItems.value[activeCategory.value]?.includes(itemId)
+}
+
+const getStatusLabel = (status) => {
+  // Garantir que status seja uma string
+  const statusStr = String(status || 'offline').toLowerCase()
+  
+  const labels = {
+    'online': 'ONLINE',
+    'warning': 'ATENÇÃO',
+    'critical': 'CRÍTICO',
+    'offline': 'OFFLINE',
+    'unknown': 'SEM STATUS',
+    '0': 'OFFLINE',
+    'null': 'OFFLINE',
+    'undefined': 'OFFLINE'
+  }
+  
+  return labels[statusStr] || 'OFFLINE'
+}
+
+const toggleSiteExpansion = (siteId) => {
+  if (expandedSites.value.has(siteId)) {
+    expandedSites.value.delete(siteId)
+  } else {
+    expandedSites.value.add(siteId)
+  }
+}
+
+const isSiteExpanded = (siteId) => {
+  return expandedSites.value.has(siteId)
+}
+
+const toggleSite = (siteId, devices) => {
+  const deviceIds = devices.map(d => d.id)
+  const allSelected = deviceIds.every(id => selectedItems.value.devices.includes(id))
+  
+  if (allSelected) {
+    // Desmarcar todos os devices do site
+    selectedItems.value.devices = selectedItems.value.devices.filter(
+      id => !deviceIds.includes(id)
+    )
+    selectedSites.value.delete(siteId)
+  } else {
+    // Marcar todos os devices do site
+    deviceIds.forEach(id => {
+      if (!selectedItems.value.devices.includes(id)) {
+        selectedItems.value.devices.push(id)
+      }
+    })
+    selectedSites.value.add(siteId)
+  }
+  
+  updateMap()
+}
+
+const isSiteSelected = (siteId, devices) => {
+  const deviceIds = devices.map(d => d.id)
+  return deviceIds.length > 0 && deviceIds.every(id => selectedItems.value.devices.includes(id))
+}
+
+const isSitePartiallySelected = (siteId, devices) => {
+  const deviceIds = devices.map(d => d.id)
+  const selectedCount = deviceIds.filter(id => selectedItems.value.devices.includes(id)).length
+  return selectedCount > 0 && selectedCount < deviceIds.length
+}
+
+const getSiteStatusSummary = (devices) => {
+  const statusCount = {
+    online: 0,
+    warning: 0,
+    critical: 0,
+    offline: 0
+  }
+  
+  devices.forEach(device => {
+    if (statusCount.hasOwnProperty(device.status)) {
+      statusCount[device.status]++
+    }
+  })
+  
+  return statusCount
 }
 
 // Função unificada para atualizar todo o mapa (markers + polylines)
@@ -331,7 +521,7 @@ const loadInventoryItems = async () => {
   try {
     console.log('[CustomMapViewer] Iniciando carregamento do inventário...')
     
-    // 1. Carregar Sites com devices
+    // 1. Carregar Sites para obter lat/lng
     const sitesResponse = await fetch('/api/v1/sites/?page_size=500', {
       credentials: 'include'
     })
@@ -344,7 +534,28 @@ const loadInventoryItems = async () => {
     const sites = Array.isArray(sitesData) ? sitesData : (sitesData.results || [])
     console.log(`[CustomMapViewer] ${sites.length} sites carregados`)
     
-    // 2. Carregar hosts do dashboard (dispositivos com status)
+    // Criar mapa de sites por ID para lookup de coordenadas
+    const sitesMap = new Map()
+    sites.forEach(site => {
+      if (site.id) {
+        sitesMap.set(String(site.id), site)
+      }
+    })
+    
+    // 2. Carregar devices (equipamentos)
+    const devicesResponse = await fetch('/api/v1/devices/?page_size=1000', {
+      credentials: 'include'
+    })
+    
+    if (!devicesResponse.ok) {
+      throw new Error(`Erro ao carregar devices: ${devicesResponse.status}`)
+    }
+    
+    const devicesData = await devicesResponse.json()
+    const devices = Array.isArray(devicesData) ? devicesData : (devicesData.results || [])
+    console.log(`[CustomMapViewer] ${devices.length} devices carregados`)
+    
+    // 3. Carregar status do Zabbix para cada device
     const hostsResponse = await fetch('/maps_view/api/dashboard/data/', {
       credentials: 'include'
     })
@@ -355,21 +566,75 @@ const loadInventoryItems = async () => {
     
     const hostsData = await hostsResponse.json()
     const hostsArray = hostsData.hosts_status || hostsData.hosts || []
-    console.log(`[CustomMapViewer] ${hostsArray.length} hosts carregados`)
+    console.log(`[CustomMapViewer] ${hostsArray.length} hosts do Zabbix carregados`)
     
-    // 3. Criar mapa de hosts por ID para lookup rápido
-    const hostsMap = new Map()
-    hostsArray.forEach(host => {
+    // DEBUG: Expor dados globalmente para inspeção
+    window.debugCustomMap = window.debugCustomMap || {}
+    window.debugCustomMap.hostsFromZabbix = hostsArray
+    window.debugCustomMap.devicesFromInventory = devices
+    
+    console.log('═══════════════════════════════════════════════════════')
+    console.log('DEBUG: Digite no console para inspecionar:')
+    console.log('  window.debugCustomMap.hostsFromZabbix')
+    console.log('  window.debugCustomMap.devicesFromInventory')
+    console.log('  window.debugCustomMap.statusMap')
+    console.log('═══════════════════════════════════════════════════════')
+    
+    if (hostsArray.length > 0) {
+      console.log('Exemplo de HOST do Zabbix:', hostsArray[0])
+    }
+    
+    if (devices.length > 0) {
+      console.log('Exemplo de DEVICE do inventário:', devices[0])
+    }
+    
+    // Criar mapa de status por device_id, name e zabbix_hostid
+    const statusMap = new Map()
+    hostsArray.forEach((host, index) => {
+      
+      // Mapear por ID
       if (host.id) {
-        hostsMap.set(String(host.id), host)
+        statusMap.set(String(host.id), host.status)
+      }
+      if (host.device_id) {
+        statusMap.set(String(host.device_id), host.status)
+      }
+      // Mapear por nome (normalizado)
+      if (host.name) {
+        statusMap.set(String(host.name).toLowerCase(), host.status)
+      }
+      if (host.display_name) {
+        statusMap.set(String(host.display_name).toLowerCase(), host.status)
+      }
+      // Mapear por zabbix_hostid
+      if (host.zabbix_hostid) {
+        statusMap.set(`zabbix_${host.zabbix_hostid}`, host.status)
       }
     })
     
-    // 4. Processar sites e criar devices com localização
+    console.log(`[CustomMapViewer] StatusMap: ${statusMap.size} entradas criadas`)
+    
+    // DEBUG: Expor statusMap globalmente
+    window.debugCustomMap.statusMap = statusMap
+    window.debugCustomMap.statusMapArray = Array.from(statusMap.entries())
+    
+    console.log('Primeiras 5 entradas do StatusMap:')
+    Array.from(statusMap.entries()).slice(0, 5).forEach(([key, value]) => {
+      console.log(`  "${key}" => "${value}"`)
+    })
+    
+    // 4. Processar devices individuais com localização do site
     const devicesWithLocation = []
     
-    sites.forEach(site => {
-      if (!site) return
+    devices.forEach((device, index) => {
+      if (!device) return
+      
+      // Pegar coordenadas do site
+      const site = sitesMap.get(String(device.site))
+      if (!site) {
+        console.warn(`[CustomMapViewer] Site não encontrado para device ${device.id}`)
+        return
+      }
       
       const lat = parseFloat(site.latitude)
       const lng = parseFloat(site.longitude)
@@ -377,20 +642,64 @@ const loadInventoryItems = async () => {
       // Só adicionar se tiver coordenadas válidas
       if (isNaN(lat) || isNaN(lng)) return
       
-      // Pegar status do host se existir
-      const host = hostsMap.get(String(site.id))
+      // Pegar status do Zabbix para este device específico (tentar várias estratégias)
+      let status = null
+      
+      // Estratégia 1: Por device.id
+      status = statusMap.get(String(device.id))
+      
+      // Estratégia 2: Por device.name (normalizado)
+      if (!status && device.name) {
+        status = statusMap.get(String(device.name).toLowerCase())
+      }
+      
+      // Estratégia 3: Por zabbix_hostid
+      if (!status && device.zabbix_hostid) {
+        status = statusMap.get(`zabbix_${device.zabbix_hostid}`)
+      }
+      
+      // Garantir que status seja uma string válida
+      if (!status || status === 0 || status === '0' || status === null || status === undefined) {
+        status = 'offline'
+      }
+      
+      // Normalizar status para lowercase
+      status = String(status).toLowerCase()
+      status = statusMap.get(String(device.id))
+      
+      // Estratégia 2: Por device.name (normalizado)
+      if (!status && device.name) {
+        status = statusMap.get(String(device.name).toLowerCase())
+      }
+      
+      // Estratégia 3: Por zabbix_hostid
+      if (!status && device.zabbix_hostid) {
+        status = statusMap.get(`zabbix_${device.zabbix_hostid}`)
+      }
+      
+      // Garantir que status seja uma string válida
+      if (!status || status === 0 || status === '0' || status === null || status === undefined) {
+        status = 'offline'
+      }
+      
+      // Normalizar status para lowercase
+      status = String(status).toLowerCase()
+      
+      console.log(`[CustomMapViewer] Device ${device.name}: status = "${status}"`, device)
       
       devicesWithLocation.push({
-        id: site.id,
-        name: site.name || site.display_name || `Site ${site.id}`,
-        type: site.type || 'site',
+        id: device.id,
+        name: device.name || `Device ${device.id}`,
+        type: device.device_type || 'device',
         lat: lat,
         lng: lng,
-        status: host?.status || 'unknown',
-        ip: host?.ip || host?.primary_ip || site.ip_address,
+        status: status,
+        ip: device.primary_ip4 || device.ip_address || 'N/A',
         location: site.city || site.location || 'N/A',
-        site_id: site.id,
-        device_count: site.device_count || site.devices_count || 0
+        site_id: device.site,
+        site_name: site.name || site.display_name,
+        device_type: device.device_type,
+        serial_number: device.serial_number
       })
     })
     
@@ -437,8 +746,34 @@ const loadInventoryItems = async () => {
       availableItems.value.cables = []
     }
     
-    // 6. Cameras e Racks (placeholders por enquanto)
-    availableItems.value.cameras = []
+    // 6. Carregar câmeras
+    try {
+      const camerasResponse = await fetch('/api/v1/cameras/', {
+        credentials: 'include'
+      })
+      
+      if (camerasResponse.ok) {
+        const camerasData = await camerasResponse.json()
+        const cameras = Array.isArray(camerasData) ? camerasData : (camerasData.results || [])
+        
+        availableItems.value.cameras = cameras.map(camera => ({
+          id: camera.id,
+          name: camera.display_name || camera.name || `Câmera ${camera.id}`,
+          status: camera.status || camera.stream_status || 'offline',
+          description: camera.description || '',
+          site_name: camera.site_name,
+          lat: camera.latitude || null,
+          lng: camera.longitude || null
+        }))
+        
+        console.log(`[CustomMapViewer] ${availableItems.value.cameras.length} câmeras carregadas`)
+      }
+    } catch (error) {
+      console.warn('[CustomMapViewer] Erro ao carregar câmeras:', error)
+      availableItems.value.cameras = []
+    }
+    
+    // 7. Racks (placeholder por enquanto)
     availableItems.value.racks = []
     
     console.log('[CustomMapViewer] Inventário completo:', {
@@ -1107,6 +1442,231 @@ onBeforeUnmount(() => {
   padding: 0 16px;
 }
 
+.site-group {
+  margin-bottom: 4px;
+}
+
+.site-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.site-row:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.btn-expand {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.btn-expand:hover {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #10b981;
+}
+
+.btn-expand i {
+  font-size: 10px;
+}
+
+.site-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+
+.site-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.site-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.site-name {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.site-name i {
+  color: #10b981;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.site-count {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+}
+
+.site-status-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.status-dot {
+  padding: 3px 7px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+}
+
+.status-dot.online {
+  background: rgba(16, 185, 129, 0.3);
+  color: #10b981;
+}
+
+.status-dot.warning {
+  background: rgba(245, 158, 11, 0.3);
+  color: #f59e0b;
+}
+
+.status-dot.critical {
+  background: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.status-dot.offline {
+  background: rgba(107, 114, 128, 0.3);
+  color: #9ca3af;
+}
+
+.devices-list {
+  margin-top: 4px;
+  padding-left: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.device-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.device-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.device-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+
+.device-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.device-details {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.device-name {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.device-ip {
+  color: rgba(139, 92, 246, 0.8);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.device-ip i {
+  font-size: 9px;
+}
+
+.device-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Transi\u00e7\u00e3o de expand/collapse */
+.expand-enter-active,
+.expand-leave-active {
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.expand-enter-from,
+.expand-leave-to {
+  opacity: 0;
+  max-height: 0;
+}
+
+.expand-enter-to,
+.expand-leave-from {
+  opacity: 1;
+  max-height: 1000px;
+}
+
 .item-row {
   display: flex;
   justify-content: space-between;
@@ -1130,23 +1690,86 @@ onBeforeUnmount(() => {
   gap: 10px;
   cursor: pointer;
   flex: 1;
+  min-width: 0;
 }
 
 .item-checkbox input[type="checkbox"] {
   width: 18px;
   height: 18px;
   cursor: pointer;
+  flex-shrink: 0;
+}
+
+.item-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
 }
 
 .item-name {
   color: #fff;
   font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-subtitle {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-subtitle i {
+  font-size: 10px;
 }
 
 .item-info {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
+}
+
+.ip-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  background: rgba(139, 92, 246, 0.15);
+  color: #a78bfa;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.ip-badge i {
+  font-size: 9px;
+}
+
+.camera-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.camera-badge i {
+  font-size: 10px;
 }
 
 .status-badge {
@@ -1175,6 +1798,12 @@ onBeforeUnmount(() => {
 .status-badge.offline {
   background: rgba(107, 114, 128, 0.2);
   color: #9ca3af;
+}
+
+.status-badge.unknown {
+  background: rgba(107, 114, 128, 0.1);
+  color: #9ca3af;
+  font-style: italic;
 }
 
 .btn-focus {
