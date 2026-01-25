@@ -568,6 +568,27 @@ const loadInventoryItems = async () => {
     const hostsArray = hostsData.hosts_status || hostsData.hosts || []
     console.log(`[CustomMapViewer] ${hostsArray.length} hosts do Zabbix carregados`)
     
+    // DEBUG: Estrutura completa do primeiro host
+    if (hostsArray.length > 0) {
+      console.log('═══════════════════════════════════════════════════════')
+      console.log('🔍 ESTRUTURA DO PRIMEIRO HOST DO ZABBIX:')
+      console.log('═══════════════════════════════════════════════════════')
+      const firstHost = hostsArray[0]
+      console.log('Objeto completo:', firstHost)
+      console.log('Campos disponíveis:', Object.keys(firstHost))
+      console.log('  - id:', firstHost.id)
+      console.log('  - device_id:', firstHost.device_id)
+      console.log('  - name:', firstHost.name)
+      console.log('  - display_name:', firstHost.display_name)
+      console.log('  - zabbix_hostid:', firstHost.zabbix_hostid)
+      console.log('  - availability:', firstHost.availability)
+      console.log('  - status:', firstHost.status)
+      console.log('═══════════════════════════════════════════════════════')
+    } else {
+      console.error('❌ NENHUM HOST RETORNADO PELO DASHBOARD!')
+      console.log('Resposta completa do dashboard:', hostsData)
+    }
+    
     // DEBUG: Expor dados globalmente para inspeção
     window.debugCustomMap = window.debugCustomMap || {}
     window.debugCustomMap.hostsFromZabbix = hostsArray
@@ -591,24 +612,42 @@ const loadInventoryItems = async () => {
     // Criar mapa de status por device_id, name e zabbix_hostid
     const statusMap = new Map()
     hostsArray.forEach((host, index) => {
+      // Converter availability do Zabbix para nosso formato de status
+      // availability: "1" = Available (online), "2" = Unavailable (offline), "0" = Unknown
+      const availability = String(host.availability || host.available || '0')
+      let mappedStatus = 'offline'
       
-      // Mapear por ID
-      if (host.id) {
-        statusMap.set(String(host.id), host.status)
+      if (availability === '1') {
+        mappedStatus = 'online'
+      } else if (availability === '2') {
+        mappedStatus = 'offline'
+      } else {
+        mappedStatus = 'unknown'
       }
-      if (host.device_id) {
-        statusMap.set(String(host.device_id), host.status)
+      
+      // Mapear por ID (tentar device_id primeiro, depois id)
+      const deviceId = host.device_id || host.id
+      if (deviceId) {
+        statusMap.set(String(deviceId), mappedStatus)
       }
+      
       // Mapear por nome (normalizado)
       if (host.name) {
-        statusMap.set(String(host.name).toLowerCase(), host.status)
+        statusMap.set(String(host.name).toLowerCase(), mappedStatus)
       }
       if (host.display_name) {
-        statusMap.set(String(host.display_name).toLowerCase(), host.status)
+        statusMap.set(String(host.display_name).toLowerCase(), mappedStatus)
       }
-      // Mapear por zabbix_hostid
-      if (host.zabbix_hostid) {
-        statusMap.set(`zabbix_${host.zabbix_hostid}`, host.status)
+      
+      // Mapear por zabbix_hostid ou hostid
+      const zabbixId = host.zabbix_hostid || host.hostid
+      if (zabbixId) {
+        statusMap.set(`zabbix_${zabbixId}`, mappedStatus)
+      }
+      
+      // Log do mapeamento (apenas primeiros 3)
+      if (index < 3) {
+        console.log(`  Host #${index + 1}: "${host.name}" → device_id=${deviceId}, availability=${availability} → status="${mappedStatus}"`)
       }
     })
     
@@ -659,33 +698,23 @@ const loadInventoryItems = async () => {
       }
       
       // Garantir que status seja uma string válida
-      if (!status || status === 0 || status === '0' || status === null || status === undefined) {
+      if (!status || status === 'unknown') {
         status = 'offline'
       }
       
-      // Normalizar status para lowercase
-      status = String(status).toLowerCase()
-      status = statusMap.get(String(device.id))
-      
-      // Estratégia 2: Por device.name (normalizado)
-      if (!status && device.name) {
-        status = statusMap.get(String(device.name).toLowerCase())
+      // Log de debug para primeiro device
+      if (index === 0) {
+        console.log(`[CustomMapViewer] DEBUG - Primeiro device:`)
+        console.log(`  - ID: ${device.id}`)
+        console.log(`  - Name: ${device.name}`)
+        console.log(`  - Zabbix ID: ${device.zabbix_hostid}`)
+        console.log(`  - Status encontrado: "${status}"`)
+        console.log(`  - StatusMap tem entrada para ID? ${statusMap.has(String(device.id))}`)
+        console.log(`  - StatusMap tem entrada para name? ${statusMap.has(String(device.name).toLowerCase())}`)
+        if (device.zabbix_hostid) {
+          console.log(`  - StatusMap tem entrada para zabbix_${device.zabbix_hostid}? ${statusMap.has(`zabbix_${device.zabbix_hostid}`)}`)
+        }
       }
-      
-      // Estratégia 3: Por zabbix_hostid
-      if (!status && device.zabbix_hostid) {
-        status = statusMap.get(`zabbix_${device.zabbix_hostid}`)
-      }
-      
-      // Garantir que status seja uma string válida
-      if (!status || status === 0 || status === '0' || status === null || status === undefined) {
-        status = 'offline'
-      }
-      
-      // Normalizar status para lowercase
-      status = String(status).toLowerCase()
-      
-      console.log(`[CustomMapViewer] Device ${device.name}: status = "${status}"`, device)
       
       devicesWithLocation.push({
         id: device.id,
@@ -705,6 +734,20 @@ const loadInventoryItems = async () => {
     
     availableItems.value.devices = devicesWithLocation
     console.log(`[CustomMapViewer] ${devicesWithLocation.length} devices com localização processados`)
+    
+    // DEBUG: Resumo de status
+    console.log('═══════════════════════════════════════════════════════')
+    console.log('📊 RESUMO DE STATUS DOS DEVICES:')
+    console.log('═══════════════════════════════════════════════════════')
+    const statusSummary = devicesWithLocation.reduce((acc, device) => {
+      acc[device.status] = (acc[device.status] || 0) + 1
+      return acc
+    }, {})
+    console.log('Distribuição de status:', statusSummary)
+    console.log('Total devices:', devicesWithLocation.length)
+    console.log('Total hosts do Zabbix:', hostsArray.length)
+    console.log('StatusMap size:', statusMap.size)
+    console.log('═══════════════════════════════════════════════════════')
     
     // 5. Carregar cabos de fibra com rotas
     try {
