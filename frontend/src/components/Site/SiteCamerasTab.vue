@@ -161,8 +161,9 @@ watch(() => props.siteId, async (newId) => {
 
 <style scoped>
 .site-cameras-tab {
-  padding: 20px;
-  min-height: 400px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Loading, Error, Empty States */
@@ -333,6 +334,8 @@ watch(() => props.siteId, async (newId) => {
   display: grid;
   gap: 16px;
   flex: 1;
+  overflow: auto;
+  align-content: start;
 }
 
 .mosaic-grid-1 {
@@ -345,22 +348,22 @@ watch(() => props.siteId, async (newId) => {
 
 .mosaic-grid-4 {
   grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: repeat(2, 1fr);
+  grid-auto-rows: minmax(300px, 1fr);
 }
 
 .mosaic-grid-6 {
   grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(2, 1fr);
+  grid-auto-rows: minmax(250px, 1fr);
 }
 
 .mosaic-grid-9 {
   grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(3, 1fr);
+  grid-auto-rows: minmax(200px, 1fr);
 }
 
 .mosaic-grid-16 {
   grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(4, 1fr);
+  grid-auto-rows: minmax(180px, 1fr);
 }
 
 .mosaic-cell {
