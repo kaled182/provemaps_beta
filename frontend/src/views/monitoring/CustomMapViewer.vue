@@ -265,6 +265,23 @@
       :site="selectedSite"
       @close="showSiteModal = false"
     />
+
+    <!-- Fiber Cable Quick Modal -->
+    <FiberCableQuickModal
+      :show="showCableModal"
+      :cable="selectedCable"
+      @close="showCableModal = false"
+      @openFullDetails="openCableFullDetails"
+    />
+
+    <!-- Fiber Cable Detail Modal -->
+    <FiberCableDetailModal
+      :show="showCableDetailModal"
+      :cable="selectedCable"
+      :can-edit="true"
+      @close="showCableDetailModal = false"
+      @save="handleCableSave"
+    />
   </div>
 </template>
 
@@ -275,6 +292,8 @@ import { useApi } from '@/composables/useApi'
 import { loadGoogleMaps } from '@/utils/googleMapsLoader'
 import { useUiStore } from '@/stores/ui'
 import SiteDetailsModal from '@/components/SiteDetailsModal.vue'
+import FiberCableQuickModal from '@/components/FiberCableQuickModal.vue'
+import FiberCableDetailModal from '@/components/FiberCableDetailModal.vue'
 
 const route = useRoute()
 const { get, post } = useApi()
@@ -294,6 +313,14 @@ const isInitialLoad = ref(true) // Flag para controlar animação inicial
 // Modal de detalhes do site
 const showSiteModal = ref(false)
 const selectedSite = ref(null)
+
+// Modal de detalhes do cabo
+const showCableModal = ref(false)
+const showCableDetailModal = ref(false)
+const selectedCable = ref(null)
+
+// Mapa de sites para lookup correto no click do marker
+const sitesMap = ref(new Map())
 
 const mapData = ref({
   id: null,
@@ -609,10 +636,7 @@ const clearAllOverlays = () => {
   // Limpar todas as overlays rastreadas
   allOverlays.value.forEach((overlay, idx) => {
     try {
-      if (overlay.infoWindow) {
-        overlay.infoWindow.close()
-        overlay.infoWindow = null
-      }
+      // Não precisamos mais limpar InfoWindows pois usamos modal
       google.maps.event.clearInstanceListeners(overlay)
       if (typeof overlay.setVisible === 'function') {
         overlay.setVisible(false)
@@ -720,12 +744,20 @@ const loadInventoryItems = async () => {
     console.log(`[CustomMapViewer] ${sites.length} sites carregados`)
     
     // Criar mapa de sites por ID para lookup de coordenadas
-    const sitesMap = new Map()
+    // Usar a ref global em vez de variável local
+    sitesMap.value.clear()
     sites.forEach(site => {
       if (site.id) {
-        sitesMap.set(String(site.id), site)
+        sitesMap.value.set(String(site.id), site)
       }
     })
+    
+    console.log('═══════════════════════════════════════════════════════')
+    console.log('🗺️  SITES NO MAPA:')
+    console.log('═══════════════════════════════════════════════════════')
+    console.log(`Total de sites no mapa: ${sitesMap.value.size}`)
+    console.log('IDs dos sites:', Array.from(sitesMap.value.keys()))
+    console.log('═══════════════════════════════════════════════════════')
     
     // 2. Carregar devices (equipamentos)
     const devicesResponse = await fetch('/api/v1/devices/?page_size=1000', {
@@ -739,6 +771,20 @@ const loadInventoryItems = async () => {
     const devicesData = await devicesResponse.json()
     const devices = Array.isArray(devicesData) ? devicesData : (devicesData.results || [])
     console.log(`[CustomMapViewer] ${devices.length} devices carregados`)
+    
+    // DEBUG: Verificar estrutura do primeiro device
+    if (devices.length > 0) {
+      console.log('═══════════════════════════════════════════════════════')
+      console.log('🔍 ESTRUTURA DO PRIMEIRO DEVICE:')
+      console.log('═══════════════════════════════════════════════════════')
+      const firstDevice = devices[0]
+      console.log('Objeto completo:', firstDevice)
+      console.log('Campos disponíveis:', Object.keys(firstDevice))
+      console.log('  - site:', firstDevice.site)
+      console.log('  - site_id:', firstDevice.site_id)
+      console.log('  - site_name:', firstDevice.site_name)
+      console.log('═══════════════════════════════════════════════════════')
+    }
     
     // 3. Carregar status do Zabbix para cada device
     const hostsResponse = await fetch('/maps_view/api/dashboard/data/', {
@@ -853,10 +899,23 @@ const loadInventoryItems = async () => {
     devices.forEach((device, index) => {
       if (!device) return
       
-      // Pegar coordenadas do site
-      const site = sitesMap.get(String(device.site))
+      // DEBUG para primeiro device
+      if (index === 0) {
+        console.log('═══════════════════════════════════════════════════════')
+        console.log('🔍 DEBUG - LOOKUP DE SITE:')
+        console.log('═══════════════════════════════════════════════════════')
+        console.log(`Device: ${device.name}`)
+        console.log(`  device.site: "${device.site}" (tipo: ${typeof device.site})`)
+        console.log(`  String(device.site): "${String(device.site)}"`)
+        console.log(`  sitesMap tem chave "${String(device.site)}"? ${sitesMap.value.has(String(device.site))}`)
+        console.log(`  Chaves no sitesMap:`, Array.from(sitesMap.value.keys()))
+        console.log('═══════════════════════════════════════════════════════')
+      }
+      
+      // Pegar coordenadas do site usando a ref global
+      const site = sitesMap.value.get(String(device.site))
       if (!site) {
-        console.warn(`[CustomMapViewer] Site não encontrado para device ${device.id}`)
+        console.warn(`[CustomMapViewer] Site ${device.site} não encontrado para device ${device.name}`)
         return
       }
       
@@ -910,7 +969,8 @@ const loadInventoryItems = async () => {
         status: status,
         ip: device.primary_ip4 || device.ip_address || 'N/A',
         location: site.city || site.location || 'N/A',
-        site_id: device.site,
+        site: device.site,        // ✅ Manter campo 'site' para lookup do sitesMap
+        site_id: device.site,     // ✅ Manter site_id também para compatibilidade
         site_name: site.name || site.display_name,
         device_type: device.device_type,
         serial_number: device.serial_number
@@ -1152,40 +1212,14 @@ const updateCablePolylines = () => {
       map: googleMap.value
     })
     
-    // InfoWindow para o cabo
-    const statusLabel = getStatusLabel(cable.status)
-    const infoContent = `
-      <div style="color: #000; padding: 12px; max-width: 250px;">
-        <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 700;">${cable.name}</h3>
-        <div style="font-size: 14px; line-height: 1.6;">
-          <p style="margin: 4px 0;"><strong>De:</strong> ${cable.site_a_name || 'N/A'}</p>
-          <p style="margin: 4px 0;"><strong>Para:</strong> ${cable.site_b_name || 'N/A'}</p>
-          <p style="margin: 4px 0;"><strong>Status:</strong> <span style="color: ${statusColors[cable.status] || statusColors.unknown}; font-weight: 700;">${statusLabel}</span></p>
-          <p style="margin: 4px 0;"><strong>Status backend:</strong> ${cable.original_status || 'N/A'}</p>
-          <p style="margin: 4px 0;"><strong>Comprimento:</strong> ${cable.length_km ? cable.length_km + ' km' : 'N/A'}</p>
-          <p style="margin: 4px 0;"><strong>Pontos de rota:</strong> ${validPath.length}</p>
-        </div>
-      </div>
-    `
+    // Armazenar dados do cabo no polyline para o modal
+    polyline.cableData = cable
     
-    const infoWindow = new google.maps.InfoWindow({
-      content: infoContent
-    })
-    
-    // Anexar InfoWindow ao polyline ANTES de adicionar listener
-    polyline.infoWindow = infoWindow
-    
-    polyline.addListener('click', (event) => {
-      // Fechar outras info windows
-      cablePolylines.value.forEach(p => {
-        if (p.infoWindow) p.infoWindow.close()
-      })
-      markers.value.forEach(m => {
-        if (m.infoWindow) m.infoWindow.close()
-      })
-      
-      infoWindow.setPosition(event.latLng)
-      infoWindow.open(googleMap.value)
+    polyline.addListener('click', () => {
+      // Abrir modal detalhado diretamente
+      selectedCable.value = cable
+      showCableDetailModal.value = true
+      console.log('[CustomMapViewer] Abrindo modal detalhado para cabo:', cable.name)
     })
     
     cablePolylines.value.push(polyline)
@@ -1263,13 +1297,26 @@ const updateMapMarkers = (animateItemId = null) => {
       animated: shouldAnimate
     })
     
-    // Armazenar dados do site no marker para usar no modal
-    marker.siteData = device
+    // Buscar o site real do sitesMap em vez de usar o device
+    const actualSite = sitesMap.value.get(String(device.site))
+    if (!actualSite) {
+      console.warn(`[CustomMapViewer] Site ${device.site} (${typeof device.site}) não encontrado para device ${device.name}`)
+      console.warn(`[CustomMapViewer] Chaves disponíveis:`, Array.from(sitesMap.value.keys()).slice(0, 5))
+      return // Não criar marker sem site válido
+    }
+    
+    // Armazenar dados do SITE no marker (não o device!)
+    marker.siteData = actualSite
+    
+    console.log(`[CustomMapViewer] 🎯 Registrando listener de CLIQUE no marker para site:`, actualSite.name)
     
     marker.addListener('click', () => {
+      console.log('🔥 MARKER CLICADO! Site:', marker.siteData.name)
+      console.log('🔥 showSiteModal antes:', showSiteModal.value)
       // Abrir modal de detalhes do site
       selectedSite.value = marker.siteData
       showSiteModal.value = true
+      console.log('🔥 showSiteModal depois:', showSiteModal.value)
       console.log('[CustomMapViewer] Abrindo modal para site:', marker.siteData.name)
     })
     
@@ -1429,6 +1476,24 @@ watch(() => selectedItems.value.cables, () => {
     updateCablePolylines()
   }
 }, { deep: true })
+
+// Função para abrir detalhes completos do cabo
+const openCableFullDetails = (cable) => {
+  console.log('[CustomMapViewer] Abrir detalhes completos do cabo:', cable.name)
+  showCableModal.value = false
+  selectedCable.value = cable
+  showCableDetailModal.value = true
+}
+
+// Função para salvar alterações do cabo
+const handleCableSave = async (cable) => {
+  console.log('[CustomMapViewer] Salvando cabo:', cable)
+  // TODO: Implementar salvamento no backend
+  showCableDetailModal.value = false
+  // Recarregar inventário para atualizar dados
+  await loadInventoryItems()
+  updateMap()
+}
 
 onMounted(async () => {
   console.log('[CustomMapViewer] Componente montado, iniciando carregamento...')

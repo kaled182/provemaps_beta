@@ -17,10 +17,12 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db import connection
 from django.db.models import Q
-from django.http import FileResponse, HttpResponse, JsonResponse
+from django.http import FileResponse, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.core.management import call_command
 from django.views.decorators.http import require_http_methods, require_GET, require_POST
 from django.urls import reverse
+
+import requests
 
 from integrations.zabbix.zabbix_client import zabbix_request
 from integrations.zabbix.guards import reload_diagnostics_flag_cache
@@ -39,6 +41,22 @@ logger = logging.getLogger(__name__)
 def _staff_check(user):
     """Check if user is staff."""
     return user.is_active and user.is_staff
+
+
+def _user_can_access_video_gateway(user, gateway: MessagingGateway) -> bool:
+    """Validate RBAC for accessing a video gateway."""
+    if user.is_superuser:
+        return True
+    # Gateways without departamentos are considered public
+    if not gateway.departments.exists():
+        return True
+    profile = getattr(user, "profile", None)
+    if not profile:
+        return False
+    user_department_ids = list(profile.departments.values_list("id", flat=True))
+    if not user_department_ids:
+        return False
+    return gateway.departments.filter(id__in=user_department_ids).exists()
 
 
 BACKUP_DIR = Path(settings.BASE_DIR) / "database" / "backups"
@@ -3107,6 +3125,98 @@ def messaging_gateway_detail(request, gateway_id: int):
     return JsonResponse({"success": True, "gateway": _serialize_gateway(gateway)})
 
 
+def _stream_upstream_response(response: requests.Response, chunk_size: int = 64 * 1024):
+    try:
+        for chunk in response.iter_content(chunk_size=chunk_size):
+            if chunk:
+                yield chunk
+    finally:
+        response.close()
+
+
+@require_GET
+@login_required
+@user_passes_test(_staff_check)
+def proxy_video_gateway_hls(request, gateway_id: int, resource: str = "index.m3u8"):
+    try:
+        gateway = MessagingGateway.objects.get(id=gateway_id, gateway_type="video")
+    except MessagingGateway.DoesNotExist:
+        return JsonResponse(
+            {"success": False, "message": "Gateway de vídeo não encontrado."},
+            status=404,
+        )
+
+    if not _user_can_access_video_gateway(request.user, gateway):
+        return JsonResponse(
+            {"success": False, "message": "Sem permissão para acessar esta câmera."},
+            status=403,
+        )
+
+    sanitized = (resource or "index.m3u8").strip()
+    if not sanitized or sanitized.endswith("/"):
+        sanitized = f"{sanitized.rstrip('/')}/index.m3u8"
+    sanitized = sanitized.lstrip("/")
+    if ".." in sanitized:
+        return JsonResponse(
+            {"success": False, "message": "Recurso inválido."},
+            status=400,
+        )
+
+    stream_key = video_gateway_service.get_stream_key(gateway)
+    target_url = video_gateway_service.build_internal_hls_url(stream_key, sanitized)
+
+    upstream_params = dict(request.GET.items())
+    upstream_params.setdefault("mode", "legacy")
+
+    try:
+        upstream = requests.get(
+            target_url,
+            params=upstream_params,
+            timeout=15,
+            stream=True,
+        )
+    except requests.RequestException as exc:
+        logger.warning(
+            "Falha ao proxy HLS para gateway %s (%s): %s",
+            gateway.id,
+            sanitized,
+            exc,
+        )
+        return HttpResponse(status=502)
+
+    if upstream.status_code >= 400:
+        content_type = upstream.headers.get("Content-Type", "text/plain")
+        body = upstream.content[:4096]
+        upstream.close()
+        return HttpResponse(body, status=upstream.status_code, content_type=content_type)
+
+    content_type = upstream.headers.get(
+        "Content-Type",
+        "application/vnd.apple.mpegurl" if sanitized.endswith(".m3u8") else "application/octet-stream",
+    )
+
+    response = StreamingHttpResponse(
+        _stream_upstream_response(upstream),
+        status=upstream.status_code,
+        content_type=content_type,
+    )
+
+    passthrough_headers = [
+        "Cache-Control",
+        "Last-Modified",
+        "ETag",
+        "Content-Length",
+        "Accept-Ranges",
+    ]
+    for header in passthrough_headers:
+        value = upstream.headers.get(header)
+        if value:
+            response[header] = value
+
+    response["Cache-Control"] = upstream.headers.get("Cache-Control", "no-cache, private")
+    return response
+
+
 @require_http_methods(["POST"])
 @login_required
 @user_passes_test(_staff_check)
@@ -3175,11 +3285,15 @@ def start_video_gateway_preview(request, gateway_id: int):
     gateway.refresh_from_db(fields=["config", "updated_at"])
     preview_url = (gateway.config or {}).get("preview_url", "")
     playback_url = video_gateway_service.build_playback_url(gateway)
+    proxy_url = request.build_absolute_uri(
+        reverse("setup_app:video_hls_proxy", args=[gateway.id, "index.m3u8"])
+    )
     return JsonResponse(
         {
             "success": True,
             "preview_url": preview_url,
             "playback_url": playback_url,
+            "playback_proxy_url": proxy_url,
         }
     )
 
@@ -3766,7 +3880,7 @@ def video_cameras_list(request):
                 return None
             restream_key = (cfg.get("restream_key") or f"gateway_{gw.id}")
             base = str(webrtc_base).rstrip('/')
-            return f"{base}/whep/{restream_key}"
+            return f"{base}/{restream_key}/whep"
 
         results = []
         for gw in gateways:

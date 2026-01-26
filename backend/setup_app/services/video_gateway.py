@@ -51,6 +51,30 @@ def _get_hls_public_base_url(config: Optional[Dict[str, object]] = None) -> str:
 	return _get_hls_probe_base_url()
 
 
+def _get_webrtc_manifest_timeout(config: Optional[Dict[str, object]] = None) -> float:
+	"""Resolve waiting window for HLS manifest when using WebRTC preview."""
+	candidate: Optional[float] = None
+	if config:
+		try:
+			raw = config.get("webrtc_manifest_grace_seconds")
+			if raw is not None:
+				candidate = float(raw)
+		except (TypeError, ValueError):
+			candidate = None
+	if candidate is None:
+		fallback = getattr(settings, "VIDEO_WEBRTC_HLS_GRACE_SECONDS", None) or os.environ.get(
+			"VIDEO_WEBRTC_HLS_GRACE_SECONDS"
+		)
+		if fallback is not None:
+			try:
+				candidate = float(fallback)
+			except (TypeError, ValueError):
+				candidate = None
+	if candidate is None or candidate <= 0:
+		candidate = 20.0
+	return max(3.0, min(candidate, 120.0))
+
+
 def build_playback_url(gateway: MessagingGateway) -> str:
 	"""Resolve the best playback URL for the gateway preview.
 
@@ -73,7 +97,7 @@ def build_playback_url(gateway: MessagingGateway) -> str:
 		return preview_url
 	public_base = _get_hls_public_base_url(config)
 	if public_base:
-		return f"{public_base}/{stream_key}.m3u8"
+		return f"{public_base}/live/{stream_key}/index.m3u8"
 	return preview_url
 
 def _get_webrtc_public_base_url(config: Optional[Dict[str, object]] = None) -> Optional[str]:
@@ -92,6 +116,17 @@ def _get_stream_key(gateway: MessagingGateway) -> str:
 	config = gateway.config or {}
 	key = config.get("restream_key") or f"gateway_{gateway.id}"
 	return key
+
+
+def get_stream_key(gateway: MessagingGateway) -> str:
+	"""Public helper to reuse restream key logic outside this module."""
+	return _get_stream_key(gateway)
+
+
+def build_internal_hls_url(stream_key: str, resource: str) -> str:
+	base = _get_hls_probe_base_url()
+	clean_resource = resource.lstrip("/")
+	return f"{base}/live/{stream_key}/{clean_resource}"
 
 
 def _persist_config(
@@ -136,7 +171,7 @@ def stop_stream_for_gateway(
 
 
 def _wait_for_manifest(stream_key: str, *, timeout: float = 30.0, interval: float = 0.6) -> None:
-	manifest_url = f"{_get_hls_probe_base_url()}/{stream_key}.m3u8"
+	manifest_url = f"{_get_hls_probe_base_url()}/live/{stream_key}/index.m3u8"
 	deadline = time.monotonic() + timeout
 	last_error = ""
 	while time.monotonic() < deadline:
@@ -145,7 +180,7 @@ def _wait_for_manifest(stream_key: str, *, timeout: float = 30.0, interval: floa
 			success = (
 				response.status_code == 200
 				and "#EXTM3U" in response.text
-				and "#EXTINF" in response.text
+				and ("#EXTINF" in response.text or "#EXT-X-STREAM-INF" in response.text)
 			)
 			if success:
 				return
@@ -190,14 +225,15 @@ def ensure_stream_for_gateway(
 	use_webrtc = bool(webrtc_base)
 	if use_webrtc:
 		# MediaMTX WebRTC player page (barra final obrigatória)
-		preview_url = f"{webrtc_base}/{stream_key}/"
+		preview_url = f"{webrtc_base}/live/{stream_key}/"
 	else:
-		preview_url = f"{public_base}/{stream_key}.m3u8"
+		preview_url = f"{public_base}/live/{stream_key}/index.m3u8"
 	hls_candidate: Optional[str] = None
 	if not use_webrtc:
 		hls_candidate = preview_url
 	elif public_base:
-		hls_candidate = f"{public_base}/{stream_key}.m3u8"
+		hls_candidate = f"{public_base}/live/{stream_key}/index.m3u8"
+	# Sempre preferir HLS para playback quando disponível; preview_url fica para player WebRTC/iframe
 	playback_url = hls_candidate or preview_url
 
 	# Verificar se stream já está ativo
@@ -216,7 +252,7 @@ def ensure_stream_for_gateway(
 	should_wait_hls = bool(hls_candidate)
 	manifest_timeout = startup_timeout
 	if use_webrtc and should_wait_hls:
-		manifest_timeout = min(startup_timeout, 6.0)
+		manifest_timeout = min(startup_timeout, _get_webrtc_manifest_timeout(config))
 	if stream_active:
 		logger.debug("Stream %s já está ativo, reutilizando.", stream_key)
 		# Garantir que preview_url e restream_key estão salvos
@@ -256,7 +292,9 @@ def ensure_stream_for_gateway(
 					stop_stream_for_gateway(gateway, clear_preview=False)
 					stream_active = False
 		if not hls_ready:
-			playback_url = preview_url
+			# Manter playback apontando para HLS mesmo que não esteja pronto;
+			# o frontend fará retries até o manifesto existir.
+			playback_url = hls_candidate or preview_url
 			should_wait_hls = False
 			config = _persist_config(
 				gateway,
@@ -306,7 +344,8 @@ def ensure_stream_for_gateway(
 					stop_stream_for_gateway(gateway, clear_preview=False)
 					raise
 		if not hls_ready:
-			playback_url = preview_url
+			# Preferir HLS mesmo em modo WebRTC, o player do painel usa HLS com retries
+			playback_url = hls_candidate or preview_url
 			should_wait_hls = False
 
 		config = _persist_config(

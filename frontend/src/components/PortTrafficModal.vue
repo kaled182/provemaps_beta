@@ -434,12 +434,13 @@ const renderChart = () => {
   })
 }
 
-const changePeriod = (hours) => {
+const changePeriod = async (hours) => {
   selectedPeriod.value = hours
   loadTrafficData()
   // Também atualizar o gráfico óptico se disponível
   if (opticalSectionOpen.value && (props.port?.optical_rx_power !== null || props.port?.optical_tx_power !== null)) {
-    renderOpticalChart()
+    await nextTick() // Garantir que o DOM está atualizado
+    await renderOpticalChart() // Aguardar o carregamento dos dados
   }
 }
 
@@ -703,6 +704,16 @@ const renderOpticalChart = async () => {
     return
   }
   
+  // Verificar se o canvas existe antes de continuar
+  if (!opticalChartCanvas.value) {
+    console.warn('[PortTrafficModal] Canvas óptico não disponível, aguardando...')
+    await nextTick()
+    if (!opticalChartCanvas.value) {
+      console.error('[PortTrafficModal] Canvas óptico ainda não disponível após nextTick')
+      return
+    }
+  }
+  
   const url = `/api/v1/ports/${props.port.id}/optical_history/`
   const params = { hours: selectedPeriod.value }
   
@@ -833,24 +844,34 @@ const handleAlarmSaved = () => {
   emit('alarm-saved')
 }
 
-watch(() => props.isOpen, (newValue) => {
+watch(() => props.isOpen, async (newValue) => {
   if (newValue) {
     loadTrafficData()
     // Carregar gráfico óptico se disponível
     if (props.port?.optical_rx_power !== null || props.port?.optical_tx_power !== null) {
-      // Garantir que o canvas exista antes de renderizar
-      nextTick().then(() => {
-        if (opticalSectionOpen.value && opticalChartCanvas.value) {
-          renderOpticalChart()
-        } else {
-          // Tentativa tardia caso o DOM ainda não tenha criado o canvas
-          setTimeout(() => {
-            if (opticalSectionOpen.value && opticalChartCanvas.value) {
-              renderOpticalChart()
-            }
-          }, 200)
-        }
-      })
+      // Múltiplos nextTick para garantir que a transição CSS complete
+      await nextTick()
+      await nextTick()
+      await nextTick()
+      
+      if (opticalSectionOpen.value && opticalChartCanvas.value) {
+        console.log('[PortTrafficModal] Canvas pronto após nextTick, renderizando...')
+        renderOpticalChart()
+      } else {
+        // Tentativa tardia com timeout maior para aguardar transição CSS
+        console.log('[PortTrafficModal] Canvas não pronto, aguardando 300ms...')
+        setTimeout(() => {
+          if (opticalSectionOpen.value && opticalChartCanvas.value) {
+            console.log('[PortTrafficModal] Canvas pronto após timeout, renderizando...')
+            renderOpticalChart()
+          } else {
+            console.warn('[PortTrafficModal] Canvas ainda não disponível:', {
+              opticalSectionOpen: opticalSectionOpen.value,
+              canvasExists: !!opticalChartCanvas.value
+            })
+          }
+        }, 300)
+      }
     }
   } else {
     if (chartInstance) {
@@ -867,9 +888,15 @@ watch(() => props.isOpen, (newValue) => {
 // Watch para renderizar gráfico óptico quando seção abrir
 watch(opticalSectionOpen, async (isOpen) => {
   if (isOpen && props.isOpen) {
+    // Múltiplos nextTick para aguardar transição CSS
+    await nextTick()
+    await nextTick()
     await nextTick()
     if (opticalChartCanvas.value) {
+      console.log('[PortTrafficModal] Seção óptica aberta, renderizando gráfico...')
       renderOpticalChart()
+    } else {
+      console.warn('[PortTrafficModal] Seção aberta mas canvas não disponível')
     }
   }
 })
@@ -884,11 +911,36 @@ onUnmounted(() => {
 })
 
 // Renderizar assim que o canvas de óptico ficar disponível
-watch(opticalChartCanvas, (canvas) => {
+watch(opticalChartCanvas, async (canvas) => {
   if (canvas && props.isOpen && opticalSectionOpen.value) {
-    renderOpticalChart()
+    console.log('[PortTrafficModal] Canvas detectado, renderizando gráfico...')
+    // Pequeno delay para garantir que o canvas está totalmente pronto
+    await nextTick()
+    await nextTick()
+    await nextTick()
+    setTimeout(() => {
+      renderOpticalChart()
+    }, 100)
   }
 })
+
+// Watch na porta para renderizar quando dados ópticos mudarem
+watch(() => props.port, async (newPort) => {
+  if (newPort && props.isOpen && opticalSectionOpen.value) {
+    console.log('[PortTrafficModal] Porta mudou, verificando dados ópticos...')
+    if (newPort.optical_rx_power !== null || newPort.optical_tx_power !== null) {
+      await nextTick()
+      await nextTick()
+      await nextTick()
+      if (opticalChartCanvas.value) {
+        console.log('[PortTrafficModal] Renderizando após mudança de porta...')
+        setTimeout(() => {
+          renderOpticalChart()
+        }, 150)
+      }
+    }
+  }
+}, { deep: true })
 </script>
 
 <style scoped>

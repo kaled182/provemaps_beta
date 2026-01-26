@@ -11,7 +11,7 @@
       </div>
       <div class="flex items-center gap-3">
         <span class="text-xs text-gray-400">
-          {{ Object.keys(connections).length }}/{{ activeCameras.filter(c => c).length }} conectadas
+          {{ Object.keys(cameraPlayerRefs).length }}/{{ activeCameras.filter(c => c).length }} ativas
         </span>
         <button @click="goBack" class="text-gray-400 hover:text-white transition-colors text-sm">
           Fechar
@@ -43,17 +43,15 @@
               :ref="el => { if (el) videoContainerRefs[camera.id] = el }"
               @dblclick="toggleFullscreen(camera.id)"
             >
-              <!-- Tag video pura com WebRTC direto via WHEP -->
-              <video 
-                :ref="el => { if (el) videoRefs[camera.id] = el }"
-                class="video-player w-full h-full object-cover bg-black"
-                autoplay
-                muted
-                playsinline
-              ></video>
-              
-              <!-- Controles de Áudio e Fullscreen -->
-              <div class="absolute top-2 right-2 z-30 flex gap-2">
+              <!-- Componente CameraPlayer -->
+              <CameraPlayer
+                :ref="el => { if (el) cameraPlayerRefs[camera.id] = el }"
+                :camera="camera"
+                :muted="unmutedCameraId !== camera.id"
+              >
+                <template #overlay>
+                  <!-- Controles de Áudio e Fullscreen -->
+                  <div class="absolute top-2 right-2 z-30 flex gap-2">
                 <!-- Botão Fullscreen -->
                 <button
                   @click="toggleFullscreen(camera.id)"
@@ -93,43 +91,8 @@
                 </button>
               </div>
 
-              <!-- Indicador de Qualidade de Rede -->
-              <div 
-                v-if="connections[camera.id]?.stats?.networkQuality && connections[camera.id].stats.networkQuality !== 'good'"
-                class="absolute top-2 left-2 z-30"
-                :title="`FPS: ${connections[camera.id].stats.framesPerSecond}, Packets Lost: ${connections[camera.id].stats.packetsLost}`"
-              >
-                <div 
-                  class="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium"
-                  :class="{
-                    'bg-yellow-600 text-white': connections[camera.id].stats.networkQuality === 'degraded',
-                    'bg-red-600 text-white': connections[camera.id].stats.networkQuality === 'poor'
-                  }"
-                >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                  </svg>
-                  <span>{{ connections[camera.id].stats.networkQuality === 'degraded' ? 'Rede Instável' : 'Rede Ruim' }}</span>
-                </div>
-              </div>
-              
-              <!-- Loading overlay -->
-              <div v-if="connections[camera.id]?.isConnecting" class="absolute inset-0 flex items-center justify-center bg-black/50 z-10 pointer-events-none">
-                <svg class="animate-spin h-6 w-6 text-white" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              </div>
-
-              <!-- Erro overlay -->
-              <div v-if="connections[camera.id]?.error" class="absolute inset-0 flex items-center justify-center bg-black/70 z-10">
-                <div class="text-center px-4">
-                  <svg class="w-8 h-8 text-red-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                  </svg>
-                  <p class="text-white text-sm">{{ connections[camera.id].error }}</p>
-                </div>
-              </div>
+                </template>
+              </CameraPlayer>
             </div>
 
             <!-- Overlay com Nome -->
@@ -154,7 +117,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useApi } from '@/composables/useApi';
 import { useNotification } from '@/composables/useNotification';
-import { useWebRTC } from '@/composables/useWebRTC';
+import CameraPlayer from '@/components/video/CameraPlayer.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -163,9 +126,8 @@ const notify = useNotification();
 
 const mosaic = ref(null);
 const cameras = ref([]);
-const videoRefs = ref({});
+const cameraPlayerRefs = ref({});
 const videoContainerRefs = ref({});
-const connections = ref({});
 const unmutedCameraId = ref(null);
 const fullscreenCameraId = ref(null);
 
@@ -229,63 +191,11 @@ const handleFullscreenChange = () => {
   }
 };
 
-// Watch para aplicar mute/unmute nos elementos de vídeo
-watch(unmutedCameraId, (newId, oldId) => {
-  // Mutar a câmera anterior
-  if (oldId && videoRefs.value[oldId]) {
-    videoRefs.value[oldId].muted = true;
-  }
-  
-  // Desmutar a nova câmera
-  if (newId && videoRefs.value[newId]) {
-    videoRefs.value[newId].muted = false;
-  }
-});
+// CameraPlayer components gerenciam mute/unmute via prop reativa :muted
 
-const initWebRTCForCamera = async (camera) => {
-  if (!camera) return;
-  
-  const streamUrl = getVideoUrl(camera);
-  if (!streamUrl) {
-    console.warn(`[Mosaico] URL indisponível para ${camera.name}`);
-    return;
-  }
-  
-  const whepUrl = streamUrl.endsWith('/') ? `${streamUrl}whep` : `${streamUrl}/whep`;
-  
-  // Criar instância do composable para esta câmera
-  const rtc = useWebRTC({
-    maxRetries: 5,
-    maxBackoff: 30000,
-    onStatsUpdate: (stats) => {
-      // Atualizar stats para exibir alertas de rede
-      if (connections.value[camera.id]) {
-        connections.value[camera.id].stats = stats;
-      }
-    }
-  });
-  
-  // Armazenar conexão
-  connections.value[camera.id] = rtc;
-  
-  // Conectar
-  await rtc.connect(whepUrl);
-  
-  // Vincular stream ao elemento de vídeo
-  watch(rtc.stream, (newStream) => {
-    if (newStream && videoRefs.value[camera.id]) {
-      videoRefs.value[camera.id].srcObject = newStream;
-    }
-  }, { immediate: true });
-};
+// Não precisamos mais de initHLSForCamera - o componente CameraPlayer cuida disso
 
-const initPlayers = () => {
-  activeCameras.value.forEach((camera) => {
-    if (camera) {
-      initWebRTCForCamera(camera);
-    }
-  });
-};
+// Funções auxiliares de layout
 
 const getLayoutLabel = (layout) => {
   const labels = { '2x2': '2×2', '3x2': '3×2', '3x3': '3×3', '4x3': '4×3', '4x4': '4×4' };
@@ -308,20 +218,7 @@ const getGridClass = (layout) => {
   return classes[layout] || 'grid-cols-2 grid-rows-2';
 };
 
-const getVideoUrl = (camera) => {
-  if (camera.playback_url) {
-    console.log(`[Mosaico] Usando playback_url para ${camera.name}:`, camera.playback_url);
-    return camera.playback_url;
-  }
-  
-  if (camera.config?.stream_url && camera.config.stream_url.startsWith('http')) {
-    console.log(`[Mosaico] Usando stream_url para ${camera.name}:`, camera.config.stream_url);
-    return camera.config.stream_url;
-  }
-  
-  console.warn(`[Mosaico] Nenhuma URL válida para ${camera.name}`);
-  return null;
-};
+// Removido: uso direto de playback_url para construir WHEP incorreto
 
 const goBack = () => {
   router.push({ path: '/video', query: { tab: 'mosaics' } });
@@ -344,46 +241,74 @@ const fetchMosaic = async () => {
 
 const fetchCameras = async () => {
   try {
-    const res = await api.get('/setup_app/api/gateways/');
-    if (res.success) {
-      cameras.value = (res.gateways || []).filter(gw => gw.gateway_type === 'video');
-      
+    // Usar API dedicada que expõe whep_url
+    const siteId = mosaic.value?.site_id;
+    const endpoint = siteId ? `/api/v1/cameras/?site=${siteId}` : '/api/v1/cameras/';
+    const res = await api.get(endpoint);
+    if (res && res.success) {
+      cameras.value = res.results || [];
+
       const validCameras = activeCameras.value.filter(cam => cam !== null);
-      
+
       if (validCameras.length === 0) {
         console.warn('[Mosaico] Nenhuma câmera válida no mosaico');
         notify.error('Mosaico', 'Adicione câmeras ao mosaico antes de visualizar.');
         return;
       }
+
+      // Limitar paralelismo para evitar sobrecarga
+      const CONCURRENT_LIMIT = 3;
+      console.log(`[Mosaico] 🚀 Iniciando ${validCameras.length} streams (batches de ${CONCURRENT_LIMIT})...`);
+
+      const results = [];
       
-      console.log(`[Mosaico] Iniciando ${validCameras.length} streams no backend em paralelo...`);
-      
-      const startPromises = validCameras.map(async (camera) => {
-        try {
-          const endpoint = `/setup_app/api/gateways/${camera.id}/video/preview/start/`;
-          const res = await api.post(endpoint);
+      for (let i = 0; i < validCameras.length; i += CONCURRENT_LIMIT) {
+        const batch = validCameras.slice(i, i + CONCURRENT_LIMIT);
+        
+        const batchPromises = batch.map(async (camera, idx) => {
+          // Pequeno delay escalonado dentro do batch
+          await new Promise(resolve => setTimeout(resolve, idx * 200));
           
-          if (res && res.success && res.playback_url) {
-            camera.playback_url = res.playback_url;
-            console.log(`[Mosaico] ✓ Stream backend iniciado: ${camera.name}`);
-          } else {
-            console.warn(`[Mosaico] Falha ao iniciar stream para ${camera.name}`);
+          try {
+            const startEndpoint = `/setup_app/api/gateways/${camera.id}/video/preview/start/`;
+            const startRes = await api.post(startEndpoint);
+
+            if (startRes && startRes.success && startRes.playback_url) {
+              camera.playback_url = startRes.playback_proxy_url || startRes.playback_url;
+              return { success: true, camera };
+            } else {
+              console.warn(`[Mosaico] ⚠️ Falha: ${camera.name}`);
+              return { success: false, camera };
+            }
+          } catch (e) {
+            console.error(`[Mosaico] Erro ao iniciar backend stream para ${camera.name}:`, e);
+            return { success: false, camera, error: e };
           }
-        } catch (e) {
-          console.error(`[Mosaico] Erro ao iniciar backend stream para ${camera.name}:`, e);
+        });
+
+        const batchResults = await Promise.all(batchPromises);
+        results.push(...batchResults);
+        
+        // Pequeno delay entre batches
+        if (i + CONCURRENT_LIMIT < validCameras.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
-      });
+      }
       
-      await Promise.all(startPromises);
+      const successCount = results.filter(r => r.success).length;
+      const failedCameras = results.filter(r => !r.success).map(r => r.camera.name);
+      
+      if (successCount === validCameras.length) {
+        console.log(`[Mosaico] ✅ ${successCount}/${validCameras.length} streams prontos`);
+      } else {
+        console.warn(`[Mosaico] ⚠️ ${successCount}/${validCameras.length} streams prontos. Falhas:`, failedCameras.join(', '));
+      }
       
       await nextTick();
-      console.log('[Mosaico] Aguardando 2s para MediaMTX publicar streams antes de iniciar WHEP...');
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      initPlayers();
     }
   } catch (e) {
     console.error('[Mosaico] Erro ao carregar câmeras:', e);
+    notify.error('Mosaico', 'Erro ao carregar câmeras');
   }
 };
 
@@ -399,8 +324,7 @@ onMounted(async () => {
 });
 
 onUnmounted(async () => {
-  const timestamp = new Date().toISOString();
-  console.log(`[Mosaico] ${timestamp} - INICIANDO CLEANUP`);
+  console.log(`[Mosaico] 🧹 Limpando ${activeCameras.value.filter(cam => cam !== null).length} streams...`);
   
   // Remover listeners de fullscreen
   document.removeEventListener('fullscreenchange', handleFullscreenChange);
@@ -408,28 +332,39 @@ onUnmounted(async () => {
   document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
   document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
   
-  // Fechar todas as conexões WebRTC via composable
-  Object.keys(connections.value).forEach((cameraId) => {
-    console.log(`[WHEP] Fechando conexão para câmera ${cameraId}`);
-    connections.value[cameraId].close();
-  });
-  connections.value = {};
+  // CameraPlayer components serão destruídos automaticamente e farão cleanup do HLS
+  cameraPlayerRefs.value = {};
   
-  // Parar streams no backend
+  // Parar streams no backend com limite de paralelismo
   const validCameras = activeCameras.value.filter(cam => cam !== null);
-  const stopPromises = validCameras.map(async camera => {
-    try {
-      console.log(`[Mosaico] Parando stream gateway ${camera.id} (${camera.name})...`);
-      await api.post(`/setup_app/api/gateways/${camera.id}/video/preview/stop/`);
-      console.log(`[Mosaico] ✓ Stream parado: ${camera.name}`);
-    } catch (e) {
-      console.warn(`[Mosaico] Erro ao parar stream ${camera.name}:`, e);
-    }
-  });
   
-  await Promise.all(stopPromises);
+  if (validCameras.length === 0) {
+    return;
+  }
   
-  console.log(`[Mosaico] ${timestamp} - CLEANUP CONCLUÍDO`);
+  const CONCURRENT_STOP_LIMIT = 5;
+  const stopResults = [];
+  
+  for (let i = 0; i < validCameras.length; i += CONCURRENT_STOP_LIMIT) {
+    const batch = validCameras.slice(i, i + CONCURRENT_STOP_LIMIT);
+    
+    const batchPromises = batch.map(async camera => {
+      try {
+        await api.post(`/setup_app/api/gateways/${camera.id}/video/preview/stop/`);
+        console.log(`[Mosaico] ✓ Stream parado: ${camera.name}`);
+        return { success: true, camera };
+      } catch (e) {
+        console.warn(`[Mosaico] Erro ao parar stream ${camera.name}:`, e);
+        return { success: false, camera, error: e };
+      }
+    });
+    
+    const batchResults = await Promise.allSettled(batchPromises);
+    stopResults.push(...batchResults);
+  }
+  
+  const stoppedCount = stopResults.filter(r => r.status === 'fulfilled' && r.value.success).length;
+  console.log(`[Mosaico] ✅ ${stoppedCount}/${validCameras.length} streams parados`);
 });
 </script>
 
