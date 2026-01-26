@@ -2035,8 +2035,9 @@ onUnmounted(() => {
 
 .cameras-modal-body {
   flex: 1;
-  overflow: hidden;
-  padding: 0;
+  overflow: auto;
+  padding: 20px;
+  background: #0f172a;
 }
 
 </style>
