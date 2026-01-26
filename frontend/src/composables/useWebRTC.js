@@ -109,6 +109,14 @@ export function useWebRTC(options = {}) {
         console.log('[useWebRTC] ICE state:', pc.iceConnectionState);
       };
 
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          console.log('[useWebRTC] ICE Candidate:', event.candidate.candidate);
+        } else {
+          console.log('[useWebRTC] ICE gathering complete');
+        }
+      };
+
       // Adicionar transceiver para receber vídeo
       pc.addTransceiver('video', { direction: 'recvonly' });
       pc.addTransceiver('audio', { direction: 'recvonly' });
@@ -117,14 +125,20 @@ export function useWebRTC(options = {}) {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
+      console.log('[useWebRTC] SDP Offer criado, enviando para:', whepUrl);
+      console.log('[useWebRTC] SDP length:', offer.sdp.length);
+
       // Enviar oferta para o servidor WHEP
       const response = await fetch(whepUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/sdp'
+          'Content-Type': 'application/sdp',
+          'Accept': 'application/sdp'
         },
         body: offer.sdp
       });
+      
+      console.log('[useWebRTC] Response status:', response.status);
 
       if (!response.ok) {
         if (response.status === 404) {

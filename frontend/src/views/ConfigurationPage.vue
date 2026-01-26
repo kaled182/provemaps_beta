@@ -1486,30 +1486,44 @@
                       <p class="text-xs text-gray-400">Gera uma saída HLS temporária para validar a entrada.</p>
                     </div>
                     <div class="flex items-center gap-3 text-xs text-gray-400">
-                      <span class="flex items-center gap-2">
+                      <button
+                        v-if="!videoPreview.url && videoGatewayForm.id && videoGatewayForm.config.stream_url"
+                        class="btn-primary text-xs h-8 px-4"
+                        type="button"
+                        @click="startVideoPreview({ silent: false })"
+                        :disabled="isVideoPreviewLoading"
+                      >
+                        <span v-if="isVideoPreviewLoading" class="inline-flex h-3 w-3 border border-white border-t-transparent rounded-full animate-spin mr-2"></span>
+                        {{ isVideoPreviewLoading ? 'Iniciando...' : 'Iniciar transmissão' }}
+                      </button>
+                      <span v-else class="flex items-center gap-2">
                         <span
                           v-if="isVideoPreviewLoading"
                           class="inline-flex h-3 w-3 border border-gray-300 border-t-transparent rounded-full animate-spin"
                         ></span>
-                        A pré-visualização inicia automaticamente.
+                        {{ videoPreview.url ? 'Transmissão ativa' : 'Aguardando stream URL...' }}
                       </span>
                       <button
+                        v-if="videoPreview.url"
                         class="btn-secondary text-xs h-8"
                         type="button"
                         @click="stopVideoPreview()"
-                        :disabled="!isVideoPreviewActive && !videoPreview.url"
                       >
                         Encerrar
                       </button>
                     </div>
                   </div>
                   <div class="relative h-80 bg-black rounded-md overflow-hidden">
-                    <template v-if="isM3U8Url">
-                      <video ref="videoPreviewElement" class="absolute inset-0 w-full h-full" controls playsinline muted style="object-fit: fill; margin: 0; padding: 0;"></video>
-                    </template>
-                    <template v-else>
-                      <iframe :src="videoPreview.url" class="absolute inset-0 w-full h-full border-0 m-0 p-0" allow="autoplay; fullscreen" style="display: block; margin: 0; padding: 0;"></iframe>
-                    </template>
+                    <CameraPlayer 
+                      v-if="videoPreview.url && videoGatewayForm.id"
+                      :camera="{
+                        id: videoGatewayForm.id,
+                        name: videoGatewayForm.name || 'Prévia',
+                        playback_url: videoPreview.url
+                      }"
+                      :muted="true"
+                      class="absolute inset-0"
+                    />
                     <div
                       v-if="isVideoPreviewLoading || videoPreview.status === 'retrying'"
                       class="absolute inset-0 bg-gray-900/80 flex flex-col items-center justify-center text-sm text-gray-200 gap-3"
@@ -1677,6 +1691,7 @@ import Hls from 'hls.js';
 import { useNotification } from '@/composables/useNotification';
 import { useApi } from '@/composables/useApi';
 import ConfirmDialog from '@/components/Common/ConfirmDialog.vue';
+import CameraPlayer from '@/components/Video/CameraPlayer.vue';
 
 const Icons = {
   Cog: { template: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>' },
@@ -2806,24 +2821,47 @@ const startVideoPreview = async ({ silent = false } = {}) => {
     videoPreview.value.error = '';
     previewRetryCount.value = 0;
     clearPreviewReloadHandle();
+    
     const res = await api.post(
       `/setup_app/api/gateways/${videoGatewayForm.value.id}/video/preview/start/`
     );
+    
     if (!res?.success) {
       videoPreview.value.status = 'error';
       videoPreview.value.error = res?.message || 'Não foi possível iniciar a pré-visualização.';
       return;
     }
-    const previewUrl = res.preview_url || videoGatewayForm.value.config.preview_url || '';
-    if (!previewUrl) {
+    
+    // Usar playback_proxy_url (preferencial) ou playback_url
+    const playbackUrl = res.playback_proxy_url || res.playback_url;
+    
+    if (!playbackUrl) {
       videoPreview.value.status = 'error';
       videoPreview.value.error = 'Backend não retornou a URL de pré-visualização.';
+      console.error('[VideoPreview] Response sem playback_url:', res);
       return;
     }
+    
+    const previewUrl = res.preview_url || videoGatewayForm.value.config.preview_url || '';
     videoGatewayForm.value.config.preview_url = previewUrl;
     videoGatewayForm.value.config.preview_active = true;
-    videoPreview.value.url = previewUrl;
-    syncVideoGatewayInList(videoGatewayForm.value.id, { preview_url: previewUrl, preview_active: true });
+    videoGatewayForm.value.config.preview_playback_url = playbackUrl;
+    
+    console.log('[VideoPreview] Preview start', {
+      apiUrl: previewUrl,
+      playbackUrl,
+      response: res
+    });
+    
+    videoPreview.value.url = playbackUrl;
+    videoPreview.value.status = 'ready';
+    
+    syncVideoGatewayInList(videoGatewayForm.value.id, {
+      preview_url: previewUrl,
+      preview_playback_url: playbackUrl,
+      preview_active: true
+    });
+    
     if (!silent) {
       notify.success('Vídeo', 'Pré-visualização iniciada.');
     }

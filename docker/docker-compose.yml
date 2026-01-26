@@ -331,7 +331,7 @@
       context: ../services/video-transmuxer
     container_name: docker-video-transmuxer-1
     environment:
-      VIDEO_HLS_RTMP_URL: "rtmp://mediamtx:1935"
+      VIDEO_HLS_RTMP_URL: "rtmp://mediamtx:1935/live"
       VIDEO_HLS_STORAGE_PATH: "/var/www/hls"
     depends_on:
       video-hls:
@@ -351,6 +351,8 @@
       - MTX_PROTOCOLS=tcp
       - MTX_WEBRTC=yes
       - MTX_WEBRTCICESERVERS2=[{"urls":["stun:stun.l.google.com:19302"]}]
+      - MTX_WEBRTCICEUDPMUXADDRESS=:8189
+      - MTX_WEBRTCICEHOSTNAT=localhost
     ports:
       - "8554:8554"   # RTSP
       - "8888:8888"   # HLS (LL-HLS)

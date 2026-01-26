@@ -230,18 +230,36 @@ def api_fiber_cached_optical_status(request: HttpRequest, cable_id: int) -> Json
     origin = cable.origin_port
     dest = cable.destination_port
 
+    # Verificar se portas existem
+    if not origin or not dest:
+        return JsonResponse({
+            "cable_id": cable.id,
+            "status": cable.status,
+            "error": "Cable does not have origin/destination ports configured",
+            "origin_optical": None,
+            "destination_optical": None,
+        }, status=200)
+
     payload: dict[str, Any] = {
         "cable_id": cable.id,
         "status": cable.status,
+        "origin_port_id": origin.id,
+        "destination_port_id": dest.id,
         "origin_optical": {
+            "port_id": origin.id,
+            "port_name": origin.name,
+            "device_name": origin.device.name if origin.device else "Dispositivo não identificado",
             "rx_dbm": origin.last_rx_power,
             "tx_dbm": origin.last_tx_power,
-            "last_check": origin.last_optical_check,
+            "last_check": origin.last_optical_check.isoformat() if origin.last_optical_check else None,
         },
         "destination_optical": {
+            "port_id": dest.id,
+            "port_name": dest.name,
+            "device_name": dest.device.name if dest.device else "Dispositivo não identificado",
             "rx_dbm": dest.last_rx_power,
             "tx_dbm": dest.last_tx_power,
-            "last_check": dest.last_optical_check,
+            "last_check": dest.last_optical_check.isoformat() if dest.last_optical_check else None,
         },
     }
     return JsonResponse(payload)
