@@ -57,7 +57,7 @@
                 <span class="summary-value">{{ deviceStats.offline }}</span>
               </div>
             </div>
-            <div class="summary-card camera-card" @click="openSiteMosaicModal" style="cursor: pointer;">
+            <div class="summary-card camera-card" @click="showCamerasTab = true" style="cursor: pointer;">
               <div class="summary-icon cameras">
                 <i class="fas fa-video"></i>
               </div>
@@ -367,6 +367,28 @@
         </div>
       </div>
     </Teleport>
+
+  <!-- Cameras Tab Modal -->
+  <Teleport to="body">
+    <Transition name="modal">
+      <div v-if="showCamerasTab && site" class="cameras-modal-overlay" @click.self="showCamerasTab = false">
+        <div class="cameras-modal-container">
+          <div class="cameras-modal-header">
+            <h3>
+              <i class="fas fa-video"></i>
+              Câmeras - {{ site.name }}
+            </h3>
+            <button class="cameras-close-btn" @click="showCamerasTab = false">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div class="cameras-modal-body">
+            <SiteCamerasTab :siteId="site.id" />
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup>
@@ -380,6 +402,7 @@ import { useWebSocket } from '@/composables/useWebSocket'
 import { useWebRTC } from '@/composables/useWebRTC'
 import DeviceDetailsModal from './DeviceDetailsModal.vue'
 import CameraPlayer from '@/components/Video/CameraPlayer.vue'
+import SiteCamerasTab from '@/components/Site/SiteCamerasTab.vue'
 
 const props = defineProps({
   isOpen: {
@@ -405,6 +428,7 @@ const showEditModal = ref(false)
 const showDeviceDetailsModal = ref(false)
 const selectedDeviceForDetails = ref(null)
 const saving = ref(false)
+const showCamerasTab = ref(false)
 const showCameraModal = ref(false)
 const cameras = ref([])
 const loadingCameras = ref(false)
@@ -2752,6 +2776,76 @@ onUnmounted(() => {
 
 .mosaic-status i {
   font-size: 10px;
+}
+
+/* Cameras Tab Modal Styles */
+.cameras-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10100;
+  padding: 20px;
+}
+
+.cameras-modal-container {
+  background: #1e293b;
+  border-radius: 16px;
+  width: 95vw;
+  height: 95vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9);
+}
+
+.cameras-modal-header {
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.cameras-modal-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cameras-close-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.cameras-close-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
+.cameras-modal-body {
+  flex: 1;
+  overflow: hidden;
+  padding: 0;
 }
 
 </style>
