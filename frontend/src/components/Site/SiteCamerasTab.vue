@@ -94,6 +94,13 @@ const props = defineProps({
   siteId: {
     type: Number,
     required: true
+  },
+  /**
+   * Abrir automaticamente o primeiro mosaico encontrado
+   */
+  autoOpen: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -134,6 +141,11 @@ onUnmounted(async () => {
 // Handlers
 async function handleFetchMosaics() {
   await fetchMosaics(props.siteId)
+  
+  // Auto-abrir o primeiro mosaico se autoOpen=true e houver mosaicos
+  if (props.autoOpen && !error.value && mosaics.value.length > 0) {
+    await handleOpenMosaic(mosaics.value[0].id)
+  }
 }
 
 async function handleOpenMosaic(mosaicId) {

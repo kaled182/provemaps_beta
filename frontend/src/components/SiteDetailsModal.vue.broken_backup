@@ -63,7 +63,7 @@
               </div>
               <div class="summary-content">
                 <span class="summary-label">Câmeras</span>
-                <span class="summary-value">{{ cameraCount }}</span>
+                <span class="summary-value">Ver Mosaicos</span>
               </div>
             </div>
           </div>
@@ -327,22 +327,27 @@
     </Transition>
   </Teleport>
 
-  <!-- Cameras Tab Modal -->
+  <!-- Site Cameras Modal -->
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="showCamerasTab && site" class="cameras-modal-overlay" @click.self="showCamerasTab = false">
-        <div class="cameras-modal-container">
-          <div class="cameras-modal-header">
-            <h3>
-              <i class="fas fa-video"></i>
-              Câmeras - {{ site.name }}
-            </h3>
-            <button class="cameras-close-btn" @click="showCamerasTab = false">
+      <div v-if="showCamerasTab" class="modal-overlay" @click.self="showCamerasTab = false" style="z-index: 10100;">
+        <div class="modal-container cameras-modal" :class="{ dark: isDark }">
+          <div class="modal-header">
+            <div class="header-content">
+              <div class="site-icon">
+                <i class="fas fa-video"></i>
+              </div>
+              <div class="site-info">
+                <h2 class="site-name">Câmeras - {{ site?.name }}</h2>
+                <p class="site-location">Mosaicos e visualização</p>
+              </div>
+            </div>
+            <button class="close-button" @click="showCamerasTab = false">
               <i class="fas fa-times"></i>
             </button>
           </div>
-          <div class="cameras-modal-body">
-            <SiteCamerasTab :siteId="site.id" :autoOpen="true" />
+          <div class="modal-body" style="padding: 0; overflow: hidden;">
+            <SiteCamerasTab v-if="site?.id" :siteId="site.id" />
           </div>
         </div>
       </div>
@@ -358,7 +363,9 @@ import { useNotification } from '@/composables/useNotification'
 import { useEscapeKey } from '@/composables/useEscapeKey'
 import { useUiStore } from '@/stores/ui'
 import { useWebSocket } from '@/composables/useWebSocket'
+import { useWebRTC } from '@/composables/useWebRTC'
 import DeviceDetailsModal from './DeviceDetailsModal.vue'
+import CameraPlayer from '@/components/Video/CameraPlayer.vue'
 import SiteCamerasTab from '@/components/Site/SiteCamerasTab.vue'
 
 const props = defineProps({
@@ -386,7 +393,6 @@ const showDeviceDetailsModal = ref(false)
 const selectedDeviceForDetails = ref(null)
 const saving = ref(false)
 const showCamerasTab = ref(false)
-const cameraCount = ref(0)
 const editForm = reactive({
   id: null,
   name: '',
@@ -398,6 +404,237 @@ const editForm = reactive({
   cpu_usage_manual_percent: null,
   memory_usage_manual_percent: null,
 })
+
+// Limpar conexões quando fechar o modal
+const close = () => {
+  emit('close')
+}
+
+// ESC para fechar modal principal
+useEscapeKey(() => close(), { isOpen: computed(() => props.isOpen) })
+
+const saveDevice = async (camera, label) => {
+  const cameraId = Number(camera?.id)
+  if (!cameraId || Number.isNaN(cameraId)) return
+
+  const now = Date.now()
+  const lastSuccess = previewRecentSuccess.get(cameraId)
+  if (lastSuccess && now - lastSuccess < PREVIEW_CACHE_MS) {
+    return
+  }
+
+  if (previewWarmups.has(cameraId)) {
+    return previewWarmups.get(cameraId)
+  }
+
+  const warmup = (async () => {
+    try {
+      console.log(`[SiteDetailsModal] Iniciando preview backend (${label}) para câmera ${cameraId}`)
+      const response = await post(`/setup_app/api/gateways/${cameraId}/video/preview/start/`)
+      if (response?.success) {
+        if (response.playback_url) {
+          camera.playback_url = response.playback_url
+        }
+        if (response.preview_url) {
+          camera.preview_url = response.preview_url
+        }
+        previewRecentSuccess.set(cameraId, Date.now())
+        console.log(`[SiteDetailsModal] ✓ Preview backend iniciado para ${label}, aguardando 2s para MediaMTX publicar...`)
+        await delay(2000)
+      } else {
+        console.warn(`[SiteDetailsModal] Preview backend respondeu sem sucesso (${label})`, response)
+      }
+    } catch (error) {
+      console.error(`[SiteDetailsModal] Erro ao iniciar preview backend (${label})`, error)
+    } finally {
+      previewWarmups.delete(cameraId)
+    }
+  })()
+
+  previewWarmups.set(cameraId, warmup)
+  return warmup
+}
+
+const attemptWhepConnectionViaComposable = async (camera, refsMap, connectionsMap, label) => {
+  const connectionKey = camera.connectionKey ?? resolveConnectionKey(camera)
+  if (!connectionKey) {
+    console.warn('[SiteDetailsModal] Não foi possível determinar a chave da câmera', camera)
+    return false
+  }
+
+  const playbackUrl = camera.playback_url || camera.preview_url
+  if (!playbackUrl) {
+    console.warn(`[SiteDetailsModal] Sem playback_url para ${label}`)
+    return false
+  }
+
+  const whepUrl = playbackUrl.endsWith('/') ? `${playbackUrl}whep` : `${playbackUrl}/whep`
+  
+  console.log(`[SiteDetailsModal] Conectando ${label} via useWebRTC composable:`, whepUrl)
+
+  if (!connectionsMap.value) {
+    connectionsMap.value = {}
+  }
+
+  const existing = connectionsMap.value?.[connectionKey]
+  if (existing?.close) {
+    try {
+      existing.close()
+    } catch (err) {
+      console.warn('[SiteDetailsModal] Falha ao encerrar conexão prévia:', err)
+    }
+  }
+
+  try {
+    const rtc = useWebRTC({
+      maxRetries: 5,
+      maxBackoff: 30000
+    })
+
+    await rtc.connect(whepUrl)
+    connectionsMap.value[connectionKey] = rtc
+
+    // Aguardar próximo tick para garantir que o elemento video existe
+    await nextTick()
+    
+    console.log(`[SiteDetailsModal] Tentando vincular stream para ${label}, connectionKey:`, connectionKey)
+    console.log(`[SiteDetailsModal] refsMap.value disponível:`, Object.keys(refsMap.value))
+    
+    // Polling para encontrar o elemento video (pode levar alguns frames)
+    const maxAttempts = 10
+    for (let i = 0; i < maxAttempts; i++) {
+      const videoEl = refsMap.value[connectionKey]
+      console.log(`[SiteDetailsModal] Tentativa ${i + 1}/${maxAttempts} - videoEl:`, !!videoEl, 'stream:', !!rtc.stream.value)
+      if (videoEl && rtc.stream.value) {
+        videoEl.srcObject = rtc.stream.value
+        console.log(`[SiteDetailsModal] ✓ Stream vinculado ao vídeo para ${label}`)
+        break
+      }
+      await delay(100)
+    }
+
+    // Watch para streams que chegam depois
+    const stopWatch = watch(rtc.stream, (newStream) => {
+      console.log(`[SiteDetailsModal] 🔄 Watch disparado para ${label}:`, {
+        hasStream: !!newStream,
+        hasVideoEl: !!refsMap.value[connectionKey],
+        connectionKey,
+        streamTracks: newStream?.getTracks().length
+      })
+      
+      if (newStream && refsMap.value[connectionKey]) {
+        const videoEl = refsMap.value[connectionKey]
+        if (videoEl.srcObject !== newStream) {
+          videoEl.srcObject = newStream
+          console.log(`[SiteDetailsModal] ✓ Stream atualizado para ${label}`)
+        } else {
+          console.log(`[SiteDetailsModal] ℹ️ Stream já vinculado para ${label}`)
+        }
+      } else if (newStream && !refsMap.value[connectionKey]) {
+        console.error(`[SiteDetailsModal] ❌ Stream disponível mas videoEl não encontrado para ${label}, key:`, connectionKey)
+        console.error(`[SiteDetailsModal] Keys disponíveis:`, Object.keys(refsMap.value))
+      } else if (!newStream) {
+        console.warn(`[SiteDetailsModal] ⚠️ Watch disparado mas stream vazio para ${label}`)
+      }
+    }, { immediate: true })
+
+    const originalClose = rtc.close.bind(rtc)
+    rtc.close = () => {
+      stopWatch()
+      originalClose()
+    }
+
+    console.log(`[SiteDetailsModal] ✓ Câmera conectada (${label}) via ${whepUrl}`)
+    return true
+  } catch (error) {
+    console.error('[SiteDetailsModal] Erro ao conectar via useWebRTC:', label, whepUrl, error)
+    return false
+  }
+}
+
+const attemptWhepConnection = async (camera, whepUrl, refsMap, connectionsMap, label) => {
+  const connectionKey = camera.connectionKey ?? resolveConnectionKey(camera)
+  if (!connectionKey) {
+    console.warn('[SiteDetailsModal] Não foi possível determinar a chave da câmera', camera)
+    return false
+  }
+
+  if (!connectionsMap.value) {
+    connectionsMap.value = {}
+  }
+
+  const existing = connectionsMap.value?.[connectionKey]
+  if (existing) {
+    try {
+      existing.close()
+    } catch (err) {
+      console.warn('[SiteDetailsModal] Falha ao encerrar conexão prévia:', err)
+    }
+    delete connectionsMap.value[connectionKey]
+  }
+
+  const pc = new RTCPeerConnection({
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+  })
+
+  pc.addTransceiver('video', { direction: 'recvonly' })
+  pc.addTransceiver('audio', { direction: 'recvonly' })
+
+  pc.ontrack = (event) => {
+    if (!refsMap.value) {
+      refsMap.value = {}
+    }
+    const refs = refsMap.value || {}
+    const videoEl = refs[connectionKey]
+    if (videoEl && event.streams[0]) {
+      videoEl.srcObject = event.streams[0]
+      videoEl.muted = true
+      const playPromise = videoEl.play?.()
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise.catch((err) => {
+          console.warn('[SiteDetailsModal] Falha ao iniciar reprodução automática do vídeo:', err)
+        })
+      }
+    }
+  }
+
+  try {
+    const offer = await pc.createOffer()
+    await pc.setLocalDescription(offer)
+
+    const response = await fetch(whepUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/sdp' },
+      body: offer.sdp
+    })
+
+    if (!response.ok) {
+      console.warn(`[SiteDetailsModal] WHEP ${label} respondeu ${response.status}`, whepUrl)
+      pc.close()
+      return false
+    }
+
+    const answerSdp = await response.text()
+    await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp })
+    connectionsMap.value[connectionKey] = pc
+    console.log(`[SiteDetailsModal] Câmera conectada (${label}) via ${whepUrl}`)
+    return true
+  } catch (error) {
+    pc.close()
+    console.error('[SiteDetailsModal] Erro ao negociar WHEP:', label, whepUrl, error)
+    return false
+  }
+}
+
+const connectCameraWithFallback = async (camera, refsMap, connectionsMap, label) => {
+  await ensurePreviewReady(camera, label)
+  
+  const success = await attemptWhepConnectionViaComposable(camera, refsMap, connectionsMap, label)
+  
+  if (!success) {
+    console.error('[SiteDetailsModal] Falha ao conectar WHEP para', label)
+  }
+}
 
 const isDark = computed(() => uiStore.theme === 'dark')
 
@@ -419,18 +656,6 @@ const deviceStats = computed(() => {
   
   return stats
 })
-
-const loadCameraCount = async () => {
-  if (!props.site?.id) return
-  
-  try {
-    const response = await get(`/api/v1/cameras/?site=${props.site.id}`)
-    cameraCount.value = response.count || response.results?.length || 0
-  } catch (error) {
-    console.error('[SiteDetailsModal] Erro ao contar câmeras:', error)
-    cameraCount.value = 0
-  }
-}
 
 const loadDevices = async () => {
   if (!props.site) return
@@ -663,6 +888,68 @@ const closeDeviceDetails = () => {
   selectedDeviceForDetails.value = null
 }
 
+// Limpar conexões quando fechar o modal
+const close = () => {
+  emit('close')
+}
+
+// ESC para fechar modal de câmeras
+useEscapeKey(() => closeCameraModal(), { isOpen: showCameraModal })
+
+const loadCameras = async () => {
+  if (!props.site) return
+  
+  loadingCameras.value = true
+  try {
+    // Buscar câmeras do site
+    const response = await get(`/api/v1/cameras/?site=${props.site.id}`)
+    const fetched = response.results || []
+    cameras.value = fetched.map((cam, idx) => assignConnectionKey({ ...cam }, `camera-${idx}`))
+    console.log('[SiteDetailsModal] Câmeras carregadas:', cameras.value.length)
+    
+    // Iniciar conexões WebRTC para cada câmera
+    for (const [index, camera] of cameras.value.entries()) {
+      await connectCamera(camera, index)
+    }
+  } catch (error) {
+    console.error('[SiteDetailsModal] Erro ao carregar câmeras:', error)
+    notifyError('Erro', 'Não foi possível carregar as câmeras')
+  } finally {
+    loadingCameras.value = false
+  }
+}
+
+const connectCamera = async (camera, idx = 0) => {
+  assignConnectionKey(camera, `camera-${idx}`)
+  await connectCameraWithFallback(
+    camera,
+    cameraVideoRefs,
+    cameraConnections,
+    camera.name || camera.connectionKey || `camera-${idx}`
+  )
+}
+
+const loadCameraCount = async () => {
+  if (!props.site) return
+  
+  try {
+    const response = await get(`/api/v1/cameras/?site=${props.site.id}`)
+    cameraCount.value = response.count || response.results?.length || 0
+  } catch (error) {
+    console.error('[SiteDetailsModal] Erro ao contar câmeras:', error)
+    cameraCount.value = 0
+  }
+}
+
+const getCameraGridClass = computed(() => {
+  const count = cameras.value.length
+  if (count === 1) return 'grid-cols-1'
+  if (count === 2) return 'grid-cols-2'
+  if (count <= 4) return 'grid-cols-2'
+  if (count <= 6) return 'grid-cols-3'
+  return 'grid-cols-4'
+})
+
 const saveDevice = async () => {
   if (!editForm.id) return
   
@@ -694,6 +981,10 @@ watch(() => props.isOpen, (newVal) => {
   if (newVal && props.site) {
     loadDevices()
     loadCameraCount()
+  } else if (!newVal) {
+    // Limpar conexões quando fechar
+    closeCameraModal()
+    closeMosaicModal()
   }
 })
 
@@ -1981,77 +2272,6 @@ onUnmounted(() => {
 
 .mosaic-status i {
   font-size: 10px;
-}
-
-/* Cameras Tab Modal Styles */
-.cameras-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.85);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10100;
-  padding: 20px;
-}
-
-.cameras-modal-container {
-  background: #1e293b;
-  border-radius: 16px;
-  width: 95vw;
-  height: 95vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9);
-}
-
-.cameras-modal-header {
-  padding: 20px 24px;
-  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.cameras-modal-header h3 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-  color: white;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.cameras-close-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  color: white;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.cameras-close-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-  transform: scale(1.1);
-}
-
-.cameras-modal-body {
-  flex: 1;
-  overflow: auto;
-  padding: 20px;
-  background: #0f172a;
 }
 
 </style>
