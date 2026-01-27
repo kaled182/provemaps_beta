@@ -39,22 +39,13 @@
                 <span class="summary-value">{{ deviceStats.warning }}</span>
               </div>
             </div>
-            <div class="summary-card">
-              <div class="summary-icon critical">
-                <i class="fas fa-exclamation-circle"></i>
+            <div class="summary-card devices-card" @click="showDevicesTab = true" style="cursor: pointer;">
+              <div class="summary-icon devices">
+                <i class="fas fa-server"></i>
               </div>
               <div class="summary-content">
-                <span class="summary-label">Crítico</span>
-                <span class="summary-value">{{ deviceStats.critical }}</span>
-              </div>
-            </div>
-            <div class="summary-card">
-              <div class="summary-icon offline">
-                <i class="fas fa-times-circle"></i>
-              </div>
-              <div class="summary-content">
-                <span class="summary-label">Offline</span>
-                <span class="summary-value">{{ deviceStats.offline }}</span>
+                <span class="summary-label">Dispositivos</span>
+                <span class="summary-value">{{ deviceCount }}</span>
               </div>
             </div>
             <div class="summary-card camera-card" @click="showCamerasTab = true" style="cursor: pointer;">
@@ -77,114 +68,6 @@
             </div>
           </div>
 
-          <!-- Devices List -->
-          <div class="devices-section">
-            <h3 class="section-title">
-              <i class="fas fa-server"></i>
-              Dispositivos ({{ devices.length }})
-            </h3>
-
-            <div v-if="loading" class="loading-state">
-              <i class="fas fa-spinner fa-spin"></i>
-              <span>Carregando dispositivos...</span>
-            </div>
-
-            <div v-else-if="devices.length === 0" class="empty-state">
-              <i class="fas fa-inbox"></i>
-              <span>Nenhum dispositivo encontrado neste site</span>
-            </div>
-
-            <div v-else class="devices-grid">
-              <div
-                v-for="device in devices"
-                :key="device.id"
-                class="device-card"
-                :class="getStatusClass(device.status)"
-                :title="getDeviceTooltip(device)"
-                @click="openDeviceDetails(device)"
-                style="cursor: pointer;"
-              >
-                <!-- Device Header -->
-                <div class="device-header">
-                  <div class="device-icon">
-                    <i :class="getDeviceIcon(device.type)"></i>
-                  </div>
-                  <div class="device-title">
-                    <h4>{{ device.name }}</h4>
-                    <span class="device-type">{{ device.type || 'N/A' }}</span>
-                  </div>
-                  <div class="device-status">
-                    <span class="status-badge" :class="device.status">
-                      {{ getStatusLabel(device.status) }}
-                    </span>
-                  </div>
-                  <button 
-                    @click.stop="openEditDevice(device)" 
-                    class="config-icon-button"
-                    title="Configurar dispositivo"
-                  >
-                    <i class="fas fa-cog"></i>
-                  </button>
-                </div>
-
-                <!-- Device Metrics -->
-                <div class="device-metrics">
-                  <div class="metric">
-                    <div class="metric-header">
-                      <i class="fas fa-microchip"></i>
-                      <span>CPU</span>
-                    </div>
-                    <div class="metric-value">
-                      <div class="progress-bar">
-                        <div 
-                          class="progress-fill" 
-                          :class="getMetricClass(device.cpu)"
-                          :style="{ width: device.cpu + '%' }"
-                        ></div>
-                      </div>
-                      <span class="metric-text">{{ device.cpu || 0 }}%</span>
-                    </div>
-                  </div>
-
-                  <div class="metric">
-                    <div class="metric-header">
-                      <i class="fas fa-memory"></i>
-                      <span>Memória</span>
-                    </div>
-                    <div class="metric-value">
-                      <div class="progress-bar">
-                        <div 
-                          class="progress-fill" 
-                          :class="getMetricClass(device.memory)"
-                          :style="{ width: device.memory + '%' }"
-                        ></div>
-                      </div>
-                      <span class="metric-text">{{ device.memory || 0 }}%</span>
-                    </div>
-                  </div>
-
-                  <div class="metric">
-                    <div class="metric-header">
-                      <i class="fas fa-clock"></i>
-                      <span>Uptime</span>
-                    </div>
-                    <div class="metric-value uptime">
-                      <span class="metric-text">{{ formatUptime(device.uptime) }}</span>
-                    </div>
-                  </div>
-
-                  <div class="metric">
-                    <div class="metric-header">
-                      <i class="fas fa-network-wired"></i>
-                      <span>IP</span>
-                    </div>
-                    <div class="metric-value ip">
-                      <span class="metric-text">{{ device.ip || 'N/A' }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -385,6 +268,32 @@
       </div>
     </Transition>
   </Teleport>
+
+  <!-- Devices Modal -->
+  <Teleport to="body">
+    <Transition name="modal">
+      <div v-if="showDevicesTab && site" class="devices-modal-overlay" @click.self="showDevicesTab = false">
+        <div class="devices-modal-container">
+          <div class="devices-modal-header">
+            <h3>
+              <i class="fas fa-server"></i>
+              Dispositivos - {{ site.name }}
+            </h3>
+            <button class="devices-close-btn" @click="showDevicesTab = false">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div class="devices-modal-body">
+            <SiteDevicesTab
+              :siteId="site.id"
+              @edit-device="handleEditDevice"
+              @view-device-details="handleViewDeviceDetails"
+            />
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup>
@@ -398,6 +307,7 @@ import { useWebSocket } from '@/composables/useWebSocket'
 import DeviceDetailsModal from './DeviceDetailsModal.vue'
 import SiteCamerasTab from '@/components/Site/SiteCamerasTab.vue'
 import SiteFibersTab from '@/components/Site/SiteFibersTab.vue'
+import SiteDevicesTab from '@/components/Site/SiteDevicesTab.vue'
 
 const props = defineProps({
   isOpen: {
@@ -427,6 +337,8 @@ const showCamerasTab = ref(false)
 const cameraCount = ref(0)
 const showFibersTab = ref(false)
 const fiberCount = ref(0)
+const showDevicesTab = ref(false)
+const deviceCount = computed(() => devices.value.length)
 const editForm = reactive({
   id: null,
   name: '',
@@ -440,25 +352,6 @@ const editForm = reactive({
 })
 
 const isDark = computed(() => uiStore.theme === 'dark')
-
-const deviceStats = computed(() => {
-  const stats = {
-    online: 0,
-    warning: 0,
-    critical: 0,
-    offline: 0
-  }
-  
-  devices.value.forEach(device => {
-    const status = device.status?.toLowerCase()
-    if (status === 'online') stats.online++
-    else if (status === 'warning' || status === 'atenção') stats.warning++
-    else if (status === 'critical' || status === 'crítico') stats.critical++
-    else stats.offline++
-  })
-  
-  return stats
-})
 
 const loadCameraCount = async () => {
   if (!props.site?.id) return
@@ -484,196 +377,15 @@ const loadCameraCount = async () => {
   }
 }
 
-const loadDevices = async () => {
-  if (!props.site) return
-  
-  loading.value = true
-  try {
-    console.log('[SiteDetailsModal] Carregando dispositivos para site:', props.site)
-    
-    // Usar o ID do site se disponível
-    const siteId = props.site.id || props.site.site_id
-    
-    console.log('[SiteDetailsModal] ID do site:', siteId)
-    console.log('[SiteDetailsModal] Nome do site:', props.site.name)
-    
-    if (!siteId) {
-      console.warn('[SiteDetailsModal] Site sem ID, não é possível carregar dispositivos')
-      devices.value = []
-      return
-    }
-    
-    // Buscar todos os devices e filtrar pelo site ID
-    const response = await get('/api/v1/devices/')
-    
-    console.log('[SiteDetailsModal] Resposta da API devices:', {
-      count: response.count,
-      totalResults: response.results?.length
-    })
-    
-    // Filtrar devices pelo site ID
-    const devicesData = response.results?.filter(device => device.site === siteId) || []
-    
-    console.log('[SiteDetailsModal] Devices encontrados para este site:', devicesData.length)
-    console.log('[SiteDetailsModal] Exemplo de device:', devicesData[0])
-    
-    devices.value = devicesData.map(device => ({
-      id: device.id,
-      name: device.name || 'Dispositivo sem nome',
-      type: device.group_name || 'Dispositivo',
-      status: 'offline', // será atualizado após buscar métricas
-      cpu: 0,
-      memory: 0,
-      uptime: 0,
-      ip: device.primary_ip || 'N/A',
-      zabbixHostId: device.zabbix_hostid,
-      cpuItemKey: device.cpu_usage_item_key,
-      uptimeItemKey: device.uptime_item_key
-    }))
-    
-    console.log('[SiteDetailsModal] Dispositivos mapeados:', devices.value)
-
-    // Fetch metrics for each device in parallel
-    try {
-      const metricPromises = devices.value.map(async (dev) => {
-        try {
-          const m = await get(`/api/v1/devices/${dev.id}/metrics/`)
-          dev.cpu = typeof m.cpu === 'number' ? Math.round(m.cpu) : (dev.cpu || 0)
-          dev.memory = typeof m.memory === 'number' ? Math.round(m.memory) : (dev.memory || 0)
-          dev.uptime_human = m.uptime_human || null
-          // Map uptime in seconds for textual display
-          if (typeof m.uptime_seconds === 'number' && m.uptime_seconds > 0) {
-            dev.uptime = m.uptime_seconds
-          }
-          // Determinar status com base em uptime e thresholds
-          const hasUptime = typeof m.uptime_seconds === 'number' && m.uptime_seconds > 0
-          // Fallback: se não há uptime mas há métricas de CPU/Memória, considerar dispositivo ativo
-          const hasMetrics = (
-            typeof m.cpu === 'number' && m.cpu > 0
-          ) || (
-            typeof m.memory === 'number' && m.memory > 0
-          )
-          const cpuCritical = dev.cpu >= 90
-          const cpuWarning = dev.cpu >= 70 && dev.cpu < 90
-          const memCritical = dev.memory >= 90
-          const memWarning = dev.memory >= 70 && dev.memory < 90
-          
-          if (!hasUptime && hasMetrics) {
-            // Sem uptime, mas com métricas → status baseado em thresholds
-            if (cpuCritical || memCritical) {
-              dev.status = 'critical'
-            } else if (cpuWarning || memWarning) {
-              dev.status = 'warning'
-            } else {
-              dev.status = 'online'
-            }
-          } else if (!hasUptime) {
-            dev.status = 'offline'
-          } else if (cpuCritical || memCritical) {
-            dev.status = 'critical'
-          } else if (cpuWarning || memWarning) {
-            dev.status = 'warning'
-          } else {
-            dev.status = 'online'
-          }
-          return dev
-        } catch (err) {
-          console.warn('[SiteDetailsModal] Metrics fetch failed for device', dev.id, err)
-          dev.status = 'offline'
-          return dev
-        }
-      })
-      await Promise.allSettled(metricPromises)
-    } catch (err) {
-      console.warn('[SiteDetailsModal] Metrics batch failed:', err)
-    }
-  } catch (error) {
-    console.error('[SiteDetailsModal] Erro ao carregar dispositivos:', error)
-    console.error('[SiteDetailsModal] Detalhes do erro:', error.response || error)
-    devices.value = []
-  } finally {
-    loading.value = false
-  }
-}
-
 const close = () => {
   emit('close')
 }
 
 // Gerenciar ESC key - ignora quando algum modal filho está aberto
 const hasChildModalOpen = computed(() => 
-  showEditModal.value || showDeviceDetailsModal.value || showMosaicModal.value || showCameraModal.value
+  showEditModal.value || showDeviceDetailsModal.value || showMosaicModal.value || showCameraModal.value || showDevicesTab.value
 )
 useEscapeKey(() => close(), { isOpen: computed(() => props.isOpen), shouldIgnore: hasChildModalOpen })
-
-const getStatusClass = (status) => {
-  return status?.toLowerCase() || 'offline'
-}
-
-const getStatusLabel = (status) => {
-  const labels = {
-    online: 'Online',
-    warning: 'Atenção',
-    critical: 'Crítico',
-    offline: 'Offline'
-  }
-  return labels[status?.toLowerCase()] || 'Offline'
-}
-
-const getDeviceIcon = (type) => {
-  const icons = {
-    router: 'fas fa-network-wired',
-    switch: 'fas fa-code-branch',
-    server: 'fas fa-server',
-    firewall: 'fas fa-shield-alt',
-    default: 'fas fa-server'
-  }
-  return icons[type?.toLowerCase()] || icons.default
-}
-
-const getMetricClass = (value) => {
-  if (value >= 90) return 'critical'
-  if (value >= 70) return 'warning'
-  return 'normal'
-}
-
-const formatUptime = (seconds) => {
-  if (!seconds) return 'N/A'
-  
-  const days = Math.floor(seconds / 86400)
-  const hours = Math.floor((seconds % 86400) / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  
-  if (days > 0) return `${days}d ${hours}h`
-  if (hours > 0) return `${hours}h ${minutes}m`
-  return `${minutes}m`
-}
-
-const getDeviceTooltip = (device) => {
-  const parts = [
-    `${device.name}`,
-    `Status: ${getStatusLabel(device.status)}`,
-    `IP: ${device.ip}`,
-  ]
-  
-  if (device.uptime_human) {
-    parts.push(`Uptime: ${device.uptime_human}`)
-  }
-  
-  if (device.cpuItemKey) {
-    parts.push(`CPU Key: ${device.cpuItemKey}`)
-  }
-  
-  if (device.uptimeItemKey) {
-    parts.push(`Uptime Key: ${device.uptimeItemKey}`)
-  }
-  
-  if (device.zabbixHostId) {
-    parts.push(`Zabbix Host ID: ${device.zabbixHostId}`)
-  }
-  
-  return parts.join('\n')
-}
 
 const openEditDevice = async (device) => {
   try {
@@ -742,6 +454,20 @@ const handleEditFiber = (fiber) => {
   // TODO: Abrir modal de edição de fibra
   notifyError('Em desenvolvimento', 'Edição de fibra será implementada em breve')
 }
+
+// Device handlers (from SiteDevicesTab)
+const handleEditDevice = (device) => {
+  console.log('[SiteDetailsModal] Editar dispositivo do tab:', device)
+  showDevicesTab.value = false
+  // Chamar a função existente openEditDevice
+  openEditDevice(device)
+}
+
+const handleViewDeviceDetails = (device) => {
+  console.log('[SiteDetailsModal] Ver detalhes do dispositivo do tab:', device)
+  showDevicesTab.value = false
+  // Chamar a função existente openDeviceDetails
+  openDeviceDetails(device)
 }
 
 const saveDevice = async () => {
@@ -773,7 +499,6 @@ const saveDevice = async () => {
 
 watch(() => props.isOpen, (newVal) => {
   if (newVal && props.site) {
-    loadDevices()
     loadCameraCount()
     loadFiberCount()
   }
@@ -2207,6 +1932,82 @@ onUnmounted(() => {
   /* Fiber Card in Summary */
   .summary-icon.fibers {
     background: linear-gradient(135deg, #3b82f6, #2563eb);
+  }
+
+  /* ===== Devices Modal Styles ===== */
+  .devices-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10100;
+    padding: 20px;
+  }
+
+  .devices-modal-container {
+    background: #1e293b;
+    border-radius: 16px;
+    width: 95vw;
+    height: 95vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9);
+  }
+
+  .devices-modal-header {
+    padding: 20px 24px;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .devices-modal-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .devices-close-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+
+  .devices-close-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.1);
+  }
+
+  .devices-modal-body {
+    flex: 1;
+    overflow: auto;
+    padding: 20px;
+    background: #0f172a;
+  }
+
+  /* Devices Card in Summary */
+  .summary-icon.devices {
+    background: linear-gradient(135deg, #10b981, #059669);
   }
   padding: 20px;
   background: #0f172a;
