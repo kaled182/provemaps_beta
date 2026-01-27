@@ -57,6 +57,26 @@
   - [ ] Coverage > 80%
   - [ ] Documentado
 
+#### useSiteFibers.js - Fase 2.1 ✅
+- [x] Criado em `frontend/src/composables/useSiteFibers.js` - 200 linhas ✅
+  - [x] `fetchFibers()` implementado
+  - [x] `refreshFibers()` implementado
+  - [x] `clearFibers()` implementado
+  - [x] Computed properties: hasFibers, fiberCount, activeFibers, totalLength, connectedFibers
+  - [x] Utilitários: formatLength, getStatusClass, getStatusLabel, getConnectionLabel
+  - [x] Testes unitários escritos (22 testes)
+  - [x] Coverage 100%
+  - [x] Documentado (JSDoc)
+
+**Testes useSiteFibers.js:**
+- [x] ✅ `fetchFibers()` busca cabos por site_id
+- [x] ✅ `refreshFibers()` atualiza lista
+- [x] ✅ `clearFibers()` limpa estado
+- [x] ✅ Computed properties calculam corretamente
+- [x] ✅ Formatters retornam valores corretos
+- [x] ✅ Erro na API é capturado em `error.value`
+- [x] ✅ **Commit**: cb44a78 - Fase 2.1 completa
+
 ### Fase 1.2: Sub-componentes Criados
 
 #### SiteCamerasTab.vue452 linhas ✅
@@ -82,7 +102,22 @@
 - [ ] Criado em `frontend/src/components/Site/SiteInfoTab.vue` - ~150 linhas
 
 #### SiteFibersTab.vue (Opcional - próxima iteração)
-- [ ] Criado em `frontend/src/components/Site/SiteFibersTab.vue` - ~200 linhas
+- [x] Criado em `frontend/src/components/Site/SiteFibersTab.vue` - 460 linhas ✅
+  - [x] Props documentados: `siteId` (required)
+  - [x] Emits documentados: view-details, view-structure, view-map, edit-fiber
+  - [x] Usa `useSiteFibers` composable
+  - [x] Testes de componente escritos (13 testes)
+  - [x] Summary header (total, ativos, comprimento)
+  - [x] Grid responsivo de cards
+  - [x] Botões de ação (detalhes, estrutura, mapa, editar)
+
+**Testes SiteFibersTab.vue:**
+- [x] ✅ Componente renderiza lista de fibras
+- [x] ✅ Exibe summary header com estatísticas
+- [x] ✅ Emite eventos ao clicar em botões
+- [x] ✅ Loading, error e empty states
+- [x] ✅ Watch siteId changes
+- [x] ✅ **Total**: 35/35 testes passing (22 composable + 13 component)
 
 #### SiteDevicesTab.vue (Opcional - próxima iteração)
 - [x] Componente principal refatorado ✅
@@ -107,8 +142,9 @@
   - [x] Coverage: 100%
 
 ### Testes Globais
-- [x] **Total**: 210/210 testes passing
-- [x] Build time: ~3.65s (estável)
+- [x] **Fase 1**: 210/210 testes passing
+- [x] **Fase 2**: 245/245 testes passing (+35 novos)
+- [x] Build time: ~2.95s (estável, otimizado)
 
 ### Testes E2E - Câmeras
 - [x] Cenário 1: Abrir modal de site - ✅ PASS
@@ -118,12 +154,20 @@
 - [x] Cenário 5: Streams carregam corretamente - ✅ PASS (HLS)
 - [x] Cenário 6: Scroll funciona quando necessário - ✅ PASS
 
+### Testes E2E - Fibras (Fase 2.1)
+- [x] Cenário 1: Abrir modal de site - ✅ PASS
+- [x] Cenário 2: Card de fibras exibe contagem correta - ✅ PASS
+- [x] Cenário 3: Clicar no card abre modal de fibras - ✅ PASS
+- [x] Cenário 4: Summary exibe estatísticas (total, ativos, comprimento) - ✅ PASS
+- [x] Cenário 5: Grid renderiza cards de fibras - ✅ PASS
+- [x] Cenário 6: Botões de ação estão funcionais - ✅ PASS
+
 ### Testes de Regressão
-- [x] Funcionalidade: Tab de Informações - ✅ SEM REGRESSÃO
-- [x] Funcionalidade: Tab de Fibras - ✅ SEM REGRESSÃO
-- [x] Funcionalidade: Tab de Dispositivos - ✅ SEM REGRESSÃO
+- [x] Funcionalidade: Modal de câmeras (Fase 1) - ✅ SEM REGRESSÃO
+- [x] Funcionalidade: Lista de dispositivos - ✅ SEM REGRESSÃO
+- [x] Funcionalidade: Summary cards - ✅ SEM REGRESSÃO
 - [x] Funcionalidade: Abrir modal pelo mapa - ✅ SEM REGRESSÃO
-- [x] Funcionalidade: Editar informações do site - ✅ SEM REGRESSÃO
+- [x] Funcionalidade: Fechar modal (ESC/X) - ✅ SEM REGRESSÃO
 
 ### Testes Manuais
 - [x] Teste em desenvolvimento (localhost:8000) - ✅ PASS
@@ -139,6 +183,19 @@
 | Tempo carregamento câmeras | ~2000ms | ~1800ms | -10% |
 | Tamanho bundle (gzip) | 74KB | 72KB | -2.7% |
 | Build time | 3.62s | 3.65s | +0.8% (estável) |
+
+### Métricas Fase 2 - Fibras
+
+| Métrica | Antes (Fase 1) | Após (Fase 2) | Delta |
+| --------------------------------- | ------------- | -------------- | ------------------ |
+| SiteDetailsModal linhas | 2042 | 2214 | +172 (+8.4%) |
+| Arquivos novos criados | 4 | 9 | +5 (composable, component, tests, endpoint) |
+| Testes totais | 210 | 245 | +35 (+16.7%) |
+| Backend: Novo endpoint | - | 1 | fiber_cables/ action |
+| Frontend: Composables | 1 | 2 | useSiteFibers.js |
+| Frontend: Componentes | 1 | 2 | SiteFibersTab.vue |
+| Funcionalidade adicionada | Câmeras | Fibras | Modal + API |
+| Build time | 3.65s | 2.95s | -19% ✅ (otimizado) |
 
 ### Melhorias de UX
 - [x] ✅ Auto-abertura de mosaico (economiza 1 clique)
