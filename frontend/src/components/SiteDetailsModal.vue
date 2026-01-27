@@ -66,6 +66,15 @@
                 <span class="summary-value">{{ cameraCount }}</span>
               </div>
             </div>
+            <div class="summary-card fiber-card" @click="showFibersTab = true" style="cursor: pointer;">
+              <div class="summary-icon fibers">
+                <i class="fas fa-network-wired"></i>
+              </div>
+              <div class="summary-content">
+                <span class="summary-label">Fibras</span>
+                <span class="summary-value">{{ fiberCount }}</span>
+              </div>
+            </div>
           </div>
 
           <!-- Devices List -->
@@ -348,6 +357,34 @@
       </div>
     </Transition>
   </Teleport>
+
+  <!-- Fibers Modal -->
+  <Teleport to="body">
+    <Transition name="modal">
+      <div v-if="showFibersTab && site" class="fibers-modal-overlay" @click.self="showFibersTab = false">
+        <div class="fibers-modal-container">
+          <div class="fibers-modal-header">
+            <h3>
+              <i class="fas fa-network-wired"></i>
+              Cabos de Fibra - {{ site.name }}
+            </h3>
+            <button class="fibers-close-btn" @click="showFibersTab = false">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div class="fibers-modal-body">
+            <SiteFibersTab
+              :siteId="site.id"
+              @view-details="handleViewFiberDetails"
+              @view-structure="handleViewFiberStructure"
+              @view-map="handleViewFiberMap"
+              @edit-fiber="handleEditFiber"
+            />
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup>
@@ -360,6 +397,7 @@ import { useUiStore } from '@/stores/ui'
 import { useWebSocket } from '@/composables/useWebSocket'
 import DeviceDetailsModal from './DeviceDetailsModal.vue'
 import SiteCamerasTab from '@/components/Site/SiteCamerasTab.vue'
+import SiteFibersTab from '@/components/Site/SiteFibersTab.vue'
 
 const props = defineProps({
   isOpen: {
@@ -387,6 +425,8 @@ const selectedDeviceForDetails = ref(null)
 const saving = ref(false)
 const showCamerasTab = ref(false)
 const cameraCount = ref(0)
+const showFibersTab = ref(false)
+const fiberCount = ref(0)
 const editForm = reactive({
   id: null,
   name: '',
@@ -429,6 +469,18 @@ const loadCameraCount = async () => {
   } catch (error) {
     console.error('[SiteDetailsModal] Erro ao contar câmeras:', error)
     cameraCount.value = 0
+
+  const loadFiberCount = async () => {
+    if (!props.site?.id) return
+  
+    try {
+      const response = await get(`/api/v1/sites/${props.site.id}/fiber_cables/`)
+      fiberCount.value = response.fiber_count || response.fibers?.length || 0
+    } catch (error) {
+      console.error('[SiteDetailsModal] Erro ao contar fibras:', error)
+      fiberCount.value = 0
+    }
+  }
   }
 }
 
@@ -661,6 +713,35 @@ const openDeviceDetails = (device) => {
 const closeDeviceDetails = () => {
   showDeviceDetailsModal.value = false
   selectedDeviceForDetails.value = null
+
+// Fiber handlers
+const handleViewFiberDetails = (fiber) => {
+  console.log('[SiteDetailsModal] Ver detalhes da fibra:', fiber)
+  // TODO: Implementar modal de detalhes de fibra ou redirecionar
+  notifyError('Em desenvolvimento', 'Modal de detalhes de fibra será implementado em breve')
+}
+
+const handleViewFiberStructure = (fiber) => {
+  console.log('[SiteDetailsModal] Ver estrutura da fibra:', fiber)
+  // TODO: Abrir modal de estrutura física (CableStructureModal)
+  notifyError('Em desenvolvimento', 'Visualização de estrutura será implementada em breve')
+}
+
+const handleViewFiberMap = (fiber) => {
+  console.log('[SiteDetailsModal] Ver fibra no mapa:', fiber)
+  // Fechar modal e navegar para o mapa com fibra selecionada
+  close()
+  router.push({
+    name: 'CustomMapViewer',
+    query: { cableId: fiber.id }
+  })
+}
+
+const handleEditFiber = (fiber) => {
+  console.log('[SiteDetailsModal] Editar fibra:', fiber)
+  // TODO: Abrir modal de edição de fibra
+  notifyError('Em desenvolvimento', 'Edição de fibra será implementada em breve')
+}
 }
 
 const saveDevice = async () => {
@@ -694,6 +775,7 @@ watch(() => props.isOpen, (newVal) => {
   if (newVal && props.site) {
     loadDevices()
     loadCameraCount()
+    loadFiberCount()
   }
 })
 
@@ -2050,6 +2132,82 @@ onUnmounted(() => {
 .cameras-modal-body {
   flex: 1;
   overflow: auto;
+
+  /* Fibers Tab Modal Styles */
+  .fibers-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10100;
+    padding: 20px;
+  }
+
+  .fibers-modal-container {
+    background: #1e293b;
+    border-radius: 16px;
+    width: 95vw;
+    height: 95vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9);
+  }
+
+  .fibers-modal-header {
+    padding: 20px 24px;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .fibers-modal-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .fibers-close-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+
+  .fibers-close-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.1);
+  }
+
+  .fibers-modal-body {
+    flex: 1;
+    overflow: auto;
+    padding: 20px;
+    background: #0f172a;
+  }
+
+  /* Fiber Card in Summary */
+  .summary-icon.fibers {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+  }
   padding: 20px;
   background: #0f172a;
 }

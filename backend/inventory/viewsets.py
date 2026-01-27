@@ -67,6 +67,40 @@ class SiteViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
 
         return Response(payload)
 
+    @action(detail=True, methods=["get"], permission_classes=[AllowAny])
+    def fiber_cables(self, request, pk=None):
+        """Return fiber cables connected to this site (as site_a or site_b)."""
+        from django.db.models import Q
+
+        site = self.get_object()
+        
+        # Buscar cabos onde o site é origem (site_a) ou destino (site_b)
+        cables_qs = (
+            FiberCable.objects.filter(
+                Q(site_a=site) | Q(site_b=site),
+                parent_cable__isnull=True  # Only parent cables (exclude segments)
+            )
+            .select_related(
+                "site_a",
+                "site_b",
+                "origin_port__device__site",
+                "destination_port__device__site",
+                "profile"
+            )
+            .order_by("name")
+        )
+        
+        serializer = FiberCableSerializer(cables_qs, many=True)
+
+        payload = {
+            "site_id": site.id,
+            "site_name": site.display_name,
+            "fiber_count": cables_qs.count(),
+            "fibers": serializer.data,
+        }
+
+        return Response(payload)
+
 
 class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
     """ViewSet for Device CRUD operations"""
