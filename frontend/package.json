@@ -37,12 +37,15 @@
     }
   },
   "dependencies": {
+    "@googlemaps/markerclusterer": "^2.6.2",
     "@phosphor-icons/vue": "^2.2.1",
     "@vueuse/core": "^11.0.0",
     "axios": "^1.13.2",
     "chart.js": "^4.5.1",
     "fuse.js": "^7.0.0",
     "hls.js": "^1.6.15",
+    "leaflet": "^1.9.4",
+    "mapbox-gl": "^3.18.1",
     "marked": "^17.0.0",
     "pinia": "^3.0.4",
     "qrcode": "^1.5.3",
