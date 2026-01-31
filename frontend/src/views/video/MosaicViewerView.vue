@@ -117,7 +117,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useApi } from '@/composables/useApi';
 import { useNotification } from '@/composables/useNotification';
-import CameraPlayer from '@/components/video/CameraPlayer.vue';
+import CameraPlayer from '@/components/Video/CameraPlayer.vue';
 
 const router = useRouter();
 const route = useRoute();

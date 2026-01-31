@@ -98,7 +98,6 @@ import BackupsTab from '@/components/Configuration/BackupsTab.vue'
 import CamerasConfigTab from '@/components/Configuration/CamerasConfigTab.vue'
 import MapsConfigTab from '@/components/Configuration/MapsConfigTab.vue'
 import AuditHistoryModal from '@/components/Configuration/AuditHistoryModal.vue'
-import '@/assets/configuration-styles.css'
 
 // Icons as functional components
 const SystemIcon = (props) => h('svg', { ...props, fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, [
@@ -209,33 +208,6 @@ const openHistory = () => {
 .custom-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: rgb(156 163 175 / 0.5) transparent;
-}
-
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: rgb(156 163 175 / 0.5);
-  border-radius: 3px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background-color: rgb(156 163 175 / 0.7);
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-out;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
