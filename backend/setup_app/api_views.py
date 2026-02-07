@@ -17,10 +17,12 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db import connection
 from django.db.models import Q
-from django.http import FileResponse, HttpResponse, JsonResponse
+from django.http import FileResponse, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.core.management import call_command
 from django.views.decorators.http import require_http_methods, require_GET, require_POST
 from django.urls import reverse
+
+import requests
 
 from integrations.zabbix.zabbix_client import zabbix_request
 from integrations.zabbix.guards import reload_diagnostics_flag_cache
@@ -39,6 +41,22 @@ logger = logging.getLogger(__name__)
 def _staff_check(user):
     """Check if user is staff."""
     return user.is_active and user.is_staff
+
+
+def _user_can_access_video_gateway(user, gateway: MessagingGateway) -> bool:
+    """Validate RBAC for accessing a video gateway."""
+    if user.is_superuser:
+        return True
+    # Gateways without departamentos are considered public
+    if not gateway.departments.exists():
+        return True
+    profile = getattr(user, "profile", None)
+    if not profile:
+        return False
+    user_department_ids = list(profile.departments.values_list("id", flat=True))
+    if not user_department_ids:
+        return False
+    return gateway.departments.filter(id__in=user_department_ids).exists()
 
 
 BACKUP_DIR = Path(settings.BASE_DIR) / "database" / "backups"
@@ -391,40 +409,59 @@ def test_zabbix_connection(request):
             result = response.json()
 
             if "error" in result:
-                raise Exception(result["error"].get("data", "API error"))
+                error_payload = result.get("error", {})
+                error_details = (
+                    error_payload.get("data")
+                    or error_payload.get("message")
+                    or "API error"
+                )
+                ConfigurationAudit.log_change(
+                    user=request.user,
+                    action="test",
+                    section="Zabbix",
+                    request=request,
+                    success=False,
+                    error_message=error_details,
+                )
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "message": f"Serviço respondeu com erro: {error_details}",
+                        "status": "api_error",
+                    },
+                    status=400,
+                )
 
             version = result.get("result", "Unknown")
 
             # 2) Optional auth validation (token or login)
             if auth_type == "token" and api_key:
+                # Zabbix 7.x+ requer Authorization Bearer header para API Keys
+                # O formato "auth" no payload não é mais suportado com tokens
                 auth_payload = {
                     "jsonrpc": "2.0",
                     "method": "user.get",
                     "params": {"output": ["userid"]},
-                    "auth": api_key,
                     "id": 2,
                 }
-                auth_response = _post(auth_payload)
+                auth_response = _post(
+                    auth_payload,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {api_key}",
+                    },
+                )
                 auth_result = auth_response.json()
 
-                if "error" in auth_result and auth_result["error"].get("code") in (-32602, -32500):
-                    auth_response = _post(
-                        auth_payload,
-                        headers={
-                            "Content-Type": "application/json",
-                            "Authorization": f"Bearer {api_key}",
-                        },
-                    )
-                    auth_result = auth_response.json()
-
                 if "error" in auth_result:
+                    error_message = auth_result.get("error", {}).get("message", "Unknown error")
                     ConfigurationAudit.log_change(
                         user=request.user,
                         action="test",
                         section="Zabbix",
                         request=request,
                         success=False,
-                        error_message="Invalid API token",
+                        error_message=f"Invalid API token: {error_message}",
                     )
                     return JsonResponse(
                         {
@@ -432,6 +469,7 @@ def test_zabbix_connection(request):
                             "message": "Conexão OK, mas o token do Zabbix é inválido.",
                             "status": "auth_failed",
                             "version": version,
+                            "error_detail": error_message,
                         },
                         status=400,
                     )
@@ -1199,6 +1237,27 @@ def export_configuration(request):
             "GOOGLE_MAPS_API_KEY",
             "MAP_PROVIDER",
             "MAPBOX_TOKEN",
+            # Map configuration - Google Maps
+            "MAP_DEFAULT_ZOOM",
+            "MAP_DEFAULT_LAT",
+            "MAP_DEFAULT_LNG",
+            "MAP_TYPE",
+            "MAP_STYLES",
+            "ENABLE_STREET_VIEW",
+            "ENABLE_TRAFFIC",
+            # Map configuration - Mapbox
+            "MAPBOX_STYLE",
+            "MAPBOX_CUSTOM_STYLE",
+            "MAPBOX_ENABLE_3D",
+            # Map configuration - Esri
+            "ESRI_API_KEY",
+            "ESRI_BASEMAP",
+            # Map configuration - Common
+            "MAP_LANGUAGE",
+            "MAP_THEME",
+            "ENABLE_MAP_CLUSTERING",
+            "ENABLE_DRAWING_TOOLS",
+            "ENABLE_FULLSCREEN",
             "ALLOWED_HOSTS",
             "ENABLE_DIAGNOSTIC_ENDPOINTS",
             "DB_HOST",
@@ -1617,6 +1676,27 @@ def get_configuration(request):
             "GOOGLE_MAPS_API_KEY",
             "MAP_PROVIDER",
             "MAPBOX_TOKEN",
+            # Map configuration - Google Maps
+            "MAP_DEFAULT_ZOOM",
+            "MAP_DEFAULT_LAT",
+            "MAP_DEFAULT_LNG",
+            "MAP_TYPE",
+            "MAP_STYLES",
+            "ENABLE_STREET_VIEW",
+            "ENABLE_TRAFFIC",
+            # Map configuration - Mapbox
+            "MAPBOX_STYLE",
+            "MAPBOX_CUSTOM_STYLE",
+            "MAPBOX_ENABLE_3D",
+            # Map configuration - Esri
+            "ESRI_API_KEY",
+            "ESRI_BASEMAP",
+            # Map configuration - Common
+            "MAP_LANGUAGE",
+            "MAP_THEME",
+            "ENABLE_MAP_CLUSTERING",
+            "ENABLE_DRAWING_TOOLS",
+            "ENABLE_FULLSCREEN",
             "ALLOWED_HOSTS",
             "ENABLE_DIAGNOSTIC_ENDPOINTS",
             "DB_HOST",
@@ -1672,6 +1752,13 @@ def get_configuration(request):
             # Network thresholds
             "OPTICAL_RX_WARNING_THRESHOLD",
             "OPTICAL_RX_CRITICAL_THRESHOLD",
+            # Backup automation
+            "BACKUP_AUTO_ENABLED",
+            "BACKUP_FREQUENCY",
+            "BACKUP_RETENTION_DAYS",
+            "BACKUP_CLOUD_UPLOAD",
+            "BACKUP_CLOUD_PROVIDER",
+            "BACKUP_CLOUD_PATH",
         ]
         current_values = env_manager.read_values(editable_keys)
         runtime_config = runtime_settings.get_runtime_config()
@@ -1687,6 +1774,27 @@ def get_configuration(request):
             "GOOGLE_MAPS_API_KEY": runtime_config.google_maps_api_key,
             "MAP_PROVIDER": runtime_config.map_provider or "google",
             "MAPBOX_TOKEN": runtime_config.mapbox_token,
+            # Map configuration defaults - Google Maps
+            "MAP_DEFAULT_ZOOM": "12",
+            "MAP_DEFAULT_LAT": "-15.7801",
+            "MAP_DEFAULT_LNG": "-47.9292",
+            "MAP_TYPE": "terrain",
+            "MAP_STYLES": "",
+            "ENABLE_STREET_VIEW": True,
+            "ENABLE_TRAFFIC": False,
+            # Map configuration defaults - Mapbox
+            "MAPBOX_STYLE": "mapbox://styles/mapbox/streets-v12",
+            "MAPBOX_CUSTOM_STYLE": "",
+            "MAPBOX_ENABLE_3D": False,
+            # Map configuration defaults - Esri
+            "ESRI_API_KEY": "",
+            "ESRI_BASEMAP": "streets",
+            # Map configuration defaults - Common
+            "MAP_LANGUAGE": "pt-BR",
+            "MAP_THEME": "light",
+            "ENABLE_MAP_CLUSTERING": True,
+            "ENABLE_DRAWING_TOOLS": True,
+            "ENABLE_FULLSCREEN": True,
             "ALLOWED_HOSTS": allowed_hosts_fallback,
             "ENABLE_DIAGNOSTIC_ENDPOINTS": runtime_config.diagnostics_enabled,
             "DB_HOST": runtime_config.db_host,
@@ -1742,6 +1850,13 @@ def get_configuration(request):
             # Defaults for network thresholds if not configured
             "OPTICAL_RX_WARNING_THRESHOLD": "-24",
             "OPTICAL_RX_CRITICAL_THRESHOLD": "-27",
+            # Backup automation defaults
+            "BACKUP_AUTO_ENABLED": False,
+            "BACKUP_FREQUENCY": "weekly",
+            "BACKUP_RETENTION_DAYS": "30",
+            "BACKUP_CLOUD_UPLOAD": False,
+            "BACKUP_CLOUD_PROVIDER": "google_drive",
+            "BACKUP_CLOUD_PATH": "/backups/provemaps",
         }
 
         # Convert boolean strings to actual booleans for JSON, fallback to runtime/config defaults
@@ -1750,7 +1865,7 @@ def get_configuration(request):
             value = current_values.get(key, "")
             if value == "":
                 value = fallback_values.get(key, "")
-            if key in ["DEBUG", "ENABLE_DIAGNOSTIC_ENDPOINTS", "FTP_ENABLED", "GDRIVE_ENABLED", "SMTP_ENABLED", "SMS_ENABLED"]:
+            if key in ["DEBUG", "ENABLE_DIAGNOSTIC_ENDPOINTS", "FTP_ENABLED", "GDRIVE_ENABLED", "SMTP_ENABLED", "SMS_ENABLED", "BACKUP_AUTO_ENABLED", "BACKUP_CLOUD_UPLOAD", "ENABLE_STREET_VIEW", "ENABLE_TRAFFIC", "MAPBOX_ENABLE_3D", "ENABLE_MAP_CLUSTERING", "ENABLE_DRAWING_TOOLS", "ENABLE_FULLSCREEN"]:
                 if isinstance(value, bool):
                     config_data[key] = value
                 else:
@@ -1876,16 +1991,27 @@ def update_configuration(request):
     try:
         data = json.loads(request.body)
 
-        # Validate required fields
+        # Read existing values from .env to allow partial updates
+        all_possible_keys = [
+            "SECRET_KEY", "ZABBIX_API_URL", "ZABBIX_API_USER", "ZABBIX_API_PASSWORD",
+            "DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD",
+            "GOOGLE_MAPS_API_KEY", "MAP_PROVIDER", "MAPBOX_TOKEN", "ALLOWED_HOSTS",
+        ]
+        existing_values = env_manager.read_values(all_possible_keys)
+        
+        # Validate required fields - use existing values if not provided in request
         required_fields = [
             "SECRET_KEY", "ZABBIX_API_URL", "DB_HOST", 
             "DB_PORT", "DB_NAME", "DB_USER"
         ]
         
-        missing_fields = [
-            field for field in required_fields 
-            if not data.get(field, "").strip()
-        ]
+        missing_fields = []
+        for field in required_fields:
+            # Check if field is provided in request OR exists in .env
+            value_from_request = data.get(field, "").strip()
+            value_from_env = existing_values.get(field, "").strip()
+            if not value_from_request and not value_from_env:
+                missing_fields.append(field)
         
         if missing_fields:
             return JsonResponse({
@@ -1974,25 +2100,46 @@ def update_configuration(request):
                 return str(default)
 
         payload = {
-            "SECRET_KEY": data.get("SECRET_KEY", "").strip(),
+            "SECRET_KEY": data.get("SECRET_KEY") or existing_values.get("SECRET_KEY", ""),
             "DEBUG": "True" if _to_bool(data.get("DEBUG", False)) else "False",
-            "ZABBIX_API_URL": data.get("ZABBIX_API_URL", "").strip(),
-            "ZABBIX_API_USER": data.get("ZABBIX_API_USER", "").strip(),
-            "ZABBIX_API_PASSWORD": data.get("ZABBIX_API_PASSWORD", "").strip(),
+            "ZABBIX_API_URL": data.get("ZABBIX_API_URL") or existing_values.get("ZABBIX_API_URL", ""),
+            "ZABBIX_API_USER": data.get("ZABBIX_API_USER") or existing_values.get("ZABBIX_API_USER", ""),
+            "ZABBIX_API_PASSWORD": data.get("ZABBIX_API_PASSWORD") or existing_values.get("ZABBIX_API_PASSWORD", ""),
             "ZABBIX_API_KEY": data.get("ZABBIX_API_KEY", "").strip(),
             "GOOGLE_MAPS_API_KEY": data.get("GOOGLE_MAPS_API_KEY", "").strip(),
             "MAP_PROVIDER": data.get("MAP_PROVIDER", "google").strip() or "google",
             "MAPBOX_TOKEN": data.get("MAPBOX_TOKEN", "").strip(),
-            "ALLOWED_HOSTS": data.get("ALLOWED_HOSTS", "").strip(),
+            # Map configuration - Google Maps
+            "MAP_DEFAULT_ZOOM": data.get("MAP_DEFAULT_ZOOM", "12").strip() or "12",
+            "MAP_DEFAULT_LAT": data.get("MAP_DEFAULT_LAT", "-15.7801").strip() or "-15.7801",
+            "MAP_DEFAULT_LNG": data.get("MAP_DEFAULT_LNG", "-47.9292").strip() or "-47.9292",
+            "MAP_TYPE": data.get("MAP_TYPE", "terrain").strip() or "terrain",
+            "MAP_STYLES": data.get("MAP_STYLES", "").strip(),
+            "ENABLE_STREET_VIEW": "True" if _to_bool(data.get("ENABLE_STREET_VIEW", True)) else "False",
+            "ENABLE_TRAFFIC": "True" if _to_bool(data.get("ENABLE_TRAFFIC", False)) else "False",
+            # Map configuration - Mapbox
+            "MAPBOX_STYLE": data.get("MAPBOX_STYLE", "mapbox://styles/mapbox/streets-v12").strip() or "mapbox://styles/mapbox/streets-v12",
+            "MAPBOX_CUSTOM_STYLE": data.get("MAPBOX_CUSTOM_STYLE", "").strip(),
+            "MAPBOX_ENABLE_3D": "True" if _to_bool(data.get("MAPBOX_ENABLE_3D", False)) else "False",
+            # Map configuration - Esri
+            "ESRI_API_KEY": data.get("ESRI_API_KEY", "").strip(),
+            "ESRI_BASEMAP": data.get("ESRI_BASEMAP", "streets").strip() or "streets",
+            # Map configuration - Common
+            "MAP_LANGUAGE": data.get("MAP_LANGUAGE", "pt-BR").strip() or "pt-BR",
+            "MAP_THEME": data.get("MAP_THEME", "light").strip() or "light",
+            "ENABLE_MAP_CLUSTERING": "True" if _to_bool(data.get("ENABLE_MAP_CLUSTERING", True)) else "False",
+            "ENABLE_DRAWING_TOOLS": "True" if _to_bool(data.get("ENABLE_DRAWING_TOOLS", True)) else "False",
+            "ENABLE_FULLSCREEN": "True" if _to_bool(data.get("ENABLE_FULLSCREEN", True)) else "False",
+            "ALLOWED_HOSTS": data.get("ALLOWED_HOSTS") or existing_values.get("ALLOWED_HOSTS", ""),
             "ENABLE_DIAGNOSTIC_ENDPOINTS": (
                 "True" if _to_bool(data.get("ENABLE_DIAGNOSTIC_ENDPOINTS", False)) 
                 else "False"
             ),
-            "DB_HOST": data.get("DB_HOST", "").strip(),
-            "DB_PORT": data.get("DB_PORT", "").strip(),
-            "DB_NAME": data.get("DB_NAME", "").strip(),
-            "DB_USER": data.get("DB_USER", "").strip(),
-            "DB_PASSWORD": data.get("DB_PASSWORD", "").strip(),
+            "DB_HOST": data.get("DB_HOST") or existing_values.get("DB_HOST", ""),
+            "DB_PORT": data.get("DB_PORT") or existing_values.get("DB_PORT", ""),
+            "DB_NAME": data.get("DB_NAME") or existing_values.get("DB_NAME", ""),
+            "DB_USER": data.get("DB_USER") or existing_values.get("DB_USER", ""),
+            "DB_PASSWORD": data.get("DB_PASSWORD") or existing_values.get("DB_PASSWORD", ""),
             "REDIS_URL": data.get("REDIS_URL", "").strip(),
             "SERVICE_RESTART_COMMANDS": data.get(
                 "SERVICE_RESTART_COMMANDS", ""
@@ -2086,6 +2233,8 @@ def update_configuration(request):
             )
         
         env_manager.write_values(payload)
+        os.environ["OPTICAL_RX_WARNING_THRESHOLD"] = payload["OPTICAL_RX_WARNING_THRESHOLD"]
+        os.environ["OPTICAL_RX_CRITICAL_THRESHOLD"] = payload["OPTICAL_RX_CRITICAL_THRESHOLD"]
         settings.EMAIL_BACKEND = payload.get("EMAIL_BACKEND", settings.EMAIL_BACKEND)
         settings.EMAIL_HOST = payload.get("EMAIL_HOST", settings.EMAIL_HOST)
         settings.EMAIL_PORT = int(payload["EMAIL_PORT"]) if payload.get("EMAIL_PORT") else settings.EMAIL_PORT
@@ -2096,6 +2245,14 @@ def update_configuration(request):
         settings.DEFAULT_FROM_EMAIL = payload.get("DEFAULT_FROM_EMAIL", settings.DEFAULT_FROM_EMAIL)
         settings.SERVER_EMAIL = payload.get("SERVER_EMAIL", settings.SERVER_EMAIL)
         os.environ["SERVICE_RESTART_COMMANDS"] = payload["SERVICE_RESTART_COMMANDS"]
+        try:
+            settings.OPTICAL_RX_WARNING_THRESHOLD = float(payload["OPTICAL_RX_WARNING_THRESHOLD"])
+        except (TypeError, ValueError):
+            settings.OPTICAL_RX_WARNING_THRESHOLD = -24.0
+        try:
+            settings.OPTICAL_RX_CRITICAL_THRESHOLD = float(payload["OPTICAL_RX_CRITICAL_THRESHOLD"])
+        except (TypeError, ValueError):
+            settings.OPTICAL_RX_CRITICAL_THRESHOLD = -27.0
 
         # Step 2: Persist to database
         auth_type = "token" if payload["ZABBIX_API_KEY"] else "login"
@@ -2119,6 +2276,27 @@ def update_configuration(request):
                 "maps_api_key": payload["GOOGLE_MAPS_API_KEY"],
                 "map_provider": payload["MAP_PROVIDER"],
                 "mapbox_token": payload["MAPBOX_TOKEN"],
+                # Map configuration - Google Maps
+                "map_default_zoom": int(payload.get("MAP_DEFAULT_ZOOM", 12)),
+                "map_default_lat": float(payload.get("MAP_DEFAULT_LAT", -15.7801)),
+                "map_default_lng": float(payload.get("MAP_DEFAULT_LNG", -47.9292)),
+                "map_type": payload.get("MAP_TYPE", "terrain"),
+                "map_styles": payload.get("MAP_STYLES", ""),
+                "enable_street_view": _to_bool(payload.get("ENABLE_STREET_VIEW", True)),
+                "enable_traffic": _to_bool(payload.get("ENABLE_TRAFFIC", False)),
+                # Map configuration - Mapbox
+                "mapbox_style": payload.get("MAPBOX_STYLE", "mapbox://styles/mapbox/streets-v12"),
+                "mapbox_custom_style": payload.get("MAPBOX_CUSTOM_STYLE", ""),
+                "mapbox_enable_3d": _to_bool(payload.get("MAPBOX_ENABLE_3D", False)),
+                # Map configuration - Esri
+                "esri_api_key": payload.get("ESRI_API_KEY", ""),
+                "esri_basemap": payload.get("ESRI_BASEMAP", "streets"),
+                # Map configuration - Common
+                "map_language": payload.get("MAP_LANGUAGE", "pt-BR"),
+                "map_theme": payload.get("MAP_THEME", "light"),
+                "enable_map_clustering": _to_bool(payload.get("ENABLE_MAP_CLUSTERING", True)),
+                "enable_drawing_tools": _to_bool(payload.get("ENABLE_DRAWING_TOOLS", True)),
+                "enable_fullscreen": _to_bool(payload.get("ENABLE_FULLSCREEN", True)),
                 "db_host": payload["DB_HOST"],
                 "db_port": payload["DB_PORT"],
                 "db_name": payload["DB_NAME"],
@@ -2180,8 +2358,9 @@ def update_configuration(request):
         reload_diagnostics_flag_cache()
 
         # Step 4: Trigger service restart if configured
+        restart_triggered = False
         if payload["SERVICE_RESTART_COMMANDS"]:
-            trigger_restart()
+            restart_triggered = trigger_restart()
 
         backup_warning = ""
         gdrive_upload = None
@@ -2251,6 +2430,7 @@ def update_configuration(request):
             "backup_filename": backup_filename,
             "gdrive_upload": gdrive_upload or {},
             "ftp_upload": ftp_upload or {},
+            "restart_triggered": restart_triggered,
         })
 
     except json.JSONDecodeError:
@@ -2389,6 +2569,7 @@ def _serialize_gateway(gateway: MessagingGateway) -> Dict[str, Any]:
         "provider": gateway.provider or "",
         "priority": gateway.priority,
         "enabled": gateway.enabled,
+        "is_active": gateway.enabled,  # Alias for frontend compatibility
         "site_name": gateway.site_name or "",
         "config": gateway.config or {},
         "created_at": gateway.created_at.isoformat(),
@@ -3107,6 +3288,98 @@ def messaging_gateway_detail(request, gateway_id: int):
     return JsonResponse({"success": True, "gateway": _serialize_gateway(gateway)})
 
 
+def _stream_upstream_response(response: requests.Response, chunk_size: int = 64 * 1024):
+    try:
+        for chunk in response.iter_content(chunk_size=chunk_size):
+            if chunk:
+                yield chunk
+    finally:
+        response.close()
+
+
+@require_GET
+@login_required
+@user_passes_test(_staff_check)
+def proxy_video_gateway_hls(request, gateway_id: int, resource: str = "index.m3u8"):
+    try:
+        gateway = MessagingGateway.objects.get(id=gateway_id, gateway_type="video")
+    except MessagingGateway.DoesNotExist:
+        return JsonResponse(
+            {"success": False, "message": "Gateway de vídeo não encontrado."},
+            status=404,
+        )
+
+    if not _user_can_access_video_gateway(request.user, gateway):
+        return JsonResponse(
+            {"success": False, "message": "Sem permissão para acessar esta câmera."},
+            status=403,
+        )
+
+    sanitized = (resource or "index.m3u8").strip()
+    if not sanitized or sanitized.endswith("/"):
+        sanitized = f"{sanitized.rstrip('/')}/index.m3u8"
+    sanitized = sanitized.lstrip("/")
+    if ".." in sanitized:
+        return JsonResponse(
+            {"success": False, "message": "Recurso inválido."},
+            status=400,
+        )
+
+    stream_key = video_gateway_service.get_stream_key(gateway)
+    target_url = video_gateway_service.build_internal_hls_url(stream_key, sanitized)
+
+    upstream_params = dict(request.GET.items())
+    upstream_params.setdefault("mode", "legacy")
+
+    try:
+        upstream = requests.get(
+            target_url,
+            params=upstream_params,
+            timeout=15,
+            stream=True,
+        )
+    except requests.RequestException as exc:
+        logger.warning(
+            "Falha ao proxy HLS para gateway %s (%s): %s",
+            gateway.id,
+            sanitized,
+            exc,
+        )
+        return HttpResponse(status=502)
+
+    if upstream.status_code >= 400:
+        content_type = upstream.headers.get("Content-Type", "text/plain")
+        body = upstream.content[:4096]
+        upstream.close()
+        return HttpResponse(body, status=upstream.status_code, content_type=content_type)
+
+    content_type = upstream.headers.get(
+        "Content-Type",
+        "application/vnd.apple.mpegurl" if sanitized.endswith(".m3u8") else "application/octet-stream",
+    )
+
+    response = StreamingHttpResponse(
+        _stream_upstream_response(upstream),
+        status=upstream.status_code,
+        content_type=content_type,
+    )
+
+    passthrough_headers = [
+        "Cache-Control",
+        "Last-Modified",
+        "ETag",
+        "Content-Length",
+        "Accept-Ranges",
+    ]
+    for header in passthrough_headers:
+        value = upstream.headers.get(header)
+        if value:
+            response[header] = value
+
+    response["Cache-Control"] = upstream.headers.get("Cache-Control", "no-cache, private")
+    return response
+
+
 @require_http_methods(["POST"])
 @login_required
 @user_passes_test(_staff_check)
@@ -3175,11 +3448,15 @@ def start_video_gateway_preview(request, gateway_id: int):
     gateway.refresh_from_db(fields=["config", "updated_at"])
     preview_url = (gateway.config or {}).get("preview_url", "")
     playback_url = video_gateway_service.build_playback_url(gateway)
+    proxy_url = request.build_absolute_uri(
+        reverse("setup_app:video_hls_proxy", args=[gateway.id, "index.m3u8"])
+    )
     return JsonResponse(
         {
             "success": True,
             "preview_url": preview_url,
             "playback_url": playback_url,
+            "playback_proxy_url": proxy_url,
         }
     )
 
@@ -3373,12 +3650,23 @@ def backups_manager(request):
                 stat = file_path.stat()
             except FileNotFoundError:
                 continue
+            
+            # Check if backup was uploaded to cloud (heuristic: check if mentioned in recent env values)
+            cloud_uploaded = False
+            upload_marker = BACKUP_DIR / f".{file_path.name}.uploaded"
+            if upload_marker.exists():
+                cloud_uploaded = True
+            
             backups.append(
                 {
+                    "id": file_path.name,
                     "name": file_path.name,
+                    "filename": file_path.name,
                     "size": stat.st_size,
                     "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
                     "type": _detect_backup_type(file_path.name),
+                    "download_url": f"/setup_app/api/backups/download/{file_path.name}/",
+                    "cloud_uploaded": cloud_uploaded,
                 }
             )
         backups.sort(key=lambda item: item["created_at"], reverse=True)
@@ -3618,6 +3906,11 @@ def upload_backup_to_cloud(request):
         gdrive_upload = _upload_backup_if_enabled(filename)
         ftp_upload = _upload_backup_via_ftp(filename)
 
+        # Mark as uploaded if at least one provider succeeded
+        if (gdrive_upload and gdrive_upload.get("success")) or (ftp_upload and ftp_upload.get("success")):
+            upload_marker = BACKUP_DIR / f".{filename}.uploaded"
+            upload_marker.touch()
+
         ConfigurationAudit.log_change(
             user=request.user,
             action="upload",
@@ -3651,18 +3944,38 @@ def upload_backup_to_cloud(request):
 @login_required
 @user_passes_test(_staff_check)
 def update_backup_settings(request):
-    """Update retention settings for backups."""
+    """Update retention and automation settings for backups."""
     try:
         data = json.loads(request.body or "{}")
+        logger.info(f"[update_backup_settings] Received data: {data}")
+        
         retention_days = data.get("retention_days")
         retention_count = data.get("retention_count")
+        auto_backup = data.get("auto_backup")
+        frequency = data.get("frequency")
+        cloud_upload = data.get("cloud_upload")
+        cloud_provider = data.get("cloud_provider")
+        cloud_path = data.get("cloud_path")
 
         payload = {
             "BACKUP_RETENTION_DAYS": str(retention_days or ""),
             "BACKUP_RETENTION_COUNT": str(retention_count or ""),
         }
+        
+        if auto_backup is not None:
+            payload["BACKUP_AUTO_ENABLED"] = "true" if auto_backup else "false"
+        if frequency:
+            payload["BACKUP_FREQUENCY"] = str(frequency)
+        if cloud_upload is not None:
+            payload["BACKUP_CLOUD_UPLOAD"] = "true" if cloud_upload else "false"
+        if cloud_provider:
+            payload["BACKUP_CLOUD_PROVIDER"] = str(cloud_provider)
+        if cloud_path:
+            payload["BACKUP_CLOUD_PATH"] = str(cloud_path)
 
+        logger.info(f"[update_backup_settings] Writing to .env: {payload}")
         env_manager.write_values(payload)
+        logger.info("[update_backup_settings] Successfully wrote to .env")
 
         _apply_backup_retention()
 
@@ -3678,11 +3991,8 @@ def update_backup_settings(request):
         return JsonResponse(
             {
                 "success": True,
-                "message": "Retenção atualizada.",
-                "settings": {
-                    "retention_days": payload.get("BACKUP_RETENTION_DAYS", ""),
-                    "retention_count": payload.get("BACKUP_RETENTION_COUNT", ""),
-                },
+                "message": "Configurações de backup atualizadas.",
+                "settings": payload,
             }
         )
     except json.JSONDecodeError:
@@ -3766,7 +4076,7 @@ def video_cameras_list(request):
                 return None
             restream_key = (cfg.get("restream_key") or f"gateway_{gw.id}")
             base = str(webrtc_base).rstrip('/')
-            return f"{base}/whep/{restream_key}"
+            return f"{base}/{restream_key}/whep"
 
         results = []
         for gw in gateways:

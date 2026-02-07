@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teste Mapbox Proxy - Autenticado</title>
+    <style>
+        body { background: #1a1a1a; color: #fff; font-family: monospace; padding: 20px; }
+        .success { color: #10b981; }
+        .error { color: #ef4444; }
+        pre { background: #2a2a2a; padding: 15px; border-radius: 5px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h2>🔐 Teste Mapbox Proxy (Usuário Autenticado)</h2>
+    <div id="output"></div>
+
+    <script>
+        const output = document.getElementById('output');
+        
+        function log(msg, type = 'info') {
+            const div = document.createElement('div');
+            div.className = type;
+            div.innerHTML = msg;
+            output.appendChild(div);
+            console.log(msg);
+        }
+        
+        async function testarProxy() {
+            log('🔍 Testando proxy Mapbox via backend...', 'info');
+            
+            try {
+                const response = await fetch('/maps/api/mapbox-proxy/styles/mapbox/streets-v12', {
+                    credentials: 'include'  // Envia cookies de sessão
+                });
+                
+                log(`<br>📡 Status: ${response.status} ${response.statusText}`, response.ok ? 'success' : 'error');
+                log(`📋 Content-Type: ${response.headers.get('Content-Type')}`, 'info');
+                
+                const text = await response.text();
+                
+                // Verificar se é HTML ou JSON
+                if (text.trimStart().startsWith('<!DOCTYPE') || text.trimStart().startsWith('<html')) {
+                    log(`<br>❌ ERRO: Recebeu HTML em vez de JSON (provavelmente página de login)`, 'error');
+                    log(`<br>Primeiros 500 chars:<br><pre>${text.substring(0, 500)}</pre>`, 'error');
+                } else if (text.trimStart().startsWith('{')) {
+                    log(`<br>✅ SUCESSO: Recebeu JSON válido!`, 'success');
+                    
+                    const data = JSON.parse(text);
+                    log(`<br>📊 Dados do estilo:`, 'success');
+                    log(`   • Name: ${data.name || 'N/A'}`, 'info');
+                    log(`   • Version: ${data.version || 'N/A'}`, 'info');
+                    log(`   • Layers: ${data.layers ? data.layers.length : 0}`, 'info');
+                    log(`   • Sources: ${data.sources ? Object.keys(data.sources).length : 0}`, 'info');
+                    
+                    log(`<br><pre>${JSON.stringify(data, null, 2).substring(0, 1000)}...</pre>`, 'info');
+                } else {
+                    log(`<br>⚠️ Resposta inesperada:<br><pre>${text.substring(0, 500)}</pre>`, 'error');
+                }
+                
+            } catch (error) {
+                log(`<br>❌ ERRO ao fazer fetch: ${error.message}`, 'error');
+                log(`<pre>${error.stack}</pre>`, 'error');
+            }
+        }
+        
+        testarProxy();
+    </script>
+</body>
+</html>

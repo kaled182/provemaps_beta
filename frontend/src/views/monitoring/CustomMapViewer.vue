@@ -1,28 +1,13 @@
 <template>
   <div class="custom-map-viewer">
     <!-- Toolbar -->
-    <div class="map-toolbar">
-      <div class="toolbar-left">
-        <button @click="$router.back()" class="btn-back">
-          <i class="fas fa-arrow-left"></i>
-          Voltar
-        </button>
-        <div class="map-title">
-          <h2>{{ mapData.name }}</h2>
-          <span class="map-category">{{ mapData.category }}</span>
-        </div>
-      </div>
-      
-      <div class="toolbar-right">
-        <button @click="showInventoryPanel = !showInventoryPanel" class="btn-toolbar">
-          <i class="fas fa-layer-group"></i>
-          Gerenciar Itens
-        </button>
-        <button @click="toggleFullscreen" class="btn-toolbar">
-          <i :class="isFullscreen ? 'fas fa-compress' : 'fas fa-expand'"></i>
-        </button>
-      </div>
-    </div>
+    <MapToolbar 
+      :map-name="mapData.name"
+      :map-category="mapData.category"
+      :is-fullscreen="isFullscreen"
+      @toggle-inventory="showInventoryPanel = !showInventoryPanel"
+      @toggle-fullscreen="toggleFullscreen"
+    />
 
     <!-- Main Content -->
     <div class="map-content">
@@ -30,234 +15,36 @@
       <div ref="mapContainer" class="map-container"></div>
 
       <!-- Painel Lateral: Gerenciar Itens -->
-      <transition name="slide">
-        <div v-if="showInventoryPanel" class="inventory-panel">
-          <div class="panel-header">
-            <h3>Itens do Mapa</h3>
-            <button @click="showInventoryPanel = false" class="btn-close-panel">×</button>
-          </div>
-
-          <div class="panel-tabs">
-            <button 
-              v-for="category in inventoryCategories" 
-              :key="category.key"
-              @click="activeCategory = category.key"
-              :class="['tab-btn', { active: activeCategory === category.key }]"
-            >
-              <i :class="category.icon"></i>
-              {{ category.label }}
-              <span class="badge">{{ getAvailableCount(category.key) }}</span>
-            </button>
-          </div>
-
-          <div class="panel-content">
-            <div class="search-box">
-              <i class="fas fa-search"></i>
-              <input 
-                v-model="searchQuery" 
-                type="text" 
-                placeholder="Buscar itens..."
-              >
-            </div>
-
-            <!-- Lista de Itens -->
-            <div class="items-list">
-              <!-- Hierarquia de Sites (apenas para devices) -->
-              <template v-if="activeCategory === 'devices'">
-                <div v-for="siteGroup in devicesBySite" :key="'site-' + siteGroup.site_id" class="site-group">
-                  <!-- Linha do Site -->
-                  <div class="site-row">
-                    <button 
-                      @click="toggleSiteExpansion(siteGroup.site_id)" 
-                      class="btn-expand"
-                      :title="isSiteExpanded(siteGroup.site_id) ? 'Colapsar' : 'Expandir'"
-                    >
-                      <i :class="isSiteExpanded(siteGroup.site_id) ? 'fas fa-chevron-down' : 'fas fa-chevron-right'"></i>
-                    </button>
-                    
-                    <label class="site-checkbox">
-                      <input 
-                        type="checkbox" 
-                        :checked="isSiteSelected(siteGroup.site_id, siteGroup.devices)"
-                        :indeterminate.prop="isSitePartiallySelected(siteGroup.site_id, siteGroup.devices)"
-                        @change="toggleSite(siteGroup.site_id, siteGroup.devices)"
-                      >
-                      <div class="site-details">
-                        <span class="site-name">
-                          <i class="fas fa-map-marker-alt"></i>
-                          {{ siteGroup.site_name }}
-                        </span>
-                        <span class="site-count">{{ siteGroup.devices.length }} equipamento(s)</span>
-                      </div>
-                    </label>
-                    
-                    <div class="site-status-summary">
-                      <template v-for="(count, status) in getSiteStatusSummary(siteGroup.devices)" :key="status">
-                        <span v-if="count > 0" :class="['status-dot', status]" :title="`${count} ${getStatusLabel(status)}`">
-                          {{ count }}
-                        </span>
-                      </template>
-                    </div>
-                  </div>
-                  
-                  <!-- Devices do Site (colapsável) -->
-                  <transition name="expand">
-                    <div v-if="isSiteExpanded(siteGroup.site_id)" class="devices-list">
-                      <div 
-                        v-for="device in siteGroup.devices" 
-                        :key="device.id"
-                        class="device-row"
-                      >
-                        <label class="device-checkbox">
-                          <input 
-                            type="checkbox" 
-                            :checked="isItemSelected(device.id)"
-                            @change="toggleItem(device.id)"
-                          >
-                          <div class="device-details">
-                            <span class="device-name">{{ device.name }}</span>
-                            <span v-if="device.ip && device.ip !== 'N/A'" class="device-ip">
-                              <i class="fas fa-network-wired"></i> {{ device.ip }}
-                            </span>
-                          </div>
-                        </label>
-                        <div class="device-info">
-                          <span v-if="device.status" :class="['status-badge', device.status]">
-                            {{ getStatusLabel(device.status) }}
-                          </span>
-                          <span v-else class="status-badge offline">
-                            Offline
-                          </span>
-                          <button @click="focusOnItem(device)" class="btn-focus">
-                            <i class="fas fa-crosshairs"></i>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </transition>
-                </div>
-              </template>
-              
-              <!-- Hierarquia de Sites para Câmeras -->
-              <template v-else-if="activeCategory === 'cameras'">
-                <div v-for="siteGroup in camerasBySite" :key="'camera-site-' + siteGroup.site_name" class="site-group">
-                  <!-- Linha do Site -->
-                  <div class="site-row">
-                    <button 
-                      @click="toggleCameraSiteExpansion(siteGroup.site_name)" 
-                      class="btn-expand"
-                      :title="isCameraSiteExpanded(siteGroup.site_name) ? 'Colapsar' : 'Expandir'"
-                    >
-                      <i :class="isCameraSiteExpanded(siteGroup.site_name) ? 'fas fa-chevron-down' : 'fas fa-chevron-right'"></i>
-                    </button>
-                    
-                    <label class="site-checkbox">
-                      <input 
-                        type="checkbox" 
-                        :checked="isCameraSiteSelected(siteGroup.site_name, siteGroup.cameras)"
-                        :indeterminate.prop="isCameraSitePartiallySelected(siteGroup.site_name, siteGroup.cameras)"
-                        @change="toggleCameraSite(siteGroup.site_name, siteGroup.cameras)"
-                      >
-                      <div class="site-details">
-                        <span class="site-name">
-                          <i class="fas fa-map-marker-alt"></i>
-                          {{ siteGroup.site_name }}
-                        </span>
-                        <span class="site-count">{{ siteGroup.cameras.length }} câmera(s)</span>
-                      </div>
-                    </label>
-                    
-                    <div class="site-status-summary">
-                      <template v-for="(count, status) in getCameraSiteStatusSummary(siteGroup.cameras)" :key="status">
-                        <span v-if="count > 0" :class="['status-dot', status]" :title="`${count} ${status === 'online' ? 'ONLINE' : 'OFFLINE'}`">
-                          {{ count }}
-                        </span>
-                      </template>
-                    </div>
-                  </div>
-                  
-                  <!-- Câmeras do Site (colapsável) -->
-                  <transition name="expand">
-                    <div v-if="isCameraSiteExpanded(siteGroup.site_name)" class="devices-list">
-                      <div 
-                        v-for="camera in siteGroup.cameras" 
-                        :key="camera.id"
-                        class="device-row"
-                      >
-                        <label class="device-checkbox">
-                          <input 
-                            type="checkbox" 
-                            :checked="isItemSelected(camera.id)"
-                            @change="toggleItem(camera.id)"
-                          >
-                          <div class="device-details">
-                            <span class="device-name">{{ camera.name }}</span>
-                          </div>
-                        </label>
-                        <div class="device-info">
-                          <span v-if="camera.status" :class="['status-badge', camera.status]">
-                            {{ getStatusLabel(camera.status) }}
-                          </span>
-                          <span v-else class="status-badge offline">
-                            Offline
-                          </span>
-                          <button @click="focusOnItem(camera)" class="btn-focus">
-                            <i class="fas fa-crosshairs"></i>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </transition>
-                </div>
-              </template>
-              
-              <!-- Lista simples para outras categorias (cabos, racks) -->
-              <template v-else>
-                <div 
-                  v-for="item in filteredItems" 
-                  :key="item.id"
-                  class="item-row"
-                >
-                  <label class="item-checkbox">
-                    <input 
-                      type="checkbox" 
-                      :checked="isItemSelected(item.id)"
-                      @change="toggleItem(item.id)"
-                    >
-                    <span class="item-name">{{ item.name }}</span>
-                  </label>
-                  <div class="item-info">
-                    <span v-if="item.status" :class="['status-badge', item.status]">
-                      {{ getStatusLabel(item.status) }}
-                    </span>
-                    <button @click="focusOnItem(item)" class="btn-focus">
-                      <i class="fas fa-crosshairs"></i>
-                    </button>
-                  </div>
-                </div>
-              </template>
-            </div>
-
-            <div class="panel-footer">
-              <button @click="selectAll" class="btn-panel btn-secondary">
-                Selecionar Todos
-              </button>
-              <button @click="saveMapItems" class="btn-panel btn-primary">
-                Salvar
-              </button>
-            </div>
-          </div>
-        </div>
-      </transition>
+      <MapInventoryPanel
+        :is-visible="showInventoryPanel"
+        :active-category="activeCategory"
+        :search-query="searchQuery"
+        :categories="inventoryCategories"
+        :available-items="availableItems"
+        :selected-items="selectedItems"
+        :expanded-sites="expandedSites"
+        :expanded-camera-sites="expandedCameraSites"
+        :devices-by-site="devicesBySite"
+        :cameras-by-site="camerasBySite"
+        :filtered-items="filteredItems"
+        @close="showInventoryPanel = false"
+        @update:activeCategory="activeCategory = $event"
+        @update:searchQuery="searchQuery = $event"
+        @toggle-site-expansion="toggleSiteExpansion"
+        @toggle-camera-site-expansion="toggleCameraSiteExpansion"
+        @toggle-site="toggleSite"
+        @toggle-camera-site="toggleCameraSite"
+        @toggle-item="toggleItem"
+        @focus-item="focusOnItem"
+        @highlight-cable="highlightCable"
+        @unhighlight-cable="unhighlightCable"
+        @select-all="selectAll"
+        @save="saveMapItems"
+      />
     </div>
 
     <!-- Legend -->
-    <div class="map-legend">
-      <div class="legend-item" v-for="status in statusLegend" :key="status.key">
-        <span :class="['legend-marker', status.key]"></span>
-        <span class="legend-label">{{ status.label }}</span>
-      </div>
-    </div>
+    <MapLegend :status-legend="statusLegend" />
 
     <!-- Site Details Modal -->
     <SiteDetailsModal 
@@ -265,35 +52,219 @@
       :site="selectedSite"
       @close="showSiteModal = false"
     />
+
+    <!-- Fiber Cable Quick Modal -->
+    <FiberCableQuickModal
+      :show="showCableModal"
+      :cable="selectedCable"
+      @close="showCableModal = false"
+      @openFullDetails="openCableFullDetails"
+    />
+
+    <!-- Fiber Cable Detail Modal -->
+    <FiberCableDetailModal
+      :show="showCableDetailModal"
+      :cable="selectedCable"
+      :can-edit="true"
+      @close="showCableDetailModal = false"
+      @save="handleCableSave"
+    />
+
+    <!-- Cable Optical Tooltip -->
+    <CableOpticalTooltip
+      :visible="showCableTooltip"
+      :cable-data="hoveredCable"
+      :position="tooltipPosition"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useApi } from '@/composables/useApi'
+import { useSystemConfig } from '@/composables/useSystemConfig'
 import { loadGoogleMaps } from '@/utils/googleMapsLoader'
+import { getMapStyles } from '@/utils/mapStyles'
 import { useUiStore } from '@/stores/ui'
+// ✅ LAZY LOADING: Bibliotecas de mapas carregadas sob demanda
+import { loadMapbox } from '@/composables/map/providers/useMapbox'
+import { loadLeaflet } from '@/composables/map/providers/useLeaflet'
+import { loadMarkerClusterer } from '@/composables/map/providers/useMarkerClusterer'
+// ✅ FASE 3: Composables de lógica de negócio
+import { useMapMarkers } from '@/composables/map/core/useMapMarkers'
+import { useMapPolylines } from '@/composables/map/core/useMapPolylines'
+import { useMapSelection } from '@/composables/map/core/useMapSelection'
+import { useMapData } from '@/composables/map/core/useMapData'
+import { runMapboxStyleDiagnostics, MAPBOX_STYLE_DIAGNOSTICS_DEFAULTS } from '@/utils/mapboxDiagnostics'
 import SiteDetailsModal from '@/components/SiteDetailsModal.vue'
+import FiberCableQuickModal from '@/components/FiberCableQuickModal.vue'
+import FiberCableDetailModal from '@/components/FiberCableDetailModal.vue'
+import CableOpticalTooltip from '@/components/CableOpticalTooltip.vue'
+import MapLegend from './components/MapLegend.vue'
+import MapToolbar from './components/MapToolbar.vue'
+import MapInventoryPanel from './components/MapInventoryPanel.vue'
+
+// Variáveis para bibliotecas lazy loaded
+let mapboxgl = null
+let L = null
+let MarkerClusterer = null
 
 const route = useRoute()
 const { get, post } = useApi()
+const { configForm, loadSystemConfig } = useSystemConfig()
 const uiStore = useUiStore()
 
 const mapContainer = ref(null)
 const googleMap = ref(null)
-const markers = ref([])
-const cablePolylines = ref([])
-const allOverlays = ref([]) // Tracking de TODAS as overlays
+const currentMapProvider = ref('google') // Armazena o provedor ativo
+const markerClusterer = ref(null) // Clusterer para agrupar markers próximos
+
+// ✅ FASE 3: Usar composables para lógica de negócio
+const { activeMarkers, createMarker, updateMapMarkers, getMarkerIcon, clearAllMarkers, addMarkerListener, clearMarkerListeners } = useMapMarkers()
+const { activePolylines, createPolyline, updateCablePolylines, highlightCable: highlightCablePolyline, unhighlightCable: unhighlightCablePolyline, clearAllPolylines, addPolylineListener, clearPolylineListeners } = useMapPolylines()
+const { 
+  selectedItems, 
+  expandedSites, 
+  expandedCameraSites, 
+  selectedSites, 
+  selectedCameraSites,
+  toggleSiteExpansion,
+  isSiteExpanded,
+  toggleSite: toggleSiteSelection,
+  isSiteSelected,
+  isSitePartiallySelected,
+  getSiteStatusSummary,
+  toggleCameraSiteExpansion,
+  isCameraSiteExpanded,
+  toggleCameraSite: toggleCameraSiteSelection,
+  isCameraSiteSelected,
+  isCameraSitePartiallySelected,
+  getCameraSiteStatusSummary,
+  toggleItem: toggleItemSelection,
+  selectAll: selectAllItems,
+  clearAllSelections,
+  isItemSelected,
+  getSelectionCount
+} = useMapSelection()
+const { availableItems, sitesMap, loadInventoryItems: loadInventory } = useMapData()
 const showInventoryPanel = ref(false)
 const activeCategory = ref('devices')
 const searchQuery = ref('')
 const isFullscreen = ref(false)
 const isInitialLoad = ref(true) // Flag para controlar animação inicial
 
+let detachZoomListener = null
+
+const DEFAULT_ZOOM_FALLBACK = 12
+const MAPBOX_MARKER_SIZE_RULES = {
+  minZoom: 5,
+  maxZoom: 16,
+  minSize: 10,
+  maxSize: 18,
+  minBorder: 2,
+  maxBorder: 3
+}
+
+const clampNumber = (value, min, max) => Math.min(max, Math.max(min, value))
+
+const getActiveMapZoom = () => {
+  if (!googleMap.value || typeof googleMap.value.getZoom !== 'function') {
+    return DEFAULT_ZOOM_FALLBACK
+  }
+  const zoom = googleMap.value.getZoom()
+  return Number.isFinite(zoom) ? zoom : DEFAULT_ZOOM_FALLBACK
+}
+
+const computeMapboxMarkerDimensions = (zoom) => {
+  const clampedZoom = clampNumber(
+    zoom,
+    MAPBOX_MARKER_SIZE_RULES.minZoom,
+    MAPBOX_MARKER_SIZE_RULES.maxZoom
+  )
+  const zoomSpan = Math.max(
+    1,
+    MAPBOX_MARKER_SIZE_RULES.maxZoom - MAPBOX_MARKER_SIZE_RULES.minZoom
+  )
+  const ratio = (clampedZoom - MAPBOX_MARKER_SIZE_RULES.minZoom) / zoomSpan
+  const size =
+    MAPBOX_MARKER_SIZE_RULES.minSize +
+    (MAPBOX_MARKER_SIZE_RULES.maxSize - MAPBOX_MARKER_SIZE_RULES.minSize) * ratio
+  const border =
+    MAPBOX_MARKER_SIZE_RULES.minBorder +
+    (MAPBOX_MARKER_SIZE_RULES.maxBorder - MAPBOX_MARKER_SIZE_RULES.minBorder) * ratio
+
+  return {
+    size: Math.round(size),
+    border: Math.max(1, Math.round(border))
+  }
+}
+
+const applyMapboxMarkerDimensions = (marker, zoom) => {
+  const element = typeof marker?.getElement === 'function' ? marker.getElement() : null
+  if (!element) {
+    return
+  }
+  const { size, border } = computeMapboxMarkerDimensions(zoom)
+  element.style.width = `${size}px`
+  element.style.height = `${size}px`
+  element.style.borderWidth = `${border}px`
+}
+
+const updateMapboxMarkerSizes = () => {
+  if (currentMapProvider.value !== 'mapbox' || activeMarkers.size === 0) {
+    return
+  }
+  const zoom = getActiveMapZoom()
+  activeMarkers.forEach((marker) => {
+    if (typeof marker?._applySize === 'function') {
+      marker._applySize(zoom)
+    } else {
+      applyMapboxMarkerDimensions(marker, zoom)
+    }
+  })
+}
+
+const resetZoomListener = () => {
+  if (typeof detachZoomListener === 'function') {
+    try {
+      detachZoomListener()
+    } catch (error) {
+      console.warn('[CustomMapViewer] Falha ao remover listener de zoom:', error)
+    }
+  }
+  detachZoomListener = null
+}
+
+const registerMapboxZoomListener = () => {
+  resetZoomListener()
+  if (!googleMap.value || typeof googleMap.value.on !== 'function') {
+    return
+  }
+  const mapInstance = googleMap.value
+  const handler = () => updateMapboxMarkerSizes()
+  mapInstance.on('zoom', handler)
+  detachZoomListener = () => {
+    if (mapInstance && typeof mapInstance.off === 'function') {
+      mapInstance.off('zoom', handler)
+    }
+  }
+}
+
 // Modal de detalhes do site
 const showSiteModal = ref(false)
 const selectedSite = ref(null)
+
+// Modal de detalhes do cabo
+const showCableModal = ref(false)
+const showCableDetailModal = ref(false)
+const selectedCable = ref(null)
+
+// Tooltip de níveis ópticos
+const showCableTooltip = ref(false)
+const hoveredCable = ref(null)
+const tooltipPosition = ref({ x: 0, y: 0 })
+let tooltipTimeout = null
 
 const mapData = ref({
   id: null,
@@ -301,18 +272,6 @@ const mapData = ref({
   category: 'backbone',
   description: ''
 })
-
-const selectedItems = ref({
-  devices: [],
-  cables: [],
-  cameras: [],
-  racks: []
-})
-
-const expandedSites = ref(new Set())
-const selectedSites = ref(new Set())
-const expandedCameraSites = ref(new Set())
-const selectedCameraSites = ref(new Set())
 
 const inventoryCategories = [
   { key: 'devices', label: 'Equipamentos', icon: 'fas fa-server' },
@@ -327,13 +286,6 @@ const statusLegend = [
   { key: 'critical', label: 'Crítico' },
   { key: 'offline', label: 'Offline' }
 ]
-
-const availableItems = ref({
-  devices: [],
-  cables: [],
-  cameras: [],
-  racks: []
-})
 
 const filteredItems = computed(() => {
   const items = availableItems.value[activeCategory.value] || []
@@ -399,10 +351,6 @@ const getAvailableCount = (category) => {
   return availableItems.value[category]?.length || 0
 }
 
-const isItemSelected = (itemId) => {
-  return selectedItems.value[activeCategory.value]?.includes(itemId)
-}
-
 const getStatusLabel = (status) => {
   // Garantir que status seja uma string
   const statusStr = String(status || 'offline').toLowerCase()
@@ -427,207 +375,117 @@ const getStatusLabel = (status) => {
   return labels[statusStr] || 'DESCONHECIDO'
 }
 
-const toggleSiteExpansion = (siteId) => {
-  if (expandedSites.value.has(siteId)) {
-    expandedSites.value.delete(siteId)
-  } else {
-    expandedSites.value.add(siteId)
-  }
-}
-
-const isSiteExpanded = (siteId) => {
-  return expandedSites.value.has(siteId)
-}
-
 const toggleSite = (siteId, devices) => {
-  const deviceIds = devices.map(d => d.id)
-  const allSelected = deviceIds.every(id => selectedItems.value.devices.includes(id))
-  
-  if (allSelected) {
-    // Desmarcar todos os devices do site
-    selectedItems.value.devices = selectedItems.value.devices.filter(
-      id => !deviceIds.includes(id)
-    )
-    selectedSites.value.delete(siteId)
-  } else {
-    // Marcar todos os devices do site
-    deviceIds.forEach(id => {
-      if (!selectedItems.value.devices.includes(id)) {
-        selectedItems.value.devices.push(id)
-      }
-    })
-    selectedSites.value.add(siteId)
-  }
-  
+  toggleSiteSelection(siteId, devices)
   updateMap()
-}
-
-const isSiteSelected = (siteId, devices) => {
-  const deviceIds = devices.map(d => d.id)
-  return deviceIds.length > 0 && deviceIds.every(id => selectedItems.value.devices.includes(id))
-}
-
-const isSitePartiallySelected = (siteId, devices) => {
-  const deviceIds = devices.map(d => d.id)
-  const selectedCount = deviceIds.filter(id => selectedItems.value.devices.includes(id)).length
-  return selectedCount > 0 && selectedCount < deviceIds.length
-}
-
-const getSiteStatusSummary = (devices) => {
-  const statusCount = {
-    online: 0,
-    warning: 0,
-    critical: 0,
-    offline: 0
-  }
-  
-  devices.forEach(device => {
-    if (statusCount.hasOwnProperty(device.status)) {
-      statusCount[device.status]++
-    }
-  })
-  
-  return statusCount
 }
 
 // Funções específicas para câmeras
-const toggleCameraSiteExpansion = (siteName) => {
-  if (expandedCameraSites.value.has(siteName)) {
-    expandedCameraSites.value.delete(siteName)
-  } else {
-    expandedCameraSites.value.add(siteName)
-  }
-}
-
-const isCameraSiteExpanded = (siteName) => {
-  return expandedCameraSites.value.has(siteName)
-}
-
 const toggleCameraSite = (siteName, cameras) => {
-  const cameraIds = cameras.map(c => c.id)
-  const allSelected = cameraIds.every(id => selectedItems.value.cameras.includes(id))
-  
-  if (allSelected) {
-    selectedItems.value.cameras = selectedItems.value.cameras.filter(
-      id => !cameraIds.includes(id)
-    )
-    selectedCameraSites.value.delete(siteName)
-  } else {
-    cameraIds.forEach(id => {
-      if (!selectedItems.value.cameras.includes(id)) {
-        selectedItems.value.cameras.push(id)
-      }
-    })
-    selectedCameraSites.value.add(siteName)
-  }
-  
+  toggleCameraSiteSelection(siteName, cameras)
   updateMap()
-}
-
-const isCameraSiteSelected = (siteName, cameras) => {
-  const cameraIds = cameras.map(c => c.id)
-  return cameraIds.length > 0 && cameraIds.every(id => selectedItems.value.cameras.includes(id))
-}
-
-const isCameraSitePartiallySelected = (siteName, cameras) => {
-  const cameraIds = cameras.map(c => c.id)
-  const selectedCount = cameraIds.filter(id => selectedItems.value.cameras.includes(id)).length
-  return selectedCount > 0 && selectedCount < cameraIds.length
-}
-
-const getCameraSiteStatusSummary = (cameras) => {
-  const statusCount = {
-    online: 0,
-    offline: 0
-  }
-  
-  cameras.forEach(camera => {
-    const status = String(camera.status || 'offline').toLowerCase()
-    if (status === 'online' || status === 'active' || status === 'streaming') {
-      statusCount.online++
-    } else {
-      statusCount.offline++
-    }
-  })
-  
-  return statusCount
 }
 
 // Função unificada para atualizar todo o mapa (markers + polylines)
 const updateMap = (animateItemId = null) => {
-  if (!googleMap.value) {
-    console.warn('[CustomMapViewer] Google Map não inicializado ainda')
-    return
+  if (!googleMap.value) return
+  
+  // Atualizar markers usando composable
+  updateMapMarkers({
+    mapInstance: googleMap.value,
+    provider: currentMapProvider.value,
+    selectedDeviceIds: selectedItems.value.devices,
+    availableDevices: availableItems.value.devices,
+    sitesMap: sitesMap.value,
+    isInitialLoad: isInitialLoad.value,
+    animateItemId: animateItemId,
+    getMarkerIcon: getMarkerIcon,
+    onMarkerClick: handleDeviceClick,
+    updateMapboxMarkerSizes: updateMapboxMarkerSizes,
+    getActiveMapZoom: getActiveMapZoom,
+    applyMapboxMarkerDimensions: applyMapboxMarkerDimensions
+  })
+  
+  // Marcar que não é mais carregamento inicial
+  if (isInitialLoad.value) {
+    isInitialLoad.value = false
   }
   
-  console.log('[CustomMapViewer] updateMap chamado - limpando tudo e redesenhando')
-  // LIMPAR TUDO PRIMEIRO
-  clearAllOverlays()
-  // Agora criar novas overlays (passando qual item animar)
-  updateMapMarkers(animateItemId)
-  updateCablePolylines()
+  // Atualizar polylines usando composable
+  updateCablePolylines({
+    mapInstance: googleMap.value,
+    provider: currentMapProvider.value,
+    selectedCableIds: selectedItems.value.cables,
+    availableCables: availableItems.value.cables,
+    isDarkMode: uiStore.theme === 'dark',
+    onPolylineClick: handleCableClick,
+    onPolylineHover: handleCableHover,
+    onPolylineUnhover: handleCableUnhover
+  })
 }
 
 const toggleItem = (itemId) => {
   const category = activeCategory.value
-  const index = selectedItems.value[category].indexOf(itemId)
+  const wasSelected = toggleItemSelection(itemId, category)
   
-  if (index > -1) {
-    // Desmarcar - sem animação
-    selectedItems.value[category].splice(index, 1)
-    console.log(`[CustomMapViewer] Item ${itemId} desmarcado da categoria ${category}`)
-    updateMap() // Atualizar sem animação
+  // Se foi marcado e é device, animar
+  if (wasSelected && category === 'devices') {
+    updateMap(itemId)
   } else {
-    // Marcar - com animação apenas deste item
-    selectedItems.value[category].push(itemId)
-    console.log(`[CustomMapViewer] Item ${itemId} marcado na categoria ${category}`)
-    
-    // Se for device, animar apenas este
-    if (category === 'devices') {
-      updateMap(itemId)
-    } else {
-      updateMap()
-    }
+    updateMap()
   }
 }
 
 const selectAll = () => {
   const category = activeCategory.value
-  const allIds = availableItems.value[category].map(item => item.id)
-  selectedItems.value[category] = [...allIds]
-  console.log(`[CustomMapViewer] Todos os ${allIds.length} items selecionados na categoria ${category}`)
-  
-  // Atualizar todo o mapa
+  selectAllItems(category, availableItems.value[category])
   updateMap()
 }
 
-// Função para limpar COMPLETAMENTE todas as overlays do mapa
+// Função para limpar TODAS as overlays - versão otimizada com Maps
 const clearAllOverlays = () => {
-  console.log('[CustomMapViewer] Limpando TODAS as overlays antigas')
-  console.log('[CustomMapViewer] Total overlays rastreadas:', allOverlays.value.length)
+  // Limpar clusterer primeiro
+  if (markerClusterer.value) {
+    markerClusterer.value.clearMarkers()
+    markerClusterer.value = null
+  }
   
-  // Limpar todas as overlays rastreadas
-  allOverlays.value.forEach((overlay, idx) => {
+  // Limpar todos os markers
+  activeMarkers.forEach((marker, id) => {
     try {
-      if (overlay.infoWindow) {
-        overlay.infoWindow.close()
-        overlay.infoWindow = null
+      clearMarkerListeners(marker)
+      if (typeof marker.setMap === 'function') {
+        marker.setMap(null)
+      } else if (typeof marker.remove === 'function') {
+        marker.remove()
       }
-      google.maps.event.clearInstanceListeners(overlay)
-      if (typeof overlay.setVisible === 'function') {
-        overlay.setVisible(false)
-      }
-      overlay.setMap(null)
-      console.log(`[CustomMapViewer] Overlay ${idx + 1} removida`)
     } catch (e) {
-      console.error(`[CustomMapViewer] Erro ao remover overlay ${idx + 1}:`, e)
+      // Ignorar erros de limpeza
     }
   })
+  activeMarkers.clear()
   
-  allOverlays.value = []
-  markers.value = []
-  cablePolylines.value = []
-  console.log('[CustomMapViewer] Todas as overlays removidas')
+  // Limpar todas as polylines
+  activePolylines.forEach((polyline, id) => {
+    try {
+      clearPolylineListeners(polyline)
+      if (typeof polyline.setMap === 'function') {
+        polyline.setMap(null)
+      } else if (currentMapProvider.value === 'mapbox') {
+        if (polyline.layerId && googleMap.value.getLayer(polyline.layerId)) {
+          googleMap.value.removeLayer(polyline.layerId)
+        }
+        if (polyline.sourceId && googleMap.value.getSource(polyline.sourceId)) {
+          googleMap.value.removeSource(polyline.sourceId)
+        }
+      } else if (currentMapProvider.value === 'osm' && typeof polyline.remove === 'function') {
+        polyline.remove()
+      }
+    } catch (e) {
+      // Ignorar erros de limpeza
+    }
+  })
+  activePolylines.clear()
 }
 
 const focusOnItem = (item) => {
@@ -664,7 +522,6 @@ const toggleFullscreen = () => {
 const loadMapData = async () => {
   try {
     const mapId = route.params.mapId
-    console.log('[CustomMapViewer] Carregando mapa ID:', mapId)
     
     if (mapId === 'default') {
       // Mapa padrão: carregar tudo
@@ -677,7 +534,7 @@ const loadMapData = async () => {
       console.log('[CustomMapViewer] Mapa padrão configurado')
     } else {
       // Carregar mapa customizado
-      const response = await fetch(`/inventory/api/v1/maps/custom/${mapId}/`, {
+      const response = await fetch(`/api/v1/maps/custom/${mapId}/`, {
         credentials: 'include'
       })
       
@@ -704,673 +561,614 @@ const loadMapData = async () => {
 
 const loadInventoryItems = async () => {
   try {
-    console.log('[CustomMapViewer] Iniciando carregamento do inventário...')
-    
-    // 1. Carregar Sites para obter lat/lng
-    const sitesResponse = await fetch('/api/v1/sites/?page_size=500', {
-      credentials: 'include'
-    })
-    
-    if (!sitesResponse.ok) {
-      throw new Error(`Erro ao carregar sites: ${sitesResponse.status}`)
-    }
-    
-    const sitesData = await sitesResponse.json()
-    const sites = Array.isArray(sitesData) ? sitesData : (sitesData.results || [])
-    console.log(`[CustomMapViewer] ${sites.length} sites carregados`)
-    
-    // Criar mapa de sites por ID para lookup de coordenadas
-    const sitesMap = new Map()
-    sites.forEach(site => {
-      if (site.id) {
-        sitesMap.set(String(site.id), site)
-      }
-    })
-    
-    // 2. Carregar devices (equipamentos)
-    const devicesResponse = await fetch('/api/v1/devices/?page_size=1000', {
-      credentials: 'include'
-    })
-    
-    if (!devicesResponse.ok) {
-      throw new Error(`Erro ao carregar devices: ${devicesResponse.status}`)
-    }
-    
-    const devicesData = await devicesResponse.json()
-    const devices = Array.isArray(devicesData) ? devicesData : (devicesData.results || [])
-    console.log(`[CustomMapViewer] ${devices.length} devices carregados`)
-    
-    // 3. Carregar status do Zabbix para cada device
-    const hostsResponse = await fetch('/maps_view/api/dashboard/data/', {
-      credentials: 'include'
-    })
-    
-    if (!hostsResponse.ok) {
-      throw new Error(`Erro ao carregar hosts: ${hostsResponse.status}`)
-    }
-    
-    const hostsData = await hostsResponse.json()
-    const hostsArray = hostsData.hosts_status || hostsData.hosts || []
-    console.log(`[CustomMapViewer] ${hostsArray.length} hosts do Zabbix carregados`)
-    
-    // DEBUG: Estrutura completa do primeiro host
-    if (hostsArray.length > 0) {
-      console.log('═══════════════════════════════════════════════════════')
-      console.log('🔍 ESTRUTURA DO PRIMEIRO HOST DO ZABBIX:')
-      console.log('═══════════════════════════════════════════════════════')
-      const firstHost = hostsArray[0]
-      console.log('Objeto completo:', firstHost)
-      console.log('Campos disponíveis:', Object.keys(firstHost))
-      console.log('  - id:', firstHost.id)
-      console.log('  - device_id:', firstHost.device_id)
-      console.log('  - name:', firstHost.name)
-      console.log('  - display_name:', firstHost.display_name)
-      console.log('  - zabbix_hostid:', firstHost.zabbix_hostid)
-      console.log('  - availability:', firstHost.availability)
-      console.log('  - status:', firstHost.status)
-      console.log('═══════════════════════════════════════════════════════')
-    } else {
-      console.error('❌ NENHUM HOST RETORNADO PELO DASHBOARD!')
-      console.log('Resposta completa do dashboard:', hostsData)
-    }
-    
-    // DEBUG: Expor dados globalmente para inspeção
-    window.debugCustomMap = window.debugCustomMap || {}
-    window.debugCustomMap.hostsFromZabbix = hostsArray
-    window.debugCustomMap.devicesFromInventory = devices
-    
-    console.log('═══════════════════════════════════════════════════════')
-    console.log('DEBUG: Digite no console para inspecionar:')
-    console.log('  window.debugCustomMap.hostsFromZabbix')
-    console.log('  window.debugCustomMap.devicesFromInventory')
-    console.log('  window.debugCustomMap.statusMap')
-    console.log('═══════════════════════════════════════════════════════')
-    
-    if (hostsArray.length > 0) {
-      console.log('Exemplo de HOST do Zabbix:', hostsArray[0])
-    }
-    
-    if (devices.length > 0) {
-      console.log('Exemplo de DEVICE do inventário:', devices[0])
-    }
-    
-    // Criar mapa de status por device_id, name e zabbix_hostid
-    const statusMap = new Map()
-    hostsArray.forEach((host, index) => {
-      // Converter availability do Zabbix para nosso formato de status
-      // availability: "1" = Available (online), "2" = Unavailable (offline), "0" = Unknown
-      const availability = String(host.availability || host.available || '0')
-      let mappedStatus = 'offline'
-      
-      if (availability === '1') {
-        mappedStatus = 'online'
-      } else if (availability === '2') {
-        mappedStatus = 'offline'
-      } else {
-        mappedStatus = 'unknown'
-      }
-      
-      // Mapear por ID (tentar device_id primeiro, depois id)
-      const deviceId = host.device_id || host.id
-      if (deviceId) {
-        statusMap.set(String(deviceId), mappedStatus)
-      }
-      
-      // Mapear por nome (normalizado)
-      if (host.name) {
-        statusMap.set(String(host.name).toLowerCase(), mappedStatus)
-      }
-      if (host.display_name) {
-        statusMap.set(String(host.display_name).toLowerCase(), mappedStatus)
-      }
-      
-      // Mapear por zabbix_hostid ou hostid
-      const zabbixId = host.zabbix_hostid || host.hostid
-      if (zabbixId) {
-        statusMap.set(`zabbix_${zabbixId}`, mappedStatus)
-      }
-      
-      // Log do mapeamento (apenas primeiros 3)
-      if (index < 3) {
-        console.log(`  Host #${index + 1}: "${host.name}" → device_id=${deviceId}, availability=${availability} → status="${mappedStatus}"`)
-      }
-    })
-    
-    console.log(`[CustomMapViewer] StatusMap: ${statusMap.size} entradas criadas`)
-    
-    // DEBUG: Expor statusMap globalmente
-    window.debugCustomMap.statusMap = statusMap
-    window.debugCustomMap.statusMapArray = Array.from(statusMap.entries())
-    
-    console.log('Primeiras 5 entradas do StatusMap:')
-    Array.from(statusMap.entries()).slice(0, 5).forEach(([key, value]) => {
-      console.log(`  "${key}" => "${value}"`)
-    })
-    
-    // 4. Processar devices individuais com localização do site
-    const devicesWithLocation = []
-    
-    devices.forEach((device, index) => {
-      if (!device) return
-      
-      // Pegar coordenadas do site
-      const site = sitesMap.get(String(device.site))
-      if (!site) {
-        console.warn(`[CustomMapViewer] Site não encontrado para device ${device.id}`)
-        return
-      }
-      
-      const lat = parseFloat(site.latitude)
-      const lng = parseFloat(site.longitude)
-      
-      // Só adicionar se tiver coordenadas válidas
-      if (isNaN(lat) || isNaN(lng)) return
-      
-      // Pegar status do Zabbix para este device específico (tentar várias estratégias)
-      let status = null
-      
-      // Estratégia 1: Por device.id
-      status = statusMap.get(String(device.id))
-      
-      // Estratégia 2: Por device.name (normalizado)
-      if (!status && device.name) {
-        status = statusMap.get(String(device.name).toLowerCase())
-      }
-      
-      // Estratégia 3: Por zabbix_hostid
-      if (!status && device.zabbix_hostid) {
-        status = statusMap.get(`zabbix_${device.zabbix_hostid}`)
-      }
-      
-      // Garantir que status seja uma string válida
-      if (!status || status === 'unknown') {
-        status = 'offline'
-      }
-      
-      // Log de debug para primeiro device
-      if (index === 0) {
-        console.log(`[CustomMapViewer] DEBUG - Primeiro device:`)
-        console.log(`  - ID: ${device.id}`)
-        console.log(`  - Name: ${device.name}`)
-        console.log(`  - Zabbix ID: ${device.zabbix_hostid}`)
-        console.log(`  - Status encontrado: "${status}"`)
-        console.log(`  - StatusMap tem entrada para ID? ${statusMap.has(String(device.id))}`)
-        console.log(`  - StatusMap tem entrada para name? ${statusMap.has(String(device.name).toLowerCase())}`)
-        if (device.zabbix_hostid) {
-          console.log(`  - StatusMap tem entrada para zabbix_${device.zabbix_hostid}? ${statusMap.has(`zabbix_${device.zabbix_hostid}`)}`)
-        }
-      }
-      
-      devicesWithLocation.push({
-        id: device.id,
-        name: device.name || `Device ${device.id}`,
-        type: device.device_type || 'device',
-        lat: lat,
-        lng: lng,
-        status: status,
-        ip: device.primary_ip4 || device.ip_address || 'N/A',
-        location: site.city || site.location || 'N/A',
-        site_id: device.site,
-        site_name: site.name || site.display_name,
-        device_type: device.device_type,
-        serial_number: device.serial_number
-      })
-    })
-    
-    availableItems.value.devices = devicesWithLocation
-    console.log(`[CustomMapViewer] ${devicesWithLocation.length} devices com localização processados`)
-    
-    // DEBUG: Resumo de status
-    console.log('═══════════════════════════════════════════════════════')
-    console.log('📊 RESUMO DE STATUS DOS DEVICES:')
-    console.log('═══════════════════════════════════════════════════════')
-    const statusSummary = devicesWithLocation.reduce((acc, device) => {
-      acc[device.status] = (acc[device.status] || 0) + 1
-      return acc
-    }, {})
-    console.log('Distribuição de status:', statusSummary)
-    console.log('Total devices:', devicesWithLocation.length)
-    console.log('Total hosts do Zabbix:', hostsArray.length)
-    console.log('StatusMap size:', statusMap.size)
-    console.log('═══════════════════════════════════════════════════════')
-    
-    // 5. Carregar cabos de fibra com rotas
-    try {
-      const cablesResponse = await fetch('/api/v1/fiber-cables/', {
-        credentials: 'include'
-      })
-      
-      if (cablesResponse.ok) {
-        const cablesData = await cablesResponse.json()
-        const cables = Array.isArray(cablesData) ? cablesData : (cablesData.results || [])
-        
-        console.log('[CustomMapViewer] Raw cables data:', cables.slice(0, 2))
-        
-        // Mapear status dos cabos de fibra
-        availableItems.value.cables = cables.map(cable => {
-          const pathCoords = cable.path_coordinates || []
-          
-          // Normalizar status do cabo para formato UI
-          // Backend retorna: "up", "down", "degraded", "unknown"
-          // UI usa: "online", "offline", "warning", "critical", "unknown"
-          let uiStatus = 'unknown'
-          const backendStatus = (cable.status || 'unknown').toLowerCase()
-          
-          switch (backendStatus) {
-            case 'up':
-            case 'operational':
-              uiStatus = 'online'
-              break
-            case 'down':
-            case 'unavailable':
-              uiStatus = 'offline'
-              break
-            case 'degraded':
-            case 'warning':
-              uiStatus = 'warning'
-              break
-            case 'critical':
-              uiStatus = 'critical'
-              break
-            default:
-              uiStatus = 'unknown'
-          }
-          
-          return {
-            id: cable.id,
-            name: cable.name,
-            status: uiStatus,
-            original_status: cable.status,
-            description: cable.description || '',
-            path_coordinates: pathCoords,
-            site_a_name: cable.site_a_name,
-            site_b_name: cable.site_b_name,
-            length_km: cable.length_km,
-            is_connected: cable.is_connected,
-            connection_status: cable.connection_status
-          }
-        })
-        
-        // DEBUG: Resumo de status dos cabos
-        console.log('═══════════════════════════════════════════════════════')
-        console.log('📡 RESUMO DE STATUS DOS CABOS:')
-        console.log('═══════════════════════════════════════════════════════')
-        const cableStatusSummary = availableItems.value.cables.reduce((acc, cable) => {
-          acc[cable.status] = (acc[cable.status] || 0) + 1
-          return acc
-        }, {})
-        console.log('Distribuição de status:', cableStatusSummary)
-        console.log('Total cabos:', availableItems.value.cables.length)
-        if (availableItems.value.cables.length > 0) {
-          console.log('Exemplo do primeiro cabo:', availableItems.value.cables[0])
-        }
-        console.log('═══════════════════════════════════════════════════════')
-        
-        console.log(`[CustomMapViewer] ${availableItems.value.cables.length} cabos carregados`)
-      }
-    } catch (error) {
-      console.warn('[CustomMapViewer] Erro ao carregar cabos:', error)
-      availableItems.value.cables = []
-    }
-    
-    // 6. Carregar câmeras
-    try {
-      const camerasResponse = await fetch('/api/v1/cameras/', {
-        credentials: 'include'
-      })
-      
-      if (camerasResponse.ok) {
-        const camerasData = await camerasResponse.json()
-        const cameras = Array.isArray(camerasData) ? camerasData : (camerasData.results || [])
-        
-        availableItems.value.cameras = cameras.map(camera => ({
-          id: camera.id,
-          name: camera.display_name || camera.name || `Câmera ${camera.id}`,
-          status: camera.status || camera.stream_status || 'offline',
-          description: camera.description || '',
-          site_name: camera.site_name,
-          lat: camera.latitude || null,
-          lng: camera.longitude || null
-        }))
-        
-        console.log(`[CustomMapViewer] ${availableItems.value.cameras.length} câmeras carregadas`)
-      }
-    } catch (error) {
-      console.warn('[CustomMapViewer] Erro ao carregar câmeras:', error)
-      availableItems.value.cameras = []
-    }
-    
-    // 7. Racks (placeholder por enquanto)
-    availableItems.value.racks = []
-    
-    console.log('[CustomMapViewer] Inventário completo:', {
-      devices: availableItems.value.devices.length,
-      cables: availableItems.value.cables.length,
-      cameras: availableItems.value.cameras.length,
-      racks: availableItems.value.racks.length
-    })
+    await loadInventory()
   } catch (error) {
     console.error('[CustomMapViewer] Erro ao carregar inventário:', error)
   }
 }
 
-const initMap = async () => {
-  if (!mapContainer.value) {
-    console.warn('[CustomMapViewer] Container do mapa não encontrado')
-    return
+const destroyCurrentMap = () => {
+  resetZoomListener()
+  clearAllMarkers(currentMapProvider.value, googleMap.value)
+  clearAllPolylines(currentMapProvider.value, googleMap.value)
+  
+  if (googleMap.value) {
+    if (currentMapProvider.value === 'mapbox' || currentMapProvider.value === 'osm') {
+      googleMap.value.remove()
+    }
+    googleMap.value = null
   }
   
+  if (mapContainer.value) {
+    mapContainer.value.innerHTML = ''
+  }
+}
+
+// Handlers para clicks em markers e polylines
+const handleDeviceClick = (device) => {
+  const site = sitesMap.value.get(String(device.site || device.site_id))
+  if (site) {
+    selectedSite.value = site
+    showSiteModal.value = true
+  }
+}
+
+const handleCableClick = (cable) => {
+  selectedCable.value = cable
+  showCableModal.value = true
+}
+
+// Handlers para hover em cabos (tooltip)
+const handleCableHover = (cable, event) => {
+  console.log('[CustomMapViewer] Cable hover detected:', cable.label, event)
+  
+  // Limpar timeout anterior se existir
+  if (tooltipTimeout) {
+    clearTimeout(tooltipTimeout)
+  }
+  
+  // Pequeno delay antes de mostrar tooltip
+  tooltipTimeout = setTimeout(() => {
+    hoveredCable.value = cable
+    tooltipPosition.value = {
+      x: event.clientX || event.pageX || event.point?.x || 0,
+      y: event.clientY || event.pageY || event.point?.y || 0
+    }
+    showCableTooltip.value = true
+    console.log('[CustomMapViewer] Tooltip shown at:', tooltipPosition.value)
+  }, 300) // 300ms de delay
+}
+
+const handleCableUnhover = () => {
+  console.log('[CustomMapViewer] Cable unhover detected')
+  if (tooltipTimeout) {
+    clearTimeout(tooltipTimeout)
+    tooltipTimeout = null
+  }
+  showCableTooltip.value = false
+  hoveredCable.value = null
+}
+
+const initMap = async () => {
+  if (!mapContainer.value) return
+  
   try {
-    // Carregar Google Maps API se necessário
-    console.log('[CustomMapViewer] Iniciando carregamento do Google Maps...')
-    await loadGoogleMaps()
+    // Carregar configurações do sistema primeiro
+    console.log('[CustomMapViewer] Carregando configurações do sistema...')
+    await loadSystemConfig()
     
-    if (!window.google?.maps) {
-      throw new Error('Google Maps API não carregou corretamente')
+    // Verificar qual provedor de mapa está configurado
+    const mapProvider = configForm.value.MAP_PROVIDER || 'google'
+    console.log(`[CustomMapViewer] 🔄 Provedor de mapa selecionado: ${mapProvider}`)
+    
+    // 🔒 EXCLUSÃO MÚTUA: Destruir mapa anterior se mudou de provider
+    if (googleMap.value && currentMapProvider.value !== mapProvider) {
+      console.log(`[CustomMapViewer] ⚠️ Trocando de ${currentMapProvider.value} para ${mapProvider}`)
+      destroyCurrentMap()
     }
     
-    console.log('[CustomMapViewer] Google Maps API disponível, criando mapa...')
-    console.log('[CustomMapViewer] Tema atual:', uiStore.theme)
+    // Inicializar o provider selecionado (sem fallback)
+    if (mapProvider === 'google') {
+      await initGoogleMap()
+    } else if (mapProvider === 'mapbox') {
+      await initMapboxMap()
+    } else if (mapProvider === 'osm') {
+      await initOpenStreetMap()
+    } else {
+      console.error(`[CustomMapViewer] Provedor de mapa não suportado: ${mapProvider}`)
+      throw new Error(`Provedor de mapa '${mapProvider}' não suportado`)
+    }
+  } catch (error) {
+    console.error('[CustomMapViewer] Erro ao inicializar mapa:', error)
+    alert('❌ Erro ao carregar o mapa:\n' + error.message + '\n\nVerifique o console para mais detalhes.')
+  }
+}
+
+const initGoogleMap = async () => {
+  // Carregar Google Maps API se necessário
+  console.log('[CustomMapViewer] Iniciando carregamento do Google Maps...')
+  await loadGoogleMaps()
+  
+  if (!window.google?.maps) {
+    throw new Error('Google Maps API não carregou corretamente')
+  }
+  resetZoomListener()
+  
+  currentMapProvider.value = 'google'
+  console.log('[CustomMapViewer] Google Maps API disponível, criando mapa...')
+  
+  // Obter configurações do banco de dados
+  const mapZoom = parseInt(configForm.value.MAP_DEFAULT_ZOOM) || 12
+  const mapLat = parseFloat(configForm.value.MAP_DEFAULT_LAT) || -15.7801
+  const mapLng = parseFloat(configForm.value.MAP_DEFAULT_LNG) || -47.9292
+  const mapType = configForm.value.MAP_TYPE || 'roadmap'
+  const mapTheme = configForm.value.MAP_THEME || 'light'
+  const enableStreetView = configForm.value.ENABLE_STREET_VIEW !== false
+  const enableTraffic = configForm.value.ENABLE_TRAFFIC === true
+  const enableFullscreen = configForm.value.ENABLE_FULLSCREEN !== false
+  
+  console.log('[CustomMapViewer] Configurações:', {
+    zoom: mapZoom,
+    center: { lat: mapLat, lng: mapLng },
+    type: mapType,
+    theme: mapTheme,
+    streetView: enableStreetView,
+    traffic: enableTraffic,
+    fullscreen: enableFullscreen
+  })
     
-    const defaultCenter = { lat: -15.8267, lng: -47.9218 } // Brasília
+    // Determinar tema efetivo usando uiStore (tema do usuário) ao invés do sistema
+    const userTheme = uiStore.theme
+    const effectiveTheme = userTheme || 'dark'
+    const mapStyles = getMapStyles(effectiveTheme, effectiveTheme)
+    
+    console.log('[CustomMapViewer] Aplicando estilos:', {
+      userTheme,
+      effectiveTheme,
+      stylesCount: mapStyles.length,
+      firstStyle: mapStyles[0]
+    })
     
     googleMap.value = new google.maps.Map(mapContainer.value, {
-      center: defaultCenter,
-      zoom: 12,
-      mapTypeId: 'roadmap',
-      styles: getMapStyles(uiStore.theme),
+      center: { lat: mapLat, lng: mapLng },
+      zoom: mapZoom,
+      mapTypeId: mapType,  // terrain, roadmap, satellite, hybrid
+      styles: mapStyles,
       mapTypeControl: true,
-      streetViewControl: true,
-      fullscreenControl: true,
-      zoomControl: true
+      streetViewControl: enableStreetView,
+      fullscreenControl: enableFullscreen,
+      zoomControl: true,
+      // Opções adicionais para remover grid e otimizar renderização
+      disableDefaultUI: false,
+      clickableIcons: true,
+      backgroundColor: effectiveTheme === 'dark' ? '#242f3e' : '#F1F3F4',  // Azul noite (dark) / Cinza Cloud (light)
+      // Configurações de renderização para evitar artifacts/grid
+      gestureHandling: 'greedy',
+      tilt: 0,  // Vista 2D sem inclinação (evita artifacts 3D)
+      restriction: null,  // Sem restrição de área
+      minZoom: 3,
+      maxZoom: 20
     })
+    
+    // Habilitar camada de tráfego se configurado
+    if (enableTraffic) {
+      const trafficLayer = new google.maps.TrafficLayer()
+      trafficLayer.setMap(googleMap.value)
+      console.log('[CustomMapViewer] Camada de tráfego ativada')
+    }
     
     console.log('[CustomMapViewer] Mapa criado com sucesso - Tipo:', googleMap.value.getMapTypeId())
     console.log('[CustomMapViewer] Mapa zoom:', googleMap.value.getZoom())
     console.log('[CustomMapViewer] Mapa center:', googleMap.value.getCenter().toString())
     
-    // Atualizar mapa completo após criar
-    updateMap()
-  } catch (error) {
-    console.error('[CustomMapViewer] Erro ao inicializar mapa:', error)
-  }
-}
-
-const updateCablePolylines = () => {
-  if (!googleMap.value) {
-    console.warn('[CustomMapViewer] Google Map não inicializado ainda')
-    return
-  }
-  
-  console.log('[CustomMapViewer] updateCablePolylines chamado')
-  console.log('[CustomMapViewer] Total cabos disponíveis:', availableItems.value.cables.length)
-  console.log('[CustomMapViewer] Total cabos selecionados:', selectedItems.value.cables.length)
-  
-  // Adicionar polylines dos cabos selecionados
-  const selectedCables = availableItems.value.cables.filter(cable => 
-    selectedItems.value.cables.includes(cable.id) && cable.path_coordinates && cable.path_coordinates.length > 0
-  )
-  
-  console.log(`[CustomMapViewer] ${selectedCables.length} cabos filtrados para desenhar polylines`)
-  
-  selectedCables.forEach((cable, index) => {
-    console.log(`[CustomMapViewer] Desenhando cabo ${index + 1}:`, {
-      name: cable.name,
-      points: cable.path_coordinates.length,
-      status: cable.status
-    })
-    
-    // Converter coordenadas para formato Google Maps
-    const path = cable.path_coordinates.map(coord => ({
-      lat: parseFloat(coord.lat),
-      lng: parseFloat(coord.lng)
-    }))
-    
-    // Validar coordenadas
-    const validPath = path.filter(point => !isNaN(point.lat) && !isNaN(point.lng))
-    
-    if (validPath.length < 2) {
-      console.warn(`[CustomMapViewer] Cabo ${cable.name} não tem coordenadas suficientes (${validPath.length}))`)
-      return
-    }
-    
-    // Cor baseada no status normalizado da UI
-    const statusColors = {
-      online: '#10b981',      // Verde - online/up/operational
-      offline: '#ef4444',     // Vermelho - offline/down/unavailable
-      warning: '#f59e0b',     // Amarelo - warning/degraded
-      critical: '#dc2626',    // Vermelho escuro - critical
-      unknown: '#6b7280'      // Cinza - unknown/sem status
-    }
-    
-    const polyline = new google.maps.Polyline({
-      path: validPath,
-      geodesic: true,
-      strokeColor: statusColors[cable.status] || statusColors.unknown,
-      strokeOpacity: 0.8,
-      strokeWeight: 3,
-      map: googleMap.value
-    })
-    
-    // InfoWindow para o cabo
-    const statusLabel = getStatusLabel(cable.status)
-    const infoContent = `
-      <div style="color: #000; padding: 12px; max-width: 250px;">
-        <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 700;">${cable.name}</h3>
-        <div style="font-size: 14px; line-height: 1.6;">
-          <p style="margin: 4px 0;"><strong>De:</strong> ${cable.site_a_name || 'N/A'}</p>
-          <p style="margin: 4px 0;"><strong>Para:</strong> ${cable.site_b_name || 'N/A'}</p>
-          <p style="margin: 4px 0;"><strong>Status:</strong> <span style="color: ${statusColors[cable.status] || statusColors.unknown}; font-weight: 700;">${statusLabel}</span></p>
-          <p style="margin: 4px 0;"><strong>Status backend:</strong> ${cable.original_status || 'N/A'}</p>
-          <p style="margin: 4px 0;"><strong>Comprimento:</strong> ${cable.length_km ? cable.length_km + ' km' : 'N/A'}</p>
-          <p style="margin: 4px 0;"><strong>Pontos de rota:</strong> ${validPath.length}</p>
-        </div>
-      </div>
-    `
-    
-    const infoWindow = new google.maps.InfoWindow({
-      content: infoContent
-    })
-    
-    // Anexar InfoWindow ao polyline ANTES de adicionar listener
-    polyline.infoWindow = infoWindow
-    
-    polyline.addListener('click', (event) => {
-      // Fechar outras info windows
-      cablePolylines.value.forEach(p => {
-        if (p.infoWindow) p.infoWindow.close()
-      })
-      markers.value.forEach(m => {
-        if (m.infoWindow) m.infoWindow.close()
-      })
-      
-      infoWindow.setPosition(event.latLng)
-      infoWindow.open(googleMap.value)
-    })
-    
-    cablePolylines.value.push(polyline)
-    allOverlays.value.push(polyline) // Registrar para limpeza global
-  })
-  
-  console.log(`[CustomMapViewer] ${cablePolylines.value.length} polylines desenhadas no mapa`)
-}
-
-const updateMapMarkers = (animateItemId = null) => {
-  if (!googleMap.value) {
-    console.warn('[CustomMapViewer] Google Map não inicializado ainda')
-    return
-  }
-  
-  console.log('[CustomMapViewer] updateMapMarkers chamado')
-  console.log('[CustomMapViewer] Item para animar:', animateItemId)
-  console.log('[CustomMapViewer] É carregamento inicial?', isInitialLoad.value)
-  console.log('[CustomMapViewer] Total devices disponíveis:', availableItems.value.devices.length)
-  console.log('[CustomMapViewer] Total devices selecionados:', selectedItems.value.devices.length)
-  
-  // Adicionar markers dos dispositivos selecionados
-  const selectedDevices = availableItems.value.devices.filter(device => 
-    selectedItems.value.devices.includes(device.id) && device.lat && device.lng
-  )
-  
-  console.log(`[CustomMapViewer] ${selectedDevices.length} devices filtrados para criar markers`)
-  
-  if (selectedDevices.length === 0) {
-    console.warn('[CustomMapViewer] Nenhum device selecionado com lat/lng válidos!')
-    console.log('[CustomMapViewer] Devices disponíveis:', availableItems.value.devices.slice(0, 3))
-    console.log('[CustomMapViewer] IDs selecionados:', selectedItems.value.devices.slice(0, 5))
-  }
-  
-  selectedDevices.forEach((device, index) => {
-    const lat = parseFloat(device.lat)
-    const lng = parseFloat(device.lng)
-    
-    console.log(`[CustomMapViewer] Criando marker ${index + 1}:`, {
-      name: device.name,
-      lat: lat,
-      lng: lng,
-      status: device.status,
-      latValid: !isNaN(lat),
-      lngValid: !isNaN(lng)
-    })
-    
-    // Validar coordenadas
-    if (isNaN(lat) || isNaN(lng)) {
-      console.error(`[CustomMapViewer] Coordenadas inválidas para ${device.name}`)
-      return
-    }
-    
-    const position = { lat: lat, lng: lng }
-    
-    console.log(`[CustomMapViewer] Posição do marker ${index + 1}:`, position)
-    console.log(`[CustomMapViewer] Mapa existe?`, !!googleMap.value)
-    
-    // Determinar se deve animar este marker
-    // Anima se: 1) é carregamento inicial OU 2) é o item específico sendo marcado
-    const shouldAnimate = isInitialLoad.value || (animateItemId && device.id === animateItemId)
-    
-    const marker = new google.maps.Marker({
-      position: position,
-      map: googleMap.value,
-      title: device.name,
-      icon: getMarkerIcon(device.status),
-      animation: shouldAnimate ? google.maps.Animation.DROP : null
-    })
-    
-    console.log(`[CustomMapViewer] Marker ${index + 1} criado:`, {
-      position: marker.getPosition(),
-      map: !!marker.getMap(),
-      visible: marker.getVisible(),
-      animated: shouldAnimate
-    })
-    
-    // Armazenar dados do site no marker para usar no modal
-    marker.siteData = device
-    
-    marker.addListener('click', () => {
-      // Abrir modal de detalhes do site
-      selectedSite.value = marker.siteData
-      showSiteModal.value = true
-      console.log('[CustomMapViewer] Abrindo modal para site:', marker.siteData.name)
-    })
-    
-    markers.value.push(marker)
-    allOverlays.value.push(marker) // Registrar para limpeza global
-  })
-  
-  // Se houver markers, ajustar bounds do mapa
-  if (markers.value.length > 0) {
-    console.log(`[CustomMapViewer] Ajustando bounds para ${markers.value.length} markers`)
-    
-    const bounds = new google.maps.LatLngBounds()
-    markers.value.forEach(marker => {
-      const pos = marker.getPosition()
-      console.log(`[CustomMapViewer] Adicionando posição ao bounds:`, { lat: pos.lat(), lng: pos.lng() })
-      bounds.extend(pos)
-    })
-    
-    console.log(`[CustomMapViewer] Bounds calculados:`, {
-      ne: { lat: bounds.getNorthEast().lat(), lng: bounds.getNorthEast().lng() },
-      sw: { lat: bounds.getSouthWest().lat(), lng: bounds.getSouthWest().lng() }
-    })
-    
-    googleMap.value.fitBounds(bounds)
-    
-    console.log(`[CustomMapViewer] fitBounds aplicado`)
-    
-    // Se for apenas um marker, não dar zoom muito próximo
-    if (markers.value.length === 1) {
-      const listener = google.maps.event.addListener(googleMap.value, 'idle', () => {
-        if (googleMap.value.getZoom() > 15) {
-          googleMap.value.setZoom(15)
+    // Watch para mudanças de tema do usuário (uiStore)
+    watch(
+      () => uiStore.theme,
+      (newTheme) => {
+        console.log('[CustomMapViewer] Tema do usuário alterado para:', newTheme)
+        if (googleMap.value) {
+          const newStyles = getMapStyles(newTheme, newTheme)
+          const newBgColor = newTheme === 'dark' ? '#242f3e' : '#F1F3F4'
+          googleMap.value.setOptions({
+            styles: newStyles,
+            backgroundColor: newBgColor
+          })
+          console.log('[CustomMapViewer] Estilos do mapa atualizados para:', newTheme)
+          
+          // Atualizar polylines com nova espessura baseada no tema
+          updateCablePolylines()
         }
-        google.maps.event.removeListener(listener)
-      })
-    }
+      },
+      { immediate: false }
+    )
     
-    console.log(`[CustomMapViewer] Markers configurados e visíveis no mapa`)
-  } else {
-    console.warn('[CustomMapViewer] Nenhum marker para exibir!')
+    // ✅ ATUALIZAR MAPA após inicialização completa do Google Maps
+    console.log('[CustomMapViewer] Google Maps pronto - aplicando seleção inicial')
+    updateMap()
+}
+
+const MAPBOX_STYLE_PRESETS = {
+  streets: 'mapbox://styles/mapbox/streets-v12',
+  'streets-v12': 'mapbox://styles/mapbox/streets-v12',
+  'street-v12': 'mapbox://styles/mapbox/streets-v12',
+  satellite: 'mapbox://styles/mapbox/satellite-v9',
+  'satellite-v9': 'mapbox://styles/mapbox/satellite-v9',
+  'satellite-streets': 'mapbox://styles/mapbox/satellite-streets-v12',
+  'satellite-streets-v12': 'mapbox://styles/mapbox/satellite-streets-v12',
+  outdoors: 'mapbox://styles/mapbox/outdoors-v12',
+  'outdoors-v12': 'mapbox://styles/mapbox/outdoors-v12',
+  terrain: 'mapbox://styles/mapbox/outdoors-v12',
+  light: 'mapbox://styles/mapbox/light-v11',
+  'light-v11': 'mapbox://styles/mapbox/light-v11',
+  dark: 'mapbox://styles/mapbox/dark-v11',
+  'dark-v11': 'mapbox://styles/mapbox/dark-v11',
+  navigation: 'mapbox://styles/mapbox/navigation-day-v1',
+  'navigation-day': 'mapbox://styles/mapbox/navigation-day-v1',
+  'navigation-day-v1': 'mapbox://styles/mapbox/navigation-day-v1',
+  'navigation-night': 'mapbox://styles/mapbox/navigation-night-v1',
+  'navigation-night-v1': 'mapbox://styles/mapbox/navigation-night-v1'
+}
+
+const mapboxDiagnosticsState = {
+  running: false
+}
+
+const resolveMapboxStyle = (rawStyle, sourceLabel) => {
+  const style = (rawStyle || '').trim()
+  if (!style) {
+    return ''
+  }
+
+  const lower = style.toLowerCase()
+
+  if (style.startsWith('mapbox://') || style.startsWith('http://') || style.startsWith('https://')) {
+    return style
+  }
+
+  if (MAPBOX_STYLE_PRESETS[lower]) {
+    console.log(`[CustomMapViewer] Normalizando estilo Mapbox (${sourceLabel}):`, style, '→', MAPBOX_STYLE_PRESETS[lower])
+    return MAPBOX_STYLE_PRESETS[lower]
+  }
+
+  console.warn(`[CustomMapViewer] Estilo Mapbox inválido (${sourceLabel}):`, style)
+  return ''
+}
+
+const buildStyleValidationUrl = (styleUrl, token) => {
+  if (!styleUrl) {
+    return null
+  }
+
+  if (styleUrl.startsWith('mapbox://styles/')) {
+    const stylePath = styleUrl.substring('mapbox://styles/'.length)
+    return `https://api.mapbox.com/styles/v1/${stylePath}?access_token=${token}`
+  }
+
+  if (styleUrl.startsWith('https://api.mapbox.com') || styleUrl.startsWith('http://api.mapbox.com')) {
+    try {
+      const url = new URL(styleUrl)
+      if (!url.searchParams.has('access_token')) {
+        url.searchParams.set('access_token', token)
+      }
+      return url.toString()
+    } catch (error) {
+      console.warn('[CustomMapViewer] URL de estilo Mapbox inválida:', styleUrl, error)
+      return null
+    }
+  }
+
+  // URLs externas não podem ser validadas com antecedência (CORS), assumir válidas
+  return null
+}
+
+const validateMapboxStyleReachability = async (styleUrl, token) => {
+  const validationUrl = buildStyleValidationUrl(styleUrl, token)
+  if (!validationUrl) {
+    console.log('[CustomMapViewer] Validação pulada (sem URL) para estilo:', styleUrl)
+    return true
+  }
+
+  try {
+    const response = await fetch(validationUrl, { method: 'GET', mode: 'cors' })
+    if (response.ok) {
+      console.log('[CustomMapViewer] Estilo disponível:', styleUrl)
+      return true
+    }
+
+    const status = response.status
+    let detail = ''
+    try {
+      const raw = await response.text()
+      detail = raw.slice(0, 140)
+    } catch (readError) {
+      detail = String(readError)
+    }
+    console.warn(`[CustomMapViewer] Estilo Mapbox indisponível (${status}) para ${styleUrl}:`, detail)
+    return false
+  } catch (error) {
+    console.error('[CustomMapViewer] Erro ao validar estilo Mapbox:', styleUrl, error)
+    return false
   }
 }
 
-const getStatusColor = (status) => {
-  const colors = {
-    online: '#10b981',
-    warning: '#f59e0b',
-    critical: '#ef4444',
-    offline: '#6b7280'
-  }
-  return colors[status] || colors.offline
-}
+const buildMapboxStyleCandidates = () => {
+  const customStyle = resolveMapboxStyle(configForm.value.MAPBOX_CUSTOM_STYLE, 'custom')
+  const configuredStyle = resolveMapboxStyle(configForm.value.MAPBOX_STYLE, 'config')
 
-// Função para obter estilos do mapa baseado no tema
-const getMapStyles = (theme) => {
-  if (theme === 'light') {
-    // Estilo claro: mantém as cores padrão do Google Maps com ajustes sutis
-    return [
-      { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
-      { elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
-      { elementType: 'labels.text.stroke', stylers: [{ color: '#f5f5f5' }] },
-      { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-      { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e5e5e5' }] },
-      { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
-      { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c9e6f7' }] },
-      { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4e91c7' }] },
-      { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#eeeeee' }] },
-      { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#e5f4e3' }] }
-    ]
-  } else {
-    // Estilo escuro
-    return [
-      { elementType: 'geometry', stylers: [{ color: '#1d2c4d' }] },
-      { elementType: 'labels.text.fill', stylers: [{ color: '#8ec3b9' }] },
-      { elementType: 'labels.text.stroke', stylers: [{ color: '#1a3646' }] },
-      { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#38414e' }] },
-      { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#212a37' }] },
-      { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9ca5b3' }] },
-      { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0e1626' }] },
-      { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4e6d70' }] }
-    ]
+  const styles = Array.from(new Set([
+    customStyle,
+    configuredStyle,
+    'mapbox://styles/mapbox/streets-v12',
+    'mapbox://styles/mapbox/streets-v11',
+    'mapbox://styles/mapbox/outdoors-v12',
+    'mapbox://styles/mapbox/light-v11',
+    'mapbox://styles/mapbox/dark-v11',
+    'mapbox://styles/mapbox/satellite-streets-v12',
+    'mapbox://styles/mapbox/satellite-v9'
+  ].filter(Boolean)))
+
+  return {
+    styles,
+    customStyle,
+    configuredStyle
   }
 }
 
-const getMarkerIcon = (status) => {
-  const colors = {
-    online: '#10b981',
-    warning: '#f59e0b',
-    critical: '#ef4444',
-    offline: '#6b7280'
+const runAutomaticMapboxDiagnostics = async ({ token, styles, center, zoom }) => {
+  if (mapboxDiagnosticsState.running) {
+    console.log('[CustomMapViewer] Diagnóstico Mapbox já em execução, ignorando chamada')
+    return null
+  }
+
+  mapboxDiagnosticsState.running = true
+  try {
+    const diagnosticStyles = styles?.length ? styles : MAPBOX_STYLE_DIAGNOSTICS_DEFAULTS
+    console.log('[CustomMapViewer] Iniciando diagnóstico automático Mapbox com estilos:', diagnosticStyles.map((s) => (typeof s === 'string' ? s : s.url)))
+    const results = await runMapboxStyleDiagnostics({
+      mapboxgl,
+      token,
+      styles: diagnosticStyles,
+      center,
+      zoom,
+      verbose: true
+    })
+    console.log('[CustomMapViewer] Diagnóstico Mapbox concluído:', results)
+    return results
+  } catch (diagnosticError) {
+    console.error('[CustomMapViewer] Falha ao executar diagnóstico Mapbox:', diagnosticError)
+    return null
+  } finally {
+    mapboxDiagnosticsState.running = false
+  }
+}
+
+const createMapboxInstanceForStyle = ({ styleUrl, center, zoom }) => {
+  const containerEl = mapContainer.value
+  if (!containerEl) {
+    throw new Error('Container do mapa não encontrado para inicializar o Mapbox')
+  }
+
+  // Garantir que o container esteja limpo para evitar avisos do Mapbox
+  if (containerEl.firstChild) {
+    containerEl.replaceChildren()
+  }
+
+  console.log(`[CustomMapViewer] Tentando carregar estilo Mapbox: ${styleUrl}`)
+
+  return new Promise((resolve, reject) => {
+    let settled = false
+
+    const map = new mapboxgl.Map({
+      container: containerEl,
+      style: styleUrl,
+      center,
+      zoom,
+      attributionControl: true,
+      cooperativeGestures: true,
+      pitch: 0,
+      bearing: 0
+    })
+
+    const settle = (error) => {
+      if (settled) {
+        return
+      }
+      settled = true
+
+      map.off('load', onLoad)
+      map.off('error', onError)
+      window.clearTimeout(timeoutId)
+
+      if (error) {
+        try {
+          map.remove()
+        } catch (removeError) {
+          console.warn('[CustomMapViewer] Falha ao remover instância Mapbox após erro:', removeError)
+        }
+
+        const normalized = error instanceof Error ? error : new Error(String(error))
+        normalized.mapboxStyle = styleUrl
+        reject(normalized)
+      } else {
+        resolve(map)
+      }
+    }
+
+    const onLoad = () => {
+      console.log(`[CustomMapViewer] ✅ Estilo Mapbox carregado: ${styleUrl}`)
+      settle()
+    }
+
+    const onError = (event) => {
+      const rawError = event?.error || event
+      let detailMessage = 'Erro desconhecido ao carregar Mapbox'
+
+      if (rawError) {
+        if (rawError instanceof Error) {
+          detailMessage = rawError.message
+        } else if (typeof rawError === 'string') {
+          detailMessage = rawError
+        } else if (typeof rawError?.message === 'string') {
+          detailMessage = rawError.message
+        }
+      }
+
+      console.error(`[CustomMapViewer] ❌ Mapbox erro (${styleUrl}):`, rawError)
+      settle(new Error(detailMessage))
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      console.warn(`[CustomMapViewer] ⏱️ Timeout ao carregar estilo Mapbox (${styleUrl})`)
+      settle(new Error('Timeout ao carregar Mapbox'))
+    }, 30000)
+
+    map.once('load', onLoad)
+    map.once('error', onError)
+  })
+}
+
+const initMapboxMap = async () => {
+  console.log('[CustomMapViewer] Iniciando Mapbox com lógica direta (sem proxy)...')
+  console.log('[CustomMapViewer] configForm completo:', JSON.stringify(configForm.value, null, 2))
+  resetZoomListener()
+
+  const mapboxToken = (configForm.value.MAPBOX_TOKEN || '').trim()
+  if (!mapboxToken) {
+    console.error('[CustomMapViewer] Token do Mapbox não configurado')
+    console.error('[CustomMapViewer] Campos disponíveis em configForm:', Object.keys(configForm.value))
+    throw new Error('Token do Mapbox não configurado. Configure em Setup > Mapas.')
+  }
+
+  // ✅ LAZY LOADING: Carregar Mapbox apenas quando necessário
+  if (!mapboxgl) {
+    console.log('[CustomMapViewer] Carregando biblioteca Mapbox sob demanda...')
+    mapboxgl = await loadMapbox()
+    // Expor globalmente para uso pelos composables
+    if (mapboxgl && typeof window !== 'undefined') {
+      window.mapboxgl = mapboxgl
+    }
+  }
+
+  mapboxgl.accessToken = mapboxToken
+  console.log('[CustomMapViewer] mapboxgl.version:', mapboxgl.version)
+
+  let candidateStyles = []
+  let selectedStyle = ''
+  let mapZoom = parseInt(configForm.value.MAP_DEFAULT_ZOOM) || 12
+  let mapLat = parseFloat(configForm.value.MAP_DEFAULT_LAT) || -15.7801
+  let mapLng = parseFloat(configForm.value.MAP_DEFAULT_LNG) || -47.9292
+
+  try {
+    currentMapProvider.value = 'mapbox'
+
+    const { styles, customStyle, configuredStyle } = buildMapboxStyleCandidates()
+    candidateStyles = styles
+
+    if (candidateStyles.length === 0) {
+      candidateStyles.push('mapbox://styles/mapbox/streets-v12')
+    }
+
+    const styleErrors = []
+
+    for (const styleCandidate of candidateStyles) {
+      let reachable = true
+      try {
+        reachable = await validateMapboxStyleReachability(styleCandidate, mapboxToken)
+      } catch (validationError) {
+        reachable = false
+        console.warn('[CustomMapViewer] Validação do estilo Mapbox falhou (exceção):', styleCandidate, validationError)
+      }
+
+      if (!reachable) {
+        console.warn('[CustomMapViewer] Estilo reprovado na validação, pulando tentativa direta:', styleCandidate)
+        styleErrors.push({ style: styleCandidate, message: 'Validação falhou (HTTP ou CORS)' })
+        continue
+      }
+
+      try {
+        const mapInstance = await createMapboxInstanceForStyle({
+          styleUrl: styleCandidate,
+          center: [mapLng, mapLat],
+          zoom: mapZoom
+        })
+
+        googleMap.value = mapInstance
+        selectedStyle = styleCandidate
+        break
+      } catch (attemptError) {
+        console.warn('[CustomMapViewer] Falha ao aplicar estilo Mapbox:', styleCandidate, attemptError)
+        styleErrors.push({ style: styleCandidate, message: attemptError.message })
+      }
+    }
+
+    if (!googleMap.value) {
+      const aggregated = styleErrors.map((entry) => `${entry.style}: ${entry.message}`).join(' | ')
+      throw new Error(aggregated ? `Falha ao carregar estilos Mapbox. Detalhes: ${aggregated}` : 'Nenhum estilo Mapbox pôde ser carregado. Verifique o token e tente novamente.')
+    }
+
+    googleMap.value.addControl(new mapboxgl.NavigationControl(), 'top-right')
+    googleMap.value.addControl(new mapboxgl.ScaleControl({ unit: 'metric' }))
+
+    const preferredStyle = customStyle || configuredStyle
+    if (preferredStyle && preferredStyle !== selectedStyle) {
+      console.warn(`[CustomMapViewer] Estilo preferido (${preferredStyle}) indisponível. Aplicando fallback ${selectedStyle}`)
+    } else if (!preferredStyle) {
+      console.warn('[CustomMapViewer] Nenhum estilo Mapbox personalizado configurado. Utilizando fallback automático', selectedStyle)
+    }
+
+    console.log('[CustomMapViewer] Mapbox inicializado com sucesso!', {
+      style: selectedStyle,
+      zoom: mapZoom,
+      center: [mapLng, mapLat]
+    })
+
+    registerMapboxZoomListener()
+    updateMapboxMarkerSizes()
+    
+    console.log('[CustomMapViewer] 🎯 Mapbox inicializado')
+    console.log('[CustomMapViewer] Devices selecionados:', selectedItems.value.devices.length)
+    console.log('[CustomMapViewer] Cabos selecionados:', selectedItems.value.cables.length)
+    
+    // Aguardar 500ms para garantir que o mapa está completamente renderizado
+    setTimeout(() => {
+      console.log('[CustomMapViewer] 🚀 Renderizando overlays após delay...')
+      updateMap()
+    }, 500)
+  } catch (error) {
+    console.error('[CustomMapViewer] Erro detalhado ao inicializar Mapbox:')
+    console.error('  - Message:', error.message)
+    console.error('  - Stack:', error.stack)
+    console.error('  - Error object:', error)
+
+    // Executar diagnóstico expandido em caso de falha
+    runAutomaticMapboxDiagnostics({
+      token: mapboxToken,
+      styles: candidateStyles,
+      center: [mapLng, mapLat],
+      zoom: mapZoom
+    }).catch((diagnosticError) => {
+      console.error('[CustomMapViewer] Diagnóstico automático falhou:', diagnosticError)
+    })
+    throw error
+  }
+}
+
+const initOpenStreetMap = async () => {
+  console.log('[CustomMapViewer] Iniciando OpenStreetMap com Leaflet...')
+  
+  // ✅ LAZY LOADING: Carregar Leaflet apenas quando necessário
+  if (!L) {
+    console.log('[CustomMapViewer] Carregando biblioteca Leaflet sob demanda...')
+    L = await loadLeaflet()
   }
   
-  return {
-    path: google.maps.SymbolPath.CIRCLE,
-    fillColor: colors[status] || colors.offline,
-    fillOpacity: 0.9,
-    strokeColor: '#fff',
-    strokeWeight: 2,
-    scale: 8
-  }
+  console.log('[CustomMapViewer] L disponível:', !!L)
+  console.log('[CustomMapViewer] L.version:', L.version)
+  
+  currentMapProvider.value = 'osm'
+  resetZoomListener()
+  
+  const mapZoom = parseInt(configForm.value.MAP_DEFAULT_ZOOM) || 12
+  const mapLat = parseFloat(configForm.value.MAP_DEFAULT_LAT) || -15.7801
+  const mapLng = parseFloat(configForm.value.MAP_DEFAULT_LNG) || -47.9292
+  
+  googleMap.value = L.map(mapContainer.value).setView([mapLat, mapLng], mapZoom)
+  
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(googleMap.value)
+  
+  console.log('[CustomMapViewer] OpenStreetMap inicializado com sucesso')
+  
+  // ✅ ATUALIZAR MAPA após inicialização completa do OSM
+  console.log('[CustomMapViewer] OSM pronto - aplicando seleção inicial')
+  updateMap()
 }
+
+// ==========================================
+// CAMADA DE ABSTRAÇÃO PARA MÚLTIPLOS PROVEDORES
+// ==========================================
+// ✅ FASE 3: Funções movidas para composables (useMapMarkers, useMapPolylines)
 
 const saveMapItems = async () => {
   try {
@@ -1380,7 +1178,7 @@ const saveMapItems = async () => {
       return
     }
     
-    const response = await fetch(`/inventory/api/v1/maps/custom/${mapId}/items/`, {
+    const response = await fetch(`/api/v1/maps/custom/${mapId}/items/`, {
       method: 'POST',
       credentials: 'include',
       headers: {
@@ -1404,31 +1202,56 @@ const saveMapItems = async () => {
   }
 }
 
-// Observar mudanças no tema e atualizar estilos do mapa
-watch(() => uiStore.theme, (newTheme) => {
-  if (googleMap.value) {
-    console.log('[CustomMapViewer] Tema alterado para:', newTheme)
-    googleMap.value.setOptions({
-      styles: getMapStyles(newTheme)
-    })
-    console.log('[CustomMapViewer] Estilos do mapa atualizados')
-  }
-})
-
 // Observar mudanças nos items selecionados e atualizar mapa
 watch(() => selectedItems.value.devices, () => {
-  if (googleMap.value) {
-    console.log('[CustomMapViewer] Devices selecionados alterados')
-    updateMapMarkers()
-  }
+  if (!googleMap.value) return
+  console.log('[CustomMapViewer] Devices selecionados alterados → updateMap')
+  updateMap()
 }, { deep: true })
 
 watch(() => selectedItems.value.cables, () => {
-  if (googleMap.value) {
-    console.log('[CustomMapViewer] Cabos selecionados alterados')
-    updateCablePolylines()
-  }
+  if (!googleMap.value) return
+  console.log('[CustomMapViewer] Cabos selecionados alterados → updateMap')
+  updateMap()
 }, { deep: true })
+
+// 🔄 WATCHER: Detecta mudanças no provider e reinicializa o mapa (EXCLUSÃO MÚTUA)
+watch(
+  () => configForm.value.MAP_PROVIDER,
+  async (newProvider, oldProvider) => {
+    if (!mapContainer.value || !oldProvider) return // Ignora primeira inicialização
+    
+    console.log(`[CustomMapViewer] 🔄 Provider mudou: ${oldProvider} → ${newProvider}`)
+    console.log('[CustomMapViewer] 🗑️ Destruindo mapa anterior...')
+    
+    // Destruir mapa anterior
+    if (googleMap.value) {
+      destroyCurrentMap()
+    }
+    
+    console.log(`[CustomMapViewer] 🆕 Inicializando ${newProvider}...`)
+    // Inicializar novo mapa
+    await initMap()
+  }
+)
+
+// Função para abrir detalhes completos do cabo
+const openCableFullDetails = (cable) => {
+  console.log('[CustomMapViewer] Abrir detalhes completos do cabo:', cable.name)
+  showCableModal.value = false
+  selectedCable.value = cable
+  showCableDetailModal.value = true
+}
+
+// Função para salvar alterações do cabo
+const handleCableSave = async (cable) => {
+  console.log('[CustomMapViewer] Salvando cabo:', cable)
+  // TODO: Implementar salvamento no backend
+  showCableDetailModal.value = false
+  // Recarregar inventário para atualizar dados
+  await loadInventoryItems()
+  updateMap()
+}
 
 onMounted(async () => {
   console.log('[CustomMapViewer] Componente montado, iniciando carregamento...')
@@ -1452,8 +1275,29 @@ onMounted(async () => {
       console.log(`[CustomMapViewer] Mapa default: ${selectedItems.value.cables.length} cabos selecionados automaticamente`)
     }
   }
+
+  if (typeof window !== 'undefined') {
+    window.__runMapboxStyleDiagnostics = async (overrideStyles) => {
+      const token = (configForm.value.MAPBOX_TOKEN || '').trim()
+      const lat = parseFloat(configForm.value.MAP_DEFAULT_LAT) || -15.7801
+      const lng = parseFloat(configForm.value.MAP_DEFAULT_LNG) || -47.9292
+      const zoom = parseInt(configForm.value.MAP_DEFAULT_ZOOM) || 12
+      const candidateSet = buildMapboxStyleCandidates()
+      const styles = overrideStyles && overrideStyles.length ? overrideStyles : candidateSet.styles
+
+      console.log('[CustomMapViewer] Executando diagnóstico manual de estilos Mapbox...', { styles, lat, lng, zoom, candidateSet })
+      const results = await runAutomaticMapboxDiagnostics({
+        token,
+        styles,
+        center: [lng, lat],
+        zoom
+      })
+      console.log('[CustomMapViewer] Resultado diagnóstico manual:', results)
+      return results
+    }
+  }
   
-  // 4. Inicializar Google Maps
+  // 4. Inicializar mapa (updateMap() será chamado automaticamente após concluir init)
   await initMap()
   
   // 5. Marcar que o carregamento inicial foi concluído
@@ -1463,11 +1307,77 @@ onMounted(async () => {
     console.log('[CustomMapViewer] Carregamento inicial concluído - animações desativadas')
   }, 2000)
   
-  console.log('[CustomMapViewer] Inicialização completa')
+  console.log('[CustomMapViewer] ✓ onMounted completo')
 })
 
 onBeforeUnmount(() => {
+  console.log('[CustomMapViewer] Limpando recursos antes de desmontar')
+  
+  // 1. Limpar MarkerClusterer
+  if (markerClusterer.value) {
+    markerClusterer.value.clearMarkers()
+    if (typeof markerClusterer.value.setMap === 'function') {
+      markerClusterer.value.setMap(null)
+    }
+    markerClusterer.value = null
+  }
+  
+  // 2. Limpar todos os markers do Map
+  activeMarkers.forEach((marker) => {
+    try {
+      clearMarkerListeners(marker)
+    } catch (error) {
+      console.warn('[CustomMapViewer] Falha ao limpar listeners do marker ao desmontar:', error)
+    }
+
+    if (typeof marker.setMap === 'function') {
+      marker.setMap(null)
+    } else if (typeof marker.remove === 'function') {
+      marker.remove()
+    }
+  })
+  activeMarkers.clear()
+  
+  // 3. Limpar todas as polylines do Map
+  activePolylines.forEach((polyline) => {
+    try {
+      clearPolylineListeners(polyline)
+    } catch (error) {
+      console.warn('[CustomMapViewer] Falha ao limpar listeners da polyline ao desmontar:', error)
+    }
+
+    if (typeof polyline.setMap === 'function') {
+      polyline.setMap(null)
+    } else if (currentMapProvider.value === 'mapbox') {
+      if (polyline.layerId && googleMap.value?.getLayer(polyline.layerId)) {
+        googleMap.value.removeLayer(polyline.layerId)
+      }
+      if (polyline.sourceId && googleMap.value?.getSource(polyline.sourceId)) {
+        googleMap.value.removeSource(polyline.sourceId)
+      }
+    } else if (currentMapProvider.value === 'osm' && typeof polyline.remove === 'function') {
+      polyline.remove()
+    }
+  })
+  activePolylines.clear()
+  
+  // 4. Limpar listeners do mapa
+  if (googleMap.value) {
+    if (currentMapProvider.value === 'mapbox' && typeof googleMap.value.remove === 'function') {
+      googleMap.value.remove()
+    } else if (currentMapProvider.value === 'osm' && typeof googleMap.value.remove === 'function') {
+      googleMap.value.remove()
+    }
+    if (currentMapProvider.value === 'google') {
+      google.maps.event.clearInstanceListeners(googleMap.value)
+    }
+    googleMap.value = null
+  }
+  
+  // 5. Remover event listener do window
   window.removeEventListener('google-maps-loaded', initMap)
+  
+  console.log('[CustomMapViewer] Recursos limpos')
 })
 </script>
 
@@ -1478,12 +1388,12 @@ onBeforeUnmount(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: #1a1d2e;
+  background: var(--bg-primary);
   display: flex;
   flex-direction: column;
   /* Ajustar margem baseado no estado do menu */
   margin-left: var(--nav-menu-width, 72px);
-  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;
 }
 
 /* Quando o menu está expandido */
@@ -1494,72 +1404,6 @@ onBeforeUnmount(() => {
 /* Quando o menu está colapsado */
 :root[data-nav-menu-open="false"] .custom-map-viewer {
   margin-left: 72px;
-}
-
-.map-toolbar {
-  height: 64px;
-  background: rgba(0, 0, 0, 0.3);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 24px;
-  z-index: 1000;
-}
-
-.toolbar-left,
-.toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.btn-back {
-  padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  color: #fff;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: all 0.2s;
-}
-
-.btn-back:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.map-title h2 {
-  margin: 0;
-  font-size: 18px;
-  color: #fff;
-}
-
-.map-category {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
-  text-transform: uppercase;
-  font-weight: 600;
-}
-
-.btn-toolbar {
-  padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  color: #fff;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: all 0.2s;
-}
-
-.btn-toolbar:hover {
-  background: rgba(16, 185, 129, 0.2);
-  border-color: rgba(16, 185, 129, 0.5);
 }
 
 .map-content {
@@ -1573,56 +1417,122 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
-.inventory-panel {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 400px;
-  height: 100%;
-  background: rgba(30, 33, 57, 0.95);
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  flex-direction: column;
-  backdrop-filter: blur(10px);
-  z-index: 1000;
+.custom-map-viewer.fullscreen {
+  z-index: 10000;
 }
 
-.slide-enter-active,
-.slide-leave-active {
-  transition: transform 0.3s ease;
+/* ==========================================
+   LIGHT THEME OVERRIDES
+   ========================================== */
+:root[data-theme="light"] .custom-map-viewer,
+html:not(.dark)[data-theme="light"] .custom-map-viewer {
+  background: var(--bg-primary);
 }
 
-.slide-enter-from,
-.slide-leave-to {
-  transform: translateX(100%);
+:root[data-theme="light"] .inventory-panel,
+html:not(.dark)[data-theme="light"] .inventory-panel {
+  background: rgba(255, 255, 255, 0.95);
+  border-left: 1px solid rgba(0, 0, 0, 0.1);
 }
 
-.panel-header {
-  padding: 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+:root[data-theme="light"] .panel-header h3,
+html:not(.dark)[data-theme="light"] .panel-header h3 {
+  color: var(--text-primary);
 }
 
-.panel-header h3 {
-  margin: 0;
-  font-size: 18px;
-  color: #fff;
+:root[data-theme="light"] .btn-close-panel,
+html:not(.dark)[data-theme="light"] .btn-close-panel {
+  color: var(--text-tertiary);
 }
 
-.btn-close-panel {
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 32px;
-  cursor: pointer;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+:root[data-theme="light"] .panel-header,
+html:not(.dark)[data-theme="light"] .panel-header,
+:root[data-theme="light"] .panel-tabs,
+html:not(.dark)[data-theme="light"] .panel-tabs {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="light"] .tab-btn,
+html:not(.dark)[data-theme="light"] .tab-btn {
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .search-box input,
+html:not(.dark)[data-theme="light"] .search-box input {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .search-box i,
+html:not(.dark)[data-theme="light"] .search-box i {
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .site-row,
+html:not(.dark)[data-theme="light"] .site-row {
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="light"] .site-row:hover,
+html:not(.dark)[data-theme="light"] .site-row:hover {
+  background: rgba(16, 185, 129, 0.05);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+:root[data-theme="light"] .site-name,
+html:not(.dark)[data-theme="light"] .site-name,
+:root[data-theme="light"] .device-name,
+html:not(.dark)[data-theme="light"] .device-name {
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .site-count,
+html:not(.dark)[data-theme="light"] .site-count,
+:root[data-theme="light"] .device-info,
+html:not(.dark)[data-theme="light"] .device-info {
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .btn-expand,
+html:not(.dark)[data-theme="light"] .btn-expand {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .item-name,
+html:not(.dark)[data-theme="light"] .item-name {
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .btn-panel.btn-secondary,
+html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .btn-panel.btn-secondary:hover,
+html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+/* ==========================================
+   MAPBOX MARKERS - Garantir visibilidade
+   ========================================== */
+.mapbox-marker {
+  display: block !important;
+  width: 30px !important;
+  height: 30px !important;
+  z-index: 1000 !important;
+  position: relative !important;
+  pointer-events: auto !important;
+}
+
+.mapboxgl-marker {
+  z-index: 1000 !important;
 }
 
 .panel-tabs {
@@ -1633,8 +1543,8 @@ onBeforeUnmount(() => {
   overflow-x: auto;
 }
 
-.tab-btn {
-  flex: 1;
+/* ==========================================
+   MAPBOX MARKERS - Garantir visibilidade
   padding: 12px 8px;
   background: transparent;
   border: none;
@@ -2129,58 +2039,121 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.1);
 }
 
-.map-legend {
-  position: absolute;
-  bottom: 24px;
-  left: 24px;
-  background: rgba(30, 33, 57, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  padding: 12px 16px;
-  backdrop-filter: blur(10px);
-  z-index: 100;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.legend-item:last-child {
-  margin-bottom: 0;
-}
-
-.legend-marker {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 2px solid #fff;
-}
-
-.legend-marker.online {
-  background: #10b981;
-}
-
-.legend-marker.warning {
-  background: #f59e0b;
-}
-
-.legend-marker.critical {
-  background: #ef4444;
-}
-
-.legend-marker.offline {
-  background: #6b7280;
-}
-
-.legend-label {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.8);
-}
-
 .custom-map-viewer.fullscreen {
   z-index: 10000;
+}
+
+/* ==========================================
+   LIGHT THEME OVERRIDES
+   ========================================== */
+:root[data-theme="light"] .custom-map-viewer,
+html:not(.dark)[data-theme="light"] .custom-map-viewer {
+  background: var(--bg-primary);
+}
+
+:root[data-theme="light"] .inventory-panel,
+html:not(.dark)[data-theme="light"] .inventory-panel {
+  background: rgba(255, 255, 255, 0.95);
+  border-left: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="light"] .panel-header h3,
+html:not(.dark)[data-theme="light"] .panel-header h3 {
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .btn-close-panel,
+html:not(.dark)[data-theme="light"] .btn-close-panel {
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .panel-header,
+html:not(.dark)[data-theme="light"] .panel-header,
+:root[data-theme="light"] .panel-tabs,
+html:not(.dark)[data-theme="light"] .panel-tabs {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="light"] .tab-btn,
+html:not(.dark)[data-theme="light"] .tab-btn {
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .search-box input,
+html:not(.dark)[data-theme="light"] .search-box input {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .search-box i,
+html:not(.dark)[data-theme="light"] .search-box i {
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .site-row,
+html:not(.dark)[data-theme="light"] .site-row {
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="light"] .site-row:hover,
+html:not(.dark)[data-theme="light"] .site-row:hover {
+  background: rgba(16, 185, 129, 0.05);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+:root[data-theme="light"] .site-name,
+html:not(.dark)[data-theme="light"] .site-name,
+:root[data-theme="light"] .device-name,
+html:not(.dark)[data-theme="light"] .device-name {
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .site-count,
+html:not(.dark)[data-theme="light"] .site-count,
+:root[data-theme="light"] .device-info,
+html:not(.dark)[data-theme="light"] .device-info {
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .btn-expand,
+html:not(.dark)[data-theme="light"] .btn-expand {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .item-name,
+html:not(.dark)[data-theme="light"] .item-name {
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .btn-panel.btn-secondary,
+html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .btn-panel.btn-secondary:hover,
+html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+/* ==========================================
+   MAPBOX MARKERS - Garantir visibilidade
+   ========================================== */
+.mapbox-marker {
+  display: block !important;
+  width: 30px !important;
+  height: 30px !important;
+  z-index: 1000 !important;
+  position: relative !important;
+  pointer-events: auto !important;
+}
+
+.mapboxgl-marker {
+  z-index: 1000 !important;
 }
 </style>

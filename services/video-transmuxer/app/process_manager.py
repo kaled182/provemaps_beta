@@ -1,7 +1,10 @@
+import logging
 import threading
 import time
 import subprocess
 from typing import Dict, Optional
+
+logger = logging.getLogger("video_transmuxer")
 
 
 class StreamProcessManager:
@@ -16,6 +19,14 @@ class StreamProcessManager:
         for stream_id, info in self._processes.items():
             process = info.get("process")
             if isinstance(process, subprocess.Popen) and process.poll() is not None:
+                # Log stderr when process terminates unexpectedly
+                stderr_data = process.stderr.read() if process.stderr else b""
+                if stderr_data:
+                    logger.warning(
+                        "Stream %s terminou com erros:\n%s",
+                        stream_id,
+                        stderr_data.decode("utf-8", errors="replace")[:500]
+                    )
                 to_remove.append(stream_id)
         for stream_id in to_remove:
             self._processes.pop(stream_id, None)
@@ -27,8 +38,8 @@ class StreamProcessManager:
         with self._lock:
             process = subprocess.Popen(
                 command,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
             )
             self._processes[stream_id] = {
                 "process": process,

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from django.urls import path
+from django.core.exceptions import ImproperlyConfigured
+import logging
+
 from .api.splice_matrix import (
     SpliceBoxMatrixView,
     CreateFusionView,
@@ -8,17 +11,33 @@ from .api.splice_matrix import (
     BoxContextView,
 )
 from .api.cable_attachment import CableAttachmentViewSet
-from .api.cable_split import CableSplitViewSet
-from .api.cable_split_v2 import CableSplitV2View
-from .api.attach_loose_end import AttachLooseEndView
-from .api.create_standalone_ceo import CreateStandaloneCEOView
-from .api.list_standalone_ceos import ListStandaloneCEOsView
-from .api.list_loose_ends import ListLooseEndsView
+
+logger = logging.getLogger(__name__)
+
+# GIS-dependent endpoints (require GDAL). In lightweight test environments we
+# tolerate missing GDAL by skipping these routes instead of blowing up during
+# URL import.
+_GIS_ENDPOINTS_AVAILABLE = True
+try:
+    from .api.cable_split import CableSplitViewSet
+    from .api.cable_split_v2 import CableSplitV2View
+    from .api.attach_loose_end import AttachLooseEndView
+    from .api.create_standalone_ceo import CreateStandaloneCEOView
+    from .api.list_standalone_ceos import ListStandaloneCEOsView
+    from .api.list_loose_ends import ListLooseEndsView
+except ImproperlyConfigured:  # pragma: no cover - depends on GDAL availability
+    _GIS_ENDPOINTS_AVAILABLE = False
+    CableSplitViewSet = None  # type: ignore[assignment]
+    CableSplitV2View = None  # type: ignore[assignment]
+    AttachLooseEndView = None  # type: ignore[assignment]
+    CreateStandaloneCEOView = None  # type: ignore[assignment]
+    ListStandaloneCEOsView = None  # type: ignore[assignment]
+    ListLooseEndsView = None  # type: ignore[assignment]
+    logger.warning("GDAL not available; skipping GIS-dependent inventory APIs")
 
 from inventory.api import devices as device_api
 from inventory.api import fibers as fiber_api
 from inventory.api import routes as routes_api
-from inventory.api import spatial as spatial_api
 from inventory.api import zabbix_lookup as zabbix_lookup_api
 from inventory.api.trace_route import trace_fiber_route
 from inventory.api.infrastructure import (
@@ -26,6 +45,14 @@ from inventory.api.infrastructure import (
     api_update_infrastructure,
     api_delete_infrastructure,
 )
+
+_SPATIAL_ENDPOINTS_AVAILABLE = True
+try:
+    from inventory.api import spatial as spatial_api
+except ImproperlyConfigured:  # pragma: no cover - depends on GDAL availability
+    _SPATIAL_ENDPOINTS_AVAILABLE = False
+    spatial_api = None  # type: ignore[assignment]
+    logger.warning("GDAL not available; skipping spatial inventory APIs")
 
 app_name = "inventory-api"
 
@@ -41,49 +68,6 @@ urlpatterns = [
         CableAttachmentViewSet.as_view({'post': 'detach'}),
         name="cable-detach",
     ),
-    
-    # Cable Split
-    path(
-        "cables/split-at-ceo/",
-        CableSplitViewSet.as_view({'post': 'split_at_ceo'}),
-        name="cable-split-ceo",
-    ),
-    
-    # Cable Split V2 (usando CableSegments)
-    path(
-        "cables/<int:pk>/split-at-ceo-v2/",
-        CableSplitV2View.as_view(),
-        name="cable-split-ceo-v2",
-    ),
-    
-    # Attach Loose End (anexar ponta solta após rompimento)
-    path(
-        "infrastructure/<int:infrastructure_id>/attach-loose-end/",
-        AttachLooseEndView.as_view(),
-        name="attach-loose-end",
-    ),
-    
-    # Create Standalone CEO (criar CEO independente, não anexada a cabo)
-    path(
-        "infrastructure/create-standalone-ceo/",
-        CreateStandaloneCEOView.as_view(),
-        name="create-standalone-ceo",
-    ),
-    
-    # List Standalone CEOs (listar CEOs independentes)
-    path(
-        "infrastructure/standalone-ceos/",
-        ListStandaloneCEOsView.as_view(),
-        name="list-standalone-ceos",
-    ),
-    
-    # List Loose Ends (listar pontas soltas de segmentos rompidos)
-    path(
-        "segments/loose-ends/",
-        ListLooseEndsView.as_view(),
-        name="list-loose-ends",
-    ),
-    
     path(
         "devices/select-options/",
         device_api.api_device_select_options,
@@ -296,23 +280,6 @@ urlpatterns = [
         routes_api.enqueue_bulk_operations,
         name="routes-bulk",
     ),
-    # Spatial queries (Phase 10 - PostGIS)
-    path(
-        "segments/",
-        spatial_api.api_route_segments_bbox,
-        name="segments-bbox",
-    ),
-    path(
-        "fibers/bbox/",
-        spatial_api.api_fiber_cables_bbox,
-        name="fibers-bbox",
-    ),
-    # Phase 7 - Spatial radius search with ST_DWithin
-    path(
-        "sites/radius/",
-        spatial_api.api_sites_within_radius,
-        name="sites-radius",
-    ),
     # Phase 11 - Device Import System (Nov 2025)
     path(
         "devices/grouped/",
@@ -376,3 +343,64 @@ urlpatterns = [
         name='trace-route',
     ),
 ]
+
+if _GIS_ENDPOINTS_AVAILABLE:
+    urlpatterns += [
+        # Cable Split
+        path(
+            "cables/split-at-ceo/",
+            CableSplitViewSet.as_view({'post': 'split_at_ceo'}),
+            name="cable-split-ceo",
+        ),
+        # Cable Split V2 (usando CableSegments)
+        path(
+            "cables/<int:pk>/split-at-ceo-v2/",
+            CableSplitV2View.as_view(),
+            name="cable-split-ceo-v2",
+        ),
+        # Attach Loose End (anexar ponta solta após rompimento)
+        path(
+            "infrastructure/<int:infrastructure_id>/attach-loose-end/",
+            AttachLooseEndView.as_view(),
+            name="attach-loose-end",
+        ),
+        # Create Standalone CEO (criar CEO independente, não anexada a cabo)
+        path(
+            "infrastructure/create-standalone-ceo/",
+            CreateStandaloneCEOView.as_view(),
+            name="create-standalone-ceo",
+        ),
+        # List Standalone CEOs (listar CEOs independentes)
+        path(
+            "infrastructure/standalone-ceos/",
+            ListStandaloneCEOsView.as_view(),
+            name="list-standalone-ceos",
+        ),
+        # List Loose Ends (listar pontas soltas de segmentos rompidos)
+        path(
+            "segments/loose-ends/",
+            ListLooseEndsView.as_view(),
+            name="list-loose-ends",
+        ),
+    ]
+
+if _SPATIAL_ENDPOINTS_AVAILABLE:
+    urlpatterns += [
+        # Spatial queries (Phase 10 - PostGIS)
+        path(
+            "segments/",
+            spatial_api.api_route_segments_bbox,
+            name="segments-bbox",
+        ),
+        path(
+            "fibers/bbox/",
+            spatial_api.api_fiber_cables_bbox,
+            name="fibers-bbox",
+        ),
+        # Phase 7 - Spatial radius search with ST_DWithin
+        path(
+            "sites/radius/",
+            spatial_api.api_sites_within_radius,
+            name="sites-radius",
+        ),
+    ]

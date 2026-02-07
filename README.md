@@ -1,7 +1,7 @@
 ﻿# MapsProveFiber
 
-**Version:** 2.0.0 (Modular Refactor - Phase 5)  
-**Status:** ✅ Production-ready after modular architecture migration
+**Version:** 2.1.0 (Production Package Release)  
+**Status:** ✅ Production-ready with Docker deployment automation
 
 MapsProveFiber is a Django 5.x platform for fiber optic network infrastructure management, integrating real-time monitoring with Zabbix telemetry and advanced route planning capabilities.
 
@@ -12,6 +12,8 @@ MapsProveFiber is a Django 5.x platform for fiber optic network infrastructure m
 - 🏗️ **Inventory Management** — Authoritative models for Sites, Devices, Ports, Routes, and Fiber Cables
 - 📈 **Observability** — Prometheus metrics, health checks, structured logging, and request tracing
 - ⚡ **Async Processing** — Celery workers for background tasks and Channels for real-time WebSocket
+- 🐳 **Docker Production** — One-command deployment with automated SSL, backup, and monitoring
+- 🎨 **First-Time Setup Wizard** — Modern UI for initial configuration with encrypted credential storage
 
 ---
 
@@ -54,10 +56,38 @@ inventory_routeevent         # Route change events (renamed from routes_builder_
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.11+
-- MariaDB/MySQL (production) or SQLite (development)
-- Redis (optional but recommended)
-- Docker & Docker Compose (for containerized setup)
+- **Production**: Linux (Debian/Ubuntu), Docker & Docker Compose
+- **Development**: Python 3.11+, MariaDB/MySQL or SQLite, Redis (optional)
+
+### Production Deployment (Docker - Recommended) 🐳
+
+**One-command installation** for Linux production servers:
+
+```bash
+# Clone repository
+git clone https://github.com/kaled182/provemaps_beta.git
+cd provemaps_beta
+
+# Run automated installation
+chmod +x scripts/deploy-docker.sh
+sudo ./scripts/deploy-docker.sh install
+
+# Access your system
+# https://your-domain.com → First-Time Setup Wizard
+```
+
+**Duration**: 10-15 minutes (fully automated)
+
+**Includes**:
+- ✅ Nginx with SSL/TLS (Let's Encrypt)
+- ✅ PostgreSQL 15 + PostGIS
+- ✅ Redis cache
+- ✅ Django + Celery workers
+- ✅ Auto-migrations
+- ✅ Health checks
+- ✅ Backup automation
+
+📚 **Full guide**: [Docker Production Deployment](./doc/operations/DOCKER_PRODUCTION.md)
 
 ### Local Development (Docker)
 ```bash
@@ -104,10 +134,25 @@ celery -A core worker --loglevel=info
 celery -A core beat --loglevel=info
 ```
 
-### First-time Setup
-1. Access admin: `http://localhost:8000/admin/`
-2. Configure Zabbix credentials: `http://localhost:8000/setup_app/`
-3. View dashboard: `http://localhost:8000/monitoring/backbone/`
+### First-Time Setup Wizard 🎨
+
+After installation, access your domain and you'll be **automatically redirected** to the setup wizard:
+
+1. **Access**: `https://your-domain.com` → `/setup_app/first_time/`
+2. **Configure** (modern UI with dark mode):
+   - 🏢 Company info (name, logo)
+   - 📊 Zabbix integration (URL, API token)
+   - 🗺️ Google Maps API key
+   - 🔑 License key
+3. **Save** → Credentials encrypted with Fernet
+4. **Redirect** → Dashboard ready!
+
+**Features**:
+- Modern gradient design (blue → emerald)
+- Dark mode synchronized with dashboard
+- Visual cards per section
+- Encrypted credential storage
+- One-time configuration lock
 
 ---
 
@@ -215,14 +260,28 @@ pytest -n auto
 Comprehensive documentation is available at `/setup_app/docs/` or in the `doc/` directory.
 
 ### Key Documents
+
+#### Getting Started
 - 🚀 **[Quick Start Guide](./doc/getting-started/QUICKSTART.md)** — Get started in 5 minutes
+- 📦 **[Installation Guide](./doc/getting-started/INSTALLATION_GUIDE.md)** — Complete installation manual (14 steps)
+- 🐳 **[Docker Production](./doc/operations/DOCKER_PRODUCTION.md)** — One-command Docker deployment
+
+#### Architecture & Development
 - 🏗️ **[Architecture Overview](./doc/architecture/OVERVIEW.md)** — System design and modules
-- 📡 **[API Reference](./doc/api/ENDPOINTS.md)** — Complete endpoint documentation
-- 🚢 **[Deployment Guide](./doc/operations/DEPLOYMENT.md)** — Production deployment steps
-- 🔄 **[Migration Guide](./doc/developer/REFATORAR.md)** — v1.x → v2.0 migration (Phases 0-5)
 - 🛠️ **[Development Guide](./doc/guides/DEVELOPMENT.md)** — Local development workflow
-- 🧪 **[Testing Guide](./doc/guides/TESTING.md)** — Test execution and coverage
+- 🔄 **[Migration Guide](./doc/developer/REFATORAR.md)** — v1.x → v2.0 migration (Phases 0-5)
+
+#### Testing & Quality
+- 🧪 **[Testing Guide](./doc/testing/TESTING_GUIDE.md)** — Complete testing documentation (600+ lines)
+- 📊 **[Testing Structure](./doc/testing/README.md)** — Test organization overview
+- 📝 **[Testing Index](./doc/testing/INDEX.md)** — Navigation guide
+
+#### Operations & Deployment
+- 🚢 **[Deployment Guide](./doc/operations/DEPLOYMENT.md)** — Production deployment steps
 - 🐳 **[Docker Setup](./doc/developer/DOCKER_SETUP.md)** — Containerized environment
+- 📡 **[API Reference](./doc/api/ENDPOINTS.md)** — Complete endpoint documentation
+
+#### Security
 - 🔒 **[Security Practices](./doc/security/SECURITY.md)** — Security hardening guide
 
 ### Breaking Changes (v2.0.0)
@@ -302,6 +361,39 @@ See [Security Audit Report](./doc/developer/REFATORAR.md#-auditorias-de-seguran�
 
 ## 🚀 Deployment
 
+### Docker Production Commands
+
+```bash
+# Gerenciamento
+sudo ./scripts/deploy-docker.sh start         # Iniciar containers
+sudo ./scripts/deploy-docker.sh stop          # Parar containers
+sudo ./scripts/deploy-docker.sh restart       # Reiniciar containers
+sudo ./scripts/deploy-docker.sh status        # Ver status
+
+# Logs
+sudo ./scripts/deploy-docker.sh logs          # Todos os logs
+sudo ./scripts/deploy-docker.sh logs web      # Logs do Django
+sudo ./scripts/deploy-docker.sh logs nginx    # Logs do Nginx
+
+# Atualização
+sudo ./scripts/deploy-docker.sh update        # Atualizar código + rebuild
+
+# Banco de dados
+sudo ./scripts/deploy-docker.sh backup        # Backup PostgreSQL
+sudo ./scripts/deploy-docker.sh restore <file> # Restore backup
+
+# Django
+sudo ./scripts/deploy-docker.sh migrate       # Executar migrations
+sudo ./scripts/deploy-docker.sh collectstatic # Coletar static files
+sudo ./scripts/deploy-docker.sh createsuperuser # Criar admin
+
+# SSL
+sudo ./scripts/deploy-docker.sh ssl           # Configurar Let's Encrypt
+
+# Shell
+sudo ./scripts/deploy-docker.sh shell         # Bash no container Django
+```
+
 ### Production Checklist
 - [ ] Set `DEBUG=False` and `SECRET_KEY` from secure vault
 - [ ] Configure `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS`
@@ -374,12 +466,20 @@ git push origin feature/your-feature-name
 
 ## 📊 Project Status
 
-### Version 2.0.0 (Current)
+### Version 2.1.0 (Current)
 - ✅ **199/199 tests passing** (100%)
 - ✅ **Modular architecture** complete (Phases 0-5)
 - ✅ **Security audits** passed (0 vulnerabilities)
 - ✅ **Performance optimized** (0 N+1 queries)
-- ✅ **Production-ready** deployment playbook
+- ✅ **Docker Production** deployment ready
+- ✅ **First-Time Setup Wizard** with modern UI
+- ✅ **Comprehensive testing documentation** (1000+ lines)
+- ✅ **One-command installation** script
+- ✅ **SSL auto-renewal** with Let's Encrypt
+
+### Version 2.0.0 (Previous)
+- ✅ Modular architecture refactor
+- ✅ Production-ready deployment playbook
 
 ### Roadmap
 - 🔄 PostGIS integration for spatial queries
@@ -387,6 +487,7 @@ git push origin feature/your-feature-name
 - 🔄 Multi-tenant support
 - 🔄 GraphQL API
 - 🔄 Mobile-responsive dashboard
+- 🔄 Advanced monitoring dashboards (Grafana)
 
 ---
 

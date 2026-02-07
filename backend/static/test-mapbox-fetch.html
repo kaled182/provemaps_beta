@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Teste Conectividade Mapbox API</title>
+    <style>
+        body { font-family: monospace; background: #1a1a1a; color: #fff; padding: 20px; }
+        .success { color: #10b981; }
+        .error { color: #ef4444; }
+        pre { background: #2a2a2a; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h2>🔍 Teste de Conectividade Mapbox API</h2>
+    <div id="output"></div>
+
+    <script>
+        const output = document.getElementById('output');
+        const TOKEN = 'pk.eyJ1Ijoia2FsZWQxODIiLCJhIjoiY21jNjd1M3p2MGozMTJvcDloa3kzeXZ0cCJ9.azs0yBSvCd8WlGXB-pptog';
+        
+        function log(msg, type = 'info') {
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = msg;
+            output.appendChild(div);
+            console.log(msg);
+        }
+        
+        async function testMapboxAPI() {
+            log('Token: ' + TOKEN.substring(0, 30) + '...', 'info');
+            
+            const urls = [
+                `https://api.mapbox.com/styles/v1/mapbox/streets-v12?access_token=${TOKEN}`,
+                `https://api.mapbox.com/v4/mapbox.mapbox-streets-v8.json?access_token=${TOKEN}`,
+                `https://api.mapbox.com/?access_token=${TOKEN}`
+            ];
+            
+            for (const url of urls) {
+                log('\n📡 Testando: ' + url.substring(0, 80) + '...', 'info');
+                
+                try {
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        mode: 'cors'
+                    });
+                    
+                    log(`✅ Status: ${response.status} ${response.statusText}`, 'success');
+                    log(`Headers: ${JSON.stringify([...response.headers.entries()])}`, 'info');
+                    
+                    if (response.ok) {
+                        const text = await response.text();
+                        log(`Resposta (primeiros 200 chars): ${text.substring(0, 200)}...`, 'success');
+                    } else {
+                        const text = await response.text();
+                        log(`❌ Erro: ${text}`, 'error');
+                    }
+                    
+                } catch (error) {
+                    log(`❌ ERRO ao fazer fetch:`, 'error');
+                    log(`   Tipo: ${error.name}`, 'error');
+                    log(`   Mensagem: ${error.message}`, 'error');
+                    log(`   Stack: ${error.stack}`, 'error');
+                    
+                    // Verificar tipo específico de erro
+                    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+                        log('⚠️ DIAGNÓSTICO: Erro de CORS ou Mixed Content', 'error');
+                        log('   Possíveis causas:', 'error');
+                        log('   1. Navegador bloqueando requisições HTTPS de página HTTP', 'error');
+                        log('   2. Extensão de navegador bloqueando (AdBlock, etc)', 'error');
+                        log('   3. Firewall corporativo', 'error');
+                        log('   4. Antivírus bloqueando', 'error');
+                    }
+                }
+            }
+            
+            log('\n\n📊 SUMÁRIO:', 'info');
+            log('Se TODOS os testes falharam com "Failed to fetch":', 'info');
+            log('  → Problema de rede/firewall/política de segurança do navegador', 'error');
+            log('Se algum teste passou (status 200):', 'info');
+            log('  → Token válido, problema pode ser no código da aplicação', 'success');
+        }
+        
+        testMapboxAPI();
+    </script>
+</body>
+</html>

@@ -1,8 +1,8 @@
 <template>
-  <div class="flex h-screen overflow-hidden relative bg-gray-50">
+  <div class="flex h-screen overflow-hidden relative bg-gray-50 dark:bg-gray-900">
     
     <!-- Área do Mapa -->
-    <div class="flex-1 relative bg-gray-100 z-0">
+    <div class="flex-1 relative bg-gray-100 dark:bg-gray-800 z-0">
       
       <UnifiedMapView
         ref="mapRef"
@@ -19,7 +19,7 @@
         <button 
           @click="setMode('read')"
           class="px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition-colors"
-          :class="mode === 'read' ? 'bg-gray-800 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'"
+          :class="mode === 'read' ? 'bg-gray-800 dark:bg-gray-700 text-white shadow-md' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
         >
           <i class="fas fa-lock"></i> Visualizar
         </button>
@@ -27,14 +27,14 @@
         <button 
           @click="setMode('edit')"
           class="px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition-colors"
-          :class="mode === 'edit' ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'"
+          :class="mode === 'edit' ? 'bg-indigo-600 dark:bg-indigo-500 text-white shadow-md' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
         >
           <i class="fas fa-pen"></i> Editar Traçado
         </button>
 
-        <div class="w-px h-4 bg-gray-300 mx-1"></div>
+        <div class="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-1"></div>
 
-        <label class="p-2 rounded-full text-gray-500 hover:bg-gray-100 hover:text-indigo-600 cursor-pointer" title="Importar KML">
+        <label class="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer" title="Importar KML">
           <input type="file" class="hidden" accept=".kml" @change="onKmlSelected" />
           <i class="fas fa-file-upload"></i>
         </label>

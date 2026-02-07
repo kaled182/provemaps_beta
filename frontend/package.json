@@ -22,6 +22,7 @@
     "@vue/test-utils": "^2.4.0",
     "eslint": "^8.57.1",
     "eslint-plugin-vue": "^9.28.0",
+    "jsdom": "^27.4.0",
     "pyright": "^1.1.407",
     "vitest": "^1.2.0",
     "vue-eslint-parser": "^9.4.3"
@@ -36,12 +37,15 @@
     }
   },
   "dependencies": {
+    "@googlemaps/markerclusterer": "^2.6.2",
     "@phosphor-icons/vue": "^2.2.1",
     "@vueuse/core": "^11.0.0",
     "axios": "^1.13.2",
     "chart.js": "^4.5.1",
     "fuse.js": "^7.0.0",
     "hls.js": "^1.6.15",
+    "leaflet": "^1.9.4",
+    "mapbox-gl": "^3.18.1",
     "marked": "^17.0.0",
     "pinia": "^3.0.4",
     "qrcode": "^1.5.3",

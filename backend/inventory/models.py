@@ -9,6 +9,7 @@ from __future__ import annotations
 from importlib import import_module
 from typing import TYPE_CHECKING, Any, cast
 
+from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.db import models, transaction
 from django.utils import timezone
@@ -574,18 +575,8 @@ class FiberCable(models.Model):
         null=True,
         blank=True,
     )
-    # Intermediate coordinates when plotting (may include origin/destination)
-    path_coordinates = LenientJSONField(
-        blank=True,
-        null=True,
-        help_text=(
-            "Coordinate list e.g. [{'lat': -16.6, 'lng': -49.2}, ...]. "
-            "Deprecated: use path field."
-        ),
-    )
     # Spatial field for PostGIS (Phase 10)
     # SRID 4326 = WGS84 (GPS coordinates)
-    # Populated by data migration from path_coordinates
     path = gis_models.LineStringField(
         srid=4326,
         blank=True,
@@ -698,6 +689,129 @@ class FiberCable(models.Model):
 
         return True
 
+
+class FiberCableAlarmConfig(models.Model):
+    """Subscription-style alarm configuration for fiber cables."""
+
+    TARGET_DEPARTMENT_GROUP = "department_group"
+    TARGET_SYSTEM_USER = "system_user"
+    TARGET_CONTACT = "contact"
+
+    TARGET_TYPE_CHOICES = [
+        (TARGET_DEPARTMENT_GROUP, "Department group"),
+        (TARGET_SYSTEM_USER, "System user"),
+        (TARGET_CONTACT, "Contact"),
+    ]
+
+    TRIGGER_WARNING = "warning"
+    TRIGGER_CRITICAL = "critical"
+
+    TRIGGER_LEVEL_CHOICES = [
+        (TRIGGER_WARNING, "Warning"),
+        (TRIGGER_CRITICAL, "Critical"),
+    ]
+
+    fiber_cable = models.ForeignKey(
+        FiberCable,
+        related_name="alarm_configs",
+        on_delete=models.CASCADE,
+        help_text="Cabo de fibra ao qual esta configuração pertence.",
+    )
+    target_type = models.CharField(
+        max_length=32,
+        choices=TARGET_TYPE_CHOICES,
+        help_text="Tipo de destino (grupo, usuário ou contato).",
+    )
+    contact_group = models.ForeignKey(
+        "setup_app.ContactGroup",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="fiber_alarm_configs",
+        help_text="Grupo de contatos alvo quando target_type=department_group.",
+    )
+    contact = models.ForeignKey(
+        "setup_app.Contact",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="fiber_alarm_configs",
+        help_text="Contato individual alvo quando target_type=contact.",
+    )
+    system_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="fiber_alarm_configs",
+        help_text="Usuário do sistema alvo quando target_type=system_user.",
+    )
+    target_snapshot = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Fotografia dos dados do destino (nome, resumo, etc.).",
+    )
+    channels = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Lista de canais de notificação habilitados (email, whatsapp, sms, telegram).",
+    )
+    trigger_level = models.CharField(
+        max_length=16,
+        choices=TRIGGER_LEVEL_CHOICES,
+        default=TRIGGER_WARNING,
+        help_text="Nível que dispara o alarme (warning ou critical).",
+    )
+    persist_minutes = models.PositiveIntegerField(
+        default=0,
+        help_text="Minutos de persistência antes do disparo (0 para imediato).",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Descrição opcional ou observações do alarme.",
+    )
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Metadados adicionais (ex: IDs externos, preferências por canal).",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="fiber_alarm_configs_created",
+        help_text="Usuário que criou a configuração.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "inventory_fiber_alarm_config"
+        ordering = ["-created_at", "id"]
+        indexes = [
+            models.Index(fields=["fiber_cable"], name="fiber_alarm_cable_idx"),
+            models.Index(fields=["target_type"], name="fiber_alarm_target_idx"),
+        ]
+
+    def __str__(self) -> str:
+        target = self.target_snapshot.get("display") or self.target_snapshot.get("name")
+        return f"{self.fiber_cable} → {target or self.get_target_type_display()}"
+
+    @property
+    def target_display(self) -> str:
+        snapshot = self.target_snapshot or {}
+        display = snapshot.get("display") or snapshot.get("name")
+        return str(display) if display else self.get_target_type_display()
+
+    def clean(self) -> None:  # pragma: no cover - delegated to forms/usecases
+        super().clean()
+        if self.target_type == self.TARGET_DEPARTMENT_GROUP and not self.contact_group_id:
+            raise ValidationError("contact_group é obrigatório para target_type=department_group")
+        if self.target_type == self.TARGET_CONTACT and not self.contact_id:
+            raise ValidationError("contact é obrigatório para target_type=contact")
+        if self.target_type == self.TARGET_SYSTEM_USER and not self.system_user_id:
+            raise ValidationError("system_user é obrigatório para target_type=system_user")
 
 class BufferTube(models.Model):
     """

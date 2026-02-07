@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste Mapbox GL JS</title>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v3.1.0/mapbox-gl.css' rel='stylesheet' />
+    <script src='https://api.mapbox.com/mapbox-gl-js/v3.1.0/mapbox-gl.js'></script>
+    <style>
+        body { margin: 0; padding: 20px; font-family: Arial, sans-serif; }
+        #map { width: 100%; height: 500px; border: 2px solid #ccc; }
+        #status { padding: 10px; margin-bottom: 10px; background: #f0f0f0; border-radius: 5px; }
+        .error { background: #ffebee; color: #c62828; }
+        .success { background: #e8f5e9; color: #2e7d32; }
+    </style>
+</head>
+<body>
+    <h1>Teste de Carregamento do Mapbox GL JS</h1>
+    <div id="status">Carregando...</div>
+    <div id="map"></div>
+    
+    <script>
+        const statusDiv = document.getElementById('status');
+        
+        function logStatus(message, isError = false) {
+            console.log(message);
+            const p = document.createElement('p');
+            p.textContent = message;
+            p.style.margin = '5px 0';
+            statusDiv.appendChild(p);
+            if (isError) {
+                statusDiv.className = 'error';
+            }
+        }
+        
+        // Verificar se Mapbox carregou
+        logStatus('1. Verificando se window.mapboxgl existe...');
+        if (typeof mapboxgl === 'undefined') {
+            logStatus('❌ ERRO: mapboxgl não está definido!', true);
+            logStatus('   - Verifique se o script carregou corretamente');
+            logStatus('   - Abra o DevTools > Network e veja se mapbox-gl.js foi baixado');
+        } else {
+            logStatus('✅ mapboxgl está disponível!');
+            logStatus('   - Versão: ' + mapboxgl.version);
+            
+            // Testar criação do mapa
+            logStatus('2. Testando criação do mapa...');
+            
+            // TOKEN DE TESTE (substitua pelo seu token real)
+            const testToken = 'pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw';
+            
+            try {
+                mapboxgl.accessToken = testToken;
+                
+                const map = new mapboxgl.Map({
+                    container: 'map',
+                    style: 'mapbox://styles/mapbox/streets-v12',
+                    center: [-47.9292, -15.7801], // Brasília
+                    zoom: 12
+                });
+                
+                map.on('load', () => {
+                    logStatus('✅ Mapa carregado com sucesso!');
+                    statusDiv.className = 'success';
+                });
+                
+                map.on('error', (e) => {
+                    logStatus('❌ Erro ao carregar o mapa: ' + e.error.message, true);
+                });
+                
+            } catch (error) {
+                logStatus('❌ ERRO ao criar mapa: ' + error.message, true);
+                logStatus('   - Stack: ' + error.stack);
+            }
+        }
+        
+        // Verificar conectividade
+        logStatus('3. Testando conectividade com Mapbox API...');
+        fetch('https://api.mapbox.com/v4/mapbox.mapbox-streets-v8.json?secure&access_token=' + testToken)
+            .then(response => {
+                if (response.ok) {
+                    logStatus('✅ Conexão com Mapbox API funcionando!');
+                } else {
+                    logStatus('⚠️ Resposta da API: ' + response.status + ' ' + response.statusText);
+                }
+            })
+            .catch(error => {
+                logStatus('❌ Erro de conectividade: ' + error.message, true);
+                logStatus('   - Possíveis causas: Firewall, proxy, DNS');
+            });
+    </script>
+</body>
+</html>

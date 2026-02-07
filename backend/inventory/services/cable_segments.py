@@ -32,8 +32,12 @@ def create_initial_segment(cable: 'FiberCable') -> 'CableSegment':
         cable=cable,
         segment_number=1,
         name=f"{cable.name}-Seg1",
-        start_infrastructure=None,  # TODO: mapear Site A
-        end_infrastructure=None,    # TODO: mapear Site B
+        # Infraestrutura será mapeada quando implementarmos:
+        # - Associação automática Site A ↔ origin_port.device.site
+        # - Associação automática Site B ↔ destination_port.device.site  
+        # Por ora, None é válido para segmentos sem infra mapeada
+        start_infrastructure=None,  # Future: mapear Site A automaticamente
+        end_infrastructure=None,    # Future: mapear Site B automaticamente
         length_meters=float(cable.length_km or 0) * 1000 if cable.length_km else 0
     )
     

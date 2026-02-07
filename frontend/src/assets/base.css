@@ -15,3 +15,46 @@ body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
 }
+
+/* Remove bordas indesejadas dos tiles do Google Maps (quadrantes/grid) */
+.gm-style img {
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.gm-style > div > div {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Remove todas as possíveis bordas e strokes dos tiles */
+.gm-style div,
+.gm-style canvas,
+.gm-style svg,
+.gm-style path {
+  border: none !important;
+  stroke: none !important;
+  outline: none !important;
+}
+
+/* Remove grid lines dos tiles do mapa */
+div[style*="position: absolute"] img[src*="googleapis.com/maps"] {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Força transparência em possíveis overlays de grid */
+.gm-style .gm-style-mtc,
+.gm-style .gm-style-mtc > div {
+  border: none !important;
+}
+
+/* Remove bordas de qualquer div dentro do container do mapa */
+#google-map div,
+#google-map img,
+#google-map canvas {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}

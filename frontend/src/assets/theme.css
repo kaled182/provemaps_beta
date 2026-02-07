@@ -27,17 +27,18 @@
   --info-soft-text: #93c5fd;
   
   /* Menu & Sidebar Colors */
-  --menu-bg: #0f172a;
-  --menu-bg-start: #0f172a;
-  --menu-bg-end: #111827;
-  --menu-item-hover: rgba(59, 130, 246, 0.16);
-  --menu-item-active-start: #22c55e;
-  --menu-item-active-end: #16a34a;
+  --menu-bg: rgba(30, 33, 57, 0.95);
+  --menu-bg-start: rgba(30, 33, 57, 0.98);
+  --menu-bg-end: rgba(17, 24, 39, 0.98);
+  --menu-item-base: rgba(255, 255, 255, 0.03);
+  --menu-item-hover: rgba(255, 255, 255, 0.08);
+  --menu-item-active-start: #10b981;
+  --menu-item-active-end: #059669;
   --menu-text-primary: #f8fafc;
-  --menu-text-secondary: #cbd5f5;
+  --menu-text-secondary: #e2e8f0;
   --menu-text-tertiary: #94a3b8;
-  --menu-border-primary: rgba(148, 163, 184, 0.25);
-  --menu-border-secondary: rgba(148, 163, 184, 0.14);
+  --menu-border-primary: rgba(255, 255, 255, 0.14);
+  --menu-border-secondary: rgba(255, 255, 255, 0.08);
   
   /* Text Colors */
   --text-primary: #f8fafc;
@@ -104,17 +105,18 @@
   --info-soft-text: #1d4ed8;
   
   /* Menu & Sidebar Colors */
-  --menu-bg: #ffffff;
-  --menu-bg-start: #ffffff;
-  --menu-bg-end: #f1f5f9;
-  --menu-item-hover: rgba(59, 130, 246, 0.08);
-  --menu-item-active-start: #22c55e;
-  --menu-item-active-end: #15803d;
+  --menu-bg: rgba(255, 255, 255, 0.96);
+  --menu-bg-start: rgba(255, 255, 255, 0.98);
+  --menu-bg-end: rgba(241, 245, 249, 0.9);
+  --menu-item-base: rgba(15, 23, 42, 0.03);
+  --menu-item-hover: rgba(15, 23, 42, 0.08);
+  --menu-item-active-start: #10b981;
+  --menu-item-active-end: #047857;
   --menu-text-primary: #0f172a;
   --menu-text-secondary: #334155;
   --menu-text-tertiary: #64748b;
-  --menu-border-primary: rgba(148, 163, 184, 0.35);
-  --menu-border-secondary: rgba(148, 163, 184, 0.2);
+  --menu-border-primary: rgba(15, 23, 42, 0.12);
+  --menu-border-secondary: rgba(15, 23, 42, 0.06);
   
   /* Text Colors */
   --text-primary: #0f172a;
@@ -178,17 +180,18 @@
   --danger-soft-text: #fecaca;
   --info-soft-bg: rgba(59, 130, 246, 0.2);
   --info-soft-text: #93c5fd;
-  --menu-bg: #0f172a;
-  --menu-bg-start: #0f172a;
-  --menu-bg-end: #111827;
-  --menu-item-hover: rgba(59, 130, 246, 0.16);
-  --menu-item-active-start: #22c55e;
-  --menu-item-active-end: #16a34a;
+  --menu-bg: rgba(30, 33, 57, 0.95);
+  --menu-bg-start: rgba(30, 33, 57, 0.98);
+  --menu-bg-end: rgba(17, 24, 39, 0.98);
+  --menu-item-base: rgba(255, 255, 255, 0.03);
+  --menu-item-hover: rgba(255, 255, 255, 0.08);
+  --menu-item-active-start: #10b981;
+  --menu-item-active-end: #059669;
   --menu-text-primary: #f8fafc;
-  --menu-text-secondary: #cbd5f5;
+  --menu-text-secondary: #e2e8f0;
   --menu-text-tertiary: #94a3b8;
-  --menu-border-primary: rgba(148, 163, 184, 0.25);
-  --menu-border-secondary: rgba(148, 163, 184, 0.14);
+  --menu-border-primary: rgba(255, 255, 255, 0.14);
+  --menu-border-secondary: rgba(255, 255, 255, 0.08);
   --text-primary: #f8fafc;
   --text-secondary: #cbd5f5;
   --text-tertiary: #94a3b8;

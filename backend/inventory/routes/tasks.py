@@ -213,7 +213,19 @@ def build_route_legacy(
     force: bool = False,
     options: Optional[Dict[str, Any]] = None,
 ) -> dict[str, Any]:
-    logger.debug("Legacy task routes_builder.build_route invoked")
+    import warnings
+    warnings.warn(
+        "Task 'routes_builder.build_route' is deprecated. "
+        "Use 'inventory.routes.tasks.build_route' instead. "
+        "This alias will be removed in v2.1.0 (Sprint 4 Week 2).",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    logger.warning(
+        "DEPRECATED: routes_builder.build_route called (route_id=%s). "
+        "Migrate to inventory.routes.tasks.build_route",
+        route_id,
+    )
     return build_route(self, route_id, force=force, options=options)
 
 
@@ -224,7 +236,19 @@ def build_routes_batch_legacy(
     force: bool = False,
     options: Optional[Dict[str, Any]] = None,
 ) -> dict[str, Any]:
-    logger.debug("Legacy task routes_builder.build_routes_batch invoked")
+    import warnings
+    warnings.warn(
+        "Task 'routes_builder.build_routes_batch' is deprecated. "
+        "Use 'inventory.routes.tasks.build_routes_batch' instead. "
+        "This alias will be removed in v2.1.0 (Sprint 4 Week 2).",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    logger.warning(
+        "DEPRECATED: routes_builder.build_routes_batch called (count=%s). "
+        "Migrate to inventory.routes.tasks.build_routes_batch",
+        len(list(route_ids)) if route_ids else 0,
+    )
     return build_routes_batch(self, route_ids, force=force, options=options)
 
 
@@ -233,7 +257,19 @@ def invalidate_route_cache_legacy(
     self: CeleryTask,
     route_id: int,
 ) -> dict[str, Any]:
-    logger.debug("Legacy task routes_builder.invalidate_route_cache invoked")
+    import warnings
+    warnings.warn(
+        "Task 'routes_builder.invalidate_route_cache' is deprecated. "
+        "Use 'inventory.routes.tasks.invalidate_route_cache' instead. "
+        "This alias will be removed in v2.1.0 (Sprint 4 Week 2).",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    logger.warning(
+        "DEPRECATED: routes_builder.invalidate_route_cache called (route_id=%s). "
+        "Migrate to inventory.routes.tasks.invalidate_route_cache",
+        route_id,
+    )
     return invalidate_route_cache(self, route_id)
 
 
@@ -243,8 +279,17 @@ def import_route_from_payload_legacy(
     payload: Dict[str, Any] | services.RouteImportPayload,
     created_by: str = "routes_builder.task",
 ) -> dict[str, Any]:
-    logger.debug(
-        "Legacy task routes_builder.import_route_from_payload invoked"
+    import warnings
+    warnings.warn(
+        "Task 'routes_builder.import_route_from_payload' is deprecated. "
+        "Use 'inventory.routes.tasks.import_route_from_payload' instead. "
+        "This alias will be removed in v2.1.0 (Sprint 4 Week 2).",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    logger.warning(
+        "DEPRECATED: routes_builder.import_route_from_payload called. "
+        "Migrate to inventory.routes.tasks.import_route_from_payload"
     )
     return import_route_from_payload(
         self,
@@ -255,7 +300,18 @@ def import_route_from_payload_legacy(
 
 @shared_task(bind=True, name="routes_builder.health_check")
 def health_check_routes_builder_legacy(self: CeleryTask) -> dict[str, Any]:
-    logger.debug("Legacy task routes_builder.health_check invoked")
+    import warnings
+    warnings.warn(
+        "Task 'routes_builder.health_check' is deprecated. "
+        "Use 'inventory.routes.tasks.health_check' instead. "
+        "This alias will be removed in v2.1.0 (Sprint 4 Week 2).",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    logger.warning(
+        "DEPRECATED: routes_builder.health_check called. "
+        "Migrate to inventory.routes.tasks.health_check"
+    )
     return health_check(self)
 
 

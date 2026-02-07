@@ -1,9 +1,19 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from . import views
 from . import views_docs  # Import docs_index and docs_view endpoints
 from . import api_views  # Import API endpoints for testing and management
+from .viewsets_contacts import ContactViewSet, ContactGroupViewSet, ImportHistoryViewSet
+from .viewsets_alert_templates import AlertTemplateViewSet
 
 app_name = 'setup_app'
+
+# Router para ViewSets (contatos)
+router = DefaultRouter()
+router.register(r'contacts', ContactViewSet, basename='contact')
+router.register(r'contact-groups', ContactGroupViewSet, basename='contact-group')
+router.register(r'contact-imports', ImportHistoryViewSet, basename='contact-import')
+router.register(r'alert-templates', AlertTemplateViewSet, basename='alert-template')
 
 urlpatterns = [
     path('dashboard/', views.setup_dashboard, name='setup_dashboard'),
@@ -33,6 +43,8 @@ urlpatterns = [
     path('api/gateways/<int:gateway_id>/', api_views.messaging_gateway_detail, name='messaging_gateway_detail'),
     path('api/gateways/<int:gateway_id>/video/preview/start/', api_views.start_video_gateway_preview, name='start_video_gateway_preview'),
     path('api/gateways/<int:gateway_id>/video/preview/stop/', api_views.stop_video_gateway_preview, name='stop_video_gateway_preview'),
+    path('video/hls/gateways/<int:gateway_id>/', api_views.proxy_video_gateway_hls, {'resource': 'index.m3u8'}, name='video_hls_proxy_root'),
+    path('video/hls/gateways/<int:gateway_id>/<path:resource>', api_views.proxy_video_gateway_hls, name='video_hls_proxy'),
     path('api/gateways/<int:gateway_id>/whatsapp/qr/', api_views.whatsapp_qr_start, name='whatsapp_qr_start'),
     path('api/gateways/<int:gateway_id>/whatsapp/qr/status/', api_views.whatsapp_qr_status, name='whatsapp_qr_status'),
     path('api/gateways/<int:gateway_id>/whatsapp/qr/disconnect/', api_views.whatsapp_qr_disconnect, name='whatsapp_qr_disconnect'),
@@ -55,4 +67,7 @@ urlpatterns = [
     # Documentation endpoints
     path("docs/", views_docs.docs_index, name="docs_index"),
     path("docs/<path:filename>/", views_docs.docs_view, name="docs_view"),
+    
+    # Contacts API (ViewSets)
+    path('api/', include(router.urls)),
 ]

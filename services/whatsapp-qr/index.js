@@ -87,7 +87,7 @@ const createSession = async (gatewayId, name) => {
           margin: 1,
           width: 280,
         });
-        entry.status = "awaiting_qr";
+        entry.status = "qr_pending";
         entry.message = "Aguardando leitura do QR.";
         entry.updatedAt = nowIso();
       } catch (error) {
@@ -117,10 +117,12 @@ const createSession = async (gatewayId, name) => {
       entry.lastDisconnectMessage = message || "";
       entry.updatedAt = nowIso();
 
+      // Limpar socket da memória
+      entry.socket = null;
+
       if (reasonCode === DisconnectReason.restartRequired || reasonCode === 515 || reasonCode === "515") {
         entry.status = "connecting";
         entry.message = "Reconectando...";
-        entry.socket = null;
         setTimeout(() => {
           ensureSession(gatewayId, entry.name).catch((error) => {
             logger.error({ error, gatewayId }, "Falha ao reiniciar sessão.");
@@ -134,7 +136,9 @@ const createSession = async (gatewayId, name) => {
         ? `Desconectado (${reasonCode}): ${message}`
         : `Desconectado (${reasonCode}).`;
 
-      if (reasonCode === DisconnectReason.loggedOut) {
+      // Limpar arquivos de sessão apenas se for logout explícito
+      if (reasonCode === DisconnectReason.loggedOut || reasonCode === 401) {
+        logger.info({ gatewayId, reasonCode, message }, "Limpando sessão após logout.");
         try {
           fs.rmSync(sessionPath, { recursive: true, force: true });
         } catch (error) {
@@ -199,6 +203,22 @@ app.post("/qr/start", async (req, res) => {
   }
 
   try {
+    // IMPORTANTE: Limpar socket antigo se existir e estiver em estado ruim
+    const existingEntry = sessions.get(gatewayId);
+    if (existingEntry?.socket) {
+      const status = existingEntry.status;
+      // Se status for erro/desconectado, limpar socket antigo
+      if (status === 'disconnected' || status === 'error') {
+        logger.info({ gatewayId, oldStatus: status }, "Limpando socket antigo antes de criar novo.");
+        try {
+          existingEntry.socket.end();
+        } catch (error) {
+          logger.warn({ gatewayId, error }, "Erro ao fechar socket antigo.");
+        }
+        existingEntry.socket = null;
+      }
+    }
+
     const entry = await ensureSession(gatewayId, name);
     logger.info({ gatewayId }, "QR start solicitado.");
     return res.json({ success: true, ...baseResponse(entry) });

@@ -262,39 +262,45 @@
                     <p class="text-xs text-gray-400">Gera uma saída HLS temporária para validar a entrada.</p>
                   </div>
                   <div class="flex items-center gap-3 text-xs text-gray-400">
-                    <span class="flex items-center gap-2">
+                    <button
+                      v-if="!videoPreview.url && videoGatewayForm.id && videoGatewayForm.config.stream_url"
+                      class="btn-primary text-xs h-8 px-4"
+                      type="button"
+                      @click="startVideoPreview({ silent: false })"
+                      :disabled="isVideoPreviewLoading"
+                    >
+                      <span v-if="isVideoPreviewLoading" class="inline-flex h-3 w-3 border border-white border-t-transparent rounded-full animate-spin mr-2"></span>
+                      {{ isVideoPreviewLoading ? 'Iniciando...' : 'Iniciar transmissão' }}
+                    </button>
+                    <span v-else class="flex items-center gap-2">
                       <span
                         v-if="isVideoPreviewLoading"
                         class="inline-flex h-3 w-3 border border-gray-300 border-t-transparent rounded-full animate-spin"
                       ></span>
-                      A pré-visualização inicia automaticamente.
+                      {{ videoPreview.url ? 'Transmissão ativa' : 'Aguardando stream URL...' }}
                     </span>
                     <button
+                      v-if="videoPreview.url"
                       class="btn-secondary text-xs h-8"
                       type="button"
                       @click="stopVideoPreview()"
-                      :disabled="!isVideoPreviewActive && !videoPreview.url"
                     >
                       Encerrar
                     </button>
                   </div>
                 </div>
                 <div class="relative h-64 bg-black rounded-md overflow-hidden">
-                  <template v-if="!useIframePreview && canUseVideoElement">
-                    <video ref="videoPreviewElement" class="absolute inset-0 w-full h-full" controls playsinline muted style="object-fit: cover; object-position: center; display: block;"></video>
-                  </template>
-                  <template v-else>
-                    <iframe 
-                      v-if="iframeReady" 
-                      :src="videoPreview.url" 
-                      class="absolute inset-0 w-full h-full border-0 m-0 p-0" 
-                      allow="autoplay; fullscreen" 
-                      sandbox="allow-same-origin allow-scripts allow-forms" 
-                      loading="eager" 
-                      referrerpolicy="no-referrer" 
-                      style="display: block; margin: 0; padding: 0; transform: scale(1.12); transform-origin: center; will-change: transform;"
-                    ></iframe>
-                  </template>
+                  <!-- Usar CameraPlayer para HLS -->
+                  <CameraPlayer 
+                    v-if="videoPreview.url && videoGatewayForm.id"
+                    :camera="{
+                      id: videoGatewayForm.id,
+                      name: videoGatewayForm.name || 'Prévia',
+                      playback_url: videoPreview.url
+                    }"
+                    :muted="true"
+                    class="absolute inset-0"
+                  />
                   <div
                     v-if="isVideoPreviewLoading || videoPreview.status === 'retrying'"
                     class="absolute inset-0 bg-gray-900/90 flex flex-col items-center justify-center text-sm text-gray-200 gap-3"
@@ -388,6 +394,7 @@ import { ref, computed, onMounted, watch, nextTick, onUnmounted } from 'vue';
 import Hls from 'hls.js';
 import { useApi } from '@/composables/useApi';
 import { useNotification } from '@/composables/useNotification';
+import CameraPlayer from '@/components/Video/CameraPlayer.vue';
 
 const props = defineProps({
   embedded: {
@@ -975,21 +982,31 @@ const startVideoPreview = async ({ silent = false } = {}) => {
       videoPreview.value.error = res?.message || 'Não foi possível iniciar a pré-visualização.';
       return;
     }
-    const previewUrl = res.preview_url || videoGatewayForm.value.config.preview_url || '';
-    if (!previewUrl) {
+    
+    // Usar playback_proxy_url (preferencial) ou playback_url
+    const playbackUrl = res.playback_proxy_url || res.playback_url;
+    
+    if (!playbackUrl) {
       videoPreview.value.status = 'error';
       videoPreview.value.error = 'Backend não retornou a URL de pré-visualização.';
+      console.error('[VideoPreview] Response sem playback_url:', res);
       return;
     }
+    
+    const previewUrl = res.preview_url || videoGatewayForm.value.config.preview_url || '';
     videoGatewayForm.value.config.preview_url = previewUrl;
     videoGatewayForm.value.config.preview_active = true;
-    const playbackUrl = res.playback_url || resolvePreviewUrl(previewUrl);
     videoGatewayForm.value.config.preview_playback_url = playbackUrl;
-    console.debug('[VideoPreview] Preview start', {
+    
+    console.log('[VideoPreview] Preview start', {
       apiUrl: previewUrl,
       playbackUrl,
+      response: res
     });
+    
     videoPreview.value.url = playbackUrl;
+    videoPreview.value.status = 'ready';
+    
     syncVideoGatewayInList(videoGatewayForm.value.id, {
       preview_url: previewUrl,
       preview_playback_url: playbackUrl,
@@ -1091,6 +1108,13 @@ const openVideoGatewayModal = (gateway = null) => {
       },
     };
   }
+  
+  // Limpar estado da pré-visualização ao abrir modal
+  videoPreview.value.url = '';
+  videoPreview.value.status = 'idle';
+  videoPreview.value.loading = false;
+  videoPreview.value.error = '';
+  
   showGatewayModal.value = true;
 };
 
