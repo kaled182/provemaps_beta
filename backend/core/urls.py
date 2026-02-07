@@ -109,6 +109,7 @@ urlpatterns: list[Any] = [
     path('api/v1/inventory/', include('inventory.urls_api')),
     path('api/v1/', include('inventory.urls_rest')),
     path('api/v1/monitoring/', include('monitoring.urls_api')),
+    path('', include('inventory.urls')),  # Custom maps and legacy HTML views
     path('api/v1/cameras/', setup_api_views.video_cameras_list, name='api_video_cameras'),
     path('api/config/', api_views.frontend_config, name='frontend_config'),
     path('setup_app/', include('setup_app.urls')),

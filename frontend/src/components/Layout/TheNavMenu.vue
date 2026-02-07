@@ -610,16 +610,17 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
   min-width: var(--nav-menu-width,280px) !important;
   max-width: var(--nav-menu-width,280px) !important;
 
-  background: var(--menu-bg);
+  background: linear-gradient(160deg, var(--menu-bg-start), var(--menu-bg-end));
   background-color: var(--menu-bg) !important;
-  background-image: none !important;
   box-shadow: var(--shadow-accent);
+  border-right: 1px solid var(--menu-border-primary);
   display: flex;
   flex-direction: column;
-  transition: width 0.3s ease, background 0.3s ease;
+  transition: width 0.3s ease, background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
   z-index: 100;
   overflow: hidden;
   height: 100vh;
+  backdrop-filter: blur(12px);
 }
 
 .nav-menu-header {
@@ -628,6 +629,8 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--menu-border-primary);
+  background: var(--menu-item-base);
+  backdrop-filter: blur(12px);
   min-height: 64px;
 }
 
@@ -689,14 +692,17 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
 
 .nav-items {
   flex: 1;
-  padding: 1rem 0.5rem;
+  padding: 1.25rem 0.75rem;
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
 .nav-group {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
 }
 
 .nav-group.group-active > .nav-item {
@@ -732,20 +738,23 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
   display: flex;
   align-items: center;
   padding: 0.75rem 1rem;
-  margin-bottom: 0.25rem;
-  border-radius: 8px;
+  margin-bottom: 0.15rem;
+  border-radius: 10px;
   color: var(--menu-text-secondary);
   text-decoration: none;
-  transition: all 0.2s;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
   position: relative;
   overflow: hidden;
   white-space: nowrap;
+  background: var(--menu-item-base);
+  border: 1px solid var(--menu-border-secondary);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  transform: translateY(0);
+  backdrop-filter: blur(8px);
 }
 
 /* Bot\u00e3o de toggle para grupos com submenu */
 .nav-item-toggle {
-  background: transparent;
-  border: none;
   width: 100%;
   cursor: pointer;
   text-align: left;
@@ -764,13 +773,15 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
 .nav-item-child {
   padding: 0.6rem 1rem;
   margin-bottom: 0;
-  border-radius: 6px;
-  background: transparent;
+  border-radius: 8px;
+  background: var(--menu-item-base);
+  border: 1px solid var(--menu-border-secondary);
 }
 
 .nav-item-child.active {
   background: var(--menu-item-hover);
   color: var(--menu-text-primary);
+  border-color: transparent;
 }
 
 .nav-menu-collapsed .nav-item {
@@ -781,14 +792,19 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
 .nav-item:hover {
   background: var(--menu-item-hover);
   color: var(--menu-text-primary);
+  border-color: var(--menu-border-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2);
 }
 
 .nav-item.router-link-active,
 .nav-item.router-link-exact-active,
 .nav-item.active {
-  background: linear-gradient(195deg, var(--menu-item-active-start) 0%, var(--menu-item-active-end) 100%);
+  background: linear-gradient(160deg, var(--menu-item-active-start) 0%, var(--menu-item-active-end) 100%);
   color: white;
-  box-shadow: var(--shadow-accent);
+  box-shadow: 0 18px 48px rgba(16, 185, 129, 0.35);
+  border-color: transparent;
+  transform: translateY(-1px);
 }
 
 .nav-icon {
@@ -816,12 +832,21 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
 
 .nav-badge {
   margin-left: auto;
-  background: var(--menu-item-hover);
-  color: var(--menu-text-primary);
+  background: rgba(16, 185, 129, 0.18);
+  color: #10b981;
   border-radius: 999px;
   font-size: 0.75rem;
-  font-weight: 600;
-  padding: 0.125rem 0.5rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.nav-item.router-link-active .nav-badge,
+.nav-item.router-link-exact-active .nav-badge,
+.nav-item.active .nav-badge {
+  background: rgba(16, 185, 129, 0.3);
+  color: white;
+  border-color: rgba(16, 185, 129, 0.45);
 }
 
 .nav-item-icon {
@@ -844,9 +869,23 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
   display: none;
 }
 
-.nav-footer {
-  padding: 1rem 0.5rem;
+
+.nav-menu-footer {
+  padding: 1.5rem 0.75rem;
   border-top: 1px solid var(--menu-border-primary);
+  background: linear-gradient(160deg, var(--menu-bg-start), var(--menu-bg-end));
+  backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.nav-menu-footer .divider {
+  width: 100%;
+  height: 1px;
+  background: var(--menu-border-primary);
+  opacity: 0.6;
+  border-radius: 999px;
 }
 
 .ws-status {
@@ -854,12 +893,14 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
   align-items: center;
   padding: 0.75rem 1rem;
   margin-bottom: 0.5rem;
-  border-radius: 8px;
-  background: var(--menu-item-hover);
+  border-radius: 10px;
+  background: var(--menu-item-base);
+  border: 1px solid var(--menu-border-secondary);
   font-size: 0.8rem;
   overflow: hidden;
   white-space: nowrap;
-  transition: background 0.3s ease;
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.1);
 }
 
 .nav-menu-collapsed .ws-status {
@@ -972,8 +1013,6 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
 
 .nav-item.theme-toggle {
   color: var(--menu-text-secondary);
-  background: transparent;
-  border: none;
   width: 100%;
   cursor: pointer;
   text-align: left;
@@ -981,7 +1020,7 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
   display: flex;
   align-items: center;
   padding: 0.75rem 1rem;
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
   white-space: nowrap;
   font-size: 0.875rem;
@@ -993,28 +1032,28 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
   padding: 0.75rem 0.5rem;
 }
 
-.nav-item.theme-toggle:hover {
-  background: var(--menu-item-hover);
-  color: var(--menu-text-primary);
-}
-
 .status-item {
-  background: var(--menu-item-hover);
+  background: var(--menu-item-base);
+  border: 1px solid var(--menu-border-secondary);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.1);
 }
 
 .status-item[data-status="online"] {
-  background: var(--status-online-light);
-  color: var(--menu-text-primary);
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #10b981;
 }
 
 .status-item[data-status="connecting"] {
-  background: var(--status-warning-light);
-  color: var(--menu-text-primary);
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #f59e0b;
 }
 
 .status-item[data-status="offline"] {
-  background: var(--status-offline-light);
-  color: var(--menu-text-primary);
+  background: rgba(248, 113, 113, 0.18);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #f87171;
 }
 
 .nav-item.theme-toggle .nav-icon {

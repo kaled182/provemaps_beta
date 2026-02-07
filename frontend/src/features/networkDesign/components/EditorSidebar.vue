@@ -29,14 +29,14 @@
 
     <!-- Métricas em grid -->
     <div class="grid grid-cols-2 gap-px bg-gray-200 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700">
-      <div class="bg-white dark:bg-gray-800 p-4 flex flex-col items-center justify-center hover:bg-gray-50 transition-colors">
-        <span class="text-xs text-gray-400 uppercase font-bold mb-1">Extensão</span>
+      <div class="bg-white dark:bg-gray-800 p-4 flex flex-col items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+        <span class="text-xs text-gray-400 dark:text-gray-500 uppercase font-bold mb-1">Extensão</span>
         <span class="text-lg font-mono font-bold text-gray-900 dark:text-white">
           {{ formatLength(cable.length) }}
         </span>
       </div>
-      <div class="bg-white dark:bg-gray-800 p-4 flex flex-col items-center justify-center hover:bg-gray-50 transition-colors">
-        <span class="text-xs text-gray-400 uppercase font-bold mb-1">Atenuação</span>
+      <div class="bg-white dark:bg-gray-800 p-4 flex flex-col items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+        <span class="text-xs text-gray-400 dark:text-gray-500 uppercase font-bold mb-1">Atenuação</span>
         <span class="text-lg font-mono font-bold text-gray-900 dark:text-white">
           {{ calculateLoss(cable.length) }}dB
         </span>
@@ -45,11 +45,11 @@
 
     <!-- Timeline de elementos -->
     <div class="flex-1 overflow-y-auto p-4">
-      <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+      <h3 class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
         <i class="fas fa-stream"></i> Elementos de Rede
       </h3>
 
-      <div class="relative pl-4 border-l-2 border-gray-200 dark:border-gray-700 space-y-6">
+      <div class="relative pl-4 border-l-2 border-gray-200 dark:border-gray-600 space-y-6">
         <!-- Site A (Origem) -->
         <div class="relative">
           <div class="absolute -left-[21px] bg-blue-500 h-3 w-3 rounded-full ring-4 ring-white dark:ring-gray-800"></div>
@@ -59,8 +59,8 @@
 
         <!-- Pontos de infraestrutura -->
         <div v-if="infrastructurePoints.length === 0" class="py-8 text-center">
-          <p class="text-xs text-gray-400 italic">Nenhuma caixa ou reserva adicionada.</p>
-          <button class="mt-2 text-xs text-indigo-600 hover:underline">
+          <p class="text-xs text-gray-400 dark:text-gray-500 italic">Nenhuma caixa ou reserva adicionada.</p>
+          <button class="mt-2 text-xs text-indigo-600 dark:text-indigo-400 hover:underline">
             + Adicionar com botão direito no mapa
           </button>
         </div>
@@ -77,21 +77,21 @@
               <p class="text-sm font-bold text-gray-900 dark:text-white truncate">
                 {{ point.name || point.type_display }}
               </p>
-              <p class="text-xs text-gray-500">
+              <p class="text-xs text-gray-500 dark:text-gray-400">
                 {{ formatDistance(point.distance_from_origin) }}
               </p>
             </div>
             <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <button 
                 @click="$emit('edit-infrastructure', point)"
-                class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 hover:text-indigo-600"
+                class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400"
                 title="Editar"
               >
                 <i class="fas fa-edit text-xs"></i>
               </button>
               <button 
                 @click="$emit('delete-infrastructure', point)"
-                class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 hover:text-red-600"
+                class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400"
                 title="Excluir"
               >
                 <i class="fas fa-trash text-xs"></i>
@@ -104,7 +104,7 @@
         <div class="relative">
           <div class="absolute -left-[21px] bg-indigo-500 h-3 w-3 rounded-full ring-4 ring-white dark:ring-gray-800"></div>
           <p class="text-sm font-bold text-gray-900 dark:text-white">{{ cable.site_b_name || 'Fim Indefinido' }}</p>
-          <p class="text-xs text-gray-500">Destino</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400">Destino</p>
         </div>
       </div>
     </div>

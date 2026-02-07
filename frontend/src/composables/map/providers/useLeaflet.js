@@ -14,15 +14,17 @@ export async function loadLeaflet() {
   try {
     console.log('[useLeaflet] Carregando biblioteca Leaflet...')
     
-    // Importação dinâmica da biblioteca
-    const module = await import('leaflet')
-    L = module.default
+    // Importação dinâmica da biblioteca E do CSS juntos
+    const [leafletModule] = await Promise.all([
+      import('leaflet'),
+      import('leaflet/dist/leaflet.css')
+    ])
     
-    // Importação dinâmica do CSS
-    await import('leaflet/dist/leaflet.css')
+    L = leafletModule.default
     
     leafletLoaded = true
     console.log('[useLeaflet] Leaflet carregado com sucesso!')
+    console.log('[useLeaflet] Versão:', L.version)
     
     return L
   } catch (error) {

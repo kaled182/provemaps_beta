@@ -3,9 +3,9 @@
 Welcome to the MapsProveFiber documentation! This wiki provides comprehensive guides for developers, operators, and contributors.
 
 **Version**: v2.0.0  
-**Last Updated**: 2025-11-18  
+**Last Updated**: 2026-02-02  
 **Architecture**: Modular Django Multi-App  
-**Documentation Status**: ✅ 100% Complete ([See Report](REORGANIZATION_COMPLETE.md))
+**Documentation Status**: ✅ 100% Complete & Organized ([See Report](REORGANIZATION_COMPLETE.md))
 
 ---
 
@@ -33,8 +33,18 @@ Day-to-day development and operations guides.
 - `DEVELOPMENT.md` — Local development, commands, workflows
 - `DOCKER.md` — Docker Compose, containers, volumes
 - `TESTING.md` — Test suite, coverage, CI/CD
-- `testing/` — Testing guides, validation checklists
+- `testing/` — Testing guides, validation checklists, E2E setup
+  - `INSTRUCOES_VALIDACAO.md` — Manual validation instructions (PT-BR)
+  - `TESTE_LAZY_LOADING.md` — Lazy loading testing guide
+  - `TESTS_E2E_SETUP.md` — End-to-end testing setup
+  - `TESTS_MOSAIC_MODAL.md` — Mosaic modal testing documentation
+  - `TESTING_GUIDE.md` — Comprehensive testing guide
+  - `VISUAL_TESTING_ENHANCEMENTS.md` — Visual testing improvements
+  - `MANUAL_VALIDATION_CHECKLIST.md` — Manual QA checklist
 - `OBSERVABILITY.md` — Metrics, health checks, logging
+- `WHATSAPP_CONTACTS_IMPLEMENTATION.md` — WhatsApp contacts integration guide
+- `DARK_MODE_CONTACTS_IMPLEMENTATION.md` — Dark mode implementation for contacts
+- Other feature-specific guides
 
 ### 🏗️ [Architecture](architecture/)
 System design, module structure, and architecture decisions.
@@ -77,8 +87,12 @@ Guidelines for contributors.
 ### 🧭 [Roadmap](roadmap/)
 Long-term planning and migration timelines.
 
-- `ROADMAP_NEXT_STEPS.md` — Phases 6-7 execution plan, automation scripts, and success metrics.
-- `ROADMAP_VUE3_PREPARATION.md` — Vue 3 migration preparation and task breakdown (última atualização 12/11/2025).
+- `ROADMAP_NEXT_STEPS.md` — Phases 6-7 execution plan, automation scripts, and success metrics
+- `ROADMAP_VUE3_PREPARATION.md` — Vue 3 migration preparation and task breakdown (última atualização 12/11/2025)
+- `SPRINT1_SUMMARY.md` — Sprint 1 completion report
+- `SPRINT2_SUMMARY.md` — Sprint 2 completion report
+- `SPRINT3_SUMMARY.md` — Sprint 3 completion report
+- Sprint implementation and completion reports (Day 1-5)
 
 ### 🗂️ [Reports](reports/)
 Historical logs, compliance reviews, and PR status snapshots. See `reports/README.md` for a detailed index.
@@ -89,17 +103,24 @@ Historical logs, compliance reviews, and PR status snapshots. See `reports/READM
 - `reports/compliance/` — Cache compliance verification and timeout analysis
 - `reports/status/PR_STATUS.md` — Checklist for Phase 5 pull request and readiness
 - `reports/pr/PR_PHASE5_COMPLETE.md` — Full PR body used to close Phase 5
+- `CUSTOMMAP_REFACTORING_COMPLETE.md` — CustomMap refactoring completion report
+- `FIX_CONTACTS_COMPLETE.md` — Contacts feature fixes completion
+- `FIX_USER_SYNC.md` — User synchronization fix report
+- `WHATSAPP_CONTACTS_INTEGRATION_FINAL.md` — WhatsApp integration final report
 
 ### 🔧 [Troubleshooting](troubleshooting/)
 Incident reports, problem resolutions, and fix documentation.
 
 - `DOCKER_CELERY_FIX.md` — Celery/Beat restart loop resolution (Docker image cache)
+- `SOLUCAO_ENDPOINTS_PORTAS.md` — Endpoints and ports solution documentation
+- `SOLUCAO_MODAL_FIBRAS_COMPLETA.md` — Complete fiber modal solution
 - Additional troubleshooting guides as issues are documented
 
 ### 🏛️ [Archive](archive/)
 Deprecated documentation and historical references.
 
 - Old migration plans, superseded guides
+- `broken-components/` — Archived broken Vue components for reference
 - Kept for reference but no longer actively maintained
 
 ---
@@ -266,9 +287,9 @@ See [contributing/README.md](contributing/README.md) for guidelines.
 
 ---
 
-**Last Updated**: 2025-11-10  
+**Last Updated**: 2026-02-02  
 **Documentation Version**: v2.0.0  
-**Documentation Status**: ✅ 100% Complete  
+**Documentation Status**: ✅ 100% Complete & Organized  
 **Maintained by**: Don Jonhn
 
 **🎉 Welcome to MapsProveFiber! Let's build something great together.**

@@ -142,7 +142,7 @@ const categoryLabel = computed(() => {
 
 const loadMaps = async () => {
   try {
-    const response = await fetch('/inventory/api/v1/maps/custom/', {
+    const response = await fetch('/api/v1/maps/custom/', {
       credentials: 'include'
     })
     
@@ -177,7 +177,7 @@ const deleteMap = async (map) => {
   if (!confirm(`Tem certeza que deseja excluir o mapa "${map.name}"?`)) return
   
   try {
-    const response = await fetch(`/inventory/api/v1/maps/custom/${map.id}/`, {
+    const response = await fetch(`/api/v1/maps/custom/${map.id}/`, {
       method: 'DELETE',
       credentials: 'include',
       headers: {
@@ -200,8 +200,8 @@ const deleteMap = async (map) => {
 const saveMap = async () => {
   try {
     const url = editingMap.value 
-      ? `/inventory/api/v1/maps/custom/${editingMap.value.id}/`
-      : '/inventory/api/v1/maps/custom/'
+      ? `/api/v1/maps/custom/${editingMap.value.id}/`
+      : '/api/v1/maps/custom/'
     
     const method = editingMap.value ? 'PUT' : 'POST'
     

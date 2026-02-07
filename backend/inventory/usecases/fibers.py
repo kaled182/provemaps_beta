@@ -22,6 +22,7 @@ from inventory.domain.geometry import (
     calculate_path_length,
     sanitize_path_points,
 )
+from inventory.spatial import coords_to_linestring, linestring_to_coords
 # NOTE: fetch_port_optical_snapshot no longer used directly here
 from inventory.models import FiberCable, FiberEvent, Port
 from inventory.services.fiber_status import (
@@ -32,11 +33,171 @@ from inventory.services.fiber_status import (
 )
 from inventory.spatial import coords_to_linestring
 from django.db.models import Q
+from django.conf import settings
+from setup_app.services import runtime_settings
 
 logger = logging.getLogger(__name__)
 
 LIVE_STATUS_CACHE_KEY_TEMPLATE = "inventory:fiber_live_status:{cable_id}"
 LIVE_STATUS_CACHE_TIMEOUT = 45  # seconds
+
+OPTICAL_STATUS_SEVERITY = {
+    "critical": 3,
+    "warning": 2,
+    "offline": 3,
+    "online": 1,
+    "unknown": 0,
+}
+
+
+def _float_or_none(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _resolve_port_thresholds(port: Optional[Port]) -> dict[str, float | None]:
+    runtime_config = runtime_settings.get_runtime_config()
+    warning_default = _float_or_none(
+        getattr(runtime_config, "optical_rx_warning_threshold", None)
+    )
+    if warning_default is None:
+        warning_default = _float_or_none(
+            getattr(settings, "OPTICAL_RX_WARNING_THRESHOLD", -24.0)
+        )
+
+    critical_default = _float_or_none(
+        getattr(runtime_config, "optical_rx_critical_threshold", None)
+    )
+    if critical_default is None:
+        critical_default = _float_or_none(
+            getattr(settings, "OPTICAL_RX_CRITICAL_THRESHOLD", -27.0)
+        )
+
+    warning = warning_default
+    critical = critical_default
+
+    if port and getattr(port, "alarm_enabled", False):
+        custom_warning = _float_or_none(port.alarm_warning_threshold)
+        custom_critical = _float_or_none(port.alarm_critical_threshold)
+        if custom_warning is not None:
+            warning = custom_warning
+        if custom_critical is not None:
+            critical = custom_critical
+        if custom_warning is None and custom_critical is not None:
+            warning = custom_critical + 2.0
+
+    if warning is not None and critical is not None and warning < critical:
+        warning, critical = critical, warning
+
+    return {"warning": warning, "critical": critical}
+
+
+def _classify_optical_thresholds(
+    rx_value: float | None, thresholds: dict[str, float | None]
+) -> str:
+    if rx_value is None:
+        return "unknown"
+
+    critical = thresholds.get("critical")
+    warning = thresholds.get("warning")
+
+    if critical is not None and rx_value <= critical:
+        return "critical"
+    if warning is not None and rx_value <= warning:
+        return "warning"
+    return "online"
+
+
+def _classify_optical_heuristic(
+    rx_value: float | None, thresholds: dict[str, float | None]
+) -> str:
+    if rx_value is None:
+        return "unknown"
+
+    # When thresholds are configured, rely on them instead of fallback heuristics.
+    warning = thresholds.get("warning")
+    critical = thresholds.get("critical")
+    if warning is not None or critical is not None:
+        return "unknown"
+
+    if rx_value >= -20:
+        return "online"
+    if rx_value >= -28:
+        return "warning"
+    return "critical"
+
+
+def _port_optical_snapshot(port: Optional[Port]) -> dict[str, Any]:
+    if not port:
+        return {
+            "status": "unknown",
+            "rx": None,
+            "tx": None,
+            "last_check": None,
+            "warning_threshold": None,
+            "critical_threshold": None,
+            "port_id": None,
+            "port_name": None,
+            "device_name": None,
+            "alarm_enabled": False,
+        }
+
+    thresholds = _resolve_port_thresholds(port)
+    rx_value = _float_or_none(port.last_rx_power)
+    tx_value = _float_or_none(port.last_tx_power)
+    status_thresholds = _classify_optical_thresholds(rx_value, thresholds)
+    status_heuristic = _classify_optical_heuristic(rx_value, thresholds)
+    status = _aggregate_optical_status(status_thresholds, status_heuristic)
+
+    return {
+        "status": status,
+        "status_sources": {
+            "thresholds": status_thresholds,
+            "heuristic": status_heuristic,
+        },
+        "rx": rx_value,
+        "tx": tx_value,
+        "last_check": (
+            port.last_optical_check.isoformat()
+            if port.last_optical_check
+            else None
+        ),
+        "warning_threshold": thresholds["warning"],
+        "critical_threshold": thresholds["critical"],
+        "port_id": port.id,
+        "port_name": port.name,
+        "device_name": port.device.name if port.device else None,
+        "alarm_enabled": bool(port.alarm_enabled),
+    }
+
+
+def _aggregate_optical_status(*statuses: str) -> str:
+    best_status = "unknown"
+    best_score = OPTICAL_STATUS_SEVERITY.get(best_status, 0)
+    for status in statuses:
+        score = OPTICAL_STATUS_SEVERITY.get(status, 0)
+        if score > best_score:
+            best_status = status
+            best_score = score
+    return best_status
+
+
+def build_optical_summary(cable: FiberCable) -> dict[str, Any]:
+    origin = _port_optical_snapshot(getattr(cable, "origin_port", None))
+    destination = _port_optical_snapshot(
+        getattr(cable, "destination_port", None)
+    )
+    status = _aggregate_optical_status(
+        origin.get("status", "unknown"),
+        destination.get("status", "unknown"),
+    )
+    return {
+        "status": status,
+        "origin": origin,
+        "destination": destination,
+    }
 
 
 class FiberUseCaseError(Exception):
@@ -171,7 +332,6 @@ def create_fiber_from_kml(
         name=name,
         origin_port=origin_port,
         destination_port=dest_port,
-        path_coordinates=sanitized,
         path=path_geom,  # PostGIS LineString
         length_km=length_km,
         status=FiberCable.STATUS_UNKNOWN,
@@ -186,21 +346,23 @@ def fiber_to_payload(
     fiber: FiberCable,
     coords: Optional[Iterable[Dict[str, float]]] = None,
 ) -> Dict[str, object]:
+    """Convert FiberCable to API payload with coordinates from PostGIS path."""
+    from inventory.spatial import linestring_to_coords
+    
     origin_port = fiber.origin_port
     dest_port = fiber.destination_port
+    
+    # Get coordinates from provided param or extract from PostGIS path
+    if coords is not None:
+        path_coords = list(coords)
+    else:
+        path_coords = linestring_to_coords(fiber.path) if fiber.path else []
+    
     return {
         "fiber_id": fiber.id,
         "name": fiber.name,
-        "points": (
-            len(list(coords))
-            if coords is not None
-            else len(fiber.path_coordinates or [])
-        ),
-        "path_coordinates": (
-            list(coords)
-            if coords is not None
-            else (fiber.path_coordinates or [])
-        ),
+        "points": len(path_coords),
+        "path_coordinates": path_coords,
         "origin_port": {
             "id": origin_port.id,
             "name": origin_port.name,
@@ -315,11 +477,14 @@ def list_fiber_cables() -> List[Dict[str, object]]:
     for cable in cables:
         origin_site = cable.origin_port.device.site
         dest_site = cable.destination_port.device.site
+        optical_summary = build_optical_summary(cable)
         payload.append(
             {
                 "id": cable.id,
                 "name": cable.name,
                 "status": cable.status,
+                "optical_status": optical_summary["status"],
+                "optical_summary": optical_summary,
                 "length_km": (
                     float(cable.length_km)
                     if cable.length_km is not None
@@ -369,7 +534,9 @@ def list_fiber_cables() -> List[Dict[str, object]]:
                     "device": cable.destination_port.device.name,
                     "port": cable.destination_port.name,
                 },
-                "path": cable.path_coordinates or [],
+                "path": (
+                    linestring_to_coords(cable.path) if cable.path else []
+                ),
             }
         )
     return payload
@@ -442,7 +609,7 @@ def fiber_detail_payload(cable: FiberCable) -> Dict[str, object]:
             "port": cable.destination_port.name,
             "port_id": cable.destination_port.id,
         },
-        "path": cable.path_coordinates or [],
+        "path": linestring_to_coords(cable.path) if cable.path else [],
         "infrastructure_points": infrastructure_points,
         "single_port": cable.origin_port == cable.destination_port,
     }
@@ -450,10 +617,9 @@ def fiber_detail_payload(cable: FiberCable) -> Dict[str, object]:
 
 def update_fiber_path(cable: FiberCable, raw_path: Any) -> Dict[str, object]:
     """
-    Update cable path coordinates and regenerate PostGIS geometry.
+    Update cable path from coordinates and store in PostGIS geometry.
     
-    CRITICAL: Always regenerates cable.path from path_coordinates to ensure
-    all cables have PostGIS LineString for spatial operations.
+    CRITICAL: Converts coordinate list to PostGIS LineString for spatial operations.
     """
     from inventory.spatial import coords_to_linestring
     
@@ -463,14 +629,10 @@ def update_fiber_path(cable: FiberCable, raw_path: Any) -> Dict[str, object]:
         raise FiberValidationError("Path requires at least two valid points")
 
     length_km = calculate_path_length(sanitized)
-    cable.path_coordinates = sanitized
+    cable.path = coords_to_linestring(sanitized)
     cable.length_km = length_km
     
-    # SEMPRE regenerar path PostGIS a partir de path_coordinates
-    # Garante que todos os cabos tenham geometria LineString
-    cable.path = coords_to_linestring(sanitized)
-    
-    cable.save(update_fields=["path_coordinates", "length_km", "path"])
+    cable.save(update_fields=["path", "length_km"])
     invalidate_fiber_cache()
     
     return {
@@ -819,7 +981,6 @@ def create_manual_fiber(data: Dict[str, object]) -> Dict[str, object]:
         name=name,
         origin_port=origin_port,
         destination_port=dest_port,
-        path_coordinates=sanitized,
         path=path_geom,  # PostGIS LineString
         length_km=length_km,
         status=FiberCable.STATUS_UNKNOWN,

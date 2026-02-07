@@ -93,34 +93,64 @@
                 </div>
 
                 <!-- Detalhes do Cabo -->
-                <div class="info-section">
-                  <h3>Detalhes do Cabo</h3>
-                  <div class="detail-list">
-                    <div class="detail-item">
-                      <span class="detail-label">ID</span>
-                      <span class="detail-value">{{ cable.id }}</span>
+                <div
+                  class="info-section collapsible"
+                  :class="{ 'is-collapsed': !showCableDetails }"
+                >
+                  <button
+                    type="button"
+                    class="collapsible-trigger"
+                    @click="toggleCableDetails"
+                  >
+                    <h3>Detalhes do Cabo</h3>
+                    <svg
+                      class="icon"
+                      :class="{ rotated: showCableDetails }"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
+                  </button>
+                  <transition name="collapse">
+                    <div
+                      v-show="showCableDetails"
+                      class="collapsible-content"
+                    >
+                      <div class="detail-list">
+                        <div class="detail-item">
+                          <span class="detail-label">ID</span>
+                          <span class="detail-value">{{ cable.id }}</span>
+                        </div>
+                        <div class="detail-item">
+                          <span class="detail-label">Nome</span>
+                          <span class="detail-value">{{ cable.name }}</span>
+                        </div>
+                        <div class="detail-item">
+                          <span class="detail-label">Site A</span>
+                          <span class="detail-value">{{ cable.site_a_name || 'N/A' }}</span>
+                        </div>
+                        <div class="detail-item">
+                          <span class="detail-label">Site B</span>
+                          <span class="detail-value">{{ cable.site_b_name || 'N/A' }}</span>
+                        </div>
+                        <div class="detail-item">
+                          <span class="detail-label">Tipo de Cabo</span>
+                          <span class="detail-value">{{ cable.cable_type || 'N/A' }}</span>
+                        </div>
+                        <div class="detail-item">
+                          <span class="detail-label">Quantidade de Fibras</span>
+                          <span class="detail-value">{{ cable.fiber_count || 'N/A' }}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div class="detail-item">
-                      <span class="detail-label">Nome</span>
-                      <span class="detail-value">{{ cable.name }}</span>
-                    </div>
-                    <div class="detail-item">
-                      <span class="detail-label">Site A</span>
-                      <span class="detail-value">{{ cable.site_a_name || 'N/A' }}</span>
-                    </div>
-                    <div class="detail-item">
-                      <span class="detail-label">Site B</span>
-                      <span class="detail-value">{{ cable.site_b_name || 'N/A' }}</span>
-                    </div>
-                    <div class="detail-item">
-                      <span class="detail-label">Tipo de Cabo</span>
-                      <span class="detail-value">{{ cable.cable_type || 'N/A' }}</span>
-                    </div>
-                    <div class="detail-item">
-                      <span class="detail-label">Quantidade de Fibras</span>
-                      <span class="detail-value">{{ cable.fiber_count || 'N/A' }}</span>
-                    </div>
-                  </div>
+                  </transition>
                 </div>
 
                 <!-- Observações -->
@@ -330,6 +360,141 @@
             </div>
           </div>
 
+          <!-- Configure Alarms Modal -->
+          <div v-if="showAlarmModal" class="alarm-modal-backdrop" @click.self="closeAlarmModal">
+            <div class="alarm-modal">
+              <div class="alarm-modal-header">
+                <h3>Configurar Alarmes</h3>
+                <button class="close-btn" @click="closeAlarmModal">
+                  <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div class="alarm-modal-content">
+                <section class="saved-configs-section">
+                  <h4>Configurações existentes</h4>
+                  <div v-if="isLoadingAlarmConfigs" class="saved-configs-loading">
+                    <span class="spinner small"></span>
+                    <span>Carregando configurações...</span>
+                  </div>
+                  <div v-else-if="savedAlarmConfigs.length" class="saved-configs-list">
+                    <div v-for="config in savedAlarmConfigs" :key="config.id" class="saved-config-card">
+                      <div class="saved-config-header">
+                        <span class="saved-config-target">{{ config.targetDisplay }}</span>
+                        <span class="saved-config-level" :class="`level-${config.triggerLevel}`">{{ config.triggerLabel }}</span>
+                      </div>
+                      <div class="saved-config-channels">
+                        <span v-for="channel in config.channels" :key="channel" class="saved-config-channel">
+                          {{ channelLabelDictionary[channel] || channel }}
+                        </span>
+                      </div>
+                      <div class="saved-config-meta">
+                        <span>{{ formatPersistLabel(config.persistMinutes) }}</span>
+                        <span v-if="config.createdAt">Atualizado {{ formatAlarmTime(config.createdAt) }}</span>
+                      </div>
+                      <p v-if="config.description" class="saved-config-notes">{{ config.description }}</p>
+                    </div>
+                  </div>
+                  <div v-else class="saved-configs-empty">
+                    Nenhuma configuração cadastrada para este cabo.
+                  </div>
+                </section>
+
+                <section>
+                  <h4>Alvo do Alarme</h4>
+                  <div class="target-options">
+                    <label class="target-option">
+                      <input type="radio" value="department_group" v-model="alarmForm.target"
+                        @change="resetTargetDetails" />
+                      <span>Grupo de Departamento</span>
+                    </label>
+                    <label class="target-option">
+                      <input type="radio" value="system_user" v-model="alarmForm.target"
+                        @change="resetTargetDetails" />
+                      <span>Usuário do Sistema</span>
+                    </label>
+                    <label class="target-option">
+                      <input type="radio" value="contact" v-model="alarmForm.target"
+                        @change="resetTargetDetails" />
+                      <span>Contato Cadastrado</span>
+                    </label>
+                  </div>
+
+                  <div class="target-selector" v-if="alarmForm.target === 'department_group'">
+                    <label>Selecionar Grupo</label>
+                    <select v-model="alarmForm.departmentGroup" :disabled="isContactsLoading && !departmentGroups.length">
+                      <option disabled value="">{{ isContactsLoading && !departmentGroups.length ? 'Carregando grupos...' : 'Selecione um grupo' }}</option>
+                      <option v-for="group in departmentGroups" :key="group.id" :value="group.id">
+                        {{ group.name }} ({{ group.contact_count ?? 0 }} contatos)
+                      </option>
+                    </select>
+                  </div>
+
+                  <div class="target-selector" v-else-if="alarmForm.target === 'system_user'">
+                    <label>Selecionar Usuário</label>
+                    <select v-model="alarmForm.systemUser" :disabled="isContactsLoading && !systemUsers.length">
+                      <option disabled value="">{{ isContactsLoading && !systemUsers.length ? 'Carregando usuários...' : 'Selecione um usuário' }}</option>
+                      <option v-for="user in systemUsers" :key="user.id" :value="user.id">
+                        {{ user.name }}<span v-if="user.email"> ({{ user.email }})</span>
+                      </option>
+                    </select>
+                  </div>
+
+                  <div class="target-selector" v-else-if="alarmForm.target === 'contact'">
+                    <label>Selecionar Contato</label>
+                    <select v-model="alarmForm.contact" :disabled="isContactsLoading && !contactOptions.length">
+                      <option disabled value="">{{ isContactsLoading && !contactOptions.length ? 'Carregando contatos...' : 'Selecione um contato' }}</option>
+                      <option v-for="contact in contactOptions" :key="contact.id" :value="contact.id">
+                        {{ contact.name }} ({{ contact.summary }})
+                      </option>
+                    </select>
+                  </div>
+                </section>
+
+                <section>
+                  <h4>Tipos de Notificação</h4>
+                  <div class="channel-grid">
+                    <label v-for="channel in availableChannels" :key="channel.id" class="channel-option">
+                      <input type="checkbox" :value="channel.id" v-model="alarmForm.channels" />
+                      <span class="channel-icon" :class="channel.id">{{ channel.label }}</span>
+                    </label>
+                  </div>
+                </section>
+
+                <section>
+                  <h4>Condições</h4>
+                  <div class="conditions-grid">
+                    <label>
+                      <span>Acionar em nível</span>
+                      <select v-model="alarmForm.triggerLevel">
+                        <option value="warning">Atenção</option>
+                        <option value="critical">Crítico</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Persistência mínima</span>
+                      <input type="number" min="0" step="1" v-model.number="alarmForm.persistMinutes" />
+                      <small>Minutos de duração antes do disparo</small>
+                    </label>
+                  </div>
+                </section>
+              </div>
+
+              <div class="alarm-modal-footer">
+                <button class="btn-secondary" @click="closeAlarmModal">Cancelar</button>
+                <button class="btn-primary" :disabled="!canSaveAlarm" @click="saveAlarmConfig">
+                  <svg v-if="isSavingAlarm" class="icon spinning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span v-else>Salvar</span>
+                  <span v-if="!isSavingAlarm"> configuração</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- Footer -->
           <div class="modal-footer">
             <button class="btn-secondary" @click="closeModal">
@@ -353,9 +518,12 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useEscapeKey } from '@/composables/useEscapeKey'
 import Chart from 'chart.js/auto'
-import { getCableOpticalHistory } from '@/services/fiberService'
+import { getCableOpticalHistory, getCableAlarms, createCableAlarm } from '@/services/fiberService'
+import { useContactsStore } from '@/stores/contacts'
+import { useAlertTemplatesStore } from '@/stores/alertTemplates'
 
 const props = defineProps({
   show: {
@@ -382,11 +550,46 @@ const originChartCanvas = ref(null)
 const destinationChartCanvas = ref(null)
 const expandedOrigin = ref(true)
 const expandedDestination = ref(false)
+const showCableDetails = ref(true)
 let originChart = null
 let destinationChart = null
 let originChartRetry = 0
 let destinationChartRetry = 0
 const MAX_CHART_RETRIES = 6
+
+const contactsStore = useContactsStore()
+const alertTemplatesStore = useAlertTemplatesStore()
+
+const { templates: alertTemplates, loading: templatesLoading, meta: templateMeta } = storeToRefs(alertTemplatesStore)
+
+const contacts = computed(() => contactsStore.contacts || [])
+const departmentGroups = computed(() => contactsStore.groups || [])
+
+const buildContactSummary = (contact) => {
+  if (!contact) return 'Sem detalhes'
+  const parts = []
+  if (contact.phone) parts.push(contact.phone)
+  if (contact.email) parts.push(contact.email)
+  if (contact.company) parts.push(contact.company)
+  return parts.join(' • ') || 'Sem detalhes'
+}
+
+const contactOptions = computed(() => contacts.value.map(contact => ({
+  id: contact.id,
+  name: contact.name || 'Contato sem nome',
+  summary: buildContactSummary(contact)
+})))
+
+const systemUsers = computed(() => contacts.value
+  .filter(contact => contact.user)
+  .map(contact => ({
+    id: contact.user,
+    name: contact.user_name || contact.name || 'Usuário do sistema',
+    email: contact.email || contact.company || null,
+    contactId: contact.id
+  })))
+
+const isContactsLoading = computed(() => contactsStore.loading)
 
 // Aguarda canvas ficar disponível antes de criar o gráfico
 const waitForCanvas = async (canvasRef, retries = 6, delay = 80) => {
@@ -442,6 +645,129 @@ const historyEvents = ref([])
 const opticalData = ref(null)
 const opticalStats = ref(null)
 const isLoadingOptical = ref(false)
+const showAlarmModal = ref(false)
+const isSavingAlarm = ref(false)
+const savedAlarmConfigs = ref([])
+const isLoadingAlarmConfigs = ref(false)
+
+const TEMPLATE_CATEGORY = 'optical_level'
+
+const createDefaultAlarmForm = () => ({
+  target: 'department_group',
+  departmentGroup: '',
+  systemUser: '',
+  contact: '',
+  channels: [],
+  triggerLevel: 'warning',
+  persistMinutes: 0,
+  templates: {},
+})
+
+const alarmForm = ref(createDefaultAlarmForm())
+
+const availableChannels = [
+  { id: 'email', label: 'E-mail' },
+  { id: 'whatsapp', label: 'WhatsApp' },
+  { id: 'sms', label: 'SMS' },
+  { id: 'telegram', label: 'Telegram' }
+]
+
+const channelLabelDictionary = availableChannels.reduce((acc, channel) => {
+  acc[channel.id] = channel.label
+  return acc
+}, {})
+
+const templatesLoaded = ref(false)
+
+const ensureTemplateDataLoaded = async () => {
+  if (templatesLoaded.value) {
+    return
+  }
+  try {
+    await alertTemplatesStore.loadTemplates({ category: TEMPLATE_CATEGORY, is_active: 'true' })
+  } finally {
+    templatesLoaded.value = true
+  }
+}
+
+const templateOptionsByChannel = computed(() => {
+  const grouped = {}
+  const list = alertTemplates.value || []
+  availableChannels.forEach(channel => {
+    grouped[channel.id] = list
+      .filter(template => template.category === TEMPLATE_CATEGORY && template.channel === channel.id && template.is_active !== false)
+      .map(template => ({
+        id: template.id,
+        name: template.name,
+        label: template.is_default ? `${template.name} (Padrão)` : template.name,
+        isDefault: Boolean(template.is_default),
+      }))
+  })
+  return grouped
+})
+
+const hasTemplatesAvailable = computed(() => {
+  return availableChannels.some(channel => (templateOptionsByChannel.value[channel.id] || []).length > 0)
+})
+
+const getDefaultTemplateIdForChannel = (channelId) => {
+  const options = templateOptionsByChannel.value[channelId] || []
+  if (!options.length) return null
+  const preferred = options.find(option => option.isDefault)
+  return (preferred || options[0]).id
+}
+
+const syncTemplatesSelection = () => {
+  if (!alarmForm.value) return
+  const selectedChannels = Array.isArray(alarmForm.value.channels) ? [...alarmForm.value.channels] : []
+  const currentTemplates = { ...(alarmForm.value.templates || {}) }
+  let changed = false
+
+  Object.keys(currentTemplates).forEach(channel => {
+    if (!selectedChannels.includes(channel)) {
+      delete currentTemplates[channel]
+      changed = true
+    }
+  })
+
+  selectedChannels.forEach(channel => {
+    const options = templateOptionsByChannel.value[channel] || []
+    if (!options.length) {
+      if (currentTemplates[channel]) {
+        delete currentTemplates[channel]
+        changed = true
+      }
+      return
+    }
+    const exists = options.some(option => option.id === currentTemplates[channel])
+    if (!exists) {
+      const defaultId = getDefaultTemplateIdForChannel(channel)
+      if (defaultId) {
+        currentTemplates[channel] = defaultId
+        changed = true
+      }
+    }
+  })
+
+  if (changed) {
+    alarmForm.value.templates = currentTemplates
+  }
+}
+
+watch(
+  () => [...alarmForm.value.channels],
+  () => {
+    syncTemplatesSelection()
+  }
+)
+
+watch(
+  templateOptionsByChannel,
+  () => {
+    syncTemplatesSelection()
+  },
+  { deep: true }
+)
 
 // Fechar modal com ESC
 useEscapeKey(() => {
@@ -458,11 +784,16 @@ const closeModal = () => {
   }
   originChartRetry = 0
   destinationChartRetry = 0
+  showAlarmModal.value = false
   emit('close')
 }
 
 const toggleEditMode = () => {
   isEditMode.value = !isEditMode.value
+}
+
+const toggleCableDetails = () => {
+  showCableDetails.value = !showCableDetails.value
 }
 
 // Carregar dados ópticos reais
@@ -520,9 +851,210 @@ const saveChanges = async () => {
   }
 }
 
-const configureAlarms = () => {
-  // TODO: Abrir modal de configuração de alarmes
-  console.log('Configurar alarmes')
+const resetAlarmForm = () => {
+  alarmForm.value = createDefaultAlarmForm()
+  syncTemplatesSelection()
+}
+
+const ensureContactDataLoaded = async () => {
+  const loaders = []
+  if (!contactsStore.contacts.length) {
+    loaders.push(contactsStore.loadContacts({ is_active: true }))
+  }
+  if (!contactsStore.groups.length) {
+    loaders.push(contactsStore.loadGroups())
+  }
+  if (loaders.length) {
+    await Promise.allSettled(loaders)
+  }
+}
+
+const normalizeChannels = (channels) => {
+  if (!channels) return []
+  if (Array.isArray(channels)) return channels.filter(Boolean)
+  if (typeof channels === 'string') {
+    return channels.split(',').map(item => item.trim()).filter(Boolean)
+  }
+  if (typeof channels === 'object') {
+    return Object.keys(channels).filter(key => channels[key])
+  }
+  return []
+}
+
+const levelLabelMap = {
+  warning: 'Atenção',
+  critical: 'Crítico',
+  info: 'Informativo',
+  alert: 'Alerta'
+}
+
+const getLevelLabel = (level) => levelLabelMap[level] || level?.toUpperCase?.() || 'Alarme'
+
+const normalizeAlarmConfig = (config) => {
+  if (!config) return null
+  const triggerLevel = String(config.trigger_level || config.level || config.severity || 'warning').toLowerCase()
+  const channels = normalizeChannels(
+    config.channels ||
+    config.notification_channels ||
+    config.alarm_channels ||
+    config.notifications
+  )
+  const persistRaw = config.persist_minutes ?? config.persist_for ?? config.duration_minutes ?? 0
+  const persistMinutes = Number.isFinite(Number(persistRaw)) ? Number(persistRaw) : 0
+  const targetType = config.target_type || config.target?.type || config.target || 'department_group'
+  const targetName = config.target_display || config.target_name || config.target?.name || config.name || 'Configuração de alarme'
+  const templatesMeta = config.templates || config.metadata?.templates || {}
+  const templateBindings = templatesMeta?.bindings || {}
+  const templateSnapshots = templatesMeta?.snapshots || {}
+  const channelDetails = channels.map(channel => ({
+    id: channel,
+    label: channelLabelDictionary[channel] || channel.toUpperCase(),
+    templateId: templateBindings[channel] || null,
+    templateName: templateSnapshots?.[channel]?.name || null,
+  }))
+
+  return {
+    id: config.id || config.uuid || `${targetType}-${targetName}-${channels.join('-')}`,
+    targetType,
+    targetDisplay: targetName,
+    channels,
+    channelDetails,
+    triggerLevel,
+    triggerLabel: getLevelLabel(triggerLevel),
+    persistMinutes,
+    createdAt: config.created_at || config.updated_at || config.timestamp || null,
+    description: config.description || config.notes || '',
+    templates: templatesMeta,
+    raw: config
+  }
+}
+
+const loadCableAlarmConfigs = async (cableId = props.cable?.id) => {
+  if (!cableId) {
+    savedAlarmConfigs.value = []
+    return
+  }
+  isLoadingAlarmConfigs.value = true
+  try {
+    const response = await getCableAlarms(cableId)
+    const payload = response?.results || response?.data || response || []
+    const configs = Array.isArray(payload) ? payload : []
+    savedAlarmConfigs.value = configs
+      .map(normalizeAlarmConfig)
+      .filter(Boolean)
+  } catch (error) {
+    console.error('[FiberCableDetailModal] Erro ao carregar configurações de alarmes:', error)
+    savedAlarmConfigs.value = []
+  } finally {
+    isLoadingAlarmConfigs.value = false
+  }
+}
+
+const setDefaultTargetSelection = () => {
+  const target = alarmForm.value.target
+  if (target === 'department_group' && !alarmForm.value.departmentGroup && departmentGroups.value.length) {
+    alarmForm.value.departmentGroup = departmentGroups.value[0].id
+  }
+  if (target === 'system_user' && !alarmForm.value.systemUser && systemUsers.value.length) {
+    alarmForm.value.systemUser = systemUsers.value[0].id
+  }
+  if (target === 'contact' && !alarmForm.value.contact && contactOptions.value.length) {
+    alarmForm.value.contact = contactOptions.value[0].id
+  }
+}
+
+const configureAlarms = async () => {
+  await Promise.all([
+    ensureContactDataLoaded(),
+    ensureTemplateDataLoaded(),
+  ])
+  resetAlarmForm()
+  setDefaultTargetSelection()
+  syncTemplatesSelection()
+  await loadCableAlarmConfigs()
+  console.debug('[FiberCableDetailModal] Abrindo modal de alarmes')
+  showAlarmModal.value = true
+}
+
+const closeAlarmModal = () => {
+  if (isSavingAlarm.value) {
+    return
+  }
+  console.debug('[FiberCableDetailModal] Fechando modal de alarmes')
+  showAlarmModal.value = false
+}
+
+const resetTargetDetails = () => {
+  alarmForm.value.departmentGroup = ''
+  alarmForm.value.systemUser = ''
+  alarmForm.value.contact = ''
+  nextTick(() => {
+    setDefaultTargetSelection()
+  })
+}
+
+const canSaveAlarm = computed(() => {
+  if (!alarmForm.value.target) {
+    return false
+  }
+  if (!alarmForm.value.channels.length) {
+    return false
+  }
+  if (alarmForm.value.target === 'department_group' && !alarmForm.value.departmentGroup) {
+    return false
+  }
+  if (alarmForm.value.target === 'system_user' && !alarmForm.value.systemUser) {
+    return false
+  }
+  if (alarmForm.value.target === 'contact' && !alarmForm.value.contact) {
+    return false
+  }
+  return true
+})
+
+const saveAlarmConfig = async () => {
+  if (!canSaveAlarm.value || !props.cable?.id) {
+    return
+  }
+
+  isSavingAlarm.value = true
+  try {
+    const payload = {
+      target: alarmForm.value.target,
+      department_group: alarmForm.value.target === 'department_group' ? alarmForm.value.departmentGroup : null,
+      system_user: alarmForm.value.target === 'system_user' ? alarmForm.value.systemUser : null,
+      contact: alarmForm.value.target === 'contact' ? alarmForm.value.contact : null,
+      channels: [...alarmForm.value.channels],
+      trigger_level: alarmForm.value.triggerLevel,
+      persist_minutes: alarmForm.value.persistMinutes ?? 0,
+      template_category: TEMPLATE_CATEGORY,
+    }
+
+    const templatePayload = {}
+    if (alarmForm.value.templates) {
+      Object.entries(alarmForm.value.templates).forEach(([channel, templateId]) => {
+        if (!alarmForm.value.channels.includes(channel)) {
+          return
+        }
+        if (templateId) {
+          templatePayload[channel] = templateId
+        }
+      })
+    }
+
+    if (Object.keys(templatePayload).length > 0) {
+      payload.templates = templatePayload
+    }
+
+    await createCableAlarm(props.cable.id, payload)
+    await loadCableAlarmConfigs(props.cable.id)
+    showAlarmModal.value = false
+  } catch (error) {
+    console.error('[FiberCableDetailModal] Falha ao salvar configuração de alarme:', error)
+    window.alert(error?.message || 'Não foi possível salvar a configuração de alarme.')
+  } finally {
+    isSavingAlarm.value = false
+  }
 }
 
 // Computeds
@@ -621,6 +1153,12 @@ const formatAlarmTime = (timestamp) => {
   return date.toLocaleString('pt-BR')
 }
 
+const formatPersistLabel = (minutes) => {
+  if (!minutes) return 'Disparo imediato'
+  if (minutes === 1) return 'Persistência mínima: 1 minuto'
+  return `Persistência mínima: ${minutes} minutos`
+}
+
 const formatEventDate = (date) => {
   if (!date) return 'N/A'
   return new Date(date).toLocaleDateString('pt-BR')
@@ -672,38 +1210,73 @@ const createOriginChart = async () => {
       originChart.destroy()
     }
     
-    console.log('[FiberCableDetailModal] Criando gráfico origem com', opticalData.value.origin.labels.length, 'pontos')
-    
+    const originData = opticalData.value.origin
+    console.log('[FiberCableDetailModal] Criando gráfico origem com', originData.labels.length, 'pontos')
+
+    const datasets = [
+      {
+        label: 'RX (dBm)',
+        data: originData.rxData,
+        borderColor: '#3b82f6',
+        backgroundColor: 'transparent',
+        borderWidth: 2,
+        fill: false,
+        tension: 0.4,
+        pointRadius: 0,
+        pointHoverRadius: 6,
+        spanGaps: true,
+        order: 1
+      },
+      {
+        label: 'TX (dBm)',
+        data: originData.txData,
+        borderColor: '#10b981',
+        backgroundColor: 'transparent',
+        borderWidth: 2,
+        fill: false,
+        tension: 0.4,
+        pointRadius: 0,
+        pointHoverRadius: 6,
+        spanGaps: true,
+        order: 1
+      }
+    ]
+
+    if (originData.warningLine) {
+      datasets.push({
+        label: 'Atenção',
+        data: originData.warningLine,
+        borderColor: '#fbbf24',
+        borderDash: [6, 6],
+        borderWidth: 1.5,
+        fill: false,
+        pointRadius: 0,
+        tension: 0,
+        spanGaps: true,
+        order: 5
+      })
+    }
+
+    if (originData.criticalLine) {
+      datasets.push({
+        label: 'Crítico',
+        data: originData.criticalLine,
+        borderColor: '#f87171',
+        borderDash: [6, 6],
+        borderWidth: 1.5,
+        fill: false,
+        pointRadius: 0,
+        tension: 0,
+        spanGaps: true,
+        order: 5
+      })
+    }
+
     originChart = new Chart(ctx, {
       type: 'line',
       data: {
-        labels: opticalData.value.origin.labels,
-        datasets: [
-          {
-            label: 'RX (dBm)',
-            data: opticalData.value.origin.rxData,
-            borderColor: '#3b82f6',
-            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-            borderWidth: 2,
-            fill: true,
-            tension: 0.4,
-            pointRadius: 0,
-            pointHoverRadius: 6,
-            spanGaps: true
-          },
-          {
-            label: 'TX (dBm)',
-            data: opticalData.value.origin.txData,
-            borderColor: '#10b981',
-            backgroundColor: 'rgba(16, 185, 129, 0.1)',
-            borderWidth: 2,
-            fill: true,
-            tension: 0.4,
-            pointRadius: 0,
-            pointHoverRadius: 6,
-            spanGaps: true
-          }
-        ]
+        labels: originData.labels,
+        datasets
       },
       options: {
         responsive: true,
@@ -788,38 +1361,73 @@ const createDestinationChart = async () => {
       destinationChart.destroy()
     }
     
-    console.log('[FiberCableDetailModal] Criando gráfico destino com', opticalData.value.destination.labels.length, 'pontos')
-    
+    const destinationData = opticalData.value.destination
+    console.log('[FiberCableDetailModal] Criando gráfico destino com', destinationData.labels.length, 'pontos')
+
+    const datasets = [
+      {
+        label: 'RX (dBm)',
+        data: destinationData.rxData,
+        borderColor: '#f59e0b',
+        backgroundColor: 'transparent',
+        borderWidth: 2,
+        fill: false,
+        tension: 0.4,
+        pointRadius: 0,
+        pointHoverRadius: 6,
+        spanGaps: true,
+        order: 1
+      },
+      {
+        label: 'TX (dBm)',
+        data: destinationData.txData,
+        borderColor: '#ec4899',
+        backgroundColor: 'transparent',
+        borderWidth: 2,
+        fill: false,
+        tension: 0.4,
+        pointRadius: 0,
+        pointHoverRadius: 6,
+        spanGaps: true,
+        order: 1
+      }
+    ]
+
+    if (destinationData.warningLine) {
+      datasets.push({
+        label: 'Atenção',
+        data: destinationData.warningLine,
+        borderColor: '#fbbf24',
+        borderDash: [6, 6],
+        borderWidth: 1.5,
+        fill: false,
+        pointRadius: 0,
+        tension: 0,
+        spanGaps: true,
+        order: 5
+      })
+    }
+
+    if (destinationData.criticalLine) {
+      datasets.push({
+        label: 'Crítico',
+        data: destinationData.criticalLine,
+        borderColor: '#f87171',
+        borderDash: [6, 6],
+        borderWidth: 1.5,
+        fill: false,
+        pointRadius: 0,
+        tension: 0,
+        spanGaps: true,
+        order: 5
+      })
+    }
+
     destinationChart = new Chart(ctx, {
       type: 'line',
       data: {
-        labels: opticalData.value.destination.labels,
-        datasets: [
-          {
-            label: 'RX (dBm)',
-            data: opticalData.value.destination.rxData,
-            borderColor: '#f59e0b',
-            backgroundColor: 'rgba(245, 158, 11, 0.1)',
-            borderWidth: 2,
-            fill: true,
-            tension: 0.4,
-            pointRadius: 0,
-            pointHoverRadius: 6,
-            spanGaps: true
-          },
-          {
-            label: 'TX (dBm)',
-            data: opticalData.value.destination.txData,
-            borderColor: '#ec4899',
-            backgroundColor: 'rgba(236, 72, 153, 0.1)',
-            borderWidth: 2,
-            fill: true,
-            tension: 0.4,
-            pointRadius: 0,
-            pointHoverRadius: 6,
-            spanGaps: true
-          }
-        ]
+        labels: destinationData.labels,
+        datasets
       },
       options: {
         responsive: true,
@@ -890,10 +1498,44 @@ watch(expandedDestination, async (isExpanded) => {
   }
 })
 
+watch(departmentGroups, (groups) => {
+  if (groups.length) {
+    setDefaultTargetSelection()
+  }
+})
+
+watch(systemUsers, (users) => {
+  if (users.length) {
+    setDefaultTargetSelection()
+  }
+})
+
+watch(contactOptions, (options) => {
+  if (options.length) {
+    setDefaultTargetSelection()
+  }
+})
+
+watch(() => alarmForm.value.target, () => {
+  setDefaultTargetSelection()
+})
+
+watch(() => props.cable?.id, (cableId) => {
+  if (cableId && props.show) {
+    loadCableAlarmConfigs(cableId)
+  } else if (!cableId) {
+    savedAlarmConfigs.value = []
+  }
+})
+
 // Watch para carregar dados quando modal abrir ou cabo mudar
 watch(() => [props.show, props.cable], async ([show, cable]) => {
   if (show && cable) {
-    await loadOpticalData()
+    showCableDetails.value = true
+    await Promise.allSettled([
+      loadOpticalData(),
+      loadCableAlarmConfigs(cable.id)
+    ])
   }
 })
 
@@ -1141,6 +1783,65 @@ onMounted(() => {
   color: white;
   font-size: 16px;
   font-weight: 700;
+}
+
+.info-section.collapsible {
+  padding: 0;
+}
+
+.info-section.collapsible h3 {
+  margin: 0;
+}
+
+.collapsible-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+  border: none;
+  color: inherit;
+  padding: 20px;
+  cursor: pointer;
+  border-radius: 12px 12px 0 0;
+  transition: background 0.2s ease;
+}
+
+.info-section.collapsible.is-collapsed .collapsible-trigger {
+  border-radius: 12px;
+}
+
+.collapsible-trigger:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.collapsible-trigger .icon {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.2s ease;
+}
+
+.collapsible-trigger .icon.rotated {
+  transform: rotate(180deg);
+}
+
+.collapsible-content {
+  padding: 0 20px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0 0 12px 12px;
+  overflow: hidden;
+}
+
+.collapse-enter-active,
+.collapse-leave-active {
+  overflow: hidden;
+  transition: height 0.2s ease, opacity 0.2s ease;
+}
+
+.collapse-enter-from,
+.collapse-leave-to {
+  height: 0;
+  opacity: 0;
 }
 
 .info-cards {
@@ -1534,6 +2235,12 @@ onMounted(() => {
   animation: spin 1s linear infinite;
 }
 
+.spinner.small {
+  width: 20px;
+  height: 20px;
+  border-width: 3px;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -1570,6 +2277,327 @@ onMounted(() => {
 .btn-primary-small .icon {
   width: 16px;
   height: 16px;
+}
+
+.alarm-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 11000;
+  padding: 24px;
+}
+
+.alarm-modal {
+  width: min(560px, 100%);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(15, 23, 42, 0.92) 100%);
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.6);
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  overflow: hidden;
+}
+
+.alarm-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, transparent 100%);
+}
+
+.alarm-modal-header h3 {
+  margin: 0;
+  color: #e2e8f0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.alarm-modal-header .close-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.alarm-modal-header .close-btn:hover {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: rgba(248, 113, 113, 0.4);
+  color: #fca5a5;
+}
+
+.alarm-modal-content {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  color: #cbd5f5;
+  overflow-y: auto;
+}
+
+.alarm-modal-content section {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+
+.saved-configs-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.saved-configs-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #cbd5f5;
+  font-size: 13px;
+}
+
+.saved-configs-empty {
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.saved-configs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.saved-config-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.saved-config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.saved-config-target {
+  color: #e2e8f0;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.saved-config-level {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.18);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  color: #bfdbfe;
+}
+
+.saved-config-level.level-warning {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+}
+
+.saved-config-level.level-critical {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #f87171;
+}
+
+.saved-config-channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.saved-config-channel {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #bfdbfe;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.saved-config-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.saved-config-notes {
+  margin: 0;
+  color: #cbd5f5;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.alarm-modal-content h4 {
+  margin: 0 0 12px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.target-options {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.target-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #cbd5f5;
+  font-size: 13px;
+}
+
+.target-option input {
+  accent-color: #3b82f6;
+}
+
+.target-option:hover {
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.target-selector {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.target-selector select {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: #e2e8f0;
+}
+
+.channel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.channel-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  color: #cbd5f5;
+  font-size: 13px;
+}
+
+.channel-option input {
+  accent-color: #3b82f6;
+}
+
+.channel-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+  background: #cbd5f5;
+}
+
+.channel-icon.email {
+  background: #bae6fd;
+}
+
+.channel-icon.whatsapp {
+  background: #86efac;
+}
+
+.channel-icon.sms {
+  background: #fef08a;
+}
+
+.channel-icon.telegram {
+  background: #c7d2fe;
+}
+
+.conditions-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.conditions-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: #cbd5f5;
+}
+
+.conditions-grid select,
+.conditions-grid input {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: #e2e8f0;
+}
+
+.conditions-grid small {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.alarm-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 18px 24px;
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+  background: linear-gradient(180deg, transparent 0%, rgba(15, 23, 42, 0.85) 100%);
 }
 
 .alarms-list {

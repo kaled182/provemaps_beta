@@ -1,0 +1,383 @@
+<template>
+  <div class="contacts-tab">
+    <!-- Toolbar -->
+    <div class="contacts-toolbar">
+      <div class="toolbar-left">
+        <button @click="showEditModal = true" class="btn btn-primary">
+          <i class="fas fa-plus"></i>
+          Novo Contato
+        </button>
+        
+        <button @click="showImportModal = true" class="btn btn-secondary">
+          <i class="fas fa-file-import"></i>
+          Importar CSV/Excel
+        </button>
+        
+        <button @click="handleSyncUsers" class="btn btn-secondary" :disabled="loading">
+          <i class="fas fa-sync"></i>
+          Sincronizar Usuários
+        </button>
+        
+        <button 
+          v-if="selectedContacts.length > 0" 
+          @click="showBulkMessageModal = true" 
+          class="btn btn-success"
+        >
+          <i class="fas fa-paper-plane"></i>
+          Enviar Mensagem ({{ selectedContacts.length }})
+        </button>
+      </div>
+      
+      <div class="toolbar-right">
+        <input 
+          v-model="searchQuery" 
+          type="text" 
+          placeholder="Buscar contatos..." 
+          class="search-input"
+          @input="handleSearch"
+        />
+        
+        <select v-model="filterGroup" @change="handleFilterChange" class="filter-select">
+          <option value="">Todos os grupos</option>
+          <option v-for="group in groups" :key="group.id" :value="group.id">
+            {{ group.name }}
+          </option>
+        </select>
+        
+        <select v-model="filterActive" @change="handleFilterChange" class="filter-select">
+          <option value="">Todos</option>
+          <option value="true">Ativos</option>
+          <option value="false">Inativos</option>
+        </select>
+        
+        <button @click="showGroupManager = true" class="btn btn-icon" title="Gerenciar Grupos">
+          <i class="fas fa-layer-group"></i>
+        </button>
+      </div>
+    </div>
+    
+    <!-- Stats -->
+    <div class="contacts-stats">
+      <div class="stat-card">
+        <div class="stat-value">{{ totalActiveContacts }}</div>
+        <div class="stat-label">Contatos Ativos</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ groups.length }}</div>
+        <div class="stat-label">Grupos</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ selectedContacts.length }}</div>
+        <div class="stat-label">Selecionados</div>
+      </div>
+    </div>
+    
+    <!-- Contact List -->
+    <ContactList 
+      :contacts="contacts"
+      :loading="loading"
+      :selected-contacts="selectedContacts"
+      @edit="handleEdit"
+      @delete="handleDelete"
+      @send-message="handleSendMessage"
+      @toggle-selection="toggleContactSelection"
+      @select-all="handleSelectAll"
+    />
+    
+    <!-- Edit Modal -->
+    <ContactEditModal 
+      v-if="showEditModal"
+      :contact="editingContact"
+      :groups="groups"
+      @close="closeEditModal"
+      @save="handleSave"
+    />
+    
+    <!-- Import Modal -->
+    <ContactImportModal 
+      v-if="showImportModal"
+      :groups="groups"
+      @close="showImportModal = false"
+      @import="handleImport"
+    />
+    
+    <!-- Bulk Message Modal -->
+    <BulkMessageModal 
+      v-if="showBulkMessageModal"
+      :selected-contact-ids="selectedContacts"
+      :groups="groups"
+      @close="showBulkMessageModal = false"
+      @send="handleBulkSend"
+    />
+    
+    <!-- Group Manager -->
+    <ContactGroupManager 
+      v-if="showGroupManager"
+      :groups="groups"
+      @close="showGroupManager = false"
+      @refresh="loadGroups"
+    />
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useContactsStore } from '@/stores/contacts'
+import ContactList from './ContactList.vue'
+import ContactEditModal from './ContactEditModal.vue'
+import ContactImportModal from './ContactImportModal.vue'
+import BulkMessageModal from './BulkMessageModal.vue'
+import ContactGroupManager from './ContactGroupManager.vue'
+
+const contactsStore = useContactsStore()
+const {
+  contacts,
+  groups,
+  loading,
+  selectedContacts,
+  totalActiveContacts
+} = storeToRefs(contactsStore)
+
+const {
+  loadContacts,
+  loadGroups,
+  saveContact,
+  deleteContact,
+  importContacts,
+  syncFromUsers,
+  sendMessage,
+  sendBulkMessage,
+  toggleContactSelection,
+  selectAll,
+  clearSelection
+} = contactsStore
+
+// Local state
+const showEditModal = ref(false)
+const showImportModal = ref(false)
+const showBulkMessageModal = ref(false)
+const showGroupManager = ref(false)
+const editingContact = ref(null)
+const searchQuery = ref('')
+const filterGroup = ref('')
+const filterActive = ref('')
+let searchTimeout = null
+
+// Handlers
+const handleSearch = () => {
+  clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    applyFilters()
+  }, 300)
+}
+
+const handleFilterChange = () => {
+  applyFilters()
+}
+
+const applyFilters = () => {
+  const filters = {}
+  if (searchQuery.value) filters.search = searchQuery.value
+  if (filterGroup.value) filters.group_id = filterGroup.value
+  if (filterActive.value) filters.is_active = filterActive.value === 'true'
+  
+  loadContacts(filters)
+}
+
+const handleEdit = (contact) => {
+  editingContact.value = { ...contact }
+  showEditModal.value = true
+}
+
+const handleDelete = async (contactId) => {
+  if (confirm('Deseja realmente excluir este contato?')) {
+    await deleteContact(contactId)
+  }
+}
+
+const handleSave = async (contactData) => {
+  const success = await saveContact(contactData)
+  if (success) {
+    closeEditModal()
+  }
+}
+
+const closeEditModal = () => {
+  showEditModal.value = false
+  editingContact.value = null
+}
+
+const handleImport = async (file, groupId, updateExisting) => {
+  const result = await importContacts(file, groupId, updateExisting)
+  if (result) {
+    showImportModal.value = false
+  }
+}
+
+const handleSyncUsers = async () => {
+  if (confirm('Sincronizar contatos a partir dos usuários do sistema?')) {
+    await syncFromUsers()
+  }
+}
+
+const handleSendMessage = async (contactId, message, gatewayId) => {
+  await sendMessage(contactId, message, gatewayId)
+}
+
+const handleBulkSend = async (contactIds, groupIds, message, gatewayId, scheduleAt) => {
+  const success = await sendBulkMessage(contactIds, groupIds, message, gatewayId, scheduleAt)
+  if (success) {
+    showBulkMessageModal.value = false
+    clearSelection()
+  }
+}
+
+const handleSelectAll = () => {
+  const allIds = contacts.value.map(c => c.id)
+  selectAll(allIds)
+}
+
+// Lifecycle
+onMounted(async () => {
+  await Promise.all([
+    loadContacts(),
+    loadGroups()
+  ])
+})
+</script>
+
+<style scoped>
+.contacts-tab {
+  padding: 20px;
+}
+
+.contacts-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+.toolbar-left,
+.toolbar-right {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: #007bff;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #0056b3;
+}
+
+.btn-secondary {
+  background: #6c757d;
+  color: white;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #545b62;
+}
+
+.btn-success {
+  background: #28a745;
+  color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+  background: #218838;
+}
+
+.btn-icon {
+  background: transparent;
+  color: #666;
+  padding: 8px 12px;
+}
+
+.btn-icon:hover {
+  background: #f8f9fa;
+  color: #333;
+}
+
+.search-input {
+  padding: 8px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  font-size: 14px;
+  min-width: 250px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.filter-select {
+  padding: 8px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  font-size: 14px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.filter-select option {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.contacts-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: var(--surface-card);
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+  color: var(--text-primary);
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: bold;
+  color: var(--accent-info);
+  margin-bottom: 5px;
+}
+
+.stat-label {
+  font-size: 14px;
+  color: var(--text-tertiary);
+}
+</style>

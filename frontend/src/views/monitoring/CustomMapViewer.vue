@@ -1,28 +1,13 @@
 <template>
   <div class="custom-map-viewer">
     <!-- Toolbar -->
-    <div class="map-toolbar">
-      <div class="toolbar-left">
-        <button @click="$router.back()" class="btn-back">
-          <i class="fas fa-arrow-left"></i>
-          Voltar
-        </button>
-        <div class="map-title">
-          <h2>{{ mapData.name }}</h2>
-          <span class="map-category">{{ mapData.category }}</span>
-        </div>
-      </div>
-      
-      <div class="toolbar-right">
-        <button @click="showInventoryPanel = !showInventoryPanel" class="btn-toolbar">
-          <i class="fas fa-layer-group"></i>
-          Gerenciar Itens
-        </button>
-        <button @click="toggleFullscreen" class="btn-toolbar">
-          <i :class="isFullscreen ? 'fas fa-compress' : 'fas fa-expand'"></i>
-        </button>
-      </div>
-    </div>
+    <MapToolbar 
+      :map-name="mapData.name"
+      :map-category="mapData.category"
+      :is-fullscreen="isFullscreen"
+      @toggle-inventory="showInventoryPanel = !showInventoryPanel"
+      @toggle-fullscreen="toggleFullscreen"
+    />
 
     <!-- Main Content -->
     <div class="map-content">
@@ -30,236 +15,36 @@
       <div ref="mapContainer" class="map-container"></div>
 
       <!-- Painel Lateral: Gerenciar Itens -->
-      <transition name="slide">
-        <div v-if="showInventoryPanel" class="inventory-panel">
-          <div class="panel-header">
-            <h3>Itens do Mapa</h3>
-            <button @click="showInventoryPanel = false" class="btn-close-panel">×</button>
-          </div>
-
-          <div class="panel-tabs">
-            <button 
-              v-for="category in inventoryCategories" 
-              :key="category.key"
-              @click="activeCategory = category.key"
-              :class="['tab-btn', { active: activeCategory === category.key }]"
-            >
-              <i :class="category.icon"></i>
-              {{ category.label }}
-              <span class="badge">{{ getAvailableCount(category.key) }}</span>
-            </button>
-          </div>
-
-          <div class="panel-content">
-            <div class="search-box">
-              <i class="fas fa-search"></i>
-              <input 
-                v-model="searchQuery" 
-                type="text" 
-                placeholder="Buscar itens..."
-              >
-            </div>
-
-            <!-- Lista de Itens -->
-            <div class="items-list">
-              <!-- Hierarquia de Sites (apenas para devices) -->
-              <template v-if="activeCategory === 'devices'">
-                <div v-for="siteGroup in devicesBySite" :key="'site-' + siteGroup.site_id" class="site-group">
-                  <!-- Linha do Site -->
-                  <div class="site-row">
-                    <button 
-                      @click="toggleSiteExpansion(siteGroup.site_id)" 
-                      class="btn-expand"
-                      :title="isSiteExpanded(siteGroup.site_id) ? 'Colapsar' : 'Expandir'"
-                    >
-                      <i :class="isSiteExpanded(siteGroup.site_id) ? 'fas fa-chevron-down' : 'fas fa-chevron-right'"></i>
-                    </button>
-                    
-                    <label class="site-checkbox">
-                      <input 
-                        type="checkbox" 
-                        :checked="isSiteSelected(siteGroup.site_id, siteGroup.devices)"
-                        :indeterminate.prop="isSitePartiallySelected(siteGroup.site_id, siteGroup.devices)"
-                        @change="toggleSite(siteGroup.site_id, siteGroup.devices)"
-                      >
-                      <div class="site-details">
-                        <span class="site-name">
-                          <i class="fas fa-map-marker-alt"></i>
-                          {{ siteGroup.site_name }}
-                        </span>
-                        <span class="site-count">{{ siteGroup.devices.length }} equipamento(s)</span>
-                      </div>
-                    </label>
-                    
-                    <div class="site-status-summary">
-                      <template v-for="(count, status) in getSiteStatusSummary(siteGroup.devices)" :key="status">
-                        <span v-if="count > 0" :class="['status-dot', status]" :title="`${count} ${getStatusLabel(status)}`">
-                          {{ count }}
-                        </span>
-                      </template>
-                    </div>
-                  </div>
-                  
-                  <!-- Devices do Site (colapsável) -->
-                  <transition name="expand">
-                    <div v-if="isSiteExpanded(siteGroup.site_id)" class="devices-list">
-                      <div 
-                        v-for="device in siteGroup.devices" 
-                        :key="device.id"
-                        class="device-row"
-                      >
-                        <label class="device-checkbox">
-                          <input 
-                            type="checkbox" 
-                            :checked="isItemSelected(device.id)"
-                            @change="toggleItem(device.id)"
-                          >
-                          <div class="device-details">
-                            <span class="device-name">{{ device.name }}</span>
-                            <span v-if="device.ip && device.ip !== 'N/A'" class="device-ip">
-                              <i class="fas fa-network-wired"></i> {{ device.ip }}
-                            </span>
-                          </div>
-                        </label>
-                        <div class="device-info">
-                          <span v-if="device.status" :class="['status-badge', device.status]">
-                            {{ getStatusLabel(device.status) }}
-                          </span>
-                          <span v-else class="status-badge offline">
-                            Offline
-                          </span>
-                          <button @click="focusOnItem(device)" class="btn-focus">
-                            <i class="fas fa-crosshairs"></i>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </transition>
-                </div>
-              </template>
-              
-              <!-- Hierarquia de Sites para Câmeras -->
-              <template v-else-if="activeCategory === 'cameras'">
-                <div v-for="siteGroup in camerasBySite" :key="'camera-site-' + siteGroup.site_name" class="site-group">
-                  <!-- Linha do Site -->
-                  <div class="site-row">
-                    <button 
-                      @click="toggleCameraSiteExpansion(siteGroup.site_name)" 
-                      class="btn-expand"
-                      :title="isCameraSiteExpanded(siteGroup.site_name) ? 'Colapsar' : 'Expandir'"
-                    >
-                      <i :class="isCameraSiteExpanded(siteGroup.site_name) ? 'fas fa-chevron-down' : 'fas fa-chevron-right'"></i>
-                    </button>
-                    
-                    <label class="site-checkbox">
-                      <input 
-                        type="checkbox" 
-                        :checked="isCameraSiteSelected(siteGroup.site_name, siteGroup.cameras)"
-                        :indeterminate.prop="isCameraSitePartiallySelected(siteGroup.site_name, siteGroup.cameras)"
-                        @change="toggleCameraSite(siteGroup.site_name, siteGroup.cameras)"
-                      >
-                      <div class="site-details">
-                        <span class="site-name">
-                          <i class="fas fa-map-marker-alt"></i>
-                          {{ siteGroup.site_name }}
-                        </span>
-                        <span class="site-count">{{ siteGroup.cameras.length }} câmera(s)</span>
-                      </div>
-                    </label>
-                    
-                    <div class="site-status-summary">
-                      <template v-for="(count, status) in getCameraSiteStatusSummary(siteGroup.cameras)" :key="status">
-                        <span v-if="count > 0" :class="['status-dot', status]" :title="`${count} ${status === 'online' ? 'ONLINE' : 'OFFLINE'}`">
-                          {{ count }}
-                        </span>
-                      </template>
-                    </div>
-                  </div>
-                  
-                  <!-- Câmeras do Site (colapsável) -->
-                  <transition name="expand">
-                    <div v-if="isCameraSiteExpanded(siteGroup.site_name)" class="devices-list">
-                      <div 
-                        v-for="camera in siteGroup.cameras" 
-                        :key="camera.id"
-                        class="device-row"
-                      >
-                        <label class="device-checkbox">
-                          <input 
-                            type="checkbox" 
-                            :checked="isItemSelected(camera.id)"
-                            @change="toggleItem(camera.id)"
-                          >
-                          <div class="device-details">
-                            <span class="device-name">{{ camera.name }}</span>
-                          </div>
-                        </label>
-                        <div class="device-info">
-                          <span v-if="camera.status" :class="['status-badge', camera.status]">
-                            {{ getStatusLabel(camera.status) }}
-                          </span>
-                          <span v-else class="status-badge offline">
-                            Offline
-                          </span>
-                          <button @click="focusOnItem(camera)" class="btn-focus">
-                            <i class="fas fa-crosshairs"></i>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </transition>
-                </div>
-              </template>
-              
-              <!-- Lista simples para outras categorias (cabos, racks) -->
-              <template v-else>
-                <div 
-                  v-for="item in filteredItems" 
-                  :key="item.id"
-                  class="item-row"
-                  @mouseenter="highlightCable(item.id)"
-                  @mouseleave="unhighlightCable(item.id)"
-                >
-                  <label class="item-checkbox">
-                    <input 
-                      type="checkbox" 
-                      :checked="isItemSelected(item.id)"
-                      @change="toggleItem(item.id)"
-                    >
-                    <span class="item-name">{{ item.name }}</span>
-                  </label>
-                  <div class="item-info">
-                    <span v-if="item.status" :class="['status-badge', item.status]">
-                      {{ getStatusLabel(item.status) }}
-                    </span>
-                    <button @click="focusOnItem(item)" class="btn-focus">
-                      <i class="fas fa-crosshairs"></i>
-                    </button>
-                  </div>
-                </div>
-              </template>
-            </div>
-
-            <div class="panel-footer">
-              <button @click="selectAll" class="btn-panel btn-secondary">
-                Selecionar Todos
-              </button>
-              <button @click="saveMapItems" class="btn-panel btn-primary">
-                Salvar
-              </button>
-            </div>
-          </div>
-        </div>
-      </transition>
+      <MapInventoryPanel
+        :is-visible="showInventoryPanel"
+        :active-category="activeCategory"
+        :search-query="searchQuery"
+        :categories="inventoryCategories"
+        :available-items="availableItems"
+        :selected-items="selectedItems"
+        :expanded-sites="expandedSites"
+        :expanded-camera-sites="expandedCameraSites"
+        :devices-by-site="devicesBySite"
+        :cameras-by-site="camerasBySite"
+        :filtered-items="filteredItems"
+        @close="showInventoryPanel = false"
+        @update:activeCategory="activeCategory = $event"
+        @update:searchQuery="searchQuery = $event"
+        @toggle-site-expansion="toggleSiteExpansion"
+        @toggle-camera-site-expansion="toggleCameraSiteExpansion"
+        @toggle-site="toggleSite"
+        @toggle-camera-site="toggleCameraSite"
+        @toggle-item="toggleItem"
+        @focus-item="focusOnItem"
+        @highlight-cable="highlightCable"
+        @unhighlight-cable="unhighlightCable"
+        @select-all="selectAll"
+        @save="saveMapItems"
+      />
     </div>
 
     <!-- Legend -->
-    <div class="map-legend">
-      <div class="legend-item" v-for="status in statusLegend" :key="status.key">
-        <span :class="['legend-marker', status.key]"></span>
-        <span class="legend-label">{{ status.label }}</span>
-      </div>
-    </div>
+    <MapLegend :status-legend="statusLegend" />
 
     <!-- Site Details Modal -->
     <SiteDetailsModal 
@@ -284,6 +69,13 @@
       @close="showCableDetailModal = false"
       @save="handleCableSave"
     />
+
+    <!-- Cable Optical Tooltip -->
+    <CableOpticalTooltip
+      :visible="showCableTooltip"
+      :cable-data="hoveredCable"
+      :position="tooltipPosition"
+    />
   </div>
 </template>
 
@@ -299,10 +91,19 @@ import { useUiStore } from '@/stores/ui'
 import { loadMapbox } from '@/composables/map/providers/useMapbox'
 import { loadLeaflet } from '@/composables/map/providers/useLeaflet'
 import { loadMarkerClusterer } from '@/composables/map/providers/useMarkerClusterer'
+// ✅ FASE 3: Composables de lógica de negócio
+import { useMapMarkers } from '@/composables/map/core/useMapMarkers'
+import { useMapPolylines } from '@/composables/map/core/useMapPolylines'
+import { useMapSelection } from '@/composables/map/core/useMapSelection'
+import { useMapData } from '@/composables/map/core/useMapData'
 import { runMapboxStyleDiagnostics, MAPBOX_STYLE_DIAGNOSTICS_DEFAULTS } from '@/utils/mapboxDiagnostics'
 import SiteDetailsModal from '@/components/SiteDetailsModal.vue'
 import FiberCableQuickModal from '@/components/FiberCableQuickModal.vue'
 import FiberCableDetailModal from '@/components/FiberCableDetailModal.vue'
+import CableOpticalTooltip from '@/components/CableOpticalTooltip.vue'
+import MapLegend from './components/MapLegend.vue'
+import MapToolbar from './components/MapToolbar.vue'
+import MapInventoryPanel from './components/MapInventoryPanel.vue'
 
 // Variáveis para bibliotecas lazy loaded
 let mapboxgl = null
@@ -317,10 +118,36 @@ const uiStore = useUiStore()
 const mapContainer = ref(null)
 const googleMap = ref(null)
 const currentMapProvider = ref('google') // Armazena o provedor ativo
-// Usar Maps para diffing eficiente - rastrea markers e polylines por ID
-const activeMarkers = new Map() // { deviceId: markerInstance }
-const activePolylines = new Map() // { cableId: polylineInstance }
 const markerClusterer = ref(null) // Clusterer para agrupar markers próximos
+
+// ✅ FASE 3: Usar composables para lógica de negócio
+const { activeMarkers, createMarker, updateMapMarkers, getMarkerIcon, clearAllMarkers, addMarkerListener, clearMarkerListeners } = useMapMarkers()
+const { activePolylines, createPolyline, updateCablePolylines, highlightCable: highlightCablePolyline, unhighlightCable: unhighlightCablePolyline, clearAllPolylines, addPolylineListener, clearPolylineListeners } = useMapPolylines()
+const { 
+  selectedItems, 
+  expandedSites, 
+  expandedCameraSites, 
+  selectedSites, 
+  selectedCameraSites,
+  toggleSiteExpansion,
+  isSiteExpanded,
+  toggleSite: toggleSiteSelection,
+  isSiteSelected,
+  isSitePartiallySelected,
+  getSiteStatusSummary,
+  toggleCameraSiteExpansion,
+  isCameraSiteExpanded,
+  toggleCameraSite: toggleCameraSiteSelection,
+  isCameraSiteSelected,
+  isCameraSitePartiallySelected,
+  getCameraSiteStatusSummary,
+  toggleItem: toggleItemSelection,
+  selectAll: selectAllItems,
+  clearAllSelections,
+  isItemSelected,
+  getSelectionCount
+} = useMapSelection()
+const { availableItems, sitesMap, loadInventoryItems: loadInventory } = useMapData()
 const showInventoryPanel = ref(false)
 const activeCategory = ref('devices')
 const searchQuery = ref('')
@@ -433,8 +260,11 @@ const showCableModal = ref(false)
 const showCableDetailModal = ref(false)
 const selectedCable = ref(null)
 
-// Mapa de sites para lookup correto no click do marker
-const sitesMap = ref(new Map())
+// Tooltip de níveis ópticos
+const showCableTooltip = ref(false)
+const hoveredCable = ref(null)
+const tooltipPosition = ref({ x: 0, y: 0 })
+let tooltipTimeout = null
 
 const mapData = ref({
   id: null,
@@ -442,18 +272,6 @@ const mapData = ref({
   category: 'backbone',
   description: ''
 })
-
-const selectedItems = ref({
-  devices: [],
-  cables: [],
-  cameras: [],
-  racks: []
-})
-
-const expandedSites = ref(new Set())
-const selectedSites = ref(new Set())
-const expandedCameraSites = ref(new Set())
-const selectedCameraSites = ref(new Set())
 
 const inventoryCategories = [
   { key: 'devices', label: 'Equipamentos', icon: 'fas fa-server' },
@@ -468,13 +286,6 @@ const statusLegend = [
   { key: 'critical', label: 'Crítico' },
   { key: 'offline', label: 'Offline' }
 ]
-
-const availableItems = ref({
-  devices: [],
-  cables: [],
-  cameras: [],
-  racks: []
-})
 
 const filteredItems = computed(() => {
   const items = availableItems.value[activeCategory.value] || []
@@ -540,10 +351,6 @@ const getAvailableCount = (category) => {
   return availableItems.value[category]?.length || 0
 }
 
-const isItemSelected = (itemId) => {
-  return selectedItems.value[activeCategory.value]?.includes(itemId)
-}
-
 const getStatusLabel = (status) => {
   // Garantir que status seja uma string
   const statusStr = String(status || 'offline').toLowerCase()
@@ -568,191 +375,75 @@ const getStatusLabel = (status) => {
   return labels[statusStr] || 'DESCONHECIDO'
 }
 
-const toggleSiteExpansion = (siteId) => {
-  if (expandedSites.value.has(siteId)) {
-    expandedSites.value.delete(siteId)
-  } else {
-    expandedSites.value.add(siteId)
-  }
-}
-
-const isSiteExpanded = (siteId) => {
-  return expandedSites.value.has(siteId)
-}
-
 const toggleSite = (siteId, devices) => {
-  const deviceIds = devices.map(d => d.id)
-  const allSelected = deviceIds.every(id => selectedItems.value.devices.includes(id))
-  
-  console.log(`[toggleSite] Site ${siteId}, deviceIds:`, deviceIds)
-  console.log(`[toggleSite] allSelected:`, allSelected)
-  console.log(`[toggleSite] selectedItems.devices ANTES:`, selectedItems.value.devices)
-  
-  if (allSelected) {
-    // Desmarcar todos os devices do site
-    selectedItems.value.devices = selectedItems.value.devices.filter(
-      id => !deviceIds.includes(id)
-    )
-    selectedSites.value.delete(siteId)
-    console.log(`[toggleSite] DESMARCANDO site ${siteId}`)
-  } else {
-    // Marcar todos os devices do site
-    deviceIds.forEach(id => {
-      if (!selectedItems.value.devices.includes(id)) {
-        selectedItems.value.devices.push(id)
-      }
-    })
-    selectedSites.value.add(siteId)
-    console.log(`[toggleSite] MARCANDO site ${siteId}`)
-  }
-  
-  console.log(`[toggleSite] selectedItems.devices DEPOIS:`, selectedItems.value.devices)
+  toggleSiteSelection(siteId, devices)
   updateMap()
-}
-
-const isSiteSelected = (siteId, devices) => {
-  const deviceIds = devices.map(d => d.id)
-  return deviceIds.length > 0 && deviceIds.every(id => selectedItems.value.devices.includes(id))
-}
-
-const isSitePartiallySelected = (siteId, devices) => {
-  const deviceIds = devices.map(d => d.id)
-  const selectedCount = deviceIds.filter(id => selectedItems.value.devices.includes(id)).length
-  return selectedCount > 0 && selectedCount < deviceIds.length
-}
-
-const getSiteStatusSummary = (devices) => {
-  const statusCount = {
-    online: 0,
-    warning: 0,
-    critical: 0,
-    offline: 0
-  }
-  
-  devices.forEach(device => {
-    if (statusCount.hasOwnProperty(device.status)) {
-      statusCount[device.status]++
-    }
-  })
-  
-  return statusCount
 }
 
 // Funções específicas para câmeras
-const toggleCameraSiteExpansion = (siteName) => {
-  if (expandedCameraSites.value.has(siteName)) {
-    expandedCameraSites.value.delete(siteName)
-  } else {
-    expandedCameraSites.value.add(siteName)
-  }
-}
-
-const isCameraSiteExpanded = (siteName) => {
-  return expandedCameraSites.value.has(siteName)
-}
-
 const toggleCameraSite = (siteName, cameras) => {
-  const cameraIds = cameras.map(c => c.id)
-  const allSelected = cameraIds.every(id => selectedItems.value.cameras.includes(id))
-  
-  if (allSelected) {
-    selectedItems.value.cameras = selectedItems.value.cameras.filter(
-      id => !cameraIds.includes(id)
-    )
-    selectedCameraSites.value.delete(siteName)
-  } else {
-    cameraIds.forEach(id => {
-      if (!selectedItems.value.cameras.includes(id)) {
-        selectedItems.value.cameras.push(id)
-      }
-    })
-    selectedCameraSites.value.add(siteName)
-  }
-  
+  toggleCameraSiteSelection(siteName, cameras)
   updateMap()
-}
-
-const isCameraSiteSelected = (siteName, cameras) => {
-  const cameraIds = cameras.map(c => c.id)
-  return cameraIds.length > 0 && cameraIds.every(id => selectedItems.value.cameras.includes(id))
-}
-
-const isCameraSitePartiallySelected = (siteName, cameras) => {
-  const cameraIds = cameras.map(c => c.id)
-  const selectedCount = cameraIds.filter(id => selectedItems.value.cameras.includes(id)).length
-  return selectedCount > 0 && selectedCount < cameraIds.length
-}
-
-const getCameraSiteStatusSummary = (cameras) => {
-  const statusCount = {
-    online: 0,
-    offline: 0
-  }
-  
-  cameras.forEach(camera => {
-    const status = String(camera.status || 'offline').toLowerCase()
-    if (status === 'online' || status === 'active' || status === 'streaming') {
-      statusCount.online++
-    } else {
-      statusCount.offline++
-    }
-  })
-  
-  return statusCount
 }
 
 // Função unificada para atualizar todo o mapa (markers + polylines)
 const updateMap = (animateItemId = null) => {
-  if (!googleMap.value) {
-    console.warn('[CustomMapViewer] Google Map não inicializado ainda')
-    return
+  if (!googleMap.value) return
+  
+  // Atualizar markers usando composable
+  updateMapMarkers({
+    mapInstance: googleMap.value,
+    provider: currentMapProvider.value,
+    selectedDeviceIds: selectedItems.value.devices,
+    availableDevices: availableItems.value.devices,
+    sitesMap: sitesMap.value,
+    isInitialLoad: isInitialLoad.value,
+    animateItemId: animateItemId,
+    getMarkerIcon: getMarkerIcon,
+    onMarkerClick: handleDeviceClick,
+    updateMapboxMarkerSizes: updateMapboxMarkerSizes,
+    getActiveMapZoom: getActiveMapZoom,
+    applyMapboxMarkerDimensions: applyMapboxMarkerDimensions
+  })
+  
+  // Marcar que não é mais carregamento inicial
+  if (isInitialLoad.value) {
+    isInitialLoad.value = false
   }
   
-  console.log('[CustomMapViewer] updateMap chamado - usando diffing incremental')
-  // Atualizar incrementalmente (adiciona novos, remove antigos, atualiza existentes)
-  updateMapMarkers(animateItemId)
-  updateCablePolylines()
+  // Atualizar polylines usando composable
+  updateCablePolylines({
+    mapInstance: googleMap.value,
+    provider: currentMapProvider.value,
+    selectedCableIds: selectedItems.value.cables,
+    availableCables: availableItems.value.cables,
+    isDarkMode: uiStore.theme === 'dark',
+    onPolylineClick: handleCableClick,
+    onPolylineHover: handleCableHover,
+    onPolylineUnhover: handleCableUnhover
+  })
 }
 
 const toggleItem = (itemId) => {
   const category = activeCategory.value
-  const index = selectedItems.value[category].indexOf(itemId)
+  const wasSelected = toggleItemSelection(itemId, category)
   
-  if (index > -1) {
-    // Desmarcar - sem animação
-    selectedItems.value[category].splice(index, 1)
-    console.log(`[CustomMapViewer] Item ${itemId} desmarcado da categoria ${category}`)
-    updateMap() // Atualizar sem animação
+  // Se foi marcado e é device, animar
+  if (wasSelected && category === 'devices') {
+    updateMap(itemId)
   } else {
-    // Marcar - com animação apenas deste item
-    selectedItems.value[category].push(itemId)
-    console.log(`[CustomMapViewer] Item ${itemId} marcado na categoria ${category}`)
-    
-    // Se for device, animar apenas este
-    if (category === 'devices') {
-      updateMap(itemId)
-    } else {
-      updateMap()
-    }
+    updateMap()
   }
 }
 
 const selectAll = () => {
   const category = activeCategory.value
-  const allIds = availableItems.value[category].map(item => item.id)
-  selectedItems.value[category] = [...allIds]
-  console.log(`[CustomMapViewer] Todos os ${allIds.length} items selecionados na categoria ${category}`)
-  
-  // Atualizar todo o mapa
+  selectAllItems(category, availableItems.value[category])
   updateMap()
 }
 
 // Função para limpar TODAS as overlays - versão otimizada com Maps
 const clearAllOverlays = () => {
-  console.log('[CustomMapViewer] Limpando todas as overlays')
-  console.log('[CustomMapViewer] Total markers:', activeMarkers.size)
-  console.log('[CustomMapViewer] Total polylines:', activePolylines.size)
-  
   // Limpar clusterer primeiro
   if (markerClusterer.value) {
     markerClusterer.value.clearMarkers()
@@ -769,7 +460,7 @@ const clearAllOverlays = () => {
         marker.remove()
       }
     } catch (e) {
-      console.error(`[CustomMapViewer] Erro ao remover marker ${id}:`, e)
+      // Ignorar erros de limpeza
     }
   })
   activeMarkers.clear()
@@ -791,12 +482,10 @@ const clearAllOverlays = () => {
         polyline.remove()
       }
     } catch (e) {
-      console.error(`[CustomMapViewer] Erro ao remover polyline ${id}:`, e)
+      // Ignorar erros de limpeza
     }
   })
   activePolylines.clear()
-  
-  console.log('[CustomMapViewer] Todas as overlays removidas')
 }
 
 const focusOnItem = (item) => {
@@ -833,7 +522,6 @@ const toggleFullscreen = () => {
 const loadMapData = async () => {
   try {
     const mapId = route.params.mapId
-    console.log('[CustomMapViewer] Carregando mapa ID:', mapId)
     
     if (mapId === 'default') {
       // Mapa padrão: carregar tudo
@@ -846,7 +534,7 @@ const loadMapData = async () => {
       console.log('[CustomMapViewer] Mapa padrão configurado')
     } else {
       // Carregar mapa customizado
-      const response = await fetch(`/inventory/api/v1/maps/custom/${mapId}/`, {
+      const response = await fetch(`/api/v1/maps/custom/${mapId}/`, {
         credentials: 'include'
       })
       
@@ -873,458 +561,76 @@ const loadMapData = async () => {
 
 const loadInventoryItems = async () => {
   try {
-    console.log('[CustomMapViewer] Iniciando carregamento do inventário...')
-    
-    // 1. Carregar Sites para obter lat/lng
-    const sitesResponse = await fetch('/api/v1/sites/?page_size=500', {
-      credentials: 'include'
-    })
-    
-    if (!sitesResponse.ok) {
-      throw new Error(`Erro ao carregar sites: ${sitesResponse.status}`)
-    }
-    
-    const sitesData = await sitesResponse.json()
-    const sites = Array.isArray(sitesData) ? sitesData : (sitesData.results || [])
-    console.log(`[CustomMapViewer] ${sites.length} sites carregados`)
-    
-    // Criar mapa de sites por ID para lookup de coordenadas
-    // Usar a ref global em vez de variável local
-    sitesMap.value.clear()
-    sites.forEach(site => {
-      if (site.id) {
-        sitesMap.value.set(String(site.id), site)
-      }
-    })
-    
-    console.log('═══════════════════════════════════════════════════════')
-    console.log('🗺️  SITES NO MAPA:')
-    console.log('═══════════════════════════════════════════════════════')
-    console.log(`Total de sites no mapa: ${sitesMap.value.size}`)
-    console.log('IDs dos sites:', Array.from(sitesMap.value.keys()))
-    console.log('═══════════════════════════════════════════════════════')
-    
-    // 2. Carregar devices (equipamentos)
-    const devicesResponse = await fetch('/api/v1/devices/?page_size=1000', {
-      credentials: 'include'
-    })
-    
-    if (!devicesResponse.ok) {
-      throw new Error(`Erro ao carregar devices: ${devicesResponse.status}`)
-    }
-    
-    const devicesData = await devicesResponse.json()
-    const devices = Array.isArray(devicesData) ? devicesData : (devicesData.results || [])
-    console.log(`[CustomMapViewer] ${devices.length} devices carregados`)
-    
-    // DEBUG: Verificar estrutura do primeiro device
-    if (devices.length > 0) {
-      console.log('═══════════════════════════════════════════════════════')
-      console.log('🔍 ESTRUTURA DO PRIMEIRO DEVICE:')
-      console.log('═══════════════════════════════════════════════════════')
-      const firstDevice = devices[0]
-      console.log('Objeto completo:', firstDevice)
-      console.log('Campos disponíveis:', Object.keys(firstDevice))
-      console.log('  - site:', firstDevice.site)
-      console.log('  - site_id:', firstDevice.site_id)
-      console.log('  - site_name:', firstDevice.site_name)
-      console.log('═══════════════════════════════════════════════════════')
-    }
-    
-    // 3. Carregar status do Zabbix para cada device
-    const hostsResponse = await fetch('/maps_view/api/dashboard/data/', {
-      credentials: 'include'
-    })
-    
-    if (!hostsResponse.ok) {
-      throw new Error(`Erro ao carregar hosts: ${hostsResponse.status}`)
-    }
-    
-    const hostsData = await hostsResponse.json()
-    const hostsArray = hostsData.hosts_status || hostsData.hosts || []
-    console.log(`[CustomMapViewer] ${hostsArray.length} hosts do Zabbix carregados`)
-    
-    // DEBUG: Estrutura completa do primeiro host
-    if (hostsArray.length > 0) {
-      console.log('═══════════════════════════════════════════════════════')
-      console.log('🔍 ESTRUTURA DO PRIMEIRO HOST DO ZABBIX:')
-      console.log('═══════════════════════════════════════════════════════')
-      const firstHost = hostsArray[0]
-      console.log('Objeto completo:', firstHost)
-      console.log('Campos disponíveis:', Object.keys(firstHost))
-      console.log('  - id:', firstHost.id)
-      console.log('  - device_id:', firstHost.device_id)
-      console.log('  - name:', firstHost.name)
-      console.log('  - display_name:', firstHost.display_name)
-      console.log('  - zabbix_hostid:', firstHost.zabbix_hostid)
-      console.log('  - availability:', firstHost.availability)
-      console.log('  - status:', firstHost.status)
-      console.log('═══════════════════════════════════════════════════════')
-    } else {
-      console.error('❌ NENHUM HOST RETORNADO PELO DASHBOARD!')
-      console.log('Resposta completa do dashboard:', hostsData)
-    }
-    
-    // DEBUG: Expor dados globalmente para inspeção
-    window.debugCustomMap = window.debugCustomMap || {}
-    window.debugCustomMap.hostsFromZabbix = hostsArray
-    window.debugCustomMap.devicesFromInventory = devices
-    
-    console.log('═══════════════════════════════════════════════════════')
-    console.log('DEBUG: Digite no console para inspecionar:')
-    console.log('  window.debugCustomMap.hostsFromZabbix')
-    console.log('  window.debugCustomMap.devicesFromInventory')
-    console.log('  window.debugCustomMap.statusMap')
-    console.log('═══════════════════════════════════════════════════════')
-    
-    if (hostsArray.length > 0) {
-      console.log('Exemplo de HOST do Zabbix:', hostsArray[0])
-    }
-    
-    if (devices.length > 0) {
-      console.log('Exemplo de DEVICE do inventário:', devices[0])
-    }
-    
-    // Criar mapa de status por device_id, name e zabbix_hostid
-    const statusMap = new Map()
-    hostsArray.forEach((host, index) => {
-      // Converter availability do Zabbix para nosso formato de status
-      // availability: "1" = Available (online), "2" = Unavailable (offline), "0" = Unknown
-      const availability = String(host.availability || host.available || '0')
-      let mappedStatus = 'offline'
-      
-      if (availability === '1') {
-        mappedStatus = 'online'
-      } else if (availability === '2') {
-        mappedStatus = 'offline'
-      } else {
-        mappedStatus = 'unknown'
-      }
-      
-      // Mapear por ID (tentar device_id primeiro, depois id)
-      const deviceId = host.device_id || host.id
-      if (deviceId) {
-        statusMap.set(String(deviceId), mappedStatus)
-      }
-      
-      // Mapear por nome (normalizado)
-      if (host.name) {
-        statusMap.set(String(host.name).toLowerCase(), mappedStatus)
-      }
-      if (host.display_name) {
-        statusMap.set(String(host.display_name).toLowerCase(), mappedStatus)
-      }
-      
-      // Mapear por zabbix_hostid ou hostid
-      const zabbixId = host.zabbix_hostid || host.hostid
-      if (zabbixId) {
-        statusMap.set(`zabbix_${zabbixId}`, mappedStatus)
-      }
-      
-      // Log do mapeamento (apenas primeiros 3)
-      if (index < 3) {
-        console.log(`  Host #${index + 1}: "${host.name}" → device_id=${deviceId}, availability=${availability} → status="${mappedStatus}"`)
-      }
-    })
-    
-    console.log(`[CustomMapViewer] StatusMap: ${statusMap.size} entradas criadas`)
-    
-    // DEBUG: Expor statusMap globalmente
-    window.debugCustomMap.statusMap = statusMap
-    window.debugCustomMap.statusMapArray = Array.from(statusMap.entries())
-    
-    console.log('Primeiras 5 entradas do StatusMap:')
-    Array.from(statusMap.entries()).slice(0, 5).forEach(([key, value]) => {
-      console.log(`  "${key}" => "${value}"`)
-    })
-    
-    // 4. Processar devices individuais com localização do site
-    const devicesWithLocation = []
-    
-    devices.forEach((device, index) => {
-      if (!device) return
-      
-      // DEBUG para primeiro device
-      if (index === 0) {
-        console.log('═══════════════════════════════════════════════════════')
-        console.log('🔍 DEBUG - LOOKUP DE SITE:')
-        console.log('═══════════════════════════════════════════════════════')
-        console.log(`Device: ${device.name}`)
-        console.log(`  device.site: "${device.site}" (tipo: ${typeof device.site})`)
-        console.log(`  String(device.site): "${String(device.site)}"`)
-        console.log(`  sitesMap tem chave "${String(device.site)}"? ${sitesMap.value.has(String(device.site))}`)
-        console.log(`  Chaves no sitesMap:`, Array.from(sitesMap.value.keys()))
-        console.log('═══════════════════════════════════════════════════════')
-      }
-      
-      // Pegar coordenadas do site usando a ref global
-      const site = sitesMap.value.get(String(device.site))
-      if (!site) {
-        console.warn(`[CustomMapViewer] Site ${device.site} não encontrado para device ${device.name}`)
-        return
-      }
-      
-      const lat = parseFloat(site.latitude)
-      const lng = parseFloat(site.longitude)
-      
-      // Só adicionar se tiver coordenadas válidas
-      if (isNaN(lat) || isNaN(lng)) return
-      
-      // Pegar status do Zabbix para este device específico (tentar várias estratégias)
-      let status = null
-      
-      // Estratégia 1: Por device.id
-      status = statusMap.get(String(device.id))
-      
-      // Estratégia 2: Por device.name (normalizado)
-      if (!status && device.name) {
-        status = statusMap.get(String(device.name).toLowerCase())
-      }
-      
-      // Estratégia 3: Por zabbix_hostid
-      if (!status && device.zabbix_hostid) {
-        status = statusMap.get(`zabbix_${device.zabbix_hostid}`)
-      }
-      
-      // Garantir que status seja uma string válida
-      if (!status || status === 'unknown') {
-        status = 'offline'
-      }
-      
-      // Log de debug para primeiro device
-      if (index === 0) {
-        console.log(`[CustomMapViewer] DEBUG - Primeiro device:`)
-        console.log(`  - ID: ${device.id}`)
-        console.log(`  - Name: ${device.name}`)
-        console.log(`  - Zabbix ID: ${device.zabbix_hostid}`)
-        console.log(`  - Status encontrado: "${status}"`)
-        console.log(`  - StatusMap tem entrada para ID? ${statusMap.has(String(device.id))}`)
-        console.log(`  - StatusMap tem entrada para name? ${statusMap.has(String(device.name).toLowerCase())}`)
-        if (device.zabbix_hostid) {
-          console.log(`  - StatusMap tem entrada para zabbix_${device.zabbix_hostid}? ${statusMap.has(`zabbix_${device.zabbix_hostid}`)}`)
-        }
-      }
-      
-      devicesWithLocation.push({
-        id: device.id,
-        name: device.name || `Device ${device.id}`,
-        type: device.device_type || 'device',
-        lat: lat,
-        lng: lng,
-        status: status,
-        ip: device.primary_ip4 || device.ip_address || 'N/A',
-        location: site.city || site.location || 'N/A',
-        site: device.site,        // ✅ Manter campo 'site' para lookup do sitesMap
-        site_id: device.site,     // ✅ Manter site_id também para compatibilidade
-        site_name: site.name || site.display_name,
-        device_type: device.device_type,
-        serial_number: device.serial_number
-      })
-    })
-    
-    availableItems.value.devices = devicesWithLocation
-    console.log(`[CustomMapViewer] ${devicesWithLocation.length} devices com localização processados`)
-    
-    // DEBUG: Resumo de status
-    console.log('═══════════════════════════════════════════════════════')
-    console.log('📊 RESUMO DE STATUS DOS DEVICES:')
-    console.log('═══════════════════════════════════════════════════════')
-    const statusSummary = devicesWithLocation.reduce((acc, device) => {
-      acc[device.status] = (acc[device.status] || 0) + 1
-      return acc
-    }, {})
-    console.log('Distribuição de status:', statusSummary)
-    console.log('Total devices:', devicesWithLocation.length)
-    console.log('Total hosts do Zabbix:', hostsArray.length)
-    console.log('StatusMap size:', statusMap.size)
-    console.log('═══════════════════════════════════════════════════════')
-    
-    // 5. Carregar cabos de fibra com rotas
-    try {
-      const cablesResponse = await fetch('/api/v1/fiber-cables/', {
-        credentials: 'include'
-      })
-      
-      if (cablesResponse.ok) {
-        const cablesData = await cablesResponse.json()
-        const cables = Array.isArray(cablesData) ? cablesData : (cablesData.results || [])
-        
-        console.log('[CustomMapViewer] Raw cables data:', cables.slice(0, 2))
-        
-        // Mapear status dos cabos de fibra
-        availableItems.value.cables = cables.map(cable => {
-          const pathCoords = cable.path_coordinates || []
-          
-          // Normalizar status do cabo para formato UI
-          // Backend retorna: "up", "down", "degraded", "unknown"
-          // UI usa: "online", "offline", "warning", "critical", "unknown"
-          let uiStatus = 'unknown'
-          const backendStatus = (cable.status || 'unknown').toLowerCase()
-          
-          switch (backendStatus) {
-            case 'up':
-            case 'operational':
-              uiStatus = 'online'
-              break
-            case 'down':
-            case 'unavailable':
-              uiStatus = 'offline'
-              break
-            case 'degraded':
-            case 'warning':
-              uiStatus = 'warning'
-              break
-            case 'critical':
-              uiStatus = 'critical'
-              break
-            default:
-              uiStatus = 'unknown'
-          }
-          
-          return {
-            id: cable.id,
-            name: cable.name,
-            status: uiStatus,
-            original_status: cable.status,
-            description: cable.description || '',
-            path_coordinates: pathCoords,
-            site_a_name: cable.site_a_name,
-            site_b_name: cable.site_b_name,
-            length_km: cable.length_km,
-            is_connected: cable.is_connected,
-            connection_status: cable.connection_status
-          }
-        })
-        
-        // DEBUG: Resumo de status dos cabos
-        console.log('═══════════════════════════════════════════════════════')
-        console.log('📡 RESUMO DE STATUS DOS CABOS:')
-        console.log('═══════════════════════════════════════════════════════')
-        const cableStatusSummary = availableItems.value.cables.reduce((acc, cable) => {
-          acc[cable.status] = (acc[cable.status] || 0) + 1
-          return acc
-        }, {})
-        console.log('Distribuição de status:', cableStatusSummary)
-        console.log('Total cabos:', availableItems.value.cables.length)
-        if (availableItems.value.cables.length > 0) {
-          console.log('Exemplo do primeiro cabo:', availableItems.value.cables[0])
-        }
-        console.log('═══════════════════════════════════════════════════════')
-        
-        console.log(`[CustomMapViewer] ${availableItems.value.cables.length} cabos carregados`)
-      }
-    } catch (error) {
-      console.warn('[CustomMapViewer] Erro ao carregar cabos:', error)
-      availableItems.value.cables = []
-    }
-    
-    // 6. Carregar câmeras
-    try {
-      const camerasResponse = await fetch('/api/v1/cameras/', {
-        credentials: 'include'
-      })
-      
-      if (camerasResponse.ok) {
-        const camerasData = await camerasResponse.json()
-        const cameras = Array.isArray(camerasData) ? camerasData : (camerasData.results || [])
-        
-        availableItems.value.cameras = cameras.map(camera => ({
-          id: camera.id,
-          name: camera.display_name || camera.name || `Câmera ${camera.id}`,
-          status: camera.status || camera.stream_status || 'offline',
-          description: camera.description || '',
-          site_name: camera.site_name,
-          lat: camera.latitude || null,
-          lng: camera.longitude || null
-        }))
-        
-        console.log(`[CustomMapViewer] ${availableItems.value.cameras.length} câmeras carregadas`)
-      }
-    } catch (error) {
-      console.warn('[CustomMapViewer] Erro ao carregar câmeras:', error)
-      availableItems.value.cameras = []
-    }
-    
-    // 7. Racks (placeholder por enquanto)
-    availableItems.value.racks = []
-    
-    console.log('[CustomMapViewer] Inventário completo:', {
-      devices: availableItems.value.devices.length,
-      cables: availableItems.value.cables.length,
-      cameras: availableItems.value.cameras.length,
-      racks: availableItems.value.racks.length
-    })
+    await loadInventory()
   } catch (error) {
     console.error('[CustomMapViewer] Erro ao carregar inventário:', error)
   }
 }
 
 const destroyCurrentMap = () => {
-  console.log('[CustomMapViewer] 🗑️ Destruindo mapa atual:', currentMapProvider.value)
   resetZoomListener()
+  clearAllMarkers(currentMapProvider.value, googleMap.value)
+  clearAllPolylines(currentMapProvider.value, googleMap.value)
   
-  // Limpar markers e polylines
-  activeMarkers.forEach(marker => {
-    try {
-      clearMarkerListeners(marker)
-    } catch (error) {
-      console.warn('[CustomMapViewer] Falha ao limpar listeners do marker durante destruição:', error)
-    }
-
-    if (typeof marker.setMap === 'function') {
-      marker.setMap(null)
-    } else if (typeof marker.remove === 'function') {
-      marker.remove()
-    }
-  })
-  activeMarkers.clear()
-  
-  activePolylines.forEach(polyline => {
-    try {
-      clearPolylineListeners(polyline)
-    } catch (error) {
-      console.warn('[CustomMapViewer] Falha ao limpar listeners da polyline durante destruição:', error)
-    }
-
-    if (typeof polyline.setMap === 'function') {
-      polyline.setMap(null)
-    } else if (currentMapProvider.value === 'mapbox') {
-      if (polyline.layerId && googleMap.value?.getLayer(polyline.layerId)) {
-        googleMap.value.removeLayer(polyline.layerId)
-      }
-      if (polyline.sourceId && googleMap.value?.getSource(polyline.sourceId)) {
-        googleMap.value.removeSource(polyline.sourceId)
-      }
-    } else if (currentMapProvider.value === 'osm' && typeof polyline.remove === 'function') {
-      polyline.remove()
-    }
-  })
-  activePolylines.clear()
-  
-  // Destruir instância do mapa
   if (googleMap.value) {
-    if (currentMapProvider.value === 'mapbox') {
-      googleMap.value.remove()
-    } else if (currentMapProvider.value === 'osm') {
+    if (currentMapProvider.value === 'mapbox' || currentMapProvider.value === 'osm') {
       googleMap.value.remove()
     }
-    // Google Maps não precisa de remove() explícito
     googleMap.value = null
   }
   
-  // Limpar container
   if (mapContainer.value) {
     mapContainer.value.innerHTML = ''
   }
+}
+
+// Handlers para clicks em markers e polylines
+const handleDeviceClick = (device) => {
+  const site = sitesMap.value.get(String(device.site || device.site_id))
+  if (site) {
+    selectedSite.value = site
+    showSiteModal.value = true
+  }
+}
+
+const handleCableClick = (cable) => {
+  selectedCable.value = cable
+  showCableModal.value = true
+}
+
+// Handlers para hover em cabos (tooltip)
+const handleCableHover = (cable, event) => {
+  console.log('[CustomMapViewer] Cable hover detected:', cable.label, event)
   
-  console.log('[CustomMapViewer] ✅ Mapa destruído')
+  // Limpar timeout anterior se existir
+  if (tooltipTimeout) {
+    clearTimeout(tooltipTimeout)
+  }
+  
+  // Pequeno delay antes de mostrar tooltip
+  tooltipTimeout = setTimeout(() => {
+    hoveredCable.value = cable
+    tooltipPosition.value = {
+      x: event.clientX || event.pageX || event.point?.x || 0,
+      y: event.clientY || event.pageY || event.point?.y || 0
+    }
+    showCableTooltip.value = true
+    console.log('[CustomMapViewer] Tooltip shown at:', tooltipPosition.value)
+  }, 300) // 300ms de delay
+}
+
+const handleCableUnhover = () => {
+  console.log('[CustomMapViewer] Cable unhover detected')
+  if (tooltipTimeout) {
+    clearTimeout(tooltipTimeout)
+    tooltipTimeout = null
+  }
+  showCableTooltip.value = false
+  hoveredCable.value = null
 }
 
 const initMap = async () => {
-  if (!mapContainer.value) {
-    console.warn('[CustomMapViewer] Container do mapa não encontrado')
-    return
-  }
+  if (!mapContainer.value) return
   
   try {
     // Carregar configurações do sistema primeiro
@@ -1717,6 +1023,10 @@ const initMapboxMap = async () => {
   if (!mapboxgl) {
     console.log('[CustomMapViewer] Carregando biblioteca Mapbox sob demanda...')
     mapboxgl = await loadMapbox()
+    // Expor globalmente para uso pelos composables
+    if (mapboxgl && typeof window !== 'undefined') {
+      window.mapboxgl = mapboxgl
+    }
   }
 
   mapboxgl.accessToken = mapboxToken
@@ -1858,546 +1168,7 @@ const initOpenStreetMap = async () => {
 // ==========================================
 // CAMADA DE ABSTRAÇÃO PARA MÚLTIPLOS PROVEDORES
 // ==========================================
-
-// Criar marker compatível com todos os provedores
-const createMarker = ({ lat, lng, title, icon, animation }) => {
-  if (currentMapProvider.value === 'google') {
-    return new google.maps.Marker({
-      position: { lat, lng },
-      map: googleMap.value,
-      title,
-      icon,
-      animation
-    })
-  } else if (currentMapProvider.value === 'mapbox') {
-    // Criar HTML element para o marker customizado
-    const el = document.createElement('div')
-    el.className = 'mapbox-marker'
-    el.style.borderRadius = '50%'
-    el.style.backgroundColor = icon?.fillColor || '#10b981'
-    el.style.borderStyle = 'solid'
-    el.style.borderColor = '#ffffff'
-    el.style.borderWidth = '2px'
-    el.style.boxShadow = '0 1px 3px rgba(0,0,0,0.25)'
-    el.style.cursor = 'pointer'
-    el.title = title
-    
-    const marker = new mapboxgl.Marker(el)
-      .setLngLat([lng, lat])
-      .addTo(googleMap.value)
-    
-    // Adicionar propriedades compatíveis
-    marker._listeners = {}
-    marker._status = icon?.statusKey || 'offline'
-    marker.setMap = (map) => map ? marker.addTo(map) : marker.remove()
-    marker.getPosition = () => ({ lat: () => lat, lng: () => lng })
-    marker._applySize = (zoomOverride) => {
-      const zoom = Number.isFinite(zoomOverride) ? zoomOverride : getActiveMapZoom()
-      applyMapboxMarkerDimensions(marker, zoom)
-    }
-    marker.setIcon = (newIcon) => {
-      if (newIcon?.fillColor) {
-        el.style.backgroundColor = newIcon.fillColor
-      }
-      marker._status = newIcon?.statusKey || marker._status
-      marker._applySize()
-    }
-    marker._applySize()
-    
-    return marker
-  } else if (currentMapProvider.value === 'osm') {
-    // Criar ícone customizado para Leaflet
-    const iconColor = icon?.fillColor || '#10b981'
-    const leafletIcon = L.divIcon({
-      className: 'leaflet-custom-marker',
-      html: `<div style="width: 30px; height: 30px; border-radius: 50%; background-color: ${iconColor}; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
-      iconSize: [30, 30],
-      iconAnchor: [15, 15]
-    })
-    
-    const marker = L.marker([lat, lng], { icon: leafletIcon, title })
-      .addTo(googleMap.value)
-    
-    // Adicionar propriedades compatíveis
-    marker._listeners = {}
-    marker.setMap = (map) => map ? marker.addTo(map) : marker.remove()
-    marker.getPosition = () => ({ lat: () => lat, lng: () => lng })
-    marker.setIcon = (newIcon) => {
-      if (newIcon?.fillColor) {
-        const newLeafletIcon = L.divIcon({
-          className: 'leaflet-custom-marker',
-          html: `<div style="width: 30px; height: 30px; border-radius: 50%; background-color: ${newIcon.fillColor}; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
-          iconSize: [30, 30],
-          iconAnchor: [15, 15]
-        })
-        marker.setIcon(newLeafletIcon)
-      }
-    }
-    
-    return marker
-  }
-}
-
-// Adicionar listener de evento compatível
-const addMarkerListener = (marker, event, callback) => {
-  if (currentMapProvider.value === 'google') {
-    marker.addListener(event, callback)
-  } else if (currentMapProvider.value === 'mapbox') {
-    const eventMap = { click: 'click' }
-    const mapboxEvent = eventMap[event] || event
-    marker.getElement().addEventListener(mapboxEvent, callback)
-    if (!marker._listeners[event]) marker._listeners[event] = []
-    marker._listeners[event].push(callback)
-  } else if (currentMapProvider.value === 'osm') {
-    const leafletEvent = event === 'click' ? 'click' : event
-    marker.on(leafletEvent, callback)
-    if (!marker._listeners[event]) marker._listeners[event] = []
-    marker._listeners[event].push(callback)
-  }
-}
-
-// Limpar listeners de marker
-const clearMarkerListeners = (marker) => {
-  if (currentMapProvider.value === 'google') {
-    google.maps.event.clearInstanceListeners(marker)
-  } else if (currentMapProvider.value === 'mapbox') {
-    if (marker._listeners) {
-      Object.entries(marker._listeners).forEach(([event, callbacks]) => {
-        callbacks.forEach(cb => marker.getElement().removeEventListener(event, cb))
-      })
-      marker._listeners = {}
-    }
-  } else if (currentMapProvider.value === 'osm') {
-    if (marker._listeners) {
-      Object.entries(marker._listeners).forEach(([event, callbacks]) => {
-        callbacks.forEach(cb => marker.off(event, cb))
-      })
-      marker._listeners = {}
-    }
-  }
-}
-
-// Criar polyline compatível
-const createPolyline = ({ path, strokeColor, strokeOpacity, strokeWeight }) => {
-  if (currentMapProvider.value === 'google') {
-    return new google.maps.Polyline({
-      path,
-      geodesic: true,
-      strokeColor,
-      strokeOpacity,
-      strokeWeight,
-      map: googleMap.value
-    })
-  } else if (currentMapProvider.value === 'mapbox') {
-    // Mapbox usa layers e sources
-    const sourceId = `polyline-${Date.now()}-${Math.random()}`
-    const layerId = `layer-${sourceId}`
-    
-    googleMap.value.addSource(sourceId, {
-      type: 'geojson',
-      data: {
-        type: 'Feature',
-        geometry: {
-          type: 'LineString',
-          coordinates: path.map(p => [p.lng, p.lat])
-        }
-      }
-    })
-    
-    googleMap.value.addLayer({
-      id: layerId,
-      type: 'line',
-      source: sourceId,
-      layout: {
-        'line-join': 'round',
-        'line-cap': 'round'
-      },
-      paint: {
-        'line-color': strokeColor,
-        'line-opacity': strokeOpacity,
-        'line-width': strokeWeight
-      }
-    })
-    
-    // Retornar objeto compatível
-    const polylineObj = {
-      sourceId,
-      layerId,
-      _listeners: {},
-      setMap: (map) => {
-        if (!map) {
-          if (googleMap.value.getLayer(layerId)) {
-            googleMap.value.removeLayer(layerId)
-          }
-          if (googleMap.value.getSource(sourceId)) {
-            googleMap.value.removeSource(sourceId)
-          }
-        }
-      },
-      setOptions: ({ strokeColor: color, strokeOpacity: opacity, strokeWeight: weight }) => {
-        if (googleMap.value.getLayer(layerId)) {
-          if (color) googleMap.value.setPaintProperty(layerId, 'line-color', color)
-          if (opacity !== undefined) googleMap.value.setPaintProperty(layerId, 'line-opacity', opacity)
-          if (weight) googleMap.value.setPaintProperty(layerId, 'line-width', weight)
-        }
-      },
-      addListener: (event, callback) => {
-        if (event === 'click') {
-          googleMap.value.on('click', layerId, callback)
-          if (!polylineObj._listeners[event]) polylineObj._listeners[event] = []
-          polylineObj._listeners[event].push(callback)
-        }
-      }
-    }
-
-    return polylineObj
-  } else if (currentMapProvider.value === 'osm') {
-    const latlngs = path.map(p => [p.lat, p.lng])
-    const polyline = L.polyline(latlngs, {
-      color: strokeColor,
-      opacity: strokeOpacity,
-      weight: strokeWeight
-    }).addTo(googleMap.value)
-    
-    polyline._listeners = {}
-    polyline.setMap = (map) => map ? polyline.addTo(map) : polyline.remove()
-    
-    return polyline
-  }
-}
-
-// Adicionar listener de polyline
-const addPolylineListener = (polyline, event, callback) => {
-  if (currentMapProvider.value === 'google') {
-    polyline.addListener(event, callback)
-  } else if (currentMapProvider.value === 'mapbox') {
-    if (polyline.layerId && event === 'click') {
-      googleMap.value.on('click', polyline.layerId, callback)
-      if (!polyline._listeners[event]) polyline._listeners[event] = []
-      polyline._listeners[event].push(callback)
-    }
-  } else if (currentMapProvider.value === 'osm') {
-    const leafletEvent = event === 'click' ? 'click' : event
-    polyline.on(leafletEvent, callback)
-    if (!polyline._listeners[event]) polyline._listeners[event] = []
-    polyline._listeners[event].push(callback)
-  }
-}
-
-// Limpar listeners de polyline
-const clearPolylineListeners = (polyline) => {
-  if (currentMapProvider.value === 'google') {
-    google.maps.event.clearInstanceListeners(polyline)
-  } else if (currentMapProvider.value === 'mapbox') {
-    if (polyline._listeners && polyline.layerId) {
-      Object.entries(polyline._listeners).forEach(([event, callbacks]) => {
-        callbacks.forEach(cb => googleMap.value.off(event, polyline.layerId, cb))
-      })
-      polyline._listeners = {}
-    }
-  } else if (currentMapProvider.value === 'osm') {
-    if (polyline._listeners) {
-      Object.entries(polyline._listeners).forEach(([event, callbacks]) => {
-        callbacks.forEach(cb => polyline.off(event, cb))
-      })
-      polyline._listeners = {}
-    }
-  }
-}
-
-const updateCablePolylines = () => {
-  if (!googleMap.value) {
-    console.warn('[CustomMapViewer] Google Map não inicializado ainda')
-    return
-  }
-  
-  console.log('[CustomMapViewer] updateCablePolylines com diffing')
-  const currentCableIds = new Set(selectedItems.value.cables)
-  
-  // Detectar tema ativo para ajustar espessura da linha
-  const isDarkMode = uiStore.theme === 'dark'
-  const strokeWeight = isDarkMode ? 2 : 3 // Linha mais fina no modo noturno
-  const strokeOpacity = isDarkMode ? 0.7 : 0.8 // Opacidade reduzida no modo noturno
-  
-  // 1. REMOVER polylines de cabos desmarcados
-  activePolylines.forEach((polyline, id) => {
-    if (!currentCableIds.has(id)) {
-      console.log(`[CustomMapViewer] Removendo polyline do cabo ${id}`)
-      clearPolylineListeners(polyline)
-      if (typeof polyline.setMap === 'function') {
-        polyline.setMap(null)
-      } else if (currentMapProvider.value === 'mapbox') {
-        if (polyline.layerId && googleMap.value.getLayer(polyline.layerId)) {
-          googleMap.value.removeLayer(polyline.layerId)
-        }
-        if (polyline.sourceId && googleMap.value.getSource(polyline.sourceId)) {
-          googleMap.value.removeSource(polyline.sourceId)
-        }
-      }
-      activePolylines.delete(id)
-    }
-  })
-  
-  // 2. ADICIONAR/ATUALIZAR polylines de cabos selecionados
-  const selectedCables = availableItems.value.cables.filter(cable => 
-    currentCableIds.has(cable.id) && cable.path_coordinates && cable.path_coordinates.length > 0
-  )
-  
-  console.log(`[CustomMapViewer] ${selectedCables.length} cabos para processar`)
-  
-  selectedCables.forEach((cable) => {
-    // Se já existe, atualizar cor E espessura baseado no tema
-    if (activePolylines.has(cable.id)) {
-      const existingPolyline = activePolylines.get(cable.id)
-      const statusColors = {
-        online: '#10b981',
-        offline: '#ef4444',
-        warning: '#f59e0b',
-        critical: '#dc2626',
-        unknown: '#6b7280'
-      }
-      const newColor = statusColors[cable.status] || statusColors.unknown
-      existingPolyline.setOptions({ 
-        strokeColor: newColor,
-        strokeWeight: strokeWeight,
-        strokeOpacity: strokeOpacity
-      })
-      return
-    }
-    
-    // Criar nova polyline
-    const path = cable.path_coordinates.map(coord => ({
-      lat: parseFloat(coord.lat),
-      lng: parseFloat(coord.lng)
-    }))
-    
-    const validPath = path.filter(point => !isNaN(point.lat) && !isNaN(point.lng))
-    
-    if (validPath.length < 2) {
-      console.warn(`[CustomMapViewer] Cabo ${cable.name} sem coordenadas suficientes`)
-      return
-    }
-    
-    const statusColors = {
-      online: '#10b981',
-      offline: '#ef4444',
-      warning: '#f59e0b',
-      critical: '#dc2626',
-      unknown: '#6b7280'
-    }
-    
-    // Usar função de abstração para criar polyline
-    const polyline = createPolyline({
-      path: validPath,
-      strokeColor: statusColors[cable.status] || statusColors.unknown,
-      strokeOpacity: strokeOpacity,
-      strokeWeight: strokeWeight
-    })
-    
-    polyline.cableData = cable
-    
-    // Usar função de abstração para adicionar listener
-    addPolylineListener(polyline, 'click', () => {
-      selectedCable.value = cable
-      showCableDetailModal.value = true
-    })
-    
-    activePolylines.set(cable.id, polyline)
-  })
-  
-  console.log(`[CustomMapViewer] ${activePolylines.size} polylines ativas`)
-}
-
-// Função para destacar cabo quando mouse passa sobre item no painel
-const highlightCable = (cableId) => {
-  if (activeCategory.value !== 'cables') return
-  
-  const polyline = activePolylines.get(cableId)
-  if (!polyline) return
-  
-  const isDarkMode = uiStore.theme === 'dark'
-  
-  // Salvar configuração original se ainda não salvou
-  if (!polyline.originalOptions) {
-    polyline.originalOptions = {
-      strokeWeight: isDarkMode ? 2 : 3,
-      strokeOpacity: isDarkMode ? 0.7 : 0.8
-    }
-  }
-  
-  // Aplicar efeito glow
-  polyline.setOptions({
-    strokeWeight: 5,
-    strokeOpacity: 1,
-    zIndex: 1000
-  })
-  
-  console.log(`[highlightCable] Destacando cabo ${cableId}`)
-}
-
-// Função para remover destaque do cabo
-const unhighlightCable = (cableId) => {
-  if (activeCategory.value !== 'cables') return
-  
-  const polyline = activePolylines.get(cableId)
-  if (!polyline || !polyline.originalOptions) return
-  
-  // Restaurar configuração original
-  polyline.setOptions({
-    strokeWeight: polyline.originalOptions.strokeWeight,
-    strokeOpacity: polyline.originalOptions.strokeOpacity,
-    zIndex: 1
-  })
-  
-  console.log(`[unhighlightCable] Removendo destaque do cabo ${cableId}`)
-}
-
-const updateMapMarkers = (animateItemId = null) => {
-  if (!googleMap.value) {
-    console.warn('[CustomMapViewer] Google Map não inicializado ainda')
-    return
-  }
-  
-  console.log('[CustomMapViewer] updateMapMarkers com diffing (SEM clustering)')
-  const currentDeviceIds = new Set(selectedItems.value.devices)
-  
-  console.log(`[updateMapMarkers] selectedItems.value.devices:`, selectedItems.value.devices)
-  console.log(`[updateMapMarkers] currentDeviceIds (Set):`, Array.from(currentDeviceIds))
-  console.log(`[updateMapMarkers] activeMarkers.keys():`, Array.from(activeMarkers.keys()))
-  
-  // 1. REMOVER markers de devices desmarcados
-  activeMarkers.forEach((marker, id) => {
-    if (!currentDeviceIds.has(id)) {
-      console.log(`[CustomMapViewer] Removendo marker do device ${id}`)
-      clearMarkerListeners(marker)
-      marker.setMap(null)
-      activeMarkers.delete(id)
-    }
-  })
-  
-  // 2. ADICIONAR/ATUALIZAR markers de devices selecionados
-  const selectedDevices = availableItems.value.devices.filter(device => 
-    currentDeviceIds.has(device.id) && device.lat && device.lng
-  )
-  
-  console.log(`[CustomMapViewer] ${selectedDevices.length} devices para processar`)
-  
-  selectedDevices.forEach((device) => {
-    // Se já existe, atualizar apenas o ícone se o status mudou
-    if (activeMarkers.has(device.id)) {
-      const existingMarker = activeMarkers.get(device.id)
-      existingMarker.setIcon(getMarkerIcon(device.status))
-      return
-    }
-    
-    // Criar novo marker
-    const lat = parseFloat(device.lat)
-    const lng = parseFloat(device.lng)
-    
-    if (isNaN(lat) || isNaN(lng)) {
-      console.error(`[CustomMapViewer] Coordenadas inválidas para ${device.name}`)
-      return
-    }
-    
-    // Buscar site no mapa
-    const actualSite = sitesMap.value.get(String(device.site))
-    if (!actualSite) {
-      console.warn(`[CustomMapViewer] Site ${device.site} não encontrado para ${device.name}`)
-      return
-    }
-    
-    const shouldAnimate = isInitialLoad.value || (animateItemId && device.id === animateItemId)
-    
-    // Usar função de abstração para criar marker
-    const marker = createMarker({
-      lat,
-      lng,
-      title: device.name,
-      icon: getMarkerIcon(device.status),
-      animation: shouldAnimate ? (currentMapProvider.value === 'google' ? google.maps.Animation.DROP : null) : null
-    })
-    
-    marker.siteData = actualSite
-    
-    // Usar função de abstração para adicionar listener
-    addMarkerListener(marker, 'click', () => {
-      console.log('🔥 MARKER CLICADO! Site:', marker.siteData.name)
-      selectedSite.value = marker.siteData
-      showSiteModal.value = true
-    })
-    
-    activeMarkers.set(device.id, marker)
-  })
-
-  if (currentMapProvider.value === 'mapbox') {
-    updateMapboxMarkerSizes()
-  }
-  
-  console.log(`[CustomMapViewer] ${activeMarkers.size} markers ativos após update`)
-  
-  // Ajustar bounds apenas na carga inicial (somente Google Maps)
-  if (isInitialLoad.value && activeMarkers.size > 0) {
-    if (currentMapProvider.value === 'google') {
-      const bounds = new google.maps.LatLngBounds()
-      activeMarkers.forEach(marker => bounds.extend(marker.getPosition()))
-      googleMap.value.fitBounds(bounds)
-      
-      if (activeMarkers.size === 1) {
-        const listener = google.maps.event.addListener(googleMap.value, 'idle', () => {
-          if (googleMap.value.getZoom() > 15) {
-            googleMap.value.setZoom(15)
-          }
-          google.maps.event.removeListener(listener)
-        })
-      }
-    } else if (currentMapProvider.value === 'mapbox') {
-      const bounds = new mapboxgl.LngLatBounds()
-      activeMarkers.forEach(marker => {
-        if (typeof marker.getLngLat === 'function') {
-          bounds.extend(marker.getLngLat())
-        }
-      })
-
-      if (!bounds.isEmpty()) {
-        googleMap.value.fitBounds(bounds, { padding: 80, maxZoom: 15 })
-      }
-    }
-  }
-}
-
-const getStatusColor = (status) => {
-  const colors = {
-    online: '#10b981',
-    warning: '#f59e0b',
-    critical: '#ef4444',
-    offline: '#6b7280'
-  }
-  return colors[status] || colors.offline
-}
-
-// Função para obter ícone do marcador baseado no status
-const getMarkerIcon = (status) => {
-  const colors = {
-    online: '#10b981',
-    warning: '#f59e0b',
-    critical: '#ef4444',
-    offline: '#6b7280'
-  }
-  const circlePath = typeof window !== 'undefined' && window.google?.maps?.SymbolPath?.CIRCLE !== undefined
-    ? window.google.maps.SymbolPath.CIRCLE
-    : 0
-  const fillColor = colors[status] || colors.offline
-  
-  return {
-    path: circlePath,
-    fillColor,
-    fillOpacity: 0.9,
-    strokeColor: '#fff',
-    strokeWeight: 1.6,
-    scale: 6,
-    statusKey: status
-  }
-}
+// ✅ FASE 3: Funções movidas para composables (useMapMarkers, useMapPolylines)
 
 const saveMapItems = async () => {
   try {
@@ -2407,7 +1178,7 @@ const saveMapItems = async () => {
       return
     }
     
-    const response = await fetch(`/inventory/api/v1/maps/custom/${mapId}/items/`, {
+    const response = await fetch(`/api/v1/maps/custom/${mapId}/items/`, {
       method: 'POST',
       credentials: 'include',
       headers: {
@@ -2635,72 +1406,6 @@ onBeforeUnmount(() => {
   margin-left: 72px;
 }
 
-.map-toolbar {
-  height: 64px;
-  background: rgba(0, 0, 0, 0.3);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 24px;
-  z-index: 1000;
-}
-
-.toolbar-left,
-.toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.btn-back {
-  padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  color: #fff;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: all 0.2s;
-}
-
-.btn-back:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.map-title h2 {
-  margin: 0;
-  font-size: 18px;
-  color: #fff;
-}
-
-.map-category {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
-  text-transform: uppercase;
-  font-weight: 600;
-}
-
-.btn-toolbar {
-  padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  color: #fff;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: all 0.2s;
-}
-
-.btn-toolbar:hover {
-  background: rgba(16, 185, 129, 0.2);
-  border-color: rgba(16, 185, 129, 0.5);
-}
-
 .map-content {
   flex: 1;
   position: relative;
@@ -2712,56 +1417,122 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
-.inventory-panel {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 400px;
-  height: 100%;
-  background: rgba(30, 33, 57, 0.95);
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  flex-direction: column;
-  backdrop-filter: blur(10px);
-  z-index: 1000;
+.custom-map-viewer.fullscreen {
+  z-index: 10000;
 }
 
-.slide-enter-active,
-.slide-leave-active {
-  transition: transform 0.3s ease;
+/* ==========================================
+   LIGHT THEME OVERRIDES
+   ========================================== */
+:root[data-theme="light"] .custom-map-viewer,
+html:not(.dark)[data-theme="light"] .custom-map-viewer {
+  background: var(--bg-primary);
 }
 
-.slide-enter-from,
-.slide-leave-to {
-  transform: translateX(100%);
+:root[data-theme="light"] .inventory-panel,
+html:not(.dark)[data-theme="light"] .inventory-panel {
+  background: rgba(255, 255, 255, 0.95);
+  border-left: 1px solid rgba(0, 0, 0, 0.1);
 }
 
-.panel-header {
-  padding: 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+:root[data-theme="light"] .panel-header h3,
+html:not(.dark)[data-theme="light"] .panel-header h3 {
+  color: var(--text-primary);
 }
 
-.panel-header h3 {
-  margin: 0;
-  font-size: 18px;
-  color: #fff;
+:root[data-theme="light"] .btn-close-panel,
+html:not(.dark)[data-theme="light"] .btn-close-panel {
+  color: var(--text-tertiary);
 }
 
-.btn-close-panel {
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 32px;
-  cursor: pointer;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+:root[data-theme="light"] .panel-header,
+html:not(.dark)[data-theme="light"] .panel-header,
+:root[data-theme="light"] .panel-tabs,
+html:not(.dark)[data-theme="light"] .panel-tabs {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="light"] .tab-btn,
+html:not(.dark)[data-theme="light"] .tab-btn {
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .search-box input,
+html:not(.dark)[data-theme="light"] .search-box input {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .search-box i,
+html:not(.dark)[data-theme="light"] .search-box i {
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .site-row,
+html:not(.dark)[data-theme="light"] .site-row {
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="light"] .site-row:hover,
+html:not(.dark)[data-theme="light"] .site-row:hover {
+  background: rgba(16, 185, 129, 0.05);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+:root[data-theme="light"] .site-name,
+html:not(.dark)[data-theme="light"] .site-name,
+:root[data-theme="light"] .device-name,
+html:not(.dark)[data-theme="light"] .device-name {
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .site-count,
+html:not(.dark)[data-theme="light"] .site-count,
+:root[data-theme="light"] .device-info,
+html:not(.dark)[data-theme="light"] .device-info {
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .btn-expand,
+html:not(.dark)[data-theme="light"] .btn-expand {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .item-name,
+html:not(.dark)[data-theme="light"] .item-name {
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .btn-panel.btn-secondary,
+html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .btn-panel.btn-secondary:hover,
+html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+/* ==========================================
+   MAPBOX MARKERS - Garantir visibilidade
+   ========================================== */
+.mapbox-marker {
+  display: block !important;
+  width: 30px !important;
+  height: 30px !important;
+  z-index: 1000 !important;
+  position: relative !important;
+  pointer-events: auto !important;
+}
+
+.mapboxgl-marker {
+  z-index: 1000 !important;
 }
 
 .panel-tabs {
@@ -2772,8 +1543,8 @@ onBeforeUnmount(() => {
   overflow-x: auto;
 }
 
-.tab-btn {
-  flex: 1;
+/* ==========================================
+   MAPBOX MARKERS - Garantir visibilidade
   padding: 12px 8px;
   background: transparent;
   border: none;
@@ -3268,57 +2039,6 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.1);
 }
 
-.map-legend {
-  position: absolute;
-  bottom: 24px;
-  left: 24px;
-  background: rgba(30, 33, 57, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  padding: 12px 16px;
-  backdrop-filter: blur(10px);
-  z-index: 100;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.legend-item:last-child {
-  margin-bottom: 0;
-}
-
-.legend-marker {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 2px solid #fff;
-}
-
-.legend-marker.online {
-  background: #10b981;
-}
-
-.legend-marker.warning {
-  background: #f59e0b;
-}
-
-.legend-marker.critical {
-  background: #ef4444;
-}
-
-.legend-marker.offline {
-  background: #6b7280;
-}
-
-.legend-label {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.8);
-}
-
 .custom-map-viewer.fullscreen {
   z-index: 10000;
 }
@@ -3329,39 +2049,6 @@ onBeforeUnmount(() => {
 :root[data-theme="light"] .custom-map-viewer,
 html:not(.dark)[data-theme="light"] .custom-map-viewer {
   background: var(--bg-primary);
-}
-
-:root[data-theme="light"] .map-toolbar,
-html:not(.dark)[data-theme="light"] .map-toolbar {
-  background: rgba(255, 255, 255, 0.9);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-}
-
-:root[data-theme="light"] .btn-back,
-html:not(.dark)[data-theme="light"] .btn-back,
-:root[data-theme="light"] .btn-toolbar,
-html:not(.dark)[data-theme="light"] .btn-toolbar {
-  background: rgba(0, 0, 0, 0.05);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  color: var(--text-primary);
-}
-
-:root[data-theme="light"] .btn-back:hover,
-html:not(.dark)[data-theme="light"] .btn-back:hover,
-:root[data-theme="light"] .btn-toolbar:hover,
-html:not(.dark)[data-theme="light"] .btn-toolbar:hover {
-  background: rgba(16, 185, 129, 0.1);
-  border-color: rgba(16, 185, 129, 0.3);
-}
-
-:root[data-theme="light"] .map-title h2,
-html:not(.dark)[data-theme="light"] .map-title h2 {
-  color: var(--text-primary);
-}
-
-:root[data-theme="light"] .map-category,
-html:not(.dark)[data-theme="light"] .map-category {
-  color: var(--text-tertiary);
 }
 
 :root[data-theme="light"] .inventory-panel,
@@ -3435,17 +2122,6 @@ html:not(.dark)[data-theme="light"] .btn-expand {
   background: rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(0, 0, 0, 0.1);
   color: var(--text-tertiary);
-}
-
-:root[data-theme="light"] .map-legend,
-html:not(.dark)[data-theme="light"] .map-legend {
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-}
-
-:root[data-theme="light"] .legend-label,
-html:not(.dark)[data-theme="light"] .legend-label {
-  color: var(--text-secondary);
 }
 
 :root[data-theme="light"] .item-name,

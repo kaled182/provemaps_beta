@@ -1,0 +1,434 @@
+# Docker Compose - Production Configuration
+# MapsProveFiber v2.1.0 - Fiber Optic Network Management Platform
+# 
+# Uso:
+#   docker compose -f docker/docker-compose.prod.yml up -d
+#
+# Includes:
+#   - Nginx reverse proxy with SSL
+#   - PostgreSQL 15 + PostGIS
+#   - Redis cache
+#   - Django (Gunicorn + Uvicorn workers)
+#   - Celery worker + beat scheduler
+#   - Auto-renewal SSL certificates
+#   - Health checks
+#   - Resource limits
+#   - Security hardening
+
+version: '3.8'
+
+services:
+  # ==========================================
+  # NGINX - Reverse Proxy & SSL Termination
+  # ==========================================
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: mapsprovefiber_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ../backend/staticfiles:/app/staticfiles:ro
+      - ../backend/media:/app/media:ro
+      - ../frontend/dist:/app/frontend:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      web:
+        condition: service_healthy
+    networks:
+      - frontend
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/healthz/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ==========================================
+  # DJANGO - Web Application (Gunicorn + ASGI)
+  # ==========================================
+  web:
+    build:
+      context: ..
+      dockerfile: docker/dockerfile
+      args:
+        PYTHON_VERSION: "3.12"
+    container_name: mapsprovefiber_web
+    restart: unless-stopped
+    command: >
+      gunicorn core.asgi:application
+      --bind 0.0.0.0:8000
+      --workers 4
+      --worker-class uvicorn.workers.UvicornWorker
+      --timeout 600
+      --max-requests 1000
+      --max-requests-jitter 100
+      --access-logfile /app/logs/gunicorn-access.log
+      --error-logfile /app/logs/gunicorn-error.log
+      --log-level info
+    entrypoint: ["/docker-entrypoint.sh"]
+    expose:
+      - "8000"
+    env_file:
+      - ../.env.production
+    working_dir: /app/backend
+    environment:
+      # Database
+      DB_ENGINE: postgis
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME:-mapsprovefiber}
+      DB_USER: ${DB_USER:-mapsprovefiber}
+      DB_PASSWORD: ${DB_PASSWORD:?Database password required}
+      
+      # Django
+      DJANGO_SETTINGS_MODULE: settings.prod
+      SECRET_KEY: ${SECRET_KEY:?Django secret key required}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Allowed hosts required}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:?CSRF trusted origins required}
+      
+      # Redis
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      
+      # Security
+      SECURE_SSL_REDIRECT: "True"
+      SESSION_COOKIE_SECURE: "True"
+      CSRF_COOKIE_SECURE: "True"
+      SECURE_HSTS_SECONDS: "31536000"
+      
+      # Paths
+      PYTHONPATH: "/app/backend:/app"
+      PYTHONUNBUFFERED: "1"
+      
+      # GDAL/GEOS
+      GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
+      GEOS_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgeos_c.so
+      PROJ_LIB: /usr/share/proj
+      
+      # Initialization
+      INIT_MIGRATE: "true"
+      INIT_COLLECTSTATIC: "true"
+      INIT_ENSURE_SUPERUSER: "false"
+      
+      # Feature Flags
+      ENABLE_FILTERS: "True"
+      ENABLE_SEARCH: "True"
+      ENABLE_URL_PERSISTENCE: "True"
+      USE_VUE_DASHBOARD: "true"
+      
+      # Health Checks
+      HEALTHCHECK_DB_TIMEOUT: "5"
+      HEALTHCHECK_FORCE_NO_TIMEOUT: "false"
+      
+      # Monitoring
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: "production"
+      SENTRY_TRACES_SAMPLE_RATE: "0.1"
+      
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+    volumes:
+      - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - ../backend:/app/backend
+      - ../frontend:/app/frontend
+      - ../database:/app/database
+      - ../.env.production:/app/.env:ro
+      - app_logs:/app/logs
+      - app_media:/app/media
+      - app_staticfiles:/app/staticfiles
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; resp = urllib.request.urlopen('http://localhost:8000/healthz/', timeout=5); exit(0 if resp.getcode() == 200 else 1)\" || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ==========================================
+  # CELERY WORKER - Asynchronous Tasks
+  # ==========================================
+  celery:
+    build:
+      context: ..
+      dockerfile: docker/dockerfile
+      args:
+        PYTHON_VERSION: "3.12"
+    container_name: mapsprovefiber_celery
+    restart: unless-stopped
+    command: >
+      celery -A core.celery_app worker
+      --loglevel=info
+      --concurrency=4
+      --queues=default,zabbix,maps
+      --max-tasks-per-child=1000
+      --time-limit=3600
+      --soft-time-limit=3000
+      --logfile=/app/logs/celery-worker.log
+    entrypoint: ["/docker-entrypoint.sh"]
+    env_file:
+      - ../.env.production
+    working_dir: /app/backend
+    environment:
+      DB_ENGINE: postgis
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME:-mapsprovefiber}
+      DB_USER: ${DB_USER:-mapsprovefiber}
+      DB_PASSWORD: ${DB_PASSWORD:?Database password required}
+      DJANGO_SETTINGS_MODULE: settings.prod
+      SECRET_KEY: ${SECRET_KEY:?Django secret key required}
+      PYTHONPATH: "/app/backend:/app"
+      PYTHONUNBUFFERED: "1"
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
+      GEOS_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgeos_c.so
+      PROJ_LIB: /usr/share/proj
+      WAIT_FOR_DB: "true"
+      WAIT_FOR_REDIS: "true"
+      CELERY_METRICS_ENABLED: "true"
+      SERVICE_ACCOUNT_ROTATION_INTERVAL_SECONDS: "3600"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    networks:
+      - backend
+    volumes:
+      - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - ../backend:/app/backend
+      - ../database:/app/database
+      - ../.env.production:/app/.env:ro
+      - app_logs:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A core.celery_app inspect ping -d celery@$$HOSTNAME -t 5 | grep -qi pong || ps aux | grep -q '[c]elery worker'"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # ==========================================
+  # CELERY BEAT - Periodic Task Scheduler
+  # ==========================================
+  celery-beat:
+    build:
+      context: ..
+      dockerfile: docker/dockerfile
+      args:
+        PYTHON_VERSION: "3.12"
+    container_name: mapsprovefiber_celery_beat
+    restart: unless-stopped
+    command: >
+      celery -A core.celery_app beat
+      --loglevel=info
+      --logfile=/app/logs/celery-beat.log
+      --pidfile=/tmp/celerybeat.pid
+      --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    entrypoint: ["/docker-entrypoint.sh"]
+    env_file:
+      - ../.env.production
+    working_dir: /app/backend
+    environment:
+      DB_ENGINE: postgis
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME:-mapsprovefiber}
+      DB_USER: ${DB_USER:-mapsprovefiber}
+      DB_PASSWORD: ${DB_PASSWORD:?Database password required}
+      DJANGO_SETTINGS_MODULE: settings.prod
+      SECRET_KEY: ${SECRET_KEY:?Django secret key required}
+      PYTHONPATH: "/app/backend:/app"
+      PYTHONUNBUFFERED: "1"
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
+      GEOS_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgeos_c.so
+      PROJ_LIB: /usr/share/proj
+      WAIT_FOR_DB: "true"
+      WAIT_FOR_REDIS: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    networks:
+      - backend
+    volumes:
+      - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - ../backend:/app/backend
+      - ../database:/app/database
+      - ../.env.production:/app/.env:ro
+      - app_logs:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -q '[c]elery beat'"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  # ==========================================
+  # POSTGRESQL + POSTGIS - Database
+  # ==========================================
+  postgres:
+    image: postgis/postgis:15-3.4-alpine
+    container_name: mapsprovefiber_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-mapsprovefiber}
+      POSTGRES_USER: ${DB_USER:-mapsprovefiber}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Database password required}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - postgres_backups:/backups
+    networks:
+      - backend
+    ports:
+      - "127.0.0.1:5432:5432"  # Apenas localhost para segurança
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-mapsprovefiber} -d ${DB_NAME:-mapsprovefiber}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "shared_buffers=512MB"
+      - "-c"
+      - "effective_cache_size=2GB"
+      - "-c"
+      - "maintenance_work_mem=128MB"
+      - "-c"
+      - "checkpoint_completion_target=0.9"
+      - "-c"
+      - "wal_buffers=16MB"
+      - "-c"
+      - "default_statistics_target=100"
+      - "-c"
+      - "random_page_cost=1.1"
+      - "-c"
+      - "effective_io_concurrency=200"
+      - "-c"
+      - "work_mem=2621kB"
+      - "-c"
+      - "min_wal_size=1GB"
+      - "-c"
+      - "max_wal_size=4GB"
+
+  # ==========================================
+  # REDIS - Cache & Message Broker
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    container_name: mapsprovefiber_redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    ports:
+      - "127.0.0.1:6379:6379"  # Apenas localhost para segurança
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 768M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+# ==========================================
+# NETWORKS
+# ==========================================
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: false  # Permitir acesso externo para Zabbix API
+
+# ==========================================
+# VOLUMES - Persistent Data
+# ==========================================
+volumes:
+  postgres_data:
+    driver: local
+  postgres_backups:
+    driver: local
+  redis_data:
+    driver: local
+  app_logs:
+    driver: local
+  app_media:
+    driver: local
+  app_staticfiles:
+    driver: local
+  nginx_logs:
+    driver: local

@@ -1,9 +1,19 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from . import views
 from . import views_docs  # Import docs_index and docs_view endpoints
 from . import api_views  # Import API endpoints for testing and management
+from .viewsets_contacts import ContactViewSet, ContactGroupViewSet, ImportHistoryViewSet
+from .viewsets_alert_templates import AlertTemplateViewSet
 
 app_name = 'setup_app'
+
+# Router para ViewSets (contatos)
+router = DefaultRouter()
+router.register(r'contacts', ContactViewSet, basename='contact')
+router.register(r'contact-groups', ContactGroupViewSet, basename='contact-group')
+router.register(r'contact-imports', ImportHistoryViewSet, basename='contact-import')
+router.register(r'alert-templates', AlertTemplateViewSet, basename='alert-template')
 
 urlpatterns = [
     path('dashboard/', views.setup_dashboard, name='setup_dashboard'),
@@ -57,4 +67,7 @@ urlpatterns = [
     # Documentation endpoints
     path("docs/", views_docs.docs_index, name="docs_index"),
     path("docs/<path:filename>/", views_docs.docs_view, name="docs_view"),
+    
+    # Contacts API (ViewSets)
+    path('api/', include(router.urls)),
 ]

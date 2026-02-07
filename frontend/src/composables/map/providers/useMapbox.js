@@ -14,15 +14,17 @@ export async function loadMapbox() {
   try {
     console.log('[useMapbox] Carregando biblioteca Mapbox...')
     
-    // Importação dinâmica da biblioteca
-    const module = await import('mapbox-gl')
-    mapboxgl = module.default
+    // Importação dinâmica da biblioteca E do CSS juntos
+    const [mapboxModule] = await Promise.all([
+      import('mapbox-gl'),
+      import('mapbox-gl/dist/mapbox-gl.css')
+    ])
     
-    // Importação dinâmica do CSS
-    await import('mapbox-gl/dist/mapbox-gl.css')
+    mapboxgl = mapboxModule.default
     
     mapboxLoaded = true
     console.log('[useMapbox] Mapbox carregado com sucesso!')
+    console.log('[useMapbox] Versão:', mapboxgl.version)
     
     return mapboxgl
   } catch (error) {

@@ -7,61 +7,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.db import models
-from inventory.models import Device, FiberCable
+from inventory.models import Device, FiberCable, CustomMap
 import json
-
-
-# Model temporário - adicionar ao models.py depois
-class CustomMap(models.Model):
-    """
-    Mapa personalizado com seleção de equipamentos
-    """
-    name = models.CharField(max_length=200)
-    description = models.TextField(blank=True)
-    category = models.CharField(max_length=50, choices=[
-        ('backbone', 'Backbone'),
-        ('gpon', 'GPON'),
-        ('dwdm', 'DWDM'),
-        ('custom', 'Personalizado')
-    ], default='backbone')
-    is_public = models.BooleanField(default=True)
-    created_by = models.ForeignKey('auth.User', on_delete=models.CASCADE, related_name='custom_maps')
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    # JSON com os IDs selecionados
-    selected_devices = models.JSONField(default=list, blank=True)
-    selected_cables = models.JSONField(default=list, blank=True)
-    selected_cameras = models.JSONField(default=list, blank=True)
-    selected_racks = models.JSONField(default=list, blank=True)
-    
-    class Meta:
-        db_table = 'custom_maps'
-        ordering = ['-created_at']
-    
-    def __str__(self):
-        return f"{self.name} ({self.category})"
-    
-    @property
-    def items_count(self):
-        return (
-            len(self.selected_devices) +
-            len(self.selected_cables) +
-            len(self.selected_cameras) +
-            len(self.selected_racks)
-        )
-    
-    @property
-    def devices_count(self):
-        return len(self.selected_devices)
-    
-    @property
-    def cables_count(self):
-        return len(self.selected_cables)
-    
-    @property
-    def cameras_count(self):
-        return len(self.selected_cameras)
 
 
 @api_view(['GET', 'POST'])
@@ -73,9 +20,7 @@ def custom_maps_list(request):
     """
     if request.method == 'GET':
         # Buscar mapas do usuário ou públicos
-        from django.apps import apps
         try:
-            CustomMap = apps.get_model('inventory', 'CustomMap')
             maps = CustomMap.objects.filter(
                 models.Q(created_by=request.user) | models.Q(is_public=True)
             ).distinct()
@@ -94,7 +39,6 @@ def custom_maps_list(request):
             } for m in maps]
             
         except Exception as e:
-            # Se o model não existir ainda, retornar mock
             maps_data = []
         
         return Response({
@@ -113,9 +57,6 @@ def custom_maps_list(request):
             )
         
         try:
-            from django.apps import apps
-            CustomMap = apps.get_model('inventory', 'CustomMap')
-            
             new_map = CustomMap.objects.create(
                 name=data['name'],
                 description=data.get('description', ''),
@@ -150,8 +91,6 @@ def custom_map_detail(request, map_id):
     DELETE: Remove mapa
     """
     try:
-        from django.apps import apps
-        CustomMap = apps.get_model('inventory', 'CustomMap')
         custom_map = CustomMap.objects.get(id=map_id)
         
         # Verificar permissão
@@ -230,8 +169,6 @@ def save_map_items(request, map_id):
     Salva os itens selecionados de um mapa
     """
     try:
-        from django.apps import apps
-        CustomMap = apps.get_model('inventory', 'CustomMap')
         custom_map = CustomMap.objects.get(id=map_id)
         
         # Verificar se é o dono
@@ -297,20 +234,51 @@ def map_devices_with_location(request):
 @permission_classes([IsAuthenticated])
 def map_cables_with_location(request):
     """
-    Retorna todos os cabos de fibra
+    Retorna todos os cabos de fibra com coordenadas para o mapa
     """
-    cables = FiberCable.objects.filter(
-        is_deleted=False
-    ).values(
-        'id', 'name', 'description', 'status'
-    )
+    from inventory.spatial import linestring_to_coords
     
-    cables_data = [{
-        'id': c['id'],
-        'name': c['name'],
-        'description': c.get('description', ''),
-        'status': c.get('status', 'unknown')
-    } for c in cables]
+    # Buscar cabos que têm geometria (path não nulo)
+    # Nota: FiberCable não tem campo is_deleted, então não filtramos por isso
+    cables = FiberCable.objects.filter(
+        path__isnull=False  # Apenas cabos com geometria
+    ).select_related('origin_port__device__site', 'destination_port__device__site')
+    
+    cables_data = []
+    for cable in cables:
+        # Extrair coordenadas do campo PostGIS path
+        path_coords = linestring_to_coords(cable.path) if cable.path else []
+        
+        if not path_coords:  # Pular cabos sem coordenadas
+            continue
+            
+        cable_data = {
+            'id': cable.id,
+            'name': cable.name,
+            'description': cable.notes or '',
+            'status': cable.status or 'unknown',
+            'path_coordinates': path_coords,
+            'points': len(path_coords),
+        }
+        
+        # Adicionar informações das portas se disponíveis
+        if cable.origin_port:
+            cable_data['origin_port'] = {
+                'id': cable.origin_port.id,
+                'name': cable.origin_port.name,
+                'device': cable.origin_port.device.name if cable.origin_port.device else None,
+                'site': cable.origin_port.device.site.name if cable.origin_port.device and cable.origin_port.device.site else None,
+            }
+        
+        if cable.destination_port:
+            cable_data['destination_port'] = {
+                'id': cable.destination_port.id,
+                'name': cable.destination_port.name,
+                'device': cable.destination_port.device.name if cable.destination_port.device else None,
+                'site': cable.destination_port.device.site.name if cable.destination_port.device and cable.destination_port.device.site else None,
+            }
+        
+        cables_data.append(cable_data)
     
     return Response({
         'results': cables_data,

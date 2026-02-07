@@ -110,14 +110,18 @@ CSP_SCRIPT_SRC = os.getenv(
     "https://cdn.jsdelivr.net "
     "https://cdn.tailwindcss.com "
     "https://cdnjs.cloudflare.com "
-    "https://maps.googleapis.com",
+    "https://maps.googleapis.com "
+    "https://api.mapbox.com "
+    "https://events.mapbox.com "
+    "blob:",
 ).split()
 CSP_STYLE_SRC = os.getenv(
     "CSP_STYLE_SRC",
     "'self' 'unsafe-inline' "
     "https://cdn.tailwindcss.com "
     "https://cdnjs.cloudflare.com "
-    "https://fonts.googleapis.com",
+    "https://fonts.googleapis.com "
+    "https://api.mapbox.com",
 ).split()
 CSP_IMG_SRC = os.getenv(
     "CSP_IMG_SRC",
@@ -125,11 +129,14 @@ CSP_IMG_SRC = os.getenv(
     "https://maps.googleapis.com "
     "https://maps.gstatic.com "
     "https://*.googleapis.com "
-    "https://*.gstatic.com",
+    "https://*.gstatic.com "
+    "https://api.mapbox.com "
+    "https://*.mapbox.com "
+    "https://*.tiles.mapbox.com",
 ).split()
 CSP_FONT_SRC = os.getenv(
     "CSP_FONT_SRC",
-    "'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com",
+    "'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com https://api.mapbox.com",
 ).split()
 CSP_CONNECT_SRC = os.getenv(
     "CSP_CONNECT_SRC",
@@ -137,6 +144,9 @@ CSP_CONNECT_SRC = os.getenv(
     "https://maps.googleapis.com "
     "https://cdn.jsdelivr.net "
     "https://maps.gstatic.com "
+    "https://api.mapbox.com "
+    "https://events.mapbox.com "
+    "https://*.tiles.mapbox.com "
     "http://localhost:8082 "
     "http://video-hls:8080 "
     "http://localhost:8889",
@@ -150,6 +160,10 @@ CSP_FRAME_SRC = os.getenv(
     "CSP_FRAME_SRC",
     "'self' http://localhost:8889 http://localhost:8888"
 ).split()
+CSP_WORKER_SRC = os.getenv(
+    "CSP_WORKER_SRC",
+    "'self' blob: https://api.mapbox.com https://*.tiles.mapbox.com",
+).split()
 CONTENT_SECURITY_POLICY = {
     "default-src": CSP_DEFAULT_SRC,
     "script-src": CSP_SCRIPT_SRC,
@@ -158,6 +172,7 @@ CONTENT_SECURITY_POLICY = {
     "font-src": CSP_FONT_SRC,
     "connect-src": CSP_CONNECT_SRC,
     "media-src": CSP_MEDIA_SRC,
+    "worker-src": CSP_WORKER_SRC,
     "frame-src": CSP_FRAME_SRC,
     "frame-ancestors": CSP_FRAME_ANCESTORS,
 }
@@ -397,6 +412,20 @@ else:
     session_engine = "django.contrib.sessions.backends.db"
 
 SESSION_ENGINE = session_engine
+
+# Session persistence settings
+SESSION_SAVE_EVERY_REQUEST = True  # Mantém a sessão ativa
+SESSION_COOKIE_NAME = 'mapsprovefiber_sessionid'
+SESSION_COOKIE_AGE = int(os.getenv("SESSION_COOKIE_AGE", "1209600"))  # 2 weeks
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Sessão persiste após fechar navegador
+
+# CSRF settings
+CSRF_COOKIE_NAME = 'mapsprovefiber_csrftoken'
+CSRF_COOKIE_AGE = 31449600  # 1 year
+CSRF_COOKIE_HTTPONLY = False  # JS precisa ler o token
+CSRF_USE_SESSIONS = False  # Usa cookie separado, não sessão
 
 # -----------------------------------------------------
 # Dashboard SWR cache tuning

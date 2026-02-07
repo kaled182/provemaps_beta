@@ -1,19 +1,28 @@
 <template>
   <div class="space-y-6">
     <!-- Header with Add Button -->
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Gateways de Comunicação</h3>
         <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
           {{ gatewayCount?.total || 0 }} {{ (gatewayCount?.total || 0) === 1 ? 'gateway' : 'gateways' }} configurado{{ (gatewayCount?.total || 0) !== 1 ? 's' : '' }}
         </p>
       </div>
-      <button @click="showAddModal = true" class="btn-primary">
-        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-        </svg>
-        Adicionar Gateway
-      </button>
+      <div class="flex items-center gap-2">
+        <button type="button" class="btn-outline" @click="handleOpenTemplates">
+          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 5h16a1.5 1.5 0 011.5 1.5v11A1.5 1.5 0 0120 19H4a1.5 1.5 0 01-1.5-1.5v-11A1.5 1.5 0 014 5z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4.5 7l7.5 5.25L19.5 7" />
+          </svg>
+          Modelos de Aviso
+        </button>
+        <button @click="showAddModal = true" class="btn-primary">
+          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+          </svg>
+          Adicionar Gateway
+        </button>
+      </div>
     </div>
 
     <!-- Gateway Type Tabs -->
@@ -94,6 +103,11 @@
       />
     </div>
 
+    <!-- Alert Templates -->
+    <div v-else-if="activeTab === 'alert_templates'">
+      <AlertTemplatesTab :modal-trigger="templatesModalTrigger" />
+    </div>
+
     <!-- Contacts Tab -->
     <div v-else-if="activeTab === 'contacts'">
       <ContactsTab />
@@ -129,17 +143,19 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useGatewayConfig } from '@/composables/useGatewayConfig'
 import { useNotification } from '@/composables/useNotification'
 import { useContactsStore } from '@/stores/contacts'
+import { useAlertTemplatesStore } from '@/stores/alertTemplates'
 import GatewayList from './GatewayList.vue'
 import WhatsAppGatewayList from './WhatsAppGatewayList.vue'
 import GatewayEditModal from './GatewayEditModal.vue'
 import WhatsAppQRModal from './WhatsAppQRModal.vue'
 import TestSMSModal from './TestSMSModal.vue'
 import ContactsTab from './ContactsTab.vue'
+import AlertTemplatesTab from './AlertTemplatesTab.vue'
 
 // Composables
 const {
@@ -172,10 +188,15 @@ const qrCode = ref(null)
 const qrStatus = ref(null)
 const showTestSMSModal = ref(false)
 const testingGateway = ref(null)
+const templatesModalTrigger = ref(0)
 
 const contactsStore = useContactsStore()
 const { contacts } = storeToRefs(contactsStore)
 const { loadContacts } = contactsStore
+
+const alertTemplatesStore = useAlertTemplatesStore()
+const { templateCount } = storeToRefs(alertTemplatesStore)
+const { loadTemplates: loadAlertTemplates } = alertTemplatesStore
 
 // Computed
 const tabs = computed(() => [
@@ -184,6 +205,7 @@ const tabs = computed(() => [
   { type: 'telegram', label: 'Telegram', count: telegramGateways.value.length },
   { type: 'smtp', label: 'E-mail (SMTP)', count: smtpGateways.value.length },
   { type: 'contacts', label: 'Contatos', count: contacts.value.length },
+  { type: 'alert_templates', label: 'Modelos de Aviso', count: templateCount.value },
 ])
 
 // Methods
@@ -328,11 +350,18 @@ const closeQRModal = () => {
   qrStatus.value = null
 }
 
+const handleOpenTemplates = async () => {
+  activeTab.value = 'alert_templates'
+  await nextTick()
+  templatesModalTrigger.value += 1
+}
+
 // Lifecycle
 onMounted(async () => {
   await Promise.all([
     loadGateways(),
     contacts.value.length ? Promise.resolve() : loadContacts(),
+    templateCount.value ? Promise.resolve() : loadAlertTemplates(),
   ])
 })
 </script>
@@ -340,5 +369,9 @@ onMounted(async () => {
 <style scoped>
 .btn-primary {
   @apply inline-flex items-center justify-center rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 transition-all duration-200;
+}
+
+.btn-outline {
+  @apply inline-flex items-center justify-center rounded-md border border-primary-200 px-4 py-2 text-sm font-semibold text-primary-600 hover:bg-primary-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 transition-all duration-200 dark:text-primary-300 dark:border-primary-700 dark:hover:bg-primary-900/40;
 }
 </style>
