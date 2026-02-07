@@ -92,7 +92,7 @@
 
     <div id="contextMenu" class="hidden">
       <div id="contextCableInfo" class="hidden">
-        <h3 class="text-xs uppercase tracking-wide text-slate-500">Selected cable</h3>
+        <h3 class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Selected cable</h3>
         <p id="contextCableName">&mdash;</p>
       </div>
 
@@ -126,13 +126,13 @@
       <div id="manualSaveModalContent" class="modal-card opacity-0 scale-95">
         <button
           type="button"
-          class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-2xl leading-none"
+          class="absolute top-4 right-4 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 text-2xl leading-none"
           @click="closeManualModal"
         >
           &times;
         </button>
         <h2 class="mb-1">Save cable manually</h2>
-        <p class="text-sm text-slate-500 mb-4">
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
           Link the drawn path to inventory devices and their monitored ports.
         </p>
 
@@ -144,7 +144,7 @@
           <input type="hidden" name="csrfmiddlewaretoken" :value="csrfToken" />
 
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1" for="manualRouteName">Cable name</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" for="manualRouteName">Cable name</label>
             <input
               id="manualRouteName"
               name="name"
@@ -157,7 +157,7 @@
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label class="block text-sm font-medium text-slate-700 mb-1" for="manualOriginDeviceSelect">Origin device</label>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" for="manualOriginDeviceSelect">Origin device</label>
               <select
                 id="manualOriginDeviceSelect"
                 name="origin_device_id"
@@ -169,7 +169,7 @@
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium text-slate-700 mb-1" for="manualOriginPortSelect">Origin port</label>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" for="manualOriginPortSelect">Origin port</label>
               <select
                 id="manualOriginPortSelect"
                 name="origin_port_id"
@@ -182,7 +182,7 @@
           </div>
 
           <div class="flex items-center justify-between gap-3">
-            <label for="manualSinglePortOnly" class="text-sm text-slate-700 select-none">Monitor origin port only</label>
+            <label for="manualSinglePortOnly" class="text-sm text-gray-700 dark:text-gray-300 select-none">Monitor origin port only</label>
             <input
               id="manualSinglePortOnly"
               name="single_port"
@@ -201,7 +201,7 @@
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label class="block text-sm font-medium text-slate-700 mb-1" for="manualDestDeviceSelect">Destination device</label>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" for="manualDestDeviceSelect">Destination device</label>
               <select
                 id="manualDestDeviceSelect"
                 name="dest_device_id"
@@ -213,7 +213,7 @@
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium text-slate-700 mb-1" for="manualDestPortSelect">Destination port</label>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" for="manualDestPortSelect">Destination port</label>
               <select
                 id="manualDestPortSelect"
                 name="dest_port_id"
@@ -226,7 +226,7 @@
           </div>
 
           <div class="flex justify-end gap-2 pt-2">
-            <button type="button" class="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition" @click="closeManualModal">
+            <button type="button" class="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition" @click="closeManualModal">
               Cancel
             </button>
             <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition">
@@ -253,13 +253,13 @@
           &times;
         </button>
 
-        <h2 class="text-xl font-semibold mb-4 text-gray-800">Import route via KML</h2>
+        <h2 class="text-xl font-semibold mb-4 text-gray-800 dark:text-white">Import route via KML</h2>
 
-        <p class="text-sm text-gray-500 mb-4">
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
           Link the <span class="font-medium">.kml</span> file to monitored devices. You may monitor only the source port (one-way) or set different source and destination devices.
         </p>
 
-        <div class="bg-gray-100 rounded-md px-3 py-2 text-xs text-gray-600 mb-4">
+        <div class="bg-gray-100 dark:bg-gray-800 rounded-md px-3 py-2 text-xs text-gray-600 dark:text-gray-400 mb-4">
           The file must include a <em>LineString</em> with the sequence of points (source -> destination) that represents the physical cable.
         </div>
 
@@ -357,7 +357,7 @@
           </div>
 
           <div class="flex justify-end gap-2 pt-2">
-            <button type="button" class="px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300 transition" @click="closeKmlModal">
+            <button type="button" class="px-4 py-2 rounded-md bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition" @click="closeKmlModal">
               Cancel
             </button>
             <button type="submit" class="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition">
@@ -482,34 +482,34 @@ onUnmounted(() => {
 
 <style scoped>
 :global(:root) {
-  --nd-bg: radial-gradient(140% 140% at 8% 8%, rgba(219, 234, 254, 0.7) 0%, rgba(248, 250, 252, 0.98) 40%, rgba(241, 245, 249, 0.95) 100%);
-  --nd-text: #0f172a;
-  --nd-muted: #475569;
-  --nd-panel-bg: rgba(255, 255, 255, 0.92);
-  --nd-panel-border: rgba(148, 163, 184, 0.35);
-  --nd-panel-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
-  --nd-panel-text: #0f172a;
-  --nd-panel-muted: #475569;
-  --nd-chip-bg: rgba(37, 99, 235, 0.12);
-  --nd-chip-text: #1d4ed8;
-  --nd-list-bg: rgba(248, 250, 252, 0.8);
-  --nd-list-border: rgba(148, 163, 184, 0.35);
-  --nd-list-item-hover: rgba(226, 232, 240, 0.7);
-  --nd-btn-bg: rgba(248, 113, 113, 0.12);
-  --nd-btn-border: rgba(248, 113, 113, 0.28);
+  --nd-bg: #f9fafb;
+  --nd-text: #111827;
+  --nd-muted: #6b7280;
+  --nd-panel-bg: #ffffff;
+  --nd-panel-border: #e5e7eb;
+  --nd-panel-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --nd-panel-text: #111827;
+  --nd-panel-muted: #6b7280;
+  --nd-chip-bg: #dbeafe;
+  --nd-chip-text: #1e40af;
+  --nd-list-bg: #f9fafb;
+  --nd-list-border: #e5e7eb;
+  --nd-list-item-hover: #f3f4f6;
+  --nd-btn-bg: #fef2f2;
+  --nd-btn-border: #fecaca;
   --nd-btn-text: #b91c1c;
   --nd-help-emphasis: #b45309;
-  --nd-shortcut-bg: rgba(148, 163, 184, 0.2);
-  --nd-shortcut-border: rgba(148, 163, 184, 0.35);
+  --nd-shortcut-bg: #f3f4f6;
+  --nd-shortcut-border: #d1d5db;
   --nd-context-bg: #ffffff;
-  --nd-context-border: #e2e8f0;
-  --nd-context-text: #0f172a;
-  --nd-context-hover: rgba(226, 232, 240, 0.8);
+  --nd-context-border: #e5e7eb;
+  --nd-context-text: #111827;
+  --nd-context-hover: #f3f4f6;
   --nd-modal-bg: #ffffff;
-  --nd-modal-text: #0f172a;
-  --nd-modal-muted: #64748b;
+  --nd-modal-text: #111827;
+  --nd-modal-muted: #6b7280;
   --nd-input-bg: #ffffff;
-  --nd-input-border: #cbd5f5;
+  --nd-input-border: #d1d5db;
 }
 
 .network-design-page {
@@ -523,34 +523,34 @@ onUnmounted(() => {
 
 :global(.dark),
 :global([data-theme='dark']) {
-  --nd-bg: radial-gradient(140% 140% at 10% 10%, rgba(59, 130, 246, 0.18) 0%, rgba(30, 41, 59, 0.88) 42%, rgba(10, 12, 26, 0.96) 100%);
-  --nd-text: #e2e8f0;
-  --nd-muted: #cbd5f5;
-  --nd-panel-bg: rgba(15, 23, 42, 0.92);
-  --nd-panel-border: rgba(148, 163, 184, 0.3);
-  --nd-panel-shadow: 0 24px 60px rgba(15, 23, 42, 0.45);
-  --nd-panel-text: #f8fafc;
-  --nd-panel-muted: #cbd5f5;
-  --nd-chip-bg: rgba(59, 130, 246, 0.25);
-  --nd-chip-text: #bfdbfe;
-  --nd-list-bg: rgba(15, 23, 42, 0.5);
-  --nd-list-border: rgba(148, 163, 184, 0.3);
-  --nd-list-item-hover: rgba(59, 130, 246, 0.18);
-  --nd-btn-bg: rgba(248, 113, 113, 0.18);
-  --nd-btn-border: rgba(248, 113, 113, 0.35);
-  --nd-btn-text: #fee2e2;
-  --nd-help-emphasis: #facc15;
-  --nd-shortcut-bg: rgba(241, 245, 249, 0.12);
-  --nd-shortcut-border: rgba(148, 163, 184, 0.4);
-  --nd-context-bg: #0f172a;
-  --nd-context-border: rgba(148, 163, 184, 0.25);
-  --nd-context-text: #e2e8f0;
-  --nd-context-hover: rgba(59, 130, 246, 0.18);
-  --nd-modal-bg: #0f172a;
-  --nd-modal-text: #e2e8f0;
-  --nd-modal-muted: #94a3b8;
-  --nd-input-bg: rgba(15, 23, 42, 0.9);
-  --nd-input-border: rgba(148, 163, 184, 0.35);
+  --nd-bg: #111827;
+  --nd-text: #f9fafb;
+  --nd-muted: #9ca3af;
+  --nd-panel-bg: #1f2937;
+  --nd-panel-border: #374151;
+  --nd-panel-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
+  --nd-panel-text: #f9fafb;
+  --nd-panel-muted: #9ca3af;
+  --nd-chip-bg: #1e3a8a;
+  --nd-chip-text: #93c5fd;
+  --nd-list-bg: #111827;
+  --nd-list-border: #374151;
+  --nd-list-item-hover: #374151;
+  --nd-btn-bg: #7f1d1d;
+  --nd-btn-border: #991b1b;
+  --nd-btn-text: #fecaca;
+  --nd-help-emphasis: #fbbf24;
+  --nd-shortcut-bg: #374151;
+  --nd-shortcut-border: #4b5563;
+  --nd-context-bg: #1f2937;
+  --nd-context-border: #374151;
+  --nd-context-text: #f9fafb;
+  --nd-context-hover: #374151;
+  --nd-modal-bg: #1f2937;
+  --nd-modal-text: #f9fafb;
+  --nd-modal-muted: #9ca3af;
+  --nd-input-bg: #111827;
+  --nd-input-border: #374151;
 }
 
 .map-container {
@@ -574,10 +574,9 @@ onUnmounted(() => {
   gap: 0.85rem;
   padding: 1.4rem;
   background: var(--nd-panel-bg);
-  border-radius: 24px;
+  border-radius: 12px;
   border: 1px solid var(--nd-panel-border);
   box-shadow: var(--nd-panel-shadow);
-  backdrop-filter: blur(22px);
   z-index: 35;
   color: var(--nd-panel-text);
   overflow: hidden;
@@ -898,11 +897,21 @@ onUnmounted(() => {
 }
 
 #contextMenu button[data-variant='danger'] {
-  color: #b91c1c;
+  color: #dc2626;
+}
+
+:global(.dark) #contextMenu button[data-variant='danger'],
+:global([data-theme='dark']) #contextMenu button[data-variant='danger'] {
+  color: #f87171;
 }
 
 #contextMenu button[data-variant='danger']:hover {
-  background-color: #fee2e2;
+  background-color: #fef2f2;
+}
+
+:global(.dark) #contextMenu button[data-variant='danger']:hover,
+:global([data-theme='dark']) #contextMenu button[data-variant='danger']:hover {
+  background-color: #7f1d1d;
 }
 
 #contextCableInfo {
@@ -923,20 +932,27 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(17, 24, 39, 0.55);
+  background: rgba(17, 24, 39, 0.75);
   z-index: 52;
   transition: opacity 0.3s ease;
 }
 
+:global(.dark) .modal-overlay,
+:global([data-theme='dark']) .modal-overlay {
+  background: rgba(0, 0, 0, 0.85);
+}
+
 .modal-card {
   background: var(--nd-modal-bg);
-  border-radius: 1rem;
+  border-radius: 0.75rem;
   width: 100%;
   max-width: 540px;
   padding: 1.5rem;
   position: relative;
   transition: opacity 0.3s ease, transform 0.3s ease;
   color: var(--nd-modal-text);
+  border: 1px solid var(--nd-panel-border);
+  box-shadow: var(--nd-panel-shadow);
 }
 
 .network-design-page .modal-card label {
@@ -983,6 +999,19 @@ onUnmounted(() => {
 
 .network-design-page #importKmlModalContent .bg-gray-100 {
   background: var(--nd-list-bg);
+}
+
+.network-design-page .modal-card .bg-blue-50 {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1e40af;
+}
+
+:global(.dark) .network-design-page .modal-card .bg-blue-50,
+:global([data-theme='dark']) .network-design-page .modal-card .bg-blue-50 {
+  background: #1e3a8a;
+  border-color: #1e40af;
+  color: #93c5fd;
 }
 
 .opacity-0 {

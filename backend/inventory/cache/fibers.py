@@ -6,6 +6,13 @@ from typing import Any, Callable, Optional
 
 from django.core.cache import cache
 
+from inventory.metrics import (
+    record_cache_hit,
+    record_cache_miss,
+    record_cache_set,
+    record_cache_invalidation,
+)
+
 logger = logging.getLogger(__name__)
 
 FIBER_LIST_CACHE_KEY = "fibers:list"
@@ -17,6 +24,7 @@ def invalidate_fiber_cache() -> None:
     """Clear cached fiber listings used in dashboards and APIs."""
     try:
         cache.delete(FIBER_LIST_CACHE_KEY)
+        record_cache_invalidation("fiber_list")
     except Exception as exc:  # pragma: no cover - cache may be unavailable
         logger.debug(
             "Cache offline (Redis indisponivel); unable to invalidate fiber "
@@ -48,6 +56,7 @@ def get_cached_fiber_list(
     if cached_entry is None:
         # Cache miss - fetch fresh data
         logger.debug("[Fiber Cache] MISS - fetching fresh data")
+        record_cache_miss("fiber_list")
         data = fetch_fn()
         try:
             cache.set(
@@ -55,8 +64,10 @@ def get_cached_fiber_list(
                 {"data": data, "timestamp": now},
                 FIBER_LIST_SWR_TIMEOUT,
             )
+            record_cache_set("fiber_list", success=True)
         except Exception as exc:  # pragma: no cover
             logger.debug("Failed to cache fiber list: %s", exc)
+            record_cache_set("fiber_list", success=False)
         return data, True
     
     # Cache hit - check freshness
@@ -69,6 +80,7 @@ def get_cached_fiber_list(
             "[Fiber Cache] HIT - serving fresh data (age: %.1fs)",
             age,
         )
+        record_cache_hit("fiber_list")
         return cached_entry["data"], True
     
     # Data is stale but acceptable - serve immediately
@@ -77,6 +89,7 @@ def get_cached_fiber_list(
         "background refresh needed",
         age,
     )
+    record_cache_hit("fiber_list")  # Still a hit, just stale
     return cached_entry["data"], False
 
 

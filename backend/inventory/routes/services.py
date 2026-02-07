@@ -44,7 +44,7 @@ class SegmentPayload(TypedDict, total=False):
     order: int
     from_port_id: int | None
     to_port_id: int | None
-    path_coordinates: Sequence[Mapping[str, float]] | None
+    path: Sequence[Mapping[str, float]] | None  # PostGIS coordinates
     length_km: Decimal | float | str | None
     estimated_loss_db: Decimal | float | str | None
     measured_loss_db: Decimal | float | str | None
@@ -350,7 +350,7 @@ def import_route_from_payload(
                     order=order,
                     from_port=_get_port(segment_payload.get("from_port_id")),
                     to_port=_get_port(segment_payload.get("to_port_id")),
-                    path_coordinates=segment_payload.get("path_coordinates"),
+                    # path will be set from 'path' key via signal if provided
                     length_km=_as_decimal(segment_payload.get("length_km")),
                     estimated_loss_db=_as_decimal(
                         segment_payload.get("estimated_loss_db")

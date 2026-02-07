@@ -3,25 +3,38 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>{% block title %}First-Time Setup{% endblock %}</title>
+  <title>{% block title %}First-Time Setup - MapsProveFiber{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/x-icon" href="{% static 'favicon.ico' %}">
 
+  <!-- Aplicar tema antes de renderizar -->
+  <script>
+    (function() {
+      const theme = localStorage.getItem('ui.theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+    })();
+  </script>
+
   <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Theme CSS Variables -->
+  <link rel="stylesheet" href="{% static 'css/theme-variables.css' %}">
+  
   {% block extra_head %}{% endblock %}
 </head>
-<body class="bg-gray-100 text-gray-800 flex flex-col min-h-screen">
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col min-h-screen transition-colors duration-300">
 
   {% include 'partials/header_first_time_setup.html' %}
 
-  <main class="flex-1 container mx-auto p-6">
+  <main class="flex-1 container mx-auto p-6 py-12">
     {% block content %}
     <p>Content goes here.</p>
     {% endblock %}
   </main>
 
-  <footer class="bg-gray-800 text-white text-center p-4">
-    &copy; {% now "Y" %} Fiber Setup Assistant
+  <footer class="bg-gray-800 dark:bg-gray-950 text-gray-300 dark:text-gray-400 text-center p-6 border-t border-gray-700 dark:border-gray-800">
+    <p class="text-sm">&copy; {% now "Y" %} MapsProveFiber - Fiber Optic Network Management Platform</p>
   </footer>
 
   {% include 'partials/add_device.html' %}

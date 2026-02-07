@@ -68,6 +68,32 @@ class RuntimeConfig:
     sms_aws_access_key_id: str
     sms_aws_secret_access_key: str
     sms_infobip_base_url: str
+    map_default_zoom: int
+    map_default_lat: str
+    map_default_lng: str
+    map_type: str
+    map_styles: str
+    enable_street_view: bool
+    enable_traffic: bool
+    mapbox_style: str
+    mapbox_custom_style: str
+    mapbox_enable_3d: bool
+    esri_api_key: str
+    esri_basemap: str
+    map_language: str
+    map_theme: str
+    enable_map_clustering: bool
+    enable_drawing_tools: bool
+    enable_fullscreen: bool
+    optical_rx_warning_threshold: float
+    optical_rx_critical_threshold: float
+
+
+def _float_setting(name: str, default: float) -> float:
+    try:
+        return float(getattr(settings, name, default))
+    except (TypeError, ValueError):
+        return default
 
 
 def _fallback_config() -> RuntimeConfig:
@@ -133,6 +159,25 @@ def _fallback_config() -> RuntimeConfig:
         sms_aws_access_key_id=getattr(settings, "SMS_AWS_ACCESS_KEY_ID", ""),
         sms_aws_secret_access_key=getattr(settings, "SMS_AWS_SECRET_ACCESS_KEY", ""),
         sms_infobip_base_url=getattr(settings, "SMS_INFOBIP_BASE_URL", ""),
+        map_default_zoom=int(getattr(settings, "MAP_DEFAULT_ZOOM", 12)),
+        map_default_lat=str(getattr(settings, "MAP_DEFAULT_LAT", "-15.7801")),
+        map_default_lng=str(getattr(settings, "MAP_DEFAULT_LNG", "-47.9292")),
+        map_type=getattr(settings, "MAP_TYPE", "terrain"),
+        map_styles=getattr(settings, "MAP_STYLES", ""),
+        enable_street_view=getattr(settings, "ENABLE_STREET_VIEW", True),
+        enable_traffic=getattr(settings, "ENABLE_TRAFFIC", False),
+        mapbox_style=getattr(settings, "MAPBOX_STYLE", "streets-v12"),
+        mapbox_custom_style=getattr(settings, "MAPBOX_CUSTOM_STYLE", ""),
+        mapbox_enable_3d=getattr(settings, "MAPBOX_ENABLE_3D", False),
+        esri_api_key=getattr(settings, "ESRI_API_KEY", ""),
+        esri_basemap=getattr(settings, "ESRI_BASEMAP", "topo-vector"),
+        map_language=getattr(settings, "MAP_LANGUAGE", "pt-BR"),
+        map_theme=getattr(settings, "MAP_THEME", "light"),
+        enable_map_clustering=getattr(settings, "ENABLE_MAP_CLUSTERING", True),
+        enable_drawing_tools=getattr(settings, "ENABLE_DRAWING_TOOLS", True),
+        enable_fullscreen=getattr(settings, "ENABLE_FULLSCREEN", True),
+        optical_rx_warning_threshold=_float_setting("OPTICAL_RX_WARNING_THRESHOLD", -24.0),
+        optical_rx_critical_threshold=_float_setting("OPTICAL_RX_CRITICAL_THRESHOLD", -27.0),
     )
 
 
@@ -203,6 +248,25 @@ def get_runtime_config() -> RuntimeConfig:
         sms_aws_access_key_id=record.sms_aws_access_key_id or getattr(settings, "SMS_AWS_ACCESS_KEY_ID", ""),
         sms_aws_secret_access_key=record.sms_aws_secret_access_key or getattr(settings, "SMS_AWS_SECRET_ACCESS_KEY", ""),
         sms_infobip_base_url=record.sms_infobip_base_url or getattr(settings, "SMS_INFOBIP_BASE_URL", ""),
+        map_default_zoom=record.map_default_zoom if record.map_default_zoom is not None else int(getattr(settings, "MAP_DEFAULT_ZOOM", 12)),
+        map_default_lat=str(record.map_default_lat) if record.map_default_lat is not None else str(getattr(settings, "MAP_DEFAULT_LAT", "-15.7801")),
+        map_default_lng=str(record.map_default_lng) if record.map_default_lng is not None else str(getattr(settings, "MAP_DEFAULT_LNG", "-47.9292")),
+        map_type=record.map_type or getattr(settings, "MAP_TYPE", "terrain"),
+        map_styles=record.map_styles or getattr(settings, "MAP_STYLES", ""),
+        enable_street_view=record.enable_street_view if record.enable_street_view is not None else getattr(settings, "ENABLE_STREET_VIEW", True),
+        enable_traffic=record.enable_traffic if record.enable_traffic is not None else getattr(settings, "ENABLE_TRAFFIC", False),
+        mapbox_style=record.mapbox_style or getattr(settings, "MAPBOX_STYLE", "streets-v12"),
+        mapbox_custom_style=record.mapbox_custom_style or getattr(settings, "MAPBOX_CUSTOM_STYLE", ""),
+        mapbox_enable_3d=record.mapbox_enable_3d if record.mapbox_enable_3d is not None else getattr(settings, "MAPBOX_ENABLE_3D", False),
+        esri_api_key=record.esri_api_key or getattr(settings, "ESRI_API_KEY", ""),
+        esri_basemap=record.esri_basemap or getattr(settings, "ESRI_BASEMAP", "topo-vector"),
+        map_language=record.map_language or getattr(settings, "MAP_LANGUAGE", "pt-BR"),
+        map_theme=record.map_theme or getattr(settings, "MAP_THEME", "light"),
+        enable_map_clustering=record.enable_map_clustering if record.enable_map_clustering is not None else getattr(settings, "ENABLE_MAP_CLUSTERING", True),
+        enable_drawing_tools=record.enable_drawing_tools if record.enable_drawing_tools is not None else getattr(settings, "ENABLE_DRAWING_TOOLS", True),
+        enable_fullscreen=record.enable_fullscreen if record.enable_fullscreen is not None else getattr(settings, "ENABLE_FULLSCREEN", True),
+        optical_rx_warning_threshold=_float_setting("OPTICAL_RX_WARNING_THRESHOLD", -24.0),
+        optical_rx_critical_threshold=_float_setting("OPTICAL_RX_CRITICAL_THRESHOLD", -27.0),
     )
 
 

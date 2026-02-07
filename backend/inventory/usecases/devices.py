@@ -2105,7 +2105,7 @@ def bulk_create_inventory(payload: Mapping[str, Any]) -> Dict[str, Any]:
                 "origin_port": origin_port,
                 "destination_port": dest_port,
                 "length_km": fiber_data.get("length_km"),
-                "path_coordinates": fiber_data.get("path"),
+                # path PostGIS field will be populated by signal if needed
                 "status": FiberCable.STATUS_UNKNOWN,
             },
         )

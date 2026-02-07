@@ -4,7 +4,7 @@
 
 import { useApi } from '@/composables/useApi'
 
-const { get } = useApi()
+const { get, post } = useApi()
 
 /**
  * Busca status óptico em cache de um cabo
@@ -56,9 +56,24 @@ export async function getCableOpticalHistory(cableId, hours = 24) {
       getPortOpticalHistory(cableStatus.origin_port_id, hours),
       getPortOpticalHistory(cableStatus.destination_port_id, hours)
     ])
+
+    const extractThresholds = (opticalInfo) => {
+      const parseValue = (value) => {
+        if (value === null || value === undefined) {
+          return null
+        }
+        const numeric = Number(value)
+        return Number.isFinite(numeric) ? numeric : null
+      }
+
+      return {
+        warning: parseValue(opticalInfo?.warning_threshold ?? opticalInfo?.warningThreshold),
+        critical: parseValue(opticalInfo?.critical_threshold ?? opticalInfo?.criticalThreshold)
+      }
+    }
     
     // Processar dados separadamente para cada porta
-    const formatPortData = (historyArray) => {
+    const formatPortData = (historyArray, thresholds) => {
       if (!historyArray || historyArray.length === 0) return null
 
       // Garantir ordenação por timestamp e alinhar as séries por tempo
@@ -106,7 +121,19 @@ export async function getCableOpticalHistory(cableId, hours = 24) {
         }
       })
 
-      return { labels, rxData, txData }
+      const warningValue = thresholds?.warning ?? null
+      const criticalValue = thresholds?.critical ?? null
+      const warningLine = warningValue !== null ? labels.map(() => warningValue) : null
+      const criticalLine = criticalValue !== null ? labels.map(() => criticalValue) : null
+
+      return {
+        labels,
+        rxData,
+        txData,
+        thresholds,
+        warningLine,
+        criticalLine
+      }
     }
     
     const calculatePortStats = (historyArray) => {
@@ -127,9 +154,12 @@ export async function getCableOpticalHistory(cableId, hours = 24) {
       }
     }
     
+    const originThresholds = extractThresholds(cableStatus.origin_optical)
+    const destinationThresholds = extractThresholds(cableStatus.destination_optical)
+
     return {
-      origin: formatPortData(originHistory),
-      destination: formatPortData(destHistory),
+      origin: formatPortData(originHistory, originThresholds),
+      destination: formatPortData(destHistory, destinationThresholds),
       portInfo: {
         origin: {
           device: cableStatus.origin_optical?.device_name || 'Dispositivo Origem',
@@ -143,6 +173,10 @@ export async function getCableOpticalHistory(cableId, hours = 24) {
       stats: {
         origin: calculatePortStats(originHistory),
         destination: calculatePortStats(destHistory)
+      },
+      thresholds: {
+        origin: originThresholds,
+        destination: destinationThresholds
       }
     }
   } catch (error) {
@@ -169,11 +203,53 @@ export async function getCableDetails(cableId) {
  */
 export async function getCableAlarms(cableId) {
   try {
-    // TODO: Verificar se existe endpoint específico para alarmes de cabo
-    // Por enquanto retorna array vazio
+    if (!cableId) {
+      return []
+    }
+
+    const response = await get(`/api/v1/fiber-cables/${cableId}/alarms/`)
+
+    if (!response) {
+      return []
+    }
+
+    if (Array.isArray(response)) {
+      return response
+    }
+
+    if (Array.isArray(response?.results)) {
+      return response.results
+    }
+
+    if (Array.isArray(response?.data)) {
+      return response.data
+    }
+
+    if (Array.isArray(response?.alarms)) {
+      return response.alarms
+    }
+
     return []
   } catch (error) {
+    if (error?.response?.status === 404) {
+      console.warn('[FiberService] Endpoint de alarmes não disponível para este cabo, retornando lista vazia')
+      return []
+    }
     console.error('[FiberService] Erro ao buscar alarmes:', error)
     return []
+  }
+}
+
+export async function createCableAlarm(cableId, payload) {
+  if (!cableId) {
+    throw new Error('Cabo inválido para salvar alarme')
+  }
+
+  try {
+    const response = await post(`/api/v1/fiber-cables/${cableId}/alarms/`, payload)
+    return response
+  } catch (error) {
+    console.error('[FiberService] Erro ao criar configuração de alarme:', error)
+    throw error
   }
 }

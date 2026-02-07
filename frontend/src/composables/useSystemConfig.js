@@ -93,6 +93,9 @@ export function useSystemConfig() {
     ENABLE_MAP_CLUSTERING: true,
     ENABLE_DRAWING_TOOLS: true,
     ENABLE_FULLSCREEN: true,
+    // Network thresholds
+    OPTICAL_RX_WARNING_THRESHOLD: '-24',
+    OPTICAL_RX_CRITICAL_THRESHOLD: '-27',
   })
 
   // Estados de teste
@@ -157,7 +160,8 @@ export function useSystemConfig() {
           'MAP_TYPE', 'MAP_STYLES', 'ENABLE_STREET_VIEW', 'ENABLE_TRAFFIC',
           'MAPBOX_STYLE', 'MAPBOX_CUSTOM_STYLE', 'MAPBOX_ENABLE_3D',
           'ESRI_API_KEY', 'ESRI_BASEMAP',
-          'MAP_LANGUAGE', 'MAP_THEME', 'ENABLE_MAP_CLUSTERING', 'ENABLE_DRAWING_TOOLS', 'ENABLE_FULLSCREEN'
+          'MAP_LANGUAGE', 'MAP_THEME', 'ENABLE_MAP_CLUSTERING', 'ENABLE_DRAWING_TOOLS', 'ENABLE_FULLSCREEN',
+          'OPTICAL_RX_WARNING_THRESHOLD', 'OPTICAL_RX_CRITICAL_THRESHOLD'
         ]
         
         const booleanFields = new Set([
@@ -354,6 +358,8 @@ export function useSystemConfig() {
       ZABBIX_API_USER: '',
       ZABBIX_API_PASSWORD: '',
       ZABBIX_API_KEY: '',
+      OPTICAL_RX_WARNING_THRESHOLD: '-24',
+      OPTICAL_RX_CRITICAL_THRESHOLD: '-27',
     }
     clearTestResults()
   }

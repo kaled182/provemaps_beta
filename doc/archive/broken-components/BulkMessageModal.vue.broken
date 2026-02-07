@@ -1,0 +1,521 @@
+﻿<template>
+  <div class="modal-overlay" @click="$emit('close')">
+    <div class="modal-dialog" @click.stop>
+      <div class="modal-header">
+        <h3>Enviar Mensagens em Massa</h3>
+        <button @click="$emit('close')" class="btn-close">&times;</button>
+      </div>
+      
+      <div class="modal-body">
+        <div class="recipients-section">
+          <h4>Destinatários</h4>
+          
+          <div class="recipient-count">
+            <i class="fas fa-users"></i>
+            <span>{{ totalRecipients }} contato(s) selecionado(s)</span>
+          </div>
+          
+          <div class="form-group">
+            <label>Adicionar grupos</label>
+            <div class="checkbox-group">
+              <label 
+                v-for="group in groups" 
+                :key="group.id" 
+                class="checkbox-label"
+              >
+                <input 
+                  type="checkbox" 
+                  :value="group.id"
+                  v-model="selectedGroupIds"
+                  @change="updateRecipientCount"
+                />
+                {{ group.name }}
+              </label>
+            </div>
+            <small v-if="groups.length === 0" class="form-hint text-muted">
+              Nenhum grupo disponível
+            </small>
+          </div>
+        </div>
+        
+        <div class="gateway-section">
+          <div class="form-group">
+            <label for="gateway">Gateway WhatsApp <span class="required">*</span></label>
+            <select id="gateway" v-model="gatewayId" class="form-control" required>
+              <option value="">Selecione um gateway...</option>
+              <!-- TODO: Buscar gateways WhatsApp ativos dinamicamente -->
+              <option value="1">Gateway Padrão (789)</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="message-section">
+          <div class="form-group">
+            <label for="message">Mensagem <span class="required">*</span></label>
+            <textarea 
+              id="message"
+              v-model="message" 
+              class="form-control"
+              rows="6"
+              placeholder="Digite sua mensagem aqui..."
+              required
+            ></textarea>
+            <small class="form-hint">
+              {{ message.length }} caracteres
+            </small>
+          </div>
+          
+          <div class="variables-help">
+            <p><strong>Variáveis disponíveis:</strong></p>
+            <ul>
+              <li><code>{{name}}</code> - Nome do contato</li>
+              <li><code>{{company}}</code> - Empresa</li>
+              <li><code>{{position}}</code> - Cargo</li>
+            </ul>
+          </div>
+        </div>
+        
+        <div class="schedule-section">
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="enableSchedule" />
+              Agendar envio
+            </label>
+          </div>
+          
+          <div v-if="enableSchedule" class="form-group">
+            <label for="schedule-datetime">Data e Hora</label>
+            <input 
+              id="schedule-datetime"
+              type="datetime-local" 
+              v-model="scheduleAt" 
+              class="form-control"
+              :min="minDateTime"
+            />
+          </div>
+        </div>
+        
+        <div class="warning-box">
+          <i class="fas fa-exclamation-triangle"></i>
+          <div>
+            <strong>Atenção:</strong>
+            <p>Esta ação enviará mensagens para todos os contatos selecionados. 
+            Certifique-se de revisar a mensagem antes de confirmar.</p>
+          </div>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button @click="$emit('close')" class="btn btn-secondary">
+          Cancelar
+        </button>
+        <button 
+          @click="handleSend" 
+          class="btn btn-primary"
+          :disabled="!isValid || sending"
+        >
+          <i v-if="!sending" class="fas fa-paper-plane"></i>
+          <i v-else class="fas fa-spinner fa-spin"></i>
+          {{ sending ? 'Enviando...' : (enableSchedule ? 'Agendar Envio' : 'Enviar Agora') }}
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+
+const props = defineProps({
+  selectedContactIds: {
+    type: Array,
+    default: () => []
+  },
+  groups: {
+    type: Array,
+    default: () => []
+  }
+})
+
+const emit = defineEmits(['close', 'send'])
+
+// State
+const selectedGroupIds = ref([])
+const gatewayId = ref('')
+const message = ref('')
+const enableSchedule = ref(false)
+const scheduleAt = ref('')
+const sending = ref(false)
+
+// Computed
+const totalRecipients = computed(() => {
+  // Base: contatos selecionados
+  let count = props.selectedContactIds.length
+  
+  // TODO: Adicionar contagem de contatos nos grupos selecionados
+  // Por enquanto, apenas soma os IDs únicos
+  return count
+})
+
+const minDateTime = computed(() => {
+  const now = new Date()
+  now.setMinutes(now.getMinutes() + 5) // Mínimo 5 minutos no futuro
+  return now.toISOString().slice(0, 16)
+})
+
+const isValid = computed(() => {
+  if (!message.value.trim()) return false
+  if (!gatewayId.value) return false
+  if (totalRecipients.value === 0) return false
+  if (enableSchedule.value && !scheduleAt.value) return false
+  return true
+})
+
+// Methods
+const updateRecipientCount = () => {
+  // TODO: Recalcular com base nos grupos selecionados
+}
+
+const handleSend = async () => {
+  if (!isValid.value) return
+  
+  sending.value = true
+  try {
+    await emit(
+      'send',
+      props.selectedContactIds,
+      selectedGroupIds.value,
+      message.value,
+      gatewayId.value,
+      enableSchedule.value ? scheduleAt.value : null
+    )
+  } finally {
+    sending.value = false
+  }
+
+// Lifecycle
+onMounted(() => {
+  // Inicializar com data/hora mínima
+  if (!scheduleAt.value) {
+    scheduleAt.value = minDateTime.value
+  }
+})
+</script>
+
+<style scoped>
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-dialog {
+  background: var(--surface-card);
+  border-radius: 8px;
+  width: 90%;
+  max-width: 700px;
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+}
+
+.modal-header {
+  padding: 20px;
+  border-bottom: 1px solid var(--border-secondary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg-secondary);
+}
+
+  
+  .modal-header h3 {
+    color: #f1f5f9;
+  }
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 20px;
+  color: var(--text-primary);
+}
+
+.btn-close {
+  background: none;
+  border: none;
+  font-size: 28px;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  line-height: 1;
+}
+
+.btn-close:hover {
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 25px;
+}
+
+.modal-footer {
+  padding: 15px 20px;
+  border-top: 1px solid var(--border-secondary);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  background: var(--bg-secondary);
+}
+
+}
+
+.recipients-section,
+.gateway-section,
+.message-section,
+.schedule-section {
+  margin-bottom: 25px;
+}
+
+.recipients-section h4,
+.message-section h4 {
+  margin: 0 0 15px 0;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+}
+
+.recipient-count {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 15px;
+  background: var(--accent-info-light);
+  border-radius: 4px;
+  margin-bottom: 15px;
+  font-weight: 500;
+  color: #007bff;
+}
+
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+}
+
+.required {
+  color: #dc3545;
+}
+
+.form-control {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 4px;
+  font-size: 14px;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  transition: border-color 0.2s;
+}
+
+  
+  .form-control::placeholder {
+    color: var(--text-tertiary);
+  }
+
+.form-control:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
+}
+
+}
+
+textarea.form-control {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.form-hint {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  color: #6c757d;
+}
+
+}
+
+.checkbox-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: normal;
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 0;
+}
+
+}
+
+.checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+}
+
+.text-muted {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+}
+
+.variables-help {
+  background: var(--bg-secondary);
+  padding: 12px 15px;
+  border-radius: 4px;
+  margin-top: 10px;
+}
+
+}
+
+.variables-help p {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+}
+
+.variables-help ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.variables-help li {
+  margin-bottom: 4px;
+  font-size: 13px;
+  color: #666;
+}
+
+}
+
+.variables-help code {
+  background: #e9ecef;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+  color: #d63384;
+}
+
+}
+
+.warning-box {
+  display: flex;
+  gap: 12px;
+  padding: 15px;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 4px;
+  margin-top: 20px;
+}
+
+}
+
+.warning-box i {
+  color: #ff6b00;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+}
+
+.warning-box strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #856404;
+}
+
+}
+
+.warning-box p {
+  margin: 0;
+  font-size: 13px;
+  color: #856404;
+  line-height: 1.5;
+}
+
+}
+
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: #007bff;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #0056b3;
+}
+
+.btn-secondary {
+  background: #6c757d;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background: #545b62;
+}
+</style>

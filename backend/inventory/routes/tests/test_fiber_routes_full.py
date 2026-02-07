@@ -88,16 +88,19 @@ def sample_ports(db: Any, sample_devices: DevicePair) -> PortPair:
 @pytest.fixture
 def sample_cable(db: Any, sample_ports: PortPair) -> Any:
     """Cria cabo de fibra de teste"""
+    from inventory.spatial import coords_to_linestring
+    
     port1, port2 = sample_ports
+    coords = [
+        {"lat": -23.5505, "lng": -46.6333},
+        {"lat": -23.0000, "lng": -45.0000},
+        {"lat": -22.9068, "lng": -43.1729}
+    ]
     cable = FiberCable.objects.create(
         name="Cabo Teste SP-RJ",
         origin_port=port1,
         destination_port=port2,
-        path_coordinates=[
-            {"lat": -23.5505, "lng": -46.6333},
-            {"lat": -23.0000, "lng": -45.0000},
-            {"lat": -22.9068, "lng": -43.1729}
-        ],
+        path=coords_to_linestring(coords),
         length_km=435.5
     )
     return cable
@@ -190,9 +193,11 @@ class TestFiberCableAPI:
         assert data['points'] == 2
 
         # Valida que o cabo foi criado no banco
+        from inventory.spatial import linestring_to_coords
         cable: Any = FiberCable.objects.get(id=data['fiber_id'])
         assert cable.name == 'Novo Cabo Teste'
-        assert len(cable.path_coordinates) == 2
+        coords = linestring_to_coords(cable.path) if cable.path else []
+        assert len(coords) == 2
 
     def test_update_cable_path(
         self,
@@ -223,8 +228,10 @@ class TestFiberCableAPI:
         assert len(data['path']) == 4
 
         # Valida que o cabo foi atualizado no banco
+        from inventory.spatial import linestring_to_coords
         cable: Any = FiberCable.objects.get(id=sample_cable.id)
-        assert len(cable.path_coordinates) == 4
+        coords = linestring_to_coords(cable.path) if cable.path else []
+        assert len(coords) == 4
 
     def test_update_cable_metadata(
         self,
@@ -297,21 +304,25 @@ class TestFiberCableModel:
 
     def test_cable_creation(self, sample_ports: PortPair) -> None:
         """Testa criação de cabo"""
+        from inventory.spatial import coords_to_linestring, linestring_to_coords
+        
         port1, port2 = sample_ports
+        coords = [
+            {"lat": -23.5505, "lng": -46.6333},
+            {"lat": -22.9068, "lng": -43.1729}
+        ]
         cable: Any = FiberCable.objects.create(
             name="Cabo Modelo Teste",
             origin_port=port1,
             destination_port=port2,
-            path_coordinates=[
-                {"lat": -23.5505, "lng": -46.6333},
-                {"lat": -22.9068, "lng": -43.1729}
-            ],
+            path=coords_to_linestring(coords),
             length_km=400.0
         )
 
         assert cable.id is not None
         assert cable.name == "Cabo Modelo Teste"
-        assert len(cable.path_coordinates) == 2
+        path_coords = linestring_to_coords(cable.path) if cable.path else []
+        assert len(path_coords) == 2
         assert cable.length_km == 400.0
 
     def test_cable_str_representation(self, sample_cable: Any) -> None:
@@ -320,14 +331,17 @@ class TestFiberCableModel:
 
     def test_cable_path_validation(self, sample_ports: PortPair) -> None:
         """Testa validação do path (deve ser lista de dicts com lat/lng)"""
+        from inventory.spatial import coords_to_linestring
+        
         port1, port2 = sample_ports
 
         # Path válido
+        coords = [{"lat": -23.5505, "lng": -46.6333}]
         cable: Any = FiberCable.objects.create(
             name="Cabo Path Válido",
             origin_port=port1,
             destination_port=port2,
-            path_coordinates=[{"lat": -23.5505, "lng": -46.6333}],
+            path=coords_to_linestring(coords),
             length_km=0.0
         )
         assert cable.id is not None

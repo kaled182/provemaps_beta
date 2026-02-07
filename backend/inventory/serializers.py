@@ -22,6 +22,7 @@ from inventory.models import (
     FiberFusion,
     ImportRule,
 )
+from inventory.usecases.fibers import build_optical_summary
 
 
 class SiteSerializer(serializers.ModelSerializer[Site]):
@@ -380,10 +381,17 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
     is_connected = serializers.SerializerMethodField()
     connection_status = serializers.SerializerMethodField()
 
+    # Optical health (cached levels -> map coloring)
+    optical_status = serializers.SerializerMethodField()
+    optical_summary = serializers.SerializerMethodField()
+
     # Site geolocation for map airline and centering
     site_a_location = serializers.SerializerMethodField()
     site_b_location = serializers.SerializerMethodField()
     infrastructure_points = serializers.SerializerMethodField()
+    
+    # Path coordinates (retrocompatibilidade - extrai de PostGIS path)
+    path_coordinates = serializers.SerializerMethodField()
     
     # Segments (when cable is split)
     segments = CableSegmentSerializer(many=True, read_only=True)
@@ -522,6 +530,17 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
             })
         return result
 
+    def get_path_coordinates(self, obj: FiberCable) -> list:
+        """Extrai coordenadas do PostGIS path para retrocompatibilidade com frontend."""
+        if not obj.path:
+            return []
+        
+        try:
+            from inventory.spatial import linestring_to_coords
+            return linestring_to_coords(obj.path)
+        except Exception:
+            return []
+
     class Meta:
         model = FiberCable
         fields = [
@@ -548,8 +567,9 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
             # Connection state
             "is_connected",
             "connection_status",
-            # Geometry/Path
-            "path_coordinates",
+            # Geometry/Path (from PostGIS)
+            "path",
+            "path_coordinates",  # Retrocompatibilidade - array [[lng,lat], ...] extraído de path
             # Infraestrutura
             "infrastructure_points",
             # Segments
@@ -558,6 +578,8 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
             "length_km",
             "status",
             "last_status_update",
+            "optical_status",
+            "optical_summary",
         ]
         read_only_fields = [
             "id",
@@ -573,7 +595,25 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
             "destination_device_name",
             "is_connected",
             "connection_status",
+            "optical_status",
+            "optical_summary",
         ]
+
+    def _build_optical_summary(self, obj: FiberCable) -> dict[str, Any]:
+        cache_attr = "_cached_optical_summary"
+        cached = getattr(obj, cache_attr, None)
+        if cached is not None:
+            return cached
+        payload = build_optical_summary(obj)
+        setattr(obj, cache_attr, payload)
+        return payload
+
+    def get_optical_status(self, obj: FiberCable) -> str:
+        summary = self._build_optical_summary(obj)
+        return summary.get("status", "unknown")
+
+    def get_optical_summary(self, obj: FiberCable) -> dict[str, Any]:
+        return self._build_optical_summary(obj)
 
 
 class ImportRuleSerializer(serializers.ModelSerializer[ImportRule]):

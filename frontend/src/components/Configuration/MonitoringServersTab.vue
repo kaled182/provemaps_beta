@@ -6,19 +6,136 @@
     </div>
 
     <!-- Servidores Header -->
-    <div class="flex items-center justify-between">
+    <div class="flex items-start justify-between">
       <div>
         <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Servidores de Monitoramento</h3>
         <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
           {{ serverCount?.total || 0 }} {{ (serverCount?.total || 0) === 1 ? 'servidor' : 'servidores' }} configurado{{ (serverCount?.total || 0) !== 1 ? 's' : '' }}
         </p>
       </div>
-      <button @click="handleAddServer" class="btn-primary">
-        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-        </svg>
-        Adicionar Servidor
-      </button>
+      <div class="flex items-center gap-2">
+        <div class="relative" ref="configMenuRef">
+          <button
+            type="button"
+            class="btn-secondary flex items-center gap-2"
+            @click="toggleConfigMenu"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            <span>Configurações</span>
+            <svg
+              class="w-3 h-3 transition-transform"
+              :class="showConfigMenu ? 'rotate-180' : 'rotate-0'"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          <transition name="fade-scale">
+            <div
+              v-if="showConfigMenu"
+              class="absolute right-0 mt-2 w-[420px] max-w-[calc(100vw-32px)] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl z-50"
+            >
+              <div class="p-5 space-y-5">
+                <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                  <div>
+                    <h4 class="text-base font-semibold text-gray-900 dark:text-white">
+                      Limites de Sinal Óptico
+                    </h4>
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      Valores controlam alertas, cores do mapa e linhas de referência.
+                    </p>
+                    <p class="mt-2 text-xs text-gray-500 dark:text-gray-500">
+                      Utilize números negativos em dBm. O limite de atenção deve ser maior ou igual ao crítico.
+                    </p>
+                  </div>
+                  <div class="flex flex-col gap-2 text-xs font-medium">
+                    <span class="px-3 py-1 rounded-md bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                      Atenção: {{ opticalWarningInput }} dBm
+                    </span>
+                    <span class="px-3 py-1 rounded-md bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                      Crítico: {{ opticalCriticalInput }} dBm
+                    </span>
+                  </div>
+                </div>
+
+                <form class="grid gap-4" @submit.prevent="saveOpticalThresholds">
+                  <div class="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label class="label-custom">Nível de Atenção (dBm)</label>
+                      <div class="relative">
+                        <input
+                          v-model="opticalWarningInput"
+                          type="number"
+                          step="0.1"
+                          class="input-custom pr-12"
+                          placeholder="Ex: -24"
+                          autocomplete="off"
+                        />
+                        <span class="absolute inset-y-0 right-3 flex items-center text-xs text-gray-400 dark:text-gray-500">dBm</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label class="label-custom">Nível Crítico (dBm)</label>
+                      <div class="relative">
+                        <input
+                          v-model="opticalCriticalInput"
+                          type="number"
+                          step="0.1"
+                          class="input-custom pr-12"
+                          placeholder="Ex: -27"
+                          autocomplete="off"
+                        />
+                        <span class="absolute inset-y-0 right-3 flex items-center text-xs text-gray-400 dark:text-gray-500">dBm</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <button type="button" class="btn-secondary" @click="restoreOpticalDefaults">
+                      Restaurar padrões (-24 / -27)
+                    </button>
+                    <div class="flex gap-3">
+                      <button
+                        type="button"
+                        class="btn-secondary"
+                        :disabled="savingThresholds"
+                        @click="reloadOpticalThresholds"
+                      >
+                        Recarregar valores
+                      </button>
+                      <button type="submit" class="btn-primary" :disabled="savingThresholds">
+                        <svg
+                          v-if="savingThresholds"
+                          class="animate-spin -ml-1 mr-2 h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Salvar limites</span>
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </transition>
+        </div>
+
+        <button @click="handleAddServer" class="btn-primary">
+          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+          </svg>
+          Adicionar Servidor
+        </button>
+      </div>
     </div>
 
     <!-- Filter Tabs -->
@@ -385,9 +502,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useServerManagement } from '@/composables/useServerManagement'
 import { useSystemConfig } from '@/composables/useSystemConfig'
+import { useNotification } from '@/composables/useNotification'
 import ServerEditModal from './ServerEditModal.vue'
 
 // Composables
@@ -415,6 +533,8 @@ const {
   testResults: systemTestResults,
 } = useSystemConfig()
 
+const { error: notifyError } = useNotification()
+
 // Local state
 const activeFilter = ref('all')
 const showModal = ref(false)
@@ -423,7 +543,128 @@ const testing = ref({})
 const serverTestResults = ref({})
 const showZabbixModal = ref(false)
 const savingZabbix = ref(false)
+const savingThresholds = ref(false)
+const showConfigMenu = ref(false)
+const configMenuRef = ref(null)
 const zabbixTestResult = computed(() => systemTestResults.value?.zabbix || null)
+
+const normalizeThresholdInput = (value) => {
+  if (value === null || value === undefined) {
+    return ''
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value.toString()
+  }
+  const str = String(value).trim()
+  if (!str) {
+    return ''
+  }
+  return str.replace(',', '.')
+}
+
+const getThresholdValue = (value, fallback) => {
+  const normalized = normalizeThresholdInput(value)
+  return normalized === '' ? fallback : normalized
+}
+
+const opticalWarningInput = computed({
+  get: () => getThresholdValue(systemConfig.value?.OPTICAL_RX_WARNING_THRESHOLD, '-24'),
+  set: (value) => {
+    if (!systemConfig.value) {
+      return
+    }
+    systemConfig.value.OPTICAL_RX_WARNING_THRESHOLD = normalizeThresholdInput(value)
+  }
+})
+
+const opticalCriticalInput = computed({
+  get: () => getThresholdValue(systemConfig.value?.OPTICAL_RX_CRITICAL_THRESHOLD, '-27'),
+  set: (value) => {
+    if (!systemConfig.value) {
+      return
+    }
+    systemConfig.value.OPTICAL_RX_CRITICAL_THRESHOLD = normalizeThresholdInput(value)
+  }
+})
+
+const parseThresholdValue = (value) => {
+  const normalized = normalizeThresholdInput(value)
+  if (normalized === '') {
+    return null
+  }
+  const numeric = Number(normalized)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+const restoreOpticalDefaults = () => {
+  opticalWarningInput.value = '-24'
+  opticalCriticalInput.value = '-27'
+}
+
+const reloadOpticalThresholds = async () => {
+  if (savingThresholds.value) {
+    return
+  }
+  await loadSystemConfig()
+}
+
+const saveOpticalThresholds = async () => {
+  const warningValue = parseThresholdValue(opticalWarningInput.value)
+  const criticalValue = parseThresholdValue(opticalCriticalInput.value)
+
+  if (warningValue === null || criticalValue === null) {
+    notifyError('Monitoramento', 'Informe valores numéricos válidos para os níveis ópticos.')
+    return
+  }
+
+  if (warningValue < criticalValue) {
+    notifyError('Monitoramento', 'O nível de atenção deve ser maior ou igual ao nível crítico.')
+    return
+  }
+
+  savingThresholds.value = true
+  try {
+    systemConfig.value.OPTICAL_RX_WARNING_THRESHOLD = warningValue.toString()
+    systemConfig.value.OPTICAL_RX_CRITICAL_THRESHOLD = criticalValue.toString()
+    const saved = await saveSystemConfig()
+    if (!saved) {
+      notifyError('Monitoramento', 'Não foi possível salvar os limites ópticos.')
+    } else {
+      showConfigMenu.value = false
+    }
+  } catch (error) {
+    console.error('[MonitoringServersTab] Error saving optical thresholds:', error)
+    notifyError('Monitoramento', 'Não foi possível salvar os limites ópticos.')
+  } finally {
+    savingThresholds.value = false
+  }
+}
+
+const toggleConfigMenu = () => {
+  showConfigMenu.value = !showConfigMenu.value
+}
+
+const closeConfigMenu = () => {
+  showConfigMenu.value = false
+}
+
+const handleOutsideClick = (event) => {
+  if (!showConfigMenu.value) {
+    return
+  }
+  if (!configMenuRef.value) {
+    return
+  }
+  if (!configMenuRef.value.contains(event.target)) {
+    showConfigMenu.value = false
+  }
+}
+
+const handleEscapeKey = (event) => {
+  if (event.key === 'Escape') {
+    showConfigMenu.value = false
+  }
+}
 
 // Zabbix form
 const zabbixForm = ref({
@@ -458,6 +699,16 @@ onMounted(async () => {
   zabbixForm.value.description = systemConfig.value?.ZABBIX_DESCRIPTION || 'Servidor principal de monitoramento Zabbix'
   zabbixForm.value.config_json = systemConfig.value?.ZABBIX_CONFIG_JSON || '{}'
   zabbixForm.value.is_active = systemConfig.value?.ZABBIX_ACTIVE !== false
+})
+
+onMounted(() => {
+  document.addEventListener('click', handleOutsideClick)
+  document.addEventListener('keydown', handleEscapeKey)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleOutsideClick)
+  document.removeEventListener('keydown', handleEscapeKey)
 })
 
 // Open Zabbix modal
@@ -576,11 +827,13 @@ const serverTypeLabel = (type) => {
 }
 
 const handleAddServer = () => {
+  closeConfigMenu()
   editingServer.value = createEmptyServerForm()
   showModal.value = true
 }
 
 const handleEditServer = (server) => {
+  closeConfigMenu()
   editingServer.value = { ...server }
   showModal.value = true
 }
@@ -594,6 +847,7 @@ const handleSaveServer = async (serverData) => {
 }
 
 const handleDeleteServer = async (server) => {
+  closeConfigMenu()
   if (confirm(`Excluir servidor "${server.name}"?`)) {
     await deleteServer(server.id)
   }
@@ -615,10 +869,12 @@ const handleTestConnection = async (server) => {
 }
 
 const handleToggleStatus = async (server) => {
+  closeConfigMenu()
   await toggleServerStatus(server.id)
 }
 
 const handleTestZabbix = async () => {
+  closeConfigMenu()
   const payload = showZabbixModal.value
     ? {
         zabbix_api_url: zabbixForm.value.url,
@@ -674,6 +930,17 @@ onMounted(async () => {
   border-top-color: #3b82f6;
   border-radius: 9999px;
   animation: spin 1s linear infinite;
+}
+
+.fade-scale-enter-active,
+.fade-scale-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.fade-scale-enter-from,
+.fade-scale-leave-to {
+  opacity: 0;
+  transform: translateY(-0.5rem) scale(0.98);
 }
 
 @keyframes spin {

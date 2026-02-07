@@ -154,6 +154,50 @@ def _load_from_database() -> Dict[str, str]:
         config["SMS_AWS_SECRET_ACCESS_KEY"] = record.sms_aws_secret_access_key
     if record.sms_infobip_base_url:
         config["SMS_INFOBIP_BASE_URL"] = record.sms_infobip_base_url
+    
+    # Map configuration
+    if record.map_provider:
+        config["MAP_PROVIDER"] = record.map_provider
+    if record.mapbox_token:
+        config["MAPBOX_TOKEN"] = record.mapbox_token
+    # Google Maps
+    if record.map_default_zoom is not None:
+        config["MAP_DEFAULT_ZOOM"] = str(record.map_default_zoom)
+    if record.map_default_lat is not None:
+        config["MAP_DEFAULT_LAT"] = str(record.map_default_lat)
+    if record.map_default_lng is not None:
+        config["MAP_DEFAULT_LNG"] = str(record.map_default_lng)
+    if record.map_type:
+        config["MAP_TYPE"] = record.map_type
+    if record.map_styles:
+        config["MAP_STYLES"] = record.map_styles
+    if record.enable_street_view is not None:
+        config["ENABLE_STREET_VIEW"] = record.enable_street_view
+    if record.enable_traffic is not None:
+        config["ENABLE_TRAFFIC"] = record.enable_traffic
+    # Mapbox
+    if record.mapbox_style:
+        config["MAPBOX_STYLE"] = record.mapbox_style
+    if record.mapbox_custom_style:
+        config["MAPBOX_CUSTOM_STYLE"] = record.mapbox_custom_style
+    if record.mapbox_enable_3d is not None:
+        config["MAPBOX_ENABLE_3D"] = record.mapbox_enable_3d
+    # Esri
+    if record.esri_api_key:
+        config["ESRI_API_KEY"] = record.esri_api_key
+    if record.esri_basemap:
+        config["ESRI_BASEMAP"] = record.esri_basemap
+    # Common
+    if record.map_language:
+        config["MAP_LANGUAGE"] = record.map_language
+    if record.map_theme:
+        config["MAP_THEME"] = record.map_theme
+    if record.enable_map_clustering is not None:
+        config["ENABLE_MAP_CLUSTERING"] = record.enable_map_clustering
+    if record.enable_drawing_tools is not None:
+        config["ENABLE_DRAWING_TOOLS"] = record.enable_drawing_tools
+    if record.enable_fullscreen is not None:
+        config["ENABLE_FULLSCREEN"] = record.enable_fullscreen
 
     return config
 

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Teste Direto Mapbox GL JS</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.1.0/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.1.0/mapbox-gl.js"></script>
+    <style>
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: #1a1a1a; color: #fff; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 15px;
+            border-radius: 5px;
+            z-index: 1000;
+            max-width: 400px;
+        }
+        .success { color: #10b981; }
+        .error { color: #ef4444; }
+        .warning { color: #f59e0b; }
+        pre { background: #2a2a2a; padding: 10px; border-radius: 3px; font-size: 11px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h3>🗺️ Teste Direto Mapbox GL JS</h3>
+        <div id="status">Carregando...</div>
+    </div>
+    <div id="map"></div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        
+        function log(message, type = 'info') {
+            const color = type === 'success' ? 'success' : type === 'error' ? 'error' : type === 'warning' ? 'warning' : '';
+            statusDiv.innerHTML += `<div class="${color}">${message}</div>`;
+            console.log(`[${type}] ${message}`);
+        }
+
+        // Token do banco de dados
+        const MAPBOX_TOKEN = 'pk.eyJ1Ijoia2FsZWQxODIiLCJhIjoiY21jNjd1M3p2MGozMTJvcDloa3kzeXZ0cCJ9.azs0yBSvCd8WlGXB-pptog';
+        
+        log('Token configurado: ' + MAPBOX_TOKEN.substring(0, 30) + '...', 'info');
+        log('Tamanho do token: ' + MAPBOX_TOKEN.length + ' caracteres', 'info');
+        
+        // Verificar se o token começa com pk.
+        if (!MAPBOX_TOKEN.startsWith('pk.')) {
+            log('❌ Token NÃO começa com "pk." - pode ser inválido!', 'error');
+        } else {
+            log('✅ Token começa com "pk." (válido)', 'success');
+        }
+        
+        // Verificar se mapboxgl está disponível
+        if (typeof mapboxgl === 'undefined') {
+            log('❌ mapboxgl não está disponível!', 'error');
+        } else {
+            log('✅ mapboxgl disponível, versão: ' + mapboxgl.version, 'success');
+        }
+        
+        try {
+            log('Configurando token de acesso...', 'info');
+            mapboxgl.accessToken = MAPBOX_TOKEN;
+            
+            log('Criando instância do mapa...', 'info');
+            const map = new mapboxgl.Map({
+                container: 'map',
+                style: 'mapbox://styles/mapbox/streets-v12',
+                center: [-47.9292, -15.7801], // Brasília
+                zoom: 12
+            });
+            
+            log('✅ Instância criada com sucesso!', 'success');
+            
+            map.on('load', () => {
+                log('✅ SUCESSO! Mapa carregado completamente!', 'success');
+                log('Centro: ' + map.getCenter().lng + ', ' + map.getCenter().lat, 'info');
+                log('Zoom: ' + map.getZoom(), 'info');
+            });
+            
+            map.on('error', (e) => {
+                log('❌ ERRO ao carregar mapa:', 'error');
+                log('Tipo de erro: ' + (e.error?.name || 'desconhecido'), 'error');
+                log('Mensagem: ' + (e.error?.message || e.message || 'sem mensagem'), 'error');
+                
+                if (e.error?.message) {
+                    if (e.error.message.includes('401')) {
+                        log('⚠️ Erro 401: Token inválido ou expirado', 'warning');
+                    } else if (e.error.message.includes('403')) {
+                        log('⚠️ Erro 403: Acesso negado - verifique permissões do token', 'warning');
+                    } else if (e.error.message.includes('Failed to fetch')) {
+                        log('⚠️ Erro de rede: Verifique conexão e firewall', 'warning');
+                    }
+                }
+                
+                log('Stack trace:', 'error');
+                statusDiv.innerHTML += '<pre>' + (e.error?.stack || e.stack || 'N/A') + '</pre>';
+            });
+            
+            map.on('style.load', () => {
+                log('✅ Estilo carregado!', 'success');
+            });
+            
+            map.on('data', (e) => {
+                if (e.dataType === 'source' && e.isSourceLoaded) {
+                    log('✅ Source carregado: ' + e.sourceId, 'success');
+                }
+            });
+            
+        } catch (error) {
+            log('❌ EXCEÇÃO ao criar mapa:', 'error');
+            log('Mensagem: ' + error.message, 'error');
+            statusDiv.innerHTML += '<pre>' + error.stack + '</pre>';
+        }
+    </script>
+</body>
+</html>

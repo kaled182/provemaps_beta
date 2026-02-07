@@ -107,6 +107,12 @@ INSTALLED_APPS = [
     app for app in _INSTALLED_APPS if app != "django_prometheus"
 ]
 
+# Disable FirstTimeSetupRedirectMiddleware during tests to avoid 302 redirects
+MIDDLEWARE = [
+    m for m in MIDDLEWARE 
+    if "FirstTimeSetupRedirectMiddleware" not in m
+]
+
 # Keep static and media assets isolated per test run
 STATICFILES_STORAGE = "django.contrib.staticfiles.storage.StaticFilesStorage"
 MEDIA_ROOT = _BASE_DIR / "test_media"

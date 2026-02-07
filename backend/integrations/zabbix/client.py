@@ -129,6 +129,18 @@ def _sanitize_params(value: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     return masked
 
 
+def _is_api_key(token: Optional[str]) -> bool:
+    """Check if token is a Zabbix API Key (64 hex chars) vs session token.
+    
+    Zabbix 7.x+ API Keys are 64-character hex strings that must be sent
+    via Authorization: Bearer header, not in the 'auth' field.
+    """
+    if not token or not isinstance(token, str):
+        return False
+    # Zabbix API Keys are exactly 64 hex characters
+    return len(token) == 64 and all(c in '0123456789abcdef' for c in token.lower())
+
+
 # ==============================================================================
 # Prometheus metrics (with fallback when not installed)
 # ==============================================================================
@@ -543,11 +555,19 @@ class ResilientZabbixClient:
         payload["id"] = attempt
         if params is not None:
             payload["params"] = cast(Any, params)
-        if include_auth and not retry_without_auth and token:
-            payload["auth"] = token
+        
+        # Detectar se é API Key (Zabbix 7.x) ou session token (Zabbix 6.x)
+        use_bearer_header = False
+        if include_auth and token:
+            if _is_api_key(token) or retry_without_auth:
+                # API Keys (Zabbix 7.x+) DEVEM usar Authorization Bearer
+                use_bearer_header = True
+            else:
+                # Session tokens (login tradicional) usam campo 'auth'
+                payload["auth"] = token
 
         headers = {"Content-Type": "application/json"}
-        if include_auth and retry_without_auth and token:
+        if use_bearer_header:
             headers["Authorization"] = f"Bearer {token}"
 
         # Metrics: start timer
@@ -779,6 +799,8 @@ class ResilientZabbixClient:
         token = self._get_token()
 
     # Build individual payloads
+        # Note: Batch API no Zabbix ainda usa 'auth' field mesmo com API Keys
+        # pois o header Authorization não é suportado em requests batch
         payloads: List[Dict[str, Any]] = []
         for idx, (method, params) in enumerate(calls):
             payload: Dict[str, Any] = {
@@ -789,6 +811,7 @@ class ResilientZabbixClient:
             if params is not None:
                 payload["params"] = cast(Any, params)
             if method not in UNAUTHENTICATED_METHODS and token:
+                # Batch ainda usa auth field (limitação do Zabbix batch API)
                 payload["auth"] = token
             payloads.append(payload)
 

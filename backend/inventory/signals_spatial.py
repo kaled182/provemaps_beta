@@ -1,7 +1,6 @@
 """Sync spatial fields before persisting inventory models."""
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from django.db.models.signals import pre_save
@@ -9,33 +8,15 @@ from django.dispatch import receiver
 
 from .models import FiberCable
 from .models_routes import RouteSegment
-from .spatial import coords_to_linestring, ensure_wgs84, linestring_to_coords
+from .spatial import ensure_wgs84
 
 
 def _sync_spatial_fields(instance: Any, *, allow_coords_to_path: bool) -> None:
+    """Ensure path PostGIS field has WGS84 SRID."""
     path = getattr(instance, "path", None)
-    coords = getattr(instance, "path_coordinates", None)
-
-    if isinstance(coords, str):
-        try:
-            coords = json.loads(coords)
-        except json.JSONDecodeError:
-            coords = None
-        else:
-            instance.path_coordinates = coords
-
+    
     if path:
         ensure_wgs84(path)
-        if not coords:
-            instance.path_coordinates = linestring_to_coords(path)
-        return
-
-    if coords and allow_coords_to_path:
-        linestring = coords_to_linestring(coords)
-        if linestring is None:
-            return
-        ensure_wgs84(linestring)
-        instance.path = linestring
 
 
 @receiver(pre_save, sender=FiberCable)

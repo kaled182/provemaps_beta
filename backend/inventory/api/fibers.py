@@ -29,6 +29,7 @@ from inventory.usecases.fibers import (
     FiberValidationError,
 )
 from inventory.cache.fibers import get_cached_fiber_list
+from inventory.usecases.fibers import build_optical_summary
 
 logger = logging.getLogger(__name__)
 
@@ -240,6 +241,10 @@ def api_fiber_cached_optical_status(request: HttpRequest, cable_id: int) -> Json
             "destination_optical": None,
         }, status=200)
 
+    summary = build_optical_summary(cable)
+    origin_summary = summary.get("origin", {}) if isinstance(summary, dict) else {}
+    dest_summary = summary.get("destination", {}) if isinstance(summary, dict) else {}
+
     payload: dict[str, Any] = {
         "cable_id": cable.id,
         "status": cable.status,
@@ -252,6 +257,11 @@ def api_fiber_cached_optical_status(request: HttpRequest, cable_id: int) -> Json
             "rx_dbm": origin.last_rx_power,
             "tx_dbm": origin.last_tx_power,
             "last_check": origin.last_optical_check.isoformat() if origin.last_optical_check else None,
+            "status": origin_summary.get("status"),
+            "warning_threshold": origin_summary.get("warning_threshold"),
+            "critical_threshold": origin_summary.get("critical_threshold"),
+            "status_sources": origin_summary.get("status_sources"),
+            "alarm_enabled": origin_summary.get("alarm_enabled"),
         },
         "destination_optical": {
             "port_id": dest.id,
@@ -260,6 +270,11 @@ def api_fiber_cached_optical_status(request: HttpRequest, cable_id: int) -> Json
             "rx_dbm": dest.last_rx_power,
             "tx_dbm": dest.last_tx_power,
             "last_check": dest.last_optical_check.isoformat() if dest.last_optical_check else None,
+            "status": dest_summary.get("status"),
+            "warning_threshold": dest_summary.get("warning_threshold"),
+            "critical_threshold": dest_summary.get("critical_threshold"),
+            "status_sources": dest_summary.get("status_sources"),
+            "alarm_enabled": dest_summary.get("alarm_enabled"),
         },
     }
     return JsonResponse(payload)

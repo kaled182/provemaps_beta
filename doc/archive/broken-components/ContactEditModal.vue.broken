@@ -1,0 +1,445 @@
+﻿<template>
+  <div class="modal-overlay" @click="$emit('close')">
+    <div class="modal-dialog" @click.stop>
+      <div class="modal-header">
+        <h3>{{ contact ? 'Editar Contato' : 'Novo Contato' }}</h3>
+        <button @click="$emit('close')" class="btn-close">&times;</button>
+      </div>
+      
+      <div class="modal-body">
+        <form @submit.prevent="handleSubmit">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="name">Nome <span class="required">*</span></label>
+              <input 
+                id="name"
+                v-model="formData.name" 
+                type="text" 
+                class="form-control"
+                placeholder="Nome completo"
+                required
+              />
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="phone">Telefone <span class="required">*</span></label>
+              <input 
+                id="phone"
+                v-model="formData.phone" 
+                type="tel" 
+                class="form-control"
+                placeholder="+5561999999999 ou 61999999999"
+                required
+                :disabled="!!contact?.id"
+              />
+              <small class="form-hint">
+                {{ contact?.id ? 'Telefone não pode ser alterado' : 'Formato: +5561999999999 ou 61999999999' }}
+              </small>
+            </div>
+            
+            <div class="form-group">
+              <label for="email">Email</label>
+              <input 
+                id="email"
+                v-model="formData.email" 
+                type="email" 
+                class="form-control"
+                placeholder="email@exemplo.com"
+              />
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="company">Empresa</label>
+              <input 
+                id="company"
+                v-model="formData.company" 
+                type="text" 
+                class="form-control"
+                placeholder="Nome da empresa"
+              />
+            </div>
+            
+            <div class="form-group">
+              <label for="position">Cargo</label>
+              <input 
+                id="position"
+                v-model="formData.position" 
+                type="text" 
+                class="form-control"
+                placeholder="Cargo na empresa"
+              />
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label for="groups">Grupos</label>
+            <div class="checkbox-group">
+              <label 
+                v-for="group in groups" 
+                :key="group.id" 
+                class="checkbox-label"
+              >
+                <input 
+                  type="checkbox" 
+                  :value="group.id"
+                  v-model="formData.groups"
+                />
+                {{ group.name }}
+              </label>
+            </div>
+            <small v-if="groups.length === 0" class="form-hint text-muted">
+              Nenhum grupo disponível. Crie grupos primeiro.
+            </small>
+          </div>
+          
+          <div class="form-group">
+            <label for="notes">Observações</label>
+            <textarea 
+              id="notes"
+              v-model="formData.notes" 
+              class="form-control"
+              rows="3"
+              placeholder="Informações adicionais..."
+            ></textarea>
+          </div>
+          
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input 
+                type="checkbox" 
+                v-model="formData.is_active"
+              />
+              Contato ativo
+            </label>
+          </div>
+        </form>
+      </div>
+      
+      <div class="modal-footer">
+        <button @click="$emit('close')" type="button" class="btn btn-secondary">
+          Cancelar
+        </button>
+        <button @click="handleSubmit" type="button" class="btn btn-primary">
+          <i class="fas fa-save"></i>
+          {{ contact ? 'Atualizar' : 'Criar' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, watch } from 'vue'
+
+const props = defineProps({
+  contact: {
+    type: Object,
+    default: null
+  },
+  groups: {
+    type: Array,
+    default: () => []
+  }
+})
+
+const emit = defineEmits(['close', 'save'])
+
+// Form data
+const formData = ref({
+  name: '',
+  phone: '',
+  email: '',
+  company: '',
+  position: '',
+  groups: [],
+  notes: '',
+  is_active: true
+})
+
+// Initialize form
+const initForm = () => {
+  if (props.contact) {
+    formData.value = {
+      id: props.contact.id,
+      name: props.contact.name || '',
+      phone: props.contact.phone || '',
+      email: props.contact.email || '',
+      company: props.contact.company || '',
+      position: props.contact.position || '',
+      groups: props.contact.groups || [],
+      notes: props.contact.notes || '',
+      is_active: props.contact.is_active !== false
+    }
+  } else {
+    formData.value = {
+      name: '',
+      phone: '',
+      email: '',
+      company: '',
+      position: '',
+      groups: [],
+      notes: '',
+      is_active: true
+    }
+
+// Watch for contact changes
+watch(() => props.contact, () => {
+  initForm()
+}, { immediate: true })
+
+// Methods
+const handleSubmit = () => {
+  // Validação básica
+  if (!formData.value.name || !formData.value.phone) {
+    alert('Nome e telefone são obrigatórios')
+    return
+  }
+  
+  // Normalizar telefone
+  let phone = formData.value.phone.replace(/\D/g, '')
+  
+  // Se não começar com + e tiver 11 dígitos (celular BR), adicionar 55
+  if (!formData.value.phone.startsWith('+') && phone.length === 11) {
+    phone = '55' + phone
+  }
+  
+  // Adicionar + se não tiver
+  if (!phone.startsWith('+')) {
+    phone = '+' + phone
+  }
+  
+  const data = {
+    ...formData.value,
+    phone: phone
+  }
+  
+  emit('save', data)
+}
+</script>
+
+<style scoped>
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-dialog {
+  background: var(--surface-card);
+  border-radius: 8px;
+  width: 90%;
+  max-width: 700px;
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+}
+
+.modal-header {
+  padding: 20px;
+  border-bottom: 1px solid var(--border-secondary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg-secondary);
+}
+
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 20px;
+  color: var(--text-primary);
+}
+
+}
+
+.btn-close {
+  background: none;
+  border: none;
+  font-size: 28px;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.btn-close:hover {
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 25px;
+}
+
+.modal-footer {
+  padding: 15px 20px;
+  border-top: 1px solid var(--border-secondary);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  background: var(--bg-secondary);
+}
+
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  margin-bottom: 0;
+}
+
+@media (max-width: 768px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+}
+
+.required {
+  color: #dc3545;
+}
+
+}
+
+.form-control {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 4px;
+  font-size: 14px;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  transition: border-color 0.2s;
+}
+
+  
+  .form-control::placeholder {
+    color: var(--text-tertiary);
+  }
+
+.form-control:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
+}
+
+}
+
+.form-control:disabled {
+  background: var(--bg-secondary);
+  cursor: not-allowed;
+}
+
+}
+
+textarea.form-control {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.form-hint {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  color: #6c757d;
+}
+
+.checkbox-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: normal;
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 0;
+}
+
+.checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+}
+
+.text-muted {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+}
+
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: #007bff;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #0056b3;
+}
+
+.btn-secondary {
+  background: #6c757d;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background: #545b62;
+}
+</style>
