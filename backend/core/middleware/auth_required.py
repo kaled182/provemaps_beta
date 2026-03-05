@@ -39,6 +39,7 @@ class AuthRequiredMiddleware:
         '/favicon.ico',
         '/celery/status',
         '/setup_app/first_time/',
+        '/api/config/',  # Frontend configuration (map provider, API keys, etc)
     ]
     
     WHITELIST_PREFIXES = [

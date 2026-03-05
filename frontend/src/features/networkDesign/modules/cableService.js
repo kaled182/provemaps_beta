@@ -20,7 +20,7 @@ import {
 } from './apiClient.js';
 import {
     createCablePolyline,
-} from './mapCore.js';
+} from './mapCore-refactored.js';
 import { showErrorMessage } from './uiHelpers.js';
 
 let _makeEditableCallback = null;
@@ -119,8 +119,8 @@ export function clearCablePolylines({ excludeCableId = null } = {}) {
         if (excludeCableId != null && String(record?.id) === String(excludeCableId)) {
             return true;
         }
-        if (record?.polyline && typeof record.polyline.setMap === 'function') {
-            record.polyline.setMap(null);
+        if (record?.polyline && typeof record.polyline.remove === 'function') {
+            record.polyline.remove();
         }
         return false;
     });
@@ -132,8 +132,8 @@ export function removeCableVisualization(cableId) {
     const remaining = [];
     visualizationPolylines.forEach((record) => {
         if (record && String(record.id) === idStr) {
-            if (record.polyline && typeof record.polyline.setMap === 'function') {
-                record.polyline.setMap(null);
+            if (record.polyline && typeof record.polyline.remove === 'function') {
+                record.polyline.remove();
             }
         } else {
             remaining.push(record);
@@ -169,10 +169,8 @@ export async function loadAllCablesForVisualization(options = {}) {
             return;
         }
 
-        let bounds = null;
-        if (fitToBounds && typeof google !== 'undefined' && google.maps) {
-            bounds = new google.maps.LatLngBounds();
-        }
+        // Collect all points for bounds calculation
+        const allPoints = [];
 
         let drawnCount = 0;
         cables.forEach((cable) => {
@@ -194,18 +192,15 @@ export async function loadAllCablesForVisualization(options = {}) {
                 strokeOpacity: 0.6,
                 strokeWeight: 4,
                 clickable: true,
-                map: _mapInstance,
             });
 
             if (viewPolyline) {
-                viewPolyline.set('cableId', cable.id);
                 visualizationPolylines.push({ id: cable.id, polyline: viewPolyline });
                 drawnCount++;
 
-                if (bounds) {
-                    validPath.forEach((point) => {
-                        bounds.extend(new google.maps.LatLng(point.lat, point.lng));
-                    });
+                // Add points to bounds calculation
+                if (fitToBounds) {
+                    allPoints.push(...validPath);
                 }
 
                 _makeEditableCallback(viewPolyline, cable.id, cable.name || `Cable ${cable.id}`);
@@ -216,9 +211,9 @@ export async function loadAllCablesForVisualization(options = {}) {
         });
         console.log(`[loadAllCablesForVisualization - cableService] Finished drawing ${drawnCount} valid cable polylines.`);
 
-        if (bounds) {
+        if (fitToBounds && allPoints.length > 0) {
             try {
-                _mapInstance.fitBounds(bounds);
+                _mapInstance.fitBounds(allPoints, 50);
             } catch (err) {
                 console.warn('[cableService] Failed to fit bounds for visualization:', err);
             }

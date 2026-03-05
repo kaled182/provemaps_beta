@@ -1,7 +1,8 @@
 // Core modules
 // Revert to relative imports (server static path already resolves module directory)
 import { getPath, setPath as setPathState, addPoint, updatePoint, removePoint, reorderPath, clearPath, totalDistance as calculateDistance, onPathChange } from './modules/pathState.js';
-import { initMap as initializeMap, onMapClick, onMapRightClick, drawPolyline, clearPolyline, addMarker as createMarker, removeMarker, clearMarkers as clearAllMarkers, attachPolylineRightClick, createCablePolyline, getMapInstance, cleanupMap } from './modules/mapCore.js';
+import { initMap as initializeMap, onMapClick, onMapRightClick, drawPolyline, clearPolyline, addMarker as createMarker, removeMarker, clearMarkers as clearAllMarkers, attachPolylineRightClick, createCablePolyline, getMapInstance, cleanupMap, fitMapToBounds } from './modules/mapCore-refactored.js';
+import { latLngToPixel, distanceBetweenPixels, distancePointToSegmentPx } from '@/utils/mapUtils.js';
 import { initContextMenu, showContextMenu, hideContextMenu, updateContextMenuState, cleanupContextMenu } from './modules/contextMenu.js';
 import {
     initModalEditor,
@@ -112,44 +113,11 @@ function syncModalParent() {
 }
 
 function getPixelPoint(lat, lng) {
-    if (!map || typeof google === 'undefined') {
+    const map = getMapInstance();
+    if (!map) {
         return null;
     }
-    const projection = map.getProjection && map.getProjection();
-    if (!projection) {
-        return null;
-    }
-    const worldPoint = projection.fromLatLngToPoint(new google.maps.LatLng(lat, lng));
-    if (!worldPoint) {
-        return null;
-    }
-    const scale = Math.pow(2, map.getZoom());
-    return new google.maps.Point(worldPoint.x * scale, worldPoint.y * scale);
-}
-
-function distanceBetweenPixels(a, b) {
-    if (!a || !b) {
-        return Number.POSITIVE_INFINITY;
-    }
-    const dx = a.x - b.x;
-    const dy = a.y - b.y;
-    return Math.hypot(dx, dy);
-}
-
-function distancePointToSegmentPx(point, segmentStart, segmentEnd) {
-    if (!point || !segmentStart || !segmentEnd) {
-        return Number.POSITIVE_INFINITY;
-    }
-    const dx = segmentEnd.x - segmentStart.x;
-    const dy = segmentEnd.y - segmentStart.y;
-    if (dx === 0 && dy === 0) {
-        return distanceBetweenPixels(point, segmentStart);
-    }
-    const t = ((point.x - segmentStart.x) * dx + (point.y - segmentStart.y) * dy) / (dx * dx + dy * dy);
-    const clampedT = Math.max(0, Math.min(1, t));
-    const projX = segmentStart.x + clampedT * dx;
-    const projY = segmentStart.y + clampedT * dy;
-    return Math.hypot(point.x - projX, point.y - projY);
+    return latLngToPixel(map, lat, lng);
 }
 
 async function fetchDeviceOptions() {
@@ -746,24 +714,6 @@ async function loadFiberDetail(id) {
         console.error('Error loading cable', err);
         showErrorMessage('Erro ao carregar o cabo.');
     }
-}
-
-function fitMapToBounds(path) {
-    if (!map || !path || path.length === 0) return;
-
-    const bounds = new google.maps.LatLngBounds();
-    
-    // Add all points to bounds
-    path.forEach(point => {
-        bounds.extend(new google.maps.LatLng(point.lat, point.lng));
-    });
-
-    // Adjust map to show all points
-    map.fitBounds(bounds);
-
-    // Add small padding
-    const padding = { top: 50, right: 50, bottom: 50, left: 50 };
-    map.fitBounds(bounds, padding);
 }
 
 async function cancelEditing() {
