@@ -72,68 +72,81 @@ def sync_device_groups_for_device(device: Device) -> bool:
         
     Returns:
         bool indicating if sync was successful
+    
+    Note:
+        Uses reverse lookup (searching hosts by group) as a workaround 
+        because selectGroups parameter in host.get doesn't return groups 
+        in some Zabbix versions/configurations.
     """
     if not device.zabbix_hostid:
         logger.debug(f"Device {device.name} has no zabbix_hostid, skipping group sync")
         return False
 
     try:
-        # Fetch host with groups from Zabbix
-        hosts = zabbix_request(
-            "host.get",
+        # Workaround: Instead of using selectGroups (which doesn't work),
+        # we fetch all groups and check which ones contain this host
+        all_groups = zabbix_request(
+            "hostgroup.get",
             {
-                "output": ["hostid"],
-                "hostids": [device.zabbix_hostid],
-                "selectGroups": ["groupid", "name"],
+                "output": ["groupid", "name"],
             },
         )
 
-        if not hosts:
-            logger.warning(f"Device {device.name} not found in Zabbix")
-            return False
+        if not all_groups:
+            logger.warning("No groups found in Zabbix")
+            device.groups.clear()
+            return True
 
-        host_data = hosts[0]
-        zabbix_groups = host_data.get("groups", [])
+        device_group_ids = []
         
-        if not zabbix_groups:
+        # For each group, check if our device is in it
+        for group_data in all_groups:
+            group_id = group_data.get("groupid")
+            if not group_id:
+                continue
+            
+            # Check if this device is in this group
+            hosts_in_group = zabbix_request(
+                "host.get",
+                {
+                    "output": ["hostid"],
+                    "groupids": [group_id],
+                    "hostids": [device.zabbix_hostid],
+                },
+            )
+            
+            # If the device is in this group, add it to our list
+            if hosts_in_group:
+                device_group_ids.append({
+                    "groupid": group_id,
+                    "name": group_data.get("name")
+                })
+
+        if not device_group_ids:
             logger.debug(f"No groups found for device {device.name}")
             device.groups.clear()
             return True
 
-        zabbix_group_ids = [
-            g.get("groupid") for g in zabbix_groups
-            if g.get("groupid")
-        ]
-
-        if not zabbix_group_ids:
-            device.groups.clear()
-            return True
+        zabbix_group_ids = [g["groupid"] for g in device_group_ids]
 
         # Ensure all groups exist in our database
-        # Import any missing groups first
-        missing_group_ids = []
         existing_groups = DeviceGroup.objects.filter(
             zabbix_groupid__in=zabbix_group_ids
         )
         existing_group_ids = set(existing_groups.values_list('zabbix_groupid', flat=True))
         
-        for group_data in zabbix_groups:
-            groupid = group_data.get("groupid")
-            if groupid and groupid not in existing_group_ids:
-                missing_group_ids.append(group_data)
-
         # Create missing groups
-        if missing_group_ids:
+        missing_groups = [g for g in device_group_ids if g["groupid"] not in existing_group_ids]
+        if missing_groups:
             with transaction.atomic():
-                for group_data in missing_group_ids:
-                    groupid = group_data.get("groupid")
-                    name = group_data.get("name")
-                    if groupid and name:
-                        DeviceGroup.objects.get_or_create(
-                            zabbix_groupid=groupid,
-                            defaults={"name": name}
-                        )
-                        logger.info(f"Auto-created missing group: {name} ({groupid})")
+                for group_data in missing_groups:
+                    groupid = group_data["groupid"]
+                    name = group_data["name"]
+                    DeviceGroup.objects.get_or_create(
+                        zabbix_groupid=groupid,
+                        defaults={"name": name}
+                    )
+                    logger.info(f"Auto-created missing group: {name} ({groupid})")
 
         # Now get all device groups for this device
         device_groups = DeviceGroup.objects.filter(
@@ -157,20 +170,87 @@ def sync_all_device_groups() -> dict[str, int]:
     """
     Sync group relationships for all devices with zabbix_hostid.
     
+    Uses optimized reverse lookup: fetches hosts by group instead of groups by host.
+    This is much more efficient than individual sync and works around 
+    the selectGroups parameter not working in some Zabbix versions.
+    
     Returns:
         dict with 'synced' and 'failed' counts
     """
-    devices_with_zabbix = Device.objects.exclude(zabbix_hostid="")
-    synced_count = 0
-    failed_count = 0
+    logger.info("Starting optimized group sync for all devices...")
+    
+    try:
+        # Fetch all groups from Zabbix
+        all_groups = zabbix_request(
+            "hostgroup.get",
+            {
+                "output": ["groupid", "name"],
+            },
+        )
 
-    for device in devices_with_zabbix:
-        if sync_device_groups_for_device(device):
-            synced_count += 1
-        else:
-            failed_count += 1
+        if not all_groups:
+            logger.warning("No groups found in Zabbix")
+            return {"synced": 0, "failed": 0}
 
-    logger.info(
-        f"Synced device groups: {synced_count} successful, {failed_count} failed"
-    )
-    return {"synced": synced_count, "failed": failed_count}
+        synced_count = 0
+        devices_updated = set()
+
+        # For each group, fetch all hosts in it
+        for group_data in all_groups:
+            group_id = group_data.get("groupid")
+            group_name = group_data.get("name")
+
+            if not group_id:
+                continue
+
+            # Get or create the DeviceGroup
+            device_group, created = DeviceGroup.objects.get_or_create(
+                zabbix_groupid=group_id,
+                defaults={"name": group_name}
+            )
+
+            if created:
+                logger.info(f"Auto-created group: {group_name} ({group_id})")
+
+            # Fetch all hosts in this group
+            hosts = zabbix_request(
+                "host.get",
+                {
+                    "output": ["hostid", "name"],
+                    "groupids": [group_id],
+                },
+            )
+
+            if not hosts:
+                continue
+
+            # Associate each host with this group
+            for host in hosts:
+                host_id = host.get("hostid")
+                
+                try:
+                    # Find device in our database
+                    device = Device.objects.get(zabbix_hostid=host_id)
+                    
+                    # Add to group if not already there
+                    if not device.groups.filter(id=device_group.id).exists():
+                        device.groups.add(device_group)
+                        devices_updated.add(device.id)
+                        logger.debug(f"Associated {device.name} with {group_name}")
+                    
+                    synced_count += 1
+                    
+                except Device.DoesNotExist:
+                    # Device not in our database yet
+                    continue
+
+        logger.info(
+            f"Synced device groups: {len(devices_updated)} devices updated, "
+            f"{synced_count} associations processed"
+        )
+        
+        return {"synced": synced_count, "failed": 0}
+
+    except Exception as e:
+        logger.exception(f"Error syncing all device groups: {e}")
+        return {"synced": 0, "failed": 1}

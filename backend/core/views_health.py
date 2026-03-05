@@ -104,8 +104,13 @@ def healthz(request: HttpRequest):
     # Database connectivity check with optional timeout
     try:
         db_timeout = int(os.getenv("HEALTHCHECK_DB_TIMEOUT", "5"))
+        is_main_thread = threading.current_thread() is threading.main_thread()
+        use_timeout = (
+            db_timeout > 0 and platform.system() != "Windows" and is_main_thread
+        )
+
         with connection.cursor() as cursor:
-            if platform.system() != "Windows":
+            if use_timeout:
                 with timeout(db_timeout):
                     cursor.execute("SELECT 1")
                     row = cursor.fetchone()
@@ -113,10 +118,16 @@ def healthz(request: HttpRequest):
                 cursor.execute("SELECT 1")
                 row = cursor.fetchone()
 
+            if not is_main_thread and db_timeout > 0:
+                logger.debug(
+                    "Health DB check running outside main thread; timeout skipped"
+                )
+
         checks["db"] = {
             "ok": bool(row and (row[0] == 1)),
             "type": connection.vendor,
             "timeout_seconds": db_timeout,
+            "thread_main": is_main_thread,
         }
     except TimeoutException:
         checks["db"] = {"ok": False, "error": "Database query timeout"}

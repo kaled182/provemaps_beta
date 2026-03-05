@@ -1,14 +1,462 @@
 {% extends "base_first_time_setup.html" %}
-
 {% load static %}
 
-{% block title %}Initial Setup{% endblock %}
+{% block title %}Initial Setup - MapsProveFiber{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="{% static 'css/first_time_setup.css' %}">
+{% endblock %}
 
 {% block content %}
-    <h2>Initial Setup</h2>
-    <form method="post" enctype="multipart/form-data">
+<div class="max-w-3xl mx-auto px-4">
+
+    <!-- ── Header ─────────────────────────────────────────────── -->
+    <div class="text-center mb-8 animate-fade-in">
+        <div class="inline-block p-4 bg-gradient-to-br from-blue-500 to-emerald-500 rounded-2xl mb-4 shadow-lg">
+            <i class="fas fa-rocket text-white text-4xl"></i>
+        </div>
+        <h1 class="text-4xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-emerald-600 bg-clip-text text-transparent">
+            Welcome to MapsProveFiber
+        </h1>
+        <p class="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+            Let's set up your fiber optic network management platform in just a few steps
+        </p>
+    </div>
+
+
+    <!-- ── Step Indicator with Progress Bar ─────────────────────── -->
+    <div class="mb-12 animate-fade-in">
+        <div class="step-indicator flex items-start justify-between max-w-4xl mx-auto px-4 relative">
+            {% comment %} Step Items {% endcomment %}
+            <div class="step-item active flex flex-col items-center" data-step="1">
+                <div class="step-circle">
+                    <i class="fas fa-building text-xl text-white-400"></i>
+                </div>
+                <span class="text-xs font-semibold mt-2 text-gray-600 dark:text-gray-400 hidden sm:block">Company</span>
+            </div>
+            <div class="step-item flex flex-col items-center" data-step="2">
+                <div class="step-circle">
+                    <i class="fas fa-chart-line text-xl text-white-400"></i>
+                </div>
+                <span class="text-xs font-semibold mt-2 text-gray-600 dark:text-gray-400 hidden sm:block">Zabbix</span>
+            </div>
+            <div class="step-item flex flex-col items-center" data-step="3">
+                <div class="step-circle">
+                    <i class="fas fa-map-marked-alt text-xl text-white-400"></i>
+                </div>
+                <span class="text-xs font-semibold mt-2 text-gray-600 dark:text-gray-400 hidden sm:block">Google Maps</span>
+            </div>
+            <div class="step-item flex flex-col items-center" data-step="4">
+                <div class="step-circle">
+                    <i class="fas fa-database text-xl text-white-400"></i>
+                </div>
+                <span class="text-xs font-semibold mt-2 text-gray-600 dark:text-gray-400 hidden sm:block">Database</span>
+            </div>
+            <div class="step-item flex flex-col items-center" data-step="5">
+                <div class="step-circle">
+                    <i class="fas fa-bolt text-xl text-white-400"></i>
+                </div>
+                <span class="text-xs font-semibold mt-2 text-gray-600 dark:text-gray-400 hidden sm:block">Redis</span>
+            </div>
+            <div class="step-item flex flex-col items-center" data-step="6">
+                <div class="step-circle">
+                    <i class="fas fa-certificate text-xl text-white-400"></i>
+                </div>
+                <span class="text-xs font-semibold mt-2 text-gray-600 dark:text-gray-400 hidden sm:block">License</span>
+            </div>
+
+            <!-- Progress Bar (absolute, behind steps) -->
+            <div class="mt-10 absolute left-0 right-0 top-1/2 -translate-y-1/2 h-2 w-full z-0">
+                <div class="bg-gray-200 dark:bg-gray-700 h-full rounded-full w-full"></div>
+                <div id="progressBar" class="progress-bar bg-gradient-to-r from-blue-600 to-emerald-600 h-full rounded-full absolute top-0 left-0 transition-all duration-300" style="width: 16.67%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Form ───────────────────────────────────────────────── -->
+    <form method="post" enctype="multipart/form-data" id="setupForm" class="space-y-8">
         {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit" class="btn btn-primary">Save</button>
+
+        <!-- ══════════════════════ STEP 1 – Company ══════════════════════ -->
+        <div class="wizard-step active" data-step="1">
+            <div class="rounded-2xl p-6 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg">
+
+                <div class="flex items-center mb-6">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-emerald-500 flex items-center justify-center mr-3 flex-shrink-0">
+                        <span class="text-white font-bold text-lg">1</span>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-900 dark:text-white">Company Information</h2>
+                        <p class="text-xs text-gray-600 dark:text-gray-400">Basic information about your organization</p>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+
+                    <!-- Company Name -->
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            <i class="fas fa-tag mr-2"></i>{{ form.company_name.label }}
+                        </label>
+                        <input type="text"
+                               name="{{ form.company_name.name }}"
+                               value="{{ form.company_name.value|default:'' }}"
+                               class="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               placeholder="Enter your company name"
+                               required>
+                    </div>
+
+                    <!-- Logo Upload -->
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            <i class="fas fa-image mr-2"></i>{{ form.logo.label }}
+                        </label>
+
+                        <!-- Drop / click area -->
+                        <div id="uploadArea">
+                            <label class="cursor-pointer block">
+                                <div class="flex flex-col items-center justify-center px-4 py-8 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-500 dark:hover:border-blue-400 transition-colors bg-gray-50 dark:bg-gray-800">
+                                    <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-2"></i>
+                                    <p class="text-sm font-semibold text-gray-600 dark:text-gray-400">Click to upload logo (PNG)</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-500 mt-1">Max 2 MB &bull; Recommended: 400×400 px</p>
+                                </div>
+                                <input type="file"
+                                       id="logoInput"
+                                       name="{{ form.logo.name }}"
+                                       accept="image/png"
+                                       class="hidden"
+                                       required>
+                            </label>
+                        </div>
+
+                        <!-- Preview (hidden until file selected) -->
+                        <div id="previewArea" class="hidden">
+                            <div class="flex flex-col items-center justify-center p-6 border-2 border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800">
+                                <div class="relative">
+                                    <img id="logoPreview"
+                                         class="w-40 h-40 object-contain rounded-lg border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-3"
+                                         alt="Logo preview">
+                                    <button type="button"
+                                            id="removeLogo"
+                                            class="absolute -top-2 -right-2 w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg transition-all duration-200 flex items-center justify-center hover:scale-110"
+                                            title="Remove logo">
+                                        <i class="fas fa-times text-sm"></i>
+                                    </button>
+                                </div>
+                                <p id="logoName" class="text-sm text-gray-600 dark:text-gray-400 mt-3 font-medium"></p>
+                                <p class="text-xs text-gray-500 dark:text-gray-500 mt-1">Click the × to remove</p>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- ══════════════════════ STEP 2 – Zabbix ═══════════════════════ -->
+        <div class="wizard-step" data-step="2">
+            <div class="rounded-2xl p-6 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg">
+
+                <div class="flex items-center mb-6">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-emerald-500 flex items-center justify-center mr-3 flex-shrink-0">
+                        <span class="text-white font-bold text-lg">2</span>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-900 dark:text-white">Zabbix Monitoring</h2>
+                        <p class="text-xs text-gray-600 dark:text-gray-400">Connect to your Zabbix monitoring server</p>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+
+                    <!-- Zabbix URL -->
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            <i class="fas fa-server mr-2"></i>{{ form.zabbix_url.label }}
+                        </label>
+                        <input type="url"
+                               name="{{ form.zabbix_url.name }}"
+                               value="{{ form.zabbix_url.value|default:'' }}"
+                               class="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               placeholder="https://zabbix.example.com"
+                               required>
+                    </div>
+
+                    <!-- Auth type selector -->
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                            <i class="fas fa-key mr-2"></i>{{ form.auth_type.label }}
+                        </label>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {% for value, label in form.auth_type.field.choices %}
+                            <label class="relative flex items-center p-4 border-2 border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:border-blue-500 dark:hover:border-blue-400 transition-colors bg-white dark:bg-gray-800">
+                                <input type="radio"
+                                       name="{{ form.auth_type.name }}"
+                                       value="{{ value }}"
+                                       class="mr-3 text-blue-600"
+                                       onchange="toggleAuthFields('{{ value }}')"
+                                       {% if forloop.first %}checked{% endif %}>
+                                <div>
+                                    <p class="font-semibold text-gray-900 dark:text-white">{{ label }}</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                        {% if value == "token" %}Use API token for authentication{% else %}Use username and password{% endif %}
+                                    </p>
+                                </div>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Token field -->
+                    <div id="tokenField">
+                        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            <i class="fas fa-lock mr-2"></i>{{ form.zabbix_api_key.label }}
+                        </label>
+                        <input type="text"
+                               name="{{ form.zabbix_api_key.name }}"
+                               value="{{ form.zabbix_api_key.value|default:'' }}"
+                               class="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm transition-all"
+                               placeholder="Enter your Zabbix API token">
+                    </div>
+
+                    <!-- Login / Password fields -->
+                    <div id="loginFields" class="hidden space-y-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                <i class="fas fa-user mr-2"></i>{{ form.zabbix_user.label }}
+                            </label>
+                            <input type="text"
+                                   name="{{ form.zabbix_user.name }}"
+                                   value="{{ form.zabbix_user.value|default:'' }}"
+                                   class="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                   placeholder="Zabbix username">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                <i class="fas fa-key mr-2"></i>{{ form.zabbix_password.label }}
+                            </label>
+                            <input type="password"
+                                   name="{{ form.zabbix_password.name }}"
+                                   class="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                   placeholder="••••••••">
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- ══════════════════════ STEP 3 – Google Maps ═══════════════════ -->
+        <div class="wizard-step" data-step="3">
+            <div class="rounded-2xl p-6 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg">
+
+                <div class="flex items-center mb-6">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-emerald-500 flex items-center justify-center mr-3 flex-shrink-0">
+                        <span class="text-white font-bold text-lg">3</span>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-900 dark:text-white">Google Maps Integration</h2>
+                        <p class="text-xs text-gray-600 dark:text-gray-400">Enable geospatial features and route planning</p>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        <i class="fas fa-code mr-2"></i>{{ form.maps_api_key.label }}
+                    </label>
+                    <input type="text"
+                           name="{{ form.maps_api_key.name }}"
+                           value="{{ form.maps_api_key.value|default:'' }}"
+                           class="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm transition-all"
+                           placeholder="AIzaSy..."
+                           >
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Get your API key from
+                        <a href="https://console.cloud.google.com/google/maps-apis/credentials"
+                           target="_blank"
+                           class="text-blue-600 dark:text-blue-400 hover:underline">Google Cloud Console</a>
+                    </p>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ══════════════════════ STEP 4 – Database ═════════════════════ -->
+        <div class="wizard-step" data-step="4">
+            <div class="rounded-2xl p-6 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg">
+
+                <div class="flex items-center mb-6">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-emerald-500 flex items-center justify-center mr-3 flex-shrink-0">
+                        <span class="text-white font-bold text-lg">4</span>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-900 dark:text-white">Database Configuration</h2>
+                        <p class="text-xs text-gray-600 dark:text-gray-400">PostgreSQL connection settings</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            <i class="fas fa-server mr-2"></i>{{ form.db_host.label }}
+                        </label>
+                        <input type="text"
+                               name="{{ form.db_host.name }}"
+                               value="{{ form.db_host.value|default:form.db_host.initial }}"
+                               class="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               placeholder="postgres"
+                               required>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            <i class="fas fa-plug mr-2"></i>{{ form.db_port.label }}
+                        </label>
+                        <input type="text"
+                               name="{{ form.db_port.name }}"
+                               value="{{ form.db_port.value|default:form.db_port.initial }}"
+                               class="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               placeholder="5432"
+                               required>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            <i class="fas fa-table mr-2"></i>{{ form.db_name.label }}
+                        </label>
+                        <input type="text"
+                               name="{{ form.db_name.name }}"
+                               value="{{ form.db_name.value|default:form.db_name.initial }}"
+                               class="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               placeholder="mapsprovefiber"
+                               required>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            <i class="fas fa-user-shield mr-2"></i>{{ form.db_user.label }}
+                        </label>
+                        <input type="text"
+                               name="{{ form.db_user.name }}"
+                               value="{{ form.db_user.value|default:form.db_user.initial }}"
+                               class="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               placeholder="provemaps"
+                               required>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            <i class="fas fa-lock mr-2"></i>{{ form.db_password.label }}
+                        </label>
+                        <input type="password"
+                               name="{{ form.db_password.name }}"
+                               class="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               placeholder="••••••••"
+                               required>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- ══════════════════════ STEP 5 – Redis ════════════════════════ -->
+        <div class="wizard-step" data-step="5">
+            <div class="rounded-2xl p-6 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg">
+
+                <div class="flex items-center mb-6">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-emerald-500 flex items-center justify-center mr-3 flex-shrink-0">
+                        <span class="text-white font-bold text-lg">5</span>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-900 dark:text-white">Redis Cache</h2>
+                        <p class="text-xs text-gray-600 dark:text-gray-400">Improve performance with Redis caching</p>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        <i class="fas fa-link mr-2"></i>{{ form.redis_url.label }}
+                    </label>
+                    <input type="text"
+                           name="{{ form.redis_url.name }}"
+                           value="{{ form.redis_url.value|default:form.redis_url.initial }}"
+                           class="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm transition-all"
+                           placeholder="redis://redis:6379/1"
+                           required>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                        <i class="fas fa-info-circle mr-1"></i>{{ form.redis_url.help_text }}
+                    </p>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ══════════════════════ STEP 6 – License ══════════════════════ -->
+        <div class="wizard-step" data-step="6">
+            <div class="rounded-2xl p-6 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg">
+
+                <div class="flex items-center mb-6">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-emerald-500 flex items-center justify-center mr-3 flex-shrink-0">
+                        <span class="text-white font-bold text-lg">6</span>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-900 dark:text-white">License Activation</h2>
+                        <p class="text-xs text-gray-600 dark:text-gray-400">Activate your MapsProveFiber license</p>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        <i class="fas fa-key mr-2"></i>{{ form.unique_licence.label }}
+                    </label>
+                    <input type="text"
+                           name="{{ form.unique_licence.name }}"
+                           value="{{ form.unique_licence.value|default:'' }}"
+                           class="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm transition-all"
+                           placeholder="XXXX-XXXX-XXXX-XXXX"
+                           required>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ── Navigation Buttons ──────────────────────────────── -->
+        <div class="flex items-center justify-between mt-6">
+
+            <button type="button"
+                    id="prevBtn"
+                    class="px-5 py-2.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-semibold rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition-all duration-200 items-center space-x-2"
+                    style="display:none;">
+                <i class="fas fa-arrow-left mr-1"></i>
+                <span>Previous</span>
+            </button>
+
+            <div class="flex-1"></div>
+
+            <button type="button"
+                    id="nextBtn"
+                    class="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-emerald-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 items-center space-x-2">
+                <span>Next</span>
+                <i class="fas fa-arrow-right ml-1"></i>
+            </button>
+
+            <button type="submit"
+                    id="submitBtn"
+                    class="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-emerald-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 items-center space-x-2"
+                    style="display:none;">
+                <i class="fas fa-check-circle mr-1"></i>
+                <span>Complete Setup</span>
+            </button>
+
+        </div>
     </form>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% static 'js/first_time_setup.js' %}"></script>
 {% endblock %}

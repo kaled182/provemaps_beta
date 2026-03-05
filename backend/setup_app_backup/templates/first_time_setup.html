@@ -1,0 +1,14 @@
+{% extends "base_first_time_setup.html" %}
+
+{% load static %}
+
+{% block title %}Initial Setup{% endblock %}
+
+{% block content %}
+    <h2>Initial Setup</h2>
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit" class="btn btn-primary">Save</button>
+    </form>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{% block title %}Setup Dashboard{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/x-icon" href="{% static 'favicon.ico' %}">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-gray-100 text-gray-800 flex flex-col min-h-screen">
+
+  {% include 'partials/header_setup_dashboard.html' %}
+
+  <main class="flex-1 container mx-auto p-6">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="bg-gray-800 text-white text-center p-4">
+    &copy; {% now "Y" %} Fiber Setup Dashboard
+  </footer>
+
+  {% include 'partials/add_device.html' %}
+  {% include 'partials/import_kml.html' %}
+
+  {% block extra_scripts %}{% endblock %}
+
+</body>
+</html>

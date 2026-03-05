@@ -1,0 +1,29 @@
+{% load static %}
+
+<header
+  class="sticky top-0 z-40 bg-gradient-to-r from-blue-600 to-blue-500 dark:from-gray-900 dark:to-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm backdrop-blur"
+>
+  <div class="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="relative flex h-16 items-center justify-center">
+      <a href="/" class="absolute left-4 flex items-center gap-2" aria-label="Home">
+        {% with setup=setup_logo %}
+          {% if setup and setup.logo %}
+            <img src="{{ setup.logo.url }}" alt="Logo" class="h-9 w-auto" loading="lazy">
+          {% else %}
+            <img src="{% static 'img/logo.png' %}" alt="Logo" class="h-9 w-auto" loading="lazy">
+          {% endif %}
+        {% endwith %}
+      </a>
+
+      <h1 class="text-white text-sm md:text-base font-medium text-center">
+        Welcome to the First-Time Setup!
+      </h1>
+
+      <div class="absolute right-4 flex items-center">
+        {% include 'partials/user_menu.html' with button_classes='flex items-center gap-2 rounded-full bg-white/10 px-2 py-1 text-sm text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white' login_classes='text-sm font-medium text-white hover:underline' %}
+      </div>
+    </div>
+  </div>
+</header>
+
+<script src="{% static 'js/partials/header_first_time_setup.js' %}"></script>

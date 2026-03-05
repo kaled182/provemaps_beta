@@ -1,0 +1,654 @@
+{# setup_app/templates/docs/docs_index.html #}
+{% extends "base_setup_dashboard.html" %}
+
+{% block title %}Documentation - Index{% endblock %}
+
+{% block content %}
+<noscript>
+  <div class="mb-4 rounded-md border border-yellow-200 bg-yellow-50 p-3 text-yellow-900 text-sm">
+    Some features (search, filters, pagination) require JavaScript to be enabled.
+  </div>
+</noscript>
+
+<div class="flex flex-col gap-6">
+
+  <!-- Search header -->
+  <header class="flex items-start justify-between gap-4">
+    <div class="min-w-0">
+      <h1 class="text-xl font-semibold text-gray-900">Documentation</h1>
+      <p class="mt-1 text-sm text-gray-600">
+        Guides, API reference, and operations for <strong>mapsprovefiber</strong>.
+      </p>
+    </div>
+
+    <!-- Search + suggestions -->
+    <div class="hidden lg:block w-80">
+      <label for="doc-search" class="sr-only">Search documents</label>
+      <div class="relative">
+        <input
+          id="doc-search"
+          type="search"
+          placeholder="Search by title, summary, or tag..."
+          aria-label="Search documents"
+          class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          aria-describedby="search-help"
+        />
+        <div class="pointer-events-none absolute right-2 top-2.5 text-gray-400 text-xs">/</div>
+
+        <!-- Suggestions -->
+        <div
+          id="search-suggestions"
+          class="hidden absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-md shadow-lg mt-1 z-10 max-h-60 overflow-y-auto"
+          role="listbox"
+          aria-label="Search suggestions"
+        ></div>
+      </div>
+      <p id="search-help" class="mt-1 text-xs text-gray-500">
+        Use <kbd class="px-1 py-0.5 bg-gray-100 border rounded text-xs">AND</kbd>,
+        <kbd class="px-1 py-0.5 bg-gray-100 border rounded text-xs">OR</kbd>,
+        <kbd class="px-1 py-0.5 bg-gray-100 border rounded text-xs">NOT</kbd> for advanced searches
+      </p>
+    </div>
+  </header>
+
+  <!-- Toolbar -->
+  <section class="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between" aria-label="Filter and sort tools">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-sm text-gray-600">Filters:</span>
+
+      <!-- Category -->
+      <label for="filter-category" class="sr-only">Category</label>
+      <select
+        id="filter-category"
+        class="rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+        aria-label="Filter by category"
+      >
+        <option value="">All categories</option>
+      </select>
+
+      <!-- Tags with suggestions -->
+      <div class="relative">
+        <label for="filter-tags" class="sr-only">Tags</label>
+        <input
+          id="filter-tags"
+          type="text"
+          placeholder="tags (e.g., deploy, zabbix)"
+          class="w-56 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          aria-label="Filter by tags"
+        />
+        <div id="tag-suggestions" class="hidden absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-md shadow-lg mt-1 z-10 p-2">
+          <div class="flex flex-wrap gap-1" id="popular-tags" aria-label="Popular tags"></div>
+        </div>
+      </div>
+
+      <!-- Date range -->
+      <div class="flex items-center gap-2">
+        <label for="filter-date-from" class="text-sm text-gray-600 whitespace-nowrap">From:</label>
+        <input
+          id="filter-date-from"
+          type="date"
+          class="rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          aria-label="Start date"
+        >
+        <label for="filter-date-to" class="text-sm text-gray-600 whitespace-nowrap">To:</label>
+        <input
+          id="filter-date-to"
+          type="date"
+          class="rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          aria-label="End date"
+        >
+      </div>
+
+      <!-- Clear -->
+      <button
+        id="clear-filters"
+        type="button"
+        class="text-sm rounded-md px-2 py-1 border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        aria-label="Clear all filters"
+      >
+        Clear
+      </button>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-3">
+      <!-- Grid/list toggle -->
+      <div class="flex border border-gray-300 rounded-md overflow-hidden" role="group" aria-label="View type">
+        <button
+          id="view-grid"
+          type="button"
+          class="p-1.5 bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          aria-label="Grid view"
+          aria-pressed="true"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+          </svg>
+        </button>
+        <button
+          id="view-list"
+          type="button"
+          class="p-1.5 bg-gray-100 hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          aria-label="List view"
+          aria-pressed="false"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Sorting -->
+      <label for="sort-by" class="sr-only">Sort by</label>
+      <select
+        id="sort-by"
+        class="rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+        aria-label="Sort results by"
+      >
+        <option value="title-asc">Title (A->Z)</option>
+        <option value="title-desc">Title (Z->A)</option>
+        <option value="date-desc">Updated (newest->oldest)</option>
+        <option value="date-asc">Updated (oldest->newest)</option>
+        <option value="size-desc">Size (largest->smallest)</option>
+        <option value="size-asc">Size (smallest->largest)</option>
+        <option value="popularity">Popularity</option>
+      </select>
+
+      <!-- Count + loading -->
+      <div class="flex items-center gap-2">
+        <span id="result-count" class="text-sm text-gray-600" aria-live="polite">0</span>
+        <div id="loading-indicator" class="hidden" aria-live="polite" aria-label="Loading results">
+          <svg class="animate-spin h-4 w-4 text-indigo-600" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Breadcrumbs -->
+  <nav aria-label="Documentation navigation" class="text-sm text-gray-600">
+    <ol class="flex items-center gap-1">
+      <li><a href="{% url 'setup_app:setup_dashboard' %}" class="hover:text-indigo-600">Dashboard</a></li>
+      <li>/</li>
+      <li aria-current="page">Documentation</li>
+    </ol>
+  </nav>
+
+  <!-- Document list (uses the shared card include) -->
+  <section id="doc-list" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" data-view="grid" role="list" aria-label="Document list">
+    {% if available_docs %}
+      {% for name, meta in available_docs.items %}
+        {% with item_title=meta.title|default:name item_summary=meta.summary|default:"" item_category=meta.category|default:"" item_tags=meta.tags|join:"," item_tag_list=meta.tags item_size=meta.size_kb|default:"" item_modified=meta.modified_at|default:"" item_github=meta.github_doc_url|default:"" item_views=meta.views|default:0 %}
+          {% include "docs/_doc_card.html" %}
+        {% endwith %}
+      {% endfor %}
+    {% else %}
+      <div class="col-span-full" role="status" aria-live="polite">
+        <div class="rounded-md border border-yellow-200 bg-yellow-50 p-4 text-yellow-900">
+          No documents were found in <code class="px-1 py-0.5 rounded bg-yellow-100">/docs</code>.
+        </div>
+      </div>
+    {% endif %}
+  </section>
+
+  <!-- Pagination -->
+  <nav id="pagination" class="flex items-center justify-between border-t border-gray-200 px-4 py-3 sm:px-6" aria-label="Pagination">
+    <div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+      <div>
+        <p class="text-sm text-gray-700">
+          Showing <span id="pagination-start">1</span> to <span id="pagination-end">10</span> of
+          <span id="pagination-total">0</span> results
+        </p>
+      </div>
+      <div>
+        <nav class="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Page navigation">
+          <button id="prev-page" class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0">
+            <span class="sr-only">Previous</span>
+            <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clip-rule="evenodd" />
+            </svg>
+          </button>
+          <div id="page-numbers" class="flex" aria-live="polite"></div>
+          <button id="next-page" class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0">
+            <span class="sr-only">Next</span>
+            <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+            </svg>
+          </button>
+        </nav>
+      </div>
+    </div>
+  </nav>
+
+</div>
+
+<!-- Card template (for dynamic cloning when needed) -->
+<script type="text/template" id="doc-card-template">
+  <article class="doc-card rounded-lg border border-gray-200 p-4 hover:shadow-sm bg-white transition-all duration-200"
+           data-filename="{% verbatim %}{{filename}}{% endverbatim %}"
+           data-title="{% verbatim %}{{title}}{% endverbatim %}"
+           data-summary="{% verbatim %}{{summary}}{% endverbatim %}"
+           data-category="{% verbatim %}{{category}}{% endverbatim %}"
+           data-tags="{% verbatim %}{{tags}}{% endverbatim %}"
+           data-size="{% verbatim %}{{size}}{% endverbatim %}"
+           data-date="{% verbatim %}{{date}}{% endverbatim %}"
+           data-views="{% verbatim %}{{views}}{% endverbatim %}"
+           tabindex="0" role="listitem" aria-label="{% verbatim %}{{title}}{% endverbatim %}">
+    <header class="flex items-start justify-between gap-2">
+      <h3 class="text-base font-semibold text-gray-900 truncate flex-1">
+        <a href="{% verbatim %}{{url}}{% endverbatim %}" class="hover:underline focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:rounded">
+          {% verbatim %}{{title}}{% endverbatim %}</a>
+      </h3>
+      <button class="favorite-btn p-1 text-gray-400 hover:text-yellow-500 focus:outline-none focus:ring-2 focus:ring-yellow-500 rounded"
+              data-filename="{% verbatim %}{{filename}}{% endverbatim %}"
+              aria-label="{% verbatim %}{{favorite_label}}{% endverbatim %}">
+        <svg class="w-4 h-4 {% verbatim %}{{favorite_class}}{% endverbatim %}" fill="{% verbatim %}{{favorite_fill}}{% endverbatim %}" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M11.48 3.499a.75.75 0 011.04 0l2.122 2.122a.75.75 0 00.532.22h2.999a.75.75 0 01.53 1.28l-2.122 2.122a.75.75 0 00-.22.531v3.0a.75.75 0 01-1.28.53l-2.122-2.122a.75.75 0 00-.532-.22h-3.0a.75.75 0 01-.53-1.28l2.122-2.122a.75.75 0 00.22-.531v-3z"/>
+        </svg>
+      </button>
+    </header>
+    <p class="mt-1 text-xs text-gray-500 truncate">{% verbatim %}{{filename}}{% endverbatim %}</p>
+    <p class="mt-3 text-sm text-gray-700 line-clamp-2">{% verbatim %}{{summary}}{% endverbatim %}</p>
+  <div class="mt-3 flex flex-wrap gap-2" aria-label="Metadata">
+      <span class="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">{% verbatim %}{{category}}{% endverbatim %}</span>
+      {% verbatim %}{{tags_html}}{% endverbatim %}
+    </div>
+    <div class="mt-4 flex flex-wrap items-center gap-3 text-xs text-gray-500">
+      <span>Size: {% verbatim %}{{size}}{% endverbatim %} KB</span>
+      <span>Updated: {% verbatim %}{{date}}{% endverbatim %}</span>
+      {% verbatim %}{{github_html}}{% endverbatim %}
+    </div>
+    <div class="mt-4 flex items-center gap-3">
+      <a href="{% verbatim %}{{url}}{% endverbatim %}" class="inline-flex items-center text-indigo-600 hover:underline text-sm">Open -></a>
+    </div>
+  </article>
+</script>
+
+<!-- Page script -->
+<script>
+(function () {
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+
+  const searchInput     = $('#doc-search');
+  const suggestionsBox  = $('#search-suggestions');
+  const listEl          = $('#doc-list');
+  const cards           = $$('.doc-card', listEl);
+  const resultCount     = $('#result-count');
+  const filterCategory  = $('#filter-category');
+  const filterTags      = $('#filter-tags');
+  const tagSuggestBox   = $('#tag-suggestions');
+  const popularTagsWrap = $('#popular-tags');
+  const clearFiltersBtn = $('#clear-filters');
+  const sortBy          = $('#sort-by');
+  const viewGridBtn     = $('#view-grid');
+  const viewListBtn     = $('#view-list');
+
+  const pageNumbers     = $('#page-numbers');
+  const prevPageBtn     = $('#prev-page');
+  const nextPageBtn     = $('#next-page');
+  const pageStart       = $('#pagination-start');
+  const pageEnd         = $('#pagination-end');
+  const pageTotal       = $('#pagination-total');
+
+  const loader          = $('#loading-indicator');
+
+  // State
+  let pageSize  = 9;
+  let page      = 1;
+  let filtered  = [];
+  let viewMode  = 'grid';
+
+  // Persistence helpers
+  const persist = {
+    get(k, d = '') { try { return sessionStorage.getItem(k) ?? d; } catch { return d; } },
+    set(k, v) { try { sessionStorage.setItem(k, v); } catch {} },
+    getJSON(k, d = null) { try { return JSON.parse(sessionStorage.getItem(k)) ?? d; } catch { return d; } },
+    setJSON(k, v) { try { sessionStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  };
+
+  // Favorites (optional, buttons live on the cards)
+  const fav = {
+    key: 'docs.favorites',
+    all() { return persist.getJSON(this.key, []); },
+    has(name) { return this.all().includes(name); },
+    toggle(name) {
+      const cur = this.all();
+      const i = cur.indexOf(name);
+      if (i >= 0) cur.splice(i,1); else cur.push(name);
+      persist.setJSON(this.key, cur);
+      return this.has(name);
+    },
+  };
+  function initFavoritesUI() {
+    const favs = fav.all();
+    $$('.favorite-btn').forEach(btn => {
+      const name = btn.dataset.filename;
+      const svg = btn.querySelector('svg');
+      const paint = (on) => {
+        svg.classList.toggle('text-yellow-500', on);
+        svg.setAttribute('fill', on ? 'currentColor' : 'none');
+        btn.setAttribute('aria-label', on ? 'Remove from favorites' : 'Add to favorites');
+      };
+      paint(favs.includes(name));
+      btn.onclick = () => paint(fav.toggle(name));
+    });
+  }
+
+  // Categories / tags derived from the cards
+  function computeCategories() {
+    const cats = new Set();
+    cards.forEach(c => { const v = (c.dataset.category || '').trim(); if (v) cats.add(cap(v)); });
+    return Array.from(cats).sort((a,b) => a.localeCompare(b));
+  }
+  function computeTags() {
+    const tags = new Map();
+    cards.forEach(c => {
+      const raw = (c.dataset.tags || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      raw.forEach(t => tags.set(t, (tags.get(t) || 0) + 1));
+    });
+    return Array.from(tags.entries()).sort((a,b) => b[1]-a[1]).slice(0,12).map(([t]) => t);
+  }
+  function populateCategorySelect() {
+    const existing = new Set(Array.from(filterCategory.options).map(o => (o.value || '').toLowerCase()));
+    computeCategories().forEach(cat => {
+      if (!existing.has(cat.toLowerCase())) {
+        const opt = document.createElement('option');
+        opt.value = cat; opt.textContent = cat;
+        filterCategory.appendChild(opt);
+      }
+    });
+  }
+  function populateTagSuggestions() {
+    const tags = computeTags();
+    popularTagsWrap.innerHTML = '';
+    tags.forEach(tag => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'px-2 py-0.5 text-xs rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100';
+      b.textContent = `#${tag}`;
+      b.addEventListener('click', () => addTagToFilter(tag));
+      popularTagsWrap.appendChild(b);
+    });
+  }
+  function addTagToFilter(tag) {
+    const cur = filterTags.value.trim();
+    const parts = cur ? cur.split(',').map(s => s.trim()).filter(Boolean) : [];
+    if (!parts.includes(tag)) parts.push(tag);
+    filterTags.value = parts.join(', ');
+    applyFiltersAndSort(true);
+  }
+
+  function cap(s){ return s ? s[0].toUpperCase() + s.slice(1) : s; }
+  function includesFold(hay, needle){ return (hay||'').toLowerCase().includes((needle||'').toLowerCase()); }
+
+  // Search with simple AND / OR / NOT operators
+  function matchesQuery(title, summary, category, tags, q) {
+    if (!q) return true;
+    const tokens = q.split(/\s+/).filter(Boolean);
+    let result = true, currentMode = 'AND';
+    const hay = `${title} ${summary} ${category} ${tags}`.toLowerCase();
+
+    for (let i=0;i<tokens.length;i++){
+      const t = tokens[i].toUpperCase();
+      if (t === 'AND' || t === 'OR') { currentMode = t; continue; }
+      if (t === 'NOT') {
+        const next = tokens[i+1]; if (!next) break;
+        const neg = hay.includes(next.toLowerCase());
+        result = currentMode === 'AND' ? (result && !neg) : (result || !neg);
+        i++; continue;
+      }
+      const found = hay.includes(tokens[i].toLowerCase());
+      result = currentMode === 'AND' ? (result && found) : (result || found);
+    }
+    return result;
+  }
+
+  function tagsMatch(cardTags, filterVal) {
+    if (!filterVal) return true;
+    const wanted = filterVal.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+    if (!wanted.length) return true;
+    const have = (cardTags || '').split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+    return wanted.every(tag => have.includes(tag));
+  }
+
+  function withinDateRange(iso, from, to) {
+    if (!iso) return true;
+    const ts = Date.parse(iso); if (!ts) return true;
+    if (from) { const f = Date.parse(from); if (f && ts < f) return false; }
+    if (to)   { const t = Date.parse(to);   if (t && ts > (t + (24*3600*1000 - 1))) return false; }
+    return true;
+  }
+
+  function compareCards(a, b, order) {
+    const byTitle = () => (a.dataset.title || '').localeCompare(b.dataset.title || '');
+    const byDate  = () => (Date.parse(a.dataset.date || '') || 0) - (Date.parse(b.dataset.date || '') || 0);
+    const bySize  = () => (parseFloat(a.dataset.size || '0') || 0) - (parseFloat(b.dataset.size || '0') || 0);
+    const byPop   = () => (parseInt(a.dataset.views || '0', 10) || 0) - (parseInt(b.dataset.views || '0', 10) || 0);
+
+    switch (order) {
+      case 'title-desc': return -byTitle();
+      case 'date-desc':  return -byDate();
+      case 'date-asc':   return  byDate();
+      case 'size-desc':  return -bySize();
+      case 'size-asc':   return  bySize();
+      case 'popularity': return -byPop();
+      case 'title-asc':
+      default:           return  byTitle();
+    }
+  }
+
+  const resultCountEl = resultCount;
+  function setLoading(on) {
+    loader?.classList.toggle('hidden', !on);
+    if (on && resultCountEl) resultCountEl.textContent = 'Loading...';
+  }
+
+  function applyFiltersAndSort(resetPage=false) {
+    setLoading(true);
+    if (resetPage) page = 1;
+
+    const q    = (searchInput?.value || '').trim();
+    const cat  = (filterCategory?.value || '').trim().toLowerCase();
+    const tags = (filterTags?.value || '').trim().toLowerCase();
+    const from = ($('#filter-date-from')?.value || '').trim();
+    const to   = ($('#filter-date-to')?.value   || '').trim();
+    const ord  = (sortBy?.value || 'title-asc');
+
+    persist.set('docs.search', q);
+    persist.set('docs.category', cat);
+    persist.set('docs.tags', tags);
+    persist.set('docs.sort', ord);
+    persist.set('docs.date_from', from);
+    persist.set('docs.date_to', to);
+
+    filtered = cards.filter(card => {
+      const t = card.dataset.title || '';
+      const s = card.dataset.summary || '';
+      const c = card.dataset.category || '';
+      const g = card.dataset.tags || '';
+      const d = card.dataset.date || '';
+
+      const qOK   = matchesQuery(t, s, c, g, q);
+      const cOK   = !cat || c === cat;
+      const gOK   = tagsMatch(g, tags);
+      const dOK   = withinDateRange(d, from, to);
+
+      return qOK && cOK && gOK && dOK;
+    });
+
+    filtered.sort((a,b) => compareCards(a,b,ord));
+
+    pageTotal.textContent = String(filtered.length);
+    renderPage();
+
+    const vis = filtered.length;
+  resultCount.textContent = `${vis} document${vis === 1 ? '' : 's'} found`;
+    setLoading(false);
+  }
+
+  function renderPage() {
+    cards.forEach(c => c.style.display = 'none');
+
+    const total = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    page = Math.min(Math.max(1, page), totalPages);
+
+    const startIndex = (page - 1) * pageSize;
+    const endIndex   = Math.min(startIndex + pageSize, total);
+
+    for (let i = startIndex; i < endIndex; i++) {
+      filtered[i].style.display = '';
+      if (viewMode === 'list') filtered[i].classList.add('!col-span-full');
+      else filtered[i].classList.remove('!col-span-full');
+    }
+
+    pageStart.textContent = String(total ? startIndex + 1 : 0);
+    pageEnd.textContent   = String(total ? endIndex : 0);
+
+    renderPaginator(totalPages);
+  }
+
+  function renderPaginator(totalPages) {
+    pageNumbers.innerHTML = '';
+    const maxButtons = 7;
+    let start = Math.max(1, page - Math.floor(maxButtons/2));
+    let end   = Math.min(totalPages, start + maxButtons - 1);
+    if (end - start + 1 < maxButtons) start = Math.max(1, end - maxButtons + 1);
+
+    for (let p = start; p <= end; p++) {
+      const btn = document.createElement('button');
+      btn.className =
+        'relative inline-flex items-center px-3 py-2 text-sm ring-1 ring-inset ring-gray-300 ' +
+        (p === page ? 'z-10 bg-indigo-50 text-indigo-600' : 'text-gray-700 hover:bg-gray-50');
+      btn.textContent = String(p);
+  btn.setAttribute('aria-label', `Go to page ${p}`);
+      btn.addEventListener('click', () => { page = p; renderPage(); });
+      pageNumbers.appendChild(btn);
+    }
+
+    prevPageBtn.onclick = () => { if (page > 1) { page--; renderPage(); } };
+    nextPageBtn.onclick = () => { if (page < totalPages) { page++; renderPage(); } };
+  }
+
+  function setView(mode) {
+    viewMode = mode;
+    persist.set('docs.view', mode);
+    listEl.dataset.view = mode;
+    viewGridBtn.setAttribute('aria-pressed', String(mode === 'grid'));
+    viewListBtn.setAttribute('aria-pressed', String(mode === 'list'));
+    renderPage();
+  }
+
+  // Suggestions: derived from titles / categories / tags
+  function buildSuggestions() {
+    const seen = new Set();
+    const items = [];
+    cards.forEach(c => {
+      const t = (c.dataset.title || '').trim();
+      const ccat = (c.dataset.category || '').trim();
+      const tags = (c.dataset.tags || '').split(',').map(s => s.trim()).filter(Boolean);
+      [t, ccat, ...tags].forEach(k => {
+        const key = k.toLowerCase();
+        if (key && !seen.has(key)) { seen.add(key); items.push(k); }
+      });
+    });
+    return items.sort((a,b) => a.localeCompare(b));
+  }
+  function showSuggestions(list) {
+    suggestionsBox.innerHTML = '';
+    if (!list.length) { suggestionsBox.classList.add('hidden'); return; }
+    list.slice(0, 20).forEach(s => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'w-full text-left px-3 py-2 hover:bg-gray-50 text-sm';
+      item.setAttribute('role','option');
+      item.textContent = s;
+      item.addEventListener('click', () => {
+        searchInput.value = s;
+        applyFiltersAndSort(true);
+        suggestionsBox.classList.add('hidden');
+      });
+      suggestionsBox.appendChild(item);
+    });
+    suggestionsBox.classList.remove('hidden');
+  }
+  function filterSuggestions(all, q) {
+    if (!q) return all.slice(0, 12);
+    const needle = q.toLowerCase();
+    return all.filter(i => i.toLowerCase().includes(needle)).slice(0, 12);
+  }
+
+  // Event wiring
+  let debounce;
+  [searchInput, filterCategory, filterTags, sortBy,
+   $('#filter-date-from'), $('#filter-date-to')].forEach(el => {
+    if (!el) return;
+    el.addEventListener('input', () => {
+      clearTimeout(debounce);
+      debounce = setTimeout(() => applyFiltersAndSort(true), 160);
+    });
+    el.addEventListener('change', () => applyFiltersAndSort(true));
+  });
+
+  // Clear filters button
+  clearFiltersBtn?.addEventListener('click', () => {
+    if (searchInput) searchInput.value = '';
+    filterCategory.value = '';
+    filterTags.value = '';
+    const df = $('#filter-date-from'); const dt = $('#filter-date-to');
+    if (df) df.value = ''; if (dt) dt.value = '';
+    sortBy.value = 'title-asc';
+    applyFiltersAndSort(true);
+  });
+
+  // View toggle handlers
+  viewGridBtn?.addEventListener('click', () => setView('grid'));
+  viewListBtn?.addEventListener('click', () => setView('list'));
+
+  // Tag suggestions (open on focus, close shortly after blur)
+  filterTags.addEventListener('focus', () => tagSuggestBox.classList.remove('hidden'));
+  filterTags.addEventListener('blur', () => setTimeout(() => tagSuggestBox.classList.add('hidden'), 150));
+
+  // Live search suggestions
+  const allSuggestions = buildSuggestions();
+  searchInput?.addEventListener('input', (e) => {
+    const q = e.target.value.trim();
+    const list = filterSuggestions(allSuggestions, q);
+    showSuggestions(list);
+  });
+  searchInput?.addEventListener('blur', () => setTimeout(() => suggestionsBox.classList.add('hidden'), 150));
+
+  // Restore persisted state
+  if (searchInput) searchInput.value = persist.get('docs.search', '');
+  filterCategory.value = persist.get('docs.category', '');
+  filterTags.value     = persist.get('docs.tags', '');
+  sortBy.value         = persist.get('docs.sort', 'title-asc');
+  $('#filter-date-from').value = persist.get('docs.date_from', '');
+  $('#filter-date-to').value   = persist.get('docs.date_to', '');
+  setView(persist.get('docs.view', 'grid'));
+
+  // Keyboard shortcuts: "/" focuses the search; Escape hides suggestions
+  document.addEventListener('keydown', (e) => {
+    if (e.key === '/' && !e.target.matches('input, textarea')) {
+      e.preventDefault();
+      searchInput?.focus();
+    }
+    if (e.key === 'Escape') {
+      suggestionsBox?.classList.add('hidden');
+    }
+  });
+
+  // Initialization
+  populateCategorySelect();
+  populateTagSuggestions();
+  initFavoritesUI();
+  applyFiltersAndSort(true);
+})();
+</script>
+{% endblock %}

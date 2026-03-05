@@ -1,0 +1,155 @@
+﻿docker :  [sentry] DEBUG: Setting up integrations (with default = True)
+No linha:1 caractere:1
++ docker compose -f docker/docker-compose.yml exec web python scripts/u ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ( [sentry] DEBUG...default = True) 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.aiohttp.AioHttpIntegration: AIOHTTP not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.anthropic.AnthropicIntegration: Anthropic not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.ariadne.AriadneIntegration: ariadne is not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.arq.ArqIntegration: Arq is not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.asyncpg.AsyncPGIntegration: asyncpg not installed.
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.boto3.Boto3Integration: botocore is not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.bottle.BottleIntegration: Bottle not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.chalice.ChaliceIntegration: Chalice is not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.clickhouse_driver.ClickhouseDriverIntegration: 
+clickhouse-driver not installed.
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.cohere.CohereIntegration: Cohere not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.falcon.FalconIntegration: Falcon not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.fastapi.FastApiIntegration: Starlette is not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.flask.FlaskIntegration: Flask is not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.gql.GQLIntegration: gql is not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.graphene.GrapheneIntegration: graphene is not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.httpx.HttpxIntegration: httpx is not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.huey.HueyIntegration: Huey is not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.huggingface_hub.HuggingfaceHubIntegration: Huggingface 
+not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.langchain.LangchainIntegration: langchain not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.langgraph.LanggraphIntegration: langgraph not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.litestar.LitestarIntegration: Litestar is not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.loguru.LoguruIntegration: LOGURU is not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.openai.OpenAIIntegration: OpenAI not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.pymongo.PyMongoIntegration: Pymongo not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.pyramid.PyramidIntegration: Pyramid not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.quart.QuartIntegration: Quart is not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.rq.RqIntegration: RQ not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.sanic.SanicIntegration: Sanic not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.sqlalchemy.SqlalchemyIntegration: SQLAlchemy not 
+installed.
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.starlette.StarletteIntegration: Starlette is not 
+installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.starlite.StarliteIntegration: Starlite is not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.strawberry.StrawberryIntegration: strawberry-graphql 
+is not installed
+ [sentry] DEBUG: Did not import default integration 
+sentry_sdk.integrations.tornado.TornadoIntegration: Tornado not installed
+ [sentry] DEBUG: Setting up previously not enabled integration django
+ [sentry] DEBUG: Setting up previously not enabled integration celery
+ [sentry] DEBUG: Setting up previously not enabled integration argv
+ [sentry] DEBUG: Setting up previously not enabled integration atexit
+ [sentry] DEBUG: Setting up previously not enabled integration dedupe
+ [sentry] DEBUG: Setting up previously not enabled integration excepthook
+ [sentry] DEBUG: Setting up previously not enabled integration logging
+ [sentry] DEBUG: Setting up previously not enabled integration modules
+ [sentry] DEBUG: Setting up previously not enabled integration stdlib
+ [sentry] DEBUG: Setting up previously not enabled integration threading
+ [sentry] DEBUG: Setting up previously not enabled integration redis
+ [sentry] DEBUG: Enabling integration django
+ [sentry] DEBUG: Enabling integration celery
+ [sentry] DEBUG: Enabling integration argv
+ [sentry] DEBUG: Enabling integration atexit
+ [sentry] DEBUG: Enabling integration dedupe
+ [sentry] DEBUG: Enabling integration excepthook
+ [sentry] DEBUG: Enabling integration logging
+ [sentry] DEBUG: Enabling integration modules
+ [sentry] DEBUG: Enabling integration stdlib
+ [sentry] DEBUG: Enabling integration threading
+ [sentry] DEBUG: Enabling integration redis
+ [sentry] DEBUG: Setting SDK name to 'sentry.python.django'
+ [sentry] DEBUG: [Profiling] Setting up profiler in thread mode
+[DEBUG_TOOLBAR] Disabled via ENABLE_DEBUG_TOOLBAR=False
+[STATIC_VERSION] STATIC_ASSET_VERSION=nosha-20260304233715
+[DEV] Development environment loaded - DEBUG=True
+INFO 2026-03-04 20:37:16,271 metrics_static_version [PROMETHEUS] 
+static_asset_version=nosha-20260304233715
+================================================================================
+UPDATING ZABBIX CREDENTIALS IN FIRSTTIMESETUP
+================================================================================
+­ƒôØ Current state:
+   Zabbix URL: http://zabbix.simplesinternet.net.br:8080/api_jsonrpc.php
+   Zabbix User: (empty)
+   Has Password: False
+
+Ô£Å´©Å  Updating with:
+   Zabbix URL: http://zabbix.simplesinternet.net.br:8080/api_jsonrpc.php
+   Zabbix User: Admin
+   Has Password: True
+
+Traceback (most recent call last):
+  File "/app/backend/scripts/update_zabbix_credentials.py", line 48, in 
+<module>
+ [sentry] DEBUG: Sending envelope [envelope with 1 items (error)] 
+project:4510353502371840 host:o4510353484742656.ingest.us.sentry.io
+DEBUG 2026-03-04 20:37:16,377 transport Sending envelope [envelope with 1 
+items (error)] project:4510353502371840 
+host:o4510353484742656.ingest.us.sentry.io
+DEBUG 2026-03-04 20:37:16,378 connectionpool Starting new HTTPS connection 
+(1): o4510353484742656.ingest.us.sentry.io:443
+    from setup_app.services.encryption import encrypt_value
+ModuleNotFoundError: No module named 'setup_app.services.encryption'
+ [sentry] DEBUG: atexit: got shutdown signal
+DEBUG 2026-03-04 20:37:16,380 atexit atexit: got shutdown signal
+ [sentry] DEBUG: atexit: shutting down client
+DEBUG 2026-03-04 20:37:16,380 atexit atexit: shutting down client
+ [sentry] DEBUG: Flushing HTTP transport
+DEBUG 2026-03-04 20:37:16,380 transport Flushing HTTP transport
+ [sentry] DEBUG: background worker got flush request
+DEBUG 2026-03-04 20:37:16,380 worker background worker got flush request
+ [sentry] DEBUG: 2 event(s) pending on flush
+DEBUG 2026-03-04 20:37:16,485 worker 2 event(s) pending on flush
+Sentry is attempting to send 2 pending events
+Waiting up to 2 seconds
+Press Ctrl-C to quit
+DEBUG 2026-03-04 20:37:16,517 connectionpool 
+https://o4510353484742656.ingest.us.sentry.io:443 "POST 
+/api/4510353502371840/envelope/ HTTP/1.1" 200 0
+ [sentry] DEBUG: background worker flushed
+DEBUG 2026-03-04 20:37:16,518 worker background worker flushed
+ [sentry] DEBUG: Killing HTTP transport
+DEBUG 2026-03-04 20:37:16,518 transport Killing HTTP transport
+ [sentry] DEBUG: background worker got kill request
+DEBUG 2026-03-04 20:37:16,518 worker background worker got kill request

@@ -1,0 +1,511 @@
+{% extends "base_with_sidebar.html" %}
+{% load static %}
+
+{% block title %}System Configuration - ProveMaps{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* Dark mode support */
+  @media (prefers-color-scheme: dark) {
+    :root { color-scheme: dark; }
+  }
+  
+  /* Animations */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  .fade-in {
+    animation: fadeIn 0.3s ease-in;
+  }
+  
+  /* Spinner */
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  
+  .spinner {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+</style>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+  }
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto space-y-6 py-6 px-4">
+  <!-- Header -->
+  <header class="space-y-3">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">System Configuration</h1>
+        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+          Manage environment variables and integration settings. Changes are saved to <code class="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">.env</code> and database.
+        </p>
+      </div>
+      <div class="flex items-center space-x-2">
+        <!-- Action Buttons -->
+        <button type="button" onclick="exportConfig()" title="Export Configuration"
+                class="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <svg class="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
+          </svg>
+          Export
+        </button>
+        
+        <button type="button" onclick="importConfig()" title="Import Configuration"
+                class="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <svg class="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+          </svg>
+          Import
+        </button>
+        
+        <button type="button" onclick="showAuditHistory()" title="View Change History"
+                class="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <svg class="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          History
+        </button>
+        
+        <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900 px-3 py-1 text-xs font-medium text-green-800 dark:text-green-200">
+          <svg class="mr-1.5 h-2 w-2 fill-current" viewBox="0 0 8 8">
+            <circle cx="4" cy="4" r="3" />
+          </svg>
+          Configured
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Messages -->
+  {% if messages %}
+    <div class="space-y-2">
+      {% for message in messages %}
+        <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 flex items-start">
+          <svg class="h-5 w-5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+          </svg>
+          <span>{{ message }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <form method="post" class="space-y-6">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    <!-- Django Core Settings -->
+    <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
+      <div class="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-6 py-4">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Django Core Settings</h2>
+        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">Security and debug configuration</p>
+      </div>
+      <div class="px-6 py-5 space-y-5">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <!-- SECRET_KEY -->
+          <div class="space-y-2 md:col-span-2">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300" for="{{ form.secret_key.id_for_label }}">
+              {{ form.secret_key.label }}
+              <span class="text-red-500">*</span>
+            </label>
+            <input type="text" name="{{ form.secret_key.name }}" 
+                   id="{{ form.secret_key.id_for_label }}"
+                   value="{{ form.secret_key.value|default:'' }}"
+                   class="block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm font-mono"
+                   required>
+            {% if form.secret_key.errors %}
+              <p class="text-sm text-red-600">{{ form.secret_key.errors|striptags }}</p>
+            {% endif %}
+            {% if form.secret_key.help_text %}
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ form.secret_key.help_text }}</p>
+            {% endif %}
+          </div>
+
+          <!-- DEBUG -->
+          <div class="space-y-2">
+            <label class="flex items-center">
+              <input type="checkbox" name="{{ form.debug.name }}" 
+                     id="{{ form.debug.id_for_label }}"
+                     {% if form.debug.value %}checked{% endif %}
+                     class="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500">
+              <span class="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">{{ form.debug.label }}</span>
+            </label>
+            {% if form.debug.help_text %}
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ form.debug.help_text }}</p>
+            {% endif %}
+          </div>
+
+          <!-- ALLOWED_HOSTS -->
+          <div class="space-y-2 md:col-span-2">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300" for="{{ form.allowed_hosts.id_for_label }}">
+              {{ form.allowed_hosts.label }}
+            </label>
+            <input type="text" name="{{ form.allowed_hosts.name }}" 
+                   id="{{ form.allowed_hosts.id_for_label }}"
+                   value="{{ form.allowed_hosts.value|default:'' }}"
+                   class="block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                   placeholder="localhost,127.0.0.1,example.com">
+            {% if form.allowed_hosts.help_text %}
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ form.allowed_hosts.help_text }}</p>
+            {% endif %}
+          </div>
+
+          <!-- ENABLE_DIAGNOSTIC_ENDPOINTS -->
+          <div class="space-y-2">
+            class="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500">
+              <span class="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">{{ form.enable_diagnostics.label }}</span>
+            </label>
+            {% if form.enable_diagnostics.help_text %}
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ form.enable_diagnostics.help_text }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Zabbix Integration -->
+    <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
+      <div class="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-6 py-4 flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Zabbix Integration</h2>
+          <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">Monitoring server connection settings</p>
+        </div>
+        <button type="button" 
+                onclick="ConnectionTester.testZabbix()"
+                class="inline-flex items-center gap-2 rounded-lg bg-blue-600 dark:bg-blue-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Test Connection
+        </button>
+      </div>
+      <div class="px-6 py-5 space-y-5">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <!-- ZABBIX_API_URL -->
+          <div class="space-y-2 md:col-span-2">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300" for="{{ form.zabbix_api_url.id_for_label }}">
+              {{ form.zabbix_api_url.label }}
+              <span class="text-red-500">*</span>
+            </label>
+            <input type="url" name="{{ form.zabbix_api_url.name }}" 
+                   id="{{ form.zabbix_api_url.id_for_label }}"
+                   value="{{ form.zabbix_api_url.value|default:'' }}"
+                   class="block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                   placeholder="https://zabbix.example.com/api_jsonrpc.php"
+                   required>
+            {% if form.zabbix_api_url.help_text %}
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ form.zabbix_api_url.help_text }}</p>
+            {% endif %}
+          </div>
+
+          <!-- ZABBIX_API_USER -->
+          <div class="space-y-2">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300" for="{{ form.zabbix_api_user.id_for_label }}">
+              {{ form.zabbix_api_user.label }}
+              <span class="text-red-500">*</span>
+            </label>
+            <input type="text" name="{{ form.zabbix_api_user.name }}" 
+                   id="{{ form.zabbix_api_user.id_for_label }}"
+                   value="{{ form.zabbix_api_user.value|default:'' }}"
+                   class="block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                   required>
+          </div>
+
+          <!-- ZABBIX_API_PASSWORD -->
+          <div class="space-y-2">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300" for="{{ form.zabbix_api_password.id_for_label }}">
+              {{ form.zabbix_api_password.label }}
+              <span class="text-red-500">*</span>
+            </label>
+            <input type="password" name="{{ form.zabbix_api_password.name }}" 
+                   id="{{ form.zabbix_api_password.id_for_label }}"
+                   value="{{ form.zabbix_api_password.value|default:'' }}"
+                   class="block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                   required>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- External Services -->
+    <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
+      <div class="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-6 py-4">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">External Services</h2>
+        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">Third-party integrations and APIs</p>
+      </div>
+      <div class="px-6 py-5 space-y-5">
+        <!-- GOOGLE_MAPS_API_KEY -->
+        <div class="space-y-2">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300" for="{{ form.google_maps_api_key.id_for_label }}">
+            {{ form.google_maps_api_key.label }}
+          </label>
+          <input type="text" name="{{ form.google_maps_api_key.name }}" 
+                 id="{{ form.google_maps_api_key.id_for_label }}"
+                 value="{{ form.google_maps_api_key.value|default:'' }}"
+                 class="block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm font-mono">
+        </div>
+      </div>
+    </section>
+
+    <!-- Database Configuration -->
+    <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
+      <div class="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-6 py-4 flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Database Configuration</h2>
+          <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">MySQL/MariaDB connection settings</p>
+        </div>
+        <button type="button" 
+                onclick="ConnectionTester.testDatabase()"
+                class="inline-flex items-center gap-2 rounded-lg bg-green-600 dark:bg-green-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700 dark:hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 dark:ring-offset-gray-800">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+          </svg>
+          Test Connection
+        </button>
+      </div>
+      <div class="px-6 py-5 space-y-5">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <!-- DB_HOST -->
+          <div class="space-y-2">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300" for="{{ form.db_host.id_for_label }}">
+              {{ form.db_host.label }}
+            </label>
+            <input type="text" name="{{ form.db_host.name }}" 
+                   id="{{ form.db_host.id_for_label }}"
+                   value="{{ form.db_host.value|default:'' }}"
+                   class="block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+          </div>
+
+          <!-- DB_PORT -->
+          <div class="space-y-2">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300" for="{{ form.db_port.id_for_label }}">
+              {{ form.db_port.label }}
+            </label>
+            <input type="text" name="{{ form.db_port.name }}" 
+                   id="{{ form.db_port.id_for_label }}"
+                   value="{{ form.db_port.value|default:'' }}"
+                   class="block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+          </div>
+
+          <!-- DB_NAME -->
+          <div class="space-y-2">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300" for="{{ form.db_name.id_for_label }}">
+              {{ form.db_name.label }}
+            </label>
+            <input type="text" name="{{ form.db_name.name }}" 
+                   id="{{ form.db_name.id_for_label }}"
+                   value="{{ form.db_name.value|default:'' }}"
+                   class="block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+          </div>
+
+          <!-- DB_USER -->
+          <div class="space-y-2">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300" for="{{ form.db_user.id_for_label }}">
+              {{ form.db_user.label }}
+            </label>
+            <input type="text" name="{{ form.db_user.name }}" 
+                   id="{{ form.db_user.id_for_label }}"
+                   value="{{ form.db_user.value|default:'' }}"
+                   class="block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+          </div>
+
+          <!-- DB_PASSWORD -->
+          <div class="space-y-2 md:col-span-2">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300" for="{{ form.db_password.id_for_label }}">
+              {{ form.db_password.label }}
+            </label>
+            <input type="password" name="{{ form.db_password.name }}" 
+                   id="{{ form.db_password.id_for_label }}"
+                   value="{{ form.db_password.value|default:'' }}"
+                   class="block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+          </div>
+          
+          <!-- Test Connection Button -->
+          <div class="md:col-span-2 flex items-center space-x-3">
+            <button type="button" id="test-database-btn" onclick="testDatabase()"
+                    class="inline-flex items-center px-4 py-2 border border-blue-300 dark:border-blue-600 rounded-lg text-sm font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900 hover:bg-blue-100 dark:hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
+              </svg>
+              Test Connection
+            </button>
+            <div id="database-test-result" class="flex-1"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Redis & Caching -->
+    <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
+      <div class="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-6 py-4">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Redis & Caching</h2>
+        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">Cache and Celery broker configuration</p>
+      </div>
+      <div class="px-6 py-5 space-y-5">
+        <!-- REDIS_URL -->
+        <div class="space-y-2">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300" for="{{ form.redis_url.id_for_label }}">
+            {{ form.redis_url.label }}
+          </label>
+          <input type="text" name="{{ form.redis_url.name }}" 
+                 id="{{ form.redis_url.id_for_label }}"
+                 value="{{ form.redis_url.value|default:'' }}"
+                 class="block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm font-mono"
+                 placeholder="redis://localhost:6379/1">
+          {% if form.redis_url.help_text %}
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ form.redis_url.help_text }}</p>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+
+    <!-- System Operations -->
+    <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
+      <div class="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-6 py-4">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">System Operations</h2>
+        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">Service management and restart commands</p>
+      </div>
+      <div class="px-6 py-5 space-y-5">
+        <!-- SERVICE_RESTART_COMMANDS -->
+        <div class="space-y-2">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300" for="{{ form.service_restart_commands.id_for_label }}">
+            {{ form.service_restart_commands.label }}
+          </label>
+          <textarea name="{{ form.service_restart_commands.name }}" 
+                    id="{{ form.service_restart_commands.id_for_label }}"
+                    rows="3"
+                    class="block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm font-mono">{{ form.service_restart_commands.value|default:'' }}</textarea>
+          {% if form.service_restart_commands.help_text %}
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ form.service_restart_commands.help_text }}</p>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+
+    <!-- Form Actions -->
+    <!-- Form Actions -->
+    <div class="sticky bottom-0 bg-white border-t border-gray-200 shadow-lg rounded-xl">
+      <div class="px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center space-x-2 text-sm text-gray-600">
+          <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <span>Changes are encrypted and stored securely. No data is sent to external servers.</span>
+        </div>
+        <div class="flex items-center space-x-3">
+          <a href="{% url 'setup_app:setup_dashboard' %}" 
+             class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+            Cancel
+          </a>
+          <button type="submit"
+                  class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+            <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            Save Configuration
+          </button>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <!-- Restart Warning -->
+  {% if requires_restart %}
+    <div class="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+      <div class="flex">
+        <div class="flex-shrink-0">
+          <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+          </svg>
+        </div>
+        <div class="ml-3">
+          <h3 class="text-sm font-medium text-yellow-800">
+            Restart Required
+          </h3>
+          <div class="mt-2 text-sm text-yellow-700">
+            <p>After saving changes, restart the services for the new configuration to take effect:</p>
+            <pre class="mt-2 bg-yellow-100 rounded p-2 text-xs overflow-x-auto">docker compose restart web celery beat</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Help Section -->
+  <div class="rounded-lg border border-blue-100 bg-blue-50 p-4">
+    <div class="flex">
+      <div class="flex-shrink-0">
+        <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+        </svg>
+      </div>
+      <div class="ml-3">
+        <h3 class="text-sm font-medium text-blue-800">
+          Need Help?
+        </h3>
+        <div class="mt-2 text-sm text-blue-700">
+          <ul class="list-disc list-inside space-y-1">
+            <li>All sensitive data (passwords, API keys) is encrypted using Fernet encryption</li>
+            <li>Use either Zabbix API User/Password <strong>or</strong> API Key (not both)</li>
+            <li>Database settings must match your MySQL/MariaDB instance</li>
+            <li>Redis URL is optional but recommended for production</li>
+            <li>See <a href="{% url 'setup_app:docs_index' %}" class="underline hover:text-blue-900">documentation</a> for detailed setup instructions</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Audit History Modal -->
+<div id="audit-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+    <div class="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 px-6 py-4">
+      <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Configuration Change History</h2>
+      <button onclick="closeAuditModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    
+    <div class="overflow-y-auto max-h-[calc(90vh-120px)] p-6">
+      <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <thead class="bg-gray-50 dark:bg-gray-900">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Timestamp</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">User</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Action</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Section</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Field</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+          </tr>
+        </thead>
+        <tbody id="audit-table-body" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+          <tr><td colspan="6" class="text-center py-4 text-gray-500 dark:text-gray-400">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% static 'setup_app/js/manage_environment.js' %}"></script>
+{% endblock %}
+

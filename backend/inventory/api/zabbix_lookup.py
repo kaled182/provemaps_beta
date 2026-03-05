@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, Iterable, List, Optional, TypedDict, cast
+
+logger = logging.getLogger(__name__)
 
 from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, JsonResponse
@@ -185,9 +188,23 @@ def lookup_zabbix_server_info(request: HttpRequest) -> JsonResponse:
 @require_GET
 @login_required
 def lookup_hosts_grouped(request: HttpRequest) -> JsonResponse:
-    """Returns Zabbix hosts grouped by hostgroup for import preview."""
+    """Returns Zabbix hosts grouped by hostgroup for import preview.
     
-    params: Dict[str, Any] = {
+    IMPORTANT: Uses reverse lookup (hosts by group) because selectGroups
+    doesn't work in this Zabbix configuration.
+    """
+    
+    # First, fetch all hostgroups
+    try:
+        all_groups = cast(
+            List[Dict[str, Any]],
+            zabbix_request("hostgroup.get", {"output": ["groupid", "name"]}) or [],
+        )
+    except Exception as exc:
+        return JsonResponse({"error": f"Zabbix API error fetching groups: {exc}"}, status=502)
+    
+    # Prepare host fetch params (without selectGroups - it doesn't work!)
+    host_params: Dict[str, Any] = {
         "output": [
             "hostid",
             "host",
@@ -213,30 +230,37 @@ def lookup_hosts_grouped(request: HttpRequest) -> JsonResponse:
             "available",
             "error",
         ],
-        "selectGroups": ["groupid", "name"],
     }
-
+    
+    # Fetch ALL hosts first (to detect hosts with no groups)
     try:
-        raw_hosts = cast(
+        all_hosts = cast(
             List[Dict[str, Any]],
-            zabbix_request("host.get", params) or [],
+            zabbix_request("host.get", host_params) or [],
         )
     except Exception as exc:
-        return JsonResponse({"error": f"Zabbix API error: {exc}"}, status=502)
-
+        return JsonResponse({"error": f"Zabbix API error fetching hosts: {exc}"}, status=502)
+    
     # Fetch all imported devices from database for drift detection
     from inventory.models import Device
     imported_devices = {
         device.zabbix_hostid: device
         for device in Device.objects.filter(
             zabbix_hostid__isnull=False
-        ).select_related('monitoring_group')
+        ).select_related('monitoring_group').prefetch_related('groups')
     }
-
-    # Group hosts by hostgroup
-    groups_dict: Dict[str, Dict[str, Any]] = {}
     
-    for host in raw_hosts:
+    # Build index of all hosts by hostid for quick lookup
+    hosts_by_id: Dict[str, Dict[str, Any]] = {}
+    hosts_with_groups: set[str] = set()  # Track which hosts have at least one group
+    
+    logger.info(f"Processing {len(all_hosts)} total hosts from Zabbix")
+    
+    for host in all_hosts:
+        hostid = str(host.get("hostid") or "")
+        if not hostid:
+            continue
+            
         interfaces = _normalise_interfaces(host.get("interfaces", []))
         availability = _build_availability(host, interfaces)
         primary_interface = _pick_primary_interface(interfaces)
@@ -245,11 +269,10 @@ def lookup_hosts_grouped(request: HttpRequest) -> JsonResponse:
             "online" if availability.get("state") == "online" else "offline"
         )
         
-        hostid = host.get("hostid")
         zabbix_name = host.get("name") or host.get("host")
         zabbix_ip = primary_interface.get("ip") if primary_interface else None
         
-        # Drift detection: compare Zabbix data with saved device
+        # Drift detection
         has_drift = False
         drift_fields = []
         
@@ -259,68 +282,91 @@ def lookup_hosts_grouped(request: HttpRequest) -> JsonResponse:
             # Compare name
             if device.name != zabbix_name:
                 has_drift = True
-                drift_msg = f"nome ('{device.name}' → '{zabbix_name}')"
-                drift_fields.append(drift_msg)
+                drift_fields.append(f"nome ('{device.name}' → '{zabbix_name}')")
             
             # Compare IP
             if (device.primary_ip and zabbix_ip and
                     device.primary_ip != zabbix_ip):
                 has_drift = True
-                drift_msg = f"IP ('{device.primary_ip}' → '{zabbix_ip}')"
-                drift_fields.append(drift_msg)
-            
-            # Compare groups (simplified: just check if groups changed)
-            zabbix_group_ids = {
-                g.get("groupid") for g in host.get("groups", [])
-            }
-            device_group_ids = {
-                str(g.zabbix_groupid)
-                for g in device.groups.all()
-                if g.zabbix_groupid
-            }
-            
-            if zabbix_group_ids != device_group_ids:
-                has_drift = True
-                drift_fields.append("grupos do Zabbix")
+                drift_fields.append(f"IP ('{device.primary_ip}' → '{zabbix_ip}')")
         
-        host_data = {
+        hosts_by_id[hostid] = {
             "zabbix_id": hostid,
             "name": zabbix_name,
             "ip": zabbix_ip,
             "status": host_status,
-            "is_imported": False,  # Frontend will mark this
+            "is_imported": hostid in imported_devices,
             "has_drift": has_drift,
             "drift_fields": drift_fields,
+            "groups": [],  # Will be populated by reverse lookup
         }
+    
+    # REVERSE LOOKUP: For each group, fetch all hosts in that group
+    groups_dict: Dict[str, Dict[str, Any]] = {}
+    
+    logger.info(f"Performing reverse lookup for {len(all_groups)} groups")
+    
+    for group_data in all_groups:
+        group_id = group_data.get("groupid")
+        group_name = group_data.get("name")
         
-        # Add to each group this host belongs to
-        host_groups = host.get("groups", [])
+        if not group_id or not group_name:
+            continue
         
-        if not host_groups:
-            # Add to "Sem Grupo" if no groups
-            if "0" not in groups_dict:
-                groups_dict["0"] = {
-                    "zabbix_group_id": "0",
-                    "name": "Sem Grupo Definido",
-                    "hosts": []
-                }
-            groups_dict["0"]["hosts"].append(host_data)
-        else:
-            for group in host_groups:
-                group_id = group.get("groupid")
-                group_name = group.get("name")
+        # Fetch hosts in this group using groupids parameter (WORKS!)
+        try:
+            hosts_in_group = cast(
+                List[Dict[str, Any]],
+                zabbix_request("host.get", {
+                    "output": ["hostid"],
+                    "groupids": [group_id]
+                }) or [],
+            )
+        except Exception as exc:
+            logger.error(f"Error fetching hosts for group {group_name}: {exc}")
+            continue
+        
+        group_hosts = []
+        for host in hosts_in_group:
+            hostid = str(host.get("hostid") or "")
+            if hostid in hosts_by_id:
+                # Mark this host as having a group
+                hosts_with_groups.add(hostid)
                 
-                if group_id not in groups_dict:
-                    groups_dict[group_id] = {
-                        "zabbix_group_id": group_id,
-                        "name": group_name,
-                        "hosts": []
-                    }
+                # Add group name to host's groups list
+                if group_name not in hosts_by_id[hostid]["groups"]:
+                    hosts_by_id[hostid]["groups"].append(group_name)
                 
-                groups_dict[group_id]["hosts"].append(host_data)
+                # Add host to this group
+                group_hosts.append(hosts_by_id[hostid].copy())
+        
+        if group_hosts:  # Only add group if it has hosts
+            groups_dict[group_id] = {
+                "zabbix_group_id": group_id,
+                "name": group_name,
+                "hosts": group_hosts
+            }
+            logger.debug(f"Group '{group_name}': {len(group_hosts)} hosts")
+    
+    # Add "Sem Grupo Definido" for hosts without any groups
+    hosts_without_groups = [
+        hosts_by_id[hostid]
+        for hostid in hosts_by_id
+        if hostid not in hosts_with_groups
+    ]
+    
+    if hosts_without_groups:
+        groups_dict["0"] = {
+            "zabbix_group_id": "0",
+            "name": "Sem Grupo Definido",
+            "hosts": hosts_without_groups
+        }
+        logger.info(f"Found {len(hosts_without_groups)} hosts without groups")
     
     # Convert to list and sort by group name
     groups_list = sorted(groups_dict.values(), key=lambda g: g["name"])
+    
+    logger.info(f"Returning {len(groups_list)} groups with reverse lookup")
     
     return JsonResponse({"data": groups_list, "count": len(groups_list)})
 
@@ -386,7 +432,7 @@ def lookup_hosts(request: HttpRequest) -> JsonResponse:
         availability = _build_availability(host, interfaces)
         hosts.append(
             {
-                "hostid": host.get("hostid"),
+                "hostid": str(host.get("hostid") or ""),
                 "name": host.get("name") or host.get("host"),
                 "host": host.get("host"),
                 "status": host.get("status"),

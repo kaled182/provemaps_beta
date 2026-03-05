@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import logging
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, user_passes_test
@@ -16,6 +17,8 @@ from .services.service_reloader import trigger_restart
 from types import SimpleNamespace
 
 from .models import CompanyProfile, FirstTimeSetup
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_SERVICE_RESTART_COMMANDS = (
     settings.SERVICE_RESTART_COMMANDS
@@ -63,7 +66,12 @@ def first_time_setup(request):
         form = FirstTimeSetupForm(request.POST, request.FILES)
         if form.is_valid():
             data = form.cleaned_data
-            FirstTimeSetup.objects.create(
+            
+            # Mark any existing configs as not configured (cleanup)
+            FirstTimeSetup.objects.all().update(configured=False)
+            
+            # Create new configuration with configured=True
+            setup_instance = FirstTimeSetup.objects.create(
                 company_name=data["company_name"],
                 logo=request.FILES.get("logo"),
                 zabbix_url=data["zabbix_url"],
@@ -81,6 +89,12 @@ def first_time_setup(request):
                 redis_url=data["redis_url"],
                 configured=True,
             )
+            
+            # Verify it was saved correctly
+            if not setup_instance.configured:
+                logger.error("Setup instance was not marked as configured after creation")
+                setup_instance.configured = True
+                setup_instance.save()
 
             commands = settings.SERVICE_RESTART_COMMANDS or DEFAULT_SERVICE_RESTART_COMMANDS
             env_payload = {
@@ -122,7 +136,19 @@ def first_time_setup(request):
             os.environ["SERVICE_RESTART_COMMANDS"] = command_string
             if command_string:
                 trigger_restart()
-            return redirect("setup_app:setup_dashboard")
+            
+            # Log success and verify configuration before redirecting
+            logger.info(f"Setup completed successfully for company: {data['company_name']}")
+            configured_count = FirstTimeSetup.objects.filter(configured=True).count()
+            logger.info(f"Configured instances in database: {configured_count}")
+            
+            if configured_count == 0:
+                logger.error("No configured instances found after setup! Forcing configuration.")
+                setup_instance.configured = True
+                setup_instance.save(update_fields=['configured'])
+                
+            # After successful first-time setup, send user to the default backbone map
+            return redirect("/monitoring/backbone/map/default")
     else:
         form = FirstTimeSetupForm()
 
