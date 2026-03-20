@@ -4330,3 +4330,144 @@ def video_mosaic_detail(request, mosaic_id: int):
                 {"success": False, "message": f"Failed to delete mosaic: {exc}"},
                 status=500,
             )
+
+
+# ─────────────────────────────────────────────────────────────
+# Camera Settings
+# ─────────────────────────────────────────────────────────────
+
+_CAMERA_KEYS = [
+    "CAMERA_DEFAULT_STREAM_TYPE",
+    "CAMERA_DEFAULT_RESOLUTION",
+    "CAMERA_DEFAULT_FPS",
+    "CAMERA_DEFAULT_CODEC",
+    "CAMERA_ENABLE_HARDWARE_ACCELERATION",
+    "CAMERA_MAX_CONCURRENT_STREAMS",
+    "CAMERA_STREAM_TIMEOUT_SECONDS",
+    "CAMERA_RECONNECT_ATTEMPTS",
+    "CAMERA_RECONNECT_DELAY_MS",
+]
+
+_CAMERA_DEFAULTS = {
+    "default_stream_type": "rtmp",
+    "default_resolution": "1080p",
+    "default_fps": 30,
+    "default_codec": "h264",
+    "enable_hardware_acceleration": True,
+    "max_concurrent_streams": 10,
+    "stream_timeout_seconds": 30,
+    "reconnect_attempts": 3,
+    "reconnect_delay_ms": 2000,
+}
+
+_CAMERA_KEY_MAP = {
+    "CAMERA_DEFAULT_STREAM_TYPE": "default_stream_type",
+    "CAMERA_DEFAULT_RESOLUTION": "default_resolution",
+    "CAMERA_DEFAULT_FPS": "default_fps",
+    "CAMERA_DEFAULT_CODEC": "default_codec",
+    "CAMERA_ENABLE_HARDWARE_ACCELERATION": "enable_hardware_acceleration",
+    "CAMERA_MAX_CONCURRENT_STREAMS": "max_concurrent_streams",
+    "CAMERA_STREAM_TIMEOUT_SECONDS": "stream_timeout_seconds",
+    "CAMERA_RECONNECT_ATTEMPTS": "reconnect_attempts",
+    "CAMERA_RECONNECT_DELAY_MS": "reconnect_delay_ms",
+}
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def camera_settings(request):
+    """GET: return camera config. POST: save camera config."""
+    if request.method == "GET":
+        try:
+            raw = env_manager.read_values(_CAMERA_KEYS)
+            result = dict(_CAMERA_DEFAULTS)
+            for env_key, setting_key in _CAMERA_KEY_MAP.items():
+                val = raw.get(env_key)
+                if val not in (None, ""):
+                    default = _CAMERA_DEFAULTS.get(setting_key)
+                    if isinstance(default, bool):
+                        result[setting_key] = str(val).lower() in ("true", "1", "yes")
+                    elif isinstance(default, int):
+                        try:
+                            result[setting_key] = int(val)
+                        except (TypeError, ValueError):
+                            pass
+                    else:
+                        result[setting_key] = val
+            return JsonResponse({"success": True, "settings": result})
+        except Exception as exc:
+            logger.exception("Error loading camera settings")
+            return JsonResponse({"success": False, "message": str(exc)}, status=500)
+
+    # POST – save settings
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError) as exc:
+        return JsonResponse({"success": False, "message": f"Invalid JSON: {exc}"}, status=400)
+
+    try:
+        to_write: Dict[str, Any] = {}
+        for env_key, setting_key in _CAMERA_KEY_MAP.items():
+            if setting_key in body:
+                val = body[setting_key]
+                default = _CAMERA_DEFAULTS.get(setting_key)
+                if isinstance(default, bool):
+                    to_write[env_key] = "true" if val else "false"
+                else:
+                    to_write[env_key] = str(val)
+        if to_write:
+            env_manager.write_values(to_write)
+        return JsonResponse({"success": True, "message": "Configurações de câmeras salvas."})
+    except Exception as exc:
+        logger.exception("Error saving camera settings")
+        return JsonResponse({"success": False, "message": str(exc)}, status=500)
+
+
+# ─────────────────────────────────────────────────────────────
+# Test Stream
+# ─────────────────────────────────────────────────────────────
+
+@login_required
+@require_POST
+def test_stream(request):
+    """Test TCP reachability of a stream endpoint (host:port)."""
+    import socket
+    from urllib.parse import urlparse
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError) as exc:
+        return JsonResponse({"success": False, "message": f"Invalid JSON: {exc}"}, status=400)
+
+    stream_url = (body.get("stream_url") or "").strip()
+    timeout = int(body.get("timeout") or 5)
+
+    if not stream_url:
+        return JsonResponse({"success": False, "message": "stream_url é obrigatório."}, status=400)
+
+    try:
+        parsed = urlparse(stream_url)
+        host = parsed.hostname
+        port = parsed.port
+
+        if not host:
+            return JsonResponse({"success": False, "message": "URL inválida: host não encontrado."}, status=400)
+
+        if not port:
+            port = {"rtsp": 554, "rtmp": 1935, "rtmps": 443, "http": 80, "https": 443}.get(
+                parsed.scheme.lower(), 554
+            )
+
+        sock = socket.create_connection((host, port), timeout=timeout)
+        sock.close()
+        return JsonResponse({
+            "success": True,
+            "message": f"Conexão bem-sucedida com {host}:{port}.",
+        })
+    except socket.timeout:
+        return JsonResponse({"success": False, "message": "Timeout ao conectar com o servidor de stream."})
+    except OSError as exc:
+        return JsonResponse({"success": False, "message": f"Falha na conexão: {exc}"})
+    except Exception as exc:
+        logger.exception("Error testing stream connection")
+        return JsonResponse({"success": False, "message": str(exc)}, status=500)

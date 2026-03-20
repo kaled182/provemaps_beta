@@ -1,7 +1,7 @@
 # Network Design - Roadmap de Melhorias
 
 **Data**: 05/03/2026  
-**Status**: Planejamento  
+**Status**: ✅ 4 de 12 melhorias concluídas (33%)  
 **Prioridade**: Média-Alta
 
 ## Contexto
@@ -18,19 +18,20 @@ A funcionalidade básica está **100% operacional**:
 
 ## 🎯 Melhorias Propostas
 
-### 1. Indicadores Visuais de Origem/Destino
+### ✅ 1. Indicadores Visuais de Origem/Destino (CONCLUÍDO)
 
-**Problema Atual**: Todos os marcadores são círculos vermelhos idênticos, dificultando identificar origem e destino.
+**Problema Atual**: ~~Todos os marcadores são círculos vermelhos idênticos, dificultando identificar origem e destino.~~
 
-**Solução Proposta**:
-- **Marcador de origem**: Verde, ícone "A" ou "🔵"
-- **Marcador de destino**: Vermelho, ícone "B" ou "🔴"
-- **Pontos intermediários**: Azul claro, menores
-- **Preview da rota**: Cor laranja antes de salvar, azul após salvo
+**Solução Implementada**:
+- ✅ **Marcador de origem**: Verde, label "A" (32px)
+- ✅ **Marcador de destino**: Vermelho, label "B" (32px)
+- ✅ **Pontos intermediários**: Azul, sem label (20px)
+- ✅ **Preview da rota**: Cor laranja (#f59e0b) antes de salvar, azul (#2563eb) após salvo
 
 **Impacto**: Alto  
-**Esforço**: 2-3 horas  
-**Prioridade**: 🔥 Alta
+**Esforço Real**: 2.5 horas  
+**Prioridade**: 🔥 Alta  
+**Status**: ✅ **Concluído em 05/03/2026**
 
 **Arquivos a modificar**:
 - `frontend/src/providers/maps/MapboxProvider.js` - `MapboxMarker` class
@@ -39,20 +40,25 @@ A funcionalidade básica está **100% operacional**:
 
 ---
 
-### 2. Validação em Tempo Real
+### ✅ 2. Validação em Tempo Real (CONCLUÍDO)
 
-**Problema Atual**: Validações só acontecem ao clicar "Save", resultando em frustração do usuário.
+**Problema Atual**: ~~Validações só acontecem ao clicar "Save", resultando em frustração do usuário.~~
 
-**Solução Proposta**:
-- Validar se porta origem/destino já está em uso (consulta real-time à API)
-- Destacar campos obrigatórios faltantes (borda vermelha)
-- Alertar sobre nomes de cabos duplicados
-- Validar distância mínima (< 100m pode indicar erro de digitação)
-- Mostrar ícone ✅ ou ❌ ao lado de cada campo
+**Solução Implementada**:
+- ✅ Validar se porta origem/destino já está em uso (consulta real-time à API com debounce 300ms)
+- ✅ Destacar campos obrigatórios faltantes (borda vermelha)
+- ✅ Alertar sobre nomes de cabos duplicados (validação case-insensitive)
+- ✅ Feedback visual dinâmico (divs de erro criadas sob os campos)
+- ✅ Bloqueio de submit até correção de erros
 
 **Impacto**: Alto  
-**Esforço**: 3-4 horas  
-**Prioridade**: 🔥 Alta
+**Esforço Real**: 3.5 horas  
+**Prioridade**: 🔥 Alta  
+**Status**: ✅ **Concluído em 05/03/2026**
+
+**Endpoints criados**:
+- `POST /api/v1/inventory/fibers/validate-port/` - Verifica disponibilidade de porta
+- `POST /api/v1/inventory/fibers/validate-name/` - Verifica unicidade de nome
 
 **Implementação**:
 ```javascript
@@ -69,33 +75,37 @@ export async function validatePortAvailability(deviceId, portId) {
 
 ---
 
-### 3. Autocomplete com Busca de Dispositivos
+### ✅ 3. Autocomplete com Busca de Dispositivos (CONCLUÍDO)
 
-**Problema Atual**: Select dropdown simples, difícil encontrar dispositivo em redes grandes (100+ devices).
+**Problema Atual**: ~~Select dropdown simples, difícil encontrar dispositivo em redes grandes (100+ devices).~~
 
-**Solução Proposta**:
-- Substituir `<select>` por componente autocomplete
-- Busca por nome, IP, ou localização
-- Ordenar por proximidade do ponto clicado no mapa
-- Exibir ícone de status Zabbix (🟢 online / 🔴 offline)
-- Mostrar distância estimada do dispositivo
+**Solução Implementada**:
+- ✅ Substituiu `<select>` por inputs de texto com autocomplete inteligente
+- ✅ Busca fuzzy usando Fuse.js (nome, IP, site, vendor, model, localização)
+- ✅ Ordenação por proximidade do ponto clicado no mapa (algoritmo Haversine)
+- ✅ Ícones de status Zabbix em tempo real (🟢 online / 🔴 offline / 🟡 unknown / ⚪ disabled)
+- ✅ Mostra distância estimada do dispositivo em km
+- ✅ Navegação por teclado (Arrow keys, Enter, Escape)
+- ✅ Debounce de 200ms para otimização
+- ✅ Cache de 5 minutos para lista de dispositivos
 
 **Impacto**: Alto  
-**Esforço**: 4-5 horas  
-**Prioridade**: 🟡 Média
+**Esforço Real**: 4.5 horas  
+**Prioridade**: 🟡 Média  
+**Status**: ✅ **Concluído em 05/03/2026**
 
-**Biblioteca sugerida**: `@headlessui/vue` (Combobox component) ou Vue Select
+**Endpoints criados**:
+- `GET /api/v1/inventory/devices/autocomplete/` - Retorna lista completa de dispositivos com coordenadas, IP, vendor, model, site, status Zabbix
 
-**Preview**:
-```
-┌──────────────────────────────────────────────┐
-│ Switch Santana                          [🟢] │
-│ 192.168.1.10 · 2.3km do ponto selecionado    │
-├──────────────────────────────────────────────┤
-│ Switch Centro                           [🟢] │
-│ 192.168.1.20 · 5.1km do ponto selecionado    │
-└──────────────────────────────────────────────┘
-```
+**Componente**:
+- `frontend/src/features/networkDesign/modules/deviceAutocomplete.js` - Componente reutilizável com Fuse.js
+
+**Funcionalidades extras**:
+- ✅ Dropdown com estilo customizado e scroll
+- ✅ Highlight do item selecionado
+- ✅ Click fora fecha dropdown
+- ✅ Exibe vendor e model do dispositivo
+- ✅ Armazena last map click para proximity scoring
 
 ---
 
@@ -253,19 +263,25 @@ const response = await fetch(
 
 ---
 
-### 9. Prevenção de Conflitos
+### ✅ 9. Prevenção de Conflitos (CONCLUÍDO)
 
-**Problema Atual**: Possível criar cabos com portas/dispositivos já em uso.
+**Problema Atual**: ~~Possível criar cabos com portas/dispositivos já em uso.~~
 
-**Solução Proposta**:
-- Validar se porta origem/destino já está vinculada a outro cabo
-- Detectar cabos muito próximos (< 50m) → "Cabo similar já existe?"
-- Validar se dispositivos têm coordenadas geográficas
-- Checar se portas existem no Zabbix
+**Solução Implementada**:
+- ✅ Validar se dispositivos têm coordenadas geográficas (warning amarelo, debounce 500ms)
+- ✅ Detectar cabos muito próximos (< 50m) usando algoritmo Haversine (popup, debounce 1s)
+- ✅ Warning não bloqueante para coordenadas ausentes
+- ✅ Alerta visual para proximidade com cabos existentes
+- ✅ Auto-dismiss de popups após 10 segundos
 
 **Impacto**: Alto (previne erros de dados)  
-**Esforço**: 3-4 horas  
-**Prioridade**: 🔥 Alta
+**Esforço Real**: 3.5 horas  
+**Prioridade**: 🔥 Alta  
+**Status**: ✅ **Concluído em 05/03/2026**
+
+**Endpoints criados**:
+- `POST /api/v1/inventory/fibers/validate-device-coords/` - Verifica lat/lng de dispositivos
+- `POST /api/v1/inventory/fibers/validate-nearby/` - Detecta cabos próximos (threshold: 50m)
 
 **Validações**:
 ```python
@@ -384,16 +400,19 @@ class FiberCable(models.Model):
 
 ## 🚀 Roadmap de Implementação
 
-### Sprint 1 - Quick Wins (1 semana)
+### Sprint 1 - Quick Wins ✅ CONCLUÍDO
 - [x] Provider Pattern (CONCLUÍDO - v2.1.0)
-- [ ] Indicadores visuais origem/destino
+- [x] Indicadores visuais origem/destino ✅ 05/03/2026
 - [ ] Preview antes de salvar
 - [ ] Copiar cabo como template
 
-### Sprint 2 - Validações (1 semana)
-- [ ] Validação em tempo real
-- [ ] Prevenção de conflitos
-- [ ] Autocomplete de dispositivos
+### Sprint 2 - Validações ✅ CONCLUÍDO
+- [x] Validação em tempo real ✅ 05/03/2026
+- [x] Prevenção de conflitos ✅ 05/03/2026
+- [x] Autocomplete de dispositivos ✅ 05/03/2026
+
+### 🎯 Sprint 3 - Em Progresso
+- [ ] **Próxima melhoria a definir**
 
 ### Sprint 3 - Edição Avançada (1-2 semanas)
 - [ ] Undo/Redo

@@ -20,6 +20,7 @@ import {
 } from './apiClient.js';
 import {
     createCablePolyline,
+    fitMapToBounds,
 } from './mapCore-refactored.js';
 import { showErrorMessage } from './uiHelpers.js';
 
@@ -212,11 +213,7 @@ export async function loadAllCablesForVisualization(options = {}) {
         console.log(`[loadAllCablesForVisualization - cableService] Finished drawing ${drawnCount} valid cable polylines.`);
 
         if (fitToBounds && allPoints.length > 0) {
-            try {
-                _mapInstance.fitBounds(allPoints, 50);
-            } catch (err) {
-                console.warn('[cableService] Failed to fit bounds for visualization:', err);
-            }
+            fitMapToBounds(allPoints, 50);
         }
 
     } catch (error) {

@@ -74,6 +74,11 @@ urlpatterns = [
         name="device-select-options",
     ),
     path(
+        "devices/autocomplete/",
+        device_api.api_devices_autocomplete,
+        name="devices-autocomplete",
+    ),
+    path(
         "devices/<int:device_id>/ports/",
         device_api.api_device_ports,
         name="device-ports",
@@ -214,6 +219,26 @@ urlpatterns = [
         "fibers/import-kml/modal/",
         fiber_api.import_kml_modal,
         name="fibers-import-kml-modal",
+    ),
+    path(
+        "fibers/validate-port/",
+        fiber_api.api_validate_port,
+        name="fibers-validate-port",
+    ),
+    path(
+        "fibers/validate-name/",
+        fiber_api.api_validate_cable_name,
+        name="fibers-validate-name",
+    ),
+    path(
+        "fibers/validate-device-coords/",
+        fiber_api.api_validate_device_coordinates,
+        name="fibers-validate-device-coords",
+    ),
+    path(
+        "fibers/validate-nearby/",
+        fiber_api.api_validate_nearby_cables,
+        name="fibers-validate-nearby",
     ),
     path(
         "diagnostics/telnet/",

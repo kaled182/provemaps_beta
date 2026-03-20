@@ -176,16 +176,32 @@ class MapboxMarker extends IMarker {
   }
 
   _createMarker() {
+    // Determine marker configuration based on type
+    const markerType = this.options.markerType || 'default';
+    const config = this._getMarkerConfig(markerType);
+
     // Create custom marker element
     const el = document.createElement('div');
-    el.className = 'map-marker';
-    el.style.width = '24px';
-    el.style.height = '24px';
+    el.className = `map-marker map-marker-${markerType}`;
+    el.style.width = `${config.size}px`;
+    el.style.height = `${config.size}px`;
     el.style.borderRadius = '50%';
-    el.style.backgroundColor = '#dc2626';
+    el.style.backgroundColor = config.color;
     el.style.border = '3px solid white';
     el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
     el.style.cursor = this.options.draggable ? 'move' : 'pointer';
+    el.style.display = 'flex';
+    el.style.alignItems = 'center';
+    el.style.justifyContent = 'center';
+    el.style.fontWeight = 'bold';
+    el.style.color = 'white';
+    el.style.fontSize = `${config.size * 0.6}px`;
+    el.style.userSelect = 'none';
+
+    // Add label if configured
+    if (config.label) {
+      el.textContent = config.label;
+    }
 
     this.marker = new mapboxgl.Marker({
       element: el,
@@ -248,6 +264,43 @@ class MapboxMarker extends IMarker {
 
   remove() {
     this.marker.remove();
+  }
+
+  /**
+   * Get marker configuration based on type
+   * @param {string} type - 'origin', 'destination', 'intermediate', 'default', 'preview'
+   * @returns {{color: string, size: number, label: string}}
+   */
+  _getMarkerConfig(type) {
+    const configs = {
+      origin: {
+        color: '#22c55e', // green-500
+        size: 32,
+        label: 'A'
+      },
+      destination: {
+        color: '#ef4444', // red-500
+        size: 32,
+        label: 'B'
+      },
+      intermediate: {
+        color: '#3b82f6', // blue-500
+        size: 20,
+        label: ''
+      },
+      preview: {
+        color: '#f59e0b', // amber-500
+        size: 20,
+        label: ''
+      },
+      default: {
+        color: '#dc2626', // red-600 (original)
+        size: 24,
+        label: ''
+      }
+    };
+
+    return configs[type] || configs.default;
   }
 }
 

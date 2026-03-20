@@ -8,6 +8,7 @@ import json
 import logging
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -610,61 +611,65 @@ def get_device_ports_with_live_status(device_id: int) -> Dict[str, Any]:
 
     ports_qs: QuerySet[Port] = Port.objects.filter(device=device).select_related("device")
     ports_list = list(ports_qs)
-    
+
     hostid = (getattr(cast(Any, device), "zabbix_hostid", "") or "").strip()
-    
-    # Preload optical discovery cache
-    discovery_cache: Dict[Any, Any] = {}
-    if hostid:
-        discovery_cache = _preload_optical_discovery_cache(hostid, ports_list)
-    
-    # Fetch optical snapshots (RX/TX power)
+
+    # Pre-fetch all cable associations in 2 queries (eliminates N+1)
+    port_ids = [cast(int, getattr(cast(Any, p), "id", p.pk)) for p in ports_list]
+    cables_by_origin: Dict[int, Any] = {
+        c.origin_port_id: c
+        for c in FiberCable.objects.filter(origin_port_id__in=port_ids).only("id", "origin_port_id")
+    }
+    cables_by_dest: Dict[int, Any] = {
+        c.destination_port_id: c
+        for c in FiberCable.objects.filter(destination_port_id__in=port_ids).only("id", "destination_port_id")
+    }
+
+    # Fetch Zabbix data: optical (sequential) + interface status (parallel)
     optical_snapshots: Dict[int, Dict[str, Any]] = {}
-    if hostid:
-        optical_snapshots = fetch_ports_optical_snapshots(
-            ports_list,
-            discovery_cache=discovery_cache,
-            persist_keys=True,
-            include_status_meta=False,
-        )
-    
-    # Fetch interface status from Zabbix
     interface_status_map: Dict[str, Dict[str, Any]] = {}
+
     if hostid:
-        interface_status_map = _fetch_interface_status_bulk(hostid, ports_list)
-    
+        def _fetch_optical():
+            cache = _preload_optical_discovery_cache(hostid, ports_list)
+            return fetch_ports_optical_snapshots(
+                ports_list,
+                discovery_cache=cache,
+                persist_keys=True,
+                include_status_meta=False,
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            f_optical = executor.submit(_fetch_optical)
+            f_status = executor.submit(_fetch_interface_status_bulk, hostid, ports_list)
+            optical_snapshots = f_optical.result()
+            interface_status_map = f_status.result()
+
     ports_data: List[Dict[str, Any]] = []
-    
+
     for port in ports_list:
         port_any = cast(Any, port)
         port_id = cast(int, getattr(port_any, "id", port_any.pk))
         port_name = cast(str, getattr(port_any, "name", ""))
-        
+
         # Get optical data
         optical = optical_snapshots.get(port_id, {})
         rx_dbm = optical.get("rx_dbm")
         tx_dbm = optical.get("tx_dbm")
-        
+
         # Get interface status
         status_data = interface_status_map.get(port_name, {})
         status = status_data.get("status", "unknown")
         speed = status_data.get("speed", "")
-        
-        # CORREÇÃO MELHORADA: Se tem sinal óptico (RX ou TX), a porta está UP
-        # Override do status do Zabbix quando há evidência física de link
+
         has_optical_signal = (rx_dbm is not None or tx_dbm is not None)
-        
         if has_optical_signal:
-            # Se tem sinal óptico, independente do status administrativo
             status = "up"
         elif status == "unknown":
-            # Se não tem sinal óptico e status é desconhecido, marca como down
             status = "down"
-        
-        # Get cable info
-        cable_as_origin = FiberCable.objects.filter(origin_port=port).first()
-        cable_as_dest = FiberCable.objects.filter(destination_port=port).first()
-        fiber_cable = cable_as_origin or cable_as_dest
+
+        # Get cable info from pre-fetched maps (no extra queries)
+        fiber_cable = cables_by_origin.get(port_id) or cables_by_dest.get(port_id)
         fiber_cable_id = cast(Optional[int], getattr(fiber_cable, "id", None) if fiber_cable else None)
         
         # FILTRO: Apenas portas físicas em uso (com sinal óptico OU status UP OU com cabo conectado)
@@ -2411,6 +2416,73 @@ def list_device_select_options() -> List[Dict[str, Any]]:
     return options
 
 
+def list_devices_autocomplete() -> List[Dict[str, Any]]:
+    """
+    Return devices with enriched data for autocomplete component.
+    Includes coordinates, Zabbix hostid, IP, and site information.
+    """
+    device_rows = (
+        Device.objects.select_related("site")
+        .order_by("name")
+        .values(
+            "id",
+            "name",
+            "vendor",
+            "model",
+            "primary_ip",
+            "zabbix_hostid",
+            "site_id",
+            "site__display_name",
+            "site__latitude",
+            "site__longitude",
+            "site__city",
+            "site__state",
+        )
+    )
+
+    options: List[Dict[str, Any]] = []
+
+    for entry in device_rows:
+        site_label = entry.get("site__display_name") or ""
+        lat = entry.get("site__latitude")
+        lng = entry.get("site__longitude")
+        
+        option: Dict[str, Any] = {
+            "id": int(entry["id"]),
+            "name": entry["name"],
+            "ip": entry.get("primary_ip") or "",
+            "vendor": entry.get("vendor") or "",
+            "model": entry.get("model") or "",
+            "zabbix_hostid": entry.get("zabbix_hostid") or "",
+        }
+
+        if site_label:
+            option["site"] = site_label
+        
+        if entry.get("site_id"):
+            option["site_id"] = int(entry["site_id"])
+        
+        # Add coordinates if available
+        if lat is not None and lng is not None:
+            option["lat"] = float(lat)
+            option["lng"] = float(lng)
+        
+        # Add city/state for better search
+        city = entry.get("site__city")
+        state = entry.get("site__state")
+        if city or state:
+            location_parts = []
+            if city:
+                location_parts.append(city)
+            if state:
+                location_parts.append(state)
+            option["location"] = ", ".join(location_parts)
+
+        options.append(option)
+
+    return options
+
+
 __all__ = [
     "InventoryUseCaseError",
     "InventoryValidationError",
@@ -2424,5 +2496,6 @@ __all__ = [
     "list_sites",
     "port_traffic_history",
     "list_device_select_options",
+    "list_devices_autocomplete",
     "ZABBIX_REQUEST",
 ]

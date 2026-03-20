@@ -132,7 +132,9 @@ CSP_IMG_SRC = os.getenv(
     "https://*.gstatic.com "
     "https://api.mapbox.com "
     "https://*.mapbox.com "
-    "https://*.tiles.mapbox.com",
+    "https://*.tiles.mapbox.com "
+    "https://*.tile.openstreetmap.org "
+    "https://*.openstreetmap.org",
 ).split()
 CSP_FONT_SRC = os.getenv(
     "CSP_FONT_SRC",
@@ -147,6 +149,7 @@ CSP_CONNECT_SRC = os.getenv(
     "https://api.mapbox.com "
     "https://events.mapbox.com "
     "https://*.tiles.mapbox.com "
+    "https://nominatim.openstreetmap.org "
     "http://localhost:8082 "
     "http://video-hls:8080 "
     "http://localhost:8889",

@@ -60,6 +60,10 @@ urlpatterns = [
     path('api/backups/settings/', api_views.update_backup_settings, name='backup_settings'),
     path('api/backups/download/<path:filename>/', api_views.download_backup, name='download_backup'),
 
+    # Camera settings
+    path('api/camera-settings/', api_views.camera_settings, name='camera_settings'),
+    path('api/test-stream/', api_views.test_stream, name='test_stream'),
+
     # Video mosaics endpoints
     path('video/api/mosaics/', api_views.video_mosaics_list, name='video_mosaics_list'),
     path('video/api/mosaics/<int:mosaic_id>/', api_views.video_mosaic_detail, name='video_mosaic_detail'),

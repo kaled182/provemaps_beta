@@ -386,11 +386,82 @@ const toggleCameraSite = (siteName, cameras) => {
   updateMap()
 }
 
+// Ajusta o mapa para mostrar todos os itens visíveis (markers + polylines)
+const fitAllItemsBounds = () => {
+  const provider = currentMapProvider.value
+  const mapInstance = googleMap.value
+  if (!mapInstance) return
+
+  const points = []
+
+  // Coletar posições dos markers (devices)
+  activeMarkers.forEach(marker => {
+    if (provider === 'google') {
+      const pos = marker.getPosition()
+      if (pos) points.push({ lat: pos.lat(), lng: pos.lng() })
+    } else if (provider === 'mapbox') {
+      if (typeof marker.getLngLat === 'function') {
+        const lngLat = marker.getLngLat()
+        points.push({ lat: lngLat.lat, lng: lngLat.lng })
+      }
+    } else if (provider === 'osm') {
+      if (typeof marker.getLatLng === 'function') {
+        const latlng = marker.getLatLng()
+        points.push({ lat: latlng.lat, lng: latlng.lng })
+      }
+    }
+  })
+
+  // Coletar pontos dos cabos selecionados
+  const selectedCableIds = new Set(selectedItems.value.cables)
+  availableItems.value.cables
+    .filter(cable => selectedCableIds.has(cable.id) && cable.path_coordinates)
+    .forEach(cable => {
+      cable.path_coordinates.forEach(coord => {
+        const lat = parseFloat(coord.lat)
+        const lng = parseFloat(coord.lng)
+        if (!isNaN(lat) && !isNaN(lng)) points.push({ lat, lng })
+      })
+    })
+
+  if (points.length === 0) {
+    console.log('[fitAllItemsBounds] Nenhum ponto para ajustar bounds')
+    return
+  }
+
+  console.log(`[fitAllItemsBounds] Ajustando bounds para ${points.length} pontos (provider: ${provider})`)
+
+  if (provider === 'google') {
+    const bounds = new google.maps.LatLngBounds()
+    points.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }))
+    mapInstance.fitBounds(bounds)
+    if (points.length === 1) {
+      const listener = google.maps.event.addListener(mapInstance, 'idle', () => {
+        if (mapInstance.getZoom() > 15) mapInstance.setZoom(15)
+        google.maps.event.removeListener(listener)
+      })
+    }
+  } else if (provider === 'mapbox') {
+    if (window.mapboxgl) {
+      const bounds = new window.mapboxgl.LngLatBounds()
+      points.forEach(p => bounds.extend([p.lng, p.lat]))
+      if (!bounds.isEmpty()) {
+        mapInstance.fitBounds(bounds, { padding: 80, maxZoom: 15 })
+      }
+    }
+  } else if (provider === 'osm') {
+    const latlngs = points.map(p => [p.lat, p.lng])
+    mapInstance.fitBounds(latlngs, { padding: [50, 50] })
+  }
+}
+
 // Função unificada para atualizar todo o mapa (markers + polylines)
 const updateMap = (animateItemId = null) => {
   if (!googleMap.value) return
-  
-  // Atualizar markers usando composable
+
+  const wasInitialLoad = isInitialLoad.value
+
+  // Atualizar markers usando composable (sem auto-fit — faremos depois com todos os itens)
   updateMapMarkers({
     mapInstance: googleMap.value,
     provider: currentMapProvider.value,
@@ -403,14 +474,15 @@ const updateMap = (animateItemId = null) => {
     onMarkerClick: handleDeviceClick,
     updateMapboxMarkerSizes: updateMapboxMarkerSizes,
     getActiveMapZoom: getActiveMapZoom,
-    applyMapboxMarkerDimensions: applyMapboxMarkerDimensions
+    applyMapboxMarkerDimensions: applyMapboxMarkerDimensions,
+    skipAutoFit: true
   })
-  
+
   // Marcar que não é mais carregamento inicial
   if (isInitialLoad.value) {
     isInitialLoad.value = false
   }
-  
+
   // Atualizar polylines usando composable
   updateCablePolylines({
     mapInstance: googleMap.value,
@@ -422,6 +494,11 @@ const updateMap = (animateItemId = null) => {
     onPolylineHover: handleCableHover,
     onPolylineUnhover: handleCableUnhover
   })
+
+  // Na carga inicial, ajustar bounds para mostrar TODOS os itens (markers + cabos)
+  if (wasInitialLoad) {
+    fitAllItemsBounds()
+  }
 }
 
 const toggleItem = (itemId) => {

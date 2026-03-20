@@ -14,10 +14,12 @@ import {
     isModalOpen,
     setDeviceOptions,
     refreshDestinationState,
+    validateAllFields,
+    clearValidationStates,
 } from './modules/modalEditor.js';
 
 // API client modules
-import { fetchFibers, fetchFiber, createFiberManual, updateFiber, removeFiber } from './modules/apiClient.js';
+import { fetchFibers, fetchFiber, createFiberManual, updateFiber, removeFiber, validateNearbyCables } from './modules/apiClient.js';
 
 // Business logic modules
 import { initCableService, loadCableList, loadCableDetails, createCable, updateCableData, deleteCable, loadAllCablesForVisualization, validateCablePayload, removeCableVisualization, cleanupCableService } from './modules/cableService.js';
@@ -46,6 +48,95 @@ let deviceOptionsPromise = null;
 let deviceOptionsDispatched = false;
 let globalListenersBound = false;
 let activeEndpoint = 'end'; // 'start' | 'end'
+
+// Nearby cables validation state
+let nearbyCablesWarningEl = null;
+
+/**
+ * Debounce utility
+ */
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+/**
+ * Validate nearby cables and show warning if found
+ */
+async function validateNearbyCablesPath(path) {
+    if (!path || path.length < 2) return;
+    
+    try {
+        const result = await validateNearbyCables(path, activeFiberId);
+        
+        // Remove previous warning
+        if (nearbyCablesWarningEl) {
+            nearbyCablesWarningEl.remove();
+            nearbyCablesWarningEl = null;
+        }
+        
+        if (result.has_nearby && result.nearby_cables && result.nearby_cables.length > 0) {
+            // Create warning element
+            nearbyCablesWarningEl = document.createElement('div');
+            nearbyCablesWarningEl.className = 'nearby-cables-warning';
+            nearbyCablesWarningEl.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                max-width: 350px;
+                background: #fef3c7;
+                border: 2px solid #f59e0b;
+                border-radius: 0.5rem;
+                padding: 1rem;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                z-index: 9999;
+                animation: slideIn 0.3s ease-out;
+            `;
+            
+            const cableList = result.nearby_cables.map(c => 
+                `<li><strong>${c.name}</strong> - ${c.distance_meters}m away</li>`
+            ).join('');
+            
+            nearbyCablesWarningEl.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                    <strong style="color: #d97706;">⚠️ Nearby Cables Detected</strong>
+                    <button onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #d97706;">&times;</button>
+                </div>
+                <p style="margin: 0.5rem 0; font-size: 0.875rem; color: #92400e;">
+                    This cable path passes very close to existing cables (< ${result.threshold_meters}m):
+                </p>
+                <ul style="margin: 0.5rem 0; padding-left: 1.5rem; font-size: 0.875rem; color: #92400e;">
+                    ${cableList}
+                </ul>
+                <small style="color: #78350f;">This might indicate duplicate cables or routing errors.</small>
+            `;
+            
+            document.body.appendChild(nearbyCablesWarningEl);
+            
+            // Auto-dismiss after 10 seconds
+            setTimeout(() => {
+                if (nearbyCablesWarningEl) {
+                    nearbyCablesWarningEl.style.animation = 'slideOut 0.3s ease-in';
+                    setTimeout(() => {
+                        if (nearbyCablesWarningEl) nearbyCablesWarningEl.remove();
+                    }, 300);
+                }
+            }, 10000);
+        }
+    } catch (error) {
+        console.error('Error validating nearby cables:', error);
+    }
+}
+
+// Debounced validation (1 second delay to avoid spam)
+const debouncedNearbyCablesValidation = debounce(validateNearbyCablesPath, 1000);
 const modalDefaultParent = { current: null };
 let googleRetryCount = 0;
 const GOOGLE_MAX_RETRY = 50;
@@ -234,7 +325,10 @@ function extendPathAtEndpoint(lat, lng) {
     if (!path || path.length === 0 || activeEndpoint === 'end') {
         const point = { lat, lng };
         addPoint(lat, lng);
-        addMarker(point);
+        // Determine type based on current path length
+        const currentPath = getPath();
+        const markerType = currentPath.length === 1 ? 'origin' : 'destination';
+        addMarker(point, markerType);
         return;
     }
 
@@ -314,13 +408,30 @@ onPathChange(({ path, distance }) => {
         clearPolyline();
     }
     if (path.length > 0) {
-        polyline = drawPolyline(path);
+        // Use preview color (orange) for new cables, blue for existing cables
+        const isPreview = !activeFiberId;
+        const polylineOptions = isPreview ? {
+            strokeColor: '#f59e0b', // amber-500 (preview)
+            strokeWeight: 4,
+            strokeOpacity: 0.8,
+        } : {
+            strokeColor: '#2563eb', // blue-600 (saved)
+            strokeWeight: 4,
+            strokeOpacity: 0.9,
+        };
+        
+        polyline = drawPolyline(path, polylineOptions);
         // Add right-click to polyline
         if (polyline) {
             attachPolylineRightClick(polyline, ({ clientX, clientY }) => {
                 showContextMenu(clientX, clientY);
                 updateContextMenuStateWrapper();
             });
+        }
+        
+        // Validate nearby cables (debounced to avoid excessive API calls)
+        if (path.length >= 2) {
+            debouncedNearbyCablesValidation(path);
         }
     }
     
@@ -420,9 +531,12 @@ function clearMarkers() {
     markers = []; // Keep local array in sync
 }
 
-function addMarker(point, removable = true) {
-    console.log(`[addMarker] Creating draggable marker at:`, point);
-    const marker = createMarker(point, { draggable: true });
+function addMarker(point, markerType = 'intermediate', removable = true) {
+    console.log(`[addMarker] Creating ${markerType} marker at:`, point);
+    const marker = createMarker(point, { 
+        draggable: true,
+        markerType: markerType
+    });
     markers.push(marker);
     console.log(`[addMarker] Total markers now: ${markers.length}`);
 
@@ -460,7 +574,16 @@ function setPath(points) {
     clearMarkers();
     setPathState(points);
     const currentPath = getPath();
-    currentPath.forEach((point) => addMarker(point));
+    currentPath.forEach((point, index) => {
+        // Determine marker type based on position
+        let markerType = 'intermediate';
+        if (index === 0) {
+            markerType = 'origin';
+        } else if (index === currentPath.length - 1) {
+            markerType = 'destination';
+        }
+        addMarker(point, markerType);
+    });
     // onPathChange callback will handle polyline drawing
 }
 
@@ -488,6 +611,9 @@ function initMap() {
     // Setup click handler via mapCore
     onMapClick(({ lat, lng }) => {
         hideContextMenu();
+        
+        // Store last map click for proximity sorting in device autocomplete
+        window.__lastMapClick = { lat, lng };
         
         const currentPath = getPath();
         if (activeFiberId && currentPath.length === 0) {
@@ -832,6 +958,13 @@ async function handleManualFormSubmit(event) {
 
     if (!isEditing && path.length < 2) {
         showErrorMessage('Add at least two points on the map before saving the route.');
+        return;
+    }
+
+    // Validate all fields in real-time
+    const isValid = await validateAllFields();
+    if (!isValid) {
+        showErrorMessage('Please fix validation errors before saving.');
         return;
     }
 

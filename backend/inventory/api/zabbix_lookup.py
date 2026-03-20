@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, Iterable, List, Optional, TypedDict, cast
 
 logger = logging.getLogger(__name__)
@@ -301,52 +302,52 @@ def lookup_hosts_grouped(request: HttpRequest) -> JsonResponse:
             "groups": [],  # Will be populated by reverse lookup
         }
     
-    # REVERSE LOOKUP: For each group, fetch all hosts in that group
+    # REVERSE LOOKUP: Fetch hosts per group in parallel to eliminate N+1
     groups_dict: Dict[str, Dict[str, Any]] = {}
-    
-    logger.info(f"Performing reverse lookup for {len(all_groups)} groups")
-    
-    for group_data in all_groups:
-        group_id = group_data.get("groupid")
-        group_name = group_data.get("name")
-        
-        if not group_id or not group_name:
-            continue
-        
-        # Fetch hosts in this group using groupids parameter (WORKS!)
+
+    valid_groups = [
+        g for g in all_groups if g.get("groupid") and g.get("name")
+    ]
+    logger.info(f"Performing parallel reverse lookup for {len(valid_groups)} groups")
+
+    def fetch_group(group_data: Dict[str, Any]):
+        group_id = group_data["groupid"]
+        group_name = group_data["name"]
         try:
-            hosts_in_group = cast(
+            result = cast(
                 List[Dict[str, Any]],
                 zabbix_request("host.get", {
                     "output": ["hostid"],
-                    "groupids": [group_id]
+                    "groupids": [group_id],
                 }) or [],
             )
+            return group_id, group_name, result
         except Exception as exc:
             logger.error(f"Error fetching hosts for group {group_name}: {exc}")
-            continue
-        
-        group_hosts = []
-        for host in hosts_in_group:
-            hostid = str(host.get("hostid") or "")
-            if hostid in hosts_by_id:
-                # Mark this host as having a group
-                hosts_with_groups.add(hostid)
-                
-                # Add group name to host's groups list
-                if group_name not in hosts_by_id[hostid]["groups"]:
-                    hosts_by_id[hostid]["groups"].append(group_name)
-                
-                # Add host to this group
-                group_hosts.append(hosts_by_id[hostid].copy())
-        
-        if group_hosts:  # Only add group if it has hosts
-            groups_dict[group_id] = {
-                "zabbix_group_id": group_id,
-                "name": group_name,
-                "hosts": group_hosts
-            }
-            logger.debug(f"Group '{group_name}': {len(group_hosts)} hosts")
+            return group_id, group_name, []
+
+    max_workers = min(10, len(valid_groups)) if valid_groups else 1
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(fetch_group, g): g for g in valid_groups}
+        for future in as_completed(futures):
+            group_id, group_name, hosts_in_group = future.result()
+
+            group_hosts = []
+            for host in hosts_in_group:
+                hostid = str(host.get("hostid") or "")
+                if hostid in hosts_by_id:
+                    hosts_with_groups.add(hostid)
+                    if group_name not in hosts_by_id[hostid]["groups"]:
+                        hosts_by_id[hostid]["groups"].append(group_name)
+                    group_hosts.append(hosts_by_id[hostid].copy())
+
+            if group_hosts:
+                groups_dict[group_id] = {
+                    "zabbix_group_id": group_id,
+                    "name": group_name,
+                    "hosts": group_hosts,
+                }
+                logger.debug(f"Group '{group_name}': {len(group_hosts)} hosts")
     
     # Add "Sem Grupo Definido" for hosts without any groups
     hosts_without_groups = [

@@ -3,7 +3,10 @@
  * Manages modal lifecycle, form state, device/port selects, and single-port mode toggling.
  */
 
-import { fetchDevicePorts } from './apiClient.js';
+console.log('[MODAL EDITOR MODULE] Loading... autocomplete enabled');
+
+import { fetchDevicePorts, validatePort, validateCableName, validateDeviceCoordinates } from './apiClient.js';
+import { createDeviceAutocomplete } from './deviceAutocomplete.js';
 
 // Cached DOM references
 let manualModal = null;
@@ -11,19 +14,40 @@ let manualModalContent = null;
 let manualForm = null;
 let manualRouteNameInput = null;
 let manualRouteDistanceEl = null;
-let manualOriginDeviceSelect = null;
+let manualOriginDeviceSelect = null;  // Now an input instead of select
 let manualOriginPortSelect = null;
-let manualDestDeviceSelect = null;
+let manualDestDeviceSelect = null;    // Now an input instead of select
 let manualDestPortSelect = null;
 let manualSinglePortCheckbox = null;
 let manualDestNotice = null;
 
+// Autocomplete instances
+let originAutocomplete = null;
+let destAutocomplete = null;
+
+// Selected device data from autocomplete
+let selectedOriginDevice = null;
+let selectedDestDevice = null;
+
+// Validation feedback elements (created dynamically)
+let nameValidationFeedback = null;
+let originPortValidationFeedback = null;
+let destPortValidationFeedback = null;
+
 // Editing state
 let editingFiberId = null;
 
-// Device option cache reused by frontend builder bootstrap
+// Device option cache reused by frontend builder bootstrap (kept for compatibility)
 let cachedDeviceOptions = [];
 let modalInitialized = false;
+
+// Validation state
+let validationTimers = {};
+let validationResults = {
+    name: { valid: true, message: '' },
+    originPort: { valid: true, message: '' },
+    destPort: { valid: true, message: '' }
+};
 
 /**
  * Helper to find elements within the page container first, then globally
@@ -32,6 +56,197 @@ function findElement(id) {
     const pageContainer = document.querySelector('.network-design-page');
     const element = pageContainer ? pageContainer.querySelector(`#${id}`) : null;
     return element || document.getElementById(id);
+}
+
+/**
+ * Debounce utility - delays function execution until after wait time
+ */
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+/**
+ * Create or get validation feedback element
+ */
+function getOrCreateFeedback(inputElement, feedbackVar) {
+    let feedback = feedbackVar;
+    if (!feedback) {
+        feedback = document.createElement('div');
+        feedback.className = 'validation-feedback';
+        feedback.style.cssText = 'color: #dc2626; font-size: 0.875rem; margin-top: 0.25rem; display: none;';
+        inputElement.parentElement.appendChild(feedback);
+    }
+    return feedback;
+}
+
+/**
+ * Show validation error on field
+ */
+function showFieldError(inputElement, feedbackElement, message) {
+    inputElement.style.borderColor = '#dc2626';
+    inputElement.style.boxShadow = '0 0 0 1px #dc2626';
+    feedbackElement.textContent = message;
+    feedbackElement.style.display = 'block';
+}
+
+/**
+ * Clear validation error from field
+ */
+function clearFieldError(inputElement, feedbackElement) {
+    inputElement.style.borderColor = '';
+    inputElement.style.boxShadow = '';
+    if (feedbackElement) {
+        feedbackElement.style.display = 'none';
+        feedbackElement.textContent = '';
+    }
+}
+
+/**
+ * Validate cable name in real-time
+ */
+async function validateCableNameField() {
+    if (!manualRouteNameInput) return;
+    
+    const name = manualRouteNameInput.value.trim();
+    
+    // Create feedback element if needed
+    nameValidationFeedback = getOrCreateFeedback(manualRouteNameInput, nameValidationFeedback);
+    
+    // Clear previous validation
+    clearFieldError(manualRouteNameInput, nameValidationFeedback);
+    
+    // Validate required
+    if (!name) {
+        validationResults.name = { valid: false, message: 'Cable name is required' };
+        showFieldError(manualRouteNameInput, nameValidationFeedback, 'Cable name is required');
+        return;
+    }
+    
+    // Validate minimum length
+    if (name.length < 3) {
+        validationResults.name = { valid: false, message: 'Cable name must be at least 3 characters' };
+        showFieldError(manualRouteNameInput, nameValidationFeedback, 'Cable name must be at least 3 characters');
+        return;
+    }
+    
+    try {
+        const result = await validateCableName(name, editingFiberId);
+        
+        if (!result.available) {
+            validationResults.name = { valid: false, message: result.message };
+            showFieldError(manualRouteNameInput, nameValidationFeedback, result.message);
+        } else {
+            validationResults.name = { valid: true, message: '' };
+            clearFieldError(manualRouteNameInput, nameValidationFeedback);
+        }
+    } catch (error) {
+        console.error('Error validating cable name:', error);
+        // Don't block on validation errors
+        validationResults.name = { valid: true, message: '' };
+    }
+}
+
+/**
+ * Validate port in real-time
+ */
+async function validatePortField(portSelectElement, feedbackElement, validationKey) {
+    if (!portSelectElement) return;
+    
+    const portId = portSelectElement.value;
+    
+    // Create feedback element if needed
+    const feedback = getOrCreateFeedback(portSelectElement, feedbackElement);
+    if (validationKey === 'originPort') {
+        originPortValidationFeedback = feedback;
+    } else if (validationKey === 'destPort') {
+        destPortValidationFeedback = feedback;
+    }
+    
+    // Clear previous validation
+    clearFieldError(portSelectElement, feedback);
+    
+    // Validate required
+    if (!portId) {
+        validationResults[validationKey] = { valid: false, message: 'Port selection is required' };
+        return;
+    }
+    
+    try {
+        const result = await validatePort(portId, editingFiberId);
+        
+        if (!result.available) {
+            const message = `Port ${result.port_name} is already used by cable "${result.cable_name}"`;
+            validationResults[validationKey] = { valid: false, message };
+            showFieldError(portSelectElement, feedback, message);
+        } else {
+            validationResults[validationKey] = { valid: true, message: '' };
+            clearFieldError(portSelectElement, feedback);
+        }
+    } catch (error) {
+        console.error('Error validating port:', error);
+        // Don't block on validation errors
+        validationResults[validationKey] = { valid: true, message: '' };
+    }
+}
+
+// Debounced validation functions (300ms delay)
+const debouncedNameValidation = debounce(validateCableNameField, 300);
+const debouncedOriginPortValidation = debounce(() => {
+    validatePortField(manualOriginPortSelect, originPortValidationFeedback, 'originPort');
+}, 300);
+const debouncedDestPortValidation = debounce(() => {
+    validatePortField(manualDestPortSelect, destPortValidationFeedback, 'destPort');
+}, 300);
+const debouncedDeviceCoordsValidation = debounce(validateDeviceCoordsField, 500);
+
+/**
+ * Validate device coordinates
+ */
+async function validateDeviceCoordsField() {
+    const originDeviceId = manualOriginDeviceSelect?.value || null;
+    const singlePort = manualSinglePortCheckbox?.checked || false;
+    const destDeviceId = singlePort ? null : (manualDestDeviceSelect?.value || null);
+    
+    if (!originDeviceId) return;
+    
+    try {
+        const result = await validateDeviceCoordinates(originDeviceId, destDeviceId);
+        
+        if (!result.valid && result.missing_devices && result.missing_devices.length > 0) {
+            const message = `Device(s) missing coordinates: ${result.missing_devices.join(', ')}. Cable cannot be drawn on map.`;
+            console.warn('[Validation]', message);
+            
+            // Show warning in UI (non-blocking, just informative)
+            const feedbackEl = document.createElement('div');
+            feedbackEl.className = 'validation-warning';
+            feedbackEl.style.cssText = 'color: #d97706; font-size: 0.875rem; margin-top: 0.5rem; padding: 0.5rem; background: #fef3c7; border-radius: 0.25rem; border-left: 3px solid #f59e0b;';
+            feedbackEl.innerHTML = `⚠️ ${message}<br><small>Please update device locations before creating this cable.</small>`;
+            
+            // Insert after destination device input or origin if single port
+            const insertAfter = singlePort ? manualOriginDeviceSelect : manualDestDeviceSelect;
+            if (insertAfter && insertAfter.parentElement) {
+                // Remove previous warning if exists
+                const oldWarning = insertAfter.parentElement.querySelector('.validation-warning');
+                if (oldWarning) oldWarning.remove();
+                
+                insertAfter.parentElement.appendChild(feedbackEl);
+            }
+        } else {
+            // Clear warning if coordinates are valid
+            const warnings = document.querySelectorAll('.validation-warning');
+            warnings.forEach(w => w.remove());
+        }
+    } catch (error) {
+        console.error('Error validating device coordinates:', error);
+    }
 }
 
 /**
@@ -50,16 +265,37 @@ export function initModalEditor() {
     manualSinglePortCheckbox = findElement('manualSinglePortOnly');
     manualDestNotice = findElement('manualDestNotice');
 
+    // DEBUG: Check what element type we got from template
+    console.log('[DEBUG initModalEditor] manualOriginDeviceSelect tagName:', manualOriginDeviceSelect?.tagName);
+    console.log('[DEBUG initModalEditor] manualOriginDeviceSelect outerHTML:', manualOriginDeviceSelect?.outerHTML);
+    console.log('[DEBUG initModalEditor] manualDestDeviceSelect tagName:', manualDestDeviceSelect?.tagName);
+
+    // Real-time validation listeners
+    if (manualRouteNameInput) {
+        manualRouteNameInput.addEventListener('input', debouncedNameValidation);
+        manualRouteNameInput.addEventListener('blur', validateCableNameField);
+    }
+
+    if (manualOriginPortSelect) {
+        manualOriginPortSelect.addEventListener('change', debouncedOriginPortValidation);
+    }
+
+    if (manualDestPortSelect) {
+        manualDestPortSelect.addEventListener('change', debouncedDestPortValidation);
+    }
+
     if (manualOriginDeviceSelect) {
         manualOriginDeviceSelect.addEventListener('change', async () => {
             await loadPortsForOrigin();
             await syncDestinationDevice();
+            debouncedDeviceCoordsValidation();
         });
     }
 
     if (manualDestDeviceSelect) {
-        manualDestDeviceSelect.addEventListener('change', () => {
-            void loadPortsForDestination();
+        manualDestDeviceSelect.addEventListener('change', async () => {
+            await loadPortsForDestination();
+            debouncedDeviceCoordsValidation();
         });
     }
 
@@ -78,6 +314,97 @@ export function initModalEditor() {
 
     if (cachedDeviceOptions.length) {
         applyDeviceOptionsToSelects();
+    }
+}
+
+/**
+ * Validate all required fields
+ * Returns true if all validations pass, false otherwise
+ */
+export async function validateAllFields() {
+    const singlePort = manualSinglePortCheckbox?.checked || false;
+    
+    // Validate name
+    await validateCableNameField();
+    
+    // Validate origin port
+    if (manualOriginPortSelect?.value) {
+        await validatePortField(manualOriginPortSelect, originPortValidationFeedback, 'originPort');
+    }
+    
+    // Validate destination port (only if not single port mode)
+    if (!singlePort && manualDestPortSelect?.value) {
+        await validatePortField(manualDestPortSelect, destPortValidationFeedback, 'destPort');
+    }
+    
+    // Check required fields
+    const nameValid = validationResults.name.valid;
+    const originDeviceValid = manualOriginDeviceSelect?.value ? true : false;
+    const originPortValid = validationResults.originPort.valid && manualOriginPortSelect?.value;
+    const destValid = singlePort || (
+        manualDestDeviceSelect?.value && 
+        validationResults.destPort.valid && 
+        manualDestPortSelect?.value
+    );
+    
+    // Highlight missing required fields
+    if (!manualRouteNameInput?.value) {
+        showFieldError(
+            manualRouteNameInput, 
+            nameValidationFeedback || getOrCreateFeedback(manualRouteNameInput, nameValidationFeedback),
+            'Cable name is required'
+        );
+    }
+    
+    if (!manualOriginDeviceSelect?.value) {
+        const feedback = getOrCreateFeedback(manualOriginDeviceSelect, null);
+        showFieldError(manualOriginDeviceSelect, feedback, 'Origin device is required');
+    }
+    
+    if (!manualOriginPortSelect?.value) {
+        const feedback = getOrCreateFeedback(manualOriginPortSelect, originPortValidationFeedback);
+        showFieldError(manualOriginPortSelect, feedback, 'Origin port is required');
+    }
+    
+    if (!singlePort && !manualDestDeviceSelect?.value) {
+        const feedback = getOrCreateFeedback(manualDestDeviceSelect, null);
+        showFieldError(manualDestDeviceSelect, feedback, 'Destination device is required');
+    }
+    
+    if (!singlePort && !manualDestPortSelect?.value) {
+        const feedback = getOrCreateFeedback(manualDestPortSelect, destPortValidationFeedback);
+        showFieldError(manualDestPortSelect, feedback, 'Destination port is required');
+    }
+    
+    return nameValid && originDeviceValid && originPortValid && destValid;
+}
+
+/**
+ * Clear all validation states
+ */
+export function clearValidationStates() {
+    validationResults = {
+        name: { valid: true, message: '' },
+        originPort: { valid: true, message: '' },
+        destPort: { valid: true, message: '' }
+    };
+    
+    if (manualRouteNameInput) {
+        clearFieldError(manualRouteNameInput, nameValidationFeedback);
+    }
+    if (manualOriginPortSelect) {
+        clearFieldError(manualOriginPortSelect, originPortValidationFeedback);
+    }
+    if (manualDestPortSelect) {
+        clearFieldError(manualDestPortSelect, destPortValidationFeedback);
+    }
+    if (manualOriginDeviceSelect) {
+        manualOriginDeviceSelect.style.borderColor = '';
+        manualOriginDeviceSelect.style.boxShadow = '';
+    }
+    if (manualDestDeviceSelect) {
+        manualDestDeviceSelect.style.borderColor = '';
+        manualDestDeviceSelect.style.boxShadow = '';
     }
 }
 
@@ -220,6 +547,9 @@ export function resetForm() {
 
     manualForm.reset();
 
+    // Clear validation states
+    clearValidationStates();
+
     if (manualOriginPortSelect) {
         manualOriginPortSelect.innerHTML = '<option value="">Selecione...</option>';
     }
@@ -288,29 +618,32 @@ export function setDeviceOptions(options = []) {
 }
 
 async function loadPortsForOrigin() {
-    if (!manualOriginDeviceSelect || !manualOriginPortSelect) return;
-    const deviceId = manualOriginDeviceSelect.value;
-    await loadPortsForSelect(deviceId, manualOriginPortSelect);
+    if (!manualOriginPortSelect) return;
+    await loadPortsForSelect(manualOriginDeviceSelect?.value || null, manualOriginPortSelect);
 }
 
 async function loadPortsForDestination() {
-    if (!manualDestDeviceSelect || !manualDestPortSelect) return;
-    const deviceId = manualDestDeviceSelect.value;
-    await loadPortsForSelect(deviceId, manualDestPortSelect);
+    if (!manualDestPortSelect) return;
+    await loadPortsForSelect(manualDestDeviceSelect?.value || null, manualDestPortSelect);
 }
 
 async function loadPortsForSelect(deviceId, targetSelect) {
     if (!targetSelect) return;
 
+    console.log('[loadPortsForSelect] Loading ports for device:', deviceId);
+
     targetSelect.innerHTML = '<option value="">Carregando...</option>';
 
     if (!deviceId) {
+        console.warn('[loadPortsForSelect] No device ID provided');
         targetSelect.innerHTML = '<option value="">Selecione...</option>';
         return;
     }
 
     try {
+        console.log('[loadPortsForSelect] Fetching ports for device:', deviceId);
         const data = await fetchDevicePorts(deviceId);
+        console.log('[loadPortsForSelect] Received', data?.ports?.length || 0, 'ports');
         targetSelect.innerHTML = '<option value="">Selecione...</option>';
 
         if (Array.isArray(data.ports)) {

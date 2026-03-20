@@ -7,11 +7,24 @@
 
 const API_BASE = '/api/v1/inventory';
 
-function getCookie(name) {
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) return parts.pop().split(';').shift();
-  return null;
+function getCsrfToken() {
+  // Tenta pegar do window (definido no base_spa.html)
+  if (window.CSRF_TOKEN) {
+    return window.CSRF_TOKEN;
+  }
+
+  // Fallback: busca no cookie
+  const name = 'csrftoken';
+  const cookieValue = document.cookie
+    .split('; ')
+    .find(row => row.startsWith(`${name}=`))
+    ?.split('=')[1];
+
+  if (!cookieValue) {
+    console.warn('[apiClient] CSRF token not found in window.CSRF_TOKEN or cookie');
+  }
+
+  return cookieValue || '';
 }
 
 async function request(path, { method = 'GET', headers = {}, body, skipJson } = {}) {
@@ -22,7 +35,11 @@ async function request(path, { method = 'GET', headers = {}, body, skipJson } = 
   };
   // Attach CSRF token for state-changing methods
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-    finalHeaders['X-CSRFToken'] = getCookie('csrftoken') || '';
+    const csrfToken = getCsrfToken();
+    if (!csrfToken) {
+      console.error('[apiClient] Cannot perform', method, 'request - CSRF token is missing');
+    }
+    finalHeaders['X-CSRFToken'] = csrfToken;
     if (body && !finalHeaders['Content-Type']) {
       finalHeaders['Content-Type'] = 'application/json';
     }
@@ -49,6 +66,9 @@ async function request(path, { method = 'GET', headers = {}, body, skipJson } = 
     throw new Error('Invalid JSON response');
   }
 }
+
+// Export request for use in other modules (e.g., deviceAutocomplete)
+export { request };
 
 // Fiber list
 export async function fetchFibers() {
@@ -88,4 +108,49 @@ export async function fetchDevicePorts(deviceId) {
   return await request(`/devices/${deviceId}/ports/`);
 }
 
-export { getCookie }; // Optional export if caller still uses directly
+// Validation endpoints
+export async function validatePort(portId, cableId = null) {
+  const payload = { port_id: portId };
+  if (cableId) {
+    payload.cable_id = cableId;
+  }
+  return await request('/fibers/validate-port/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function validateCableName(name, cableId = null) {
+  const payload = { name };
+  if (cableId) {
+    payload.cable_id = cableId;
+  }
+  return await request('/fibers/validate-name/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function validateDeviceCoordinates(originDeviceId, destDeviceId = null) {
+  const payload = { origin_device_id: originDeviceId };
+  if (destDeviceId) {
+    payload.dest_device_id = destDeviceId;
+  }
+  return await request('/fibers/validate-device-coords/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function validateNearbyCables(path, cableId = null) {
+  const payload = { path };
+  if (cableId) {
+    payload.cable_id = cableId;
+  }
+  return await request('/fibers/validate-nearby/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export { getCsrfToken }; // Export for external use if needed

@@ -35,13 +35,17 @@ export function initMap(elementId, options = {}) {
   });
 
   map.addListener('rightclick', (event) => {
-    event.stop();
+    if (event.domEvent && typeof event.domEvent.stopPropagation === 'function') {
+      event.domEvent.stopPropagation();
+    } else if (typeof event.stop === 'function') {
+      event.stop();
+    }
     if (rightClickCallback) {
       rightClickCallback({
         lat: event.latLng.lat(),
         lng: event.latLng.lng(),
-        clientX: event.domEvent.clientX,
-        clientY: event.domEvent.clientY,
+        clientX: event.domEvent?.clientX ?? 0,
+        clientY: event.domEvent?.clientY ?? 0,
       });
     }
   });
@@ -93,10 +97,14 @@ export function getPolyline() {
 export function onPolylineRightClick(callback) {
   if (polyline) {
     polyline.addListener('rightclick', (event) => {
-      event.stop();
+      if (event.domEvent && typeof event.domEvent.stopPropagation === 'function') {
+        event.domEvent.stopPropagation();
+      } else if (typeof event.stop === 'function') {
+        event.stop();
+      }
       callback({
-        clientX: event.domEvent.clientX,
-        clientY: event.domEvent.clientY,
+        clientX: event.domEvent?.clientX ?? 0,
+        clientY: event.domEvent?.clientY ?? 0,
       });
     });
   }
@@ -156,9 +164,11 @@ export function fitMapToBounds(path, padding = 50) {
   });
   map.fitBounds(bounds);
   if (typeof padding === 'number') {
-    padding = { top: padding, right: padding, bottom: padding, left: padding };
+    const uniformPadding = { top: padding, right: padding, bottom: padding, left: padding };
+    map.fitBounds(bounds, uniformPadding);
+  } else {
+    map.fitBounds(bounds, padding);
   }
-  map.fitBounds(bounds, padding);
 }
 
 // Create cable polyline for visualization (non-editable)
@@ -179,12 +189,16 @@ export function createCablePolyline(path, options = {}) {
 }
 
 // Attach right-click to external polyline
-export function attachPolylineRightClick(polyline, callback) {
-  polyline.addListener('rightclick', (event) => {
-    event.stop();
+export function attachPolylineRightClick(polylineInstance, callback) {
+  polylineInstance.addListener('rightclick', (event) => {
+    if (event.domEvent && typeof event.domEvent.stopPropagation === 'function') {
+      event.domEvent.stopPropagation();
+    } else if (typeof event.stop === 'function') {
+      event.stop();
+    }
     callback({
-      clientX: event.domEvent.clientX,
-      clientY: event.domEvent.clientY,
+      clientX: event.domEvent?.clientX ?? 0,
+      clientY: event.domEvent?.clientY ?? 0,
     });
   });
 }
@@ -195,4 +209,52 @@ export function attachPolylineRightClick(polyline, callback) {
  */
 export function getMapInstance() {
   return map;
+}
+
+/**
+ * Cleanup map resources
+ */
+export function cleanupMap() {
+  clearPolyline();
+  clearMarkers();
+  
+  // Clear event listeners if map exists
+  if (map) {
+    google.maps.event.clearInstanceListeners(map);
+  }
+  
+  // Reset references
+  map = null;
+  polyline = null;
+  markers = [];
+  clickCallback = null;
+  rightClickCallback = null;
+}
+
+/**
+ * Alterna o modo de edição de um caminho (polyline)
+ * 
+ * @param {boolean} isEditable - true = modo edição, false = modo visualização
+ * @param {HTMLElement} mapDiv - Container do mapa (para feedback de cursor)
+ * 
+ * Comportamento:
+ * - Google Maps: polyline.setEditable() + polyline.setDraggable()
+ * - Cursor: crosshair (edit) / grab (read)
+ */
+export function setPathEditable(isEditable, mapDiv = null) {
+  if (!polyline) {
+    console.warn('[mapCore] setPathEditable: polyline is null');
+    return;
+  }
+
+  // Google Maps API
+  polyline.setEditable(isEditable);
+  polyline.setDraggable(isEditable);
+  console.log(`[mapCore] Google Maps polyline editable: ${isEditable}`);
+
+  // Feedback visual: cursor do mapa
+  if (mapDiv) {
+    mapDiv.style.cursor = isEditable ? 'crosshair' : 'grab';
+    console.log(`[mapCore] Map cursor: ${mapDiv.style.cursor}`);
+  }
 }

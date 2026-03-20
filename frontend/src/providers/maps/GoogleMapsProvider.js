@@ -113,11 +113,19 @@ class GoogleMarkerClass extends IMarker {
     this.googleMap = map.googleMap;
     this.listeners = {};
 
+    // Get marker configuration based on type
+    const markerType = options.markerType || 'default';
+    const config = this._getMarkerConfig(markerType);
+
+    // Create SVG icon with label
+    const icon = this._createCustomIcon(config);
+
     this.marker = new google.maps.Marker({
       position: options.position,
       map: this.googleMap,
       draggable: options.draggable || false,
       title: options.title || '',
+      icon: icon,
     });
   }
 
@@ -155,6 +163,71 @@ class GoogleMarkerClass extends IMarker {
 
   remove() {
     this.marker.setMap(null);
+  }
+
+  /**
+   * Get marker configuration based on type
+   * @param {string} type - 'origin', 'destination', 'intermediate', 'default', 'preview'
+   * @returns {{color: string, size: number, label: string}}
+   */
+  _getMarkerConfig(type) {
+    const configs = {
+      origin: {
+        color: '#22c55e',
+        size: 32,
+        label: 'A'
+      },
+      destination: {
+        color: '#ef4444',
+        size: 32,
+        label: 'B'
+      },
+      intermediate: {
+        color: '#3b82f6',
+        size: 20,
+        label: ''
+      },
+      preview: {
+        color: '#f59e0b',
+        size: 20,
+        label: ''
+      },
+      default: {
+        color: '#dc2626',
+        size: 24,
+        label: ''
+      }
+    };
+
+    return configs[type] || configs.default;
+  }
+
+  /**
+   * Create custom SVG icon for Google Maps marker
+   * @param {{color: string, size: number, label: string}} config
+   * @returns {google.maps.Icon}
+   */
+  _createCustomIcon(config) {
+    const svg = `
+      <svg width="${config.size}" height="${config.size}" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="${config.size/2}" cy="${config.size/2}" r="${config.size/2 - 2}" 
+                fill="${config.color}" stroke="white" stroke-width="3"/>
+        ${config.label ? `
+          <text x="${config.size/2}" y="${config.size/2 + config.size*0.15}" 
+                text-anchor="middle" 
+                fill="white" 
+                font-size="${config.size * 0.6}px" 
+                font-weight="bold" 
+                font-family="Arial, sans-serif">${config.label}</text>
+        ` : ''}
+      </svg>
+    `;
+
+    return {
+      url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+      scaledSize: new google.maps.Size(config.size, config.size),
+      anchor: new google.maps.Point(config.size/2, config.size/2)
+    };
   }
 }
 

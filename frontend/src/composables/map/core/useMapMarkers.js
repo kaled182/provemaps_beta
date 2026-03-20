@@ -181,7 +181,8 @@ export function useMapMarkers() {
     onMarkerClick,
     updateMapboxMarkerSizes,
     getActiveMapZoom,
-    applyMapboxMarkerDimensions
+    applyMapboxMarkerDimensions,
+    skipAutoFit = false
   }) => {
     if (!mapInstance) {
       console.warn('[useMapMarkers] Map instance não inicializado')
@@ -271,8 +272,8 @@ export function useMapMarkers() {
     
     console.log(`[useMapMarkers] ${activeMarkers.size} markers ativos após update`)
     
-    // Ajustar bounds apenas na carga inicial
-    if (isInitialLoad && activeMarkers.size > 0) {
+    // Ajustar bounds apenas na carga inicial (se não skipAutoFit)
+    if (!skipAutoFit && isInitialLoad && activeMarkers.size > 0) {
       if (provider === 'google') {
         const bounds = new google.maps.LatLngBounds()
         activeMarkers.forEach(marker => bounds.extend(marker.getPosition()))

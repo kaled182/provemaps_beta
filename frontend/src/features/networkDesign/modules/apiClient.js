@@ -67,6 +67,9 @@ async function request(path, { method = 'GET', headers = {}, body, skipJson } = 
   }
 }
 
+// Export request for use in other modules (e.g., deviceAutocomplete)
+export { request };
+
 // Fiber list
 export async function fetchFibers() {
   // Endpoint returns { fibers: [...] }
@@ -103,6 +106,51 @@ export async function removeFiber(id) {
 // Device ports
 export async function fetchDevicePorts(deviceId) {
   return await request(`/devices/${deviceId}/ports/`);
+}
+
+// Validation endpoints
+export async function validatePort(portId, cableId = null) {
+  const payload = { port_id: portId };
+  if (cableId) {
+    payload.cable_id = cableId;
+  }
+  return await request('/fibers/validate-port/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function validateCableName(name, cableId = null) {
+  const payload = { name };
+  if (cableId) {
+    payload.cable_id = cableId;
+  }
+  return await request('/fibers/validate-name/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function validateDeviceCoordinates(originDeviceId, destDeviceId = null) {
+  const payload = { origin_device_id: originDeviceId };
+  if (destDeviceId) {
+    payload.dest_device_id = destDeviceId;
+  }
+  return await request('/fibers/validate-device-coords/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function validateNearbyCables(path, cableId = null) {
+  const payload = { path };
+  if (cableId) {
+    payload.cable_id = cableId;
+  }
+  return await request('/fibers/validate-nearby/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export { getCsrfToken }; // Export for external use if needed
