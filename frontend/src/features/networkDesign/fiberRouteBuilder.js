@@ -33,6 +33,9 @@ let polyline;
 let markers = [];
 let activeFiberId = null;
 let currentFiberMeta = null;
+// Preview state: cable selected (right-clicked) but NOT in edit mode
+let previewCableId = null;
+let previewCableMeta = null;
 // REMOVED: let allCablesPolylines = []; // Managed inside cableService.js
 
 // DOM elements
@@ -53,17 +56,73 @@ let activeEndpoint = 'end'; // 'start' | 'end'
 let nearbyCablesWarningEl = null;
 
 /**
- * Show or hide the Route Points panel.
- * Uses CSS opacity/transform transition (nd-panel-hidden class).
+ * Show or hide the Route Points panel (editing mode).
  */
 function setRoutePointsPanelVisible(visible) {
     const panel = document.getElementById('routePointsPanel');
     if (!panel) return;
-    if (visible) {
-        panel.classList.remove('nd-panel-hidden');
+    panel.classList.toggle('nd-panel-hidden', !visible);
+}
+
+/**
+ * Show or hide the Cable Details panel (preview/read-only mode).
+ */
+function setCableDetailsPanelVisible(visible) {
+    const panel = document.getElementById('cableDetailsPanel');
+    if (!panel) return;
+    panel.classList.toggle('nd-panel-hidden', !visible);
+}
+
+/**
+ * Populate the Cable Details panel with metadata.
+ */
+function populateCableDetailsPanel(meta) {
+    const set = (id, text) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = text || '—';
+    };
+    set('cableDetailName', meta.name);
+    const distance = meta.path_length_km != null ? `${parseFloat(meta.path_length_km).toFixed(3)} km` : '—';
+    set('cableDetailDistance', distance);
+    const originDevice = meta.origin?.device_name || meta.origin?.device_id || null;
+    const originPort = meta.origin?.port_name || meta.origin?.port_id || null;
+    set('cableDetailOrigin', originDevice ? `${originDevice}${originPort ? ` / ${originPort}` : ''}` : '—');
+    if (meta.single_port) {
+        set('cableDetailDestination', '— (porta única)');
     } else {
-        panel.classList.add('nd-panel-hidden');
+        const destDevice = meta.destination?.device_name || meta.destination?.device_id || null;
+        const destPort = meta.destination?.port_name || meta.destination?.port_id || null;
+        set('cableDetailDestination', destDevice ? `${destDevice}${destPort ? ` / ${destPort}` : ''}` : '—');
     }
+}
+
+/**
+ * Select a cable for preview (right-click) without entering edit mode.
+ */
+async function previewCable(id) {
+    try {
+        const data = await fetchFiber(id);
+        previewCableId = data.id;
+        previewCableMeta = data;
+        // Hide edit panel, show details panel
+        setRoutePointsPanelVisible(false);
+        populateCableDetailsPanel(data);
+        setCableDetailsPanelVisible(true);
+        updateContextMenuStateWrapper();
+    } catch (err) {
+        console.error('[previewCable] Error loading cable metadata', err);
+        showErrorMessage('Erro ao carregar detalhes do cabo.');
+    }
+}
+
+/**
+ * Clear preview state and hide the details panel.
+ */
+function clearPreview() {
+    previewCableId = null;
+    previewCableMeta = null;
+    setCableDetailsPanelVisible(false);
+    updateContextMenuStateWrapper();
 }
 
 /**
@@ -686,8 +745,9 @@ function updateContextMenuStateWrapper() {
         hasActiveFiber: !!activeFiberId,
         fiberMeta: currentFiberMeta,
         pathLength: getPath().length,
+        previewCableId,
+        previewCableMeta,
     };
-    console.log(`[updateContextMenuStateWrapper] Updating menu with state:`, state);
     updateContextMenuState(state);
 }
 
@@ -727,15 +787,15 @@ function makeCableEditable(cablePolyline, cableId, cableName) {
         }
         
         try {
-            // Load cable for editing
-            await loadFiberDetail(cableId); // Carrega dados E chama setPath -> onPathChange
+            // Load cable for preview (no edit mode)
+            await previewCable(cableId);
 
-            // Mostra menu de contexto
-            setTimeout(() => {
-                const clickPos = event.domEvent ? { clientX: event.domEvent.clientX, clientY: event.domEvent.clientY } : { clientX: 0, clientY: 0 };
-                showContextMenu(clickPos.clientX, clickPos.clientY);
-                updateContextMenuStateWrapper(); // Atualiza estado do menu
-            }, 100);
+            // Show context menu
+            const clickPos = event.domEvent
+                ? { clientX: event.domEvent.clientX, clientY: event.domEvent.clientY }
+                : { clientX: 0, clientY: 0 };
+            showContextMenu(clickPos.clientX, clickPos.clientY);
+            updateContextMenuStateWrapper();
 
         } catch (error) {
             console.error(`[Polyline RightClick] Error loading details for cable ID ${cableId}:`, error);
@@ -832,6 +892,10 @@ async function loadFiberDetail(id) {
         const data = await fetchFiber(id);
         console.log(`[loadFiberDetail] Loaded cable #${id}:`, data);
         activeFiberId = data.id;
+        // Entering edit mode — clear preview state
+        previewCableId = null;
+        previewCableMeta = null;
+        setCableDetailsPanelVisible(false);
         setRoutePointsPanelVisible(true);
         currentFiberMeta = {
             id: data.id,
@@ -865,6 +929,7 @@ async function cancelEditing() {
     hideContextMenu();
     clearMapAndResetState();
     setRoutePointsPanelVisible(false);
+    clearPreview();
     await reloadCableVisualization({ fitToBounds: true });
     refreshList();
     updateContextMenuStateWrapper();
@@ -1101,6 +1166,65 @@ function initializeDomBindings() {
         await cancelEditing();
     });
     
+    // Context menu - Preview options (cable right-clicked, not editing)
+    document.getElementById('contextViewDetails')?.addEventListener('click', () => {
+        hideContextMenu();
+        setCableDetailsPanelVisible(true);
+    });
+
+    document.getElementById('contextStartEdit')?.addEventListener('click', async () => {
+        hideContextMenu();
+        if (previewCableId) {
+            await loadFiberDetail(previewCableId);
+        }
+    });
+
+    document.getElementById('contextDeletePreview')?.addEventListener('click', async () => {
+        hideContextMenu();
+        if (!previewCableId || !previewCableMeta) return;
+        const confirmed = await showConfirmDialog(
+            `Excluir cabo "${previewCableMeta.name || `#${previewCableId}`}"?`,
+            'Esta ação não pode ser desfeita.',
+        );
+        if (!confirmed) return;
+        try {
+            await deleteCable(previewCableId);
+            clearPreview();
+            showSuccessMessage('Cabo excluído.');
+            await reloadCableVisualization({ fitToBounds: false });
+        } catch (err) {
+            showErrorMessage('Erro ao excluir o cabo.');
+        }
+    });
+
+    // Cable Details panel buttons
+    document.getElementById('closeCableDetails')?.addEventListener('click', () => {
+        clearPreview();
+    });
+
+    document.getElementById('cableDetailEditBtn')?.addEventListener('click', async () => {
+        if (previewCableId) {
+            await loadFiberDetail(previewCableId);
+        }
+    });
+
+    document.getElementById('cableDetailDeleteBtn')?.addEventListener('click', async () => {
+        if (!previewCableId || !previewCableMeta) return;
+        const confirmed = await showConfirmDialog(
+            `Excluir cabo "${previewCableMeta.name || `#${previewCableId}`}"?`,
+            'Esta ação não pode ser desfeita.',
+        );
+        if (!confirmed) return;
+        try {
+            await deleteCable(previewCableId);
+            clearPreview();
+            showSuccessMessage('Cabo excluído.');
+            await reloadCableVisualization({ fitToBounds: false });
+        } catch (err) {
+            showErrorMessage('Erro ao excluir o cabo.');
+        }
+    });
+
     // Context menu - General options
     document.getElementById('contextLoadAll')?.addEventListener('click', () => {
         hideContextMenu();

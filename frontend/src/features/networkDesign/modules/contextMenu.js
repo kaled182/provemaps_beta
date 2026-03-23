@@ -9,6 +9,7 @@
 let menuElement = null;
 let selectedOptionsEl = null;
 let creatingOptionsEl = null;
+let previewOptionsEl = null;
 let cableInfoEl = null;
 let cableNameEl = null;
 let savePathEl = null;
@@ -46,6 +47,7 @@ export function initContextMenu() {
     menuElement = searchRoot.querySelector('#contextMenu') || document.getElementById('contextMenu');
     selectedOptionsEl = searchRoot.querySelector('#contextSelectedOptions') || document.getElementById('contextSelectedOptions');
     creatingOptionsEl = searchRoot.querySelector('#contextCreatingOptions') || document.getElementById('contextCreatingOptions');
+    previewOptionsEl = searchRoot.querySelector('#contextPreviewOptions') || document.getElementById('contextPreviewOptions');
     cableInfoEl = searchRoot.querySelector('#contextCableInfo') || document.getElementById('contextCableInfo');
     cableNameEl = searchRoot.querySelector('#contextCableName') || document.getElementById('contextCableName');
     savePathEl = searchRoot.querySelector('#contextSavePath') || document.getElementById('contextSavePath');
@@ -135,26 +137,34 @@ export function hideContextMenu() {
     }
 }
 
-export function updateContextMenuState({ hasActiveFiber, fiberMeta, pathLength }) {
+export function updateContextMenuState({ hasActiveFiber, fiberMeta, pathLength, previewCableId, previewCableMeta }) {
     if (!menuElement) return;
 
-    const isCreatingNewCable = !hasActiveFiber && pathLength > 0;
-    const isSelectedCable = hasActiveFiber && !!fiberMeta;
-    const isEmpty = !hasActiveFiber && pathLength === 0;
+    const isCreatingNewCable = !hasActiveFiber && !previewCableId && pathLength > 0;
+    const isPreviewCable = !hasActiveFiber && !!previewCableId && !!previewCableMeta;
+    const isEditingCable = hasActiveFiber && !!fiberMeta;
+    const isEmpty = !hasActiveFiber && !previewCableId && pathLength === 0;
 
     selectedOptionsEl?.classList.add('hidden');
     creatingOptionsEl?.classList.add('hidden');
+    previewOptionsEl?.classList.add('hidden');
     cableInfoEl?.classList.add('hidden');
     generalOptionsEl?.classList.add('hidden');
     reloadButtonEl?.classList.add('hidden');
 
     if (isCreatingNewCable) {
         creatingOptionsEl?.classList.remove('hidden');
-    } else if (isSelectedCable) {
+    } else if (isPreviewCable) {
+        previewOptionsEl?.classList.remove('hidden');
+        cableInfoEl?.classList.remove('hidden');
+        if (cableNameEl) {
+            cableNameEl.textContent = previewCableMeta.name || `Cable #${previewCableId}`;
+        }
+    } else if (isEditingCable) {
         selectedOptionsEl?.classList.remove('hidden');
         cableInfoEl?.classList.remove('hidden');
         if (cableNameEl) {
-            const editingSuffix = pathLength > 0 ? ' - EDITING' : '';
+            const editingSuffix = pathLength > 0 ? ' — editando' : '';
             const displayName = fiberMeta.name || `Cable #${fiberMeta.id ?? '?'}`;
             cableNameEl.textContent = `${displayName}${editingSuffix}`;
         }
@@ -196,6 +206,7 @@ export function cleanupContextMenu() {
     menuElement = null;
     selectedOptionsEl = null;
     creatingOptionsEl = null;
+    previewOptionsEl = null;
     cableInfoEl = null;
     cableNameEl = null;
     savePathEl = null;

@@ -79,6 +79,13 @@
         <button id="contextImportKML" type="button">Import route from KML</button>
       </div>
 
+      <div id="contextPreviewOptions" class="hidden space-y-2 mt-3">
+        <h3>Cable</h3>
+        <button id="contextViewDetails" type="button">Ver detalhes</button>
+        <button id="contextStartEdit" type="button">Editar rota</button>
+        <button id="contextDeletePreview" type="button" data-variant="danger">Excluir cabo</button>
+      </div>
+
       <div id="contextSelectedOptions" class="hidden space-y-2 mt-3">
         <h3>Editing cable</h3>
         <button id="contextEditCable" type="button">Edit cable metadata</button>
@@ -93,6 +100,45 @@
         <button id="contextClearNew" type="button">Clear drawn points</button>
       </div>
     </div>
+
+    <section
+      id="cableDetailsPanel"
+      class="floating-panel nd-panel-hidden"
+      aria-labelledby="cableDetailsPanelTitle"
+    >
+      <div class="floating-panel__header">
+        <h3 id="cableDetailsPanelTitle">Cable details</h3>
+        <button id="closeCableDetails" type="button" class="panel-toggle-btn" aria-label="Fechar painel">
+          <svg viewBox="0 0 20 20" aria-hidden="true" style="width:18px;height:18px">
+            <path d="M5 5l10 10M15 5L5 15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="floating-panel__body">
+        <dl class="cable-details-dl">
+          <div class="cable-details-row">
+            <dt>Nome</dt>
+            <dd id="cableDetailName">—</dd>
+          </div>
+          <div class="cable-details-row">
+            <dt>Distância</dt>
+            <dd id="cableDetailDistance">—</dd>
+          </div>
+          <div class="cable-details-row">
+            <dt>Origem</dt>
+            <dd id="cableDetailOrigin">—</dd>
+          </div>
+          <div class="cable-details-row">
+            <dt>Destino</dt>
+            <dd id="cableDetailDestination">—</dd>
+          </div>
+        </dl>
+        <div class="floating-panel__footer">
+          <button id="cableDetailEditBtn" type="button" class="footer-btn footer-btn--primary">Editar rota</button>
+          <button id="cableDetailDeleteBtn" type="button" class="footer-btn footer-btn--danger">Excluir</button>
+        </div>
+      </div>
+    </section>
 
     <div id="toastHost" class="toast-host hidden"></div>
     <div id="confirmHost" class="confirm-host hidden"></div>
@@ -781,6 +827,7 @@ onUnmounted(() => {
 .floating-panel__footer {
   display: flex;
   justify-content: flex-end;
+  gap: 0.5rem;
   padding-top: 0.5rem;
 }
 
@@ -799,6 +846,56 @@ onUnmounted(() => {
 .footer-btn:hover {
   background: rgba(248, 113, 113, 0.22);
   border-color: rgba(248, 113, 113, 0.45);
+}
+
+.footer-btn--primary {
+  background: var(--nd-chip-bg);
+  color: var(--nd-chip-text);
+  border-color: transparent;
+}
+
+.footer-btn--primary:hover {
+  background: #bfdbfe;
+  border-color: transparent;
+}
+
+.footer-btn--danger {
+  background: var(--nd-btn-bg);
+  color: var(--nd-btn-text);
+  border-color: var(--nd-btn-border);
+}
+
+/* Cable Details Panel */
+#cableDetailsPanel {
+  top: 104px;
+}
+
+.cable-details-dl {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin: 0;
+}
+
+.cable-details-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.cable-details-row dt {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--nd-panel-muted);
+}
+
+.cable-details-row dd {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--nd-panel-text);
+  word-break: break-word;
 }
 
 .help-list {
