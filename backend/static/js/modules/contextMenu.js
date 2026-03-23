@@ -16,7 +16,7 @@ let generalOptionsEl = null;
 let reloadButtonEl = null;
 let reloadTextEl = null;
 
-const MENU_Z_INDEX = 2147483647;
+const MENU_Z_INDEX = 50;
 
 function fullscreenElement() {
     return (
@@ -39,19 +39,25 @@ function attachMenuTo(parent) {
 }
 
 export function initContextMenu() {
-    menuElement = document.getElementById('contextMenu');
-    selectedOptionsEl = document.getElementById('contextSelectedOptions');
-    creatingOptionsEl = document.getElementById('contextCreatingOptions');
-    cableInfoEl = document.getElementById('contextCableInfo');
-    cableNameEl = document.getElementById('contextCableName');
-    savePathEl = document.getElementById('contextSavePath');
-    generalOptionsEl = document.getElementById('contextGeneralOptions');
-    reloadButtonEl = document.getElementById('contextLoadAll');
-    reloadTextEl = document.getElementById('contextLoadAllText');
+    // Busca dentro do container da página primeiro
+    const pageContainer = document.querySelector('.network-design-page');
+    const searchRoot = pageContainer || document;
+    
+    menuElement = searchRoot.querySelector('#contextMenu') || document.getElementById('contextMenu');
+    selectedOptionsEl = searchRoot.querySelector('#contextSelectedOptions') || document.getElementById('contextSelectedOptions');
+    creatingOptionsEl = searchRoot.querySelector('#contextCreatingOptions') || document.getElementById('contextCreatingOptions');
+    cableInfoEl = searchRoot.querySelector('#contextCableInfo') || document.getElementById('contextCableInfo');
+    cableNameEl = searchRoot.querySelector('#contextCableName') || document.getElementById('contextCableName');
+    savePathEl = searchRoot.querySelector('#contextSavePath') || document.getElementById('contextSavePath');
+    generalOptionsEl = searchRoot.querySelector('#contextGeneralOptions') || document.getElementById('contextGeneralOptions');
+    reloadButtonEl = searchRoot.querySelector('#contextLoadAll') || document.getElementById('contextLoadAll');
+    reloadTextEl = searchRoot.querySelector('#contextLoadAllText') || document.getElementById('contextLoadAllText');
 
-    attachMenuTo(document.body);
-    menuElement.style.position = 'fixed';
-    menuElement.style.pointerEvents = 'auto';
+    // Não anexa ao document.body - deixa no container da página
+    if (menuElement) {
+        menuElement.style.position = 'fixed';
+        menuElement.style.pointerEvents = 'auto';
+    }
 
     document.addEventListener('click', (event) => {
         if (menuElement && !menuElement.classList.contains('hidden') && !menuElement.contains(event.target)) {
@@ -67,11 +73,9 @@ export function initContextMenu() {
 
     const handleFullscreenChange = () => {
         const fsElement = fullscreenElement();
-        if (fsElement) {
-            attachMenuTo(fsElement);
+        if (fsElement && menuElement) {
             menuElement.style.position = 'absolute';
-        } else {
-            attachMenuTo(document.body);
+        } else if (menuElement) {
             menuElement.style.position = 'fixed';
         }
     };
@@ -88,8 +92,7 @@ export function showContextMenu(x, y) {
     }
 
     const fsElement = fullscreenElement();
-    const parent = fsElement || document.body;
-    attachMenuTo(parent);
+    const parent = fsElement || menuElement.parentElement || document.body;
     const parentRect = parent.getBoundingClientRect();
     menuElement.style.position = fsElement ? 'absolute' : 'fixed';
 
@@ -185,4 +188,18 @@ export function getContextMenuPosition() {
         x: parseInt(menuElement.style.left, 10) || 0,
         y: parseInt(menuElement.style.top, 10) || 0,
     };
+}
+
+export function cleanupContextMenu() {
+    hideContextMenu();
+    // Reset all references
+    menuElement = null;
+    selectedOptionsEl = null;
+    creatingOptionsEl = null;
+    cableInfoEl = null;
+    cableNameEl = null;
+    savePathEl = null;
+    generalOptionsEl = null;
+    reloadButtonEl = null;
+    reloadTextEl = null;
 }

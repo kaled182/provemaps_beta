@@ -1,0 +1,11 @@
+# Ignorar arquivos de backup grandes
+*.tar.gz
+*.zip
+*.tar
+*.7z
+
+# Manter apenas documentação
+!INDEX.md
+!README_*.md
+!CHECKLIST_*.md
+!QUICK_START.txt

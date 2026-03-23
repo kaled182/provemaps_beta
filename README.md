@@ -104,11 +104,26 @@ cp .env.example .env
 # ZABBIX_API_PASSWORD=your_password
 
 # Start all services
-docker compose up -d
+docker compose -f docker/docker-compose.yml up -d
 
 # Check health
-curl http://localhost:8000/healthz
+curl http://localhost:8100/healthz
 ```
+
+**🔑 Credenciais Padrão:**
+- **Admin URL:** http://localhost:8100/admin
+- **Username:** `admin`
+- **Senha:** `admin123`
+- ⚠️ Altere a senha após primeiro acesso!
+
+**📍 Portas dos Serviços:**
+- Django Web: `8100` (http://localhost:8100)
+- PostgreSQL: `5433`
+- Redis: `6380`
+- Prometheus: `9090`
+- Grafana: `3002` (http://localhost:3002)
+- Video HLS: `8083`
+- WhatsApp QR: `3001`
 
 ### Local Development (Manual)
 ```bash
@@ -302,22 +317,22 @@ Comprehensive documentation is available at `/setup_app/docs/` or in the `doc/` 
 ### Health Checks
 ```bash
 # Basic health (database connectivity)
-curl http://localhost:8000/healthz
+curl http://localhost:8100/healthz
 
 # Readiness probe (all services ready)
-curl http://localhost:8000/ready
+curl http://localhost:8100/ready
 
 # Liveness probe (application alive)
-curl http://localhost:8000/live
+curl http://localhost:8100/live
 
 # Celery workers status
-curl http://localhost:8000/celery/status
+curl http://localhost:8100/celery/status
 ```
 
 ### Prometheus Metrics
 ```bash
 # Scrape endpoint
-curl http://localhost:8000/metrics/
+curl http://localhost:8100/metrics/
 
 # Key metrics:
 # - django_http_requests_total_by_view_transport_method

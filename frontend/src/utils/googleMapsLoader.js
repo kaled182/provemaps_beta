@@ -1,13 +1,13 @@
 /**
  * Google Maps Loader - Carregamento centralizado da API do Google Maps
  * 
- * Garante que a API seja carregada apenas uma vez e compartilhada
- * entre todas as páginas/componentes que precisam usar mapas.
+ * DEPRECATED: Este módulo está sendo substituído por mapLoader.js
+ * que suporta múltiplos provedores (Google, Mapbox, OSM, Esri)
  * 
- * Resolve o problema de navegação de páginas sem maps (Zabbix Lookup)
- * para páginas com maps (Network Design, Monitoring) onde o script
- * não estava disponível.
+ * Este wrapper é mantido para compatibilidade com código existente.
  */
+
+import { loadGoogleMaps as loadGoogleMapsNew, getMapConfig } from './mapLoader.js';
 
 let loadingPromise = null;
 let isLoaded = false;
@@ -15,23 +15,19 @@ let isLoaded = false;
 /**
  * Obtém a API key do Google Maps do endpoint de configuração
  * @returns {Promise<string|null>}
+ * @deprecated Use getMapConfig() from mapLoader.js instead
  */
 export async function getGoogleMapsApiKey() {
   try {
     console.log('[GoogleMapsLoader] Fetching API key from /api/config/');
-    const response = await fetch('/api/config/', {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    const config = await getMapConfig();
     
-    if (!response.ok) {
-      console.error('[GoogleMapsLoader] Failed to fetch config:', response.status);
-      return null;
+    // Verificar se o provider configurado é Google Maps
+    if (config.mapProvider && config.mapProvider !== 'google') {
+      console.warn(`[GoogleMapsLoader] ⚠️ MAP_PROVIDER is ${config.mapProvider}, not google`);
+      console.warn('[GoogleMapsLoader] ⚠️ Consider using mapLoader.loadConfiguredMapProvider() instead');
     }
     
-    const config = await response.json();
     const apiKey = config.googleMapsApiKey;
     
     if (apiKey) {
@@ -50,9 +46,23 @@ export async function getGoogleMapsApiKey() {
 /**
  * Carrega o Google Maps JavaScript API
  * @returns {Promise<void>}
+ * @deprecated Use loadConfiguredMapProvider() from mapLoader.js to respect configured provider
  */
 export async function loadGoogleMaps() {
   console.log('[GoogleMapsLoader] loadGoogleMaps() called');
+  
+  // Verificar se o provider configurado é Google Maps
+  try {
+    const config = await getMapConfig();
+    if (config.mapProvider && config.mapProvider !== 'google') {
+      console.warn(`[GoogleMapsLoader] ⚠️ WARNING: MAP_PROVIDER is configured as '${config.mapProvider}'`);
+      console.warn('[GoogleMapsLoader] ⚠️ But Google Maps is being loaded anyway (legacy code)');
+      console.warn('[GoogleMapsLoader] ⚠️ Consider migrating to mapLoader.loadConfiguredMapProvider()');
+    }
+  } catch (err) {
+    console.error('[GoogleMapsLoader] Failed to check map provider:', err);
+  }
+  
   console.log('[GoogleMapsLoader] isLoaded:', isLoaded);
   console.log('[GoogleMapsLoader] window.google?.maps:', !!window.google?.maps);
   
@@ -68,84 +78,20 @@ export async function loadGoogleMaps() {
     return loadingPromise;
   }
 
-  console.log('[GoogleMapsLoader] Starting new load...');
-
-  // Inicia novo carregamento
-  loadingPromise = new Promise((resolve, reject) => {
-    // Verifica se já existe script
-    const existingScript = document.querySelector('script[data-google-maps]');
-    if (existingScript) {
-      console.log('[GoogleMapsLoader] Found existing script tag');
-      if (window.google?.maps) {
-        console.log('[GoogleMapsLoader] Google Maps already available');
-        isLoaded = true;
-        resolve();
-        return;
-      }
-      
-      console.log('[GoogleMapsLoader] Script exists but API not ready, waiting for load event');
-      existingScript.addEventListener('load', () => {
-        console.log('[GoogleMapsLoader] Existing script loaded');
-        isLoaded = true;
-        resolve();
-      }, { once: true });
-      
-      existingScript.addEventListener('error', (err) => {
-        console.error('[GoogleMapsLoader] Existing script failed to load');
-        loadingPromise = null;
-        reject(new Error('Failed to load Google Maps API'));
-      }, { once: true });
-      
-      return;
-    }
-
-    // Obtém API key com retry
-    const loadScriptWithKey = async () => {
-      console.log('[GoogleMapsLoader] Fetching API key...');
-      const apiKey = await getGoogleMapsApiKey();
-      console.log('[GoogleMapsLoader] API key found:', !!apiKey);
-
-      if (!apiKey) {
-        loadingPromise = null;
-        throw new Error('Google Maps API key not found');
-      }
-
-      // Cria novo script
-      console.log('[GoogleMapsLoader] Creating new script tag');
-      const script = document.createElement('script');
-      const params = new URLSearchParams({
-        key: apiKey,
-        libraries: 'geometry,places,marker'
-      });
-
-      script.src = `https://maps.googleapis.com/maps/api/js?${params.toString()}`;
-      script.async = true;
-      script.defer = true;
-      script.dataset.googleMaps = 'true';
-
-      script.addEventListener('load', () => {
-        isLoaded = true;
-        console.log('[GoogleMapsLoader] ✅ New script loaded successfully');
-        console.log('[GoogleMapsLoader] window.google.maps available:', !!window.google?.maps);
-        resolve();
-      }, { once: true });
-
-      script.addEventListener('error', () => {
-        console.error('[GoogleMapsLoader] ❌ Failed to load script');
-        loadingPromise = null;
-        reject(new Error('Failed to load Google Maps API'));
-      }, { once: true });
-
-      console.log('[GoogleMapsLoader] Appending script to head');
-      document.head.appendChild(script);
-    };
-
-    loadScriptWithKey().catch((error) => {
-      console.error('[GoogleMapsLoader] Error loading Google Maps', error);
+  console.log('[GoogleMapsLoader] Delegating to mapLoader.loadGoogleMaps()...');
+  
+  loadingPromise = loadGoogleMapsNew()
+    .then(() => {
+      isLoaded = true;
+      console.log('[GoogleMapsLoader] ✅ Google Maps loaded via mapLoader');
       loadingPromise = null;
-      reject(error);
+    })
+    .catch((error) => {
+      console.error('[GoogleMapsLoader] ❌ Failed to load Google Maps:', error);
+      loadingPromise = null;
+      isLoaded = false;
+      throw error;
     });
-  });
 
   return loadingPromise;
 }

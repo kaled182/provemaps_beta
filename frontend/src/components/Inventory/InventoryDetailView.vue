@@ -330,15 +330,15 @@ const goBack = () => {
 };
 
 const goToDevices = () => {
-  router.push({ name: 'inventory-devices' });
+  router.push({ name: 'device-import' });
 };
 
 const goToCameras = () => {
   const siteName = site.value.name || site.value.display_name;
   if (siteName) {
-    router.push({ name: 'video', query: { tab: 'cameras', search: siteName } });
+    router.push({ name: 'video-cameras', query: { search: siteName } });
   } else {
-    router.push({ name: 'video', query: { tab: 'cameras' } });
+    router.push({ name: 'video-cameras' });
   }
 };
 

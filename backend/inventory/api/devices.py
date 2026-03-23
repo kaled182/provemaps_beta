@@ -140,6 +140,39 @@ def api_device_select_options(request: HttpRequest) -> HttpResponse:
 @require_GET
 @login_required
 @handle_api_errors
+def api_devices_autocomplete(request: HttpRequest) -> HttpResponse:
+    """
+    Return devices with enriched data for autocomplete component.
+    Includes coordinates, Zabbix hostid, IP, vendor, model, and location.
+    
+    Endpoint: GET /api/v1/inventory/devices/autocomplete/
+    
+    Response: {
+        "devices": [
+            {
+                "id": 123,
+                "name": "SW-GYN-01",
+                "ip": "192.168.1.10",
+                "vendor": "Cisco",
+                "model": "C9300",
+                "zabbix_hostid": "10101",
+                "site": "Goiania-POP",
+                "site_id": 5,
+                "lat": -16.6869,
+                "lng": -49.2648,
+                "location": "Goiânia, GO"
+            },
+            ...
+        ]
+    }
+    """
+    payload = device_uc.list_devices_autocomplete()
+    return JsonResponse({"devices": payload})
+
+
+@require_GET
+@login_required
+@handle_api_errors
 def api_device_ports_with_optical(
     request: HttpRequest,
     device_id: int,
@@ -1154,6 +1187,7 @@ __all__ = [
     "api_device_ports",
     "api_device_ports_live",
     "api_device_select_options",
+    "api_devices_autocomplete",
     "api_device_ports_with_optical",
     "api_add_device_from_zabbix",
     "api_zabbix_discover_hosts",

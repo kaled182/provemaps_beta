@@ -58,10 +58,11 @@
 
         <div v-else>
           <keep-alive>
-            <component 
-              :is="currentTabComponent" 
+            <component
+              :is="currentTabComponent"
               :data="tabData"
               :loading="loading"
+              :loading-zabbix="loadingZabbix"
               :available-groups="availableGroups"
               :available-sites="availableSites"
               @edit-device="openEditModal"
@@ -217,6 +218,7 @@ const { success, error: notifyError } = useNotification();
 
 // Estado
 const loading = ref(false);
+const loadingZabbix = ref(false);
 const currentTab = ref('inventory');
 const showModal = ref(false);
 const selectedDevice = ref(null);
@@ -271,78 +273,70 @@ const tabData = computed(() => {
 // Ações
 const refreshData = async () => {
   loading.value = true;
-  
+  loadingZabbix.value = true;
+
   try {
-    // 1. Buscar inventário agrupado (Pós-Importação)
-    const grouped = await api.get('/api/v1/inventory/devices/grouped/');
+    // Todas as 3 chamadas rápidas em paralelo
+    const [grouped, allGroupsResponse, sitesResponse] = await Promise.all([
+      api.get('/api/v1/inventory/devices/grouped/'),
+      api.get('/api/v1/device-groups/').catch(() => null),
+      api.get('/api/v1/inventory/sites/').catch(() => null),
+    ]);
+
     inventoryData.value = grouped;
-    
-    // Extrai grupos únicos (incluindo vazios) + complementa com todos do backend
+
+    // Monta lista de grupos disponíveis
     const uniqueGroups = new Set();
     grouped.forEach(group => {
       if (group.group_name && group.group_name !== 'Sem Grupo Definido') {
         uniqueGroups.add(group.group_name);
       }
     });
-    // Busca lista completa de DeviceGroups para garantir que o dropdown tenha TODOS
-    try {
-      const allGroupsResponse = await api.get('/api/v1/device-groups/');
+    if (allGroupsResponse) {
       const rawGroups = Array.isArray(allGroupsResponse)
         ? allGroupsResponse
         : (allGroupsResponse.results || allGroupsResponse.data || []);
-      const allGroupNames = rawGroups
-        .map(g => g && (g.name || g.group_name))
-        .filter(Boolean);
-      allGroupNames.forEach(name => uniqueGroups.add(name));
-    } catch (groupErr) {
-      console.warn('[DeviceImport] Erro ao buscar lista completa de grupos:', groupErr);
+      rawGroups.map(g => g && (g.name || g.group_name)).filter(Boolean)
+        .forEach(name => uniqueGroups.add(name));
     }
     availableGroups.value = Array.from(uniqueGroups).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-    
-    // 2. Buscar sites disponíveis
-    try {
-      const sitesResponse = await api.get('/api/v1/inventory/sites/');
-      availableSites.value = sitesResponse.sites || [];
-    } catch (sitesError) {
-      console.warn('Erro ao buscar sites:', sitesError);
-      availableSites.value = [];
-    }
-    
-    // 3. Buscar preview do Zabbix (Pré-Importação) agrupado por hostgroups
-    try {
-      const response = await api.get('/api/v1/inventory/zabbix/lookup/hosts/grouped/');
-      const zabbixGroups = response.data || [];
-      
-      // Marca quais já foram importados
-      const importedIPs = new Set();
-      const importedZabbixIds = new Set();
-      
-      grouped.forEach(group => {
-        group.devices?.forEach(device => {
-          if (device.primary_ip) importedIPs.add(device.primary_ip);
-          if (device.zabbix_hostid) importedZabbixIds.add(device.zabbix_hostid);
-        });
-      });
-      
-      // Marca hosts importados em cada grupo
-      previewData.value = zabbixGroups.map(group => ({
-        ...group,
-        hosts: group.hosts.map(host => ({
-          ...host,
-          is_imported: importedIPs.has(host.ip) || importedZabbixIds.has(host.zabbix_id)
-        }))
-      }));
-    } catch (zabbixError) {
-      console.warn('Erro ao buscar preview Zabbix:', zabbixError);
-      notifyError('Aviso', 'Não foi possível carregar dispositivos do Zabbix.');
-      previewData.value = [];
-    }
-    
+
+    availableSites.value = sitesResponse?.sites || [];
+
   } catch (error) {
     console.error('Erro ao carregar dados:', error);
     notifyError('Erro ao Carregar', error.message || 'Não foi possível conectar ao servidor.');
   } finally {
     loading.value = false;
+  }
+
+  // Carrega Zabbix separadamente sem bloquear a aba de inventário
+  try {
+    const response = await api.get('/api/v1/inventory/zabbix/lookup/hosts/grouped/');
+    const zabbixGroups = response.data || [];
+
+    const importedIPs = new Set();
+    const importedZabbixIds = new Set();
+    inventoryData.value.forEach(group => {
+      group.devices?.forEach(device => {
+        if (device.primary_ip) importedIPs.add(device.primary_ip);
+        if (device.zabbix_hostid) importedZabbixIds.add(device.zabbix_hostid);
+      });
+    });
+
+    previewData.value = zabbixGroups.map(group => ({
+      ...group,
+      hosts: group.hosts.map(host => ({
+        ...host,
+        is_imported: importedIPs.has(host.ip) || importedZabbixIds.has(host.zabbix_id),
+      })),
+    }));
+  } catch (zabbixError) {
+    console.warn('Erro ao buscar preview Zabbix:', zabbixError);
+    notifyError('Aviso', 'Não foi possível carregar dispositivos do Zabbix.');
+    previewData.value = [];
+  } finally {
+    loadingZabbix.value = false;
   }
 };
 

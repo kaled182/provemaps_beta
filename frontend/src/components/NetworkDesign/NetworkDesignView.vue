@@ -374,7 +374,6 @@
 import { ref, onMounted, nextTick, onUnmounted } from 'vue';
 import { initializeNetworkDesignApp } from '@/features/networkDesign/fiberRouteBuilder.js';
 import { initializeKmlModal, cleanupKmlModal } from '@/features/networkDesign/partials/import_kml.js';
-import { waitForGoogleMaps } from '@/utils/googleMapsLoader';
 
 const csrfToken = ref(window.CSRF_TOKEN || '');
 
@@ -431,23 +430,39 @@ onMounted(async () => {
 
   ensureFiberGlobals();
 
-  // Aguarda Google Maps estar disponível
-  // Tenta carregar se ainda não foi carregado (fallback do router guard)
+  // IMPORTANTE: NetworkDesign refatorado para usar Provider Pattern
+  // Funciona com qualquer provider configurado (Mapbox, Google Maps, etc.)
   try {
-    console.log('[NetworkDesignView] Checking Google Maps availability...');
+    console.log('[NetworkDesignView] Initializing map provider system...');
     
-    // Se Google Maps já está disponível, usa imediatamente
-    if (window.google?.maps) {
-      console.log('[NetworkDesignView] ✅ Google Maps already available!');
-    } else {
-      // Tenta carregar (pode ser que o router guard tenha falhado)
-      console.log('[NetworkDesignView] Google Maps not loaded, attempting to load...');
-      await waitForGoogleMaps(30000); // 30 segundos de timeout
-      console.log('[NetworkDesignView] ✅ Google Maps loaded successfully!');
+    // Pre-load provider antes de inicializar NetworkDesign
+    const { getMapProvider, getCurrentProviderName } = await import('@/providers/maps/MapProviderFactory.js');
+    
+    const providerName = await getCurrentProviderName();
+    console.log(`[NetworkDesignView] 🗺️ Configured provider: ${providerName}`);
+    
+    // Carregar provider (Google, Mapbox, etc.)
+    const provider = await getMapProvider();
+    
+    if (!provider.isLoaded()) {
+      throw new Error(`Provider ${providerName} failed to load`);
     }
+    
+    console.log(`[NetworkDesignView] ✅ ${providerName} provider ready`);
+    
   } catch (error) {
-    console.error('[NetworkDesignView] ❌ Failed to load Google Maps API', error);
-    alert('Erro ao carregar Google Maps.\n\nPossíveis causas:\n- Chave da API não configurada\n- Problema de conexão\n\nPor favor, recarregue a página (F5).');
+    console.error('[NetworkDesignView] ❌ Failed to initialize map provider:', error);
+    
+    alert(
+      `Erro ao inicializar sistema de mapas.\n\n` +
+      `Detalhes: ${error.message}\n\n` +
+      `Possíveis causas:\n` +
+      `- Chave/token da API não configurado no sistema\n` +
+      `- Problema de conexão com o serviço de mapas\n` +
+      `- Provider de mapas não suportado\n\n` +
+      `Configure em: Sistema > Configuração > Mapas\n\n` +
+      `Por favor, recarregue a página (F5).`
+    );
     return;
   }
 

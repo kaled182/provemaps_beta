@@ -12,6 +12,7 @@ class NoCacheDevMiddleware:
 
     TARGET_PREFIXES: tuple[str, ...] = (
         "/static/js/fiber_route_builder",
+        "/static/js/modules/",
     )
 
     def __init__(

@@ -21,17 +21,25 @@ function getFullscreenElement() {
 }
 
 function ensureHost(hostId) {
-    let host = document.getElementById(hostId);
+    // Primeiro tenta encontrar dentro do container da página Network Design
+    const pageContainer = document.querySelector('.network-design-page');
+    let host = pageContainer ? pageContainer.querySelector(`#${hostId}`) : null;
+    
+    // Se não encontrou, busca globalmente
+    if (!host) {
+        host = document.getElementById(hostId);
+    }
+    
+    // Se ainda não existe, cria dentro do container da página (não no body)
     if (!host) {
         host = document.createElement('div');
         host.id = hostId;
         host.className = 'hidden';
-        document.body.appendChild(host);
+        const targetContainer = pageContainer || document.body;
+        targetContainer.appendChild(host);
     }
-    const targetParent = getFullscreenElement() || document.body;
-    if (host.parentElement !== targetParent) {
-        targetParent.appendChild(host);
-    }
+    
+    // Não move o elemento se já estiver no lugar certo
     return host;
 }
 
@@ -249,7 +257,7 @@ export function extractFormData() {
         dest_device_id: singlePort
             ? formData.get('origin_device_id')
             : formData.get('dest_device_id'),
-        dest_port_id: singlePort ? null : formData.get('dest_port_id'),
+        dest_port_id: singlePort ? formData.get('origin_port_id') : formData.get('dest_port_id'),
         single_port: singlePort,
     };
 }
@@ -301,20 +309,16 @@ export function getCookie(name) {
     return null;
 }
 
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {
-        showSuccessMessage,
-        showErrorMessage,
-        showInfoMessage,
-        showConfirmDialog,
-        refreshPointsList,
-        updateDistanceDisplay,
-        updateSaveButtonState,
-        extractFormData,
-        togglePanel,
-        setFormSubmitting,
-        updateCableSelect,
-        getCableSelectValue,
-        getCookie,
-    };
+export function cleanupUIHelpers() {
+    // Remove toastHost if it was created dynamically
+    const toastHost = document.getElementById('toastHost');
+    if (toastHost && toastHost.parentElement === document.body) {
+        toastHost.remove();
+    }
+    
+    // Remove confirmHost if it was created dynamically
+    const confirmHost = document.getElementById('confirmHost');
+    if (confirmHost && confirmHost.parentElement === document.body) {
+        confirmHost.remove();
+    }
 }

@@ -52,7 +52,12 @@
     </div>
 
     <!-- Lista de Grupos Hierárquica -->
-    <div class="app-surface overflow-hidden sm:rounded-md max-h-[600px] overflow-y-auto">
+    <div v-if="props.loadingZabbix" class="app-surface p-8 rounded-lg flex flex-col items-center justify-center gap-3">
+      <i class="fas fa-circle-notch fa-spin text-2xl" style="color: var(--accent-info);"></i>
+      <span class="text-sm app-text-secondary">Consultando Zabbix...</span>
+    </div>
+
+    <div v-else class="app-surface overflow-hidden sm:rounded-md max-h-[600px] overflow-y-auto">
       <ul class="divide-y app-divide">
         <li v-for="group in filteredGroups" :key="group.zabbix_group_id" class="group-container">
           
@@ -242,7 +247,8 @@ const api = useApi();
 const props = defineProps({
   data: { type: Array, default: () => [] },
   availableGroups: { type: Array, default: () => [] },
-  availableSites: { type: Array, default: () => [] }
+  availableSites: { type: Array, default: () => [] },
+  loadingZabbix: { type: Boolean, default: false },
 });
 const emit = defineEmits(['edit-device', 'trigger-sync', 'refresh-data']);
 

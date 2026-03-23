@@ -38,7 +38,11 @@ from typing import Any
 
 from django.core.management.base import BaseCommand, CommandParser
 
-from inventory.models import Device, Port, Site
+from inventory.models import Device, DeviceGroup, Port, Site
+from inventory.services.device_groups import (
+    import_device_groups_from_zabbix,
+    sync_all_device_groups,
+)
 from integrations.zabbix.zabbix_service import zabbix_request
 
 logger = logging.getLogger(__name__)
@@ -115,6 +119,23 @@ class Command(BaseCommand):
                 )
             )
 
+        # Import device groups from Zabbix first
+        if not dry_run:
+            self.stdout.write("Importing device groups from Zabbix...")
+            try:
+                group_stats = import_device_groups_from_zabbix()
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"[OK] Groups: {group_stats['created']} created, "
+                        f"{group_stats['updated']} updated"
+                    )
+                )
+            except Exception as e:
+                self.stdout.write(
+                    self.style.ERROR(f"[ERROR] Failed to import groups: {e}")
+                )
+                logger.exception("Failed to import device groups")
+
         # Fetch hosts from Zabbix
         self.stdout.write("Fetching hosts from Zabbix API...")
         hosts = self._fetch_zabbix_hosts(host_filter, limit)
@@ -137,6 +158,7 @@ class Command(BaseCommand):
             "devices_updated": 0,
             "ports_created": 0,
             "ports_updated": 0,
+            "groups_synced": 0,
             "errors": 0,
         }
 
@@ -170,6 +192,23 @@ class Command(BaseCommand):
                 self.stdout.write(
                     self.style.ERROR(f"  [ERROR] {str(e)}")
                 )
+
+        # Sync device groups (optimized batch operation after all hosts are synced)
+        if not dry_run:
+            self.stdout.write("\nSyncing device groups (batch operation)...")
+            try:
+                group_sync_result = sync_all_device_groups()
+                stats["groups_synced"] = group_sync_result.get("synced", 0)
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"[OK] Synced {stats['groups_synced']} device-group associations"
+                    )
+                )
+            except Exception as e:
+                self.stdout.write(
+                    self.style.ERROR(f"[ERROR] Failed to sync groups: {e}")
+                )
+                logger.exception("Failed to batch sync device groups")
 
         # Summary
         elapsed = time.time() - start_time
@@ -237,6 +276,7 @@ class Command(BaseCommand):
             "devices_updated": 0,
             "ports_created": 0,
             "ports_updated": 0,
+            "groups_synced": 0,
             "errors": 0,
         }
 
@@ -343,6 +383,9 @@ class Command(BaseCommand):
             )
             stats["ports_created"] += port_stats["created"]
             stats["ports_updated"] += port_stats["updated"]
+
+        # Device groups will be synced in batch after all hosts are processed
+        # (more efficient than individual sync per device)
 
         return stats
 
@@ -524,6 +567,9 @@ class Command(BaseCommand):
         )
         self.stdout.write(
             f"Ports updated: {stats['ports_updated']}"
+        )
+        self.stdout.write(
+            f"Device groups synced: {stats['groups_synced']}"
         )
 
         if stats["errors"] > 0:

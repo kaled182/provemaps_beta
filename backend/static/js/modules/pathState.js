@@ -10,7 +10,6 @@ const EARTH_RADIUS_KM = 6371;
 let currentPath = [];
 let pathChangeCallbacks = [];
 
-// Haversine distance calculation
 function haversineKm(pointA, pointB) {
   const dLat = (pointB.lat - pointA.lat) * Math.PI / 180;
   const dLng = (pointB.lng - pointA.lng) * Math.PI / 180;
@@ -22,7 +21,6 @@ function haversineKm(pointA, pointB) {
   return EARTH_RADIUS_KM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Calculate total path distance
 export function totalDistance() {
   let total = 0;
   for (let i = 0; i < currentPath.length - 1; i++) {
@@ -31,26 +29,22 @@ export function totalDistance() {
   return total;
 }
 
-// Get current path (read-only copy)
 export function getPath() {
   return currentPath.slice();
 }
 
-// Set entire path (replaces current)
 export function setPath(points) {
   currentPath = points.slice();
   notifyPathChange();
   return currentPath;
 }
 
-// Add point to path
 export function addPoint(lat, lng) {
   currentPath.push({ lat, lng });
   notifyPathChange();
-  return currentPath.length - 1; // Return index
+  return currentPath.length - 1;
 }
 
-// Remove point by index
 export function removePoint(index) {
   if (index >= 0 && index < currentPath.length) {
     currentPath.splice(index, 1);
@@ -60,7 +54,6 @@ export function removePoint(index) {
   return false;
 }
 
-// Update point at index
 export function updatePoint(index, lat, lng) {
   if (index >= 0 && index < currentPath.length) {
     currentPath[index] = { lat, lng };
@@ -70,7 +63,6 @@ export function updatePoint(index, lat, lng) {
   return false;
 }
 
-// Reorder path (drag & drop support)
 export function reorderPath(fromIndex, toIndex) {
   if (
     fromIndex >= 0 &&
@@ -87,22 +79,18 @@ export function reorderPath(fromIndex, toIndex) {
   return false;
 }
 
-// Clear all points
 export function clearPath() {
   currentPath = [];
   notifyPathChange();
 }
 
-// Subscribe to path changes
 export function onPathChange(callback) {
   pathChangeCallbacks.push(callback);
   return () => {
-    // Return unsubscribe function
     pathChangeCallbacks = pathChangeCallbacks.filter((cb) => cb !== callback);
   };
 }
 
-// Notify all subscribers
 function notifyPathChange() {
   pathChangeCallbacks.forEach((cb) => {
     try {
@@ -113,5 +101,4 @@ function notifyPathChange() {
   });
 }
 
-// Export haversine for potential reuse
 export { haversineKm };

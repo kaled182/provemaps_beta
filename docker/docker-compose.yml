@@ -12,7 +12,7 @@
       --max-requests 1000
     entrypoint: ["/docker-entrypoint.sh"]
     ports:
-      - "8000:8000"
+      - "8100:8000"
     env_file:
       - ../.env
     working_dir: /app/backend
@@ -51,8 +51,8 @@
       SENTRY_TRACES_SAMPLE_RATE: "0.1"
       SENTRY_PROFILES_SAMPLE_RATE: "0.1"
       INIT_MIGRATE: "true"
-      # Skip collectstatic on host filesystems that don't support chmod (WSL/NTFS)
-      INIT_COLLECTSTATIC: "false"
+      # Ensure collectstatic runs in the container so static files are available to the web server
+      INIT_COLLECTSTATIC: "true"
       INIT_ENSURE_SUPERUSER: "true"
       CELERY_STATUS_TIMEOUT: "6"
       CELERY_PING_TIMEOUT: "2"
@@ -66,8 +66,8 @@
       ENV_FILE_PATH: /app/database/runtime.env
       VIDEO_TRANSMUXER_URL: "http://video-transmuxer:9000"
       VIDEO_HLS_BASE_URL: "http://video-hls:8080/hls"
-      VIDEO_HLS_PUBLIC_BASE_URL: "http://localhost:8082/hls"
-      VIDEO_WEBRTC_PUBLIC_BASE_URL: "http://localhost:8082/camera-stream"
+      VIDEO_HLS_PUBLIC_BASE_URL: "http://localhost:8083/hls"
+      VIDEO_WEBRTC_PUBLIC_BASE_URL: "http://localhost:8083/camera-stream"
       WHATSAPP_QR_SERVICE_URL: "http://whatsapp-qr:3000"
     depends_on:
       postgres:
@@ -290,7 +290,7 @@
       - GF_ANALYTICS_CHECK_FOR_UPDATES=false
       - GF_INSTALL_PLUGINS=
     ports:
-      - "3000:3000"
+      - "3002:3000"
     volumes:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
@@ -315,11 +315,11 @@
     container_name: docker-video-hls-1
     ports:
       - "1935:1935"
-      - "8082:8080"
+      - "8083:8080"
     volumes:
       - hls_cache:/var/www/hls
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/healthz || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8080/healthz || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

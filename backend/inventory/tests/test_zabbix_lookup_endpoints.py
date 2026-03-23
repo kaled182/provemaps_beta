@@ -1,3 +1,53 @@
+from django.test import TestCase, Client
+from django.contrib.auth import get_user_model
+
+
+class ZabbixLookupEndpointsTests(TestCase):
+    """Smoke tests for Zabbix lookup endpoints.
+
+    These tests exercise the HTTP endpoints to ensure they require
+    authentication and return the expected JSON shape when called
+    by an authenticated user. They are intentionally lightweight and
+    safe for local development.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        # create a temporary superuser for authenticated calls
+        self.username = "tmp_test_admin"
+        self.password = "tmp_password_123"
+        self.user = User.objects.create_superuser(self.username, "tmp@test.local", self.password)
+        self.client = Client()
+
+    def tearDown(self):
+        try:
+            self.user.delete()
+        except Exception:
+            pass
+
+    def test_host_groups_requires_login(self):
+        res = self.client.get("/api/v1/inventory/zabbix/lookup/host-groups/?exclude_empty=1")
+        # unauthenticated requests are expected to redirect to login (302)
+        self.assertIn(res.status_code, (302, 401))
+
+    def test_host_groups_authenticated_returns_list(self):
+        login_ok = self.client.login(username=self.username, password=self.password)
+        self.assertTrue(login_ok)
+        res = self.client.get("/api/v1/inventory/zabbix/lookup/host-groups/?exclude_empty=1")
+        self.assertEqual(res.status_code, 200)
+        payload = res.json()
+        self.assertIsInstance(payload, dict)
+        self.assertIn("data", payload)
+        self.assertIsInstance(payload["data"], list)
+
+    def test_hosts_grouped_authenticated_returns_groups(self):
+        login_ok = self.client.login(username=self.username, password=self.password)
+        self.assertTrue(login_ok)
+        res = self.client.get("/api/v1/inventory/zabbix/lookup/hosts/grouped/")
+        self.assertEqual(res.status_code, 200)
+        payload = res.json()
+        self.assertIsInstance(payload, dict)
+        self.assertIn("data", payload)
 import json
 from unittest.mock import patch
 

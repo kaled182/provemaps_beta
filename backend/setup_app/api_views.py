@@ -1987,30 +1987,27 @@ def update_company_profile(request):
 @login_required
 @user_passes_test(_staff_check)
 def update_configuration(request):
-    """Update system configuration (save to .env and database)."""
+    """Update system configuration (save to database only - .env is just a fallback template)."""
     try:
         data = json.loads(request.body)
 
-        # Read existing values from .env to allow partial updates
-        all_possible_keys = [
-            "SECRET_KEY", "ZABBIX_API_URL", "ZABBIX_API_USER", "ZABBIX_API_PASSWORD",
-            "DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD",
-            "GOOGLE_MAPS_API_KEY", "MAP_PROVIDER", "MAPBOX_TOKEN", "ALLOWED_HOSTS",
-        ]
-        existing_values = env_manager.read_values(all_possible_keys)
+        # Read existing values from database (not .env) to allow partial updates
+        runtime_config = runtime_settings.get_runtime_config()
+        existing_record = FirstTimeSetup.objects.filter(configured=True).order_by("-configured_at").first()
         
-        # Validate required fields - use existing values if not provided in request
-        required_fields = [
-            "SECRET_KEY", "ZABBIX_API_URL", "DB_HOST", 
-            "DB_PORT", "DB_NAME", "DB_USER"
-        ]
+        # Validate required fields - check if provided in request OR exists in database
+        required_fields = {
+            "ZABBIX_API_URL": runtime_config.zabbix_api_url,
+            "DB_HOST": runtime_config.db_host,
+            "DB_PORT": runtime_config.db_port,
+            "DB_NAME": runtime_config.db_name,
+            "DB_USER": runtime_config.db_user,
+        }
         
         missing_fields = []
-        for field in required_fields:
-            # Check if field is provided in request OR exists in .env
+        for field, existing_value in required_fields.items():
             value_from_request = data.get(field, "").strip()
-            value_from_env = existing_values.get(field, "").strip()
-            if not value_from_request and not value_from_env:
+            if not value_from_request and not existing_value:
                 missing_fields.append(field)
         
         if missing_fields:
@@ -2019,10 +2016,12 @@ def update_configuration(request):
                 "message": f"Missing required fields: {', '.join(missing_fields)}"
             }, status=400)
 
-        existing_backup_password = env_manager.read_values(["BACKUP_ZIP_PASSWORD"]).get(
-            "BACKUP_ZIP_PASSWORD", ""
-        )
+        # For backup password, use existing from database if not provided
         backup_zip_password = data.get("BACKUP_ZIP_PASSWORD", "").strip()
+        if not backup_zip_password and existing_record:
+            # Read from database if available
+            backup_zip_password = getattr(existing_record, 'backup_password', '')
+        
         if backup_zip_password and len(backup_zip_password) < _MIN_BACKUP_PASSWORD_LEN:
             return JsonResponse(
                 {
@@ -2032,46 +2031,34 @@ def update_configuration(request):
                 status=400,
             )
         if backup_zip_password == "":
-            backup_zip_password = existing_backup_password
+            backup_zip_password = ""  # Will be handled by database defaults
 
-        # Step 1: Write to .env file
-        existing_oauth = env_manager.read_values(
-            [
-                "GDRIVE_OAUTH_REFRESH_TOKEN",
-                "GDRIVE_OAUTH_USER_EMAIL",
-                "GDRIVE_OAUTH_CLIENT_ID",
-                "GDRIVE_OAUTH_CLIENT_SECRET",
-            ]
-        )
+        # Read existing OAuth/SMTP/SMS credentials from database (not .env)
+        existing_oauth_refresh = runtime_config.gdrive_oauth_refresh_token or ""
+        existing_oauth_email = runtime_config.gdrive_oauth_user_email or ""
+        existing_oauth_client_id = runtime_config.gdrive_oauth_client_id or ""
+        existing_oauth_client_secret = runtime_config.gdrive_oauth_client_secret or ""
+        
+        existing_smtp_password = runtime_config.smtp_password or ""
+        existing_smtp_auth_mode = runtime_config.smtp_auth_mode or "password"
+        existing_smtp_oauth_client_id = runtime_config.smtp_oauth_client_id or ""
+        existing_smtp_oauth_client_secret = runtime_config.smtp_oauth_client_secret or ""
+        existing_smtp_oauth_refresh = runtime_config.smtp_oauth_refresh_token or ""
+        
+        existing_sms_password = runtime_config.sms_password or ""
+        existing_sms_token = runtime_config.sms_api_token or ""
+        existing_sms_aws_secret = runtime_config.sms_aws_secret_access_key or ""
+        
         ftp_port_raw = data.get("FTP_PORT", "").strip()
         try:
             ftp_port_value = int(ftp_port_raw) if ftp_port_raw else 21
         except ValueError:
             ftp_port_value = 21
 
-        existing_smtp = env_manager.read_values(
-            [
-                "SMTP_PASSWORD",
-            ]
-        )
-        existing_sms = env_manager.read_values(
-            [
-                "SMS_PASSWORD",
-                "SMS_API_TOKEN",
-                "SMS_AWS_SECRET_ACCESS_KEY",
-            ]
-        )
-        existing_smtp_oauth = env_manager.read_values(
-            [
-                "SMTP_AUTH_MODE",
-                "SMTP_OAUTH_CLIENT_ID",
-                "SMTP_OAUTH_CLIENT_SECRET",
-                "SMTP_OAUTH_REFRESH_TOKEN",
-            ]
-        )
         smtp_password = data.get("SMTP_PASSWORD", "")
         if smtp_password == "":
-            smtp_password = existing_smtp.get("SMTP_PASSWORD", "")
+            smtp_password = existing_smtp_password
+            
         sms_provider_rank = data.get("SMS_PROVIDER_RANK", "").strip()
         try:
             sms_provider_rank_value = int(sms_provider_rank) if sms_provider_rank else 1
@@ -2081,15 +2068,16 @@ def update_configuration(request):
             sms_provider_rank_value = 1
         if sms_provider_rank_value > 5:
             sms_provider_rank_value = 5
+            
         sms_password = data.get("SMS_PASSWORD", "")
         if sms_password == "":
-            sms_password = existing_sms.get("SMS_PASSWORD", "")
+            sms_password = existing_sms_password
         sms_api_token = data.get("SMS_API_TOKEN", "")
         if sms_api_token == "":
-            sms_api_token = existing_sms.get("SMS_API_TOKEN", "")
+            sms_api_token = existing_sms_token
         sms_aws_secret_access_key = data.get("SMS_AWS_SECRET_ACCESS_KEY", "")
         if sms_aws_secret_access_key == "":
-            sms_aws_secret_access_key = existing_sms.get("SMS_AWS_SECRET_ACCESS_KEY", "")
+            sms_aws_secret_access_key = existing_sms_aws_secret
 
         # Parse thresholds (optional numbers)
         def _parse_float_str(value, default):
@@ -2100,11 +2088,11 @@ def update_configuration(request):
                 return str(default)
 
         payload = {
-            "SECRET_KEY": data.get("SECRET_KEY") or existing_values.get("SECRET_KEY", ""),
+            "SECRET_KEY": data.get("SECRET_KEY") or runtime_config.secret_key or "",
             "DEBUG": "True" if _to_bool(data.get("DEBUG", False)) else "False",
-            "ZABBIX_API_URL": data.get("ZABBIX_API_URL") or existing_values.get("ZABBIX_API_URL", ""),
-            "ZABBIX_API_USER": data.get("ZABBIX_API_USER") or existing_values.get("ZABBIX_API_USER", ""),
-            "ZABBIX_API_PASSWORD": data.get("ZABBIX_API_PASSWORD") or existing_values.get("ZABBIX_API_PASSWORD", ""),
+            "ZABBIX_API_URL": data.get("ZABBIX_API_URL") or runtime_config.zabbix_api_url or "",
+            "ZABBIX_API_USER": data.get("ZABBIX_API_USER") or runtime_config.zabbix_api_user or "",
+            "ZABBIX_API_PASSWORD": data.get("ZABBIX_API_PASSWORD") or runtime_config.zabbix_api_password or "",
             "ZABBIX_API_KEY": data.get("ZABBIX_API_KEY", "").strip(),
             "GOOGLE_MAPS_API_KEY": data.get("GOOGLE_MAPS_API_KEY", "").strip(),
             "MAP_PROVIDER": data.get("MAP_PROVIDER", "google").strip() or "google",
@@ -2130,16 +2118,16 @@ def update_configuration(request):
             "ENABLE_MAP_CLUSTERING": "True" if _to_bool(data.get("ENABLE_MAP_CLUSTERING", True)) else "False",
             "ENABLE_DRAWING_TOOLS": "True" if _to_bool(data.get("ENABLE_DRAWING_TOOLS", True)) else "False",
             "ENABLE_FULLSCREEN": "True" if _to_bool(data.get("ENABLE_FULLSCREEN", True)) else "False",
-            "ALLOWED_HOSTS": data.get("ALLOWED_HOSTS") or existing_values.get("ALLOWED_HOSTS", ""),
+            "ALLOWED_HOSTS": data.get("ALLOWED_HOSTS") or runtime_config.allowed_hosts or "",
             "ENABLE_DIAGNOSTIC_ENDPOINTS": (
                 "True" if _to_bool(data.get("ENABLE_DIAGNOSTIC_ENDPOINTS", False)) 
                 else "False"
             ),
-            "DB_HOST": data.get("DB_HOST") or existing_values.get("DB_HOST", ""),
-            "DB_PORT": data.get("DB_PORT") or existing_values.get("DB_PORT", ""),
-            "DB_NAME": data.get("DB_NAME") or existing_values.get("DB_NAME", ""),
-            "DB_USER": data.get("DB_USER") or existing_values.get("DB_USER", ""),
-            "DB_PASSWORD": data.get("DB_PASSWORD") or existing_values.get("DB_PASSWORD", ""),
+            "DB_HOST": data.get("DB_HOST") or runtime_config.db_host or "",
+            "DB_PORT": data.get("DB_PORT") or runtime_config.db_port or "",
+            "DB_NAME": data.get("DB_NAME") or runtime_config.db_name or "",
+            "DB_USER": data.get("DB_USER") or runtime_config.db_user or "",
+            "DB_PASSWORD": data.get("DB_PASSWORD") or runtime_config.db_password or "",
             "REDIS_URL": data.get("REDIS_URL", "").strip(),
             "SERVICE_RESTART_COMMANDS": data.get(
                 "SERVICE_RESTART_COMMANDS", ""
@@ -2157,11 +2145,11 @@ def update_configuration(request):
             "GDRIVE_FOLDER_ID": data.get("GDRIVE_FOLDER_ID", "").strip(),
             "GDRIVE_SHARED_DRIVE_ID": data.get("GDRIVE_SHARED_DRIVE_ID", "").strip(),
             "GDRIVE_OAUTH_CLIENT_ID": data.get("GDRIVE_OAUTH_CLIENT_ID", "").strip()
-            or existing_oauth.get("GDRIVE_OAUTH_CLIENT_ID", ""),
+            or existing_oauth_client_id,
             "GDRIVE_OAUTH_CLIENT_SECRET": data.get("GDRIVE_OAUTH_CLIENT_SECRET", "").strip()
-            or existing_oauth.get("GDRIVE_OAUTH_CLIENT_SECRET", ""),
-            "GDRIVE_OAUTH_REFRESH_TOKEN": existing_oauth.get("GDRIVE_OAUTH_REFRESH_TOKEN", ""),
-            "GDRIVE_OAUTH_USER_EMAIL": existing_oauth.get("GDRIVE_OAUTH_USER_EMAIL", ""),
+            or existing_oauth_client_secret,
+            "GDRIVE_OAUTH_REFRESH_TOKEN": existing_oauth_refresh,
+            "GDRIVE_OAUTH_USER_EMAIL": existing_oauth_email,
             "SMTP_ENABLED": "True" if _to_bool(data.get("SMTP_ENABLED", False)) else "False",
             "SMTP_HOST": data.get("SMTP_HOST", "").strip(),
             "SMTP_PORT": data.get("SMTP_PORT", "").strip(),
@@ -2169,13 +2157,13 @@ def update_configuration(request):
             "SMTP_USER": data.get("SMTP_USER", "").strip(),
             "SMTP_PASSWORD": smtp_password,
             "SMTP_AUTH_MODE": data.get("SMTP_AUTH_MODE", "").strip()
-            or existing_smtp_oauth.get("SMTP_AUTH_MODE", "password"),
+            or existing_smtp_auth_mode,
             "SMTP_OAUTH_CLIENT_ID": data.get("SMTP_OAUTH_CLIENT_ID", "").strip()
-            or existing_smtp_oauth.get("SMTP_OAUTH_CLIENT_ID", ""),
+            or existing_smtp_oauth_client_id,
             "SMTP_OAUTH_CLIENT_SECRET": data.get("SMTP_OAUTH_CLIENT_SECRET", "").strip()
-            or existing_smtp_oauth.get("SMTP_OAUTH_CLIENT_SECRET", ""),
+            or existing_smtp_oauth_client_secret,
             "SMTP_OAUTH_REFRESH_TOKEN": data.get("SMTP_OAUTH_REFRESH_TOKEN", "").strip()
-            or existing_smtp_oauth.get("SMTP_OAUTH_REFRESH_TOKEN", ""),
+            or existing_smtp_oauth_refresh,
             "SMTP_FROM_NAME": data.get("SMTP_FROM_NAME", "").strip(),
             "SMTP_FROM_EMAIL": data.get("SMTP_FROM_EMAIL", "").strip(),
             "SMTP_TEST_RECIPIENT": data.get("SMTP_TEST_RECIPIENT", "").strip(),
@@ -2232,7 +2220,10 @@ def update_configuration(request):
                 }
             )
         
-        env_manager.write_values(payload)
+        # DO NOT write to .env - all configuration is stored in database only
+        # env_manager.write_values(payload)  # REMOVED: .env is only a template
+        
+        # Update runtime environment and settings for immediate effect (without restart)
         os.environ["OPTICAL_RX_WARNING_THRESHOLD"] = payload["OPTICAL_RX_WARNING_THRESHOLD"]
         os.environ["OPTICAL_RX_CRITICAL_THRESHOLD"] = payload["OPTICAL_RX_CRITICAL_THRESHOLD"]
         settings.EMAIL_BACKEND = payload.get("EMAIL_BACKEND", settings.EMAIL_BACKEND)
@@ -2255,6 +2246,7 @@ def update_configuration(request):
             settings.OPTICAL_RX_CRITICAL_THRESHOLD = -27.0
 
         # Step 2: Persist to database
+        # Determine auth_type but always save all credentials provided
         auth_type = "token" if payload["ZABBIX_API_KEY"] else "login"
         
         FirstTimeSetup.objects.update_or_create(
@@ -2263,16 +2255,10 @@ def update_configuration(request):
                 "company_name": "MapsproveFiber",
                 "zabbix_url": payload["ZABBIX_API_URL"],
                 "auth_type": auth_type,
-                "zabbix_api_key": (
-                    payload["ZABBIX_API_KEY"] if auth_type == "token" else None
-                ),
-                "zabbix_user": (
-                    payload["ZABBIX_API_USER"] if auth_type == "login" else None
-                ),
-                "zabbix_password": (
-                    payload["ZABBIX_API_PASSWORD"] if auth_type == "login" 
-                    else None
-                ),
+                # Always save all credentials (runtime_config will decide which to use)
+                "zabbix_api_key": payload["ZABBIX_API_KEY"] or None,
+                "zabbix_user": payload["ZABBIX_API_USER"] or None,
+                "zabbix_password": payload["ZABBIX_API_PASSWORD"] or None,
                 "maps_api_key": payload["GOOGLE_MAPS_API_KEY"],
                 "map_provider": payload["MAP_PROVIDER"],
                 "mapbox_token": payload["MAPBOX_TOKEN"],
@@ -4344,3 +4330,144 @@ def video_mosaic_detail(request, mosaic_id: int):
                 {"success": False, "message": f"Failed to delete mosaic: {exc}"},
                 status=500,
             )
+
+
+# ─────────────────────────────────────────────────────────────
+# Camera Settings
+# ─────────────────────────────────────────────────────────────
+
+_CAMERA_KEYS = [
+    "CAMERA_DEFAULT_STREAM_TYPE",
+    "CAMERA_DEFAULT_RESOLUTION",
+    "CAMERA_DEFAULT_FPS",
+    "CAMERA_DEFAULT_CODEC",
+    "CAMERA_ENABLE_HARDWARE_ACCELERATION",
+    "CAMERA_MAX_CONCURRENT_STREAMS",
+    "CAMERA_STREAM_TIMEOUT_SECONDS",
+    "CAMERA_RECONNECT_ATTEMPTS",
+    "CAMERA_RECONNECT_DELAY_MS",
+]
+
+_CAMERA_DEFAULTS = {
+    "default_stream_type": "rtmp",
+    "default_resolution": "1080p",
+    "default_fps": 30,
+    "default_codec": "h264",
+    "enable_hardware_acceleration": True,
+    "max_concurrent_streams": 10,
+    "stream_timeout_seconds": 30,
+    "reconnect_attempts": 3,
+    "reconnect_delay_ms": 2000,
+}
+
+_CAMERA_KEY_MAP = {
+    "CAMERA_DEFAULT_STREAM_TYPE": "default_stream_type",
+    "CAMERA_DEFAULT_RESOLUTION": "default_resolution",
+    "CAMERA_DEFAULT_FPS": "default_fps",
+    "CAMERA_DEFAULT_CODEC": "default_codec",
+    "CAMERA_ENABLE_HARDWARE_ACCELERATION": "enable_hardware_acceleration",
+    "CAMERA_MAX_CONCURRENT_STREAMS": "max_concurrent_streams",
+    "CAMERA_STREAM_TIMEOUT_SECONDS": "stream_timeout_seconds",
+    "CAMERA_RECONNECT_ATTEMPTS": "reconnect_attempts",
+    "CAMERA_RECONNECT_DELAY_MS": "reconnect_delay_ms",
+}
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def camera_settings(request):
+    """GET: return camera config. POST: save camera config."""
+    if request.method == "GET":
+        try:
+            raw = env_manager.read_values(_CAMERA_KEYS)
+            result = dict(_CAMERA_DEFAULTS)
+            for env_key, setting_key in _CAMERA_KEY_MAP.items():
+                val = raw.get(env_key)
+                if val not in (None, ""):
+                    default = _CAMERA_DEFAULTS.get(setting_key)
+                    if isinstance(default, bool):
+                        result[setting_key] = str(val).lower() in ("true", "1", "yes")
+                    elif isinstance(default, int):
+                        try:
+                            result[setting_key] = int(val)
+                        except (TypeError, ValueError):
+                            pass
+                    else:
+                        result[setting_key] = val
+            return JsonResponse({"success": True, "settings": result})
+        except Exception as exc:
+            logger.exception("Error loading camera settings")
+            return JsonResponse({"success": False, "message": str(exc)}, status=500)
+
+    # POST – save settings
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError) as exc:
+        return JsonResponse({"success": False, "message": f"Invalid JSON: {exc}"}, status=400)
+
+    try:
+        to_write: Dict[str, Any] = {}
+        for env_key, setting_key in _CAMERA_KEY_MAP.items():
+            if setting_key in body:
+                val = body[setting_key]
+                default = _CAMERA_DEFAULTS.get(setting_key)
+                if isinstance(default, bool):
+                    to_write[env_key] = "true" if val else "false"
+                else:
+                    to_write[env_key] = str(val)
+        if to_write:
+            env_manager.write_values(to_write)
+        return JsonResponse({"success": True, "message": "Configurações de câmeras salvas."})
+    except Exception as exc:
+        logger.exception("Error saving camera settings")
+        return JsonResponse({"success": False, "message": str(exc)}, status=500)
+
+
+# ─────────────────────────────────────────────────────────────
+# Test Stream
+# ─────────────────────────────────────────────────────────────
+
+@login_required
+@require_POST
+def test_stream(request):
+    """Test TCP reachability of a stream endpoint (host:port)."""
+    import socket
+    from urllib.parse import urlparse
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError) as exc:
+        return JsonResponse({"success": False, "message": f"Invalid JSON: {exc}"}, status=400)
+
+    stream_url = (body.get("stream_url") or "").strip()
+    timeout = int(body.get("timeout") or 5)
+
+    if not stream_url:
+        return JsonResponse({"success": False, "message": "stream_url é obrigatório."}, status=400)
+
+    try:
+        parsed = urlparse(stream_url)
+        host = parsed.hostname
+        port = parsed.port
+
+        if not host:
+            return JsonResponse({"success": False, "message": "URL inválida: host não encontrado."}, status=400)
+
+        if not port:
+            port = {"rtsp": 554, "rtmp": 1935, "rtmps": 443, "http": 80, "https": 443}.get(
+                parsed.scheme.lower(), 554
+            )
+
+        sock = socket.create_connection((host, port), timeout=timeout)
+        sock.close()
+        return JsonResponse({
+            "success": True,
+            "message": f"Conexão bem-sucedida com {host}:{port}.",
+        })
+    except socket.timeout:
+        return JsonResponse({"success": False, "message": "Timeout ao conectar com o servidor de stream."})
+    except OSError as exc:
+        return JsonResponse({"success": False, "message": f"Falha na conexão: {exc}"})
+    except Exception as exc:
+        logger.exception("Error testing stream connection")
+        return JsonResponse({"success": False, "message": str(exc)}, status=500)

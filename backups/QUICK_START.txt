@@ -1,0 +1,213 @@
+================================================================================
+  ProveMaps v2.1.0 - QUICK START GUIDE
+================================================================================
+
+📦 Arquivo: provemaps_beta_v2.1.0_2026-03-05_011158.tar.gz
+📏 Tamanho: 2.68 MB
+📅 Data: 05/03/2026
+
+================================================================================
+  PASSO 1 - EXTRAIR
+================================================================================
+
+Windows PowerShell:
+  tar -xzf provemaps_beta_v2.1.0_2026-03-05_011158.tar.gz
+  cd provemaps_beta
+
+Linux/Mac:
+  tar -xzf provemaps_beta_v2.1.0_2026-03-05_011158.tar.gz
+  cd provemaps_beta
+
+================================================================================
+  PASSO 2 - CONFIGURAR
+================================================================================
+
+1. Copiar arquivo de configuração:
+   cp .env.example .env
+
+2. Editar .env (usar notepad/nano/vim):
+   
+   OBRIGATÓRIO:
+   ─────────────────────────────────────────────────────────────────────
+   ZABBIX_URL=https://seu-zabbix.com.br
+   ZABBIX_USER=Admin
+   ZABBIX_PASSWORD=sua-senha-aqui
+   ─────────────────────────────────────────────────────────────────────
+
+   ESCOLHER UM PROVIDER:
+   ─────────────────────────────────────────────────────────────────────
+   Opção A - Mapbox (RECOMENDADO):
+     MAPBOX_TOKEN=pk.eyJ1Ijoia2FsZWQxODIi...
+     
+     Obter token grátis em: https://account.mapbox.com/
+     Limite: 200.000 requisições/mês
+   
+   Opção B - Google Maps:
+     GOOGLE_MAPS_API_KEY=AIzaSyC...
+     
+     Obter chave em: https://console.cloud.google.com/
+     Habilitar: Maps JavaScript API
+     Limite: $200/mês grátis
+   ─────────────────────────────────────────────────────────────────────
+
+================================================================================
+  PASSO 3 - INICIAR
+================================================================================
+
+1. Subir containers Docker:
+   docker compose -f docker/docker-compose.yml up -d
+
+2. Aguardar 30-60 segundos para inicialização
+
+3. Verificar logs (opcional):
+   docker compose -f docker/docker-compose.yml logs -f web
+
+4. Acessar aplicação:
+   http://localhost:8100
+
+5. Login padrão:
+   Usuário: admin
+   Senha: admin
+   
+   ⚠️ IMPORTANTE: Alterar senha após primeiro acesso!
+
+================================================================================
+  PASSO 4 - CONFIGURAR PROVIDER DE MAPAS
+================================================================================
+
+1. No sistema, ir em: Sistema > Configuração > Mapas
+
+2. Selecionar Provider:
+   [x] Mapbox  ou  [ ] Google Maps
+
+3. Colar token/API key do .env
+
+4. Clicar em SALVAR
+
+5. Recarregar página: Ctrl+Shift+R
+
+================================================================================
+  PASSO 5 - TESTAR NETWORK DESIGN
+================================================================================
+
+1. Acessar: http://localhost:8100/Network/NetworkDesign/
+
+2. Verificar se mapa carrega
+
+3. Criar cabo de teste:
+   a) Clicar no mapa para desenhar rota (mínimo 2 pontos)
+   b) Clicar em "Save cable manually"
+   c) Preencher formulário:
+      - Nome do cabo: "Teste 001"
+      - Dispositivo origem: (selecionar)
+      - Porta origem: (selecionar)
+      - Opcionalmente: dispositivo/porta destino
+   d) Clicar em SAVE
+   e) Verificar se cabo aparece no mapa
+
+================================================================================
+  COMANDOS ÚTEIS
+================================================================================
+
+Ver logs em tempo real:
+  docker compose -f docker/docker-compose.yml logs -f web
+
+Reiniciar aplicação:
+  docker compose -f docker/docker-compose.yml restart web
+
+Parar tudo:
+  docker compose -f docker/docker-compose.yml down
+
+Acessar shell do container:
+  docker compose -f docker/docker-compose.yml exec web bash
+
+Sincronizar inventário Zabbix:
+  docker compose exec web python manage.py sync_zabbix_inventory
+
+================================================================================
+  SOLUÇÃO DE PROBLEMAS
+================================================================================
+
+❌ Mapa não carrega
+   ✅ Verificar provider configurado em Sistema > Configurações > Mapas
+   ✅ Verificar token/API key válido no .env
+   ✅ Abrir console do navegador (F12) e verificar erros
+   ✅ Recarregar com Ctrl+Shift+R
+
+❌ Erro 403 ao salvar
+   ✅ Recarregar página (F5)
+   ✅ Fazer logout e login novamente
+
+❌ Nenhum dispositivo aparece
+   ✅ Verificar credenciais Zabbix no .env
+   ✅ Executar: docker compose exec web python manage.py sync_zabbix_inventory
+   ✅ Verificar se dispositivos têm latitude/longitude no Zabbix
+
+❌ Porta 8100 já está em uso
+   ✅ Verificar: netstat -ano | findstr :8100 (Windows)
+   ✅ Verificar: lsof -i :8100 (Linux/Mac)
+   ✅ Mudar porta no docker-compose.yml
+
+❌ Container não inicia
+   ✅ Verificar Docker Desktop rodando
+   ✅ Ver logs: docker compose logs web
+   ✅ Remover volumes: docker compose down -v
+
+================================================================================
+  ARQUIVOS IMPORTANTES
+================================================================================
+
+📄 README_BACKUP_v2.1.0.md
+   Documentação completa com todos os detalhes técnicos
+
+📋 CHECKLIST_TESTES_v2.1.0.md
+   Checklist completo para realizar testes sistemáticos
+
+📖 doc/features/MAP_PROVIDER_PATTERN.md
+   Arquitetura técnica do Provider Pattern implementado
+
+🗺️ doc/roadmap/network-design-improvements.md
+   Roadmap com 12 melhorias planejadas
+
+================================================================================
+  URLs IMPORTANTES
+================================================================================
+
+🌐 Aplicação:           http://localhost:8100
+🗺️ Network Design:      http://localhost:8100/Network/NetworkDesign/
+📊 Monitoring Backbone: http://localhost:8100/monitoring/backbone/
+🔧 Admin Django:        http://localhost:8100/admin/
+📡 API:                 http://localhost:8100/api/
+📜 Swagger:             http://localhost:8100/api/schema/swagger/
+
+================================================================================
+  SUPORTE
+================================================================================
+
+🐛 Reportar problemas: https://github.com/kaled182/provemaps_beta/issues
+📚 Documentação:       Ver pasta doc/
+💬 Branch desta versão: refactor/lazy-load-map-providers
+
+================================================================================
+  CHECKLIST RÁPIDO
+================================================================================
+
+Antes de começar os testes:
+  [ ] Extraiu o arquivo tar.gz
+  [ ] Configurou .env com credenciais
+  [ ] Iniciou Docker Compose
+  [ ] Acessou http://localhost:8100
+  [ ] Configurou provider de mapas
+  [ ] Testou criar cabo no NetworkDesign
+
+Está tudo funcionando?
+  [ ] Login OK
+  [ ] Mapa carrega
+  [ ] Cabo criado com sucesso
+  
+  ✅ Pronto para testes completos!
+  📋 Use CHECKLIST_TESTES_v2.1.0.md para testes detalhados
+
+================================================================================
+  BOA SORTE COM OS TESTES! 🚀
+================================================================================

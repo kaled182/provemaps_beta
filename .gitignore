@@ -188,6 +188,18 @@ test_db.sqlite3
 database/backups/*.dump
 database/*.dump
 
+# Sensitive runtime config (CRITICAL: Never commit - use database/env only)
+database/runtime.env
+*.env
+!.env.example
+
+# Debug / temp test scripts (não commitar)
+debug_*.js
+debug_*.py
+test_*.js
+test_*.py
+RELATORIO_TESTES_*.md
+
 # Frontend test artifacts (Playwright/Vitest)
 frontend/playwright-report/
 frontend/test-results/
