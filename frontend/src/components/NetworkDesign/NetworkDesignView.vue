@@ -6,7 +6,7 @@
 
     <section
       id="routePointsPanel"
-      class="floating-panel"
+      class="floating-panel nd-panel-hidden"
       aria-labelledby="routePointsPanelTitle"
     >
       <div class="floating-panel__header">
@@ -46,49 +46,24 @@
       </div>
     </section>
 
-    <section
-      id="helpPanel"
-      class="floating-panel help-panel"
-      aria-labelledby="helpPanelTitle"
-    >
-      <div class="floating-panel__header">
-        <h3 id="helpPanelTitle">Tips</h3>
-        <button
-          id="toggleHelp"
-          type="button"
-          class="panel-toggle-btn"
-          aria-expanded="true"
-          aria-controls="helpPanelBody"
-        >
-          <svg class="panel-toggle-icon" viewBox="0 0 20 20" aria-hidden="true">
-            <path d="M5.5 7.5L10 12l4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          <span class="sr-only">Collapse tips</span>
-        </button>
-      </div>
-      <div id="helpPanelBody" class="floating-panel__body" aria-hidden="false">
+    <div class="help-fab-wrapper" v-click-outside="closeHelpPopover">
+      <div class="help-popover" :class="{ visible: helpOpen }" :aria-hidden="String(!helpOpen)">
         <ul class="help-list">
-          <li>
-            <span class="help-index">1.</span>
-            Click the map to add points. Drag markers to adjust their position or reorder them in the list.
-          </li>
-          <li>
-            <span class="help-index">2.</span>
-            Use the <span class="help-emphasis">context menu</span> (right-click) to save, edit, import from KML, or delete cables.
-          </li>
-          <li>
-            <span class="help-index">3.</span>
-            When editing, the selected cable is highlighted while the remaining cables stay visible with lower opacity.
-          </li>
-          <li>
-            <span class="help-index">4.</span>
-            Press
-            <kbd class="help-shortcut">Esc</kbd>
-            to quickly exit the current edit session.
-          </li>
+          <li><span class="help-index">1.</span> Click the map to add points. Drag markers to adjust their position or reorder them in the list.</li>
+          <li><span class="help-index">2.</span> Use the <span class="help-emphasis">context menu</span> (right-click) to save, edit, import from KML, or delete cables.</li>
+          <li><span class="help-index">3.</span> When editing, the selected cable is highlighted while the remaining cables stay visible with lower opacity.</li>
+          <li><span class="help-index">4.</span> Press <kbd class="help-shortcut">Esc</kbd> to quickly exit the current edit session.</li>
         </ul>
       </div>
-    </section>
+      <button
+        type="button"
+        class="help-fab"
+        :class="{ active: helpOpen }"
+        aria-label="Dicas de uso"
+        :aria-expanded="String(helpOpen)"
+        @click.stop="helpOpen = !helpOpen"
+      >?</button>
+    </div>
 
     <div id="contextMenu" class="hidden">
       <div id="contextCableInfo" class="hidden">
@@ -102,6 +77,13 @@
           <span id="contextLoadAllText">Reload all cables</span>
         </button>
         <button id="contextImportKML" type="button">Import route from KML</button>
+      </div>
+
+      <div id="contextPreviewOptions" class="hidden space-y-2 mt-3">
+        <h3>Cable</h3>
+        <button id="contextViewDetails" type="button">Ver detalhes</button>
+        <button id="contextStartEdit" type="button">Editar rota</button>
+        <button id="contextDeletePreview" type="button" data-variant="danger">Excluir cabo</button>
       </div>
 
       <div id="contextSelectedOptions" class="hidden space-y-2 mt-3">
@@ -118,6 +100,45 @@
         <button id="contextClearNew" type="button">Clear drawn points</button>
       </div>
     </div>
+
+    <section
+      id="cableDetailsPanel"
+      class="floating-panel nd-panel-hidden"
+      aria-labelledby="cableDetailsPanelTitle"
+    >
+      <div class="floating-panel__header">
+        <h3 id="cableDetailsPanelTitle">Cable details</h3>
+        <button id="closeCableDetails" type="button" class="panel-toggle-btn" aria-label="Fechar painel">
+          <svg viewBox="0 0 20 20" aria-hidden="true" style="width:18px;height:18px">
+            <path d="M5 5l10 10M15 5L5 15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="floating-panel__body">
+        <dl class="cable-details-dl">
+          <div class="cable-details-row">
+            <dt>Nome</dt>
+            <dd id="cableDetailName">—</dd>
+          </div>
+          <div class="cable-details-row">
+            <dt>Distância</dt>
+            <dd id="cableDetailDistance">—</dd>
+          </div>
+          <div class="cable-details-row">
+            <dt>Origem</dt>
+            <dd id="cableDetailOrigin">—</dd>
+          </div>
+          <div class="cable-details-row">
+            <dt>Destino</dt>
+            <dd id="cableDetailDestination">—</dd>
+          </div>
+        </dl>
+        <div class="floating-panel__footer">
+          <button id="cableDetailEditBtn" type="button" class="footer-btn footer-btn--primary">Editar rota</button>
+          <button id="cableDetailDeleteBtn" type="button" class="footer-btn footer-btn--danger">Excluir</button>
+        </div>
+      </div>
+    </section>
 
     <div id="toastHost" class="toast-host hidden"></div>
     <div id="confirmHost" class="confirm-host hidden"></div>
@@ -376,6 +397,21 @@ import { initializeNetworkDesignApp } from '@/features/networkDesign/fiberRouteB
 import { initializeKmlModal, cleanupKmlModal } from '@/features/networkDesign/partials/import_kml.js';
 
 const csrfToken = ref(window.CSRF_TOKEN || '');
+const helpOpen = ref(false);
+const closeHelpPopover = () => { helpOpen.value = false; };
+
+// v-click-outside directive
+const vClickOutside = {
+  mounted(el, binding) {
+    el._clickOutsideHandler = (e) => {
+      if (!el.contains(e.target)) binding.value(e);
+    };
+    document.addEventListener('click', el._clickOutsideHandler);
+  },
+  unmounted(el) {
+    document.removeEventListener('click', el._clickOutsideHandler);
+  },
+};
 
 const ensureFiberGlobals = () => {
   if (!Array.isArray(window.__FIBER_DEVICE_OPTIONS)) {
@@ -596,6 +632,13 @@ onUnmounted(() => {
   color: var(--nd-panel-text);
   overflow: hidden;
   overflow-y: auto;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.floating-panel.nd-panel-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-8px);
 }
 
 .floating-panel.collapsed {
@@ -607,9 +650,59 @@ onUnmounted(() => {
   top: 104px;
 }
 
-.help-panel {
-  top: auto;
+/* Help FAB + Popover */
+.help-fab-wrapper {
+  position: absolute;
   bottom: 32px;
+  right: 24px;
+  z-index: 35;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.help-fab {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--nd-panel-bg);
+  border: 1px solid var(--nd-panel-border);
+  box-shadow: var(--nd-panel-shadow);
+  color: var(--nd-panel-muted);
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.help-fab:hover,
+.help-fab.active {
+  background: var(--nd-chip-bg);
+  color: var(--nd-chip-text);
+}
+
+.help-popover {
+  width: min(320px, calc(100vw - 48px));
+  background: var(--nd-panel-bg);
+  border: 1px solid var(--nd-panel-border);
+  border-radius: 12px;
+  box-shadow: var(--nd-panel-shadow);
+  padding: 1.1rem 1.2rem;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(6px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.help-popover.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
 }
 
 .floating-panel h3 {
@@ -734,6 +827,7 @@ onUnmounted(() => {
 .floating-panel__footer {
   display: flex;
   justify-content: flex-end;
+  gap: 0.5rem;
   padding-top: 0.5rem;
 }
 
@@ -752,6 +846,56 @@ onUnmounted(() => {
 .footer-btn:hover {
   background: rgba(248, 113, 113, 0.22);
   border-color: rgba(248, 113, 113, 0.45);
+}
+
+.footer-btn--primary {
+  background: var(--nd-chip-bg);
+  color: var(--nd-chip-text);
+  border-color: transparent;
+}
+
+.footer-btn--primary:hover {
+  background: #bfdbfe;
+  border-color: transparent;
+}
+
+.footer-btn--danger {
+  background: var(--nd-btn-bg);
+  color: var(--nd-btn-text);
+  border-color: var(--nd-btn-border);
+}
+
+/* Cable Details Panel */
+#cableDetailsPanel {
+  top: 104px;
+}
+
+.cable-details-dl {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin: 0;
+}
+
+.cable-details-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.cable-details-row dt {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--nd-panel-muted);
+}
+
+.cable-details-row dd {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--nd-panel-text);
+  word-break: break-word;
 }
 
 .help-list {
@@ -798,8 +942,9 @@ onUnmounted(() => {
     bottom: calc(32px + 18vh);
   }
 
-  .help-panel {
+  .help-fab-wrapper {
     bottom: 24px;
+    right: 24px;
   }
 }
 
