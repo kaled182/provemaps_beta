@@ -6,7 +6,7 @@
 
     <section
       id="routePointsPanel"
-      class="floating-panel"
+      class="floating-panel nd-panel-hidden"
       aria-labelledby="routePointsPanelTitle"
     >
       <div class="floating-panel__header">
@@ -46,49 +46,24 @@
       </div>
     </section>
 
-    <section
-      id="helpPanel"
-      class="floating-panel help-panel"
-      aria-labelledby="helpPanelTitle"
-    >
-      <div class="floating-panel__header">
-        <h3 id="helpPanelTitle">Tips</h3>
-        <button
-          id="toggleHelp"
-          type="button"
-          class="panel-toggle-btn"
-          aria-expanded="true"
-          aria-controls="helpPanelBody"
-        >
-          <svg class="panel-toggle-icon" viewBox="0 0 20 20" aria-hidden="true">
-            <path d="M5.5 7.5L10 12l4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          <span class="sr-only">Collapse tips</span>
-        </button>
-      </div>
-      <div id="helpPanelBody" class="floating-panel__body" aria-hidden="false">
+    <div class="help-fab-wrapper">
+      <div id="helpPopover" class="help-popover" aria-hidden="true">
         <ul class="help-list">
-          <li>
-            <span class="help-index">1.</span>
-            Click the map to add points. Drag markers to adjust their position or reorder them in the list.
-          </li>
-          <li>
-            <span class="help-index">2.</span>
-            Use the <span class="help-emphasis">context menu</span> (right-click) to save, edit, import from KML, or delete cables.
-          </li>
-          <li>
-            <span class="help-index">3.</span>
-            When editing, the selected cable is highlighted while the remaining cables stay visible with lower opacity.
-          </li>
-          <li>
-            <span class="help-index">4.</span>
-            Press
-            <kbd class="help-shortcut">Esc</kbd>
-            to quickly exit the current edit session.
-          </li>
+          <li><span class="help-index">1.</span> Click the map to add points. Drag markers to adjust their position or reorder them in the list.</li>
+          <li><span class="help-index">2.</span> Use the <span class="help-emphasis">context menu</span> (right-click) to save, edit, import from KML, or delete cables.</li>
+          <li><span class="help-index">3.</span> When editing, the selected cable is highlighted while the remaining cables stay visible with lower opacity.</li>
+          <li><span class="help-index">4.</span> Press <kbd class="help-shortcut">Esc</kbd> to quickly exit the current edit session.</li>
         </ul>
       </div>
-    </section>
+      <button
+        id="helpFab"
+        type="button"
+        class="help-fab"
+        aria-label="Dicas de uso"
+        aria-expanded="false"
+        aria-controls="helpPopover"
+      >?</button>
+    </div>
 
     <div id="contextMenu" class="hidden">
       <div id="contextCableInfo" class="hidden">
@@ -596,6 +571,13 @@ onUnmounted(() => {
   color: var(--nd-panel-text);
   overflow: hidden;
   overflow-y: auto;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.floating-panel.nd-panel-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-8px);
 }
 
 .floating-panel.collapsed {
@@ -607,9 +589,59 @@ onUnmounted(() => {
   top: 104px;
 }
 
-.help-panel {
-  top: auto;
+/* Help FAB + Popover */
+.help-fab-wrapper {
+  position: absolute;
   bottom: 32px;
+  right: 24px;
+  z-index: 35;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.help-fab {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--nd-panel-bg);
+  border: 1px solid var(--nd-panel-border);
+  box-shadow: var(--nd-panel-shadow);
+  color: var(--nd-panel-muted);
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.help-fab:hover,
+.help-fab.active {
+  background: var(--nd-chip-bg);
+  color: var(--nd-chip-text);
+}
+
+.help-popover {
+  width: min(320px, calc(100vw - 48px));
+  background: var(--nd-panel-bg);
+  border: 1px solid var(--nd-panel-border);
+  border-radius: 12px;
+  box-shadow: var(--nd-panel-shadow);
+  padding: 1.1rem 1.2rem;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(6px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.help-popover.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
 }
 
 .floating-panel h3 {
@@ -798,8 +830,9 @@ onUnmounted(() => {
     bottom: calc(32px + 18vh);
   }
 
-  .help-panel {
+  .help-fab-wrapper {
     bottom: 24px;
+    right: 24px;
   }
 }
 

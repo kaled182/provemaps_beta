@@ -53,6 +53,20 @@ let activeEndpoint = 'end'; // 'start' | 'end'
 let nearbyCablesWarningEl = null;
 
 /**
+ * Show or hide the Route Points panel.
+ * Uses CSS opacity/transform transition (nd-panel-hidden class).
+ */
+function setRoutePointsPanelVisible(visible) {
+    const panel = document.getElementById('routePointsPanel');
+    if (!panel) return;
+    if (visible) {
+        panel.classList.remove('nd-panel-hidden');
+    } else {
+        panel.classList.add('nd-panel-hidden');
+    }
+}
+
+/**
  * Debounce utility
  */
 function debounce(func, wait) {
@@ -448,16 +462,19 @@ onPathChange(({ path, distance }) => {
         }
     }
     
+    // Show/hide route points panel based on active editing state
+    setRoutePointsPanelVisible(path.length > 0 || !!activeFiberId);
+
     // Rebuild marker list
     refreshList();
-    
+
     // Update save button state
     const saveButton = findElement('savePath');
     if (saveButton) {
         const allowSave = (path.length >= 2) || (activeFiberId && path.length === 0);
         saveButton.disabled = !allowSave;
     }
-    
+
     // Update context menu state
     updateContextMenuStateWrapper();
 });
@@ -815,6 +832,7 @@ async function loadFiberDetail(id) {
         const data = await fetchFiber(id);
         console.log(`[loadFiberDetail] Loaded cable #${id}:`, data);
         activeFiberId = data.id;
+        setRoutePointsPanelVisible(true);
         currentFiberMeta = {
             id: data.id,
             name: data.name || '',
@@ -843,10 +861,10 @@ async function loadFiberDetail(id) {
 }
 
 async function cancelEditing() {
-    const wasEditing = Boolean(activeFiberId);
     closeManualSaveModal();
     hideContextMenu();
     clearMapAndResetState();
+    setRoutePointsPanelVisible(false);
     await reloadCableVisualization({ fitToBounds: true });
     refreshList();
     updateContextMenuStateWrapper();
@@ -1066,7 +1084,7 @@ function initializeDomBindings() {
     initContextMenu();
     initModalEditor();
     
-    // Collapse buttons for panels
+    // Collapse button for route points panel
     document.getElementById('toggleRoutePoints')?.addEventListener('click', () => {
         const panel = document.getElementById('routePointsPanel');
         const body = document.getElementById('routePointsPanelBody');
@@ -1077,17 +1095,29 @@ function initializeDomBindings() {
             body?.setAttribute('aria-hidden', String(isCollapsed));
         }
     });
-    
-    document.getElementById('toggleHelp')?.addEventListener('click', () => {
-        const panel = document.getElementById('helpPanel');
-        const body = document.getElementById('helpPanelBody');
-        if (panel) {
-            panel.classList.toggle('collapsed');
-            const isCollapsed = panel.classList.contains('collapsed');
-            document.getElementById('toggleHelp')?.setAttribute('aria-expanded', String(!isCollapsed));
-            body?.setAttribute('aria-hidden', String(isCollapsed));
-        }
+
+    // Help FAB — toggle popover
+    document.getElementById('helpFab')?.addEventListener('click', () => {
+        const popover = document.getElementById('helpPopover');
+        const btn = document.getElementById('helpFab');
+        if (!popover) return;
+        const isVisible = popover.classList.toggle('visible');
+        popover.setAttribute('aria-hidden', String(!isVisible));
+        btn?.setAttribute('aria-expanded', String(isVisible));
+        btn?.classList.toggle('active', isVisible);
     });
+
+    // Close help popover when clicking outside
+    document.addEventListener('click', (e) => {
+        const popover = document.getElementById('helpPopover');
+        const btn = document.getElementById('helpFab');
+        if (popover?.classList.contains('visible') && !btn?.contains(e.target) && !popover.contains(e.target)) {
+            popover.classList.remove('visible');
+            popover.setAttribute('aria-hidden', 'true');
+            btn?.setAttribute('aria-expanded', 'false');
+            btn?.classList.remove('active');
+        }
+    }, { capture: false });
     
     document.getElementById('manualCancelButton')?.addEventListener('click', async () => {
         await cancelEditing();
