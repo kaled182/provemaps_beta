@@ -1096,28 +1096,6 @@ function initializeDomBindings() {
         }
     });
 
-    // Help FAB — toggle popover
-    document.getElementById('helpFab')?.addEventListener('click', () => {
-        const popover = document.getElementById('helpPopover');
-        const btn = document.getElementById('helpFab');
-        if (!popover) return;
-        const isVisible = popover.classList.toggle('visible');
-        popover.setAttribute('aria-hidden', String(!isVisible));
-        btn?.setAttribute('aria-expanded', String(isVisible));
-        btn?.classList.toggle('active', isVisible);
-    });
-
-    // Close help popover when clicking outside
-    document.addEventListener('click', (e) => {
-        const popover = document.getElementById('helpPopover');
-        const btn = document.getElementById('helpFab');
-        if (popover?.classList.contains('visible') && !btn?.contains(e.target) && !popover.contains(e.target)) {
-            popover.classList.remove('visible');
-            popover.setAttribute('aria-hidden', 'true');
-            btn?.setAttribute('aria-expanded', 'false');
-            btn?.classList.remove('active');
-        }
-    }, { capture: false });
     
     document.getElementById('manualCancelButton')?.addEventListener('click', async () => {
         await cancelEditing();

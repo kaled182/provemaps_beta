@@ -46,8 +46,8 @@
       </div>
     </section>
 
-    <div class="help-fab-wrapper">
-      <div id="helpPopover" class="help-popover" aria-hidden="true">
+    <div class="help-fab-wrapper" v-click-outside="closeHelpPopover">
+      <div class="help-popover" :class="{ visible: helpOpen }" :aria-hidden="String(!helpOpen)">
         <ul class="help-list">
           <li><span class="help-index">1.</span> Click the map to add points. Drag markers to adjust their position or reorder them in the list.</li>
           <li><span class="help-index">2.</span> Use the <span class="help-emphasis">context menu</span> (right-click) to save, edit, import from KML, or delete cables.</li>
@@ -56,12 +56,12 @@
         </ul>
       </div>
       <button
-        id="helpFab"
         type="button"
         class="help-fab"
+        :class="{ active: helpOpen }"
         aria-label="Dicas de uso"
-        aria-expanded="false"
-        aria-controls="helpPopover"
+        :aria-expanded="String(helpOpen)"
+        @click.stop="helpOpen = !helpOpen"
       >?</button>
     </div>
 
@@ -351,6 +351,21 @@ import { initializeNetworkDesignApp } from '@/features/networkDesign/fiberRouteB
 import { initializeKmlModal, cleanupKmlModal } from '@/features/networkDesign/partials/import_kml.js';
 
 const csrfToken = ref(window.CSRF_TOKEN || '');
+const helpOpen = ref(false);
+const closeHelpPopover = () => { helpOpen.value = false; };
+
+// v-click-outside directive
+const vClickOutside = {
+  mounted(el, binding) {
+    el._clickOutsideHandler = (e) => {
+      if (!el.contains(e.target)) binding.value(e);
+    };
+    document.addEventListener('click', el._clickOutsideHandler);
+  },
+  unmounted(el) {
+    document.removeEventListener('click', el._clickOutsideHandler);
+  },
+};
 
 const ensureFiberGlobals = () => {
   if (!Array.isArray(window.__FIBER_DEVICE_OPTIONS)) {
