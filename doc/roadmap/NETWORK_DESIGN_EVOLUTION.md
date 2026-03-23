@@ -24,8 +24,11 @@
 ### 1.3 Menus de Contexto (Right-click)
 - [x] Implementado menu de contexto no mapa (clique direito sobre cabos/elementos)
   - _Concluído: modal editor com opções Editar, Salvar, Cancelar, Deletar_
-- [ ] Refinar opções do menu por tipo de elemento (cabo, caixa, ponto de emenda)
-- [ ] Adicionar ação "Ver detalhes" que abre painel lateral sem entrar em modo edição
+- [x] Adicionar ação "Ver detalhes" que abre painel lateral sem entrar em modo edição
+  - _2026-03-23: right-click abre modo preview → painel Cable Details (read-only) com Editar/Excluir_
+- [x] Separar fluxo de preview vs edição no context menu
+  - _2026-03-23: seção contextPreviewOptions (Ver detalhes / Editar rota / Excluir) vs contextSelectedOptions (editando)_
+- [ ] Refinar opções do menu por tipo de elemento (cabo, caixa, ponto de emenda) — fase 3+
 
 ---
 
@@ -119,6 +122,7 @@
 | 2026-03-23 | 4.1 | Distância total na rota | — | Já existia, confirmado funcionando |
 | 2026-03-23 | 1.1 | Route Points panel oculto por padrão | Claude | nd-panel-hidden + setRoutePointsPanelVisible() |
 | 2026-03-23 | 1.2 | Tips como botão FAB "?" com popover | Claude | #helpFab + #helpPopover substituem painel fixo |
+| 2026-03-23 | 1.3 | Painel de detalhes + preview de cabo | Claude | previewCable() + CableDetailsPanel + contextPreviewOptions |
 
 ---
 
