@@ -9,14 +9,16 @@
 > Objetivo: Ganhar área útil de mapa e melhorar a primeira impressão do usuário.
 
 ### 1.1 Refatoração do Painel "Route Points"
-- [ ] Painel fica **oculto por padrão** (não ocupa espaço na tela inicial)
-- [ ] Aparece como painel flutuante/lateral apenas quando "Criar Nova Rota" ou "Editar Rota" é disparado
+- [x] Painel fica **oculto por padrão** (nd-panel-hidden com transição opacity/transform)
+  - _2026-03-23: classe `nd-panel-hidden` adicionada ao template; lógica de show/hide em onPathChange e loadFiberDetail_
+- [x] Aparece ao adicionar o primeiro ponto ou ao entrar em modo de edição de cabo existente
 - [ ] Painel é redimensionável ou tem tamanho proporcional à viewport
-- [ ] Fecha automaticamente ao cancelar/salvar a edição
+- [x] Fecha automaticamente ao cancelar/salvar a edição (`cancelEditing` chama `setRoutePointsPanelVisible(false)`)
 
 ### 1.2 Minimização da Caixa de Dicas (Tips)
-- [ ] Substituir caixa fixa por botão flutuante com ícone "?" no canto da tela
-- [ ] Ao clicar ou hover, exibir popover elegante com as dicas contextuais
+- [x] Substituir caixa fixa por botão FAB flutuante "?" no canto inferior direito
+  - _2026-03-23: `#helpFab` + `#helpPopover` substituem o `#helpPanel` original_
+- [x] Ao clicar, popover elegante abre/fecha com transição suave; fecha ao clicar fora
 - [ ] Dicas se adaptam ao contexto atual (modo edição, modo visualização, etc.)
 
 ### 1.3 Menus de Contexto (Right-click)
@@ -115,6 +117,8 @@
 | 2026-03-23 | — | Criação deste plano | Claude + Paulo | Baseado na proposta de evolução aprovada |
 | 2026-03-23 | 2.2 | Modal save cable com device/port selects | Claude | Restaurados selects, validação coords corrigida |
 | 2026-03-23 | 4.1 | Distância total na rota | — | Já existia, confirmado funcionando |
+| 2026-03-23 | 1.1 | Route Points panel oculto por padrão | Claude | nd-panel-hidden + setRoutePointsPanelVisible() |
+| 2026-03-23 | 1.2 | Tips como botão FAB "?" com popover | Claude | #helpFab + #helpPopover substituem painel fixo |
 
 ---
 
