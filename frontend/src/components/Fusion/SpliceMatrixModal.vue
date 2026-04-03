@@ -1,7 +1,7 @@
 <template>
   <!-- Modal controlado por prop show do pai -->
   <div v-if="show" class="fixed inset-0 z-[2000] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
-    <div class="bg-gray-900 w-full max-w-[95vw] h-[90vh] rounded-xl flex flex-col overflow-hidden shadow-2xl border border-gray-700 ring-1 ring-gray-800">
+    <div class="splice-modal-root bg-gray-900 w-full max-w-[95vw] h-[90vh] rounded-xl flex flex-col overflow-hidden shadow-2xl border border-gray-700 ring-1 ring-gray-800">
       
       <!-- Header -->
       <div class="px-6 py-4 bg-gray-800 border-b border-gray-700 flex justify-between items-center shrink-0">
@@ -535,8 +535,62 @@ watch(() => props.infraPoint?.id, (newVal, oldVal) => {
 
 <style scoped>
 .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
-.custom-scrollbar::-webkit-scrollbar-track { background: #1f2937; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+
+/* ── Light-mode overrides for hardcoded dark Tailwind classes ── */
+.splice-modal-root {
+  background: var(--surface-card) !important;
+  border-color: var(--border-primary) !important;
+  outline: none !important; /* remove ring-gray-800 */
+  color: var(--text-primary);
+}
+
+/* Header and tab bar */
+.splice-modal-root .bg-gray-800 {
+  background: var(--bg-secondary) !important;
+}
+
+/* Panels and sidebar */
+.splice-modal-root .bg-gray-900 {
+  background: var(--bg-primary) !important;
+}
+
+/* Borders */
+.splice-modal-root .border-gray-700,
+.splice-modal-root .border-gray-700\/50 {
+  border-color: var(--border-primary) !important;
+}
+
+.splice-modal-root .border-gray-800 {
+  border-color: var(--border-secondary) !important;
+}
+
+/* Text */
+.splice-modal-root .text-white {
+  color: var(--text-primary) !important;
+}
+
+.splice-modal-root .text-gray-300,
+.splice-modal-root .text-gray-400 {
+  color: var(--text-tertiary) !important;
+}
+
+.splice-modal-root .text-gray-500,
+.splice-modal-root .text-gray-600 {
+  color: var(--text-disabled) !important;
+}
+
+/* Hover states */
+.splice-modal-root .hover\:bg-gray-700:hover {
+  background: var(--menu-item-hover) !important;
+}
+
+/* Active tab */
+.splice-modal-root .bg-gray-900.text-white {
+  background: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
 
 @keyframes slide-in-from-top {
   from {

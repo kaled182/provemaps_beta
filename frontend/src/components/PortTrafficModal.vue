@@ -179,10 +179,18 @@
             <button class="btn-secondary" @click="close">
               Fechar
             </button>
-            <button class="btn-primary" @click="exportData">
-              <i class="fas fa-download"></i>
-              Exportar Dados
-            </button>
+            <div class="export-dropdown-wrapper" @click.stop>
+              <button class="btn-primary" @click="exportMenuOpen = !exportMenuOpen">
+                <i class="fas fa-download"></i>
+                Exportar
+                <i class="fas fa-chevron-up" :class="{ 'fa-chevron-down': !exportMenuOpen, 'fa-chevron-up': exportMenuOpen }"></i>
+              </button>
+              <div v-if="exportMenuOpen" class="export-options">
+                <button @click="exportCSV"><i class="fas fa-file-csv"></i> CSV</button>
+                <button @click="exportPNG"><i class="fas fa-image"></i> PNG</button>
+                <button @click="exportPDF"><i class="fas fa-file-pdf"></i> PDF</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -199,7 +207,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onUnmounted, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useApi } from '@/composables/useApi'
 import { useEscapeKey } from '@/composables/useEscapeKey'
 import Chart from 'chart.js/auto'
@@ -216,11 +224,6 @@ const props = defineProps({
   }
 })
 
-console.log('[PortTrafficModal] Props iniciais - isOpen:', props.isOpen, 'port:', props.port)
-
-onMounted(() => {
-  console.log('[PortTrafficModal] Componente montado')
-})
 
 const emit = defineEmits(['close', 'alarm-saved'])
 
@@ -235,6 +238,7 @@ const opticalChartCanvas = ref(null)
 const trafficSectionOpen = ref(true)
 const opticalSectionOpen = ref(true)
 const showAlarmConfig = ref(false)
+const exportMenuOpen = ref(false)
 let chartInstance = null
 let opticalChartInstance = null
 let opticalChartData = null // Armazenar dados para tooltips
@@ -270,32 +274,13 @@ const loadTrafficData = async () => {
 
   try {
     const response = await api.get(`/api/v1/ports/${props.port.id}/traffic_history/?hours=${selectedPeriod.value}`)
-    
-    console.log('[PortTrafficModal] Dados recebidos:', response)
-    console.log('[PortTrafficModal] History points:', response.history?.length)
-    
-    // Definir os dados E parar o loading para o DOM renderizar
     trafficData.value = response
-    loading.value = false  // Parar loading ANTES do nextTick
-    
-    // AGUARDAR Vue renderizar o conteúdo (v-else-if="trafficData")
+    loading.value = false
     await nextTick()
-    await nextTick()
-    await nextTick() // Múltiplos ticks para garantir
-    
-    console.log('[PortTrafficModal] Após nextTick - chartCanvas.value:', chartCanvas.value)
-    
     if (chartCanvas.value) {
       renderChart()
     } else {
-      console.error('[PortTrafficModal] Canvas ainda não disponível!')
-      // Tentar novamente após mais tempo
-      setTimeout(() => {
-        console.log('[PortTrafficModal] Retry - chartCanvas.value:', chartCanvas.value)
-        if (chartCanvas.value) {
-          renderChart()
-        }
-      }, 500)
+      setTimeout(() => { if (chartCanvas.value) renderChart() }, 200)
     }
   } catch (err) {
     console.error('Erro ao carregar dados de tráfego:', err)
@@ -806,9 +791,9 @@ const getOpticalClass = (value) => {
   return 'signal-good'
 }
 
-const exportData = () => {
+const exportCSV = () => {
+  exportMenuOpen.value = false
   if (!trafficData.value) return
-
   const csvContent = [
     ['Timestamp', 'Download (bps)', 'Upload (bps)'].join(','),
     ...trafficData.value.history.map(d => [
@@ -817,13 +802,82 @@ const exportData = () => {
       d.traffic_out || ''
     ].join(','))
   ].join('\n')
-
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
   link.download = `traffic_${props.port.name}_${new Date().toISOString().split('T')[0]}.csv`
   link.click()
 }
+
+/**
+ * Combina os dois gráficos (tráfego + óptico) em um único canvas empilhado verticalmente.
+ * Retorna um data URL PNG ou null se nenhum canvas estiver disponível.
+ */
+const buildCombinedCanvas = () => {
+  const canvases = [chartCanvas.value, opticalChartCanvas.value].filter(Boolean)
+  if (canvases.length === 0) return null
+
+  const GAP = 16
+  const PADDING = 20
+  const LABEL_HEIGHT = 22
+  const labels = ['Tráfego de Rede', 'Sinal Óptico']
+
+  const totalHeight = canvases.reduce((acc, c) => acc + c.height + LABEL_HEIGHT + GAP, 0)
+    - GAP + PADDING * 2
+  const maxWidth = Math.max(...canvases.map(c => c.width)) + PADDING * 2
+
+  const combined = document.createElement('canvas')
+  combined.width = maxWidth
+  combined.height = totalHeight
+
+  const ctx = combined.getContext('2d')
+  ctx.fillStyle = '#111827'
+  ctx.fillRect(0, 0, maxWidth, totalHeight)
+
+  let y = PADDING
+  canvases.forEach((src, i) => {
+    // Section label
+    ctx.fillStyle = '#94a3b8'
+    ctx.font = 'bold 13px sans-serif'
+    ctx.fillText(labels[i], PADDING, y + 14)
+    y += LABEL_HEIGHT
+
+    // Draw chart
+    const x = PADDING + Math.floor((maxWidth - PADDING * 2 - src.width) / 2)
+    ctx.drawImage(src, x, y)
+    y += src.height + GAP
+  })
+
+  return combined.toDataURL('image/png')
+}
+
+const exportPNG = () => {
+  exportMenuOpen.value = false
+  const imgData = buildCombinedCanvas()
+  if (!imgData) return
+  const filename = `trafego_optico_${props.port?.name || 'porta'}_${selectedPeriod.value}h`
+    .replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '')
+  const link = document.createElement('a')
+  link.download = `${filename}.png`
+  link.href = imgData
+  link.click()
+}
+
+const exportPDF = () => {
+  exportMenuOpen.value = false
+  const imgData = buildCombinedCanvas()
+  if (!imgData) return
+  const device = props.port?.name || 'Porta'
+  const desc = props.port?.description || ''
+  const win = window.open('', '_blank')
+  if (!win) return
+  win.document.write(`<!DOCTYPE html><html><head><title>${device}</title><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#fff;display:flex;flex-direction:column;align-items:center;padding:24px;font-family:sans-serif;}h2{font-size:14px;color:#334155;margin-bottom:4px;}p{font-size:12px;color:#64748b;margin-bottom:16px;}img{max-width:100%;border:1px solid #e2e8f0;border-radius:8px;}</style></head><body><h2>${device}</h2><p>${desc} — Período: ${selectedPeriod.value}h</p><img src="${imgData}"/><script>window.onload=()=>{window.print()}<\/script></body></html>`)
+  win.document.close()
+}
+
+const onDocumentClick = () => { exportMenuOpen.value = false }
+
+onMounted(() => { document.addEventListener('click', onDocumentClick) })
 
 const openAlarmConfig = () => {
   showAlarmConfig.value = true
@@ -844,103 +898,39 @@ const handleAlarmSaved = () => {
   emit('alarm-saved')
 }
 
-watch(() => props.isOpen, async (newValue) => {
+watch(() => props.isOpen, (newValue) => {
   if (newValue) {
+    // Load traffic and optical in parallel — no sequential waiting
     loadTrafficData()
-    // Carregar gráfico óptico se disponível
     if (props.port?.optical_rx_power !== null || props.port?.optical_tx_power !== null) {
-      // Múltiplos nextTick para garantir que a transição CSS complete
-      await nextTick()
-      await nextTick()
-      await nextTick()
-      
-      if (opticalSectionOpen.value && opticalChartCanvas.value) {
-        console.log('[PortTrafficModal] Canvas pronto após nextTick, renderizando...')
-        renderOpticalChart()
-      } else {
-        // Tentativa tardia com timeout maior para aguardar transição CSS
-        console.log('[PortTrafficModal] Canvas não pronto, aguardando 300ms...')
-        setTimeout(() => {
-          if (opticalSectionOpen.value && opticalChartCanvas.value) {
-            console.log('[PortTrafficModal] Canvas pronto após timeout, renderizando...')
-            renderOpticalChart()
-          } else {
-            console.warn('[PortTrafficModal] Canvas ainda não disponível:', {
-              opticalSectionOpen: opticalSectionOpen.value,
-              canvasExists: !!opticalChartCanvas.value
-            })
-          }
-        }, 300)
-      }
+      renderOpticalChart()
     }
   } else {
-    if (chartInstance) {
-      chartInstance.destroy()
-      chartInstance = null
-    }
-    if (opticalChartInstance) {
-      opticalChartInstance.destroy()
-      opticalChartInstance = null
-    }
+    if (chartInstance) { chartInstance.destroy(); chartInstance = null }
+    if (opticalChartInstance) { opticalChartInstance.destroy(); opticalChartInstance = null }
   }
 })
 
 // Watch para renderizar gráfico óptico quando seção abrir
 watch(opticalSectionOpen, async (isOpen) => {
   if (isOpen && props.isOpen) {
-    // Múltiplos nextTick para aguardar transição CSS
     await nextTick()
-    await nextTick()
-    await nextTick()
-    if (opticalChartCanvas.value) {
-      console.log('[PortTrafficModal] Seção óptica aberta, renderizando gráfico...')
-      renderOpticalChart()
-    } else {
-      console.warn('[PortTrafficModal] Seção aberta mas canvas não disponível')
-    }
+    renderOpticalChart()
   }
 })
 
 onUnmounted(() => {
-  if (chartInstance) {
-    chartInstance.destroy()
-  }
-  if (opticalChartInstance) {
-    opticalChartInstance.destroy()
-  }
+  document.removeEventListener('click', onDocumentClick)
+  if (chartInstance) { chartInstance.destroy() }
+  if (opticalChartInstance) { opticalChartInstance.destroy() }
 })
 
 // Renderizar assim que o canvas de óptico ficar disponível
-watch(opticalChartCanvas, async (canvas) => {
+watch(opticalChartCanvas, (canvas) => {
   if (canvas && props.isOpen && opticalSectionOpen.value) {
-    console.log('[PortTrafficModal] Canvas detectado, renderizando gráfico...')
-    // Pequeno delay para garantir que o canvas está totalmente pronto
-    await nextTick()
-    await nextTick()
-    await nextTick()
-    setTimeout(() => {
-      renderOpticalChart()
-    }, 100)
+    renderOpticalChart()
   }
 })
-
-// Watch na porta para renderizar quando dados ópticos mudarem
-watch(() => props.port, async (newPort) => {
-  if (newPort && props.isOpen && opticalSectionOpen.value) {
-    console.log('[PortTrafficModal] Porta mudou, verificando dados ópticos...')
-    if (newPort.optical_rx_power !== null || newPort.optical_tx_power !== null) {
-      await nextTick()
-      await nextTick()
-      await nextTick()
-      if (opticalChartCanvas.value) {
-        console.log('[PortTrafficModal] Renderizando após mudança de porta...')
-        setTimeout(() => {
-          renderOpticalChart()
-        }, 150)
-      }
-    }
-  }
-}, { deep: true })
 </script>
 
 <style scoped>
@@ -961,15 +951,14 @@ watch(() => props.port, async (newPort) => {
 
 .traffic-modal {
   width: 100%;
-  max-width: 1400px;
-  /* Fixed max-height so modal doesn't grow beyond viewport */
-  max-height: 90vh;
+  max-width: 1000px;
+  max-height: 88vh;
   display: flex;
   flex-direction: column;
 }
 
 .modal-container {
-  background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+  background: linear-gradient(135deg, var(--surface-card) 0%, var(--bg-secondary) 100%);
   border-radius: 16px;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(59, 130, 246, 0.2);
@@ -1191,11 +1180,8 @@ watch(() => props.port, async (newPort) => {
   background: rgba(31, 41, 55, 0.5);
   border: 1px solid rgba(75, 85, 99, 0.3);
   border-radius: 12px;
-  padding: 16px;
-  /* Fixed height to prevent canvas from growing infinitely */
-  min-height: 450px;
-  max-height: 550px;
-  height: 450px;
+  padding: 12px;
+  height: 280px;
   position: relative;
   overflow: hidden;
 }
@@ -1247,6 +1233,49 @@ watch(() => props.port, async (newPort) => {
 .btn-primary:hover {
   transform: translateY(-1px);
   box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3);
+}
+
+.export-dropdown-wrapper {
+  position: relative;
+}
+
+.export-options {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  background: var(--surface-card);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  overflow: hidden;
+  min-width: 130px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+}
+
+.export-options button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 14px;
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+  text-align: left;
+}
+
+.export-options button:hover {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+}
+
+.export-options button i {
+  width: 14px;
+  color: #94a3b8;
 }
 
 /* Transitions */

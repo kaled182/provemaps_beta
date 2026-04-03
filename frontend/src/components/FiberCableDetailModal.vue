@@ -81,8 +81,8 @@
                     </div>
                     <div class="stat-card">
                       <div class="stat-label">Fibras</div>
-                      <div class="stat-value">{{ cable?.fiber_count || 'N/A' }}</div>
-                      <div class="stat-detail">{{ cable?.cable_type || 'Tipo não especificado' }}</div>
+                      <div class="stat-value">{{ cable?.fiber_count ?? 'N/A' }}</div>
+                      <div class="stat-detail">{{ cable?.cable_type_name || 'Tipo não especificado' }}</div>
                     </div>
                     <div class="stat-card">
                       <div class="stat-label">Atenuação</div>
@@ -140,13 +140,49 @@
                           <span class="detail-label">Site B</span>
                           <span class="detail-value">{{ cable.site_b_name || 'N/A' }}</span>
                         </div>
+                        <div v-if="cable.origin_device_name" class="detail-item">
+                          <span class="detail-label">Dispositivo Origem</span>
+                          <span class="detail-value">{{ cable.origin_device_name }}</span>
+                        </div>
+                        <div v-if="cable.origin_port_name" class="detail-item">
+                          <span class="detail-label">Porta Origem</span>
+                          <span class="detail-value">{{ cable.origin_port_name }}</span>
+                        </div>
+                        <div v-if="cable.destination_device_name" class="detail-item">
+                          <span class="detail-label">Dispositivo Destino</span>
+                          <span class="detail-value">{{ cable.destination_device_name }}</span>
+                        </div>
+                        <div v-if="cable.destination_port_name" class="detail-item">
+                          <span class="detail-label">Porta Destino</span>
+                          <span class="detail-value">{{ cable.destination_port_name }}</span>
+                        </div>
                         <div class="detail-item">
                           <span class="detail-label">Tipo de Cabo</span>
-                          <span class="detail-value">{{ cable.cable_type || 'N/A' }}</span>
+                          <span class="detail-value">{{ cable.cable_type_name || 'N/A' }}</span>
+                        </div>
+                        <div class="detail-item">
+                          <span class="detail-label">Grupo de Cabo</span>
+                          <span class="detail-value">{{ cable.cable_group_name || 'N/A' }}</span>
                         </div>
                         <div class="detail-item">
                           <span class="detail-label">Quantidade de Fibras</span>
-                          <span class="detail-value">{{ cable.fiber_count || 'N/A' }}</span>
+                          <span class="detail-value">{{ cable.fiber_count ?? 'N/A' }}</span>
+                        </div>
+                        <div v-if="cable.folder_name" class="detail-item">
+                          <span class="detail-label">Pasta</span>
+                          <span class="detail-value">{{ cable.folder_name }}</span>
+                        </div>
+                        <div v-if="cable.responsible_name" class="detail-item">
+                          <span class="detail-label">Responsável</span>
+                          <span class="detail-value">{{ cable.responsible_name }}</span>
+                        </div>
+                        <div v-if="cable.responsible_user_name" class="detail-item">
+                          <span class="detail-label">Resp. (Usuário)</span>
+                          <span class="detail-value">{{ cable.responsible_user_name }}</span>
+                        </div>
+                        <div v-if="cable.last_status_update" class="detail-item">
+                          <span class="detail-label">Última Atualização</span>
+                          <span class="detail-value">{{ new Date(cable.last_status_update).toLocaleString('pt-BR') }}</span>
                         </div>
                       </div>
                     </div>
@@ -204,13 +240,26 @@
                       <div class="port-info">
                         <div class="port-icon origin">
                           <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M5 12h14M5 12l4-4m-4 4l4 4" />
                           </svg>
                         </div>
                         <div class="port-details">
                           <h4>{{ opticalData?.portInfo?.origin?.device || 'Dispositivo Origem' }}</h4>
                           <p>{{ opticalData?.portInfo?.origin?.port || 'Porta não identificada' }}</p>
+                        </div>
+                      </div>
+                      <div class="panel-actions" @click.stop>
+                        <div class="export-menu" :class="{ open: exportMenuOpen === 'origin' }">
+                          <button class="export-btn" @click="exportMenuOpen = exportMenuOpen === 'origin' ? null : 'origin'" title="Exportar gráfico">
+                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                          </button>
+                          <div v-if="exportMenuOpen === 'origin'" class="export-dropdown">
+                            <button @click="exportChart('origin', 'png')">PNG</button>
+                            <button @click="exportChart('origin', 'pdf')">PDF</button>
+                          </div>
                         </div>
                       </div>
                       <button class="collapse-btn">
@@ -249,13 +298,26 @@
                       <div class="port-info">
                         <div class="port-icon destination">
                           <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M19 12H5m14 0l-4 4m4-4l-4-4" />
                           </svg>
                         </div>
                         <div class="port-details">
                           <h4>{{ opticalData?.portInfo?.destination?.device || 'Dispositivo Destino' }}</h4>
                           <p>{{ opticalData?.portInfo?.destination?.port || 'Porta não identificada' }}</p>
+                        </div>
+                      </div>
+                      <div class="panel-actions" @click.stop>
+                        <div class="export-menu" :class="{ open: exportMenuOpen === 'destination' }">
+                          <button class="export-btn" @click="exportMenuOpen = exportMenuOpen === 'destination' ? null : 'destination'" title="Exportar gráfico">
+                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                          </button>
+                          <div v-if="exportMenuOpen === 'destination'" class="export-dropdown">
+                            <button @click="exportChart('destination', 'png')">PNG</button>
+                            <button @click="exportChart('destination', 'pdf')">PDF</button>
+                          </div>
                         </div>
                       </div>
                       <button class="collapse-btn">
@@ -288,6 +350,174 @@
                     </div>
                   </div>
 
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Tab: Tráfego de Rede -->
+            <div v-show="activeTab === 'traffic'" class="tab-content">
+              <div class="optical-section">
+                <div class="section-header">
+                  <h3>Tráfego de Rede</h3>
+                  <div class="period-selector">
+                    <button
+                      v-for="period in opticalPeriods"
+                      :key="period.value"
+                      class="period-btn"
+                      :class="{ active: selectedPeriod === period.value }"
+                      @click="selectedPeriod = period.value"
+                    >
+                      {{ period.label }}
+                    </button>
+                  </div>
+                </div>
+
+                <div class="loading-state" v-if="isLoadingTraffic">
+                  <div class="spinner"></div>
+                  <p>Carregando dados de tráfego...</p>
+                </div>
+
+                <div v-else-if="!trafficData || (!trafficData.origin?.statistics && !trafficData.destination?.statistics)" class="empty-state">
+                  <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p>Nenhum dado de tráfego disponível</p>
+                  <small>Verifique se a porta possui items de tráfego configurados</small>
+                </div>
+
+                <div v-else class="traffic-ports-container">
+                  <!-- Porta de Origem -->
+                  <div v-if="trafficData.origin?.statistics" class="port-chart-panel" :class="{ collapsed: !trafficExpandedOrigin }">
+                    <div class="panel-header" @click="trafficExpandedOrigin = !trafficExpandedOrigin">
+                      <div class="port-info">
+                        <div class="port-icon origin">
+                          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12l4-4m-4 4l4 4" />
+                          </svg>
+                        </div>
+                        <div class="port-details">
+                          <h4>{{ trafficData.origin.device || 'Dispositivo Origem' }}</h4>
+                          <p>{{ trafficData.origin.port || 'Porta não identificada' }}</p>
+                        </div>
+                      </div>
+                      <div class="panel-actions" @click.stop>
+                        <div class="export-menu" :class="{ open: trafficExportMenuOpen === 'origin' }">
+                          <button class="export-btn" @click="trafficExportMenuOpen = trafficExportMenuOpen === 'origin' ? null : 'origin'" title="Exportar gráfico">
+                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                          </button>
+                          <div v-if="trafficExportMenuOpen === 'origin'" class="export-dropdown">
+                            <button @click="exportTrafficChart('origin', 'png')">PNG</button>
+                            <button @click="exportTrafficChart('origin', 'pdf')">PDF</button>
+                          </div>
+                        </div>
+                      </div>
+                      <button class="collapse-btn">
+                        <svg class="icon" :class="{ rotated: trafficExpandedOrigin }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div class="panel-content" v-show="trafficExpandedOrigin">
+                      <div v-if="trafficData.origin?.history?.length" class="optical-chart-container">
+                        <canvas ref="trafficOriginChartCanvas"></canvas>
+                      </div>
+                      <div class="traffic-stats-grid">
+                        <div class="traffic-stat-card">
+                          <div class="traffic-stat-title">
+                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                            95º PERCENTIL
+                          </div>
+                          <div class="traffic-stat-row"><span>Download:</span><strong>{{ formatBps(trafficData.origin.statistics.percentile_95_in) }}</strong></div>
+                          <div class="traffic-stat-row"><span>Upload:</span><strong>{{ formatBps(trafficData.origin.statistics.percentile_95_out) }}</strong></div>
+                        </div>
+                        <div class="traffic-stat-card">
+                          <div class="traffic-stat-title">
+                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" /></svg>
+                            MÉDIA
+                          </div>
+                          <div class="traffic-stat-row"><span>Download:</span><strong>{{ formatBps(trafficData.origin.statistics.avg_in) }}</strong></div>
+                          <div class="traffic-stat-row"><span>Upload:</span><strong>{{ formatBps(trafficData.origin.statistics.avg_out) }}</strong></div>
+                        </div>
+                        <div class="traffic-stat-card">
+                          <div class="traffic-stat-title">
+                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                            PICO
+                          </div>
+                          <div class="traffic-stat-row"><span>Download:</span><strong>{{ formatBps(trafficData.origin.statistics.max_in) }}</strong></div>
+                          <div class="traffic-stat-row"><span>Upload:</span><strong>{{ formatBps(trafficData.origin.statistics.max_out) }}</strong></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Porta de Destino -->
+                  <div v-if="trafficData.destination?.statistics" class="port-chart-panel" :class="{ collapsed: !trafficExpandedDestination }">
+                    <div class="panel-header" @click="trafficExpandedDestination = !trafficExpandedDestination">
+                      <div class="port-info">
+                        <div class="port-icon destination">
+                          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 12H5m14 0l-4 4m4-4l-4-4" />
+                          </svg>
+                        </div>
+                        <div class="port-details">
+                          <h4>{{ trafficData.destination.device || 'Dispositivo Destino' }}</h4>
+                          <p>{{ trafficData.destination.port || 'Porta não identificada' }}</p>
+                        </div>
+                      </div>
+                      <div class="panel-actions" @click.stop>
+                        <div class="export-menu" :class="{ open: trafficExportMenuOpen === 'destination' }">
+                          <button class="export-btn" @click="trafficExportMenuOpen = trafficExportMenuOpen === 'destination' ? null : 'destination'" title="Exportar gráfico">
+                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                          </button>
+                          <div v-if="trafficExportMenuOpen === 'destination'" class="export-dropdown">
+                            <button @click="exportTrafficChart('destination', 'png')">PNG</button>
+                            <button @click="exportTrafficChart('destination', 'pdf')">PDF</button>
+                          </div>
+                        </div>
+                      </div>
+                      <button class="collapse-btn">
+                        <svg class="icon" :class="{ rotated: trafficExpandedDestination }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div class="panel-content" v-show="trafficExpandedDestination">
+                      <div v-if="trafficData.destination?.history?.length" class="optical-chart-container">
+                        <canvas ref="trafficDestinationChartCanvas"></canvas>
+                      </div>
+                      <div class="traffic-stats-grid">
+                        <div class="traffic-stat-card">
+                          <div class="traffic-stat-title">
+                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                            95º PERCENTIL
+                          </div>
+                          <div class="traffic-stat-row"><span>Download:</span><strong>{{ formatBps(trafficData.destination.statistics.percentile_95_in) }}</strong></div>
+                          <div class="traffic-stat-row"><span>Upload:</span><strong>{{ formatBps(trafficData.destination.statistics.percentile_95_out) }}</strong></div>
+                        </div>
+                        <div class="traffic-stat-card">
+                          <div class="traffic-stat-title">
+                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" /></svg>
+                            MÉDIA
+                          </div>
+                          <div class="traffic-stat-row"><span>Download:</span><strong>{{ formatBps(trafficData.destination.statistics.avg_in) }}</strong></div>
+                          <div class="traffic-stat-row"><span>Upload:</span><strong>{{ formatBps(trafficData.destination.statistics.avg_out) }}</strong></div>
+                        </div>
+                        <div class="traffic-stat-card">
+                          <div class="traffic-stat-title">
+                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                            PICO
+                          </div>
+                          <div class="traffic-stat-row"><span>Download:</span><strong>{{ formatBps(trafficData.destination.statistics.max_in) }}</strong></div>
+                          <div class="traffic-stat-row"><span>Upload:</span><strong>{{ formatBps(trafficData.destination.statistics.max_out) }}</strong></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -364,7 +594,7 @@
           <div v-if="showAlarmModal" class="alarm-modal-backdrop" @click.self="closeAlarmModal">
             <div class="alarm-modal">
               <div class="alarm-modal-header">
-                <h3>Configurar Alarmes</h3>
+                <h3>{{ editingAlarmIds.length ? 'Editar Configuração' : 'Nova Configuração' }}</h3>
                 <button class="close-btn" @click="closeAlarmModal">
                   <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -373,28 +603,53 @@
               </div>
 
               <div class="alarm-modal-content">
+                <!-- ── Saved configs ────────────────────────────────────── -->
                 <section class="saved-configs-section">
                   <h4>Configurações existentes</h4>
                   <div v-if="isLoadingAlarmConfigs" class="saved-configs-loading">
                     <span class="spinner small"></span>
                     <span>Carregando configurações...</span>
                   </div>
-                  <div v-else-if="savedAlarmConfigs.length" class="saved-configs-list">
-                    <div v-for="config in savedAlarmConfigs" :key="config.id" class="saved-config-card">
+                  <div v-else-if="groupedAlarmConfigs.length" class="saved-configs-list">
+                    <div v-for="group in groupedAlarmConfigs" :key="group.ids.join(',')" class="saved-config-card">
                       <div class="saved-config-header">
-                        <span class="saved-config-target">{{ config.targetDisplay }}</span>
-                        <span class="saved-config-level" :class="`level-${config.triggerLevel}`">{{ config.triggerLabel }}</span>
+                        <span class="saved-config-target">{{ group.targetDisplay }}</span>
+                        <div class="saved-config-badges">
+                          <span
+                            v-for="(atype, i) in group.alertTypes"
+                            :key="atype"
+                            class="saved-config-atype"
+                            :class="`atype-${atype}`"
+                          >{{ group.alertTypeLabels[i] || atype }}</span>
+                          <span class="saved-config-level" :class="`level-${group.triggerLevel}`">{{ group.triggerLabel }}</span>
+                        </div>
                       </div>
                       <div class="saved-config-channels">
-                        <span v-for="channel in config.channels" :key="channel" class="saved-config-channel">
+                        <span v-for="channel in group.channels" :key="channel" class="saved-config-channel">
                           {{ channelLabelDictionary[channel] || channel }}
                         </span>
                       </div>
                       <div class="saved-config-meta">
-                        <span>{{ formatPersistLabel(config.persistMinutes) }}</span>
-                        <span v-if="config.createdAt">Atualizado {{ formatAlarmTime(config.createdAt) }}</span>
+                        <span>{{ formatPersistLabel(group.persistMinutes) }}</span>
+                        <span v-if="group.createdAt">Atualizado {{ formatAlarmTime(group.createdAt) }}</span>
                       </div>
-                      <p v-if="config.description" class="saved-config-notes">{{ config.description }}</p>
+                      <p v-if="group.description" class="saved-config-notes">{{ group.description }}</p>
+                      <div class="saved-config-actions">
+                        <button class="btn-config-action btn-edit" @click="startEditAlarm(group)" title="Editar">
+                          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          Editar
+                        </button>
+                        <button class="btn-config-action btn-delete" @click="deleteAlarm(group)" title="Excluir">
+                          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          Excluir
+                        </button>
+                      </div>
                     </div>
                   </div>
                   <div v-else class="saved-configs-empty">
@@ -402,6 +657,25 @@
                   </div>
                 </section>
 
+                <!-- ── Alert type ───────────────────────────────────────── -->
+                <section>
+                  <h4>Tipo de Aviso</h4>
+                  <div class="alert-type-grid">
+                    <label
+                      v-for="atype in alertTypeOptions"
+                      :key="atype.id"
+                      class="alert-type-card"
+                      :class="{ selected: alarmForm.alertTypes.includes(atype.id) }"
+                    >
+                      <input type="checkbox" :value="atype.id" v-model="alarmForm.alertTypes" class="sr-only" />
+                      <div class="atype-icon" :class="`atype-${atype.id}`">{{ atype.icon }}</div>
+                      <div class="atype-name">{{ atype.label }}</div>
+                      <div class="atype-desc">{{ atype.description }}</div>
+                    </label>
+                  </div>
+                </section>
+
+                <!-- ── Target ───────────────────────────────────────────── -->
                 <section>
                   <h4>Alvo do Alarme</h4>
                   <div class="target-options">
@@ -419,6 +693,11 @@
                       <input type="radio" value="contact" v-model="alarmForm.target"
                         @change="resetTargetDetails" />
                       <span>Contato Cadastrado</span>
+                    </label>
+                    <label class="target-option">
+                      <input type="radio" value="department" v-model="alarmForm.target"
+                        @change="resetTargetDetails" />
+                      <span>Departamento</span>
                     </label>
                   </div>
 
@@ -451,10 +730,21 @@
                       </option>
                     </select>
                   </div>
+
+                  <div class="target-selector" v-else-if="alarmForm.target === 'department'">
+                    <label>Selecionar Departamento</label>
+                    <select v-model="alarmForm.department" :disabled="isContactsLoading && !departments.length">
+                      <option disabled value="">{{ isContactsLoading && !departments.length ? 'Carregando departamentos...' : 'Selecione um departamento' }}</option>
+                      <option v-for="dept in departments" :key="dept.id" :value="dept.id">
+                        {{ dept.name }} ({{ dept.member_count ?? 0 }} membros)
+                      </option>
+                    </select>
+                  </div>
                 </section>
 
+                <!-- ── Channels ─────────────────────────────────────────── -->
                 <section>
-                  <h4>Tipos de Notificação</h4>
+                  <h4>Canais de Notificação</h4>
                   <div class="channel-grid">
                     <label v-for="channel in availableChannels" :key="channel.id" class="channel-option">
                       <input type="checkbox" :value="channel.id" v-model="alarmForm.channels" />
@@ -463,10 +753,11 @@
                   </div>
                 </section>
 
+                <!-- ── Conditions ───────────────────────────────────────── -->
                 <section>
                   <h4>Condições</h4>
                   <div class="conditions-grid">
-                    <label>
+                    <label v-if="alarmForm.alertTypes.includes('attenuation')">
                       <span>Acionar em nível</span>
                       <select v-model="alarmForm.triggerLevel">
                         <option value="warning">Atenção</option>
@@ -488,8 +779,7 @@
                   <svg v-if="isSavingAlarm" class="icon spinning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
-                  <span v-else>Salvar</span>
-                  <span v-if="!isSavingAlarm"> configuração</span>
+                  <span v-else>{{ editingAlarmIds.length ? 'Salvar alterações' : 'Salvar configuração' }}</span>
                 </button>
               </div>
             </div>
@@ -517,12 +807,11 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useEscapeKey } from '@/composables/useEscapeKey'
 import Chart from 'chart.js/auto'
-import { getCableOpticalHistory, getCableAlarms, createCableAlarm } from '@/services/fiberService'
-import { useContactsStore } from '@/stores/contacts'
+import { getCableOpticalHistory, getCableTrafficHistory, getCableAlarms, createCableAlarm, deleteCableAlarm } from '@/services/fiberService'
 import { useAlertTemplatesStore } from '@/stores/alertTemplates'
 
 const props = defineProps({
@@ -551,45 +840,44 @@ const destinationChartCanvas = ref(null)
 const expandedOrigin = ref(true)
 const expandedDestination = ref(false)
 const showCableDetails = ref(true)
+const exportMenuOpen = ref(null)
+
+// Tráfego de Rede
+const trafficData = ref(null)
+const isLoadingTraffic = ref(false)
+const trafficExpandedOrigin = ref(true)
+const trafficExpandedDestination = ref(false)
+const trafficOriginChartCanvas = ref(null)
+const trafficDestinationChartCanvas = ref(null)
+const trafficExportMenuOpen = ref(null)
 let originChart = null
 let destinationChart = null
+let trafficOriginChart = null
+let trafficDestinationChart = null
 let originChartRetry = 0
 let destinationChartRetry = 0
+let trafficOriginChartRetry = 0
+let trafficDestinationChartRetry = 0
 const MAX_CHART_RETRIES = 6
 
-const contactsStore = useContactsStore()
 const alertTemplatesStore = useAlertTemplatesStore()
 
-const { templates: alertTemplates, loading: templatesLoading, meta: templateMeta } = storeToRefs(alertTemplatesStore)
+const { templates: alertTemplates } = storeToRefs(alertTemplatesStore)
 
-const contacts = computed(() => contactsStore.contacts || [])
-const departmentGroups = computed(() => contactsStore.groups || [])
+// ── Alarm config contact sources ────────────────────────────────────────────
+const alarmSources = ref({ system_users: [], departments: [], contact_groups: [], contacts: [] })
+const isContactsLoading = ref(false)
 
-const buildContactSummary = (contact) => {
-  if (!contact) return 'Sem detalhes'
-  const parts = []
-  if (contact.phone) parts.push(contact.phone)
-  if (contact.email) parts.push(contact.email)
-  if (contact.company) parts.push(contact.company)
-  return parts.join(' • ') || 'Sem detalhes'
-}
-
-const contactOptions = computed(() => contacts.value.map(contact => ({
-  id: contact.id,
-  name: contact.name || 'Contato sem nome',
-  summary: buildContactSummary(contact)
-})))
-
-const systemUsers = computed(() => contacts.value
-  .filter(contact => contact.user)
-  .map(contact => ({
-    id: contact.user,
-    name: contact.user_name || contact.name || 'Usuário do sistema',
-    email: contact.email || contact.company || null,
-    contactId: contact.id
-  })))
-
-const isContactsLoading = computed(() => contactsStore.loading)
+const systemUsers = computed(() => alarmSources.value.system_users || [])
+const departments = computed(() => alarmSources.value.departments || [])
+const departmentGroups = computed(() => alarmSources.value.contact_groups || [])
+const contactOptions = computed(() =>
+  (alarmSources.value.contacts || []).map(c => ({
+    id: c.id,
+    name: c.name || 'Contato sem nome',
+    summary: c.summary || 'Sem detalhes',
+  }))
+)
 
 // Aguarda canvas ficar disponível antes de criar o gráfico
 const waitForCanvas = async (canvasRef, retries = 6, delay = 80) => {
@@ -619,6 +907,11 @@ const tabs = [
     icon: 'M13 10V3L4 14h7v7l9-11h-7z'
   },
   {
+    id: 'traffic',
+    label: 'Tráfego',
+    icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z'
+  },
+  {
     id: 'alarms',
     label: 'Alarmes',
     icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9'
@@ -643,21 +936,56 @@ const opticalPeriods = [
 const alarms = ref([])
 const historyEvents = ref([])
 const opticalData = ref(null)
-const opticalStats = ref(null)
 const isLoadingOptical = ref(false)
 const showAlarmModal = ref(false)
 const isSavingAlarm = ref(false)
+const editingAlarmIds = ref([])
 const savedAlarmConfigs = ref([])
 const isLoadingAlarmConfigs = ref(false)
 
-const TEMPLATE_CATEGORY = 'optical_level'
+const ALERT_TYPE_TO_CATEGORY = {
+  break: 'cable_break',
+  attenuation: 'cable_attenuation',
+  normalization: 'cable_normalization',
+}
+
+const alertTypeOptions = [
+  {
+    id: 'break',
+    icon: '🔴',
+    label: 'Rompimento',
+    description: 'Cabo offline ou rompido',
+  },
+  {
+    id: 'attenuation',
+    icon: '📡',
+    label: 'Atenuação',
+    description: 'Nível óptico acima do padrão',
+  },
+  {
+    id: 'normalization',
+    icon: '✅',
+    label: 'Normalização',
+    description: 'Serviço restabelecido',
+  },
+]
+
+const ALERT_TYPE_LABELS = Object.fromEntries(
+  alertTypeOptions.map(t => [t.id, t.label])
+)
+
+const templateCategory = computed(() =>
+  ALERT_TYPE_TO_CATEGORY[(alarmForm.value.alertTypes || [])[0]] || 'cable_break'
+)
 
 const createDefaultAlarmForm = () => ({
   target: 'department_group',
   departmentGroup: '',
   systemUser: '',
   contact: '',
+  department: '',
   channels: [],
+  alertTypes: ['break'],
   triggerLevel: 'warning',
   persistMinutes: 0,
   templates: {},
@@ -680,11 +1008,8 @@ const channelLabelDictionary = availableChannels.reduce((acc, channel) => {
 const templatesLoaded = ref(false)
 
 const ensureTemplateDataLoaded = async () => {
-  if (templatesLoaded.value) {
-    return
-  }
   try {
-    await alertTemplatesStore.loadTemplates({ category: TEMPLATE_CATEGORY, is_active: 'true' })
+    await alertTemplatesStore.loadTemplates({ is_active: 'true' })
   } finally {
     templatesLoaded.value = true
   }
@@ -693,9 +1018,10 @@ const ensureTemplateDataLoaded = async () => {
 const templateOptionsByChannel = computed(() => {
   const grouped = {}
   const list = alertTemplates.value || []
+  const cat = templateCategory.value
   availableChannels.forEach(channel => {
     grouped[channel.id] = list
-      .filter(template => template.category === TEMPLATE_CATEGORY && template.channel === channel.id && template.is_active !== false)
+      .filter(template => template.category === cat && template.channel === channel.id && template.is_active !== false)
       .map(template => ({
         id: template.id,
         name: template.name,
@@ -706,9 +1032,6 @@ const templateOptionsByChannel = computed(() => {
   return grouped
 })
 
-const hasTemplatesAvailable = computed(() => {
-  return availableChannels.some(channel => (templateOptionsByChannel.value[channel.id] || []).length > 0)
-})
 
 const getDefaultTemplateIdForChannel = (channelId) => {
   const options = templateOptionsByChannel.value[channelId] || []
@@ -762,6 +1085,14 @@ watch(
 )
 
 watch(
+  () => [...(alarmForm.value.alertTypes || [])],
+  () => {
+    alarmForm.value.templates = {}
+    syncTemplatesSelection()
+  }
+)
+
+watch(
   templateOptionsByChannel,
   () => {
     syncTemplatesSelection()
@@ -794,6 +1125,51 @@ const toggleEditMode = () => {
 
 const toggleCableDetails = () => {
   showCableDetails.value = !showCableDetails.value
+}
+
+const exportChart = (port, format) => {
+  exportMenuOpen.value = null
+  const canvas = port === 'origin' ? originChartCanvas.value : destinationChartCanvas.value
+  if (!canvas) return
+
+  const device = opticalData.value?.portInfo?.[port]?.device || port
+  const portName = opticalData.value?.portInfo?.[port]?.port || ''
+  const filename = `nivel-optico_${device}_${portName}_${selectedPeriod.value}h`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '')
+
+  if (format === 'png') {
+    const link = document.createElement('a')
+    link.download = `${filename}.png`
+    link.href = canvas.toDataURL('image/png')
+    link.click()
+    return
+  }
+
+  // PDF: abre janela com a imagem em alta resolução e dispara impressão
+  const imgData = canvas.toDataURL('image/png')
+  const win = window.open('', '_blank')
+  if (!win) return
+  win.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>${device} — ${portName}</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #fff; display: flex; flex-direction: column; align-items: center; padding: 24px; font-family: sans-serif; }
+        h2 { font-size: 14px; color: #334155; margin-bottom: 4px; }
+        p  { font-size: 12px; color: #64748b; margin-bottom: 16px; }
+        img { max-width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; }
+      </style>
+    </head>
+    <body>
+      <h2>${device}</h2>
+      <p>${portName} — Período: ${selectedPeriod.value}h</p>
+      <img src="${imgData}" />
+      <script>window.onload = () => { window.print(); }<\/script>
+    </body>
+    </html>
+  `)
+  win.document.close()
 }
 
 // Carregar dados ópticos reais
@@ -836,6 +1212,167 @@ const loadOpticalData = async () => {
   }
 }
 
+const loadTrafficData = async () => {
+  if (!props.cable?.id) return
+  isLoadingTraffic.value = true
+  try {
+    const data = await getCableTrafficHistory(props.cable.id, selectedPeriod.value)
+    trafficData.value = data
+    await nextTick()
+    if (activeTab.value === 'traffic') {
+      await createTrafficCharts()
+    }
+  } catch (error) {
+    console.error('[FiberCableDetailModal] Erro ao carregar tráfego:', error)
+    trafficData.value = null
+  } finally {
+    isLoadingTraffic.value = false
+  }
+}
+
+/**
+ * Formata array de histórico de tráfego em labels + inData + outData (com forward-fill)
+ */
+const formatTrafficHistoryData = (historyArray) => {
+  if (!historyArray || historyArray.length === 0) return null
+  const sorted = [...historyArray].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+  const labels = []
+  const inData = []
+  const outData = []
+  let lastIn = null
+  let lastOut = null
+  sorted.forEach(point => {
+    const date = new Date(point.timestamp)
+    labels.push(date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }))
+    const inVal = point.traffic_in
+    const outVal = point.traffic_out
+    if (inVal !== null && inVal !== undefined && !Number.isNaN(inVal)) { lastIn = inVal; inData.push(inVal) } else { inData.push(lastIn) }
+    if (outVal !== null && outVal !== undefined && !Number.isNaN(outVal)) { lastOut = outVal; outData.push(outVal) } else { outData.push(lastOut) }
+  })
+  return { labels, inData, outData }
+}
+
+const createTrafficCharts = async () => {
+  if (trafficExpandedOrigin.value && trafficData.value?.origin?.history?.length) {
+    await createTrafficOriginChart()
+  }
+  if (trafficExpandedDestination.value && trafficData.value?.destination?.history?.length) {
+    await createTrafficDestinationChart()
+  }
+}
+
+const createTrafficOriginChart = async () => {
+  const canvasEl = await waitForCanvas(trafficOriginChartCanvas)
+  if (!canvasEl || !trafficData.value?.origin?.history?.length) {
+    if (trafficOriginChartRetry < MAX_CHART_RETRIES) {
+      trafficOriginChartRetry += 1
+      setTimeout(() => createTrafficOriginChart(), 150)
+    } else {
+      trafficOriginChartRetry = 0
+    }
+    return
+  }
+  try {
+    trafficOriginChartRetry = 0
+    const ctx = canvasEl.getContext('2d')
+    if (trafficOriginChart) { trafficOriginChart.destroy() }
+    const formatted = formatTrafficHistoryData(trafficData.value.origin.history)
+    if (!formatted) return
+    trafficOriginChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: formatted.labels,
+        datasets: [
+          { label: 'Download (IN)', data: formatted.inData, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, spanGaps: true },
+          { label: 'Upload (OUT)', data: formatted.outData, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, spanGaps: true }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, labels: { color: '#94a3b8' } },
+          tooltip: { mode: 'index', intersect: false, backgroundColor: 'rgba(0,0,0,0.8)', titleColor: '#fff', bodyColor: '#fff', borderColor: '#3b82f6', borderWidth: 1,
+            callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${formatBps(ctx.parsed.y)}` }
+          }
+        },
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#94a3b8', maxRotation: 45, minRotation: 45 } },
+          y: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#94a3b8', callback: (v) => formatBps(v) } }
+        }
+      }
+    })
+  } catch (error) {
+    console.error('[FiberCableDetailModal] Erro ao criar gráfico tráfego origem:', error)
+  }
+}
+
+const createTrafficDestinationChart = async () => {
+  const canvasEl = await waitForCanvas(trafficDestinationChartCanvas)
+  if (!canvasEl || !trafficData.value?.destination?.history?.length) {
+    if (trafficDestinationChartRetry < MAX_CHART_RETRIES) {
+      trafficDestinationChartRetry += 1
+      setTimeout(() => createTrafficDestinationChart(), 150)
+    } else {
+      trafficDestinationChartRetry = 0
+    }
+    return
+  }
+  try {
+    trafficDestinationChartRetry = 0
+    const ctx = canvasEl.getContext('2d')
+    if (trafficDestinationChart) { trafficDestinationChart.destroy() }
+    const formatted = formatTrafficHistoryData(trafficData.value.destination.history)
+    if (!formatted) return
+    trafficDestinationChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: formatted.labels,
+        datasets: [
+          { label: 'Download (IN)', data: formatted.inData, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.08)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, spanGaps: true },
+          { label: 'Upload (OUT)', data: formatted.outData, borderColor: '#ec4899', backgroundColor: 'rgba(236,72,153,0.08)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, spanGaps: true }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, labels: { color: '#94a3b8' } },
+          tooltip: { mode: 'index', intersect: false, backgroundColor: 'rgba(0,0,0,0.8)', titleColor: '#fff', bodyColor: '#fff', borderColor: '#f59e0b', borderWidth: 1,
+            callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${formatBps(ctx.parsed.y)}` }
+          }
+        },
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#94a3b8', maxRotation: 45, minRotation: 45 } },
+          y: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#94a3b8', callback: (v) => formatBps(v) } }
+        }
+      }
+    })
+  } catch (error) {
+    console.error('[FiberCableDetailModal] Erro ao criar gráfico tráfego destino:', error)
+  }
+}
+
+const exportTrafficChart = (port, format) => {
+  trafficExportMenuOpen.value = null
+  const canvas = port === 'origin' ? trafficOriginChartCanvas.value : trafficDestinationChartCanvas.value
+  if (!canvas) return
+  const portData = port === 'origin' ? trafficData.value?.origin : trafficData.value?.destination
+  const device = portData?.device || port
+  const portName = portData?.port || ''
+  const filename = `trafego_${device}_${portName}_${selectedPeriod.value}h`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '')
+  if (format === 'png') {
+    const link = document.createElement('a')
+    link.download = `${filename}.png`
+    link.href = canvas.toDataURL('image/png')
+    link.click()
+    return
+  }
+  const imgData = canvas.toDataURL('image/png')
+  const win = window.open('', '_blank')
+  if (!win) return
+  win.document.write(`<!DOCTYPE html><html><head><title>${device} — ${portName}</title><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#fff;display:flex;flex-direction:column;align-items:center;padding:24px;font-family:sans-serif;}h2{font-size:14px;color:#334155;margin-bottom:4px;}p{font-size:12px;color:#64748b;margin-bottom:16px;}img{max-width:100%;border:1px solid #e2e8f0;border-radius:8px;}</style></head><body><h2>${device}</h2><p>${portName} — Período: ${selectedPeriod.value}h</p><img src="${imgData}"/><script>window.onload=()=>{window.print()}<\/script></body></html>`)
+  win.document.close()
+}
+
 const saveChanges = async () => {
   isSaving.value = true
   try {
@@ -857,15 +1394,20 @@ const resetAlarmForm = () => {
 }
 
 const ensureContactDataLoaded = async () => {
-  const loaders = []
-  if (!contactsStore.contacts.length) {
-    loaders.push(contactsStore.loadContacts({ is_active: true }))
-  }
-  if (!contactsStore.groups.length) {
-    loaders.push(contactsStore.loadGroups())
-  }
-  if (loaders.length) {
-    await Promise.allSettled(loaders)
+  isContactsLoading.value = true
+  try {
+    const res = await fetch('/api/v1/inventory/alarm-config-sources/', {
+      credentials: 'include',
+    })
+    if (res.ok) {
+      alarmSources.value = await res.json()
+    } else {
+      console.error('[FiberCableDetailModal] alarm-config-sources error', res.status)
+    }
+  } catch (err) {
+    console.error('[FiberCableDetailModal] alarm-config-sources fetch error', err)
+  } finally {
+    isContactsLoading.value = false
   }
 }
 
@@ -913,6 +1455,7 @@ const normalizeAlarmConfig = (config) => {
     templateName: templateSnapshots?.[channel]?.name || null,
   }))
 
+  const alertType = String(config.alert_type || '').toLowerCase()
   return {
     id: config.id || config.uuid || `${targetType}-${targetName}-${channels.join('-')}`,
     targetType,
@@ -921,6 +1464,8 @@ const normalizeAlarmConfig = (config) => {
     channelDetails,
     triggerLevel,
     triggerLabel: getLevelLabel(triggerLevel),
+    alertType,
+    alertTypeLabel: ALERT_TYPE_LABELS[alertType] || null,
     persistMinutes,
     createdAt: config.created_at || config.updated_at || config.timestamp || null,
     description: config.description || config.notes || '',
@@ -928,6 +1473,33 @@ const normalizeAlarmConfig = (config) => {
     raw: config
   }
 }
+
+// Group configs that share the same target + channels + trigger so they show as one card
+const groupAlarmConfigs = (configs) => {
+  const groups = new Map()
+  for (const config of configs) {
+    const targetId = config.raw?.target_id ?? ''
+    const channelKey = [...(config.channels || [])].sort().join(',')
+    const key = `${config.targetType}:${targetId}:${channelKey}:${config.triggerLevel}:${config.persistMinutes}`
+    if (!groups.has(key)) {
+      groups.set(key, {
+        ...config,
+        ids: [],
+        alertTypes: [],
+        alertTypeLabels: [],
+      })
+    }
+    const group = groups.get(key)
+    group.ids.push(config.id)
+    if (config.alertType) {
+      group.alertTypes.push(config.alertType)
+      if (config.alertTypeLabel) group.alertTypeLabels.push(config.alertTypeLabel)
+    }
+  }
+  return [...groups.values()]
+}
+
+const groupedAlarmConfigs = computed(() => groupAlarmConfigs(savedAlarmConfigs.value))
 
 const loadCableAlarmConfigs = async (cableId = props.cable?.id) => {
   if (!cableId) {
@@ -961,9 +1533,13 @@ const setDefaultTargetSelection = () => {
   if (target === 'contact' && !alarmForm.value.contact && contactOptions.value.length) {
     alarmForm.value.contact = contactOptions.value[0].id
   }
+  if (target === 'department' && !alarmForm.value.department && departments.value.length) {
+    alarmForm.value.department = departments.value[0].id
+  }
 }
 
 const configureAlarms = async () => {
+  editingAlarmIds.value = []
   await Promise.all([
     ensureContactDataLoaded(),
     ensureTemplateDataLoaded(),
@@ -982,12 +1558,48 @@ const closeAlarmModal = () => {
   }
   console.debug('[FiberCableDetailModal] Fechando modal de alarmes')
   showAlarmModal.value = false
+  editingAlarmIds.value = []
+  resetAlarmForm()
+}
+
+const startEditAlarm = async (group) => {
+  editingAlarmIds.value = [...(group.ids || [])]
+  await Promise.all([ensureContactDataLoaded(), ensureTemplateDataLoaded()])
+  const raw = group.raw || {}
+  alarmForm.value = {
+    target: group.targetType || 'department_group',
+    departmentGroup: group.targetType === 'department_group' ? (raw.target_id || '') : '',
+    systemUser: group.targetType === 'system_user' ? (raw.target_id || '') : '',
+    contact: group.targetType === 'contact' ? (raw.target_id || '') : '',
+    department: group.targetType === 'department' ? (raw.target_id || '') : '',
+    channels: [...(group.channels || [])],
+    alertTypes: group.alertTypes?.length ? [...group.alertTypes] : ['break'],
+    triggerLevel: group.triggerLevel || 'warning',
+    persistMinutes: group.persistMinutes ?? 0,
+    templates: {},
+  }
+  showAlarmModal.value = true
+}
+
+const deleteAlarm = async (group) => {
+  const ids = group.ids || []
+  if (!window.confirm(`Excluir configuração de alarme para "${group.targetDisplay}"?`)) {
+    return
+  }
+  try {
+    await Promise.all(ids.map(id => deleteCableAlarm(props.cable.id, id)))
+    await loadCableAlarmConfigs(props.cable.id)
+  } catch (error) {
+    console.error('[FiberCableDetailModal] Erro ao excluir alarme:', error)
+    window.alert(error?.message || 'Não foi possível excluir a configuração.')
+  }
 }
 
 const resetTargetDetails = () => {
   alarmForm.value.departmentGroup = ''
   alarmForm.value.systemUser = ''
   alarmForm.value.contact = ''
+  alarmForm.value.department = ''
   nextTick(() => {
     setDefaultTargetSelection()
   })
@@ -995,6 +1607,9 @@ const resetTargetDetails = () => {
 
 const canSaveAlarm = computed(() => {
   if (!alarmForm.value.target) {
+    return false
+  }
+  if (!(alarmForm.value.alertTypes || []).length) {
     return false
   }
   if (!alarmForm.value.channels.length) {
@@ -1009,6 +1624,9 @@ const canSaveAlarm = computed(() => {
   if (alarmForm.value.target === 'contact' && !alarmForm.value.contact) {
     return false
   }
+  if (alarmForm.value.target === 'department' && !alarmForm.value.department) {
+    return false
+  }
   return true
 })
 
@@ -1019,36 +1637,52 @@ const saveAlarmConfig = async () => {
 
   isSavingAlarm.value = true
   try {
-    const payload = {
+    const basePayload = {
       target: alarmForm.value.target,
       department_group: alarmForm.value.target === 'department_group' ? alarmForm.value.departmentGroup : null,
       system_user: alarmForm.value.target === 'system_user' ? alarmForm.value.systemUser : null,
       contact: alarmForm.value.target === 'contact' ? alarmForm.value.contact : null,
+      department: alarmForm.value.target === 'department' ? alarmForm.value.department : null,
       channels: [...alarmForm.value.channels],
       trigger_level: alarmForm.value.triggerLevel,
       persist_minutes: alarmForm.value.persistMinutes ?? 0,
-      template_category: TEMPLATE_CATEGORY,
     }
 
     const templatePayload = {}
     if (alarmForm.value.templates) {
       Object.entries(alarmForm.value.templates).forEach(([channel, templateId]) => {
-        if (!alarmForm.value.channels.includes(channel)) {
-          return
-        }
-        if (templateId) {
-          templatePayload[channel] = templateId
-        }
+        if (!alarmForm.value.channels.includes(channel)) return
+        if (templateId) templatePayload[channel] = templateId
       })
     }
 
-    if (Object.keys(templatePayload).length > 0) {
-      payload.templates = templatePayload
+    const selectedTypes = [...(alarmForm.value.alertTypes || ['break'])]
+    const cableId = props.cable.id
+
+    // Create one config per selected type (first type gets user-selected templates)
+    const [firstType, ...extraTypes] = selectedTypes
+    await createCableAlarm(cableId, {
+      ...basePayload,
+      alert_type: firstType,
+      template_category: ALERT_TYPE_TO_CATEGORY[firstType] || 'cable_break',
+      ...(Object.keys(templatePayload).length > 0 ? { templates: templatePayload } : {}),
+    })
+    for (const atype of extraTypes) {
+      await createCableAlarm(cableId, {
+        ...basePayload,
+        alert_type: atype,
+        template_category: ALERT_TYPE_TO_CATEGORY[atype] || 'cable_break',
+      })
     }
 
-    await createCableAlarm(props.cable.id, payload)
-    await loadCableAlarmConfigs(props.cable.id)
+    // Edit mode: delete the old group's configs after creating the new ones
+    if (editingAlarmIds.value.length) {
+      await Promise.all(editingAlarmIds.value.map(id => deleteCableAlarm(cableId, id)))
+    }
+
+    await loadCableAlarmConfigs(cableId)
     showAlarmModal.value = false
+    editingAlarmIds.value = []
   } catch (error) {
     console.error('[FiberCableDetailModal] Falha ao salvar configuração de alarme:', error)
     window.alert(error?.message || 'Não foi possível salvar a configuração de alarme.')
@@ -1063,40 +1697,18 @@ const cableStatus = computed(() => {
   return String(props.cable.status || 'unknown').toLowerCase()
 })
 
-// Cálculo de atenuação baseado na distância
+// Perda estimada: attenuation_db_per_km do grupo de cabo × distância (igual ao NetworkDesign)
+// Sem grupo configurado = sem base técnica para estimativa → null
 const calculatedAttenuation = computed(() => {
   if (!props.cable) return null
-  
-  // Fórmula básica: atenuação = distância_km * fator_atenuação
-  // Fibra monomodo típica: ~0.3 dB/km em 1550nm
-  // Fibra multimodo típica: ~2.5 dB/km em 850nm
-  
   const distance = parseFloat(props.cable.length_km) || 0
-  const attenuationFactor = props.cable.cable_type?.toLowerCase().includes('multimodo') ? 2.5 : 0.3
-  
-  // Adicionar perdas por conectores/emendas (estimativa: 0.5 dB por conexão)
-  const connectionLoss = (props.cable.path_coordinates?.length || 2) * 0.1
-  
-  return (distance * attenuationFactor) + connectionLoss
+  const groupAttenuation = parseFloat(props.cable.cable_group_attenuation)
+  if (!distance || isNaN(groupAttenuation) || groupAttenuation <= 0) return null
+  return groupAttenuation * distance
 })
 
 const selectedPeriod = ref(24) // horas
 
-// Níveis ópticos computados dos dados reais
-const averageOpticalLevel = computed(() => {
-  if (!opticalStats.value || opticalStats.value.avgRx === null || opticalStats.value.avgTx === null) return null
-  return ((opticalStats.value.avgRx + opticalStats.value.avgTx) / 2).toFixed(2)
-})
-
-const minOpticalLevel = computed(() => {
-  if (!opticalStats.value || opticalStats.value.minRx === null || opticalStats.value.minTx === null) return null
-  return Math.min(opticalStats.value.minRx, opticalStats.value.minTx).toFixed(2)
-})
-
-const maxOpticalLevel = computed(() => {
-  if (!opticalStats.value || opticalStats.value.maxRx === null || opticalStats.value.maxTx === null) return null
-  return Math.max(opticalStats.value.maxRx, opticalStats.value.maxTx).toFixed(2)
-})
 
 const getStatusLabel = (status) => {
   const labels = {
@@ -1142,10 +1754,6 @@ const getAttenuationQuality = () => {
   return 'Crítico'
 }
 
-const formatOpticalLevel = (value) => {
-  if (value === null || value === undefined) return 'N/A'
-  return `${value.toFixed(2)} dBm`
-}
 
 const formatAlarmTime = (timestamp) => {
   if (!timestamp) return 'N/A'
@@ -1480,6 +2088,16 @@ const createDestinationChart = async () => {
 }
 
 // Helper para formatar valores dBm
+const formatBps = (value) => {
+  if (value === null || value === undefined) return 'N/A'
+  const bps = Number(value)
+  if (isNaN(bps)) return 'N/A'
+  if (bps >= 1e9) return `${(bps / 1e9).toFixed(2)} Gbps`
+  if (bps >= 1e6) return `${(bps / 1e6).toFixed(2)} Mbps`
+  if (bps >= 1e3) return `${(bps / 1e3).toFixed(2)} Kbps`
+  return `${bps.toFixed(0)} bps`
+}
+
 const formatDbm = (value) => {
   if (value === null || value === undefined || isNaN(value)) return 'N/A'
   return `${value.toFixed(2)} dBm`
@@ -1534,32 +2152,60 @@ watch(() => [props.show, props.cable], async ([show, cable]) => {
     showCableDetails.value = true
     await Promise.allSettled([
       loadOpticalData(),
+      loadTrafficData(),
       loadCableAlarmConfigs(cable.id)
     ])
   }
 })
 
-// Watch para criar gráficos quando mudar para tab optical
+// Watch para criar gráficos quando mudar para tab optical ou traffic
 watch(activeTab, async (newTab) => {
   if (newTab === 'optical' && opticalData.value && props.show) {
     await nextTick()
     await createOpticalCharts()
   }
+  if (newTab === 'traffic' && trafficData.value && props.show) {
+    await nextTick()
+    await createTrafficCharts()
+  }
 })
 
 // Watch para recriar gráficos quando mudar período
 watch(selectedPeriod, async () => {
-  if (props.show && activeTab.value === 'optical') {
-    await loadOpticalData()
+  if (props.show) {
+    if (activeTab.value === 'optical') {
+      await Promise.allSettled([loadOpticalData(), loadTrafficData()])
+    } else if (activeTab.value === 'traffic') {
+      await loadTrafficData()
+    }
   }
 })
 
+watch(trafficExpandedOrigin, async (isExpanded) => {
+  if (isExpanded && trafficData.value?.origin?.history?.length) {
+    await createTrafficOriginChart()
+  }
+})
+
+watch(trafficExpandedDestination, async (isExpanded) => {
+  if (isExpanded && trafficData.value?.destination?.history?.length) {
+    await createTrafficDestinationChart()
+  }
+})
+
+const onDocumentClick = () => { exportMenuOpen.value = null; trafficExportMenuOpen.value = null }
+
 onMounted(() => {
+  document.addEventListener('click', onDocumentClick)
   if (props.show && activeTab.value === 'optical' && opticalData.value) {
     nextTick(async () => {
       await createOpticalCharts()
     })
   }
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', onDocumentClick)
 })
 </script>
 
@@ -1577,12 +2223,12 @@ onMounted(() => {
 }
 
 .detail-modal-container {
-  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-  border-radius: 16px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  max-width: 1000px;
-  width: 100%;
-  max-height: 90vh;
+  background: linear-gradient(135deg, var(--surface-card) 0%, var(--bg-secondary) 100%);
+  border-radius: 14px;
+  box-shadow: 0 20px 40px -8px rgba(0, 0, 0, 0.55);
+  max-width: 780px;
+  width: calc(100vw - 40px);
+  max-height: 95vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -1594,7 +2240,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 24px;
+  padding: 14px 18px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, transparent 100%);
 }
@@ -1607,15 +2253,15 @@ onMounted(() => {
 }
 
 .cable-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
   background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 3px 8px rgba(59, 130, 246, 0.3);
 }
 
 .cable-icon.status-online {
@@ -1634,15 +2280,15 @@ onMounted(() => {
 }
 
 .cable-icon .icon {
-  width: 32px;
-  height: 32px;
+  width: 22px;
+  height: 22px;
   color: white;
 }
 
 .cable-title h2 {
   margin: 0;
   color: white;
-  font-size: 22px;
+  font-size: 17px;
   font-weight: 700;
   line-height: 1.3;
 }
@@ -1743,7 +2389,7 @@ onMounted(() => {
 .modal-body {
   flex: 1;
   overflow-y: auto;
-  padding: 24px;
+  padding: 16px 18px;
 }
 
 .tab-content {
@@ -1764,14 +2410,14 @@ onMounted(() => {
 /* Info Grid */
 .info-grid {
   display: grid;
-  gap: 24px;
+  gap: 12px;
 }
 
 .info-section {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 20px;
+  border-radius: 10px;
+  padding: 14px;
 }
 
 .info-section.full-width {
@@ -1779,10 +2425,13 @@ onMounted(() => {
 }
 
 .info-section h3 {
-  margin: 0 0 16px 0;
+  margin: 0 0 10px 0;
   color: white;
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #94a3b8;
 }
 
 .info-section.collapsible {
@@ -1801,9 +2450,9 @@ onMounted(() => {
   background: transparent;
   border: none;
   color: inherit;
-  padding: 20px;
+  padding: 14px;
   cursor: pointer;
-  border-radius: 12px 12px 0 0;
+  border-radius: 10px 10px 0 0;
   transition: background 0.2s ease;
 }
 
@@ -1846,15 +2495,15 @@ onMounted(() => {
 
 .info-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
 }
 
 .stat-card {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  padding: 16px;
+  border-radius: 8px;
+  padding: 12px 10px;
   text-align: center;
 }
 
@@ -1870,18 +2519,19 @@ onMounted(() => {
 
 .stat-label {
   color: #94a3b8;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 8px;
+  margin-bottom: 5px;
 }
 
 .stat-value {
   color: white;
-  font-size: 24px;
+  font-size: 17px;
   font-weight: 700;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
+  line-height: 1.2;
 }
 
 .stat-value.good {
@@ -1905,16 +2555,16 @@ onMounted(() => {
 .detail-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
 }
 
 .detail-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px;
+  padding: 8px 10px;
   background: rgba(255, 255, 255, 0.03);
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 .detail-label {
@@ -1944,7 +2594,7 @@ onMounted(() => {
 .optical-section {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 12px;
 }
 
 .section-header {
@@ -1952,13 +2602,13 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 8px;
 }
 
 .section-header h3 {
   margin: 0;
   color: white;
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -1971,7 +2621,7 @@ onMounted(() => {
 }
 
 .period-btn {
-  padding: 8px 16px;
+  padding: 5px 11px;
   background: transparent;
   border: none;
   color: #94a3b8;
@@ -1995,15 +2645,15 @@ onMounted(() => {
 .optical-chart-container {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 20px;
-  height: 300px;
+  border-radius: 8px;
+  padding: 10px;
+  height: 175px;
 }
 
 .port-charts-container {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;
 }
 
 .port-chart-panel {
@@ -2022,7 +2672,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
+  padding: 10px 14px;
   cursor: pointer;
   user-select: none;
   transition: background 0.2s ease;
@@ -2039,9 +2689,9 @@ onMounted(() => {
 }
 
 .port-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2064,15 +2714,83 @@ onMounted(() => {
 
 .port-details h4 {
   margin: 0;
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 600;
   color: #e2e8f0;
 }
 
 .port-details p {
-  margin: 4px 0 0 0;
-  font-size: 13px;
+  margin: 2px 0 0 0;
+  font-size: 12px;
   color: #94a3b8;
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  margin-right: 4px;
+}
+
+.export-menu {
+  position: relative;
+}
+
+.export-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.export-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+}
+
+.export-btn .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.export-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: var(--surface-card);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 100;
+  min-width: 80px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.export-dropdown button {
+  background: transparent;
+  border: none;
+  color: #cbd5e1;
+  cursor: pointer;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.export-dropdown button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1f5f9;
 }
 
 .collapse-btn {
@@ -2104,35 +2822,36 @@ onMounted(() => {
 }
 
 .panel-content {
-  padding: 0 20px 20px 20px;
+  padding: 0 12px 10px;
 }
 
 .optical-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  margin-top: 6px;
 }
 
 .stat-box {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 6px 10px;
 }
 
 .stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 9px;
 }
 
 .stat-icon.good {
@@ -2169,8 +2888,9 @@ onMounted(() => {
 
 .stat-info .stat-value {
   color: white;
-  font-size: 18px;
+  font-size: 13px;
   font-weight: 700;
+  line-height: 1.2;
 }
 
 /* Empty State and Loading */
@@ -2407,6 +3127,159 @@ onMounted(() => {
   font-weight: 600;
   font-size: 14px;
 }
+
+.saved-config-badges {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.saved-config-atype {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.18);
+  border: 1px solid rgba(100, 116, 139, 0.35);
+  color: #94a3b8;
+}
+
+.saved-config-atype.atype-break {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+}
+
+.saved-config-atype.atype-attenuation {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #fcd34d;
+}
+
+.saved-config-atype.atype-normalization {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #6ee7b7;
+}
+
+/* ── Saved config actions ─────────────────────────────────── */
+.saved-config-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.btn-config-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.btn-config-action .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.btn-edit {
+  background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.35);
+  color: #a5b4fc;
+}
+
+.btn-edit:hover {
+  background: rgba(99, 102, 241, 0.22);
+  border-color: rgba(99, 102, 241, 0.6);
+  color: #c7d2fe;
+}
+
+.btn-delete {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: #fca5a5;
+}
+
+.btn-delete:hover {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fecaca;
+}
+
+/* ── Alert type selector ──────────────────────────────────── */
+.alert-type-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.alert-type-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 10px;
+  border-radius: 10px;
+  border: 2px solid rgba(148, 163, 184, 0.15);
+  background: rgba(15, 23, 42, 0.5);
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s;
+  text-align: center;
+}
+
+.alert-type-card:hover {
+  border-color: rgba(148, 163, 184, 0.35);
+  background: rgba(30, 41, 59, 0.6);
+}
+
+.alert-type-card.selected {
+  border-color: rgba(96, 165, 250, 0.6);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.atype-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.atype-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.atype-desc {
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.alert-type-card.selected .atype-name {
+  color: #93c5fd;
+}
+
+/* ── End alert type selector ─────────────────────────────── */
 
 .saved-config-level {
   font-size: 12px;
@@ -2776,19 +3649,19 @@ onMounted(() => {
 
 /* Footer */
 .modal-footer {
-  padding: 16px 24px;
+  padding: 10px 18px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(0, 0, 0, 0.2);
   display: flex;
-  gap: 12px;
+  gap: 10px;
   justify-content: flex-end;
 }
 
 .btn-secondary,
 .btn-primary {
-  padding: 12px 24px;
+  padding: 9px 20px;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
@@ -2912,5 +3785,75 @@ onMounted(() => {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+/* ── Tráfego de Rede ─────────────────────────────────────── */
+.traffic-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.traffic-ports-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.traffic-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 4px 0 2px;
+}
+
+.traffic-stat-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.traffic-stat-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: #64748b;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.traffic-stat-title .icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  color: #475569;
+}
+
+.traffic-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  color: #94a3b8;
+  gap: 8px;
+}
+
+.traffic-stat-row span {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.traffic-stat-row strong {
+  color: #e2e8f0;
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
 }
 </style>

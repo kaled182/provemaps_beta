@@ -10,6 +10,10 @@ from django.db import transaction
 from django.utils import timezone
 
 from inventory.models import FiberCable, FiberCableAlarmConfig
+try:
+    from core.models import Department
+except Exception:  # pragma: no cover
+    Department = None  # type: ignore
 
 try:  # Optional dependency: contacts app might be disabled in some deployments
     from setup_app.models_contacts import Contact, ContactGroup
@@ -30,17 +34,26 @@ ALLOWED_TARGETS = {
     FiberCableAlarmConfig.TARGET_DEPARTMENT_GROUP,
     FiberCableAlarmConfig.TARGET_SYSTEM_USER,
     FiberCableAlarmConfig.TARGET_CONTACT,
+    FiberCableAlarmConfig.TARGET_DEPARTMENT,
 }
 ALLOWED_TRIGGERS = {
     FiberCableAlarmConfig.TRIGGER_WARNING,
     FiberCableAlarmConfig.TRIGGER_CRITICAL,
 }
+ALLOWED_ALERT_TYPES = {
+    FiberCableAlarmConfig.ALERT_BREAK,
+    FiberCableAlarmConfig.ALERT_ATTENUATION,
+    FiberCableAlarmConfig.ALERT_NORMALIZATION,
+}
 
-DEFAULT_TEMPLATE_CATEGORY = (
-    AlertTemplate.CATEGORY_OPTICAL_LEVEL
-    if AlertTemplate is not None and hasattr(AlertTemplate, 'CATEGORY_OPTICAL_LEVEL')
-    else 'optical_level'
-)
+# Map alert_type → AlertTemplate category
+ALERT_TYPE_TO_CATEGORY = {
+    FiberCableAlarmConfig.ALERT_BREAK: 'cable_break',
+    FiberCableAlarmConfig.ALERT_ATTENUATION: 'cable_attenuation',
+    FiberCableAlarmConfig.ALERT_NORMALIZATION: 'cable_normalization',
+}
+
+DEFAULT_TEMPLATE_CATEGORY = 'cable_break'
 
 
 class FiberCableAlarmError(Exception):
@@ -80,13 +93,19 @@ def _template_snapshot(template: 'AlertTemplate') -> dict[str, object]:  # type:
     }
 
 
-def _normalize_template_category(raw_category: object) -> str:
+def _category_for_alert_type(alert_type: str) -> str:
+    """Return the AlertTemplate category that corresponds to an alert_type."""
+    return ALERT_TYPE_TO_CATEGORY.get(alert_type, DEFAULT_TEMPLATE_CATEGORY)
+
+
+def _normalize_template_category(raw_category: object, alert_type: str = '') -> str:
     if AlertTemplate is None:
-        return DEFAULT_TEMPLATE_CATEGORY
-    category = str(raw_category or '').strip() or DEFAULT_TEMPLATE_CATEGORY
+        return _category_for_alert_type(alert_type)
+    # Prefer the category derived from alert_type when no explicit category given
+    category = str(raw_category or '').strip() or _category_for_alert_type(alert_type)
     valid_categories = {choice[0] for choice in getattr(AlertTemplate, 'CATEGORY_CHOICES', [])}
     if category not in valid_categories:
-        return DEFAULT_TEMPLATE_CATEGORY
+        return _category_for_alert_type(alert_type)
     return category
 
 
@@ -185,6 +204,17 @@ def _resolve_user(user_id: int | str | None) -> AbstractBaseUser | None:
         raise FiberCableAlarmValidationError("Usuário do sistema não encontrado") from None
 
 
+def _resolve_department(dept_id: int | str | None):
+    if dept_id in (None, ""):
+        return None
+    if Department is None:
+        raise FiberCableAlarmValidationError("Módulo de departamentos não disponível")
+    try:
+        return Department.objects.get(pk=dept_id)
+    except (Department.DoesNotExist, ValueError, TypeError):
+        raise FiberCableAlarmValidationError("Departamento não encontrado") from None
+
+
 def _resolve_contact(contact_id: int | str | None):
     if contact_id in (None, ""):
         return None
@@ -240,6 +270,17 @@ def _extract_target_context(payload: dict[str, object]) -> TargetContext:
         }
         return TargetContext(raw_target, int(system_user.pk), display, snapshot, system_user)
 
+    if raw_target == FiberCableAlarmConfig.TARGET_DEPARTMENT:
+        dept = _resolve_department(payload.get("department") or payload.get("target_id"))
+        if dept is None:
+            raise FiberCableAlarmValidationError("Departamento obrigatório")
+        member_count = dept.user_profiles.count() if hasattr(dept, "user_profiles") else None
+        display = dept.name
+        if member_count is not None:
+            display = f"{dept.name} ({member_count} membros)"
+        snapshot = {"name": dept.name, "display": display, "member_count": member_count}
+        return TargetContext(raw_target, int(dept.pk), display, snapshot, dept)
+
     contact = _resolve_contact(payload.get("contact") or payload.get("target_id"))
     if contact is None:
         raise FiberCableAlarmValidationError("Contato obrigatório")
@@ -262,6 +303,8 @@ def alarm_config_to_payload(config: FiberCableAlarmConfig) -> dict[str, object]:
         target_id = config.contact_group_id
     elif config.target_type == FiberCableAlarmConfig.TARGET_SYSTEM_USER:
         target_id = config.system_user_id
+    elif config.target_type == FiberCableAlarmConfig.TARGET_DEPARTMENT:
+        target_id = config.department_id
     else:
         target_id = config.contact_id
 
@@ -287,6 +330,7 @@ def alarm_config_to_payload(config: FiberCableAlarmConfig) -> dict[str, object]:
         "target_display": config.target_display,
         "channels": list(config.channels or []),
         "trigger_level": config.trigger_level,
+        "alert_type": config.alert_type or "",
         "persist_minutes": config.persist_minutes,
         "description": config.description or "",
         "target_snapshot": config.target_snapshot or {},
@@ -308,7 +352,7 @@ def list_alarm_configs(cable: FiberCable) -> list[dict[str, object]]:
 
     configs = (
         FiberCableAlarmConfig.objects.filter(fiber_cable=cable)
-        .select_related("contact_group", "contact", "system_user", "created_by")
+        .select_related("contact_group", "contact", "system_user", "department", "created_by")
         .order_by("-created_at", "id")
     )
     return [alarm_config_to_payload(config) for config in configs]
@@ -331,6 +375,10 @@ def create_alarm_config(
     if trigger_level not in ALLOWED_TRIGGERS:
         trigger_level = FiberCableAlarmConfig.TRIGGER_WARNING
 
+    alert_type = str(payload.get("alert_type") or payload.get("alertType") or "").strip().lower()
+    if alert_type not in ALLOWED_ALERT_TYPES:
+        alert_type = ""
+
     persist_raw = payload.get("persist_minutes") or payload.get("persistMinutes") or 0
     try:
         persist_minutes = max(int(persist_raw), 0)
@@ -341,7 +389,7 @@ def create_alarm_config(
     metadata_raw = payload.get("metadata")
     metadata = metadata_raw if isinstance(metadata_raw, dict) else {}
 
-    template_category = _normalize_template_category(payload.get('template_category'))
+    template_category = _normalize_template_category(payload.get('template_category'), alert_type)
     templates_meta = _build_template_metadata(template_category, channels, payload.get('templates'))
     if templates_meta:
         metadata = dict(metadata)
@@ -354,6 +402,7 @@ def create_alarm_config(
         target_type=target.target_type,
         channels=channels,
         trigger_level=trigger_level,
+        alert_type=alert_type,
         persist_minutes=persist_minutes,
         description=description,
         metadata=metadata,
@@ -365,6 +414,8 @@ def create_alarm_config(
         config.contact_group_id = target.target_id
     elif target.target_type == FiberCableAlarmConfig.TARGET_SYSTEM_USER:
         config.system_user_id = target.target_id
+    elif target.target_type == FiberCableAlarmConfig.TARGET_DEPARTMENT:
+        config.department_id = target.target_id
     else:
         config.contact_id = target.target_id
 

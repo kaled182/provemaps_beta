@@ -1,19 +1,19 @@
 <template>
   <div class="min-h-screen bg-black flex flex-col h-[calc(100vh-64px)]">
     <!-- Header -->
-    <div class="flex-none bg-gray-900 border-b border-gray-700 px-4 py-2 flex justify-between items-center z-10">
+    <div class="mosaic-header flex-none px-4 py-2 flex justify-between items-center z-10">
       <div class="flex items-center gap-3">
-        <button @click="goBack" class="text-gray-400 hover:text-white transition-colors p-1">
+        <button @click="goBack" class="mosaic-header-btn transition-colors p-1">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
         </button>
-        <h1 class="text-white font-semibold">{{ mosaic?.name || 'Mosaico' }}</h1>
-        <span class="text-xs text-gray-400">{{ getLayoutLabel(mosaic?.layout) }}</span>
+        <h1 class="mosaic-header-title font-semibold">{{ mosaic?.name || 'Mosaico' }}</h1>
+        <span class="text-xs mosaic-header-sub">{{ getLayoutLabel(mosaic?.layout) }}</span>
       </div>
       <div class="flex items-center gap-3">
-        <span class="text-xs text-gray-400">
+        <span class="text-xs mosaic-header-sub">
           {{ Object.keys(cameraPlayerRefs).length }}/{{ activeCameras.filter(c => c).length }} ativas
         </span>
-        <button @click="goBack" class="text-gray-400 hover:text-white transition-colors text-sm">
+        <button @click="goBack" class="mosaic-header-btn transition-colors text-sm">
           Fechar
         </button>
       </div>
@@ -369,6 +369,30 @@ onUnmounted(async () => {
 </script>
 
 <style scoped>
+.mosaic-header {
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.mosaic-header-title {
+  color: var(--text-primary);
+}
+
+.mosaic-header-sub {
+  color: var(--text-tertiary);
+}
+
+.mosaic-header-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+}
+
+.mosaic-header-btn:hover {
+  color: var(--text-primary);
+}
+
 .grid {
   height: 100%;
 }

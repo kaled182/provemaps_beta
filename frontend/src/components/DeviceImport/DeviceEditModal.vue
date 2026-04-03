@@ -5,8 +5,17 @@
       <div class="fixed inset-0 bg-gray-500 dark:bg-gray-900/80 bg-opacity-75 transition-opacity" @click="$emit('close')"></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
 
-      <div class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
-        
+      <div class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full relative">
+
+        <!-- Overlay de progresso durante importação -->
+        <div v-if="saving" class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-gray-900/80 rounded-lg">
+          <div class="animate-spin rounded-full h-14 w-14 border-4 border-indigo-500 border-t-transparent mb-5"></div>
+          <p class="text-white text-base font-semibold">
+            {{ isBatch ? `Importando ${activeDevices.length} dispositivo${activeDevices.length > 1 ? 's' : ''}…` : 'Importando dispositivo…' }}
+          </p>
+          <p class="text-gray-400 text-sm mt-1">Aguarde, isso pode levar alguns segundos.</p>
+        </div>
+
         <!-- Header -->
         <div class="bg-white dark:bg-gray-800 px-4 pt-5 pb-4 sm:p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
           <div>
@@ -214,6 +223,7 @@
                 <div class="flex justify-between items-center mb-1">
                   <label class="block text-sm font-medium text-gray-700 dark:text-gray-200">
                     <i class="fas fa-map-marker-alt text-red-500 mr-1"></i> Local (Site)
+                    <span v-if="isBatch" class="ml-1 text-xs font-normal text-gray-400 dark:text-gray-500">(opcional — deixe em branco para manter o local original de cada device)</span>
                   </label>
                   <button 
                     @click="openMapPicker"
@@ -226,13 +236,13 @@
 
                 <!-- Modo: Lista de Seleção -->
                 <div v-if="!isCreatingSite">
-                  <select 
-                    v-model="selectedSiteProxy" 
+                  <select
+                    v-model="selectedSiteProxy"
                     @change="handleSiteChange"
                     class="block w-full pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
                     :class="{'text-gray-400 dark:text-gray-500': !selectedSiteProxy}"
                   >
-                    <option value="" disabled>Selecione o local...</option>
+                    <option value="" :disabled="!isBatch">{{ isBatch ? '— Não alterar (manter local de cada device) —' : 'Selecione o local...' }}</option>
                     <option v-for="site in availableSites" :key="site.id" :value="site.id">{{ site.display_name }}</option>
                     <option disabled>──────────────</option>
                     <option value="__CREATE_NEW__" class="text-red-600 font-medium">📍 Criar Novo Site...</option>
@@ -563,21 +573,24 @@
                 {{ syncingFromZabbix ? 'Sincronizando...' : 'Sincronizar Zabbix' }}
               </button>
 
-              <button 
+              <button
                 @click="$emit('close')"
-                type="button" 
-                class="inline-flex justify-center items-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none transition-colors"
+                type="button"
+                :disabled="saving"
+                class="inline-flex justify-center items-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Cancelar
               </button>
-              <button 
+              <button
                 @click="handleSave"
-                type="button" 
-                class="inline-flex justify-center items-center rounded-md border border-transparent shadow-sm px-4 py-2 text-sm font-medium text-white focus:outline-none transition-colors"
+                type="button"
+                :disabled="saving"
+                class="inline-flex justify-center items-center rounded-md border border-transparent shadow-sm px-4 py-2 text-sm font-medium text-white focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 :class="saveButtonClass"
               >
-                <i :class="isBatch ? 'fas fa-cloud-download-alt' : 'fas fa-save'" class="mr-2"></i> 
-                {{ isBatch ? `Importar ${activeDevices.length} Dispositivos` : 'Confirmar Importação' }}
+                <i v-if="saving" class="fas fa-circle-notch fa-spin mr-2"></i>
+                <i v-else :class="isBatch ? 'fas fa-cloud-download-alt' : 'fas fa-save'" class="mr-2"></i>
+                {{ saving ? 'Importando…' : (isBatch ? `Importar ${activeDevices.length} Dispositivos` : 'Confirmar Importação') }}
               </button>
             </div>
           </div>
@@ -842,6 +855,7 @@ const props = defineProps({
   device: { type: Object, default: null },     // Modo Single (Legacy support)
   isNew: { type: Boolean, default: false },    // Legacy flag
   readOnly: { type: Boolean, default: false }, // Modo readonly (Ver Detalhes)
+  saving: { type: Boolean, default: false },   // Importação em andamento
   availableGroups: { type: Array, default: () => [] },
   availableSites: { type: Array, default: () => [] } // Lista de Sites do backend
 });
@@ -1314,7 +1328,21 @@ const saveZabbixFields = async () => {
       alert('Dispositivo sem ID válido para salvar.');
       return;
     }
+
+    // Inclui site, categoria, grupo e alertas além das chaves Zabbix
+    const siteVal = selectedSiteProxy.value || null;
+    // monitoring_group: DRF espera FK ID — usa o ID existente do device (grupo muda via Confirmar Importação)
+    const monitoringGroupId = device.monitoring_group ?? null;
     const payload = {
+      // Site e organização
+      ...(siteVal ? { site: siteVal } : {}),
+      category: formState.category,
+      ...(monitoringGroupId !== null ? { monitoring_group: monitoringGroupId } : {}),
+      // Alertas
+      enable_screen_alert: formState.alerts?.screen ?? true,
+      enable_whatsapp_alert: formState.alerts?.whatsapp ?? false,
+      enable_email_alert: formState.alerts?.email ?? false,
+      // Chaves Zabbix
       uptime_item_key: zabbixForm.uptime_item_key || null,
       cpu_usage_item_key: zabbixForm.cpu_usage_item_key || null,
       memory_usage_item_key: zabbixForm.memory_usage_item_key || null,
@@ -1323,7 +1351,7 @@ const saveZabbixFields = async () => {
     };
     const resp = await api.patch(`/api/v1/devices/${device.id}/`, payload);
     console.log('[DeviceEditModal] Device patched:', resp?.id || device.id);
-    success('Device atualizado', 'Campos de Zabbix e métricas salvos.');
+    success('Device atualizado', 'Configurações salvas com sucesso.');
   } catch (e) {
     console.error('[DeviceEditModal] Patch failed:', e);
     notifyError('Erro ao salvar', e?.message || 'Não foi possível atualizar o device.');
@@ -1475,8 +1503,8 @@ const handleSave = () => {
     finalSite = selectedSiteProxy.value;
   }
 
-  // Validação de Site
-  if (!finalSite) {
+  // Validação de Site — obrigatório apenas no modo single
+  if (!finalSite && !isBatch.value) {
     alert('Selecione um local/site para o dispositivo.');
     return;
   }
@@ -1504,17 +1532,24 @@ const handleSave = () => {
 
   // Prepara o Payload de Saída
   if (isBatch.value) {
-    // Em Batch, aplicamos as configurações comuns a TODOS os itens originais
-    const batchPayload = activeDevices.value.map(dev => ({
-      ...dev, // Mantém dados originais (ID Zabbix, IP, etc)
-      category: formState.category,
-      site: finalSite,
-      is_new_site: isNewSite,
-      site_coordinates: siteCoordinates,
-      group: finalGroup,
-      is_new_group: isNewGroup,
-      alerts: { ...formState.alerts }
-    }));
+    // Em Batch, aplicamos as configurações comuns a TODOS os itens originais.
+    // Se site não foi selecionado, omite os campos de site para o backend
+    // manter o site atual de cada device.
+    const batchPayload = activeDevices.value.map(dev => {
+      const base = {
+        ...dev,
+        category: formState.category,
+        group: finalGroup,
+        is_new_group: isNewGroup,
+        alerts: { ...formState.alerts }
+      }
+      if (finalSite) {
+        base.site = finalSite
+        base.is_new_site = isNewSite
+        base.site_coordinates = siteCoordinates
+      }
+      return base
+    });
     
     emit('save', { mode: 'batch', devices: batchPayload });
   } else {

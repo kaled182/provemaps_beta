@@ -33,28 +33,24 @@ class MapboxPolyline extends IPolyline {
 
   _addToMap() {
     const coordinates = this.path.map(p => [p.lng, p.lat]);
+    this.hitLayerId = `${this.layerId}-hit`;
+    this._hovered = false;
 
-    // Add source
+    // Add source (shared by visible + hit layers)
     this.mapboxMap.addSource(this.sourceId, {
       type: 'geojson',
       data: {
         type: 'Feature',
-        geometry: {
-          type: 'LineString',
-          coordinates: coordinates,
-        },
+        geometry: { type: 'LineString', coordinates },
       },
     });
 
-    // Add layer
+    // Visible line layer
     this.mapboxMap.addLayer({
       id: this.layerId,
       type: 'line',
       source: this.sourceId,
-      layout: {
-        'line-join': 'round',
-        'line-cap': 'round',
-      },
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
       paint: {
         'line-color': this.options.strokeColor || '#2563eb',
         'line-width': this.options.strokeWeight || 4,
@@ -62,10 +58,40 @@ class MapboxPolyline extends IPolyline {
       },
     });
 
-    // Add click handler
+    // Transparent wide hit-area layer (easier to click/right-click)
+    this.mapboxMap.addLayer({
+      id: this.hitLayerId,
+      type: 'line',
+      source: this.sourceId,
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: { 'line-color': 'transparent', 'line-width': 16, 'line-opacity': 0 },
+    });
+
     if (this.options.clickable !== false) {
-      this.mapboxMap.on('click', this.layerId, this._handleClick.bind(this));
-      this.mapboxMap.on('contextmenu', this.layerId, this._handleRightClick.bind(this));
+      // Use hit layer for events so the wider area is responsive
+      this.mapboxMap.on('click', this.hitLayerId, this._handleClick.bind(this));
+      this.mapboxMap.on('contextmenu', this.hitLayerId, this._handleRightClick.bind(this));
+
+      // Hover: cursor + highlight
+      this._onMouseEnter = () => {
+        this.mapboxMap.getCanvas().style.cursor = 'pointer';
+        if (!this._hovered) {
+          this._hovered = true;
+          const baseWidth = this.options.strokeWeight || 4;
+          this.mapboxMap.setPaintProperty(this.layerId, 'line-width', baseWidth + 2);
+          this.mapboxMap.setPaintProperty(this.layerId, 'line-opacity', 1);
+        }
+      };
+      this._onMouseLeave = () => {
+        this.mapboxMap.getCanvas().style.cursor = '';
+        if (this._hovered) {
+          this._hovered = false;
+          this.mapboxMap.setPaintProperty(this.layerId, 'line-width', this.options.strokeWeight || 4);
+          this.mapboxMap.setPaintProperty(this.layerId, 'line-opacity', this.options.strokeOpacity || 0.9);
+        }
+      };
+      this.mapboxMap.on('mouseenter', this.hitLayerId, this._onMouseEnter);
+      this.mapboxMap.on('mouseleave', this.hitLayerId, this._onMouseLeave);
     }
   }
 
@@ -148,6 +174,14 @@ class MapboxPolyline extends IPolyline {
   }
 
   remove() {
+    // Remove hit layer first (it's on top)
+    if (this.hitLayerId && this.mapboxMap.getLayer(this.hitLayerId)) {
+      this.mapboxMap.off('click', this.hitLayerId, this._handleClick);
+      this.mapboxMap.off('contextmenu', this.hitLayerId, this._handleRightClick);
+      if (this._onMouseEnter) this.mapboxMap.off('mouseenter', this.hitLayerId, this._onMouseEnter);
+      if (this._onMouseLeave) this.mapboxMap.off('mouseleave', this.hitLayerId, this._onMouseLeave);
+      this.mapboxMap.removeLayer(this.hitLayerId);
+    }
     if (this.mapboxMap.getLayer(this.layerId)) {
       this.mapboxMap.off('click', this.layerId, this._handleClick);
       this.mapboxMap.off('contextmenu', this.layerId, this._handleRightClick);
@@ -156,6 +190,8 @@ class MapboxPolyline extends IPolyline {
     if (this.mapboxMap.getSource(this.sourceId)) {
       this.mapboxMap.removeSource(this.sourceId);
     }
+    // Reset cursor if this polyline was being hovered when removed
+    try { this.mapboxMap.getCanvas().style.cursor = ''; } catch (_) {}
   }
 }
 
@@ -403,6 +439,10 @@ class MapboxMap extends IMap {
 
   panTo(latLng) {
     this.mapboxMap.panTo([latLng.lng, latLng.lat]);
+  }
+
+  flyTo(latLng, zoom = 14) {
+    this.mapboxMap.flyTo({ center: [latLng.lng, latLng.lat], zoom, duration: 800 });
   }
 
   on(event, callback) {

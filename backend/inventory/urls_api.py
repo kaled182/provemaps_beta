@@ -37,8 +37,40 @@ except ImproperlyConfigured:  # pragma: no cover - depends on GDAL availability
 
 from inventory.api import devices as device_api
 from inventory.api import fibers as fiber_api
+from inventory.api.fibers import api_fiber_audit_log
+from inventory.api.cable_photos import api_cable_photos, api_cable_photo_delete
+from inventory.api.search import api_global_search
+from inventory.api.cable_folders import (
+    api_list_cable_folders,
+    api_create_cable_folder,
+    api_update_cable_folder,
+    api_delete_cable_folder,
+    api_move_cable_to_folder,
+)
 from inventory.api import routes as routes_api
 from inventory.api import zabbix_lookup as zabbix_lookup_api
+from inventory.api.cable_groups import (
+    api_list_cable_groups,
+    api_create_cable_group,
+    api_update_cable_group,
+    api_delete_cable_group,
+)
+from inventory.api.cable_types import (
+    api_list_cable_types,
+    api_create_cable_type,
+    api_update_cable_type,
+    api_delete_cable_type,
+)
+from inventory.api.responsibles import (
+    api_list_responsibles,
+    api_create_responsible,
+)
+from inventory.api.maintenance_alert import (
+    api_maintenance_recipients,
+    api_maintenance_send_alert,
+)
+from inventory.api.alarm_sources import api_alarm_config_sources
+from inventory.api.system_info import api_system_info
 from inventory.api.trace_route import trace_fiber_route
 from inventory.api.infrastructure import (
     api_create_infrastructure,
@@ -57,6 +89,50 @@ except ImproperlyConfigured:  # pragma: no cover - depends on GDAL availability
 app_name = "inventory-api"
 
 urlpatterns = [
+    # System info / admin panel base
+    path("system/info/", api_system_info, name="system-info"),
+    # Global search
+    path("search/", api_global_search, name="global-search"),
+    # Cable folders
+    path("cable-folders/", api_list_cable_folders, name="cable-folders-list"),
+    path("cable-folders/create/", api_create_cable_folder, name="cable-folders-create"),
+    path("cable-folders/<int:folder_id>/", api_update_cable_folder, name="cable-folders-update"),
+    path("cable-folders/<int:folder_id>/delete/", api_delete_cable_folder, name="cable-folders-delete"),
+    path("fibers/<int:cable_id>/move-folder/", api_move_cable_to_folder, name="fiber-move-folder"),
+    # Cable Groups
+    path(
+        "cable-groups/",
+        api_list_cable_groups,
+        name="cable-groups-list",
+    ),
+    path(
+        "cable-groups/create/",
+        api_create_cable_group,
+        name="cable-groups-create",
+    ),
+    path(
+        "cable-groups/<int:group_id>/",
+        api_update_cable_group,
+        name="cable-groups-update",
+    ),
+    path(
+        "cable-groups/<int:group_id>/delete/",
+        api_delete_cable_group,
+        name="cable-groups-delete",
+    ),
+    # Cable Types
+    path("cable-types/", api_list_cable_types, name="cable-types-list"),
+    path("cable-types/create/", api_create_cable_type, name="cable-types-create"),
+    path("cable-types/<int:type_id>/", api_update_cable_type, name="cable-types-update"),
+    path("cable-types/<int:type_id>/delete/", api_delete_cable_type, name="cable-types-delete"),
+    # Responsibles
+    path("responsibles/", api_list_responsibles, name="responsibles-list"),
+    path("responsibles/create/", api_create_responsible, name="responsibles-create"),
+    # Maintenance area notifications
+    path("maintenance-alert/recipients/", api_maintenance_recipients, name="maintenance-alert-recipients"),
+    path("maintenance-alert/send/", api_maintenance_send_alert, name="maintenance-alert-send"),
+    # Alarm configuration sources (users, groups, contacts)
+    path("alarm-config-sources/", api_alarm_config_sources, name="alarm-config-sources"),
     # Cable Attachments
     path(
         "cable-attachments/attach/",
@@ -149,6 +225,21 @@ urlpatterns = [
         name="bulk-create-inventory",
     ),
     path("sites/", device_api.api_sites, name="sites"),
+    path(
+        "fibers/<int:cable_id>/audit-log/",
+        api_fiber_audit_log,
+        name="fiber-audit-log",
+    ),
+    path(
+        "fibers/<int:cable_id>/photos/",
+        api_cable_photos,
+        name="fiber-photos",
+    ),
+    path(
+        "fibers/<int:cable_id>/photos/<int:photo_id>/",
+        api_cable_photo_delete,
+        name="fiber-photo-delete",
+    ),
     path(
         "fibers/<int:cable_id>/oper-status/",
         device_api.api_update_cable_oper_status,
@@ -323,8 +414,8 @@ urlpatterns = [
     ),
     path(
         "devices/<int:device_id>/",
-        device_api.api_device_delete,
-        name="device-delete",
+        device_api.api_device_detail,
+        name="device-detail",
     ),
     path(
         "infrastructure/",

@@ -106,6 +106,7 @@ urlpatterns: list[Any] = [
     path('system/users', SPAView.as_view(), name='users_page'),
 
     # APIs
+    path('api/v1/telemetry/', include('telemetry.urls')),
     path('api/v1/inventory/', include('inventory.urls_api')),
     path('api/v1/', include('inventory.urls_rest')),
     path('api/v1/monitoring/', include('monitoring.urls_api')),

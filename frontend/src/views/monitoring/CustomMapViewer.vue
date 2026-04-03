@@ -1,14 +1,5 @@
 <template>
-  <div class="custom-map-viewer">
-    <!-- Toolbar -->
-    <MapToolbar 
-      :map-name="mapData.name"
-      :map-category="mapData.category"
-      :is-fullscreen="isFullscreen"
-      @toggle-inventory="showInventoryPanel = !showInventoryPanel"
-      @toggle-fullscreen="toggleFullscreen"
-    />
-
+  <div class="custom-map-viewer" @contextmenu.prevent="onViewerContextMenu">
     <!-- Main Content -->
     <div class="map-content">
       <!-- Mapa Google Maps -->
@@ -27,6 +18,7 @@
         :devices-by-site="devicesBySite"
         :cameras-by-site="camerasBySite"
         :filtered-items="filteredItems"
+        :folders-tree="foldersTree"
         @close="showInventoryPanel = false"
         @update:activeCategory="activeCategory = $event"
         @update:searchQuery="searchQuery = $event"
@@ -45,6 +37,68 @@
 
     <!-- Legend -->
     <MapLegend :status-legend="statusLegend" />
+
+    <!-- Context Menu (botão direito) -->
+    <MapContextMenu
+      :visible="ctxMenu.visible"
+      :x="ctxMenu.x"
+      :y="ctxMenu.y"
+      :map-name="mapData.name"
+      :map-category="mapData.category"
+      :maintenance-active="maintenanceMode"
+      :is-fullscreen="isFullscreen"
+      @action="onCtxMenuAction"
+      @close="ctxMenu.visible = false"
+    />
+
+    <!-- Painel de resultado da Área de Manutenção (Fase 5.2) -->
+    <MaintenanceAreaPanel
+      :visible="maintenanceMode"
+      :vertex-count="maintenanceVertices.length"
+      :affected-cables="affectedCables"
+      :affected-devices="affectedDevices"
+      @close="exitMaintenanceMode"
+      @clear="clearMaintenanceArea"
+      @export-csv="exportMaintenanceCSV"
+      @notify="showNotifyModal = true"
+    />
+
+    <!-- Modal de notificação de área de manutenção -->
+    <MaintenanceNotifyModal
+      :visible="showNotifyModal"
+      :cables="affectedCables"
+      :devices="affectedDevices"
+      @close="showNotifyModal = false"
+      @sent="onNotifySent"
+    />
+
+    <!-- In-app alert badge de notificação enviada -->
+    <transition name="toast-slide">
+      <div v-if="notifyBadge.visible" class="notify-sent-badge">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <span>{{ notifyBadge.message }}</span>
+        <button class="nsb-close" @click="notifyBadge.visible = false">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    </transition>
+
+    <!-- Status badge — live Zabbix polling indicator (Fase 5.1) -->
+    <div class="status-poll-badge" :class="{ 'status-poll-badge--stale': !lastStatusUpdate }">
+      <span class="spb-dot" :class="`spb-dot--${statusSummary.offline > 0 ? 'warning' : 'ok'}`"></span>
+      <span class="spb-counts">
+        <span class="spb-online">{{ statusSummary.online }} online</span>
+        <template v-if="statusSummary.offline > 0">
+          · <span class="spb-offline">{{ statusSummary.offline }} offline</span>
+        </template>
+      </span>
+      <span v-if="lastUpdateLabel" class="spb-time">· {{ lastUpdateLabel }}</span>
+      <span v-else class="spb-time">· aguardando…</span>
+    </div>
 
     <!-- Site Details Modal -->
     <SiteDetailsModal 
@@ -76,6 +130,24 @@
       :cable-data="hoveredCable"
       :position="tooltipPosition"
     />
+
+    <!-- Toast notification -->
+    <transition name="toast-slide">
+      <div v-if="toast.visible" :class="['map-toast', `map-toast--${toast.type}`]">
+        <span class="map-toast__icon">
+          <svg v-if="toast.type === 'success'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          <svg v-else-if="toast.type === 'error'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </span>
+        <span class="map-toast__msg">{{ toast.message }}</span>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -102,8 +174,10 @@ import FiberCableQuickModal from '@/components/FiberCableQuickModal.vue'
 import FiberCableDetailModal from '@/components/FiberCableDetailModal.vue'
 import CableOpticalTooltip from '@/components/CableOpticalTooltip.vue'
 import MapLegend from './components/MapLegend.vue'
-import MapToolbar from './components/MapToolbar.vue'
 import MapInventoryPanel from './components/MapInventoryPanel.vue'
+import MaintenanceAreaPanel from './components/MaintenanceAreaPanel.vue'
+import MapContextMenu from './components/MapContextMenu.vue'
+import MaintenanceNotifyModal from './components/MaintenanceNotifyModal.vue'
 
 // Variáveis para bibliotecas lazy loaded
 let mapboxgl = null
@@ -116,6 +190,37 @@ const { configForm, loadSystemConfig } = useSystemConfig()
 const uiStore = useUiStore()
 
 const mapContainer = ref(null)
+
+// ── Toast notifications ────────────────────────────────────────────────────
+const toast = ref({ visible: false, type: 'success', message: '' })
+let _toastTimer = null
+
+function showToast(message, type = 'success', duration = 3000) {
+  if (_toastTimer) clearTimeout(_toastTimer)
+  toast.value = { visible: true, type, message }
+  _toastTimer = setTimeout(() => { toast.value.visible = false }, duration)
+}
+
+// ── Maintenance notification modal ─────────────────────────────────────────
+const showNotifyModal = ref(false)
+const notifyBadge = ref({ visible: false, message: '' })
+let _badgeTimer = null
+
+function onNotifySent(result) {
+  showNotifyModal.value = false
+  if (result.ok) {
+    const total = result.total_sent || 0
+    const msg = total > 0
+      ? `${total} destinatário(s) notificado(s)`
+      : 'Notificação enviada'
+    if (_badgeTimer) clearTimeout(_badgeTimer)
+    notifyBadge.value = { visible: true, message: msg }
+    _badgeTimer = setTimeout(() => { notifyBadge.value.visible = false }, 8000)
+    showToast(msg)
+  } else {
+    showToast(result.error || 'Erro ao enviar notificação', 'error')
+  }
+}
 const googleMap = ref(null)
 const currentMapProvider = ref('google') // Armazena o provedor ativo
 const markerClusterer = ref(null) // Clusterer para agrupar markers próximos
@@ -147,12 +252,44 @@ const {
   isItemSelected,
   getSelectionCount
 } = useMapSelection()
-const { availableItems, sitesMap, loadInventoryItems: loadInventory } = useMapData()
+const { availableItems, sitesMap, foldersTree, loadInventoryItems: loadInventory } = useMapData()
 const showInventoryPanel = ref(false)
 const activeCategory = ref('devices')
 const searchQuery = ref('')
 const isFullscreen = ref(false)
-const isInitialLoad = ref(true) // Flag para controlar animação inicial
+const isInitialLoad = ref(true)
+
+// ── Context Menu (botão direito) ─────────────────────────────────────────────
+const ctxMenu = ref({ visible: false, x: 0, y: 0 })
+
+function onViewerContextMenu(e) {
+  ctxMenu.value = { visible: true, x: e.clientX, y: e.clientY }
+}
+
+function _hideCtxMenu() {
+  ctxMenu.value.visible = false
+}
+
+function onCtxMenuAction(action) {
+  _hideCtxMenu()
+  if (action === 'inventory') showInventoryPanel.value = !showInventoryPanel.value
+  else if (action === 'maintenance') toggleMaintenanceMode()
+  else if (action === 'fullscreen') toggleFullscreen()
+  else if (action === 'back') window.history.back()
+}
+
+function _globalKeydown(e) {
+  if (e.key !== 'Escape') return
+  _hideCtxMenu()
+  // Fecha em cascata: modal mais específico primeiro, tela cheia por último
+  if (showCableDetailModal.value)  { showCableDetailModal.value = false; return }
+  if (showCableModal.value)        { showCableModal.value = false; return }
+  if (showSiteModal.value)         { showSiteModal.value = false; return }
+  if (maintenanceMode.value)       { exitMaintenanceMode(); return }
+  if (showInventoryPanel.value)    { showInventoryPanel.value = false; return }
+  if (isFullscreen.value)          { toggleFullscreen(); return }
+}
+// ───────────────────────────────────────────────────────────────────────────── // Flag para controlar animação inicial
 
 let detachZoomListener = null
 
@@ -265,6 +402,94 @@ const showCableTooltip = ref(false)
 const hoveredCable = ref(null)
 const tooltipPosition = ref({ x: 0, y: 0 })
 let tooltipTimeout = null
+
+// ── Status polling (Fase 5.1) ──────────────────────────────────────────────
+const deviceStatusMap = ref(new Map()) // device_id (string) → 'online'|'offline'|'warning'|'unknown'
+const lastStatusUpdate = ref(null)     // Date | null
+let statusPollTimer = null
+const STATUS_POLL_INTERVAL = 30_000   // 30 segundos
+
+const STATUS_SEVERITY = { offline: 4, critical: 3, warning: 2, online: 1, unknown: 0 }
+
+const statusSummary = computed(() => {
+  const counts = { online: 0, warning: 0, critical: 0, offline: 0, unknown: 0 }
+  availableItems.value.devices.forEach(d => {
+    const k = d.status || 'unknown'
+    counts[k] = (counts[k] || 0) + 1
+  })
+  const total = availableItems.value.devices.length
+  return { ...counts, total }
+})
+
+const lastUpdateLabel = computed(() => {
+  if (!lastStatusUpdate.value) return null
+  const diffMs = Date.now() - lastStatusUpdate.value.getTime()
+  const secs = Math.round(diffMs / 1000)
+  if (secs < 60) return `${secs}s atrás`
+  return `${Math.round(secs / 60)}min atrás`
+})
+
+function _normalizeAvailability(avail) {
+  const s = String(avail ?? '0')
+  if (s === '1') return 'online'
+  if (s === '2') return 'offline'
+  return 'unknown'
+}
+
+function _deriveCableStatus(cable) {
+  const a = deviceStatusMap.value.get(String(cable.origin_device_id)) || 'unknown'
+  const b = deviceStatusMap.value.get(String(cable.destination_device_id)) || 'unknown'
+  if (a === 'unknown' && b === 'unknown') return cable.status
+  const sevA = STATUS_SEVERITY[a] ?? 0
+  const sevB = STATUS_SEVERITY[b] ?? 0
+  return sevA >= sevB ? a : b
+}
+
+async function fetchAndApplyDeviceStatuses() {
+  try {
+    const res = await fetch('/api/v1/monitoring/hosts/status/', { credentials: 'include' })
+    if (!res.ok) return
+    const data = await res.json()
+    const hosts = data.hosts_status || []
+
+    const newMap = new Map()
+    hosts.forEach(host => {
+      const status = _normalizeAvailability(host.available)
+      if (host.device_id) newMap.set(String(host.device_id), status)
+    })
+    deviceStatusMap.value = newMap
+    lastStatusUpdate.value = new Date()
+
+    // Atualizar status dos devices
+    availableItems.value.devices.forEach(device => {
+      const live = newMap.get(String(device.id))
+      if (live) device.status = live
+    })
+
+    // Atualizar status dos cabos derivado dos devices
+    availableItems.value.cables.forEach(cable => {
+      if (cable.origin_device_id || cable.destination_device_id) {
+        cable.status = _deriveCableStatus(cable)
+      }
+    })
+
+    updateMap()
+  } catch (err) {
+    console.warn('[CustomMapViewer] Erro no status poll:', err)
+  }
+}
+
+function startStatusPolling() {
+  fetchAndApplyDeviceStatuses()
+  statusPollTimer = setInterval(fetchAndApplyDeviceStatuses, STATUS_POLL_INTERVAL)
+}
+
+function stopStatusPolling() {
+  if (statusPollTimer) {
+    clearInterval(statusPollTimer)
+    statusPollTimer = null
+  }
+}
 
 const mapData = ref({
   id: null,
@@ -593,7 +818,13 @@ const focusOnItem = (item) => {
 
 const toggleFullscreen = () => {
   isFullscreen.value = !isFullscreen.value
-  document.querySelector('.custom-map-viewer').classList.toggle('fullscreen')
+  const el = document.querySelector('.custom-map-viewer')
+  if (isFullscreen.value) {
+    el.classList.add('fullscreen')
+  } else {
+    el.classList.remove('fullscreen')
+  }
+  // ResizeObserver detecta a mudança de tamanho automaticamente
 }
 
 const loadMapData = async () => {
@@ -737,7 +968,7 @@ const initMap = async () => {
     }
   } catch (error) {
     console.error('[CustomMapViewer] Erro ao inicializar mapa:', error)
-    alert('❌ Erro ao carregar o mapa:\n' + error.message + '\n\nVerifique o console para mais detalhes.')
+    showToast('Erro ao carregar o mapa: ' + error.message, 'error', 5000)
   }
 }
 
@@ -1086,7 +1317,6 @@ const createMapboxInstanceForStyle = ({ styleUrl, center, zoom }) => {
 
 const initMapboxMap = async () => {
   console.log('[CustomMapViewer] Iniciando Mapbox com lógica direta (sem proxy)...')
-  console.log('[CustomMapViewer] configForm completo:', JSON.stringify(configForm.value, null, 2))
   resetZoomListener()
 
   const mapboxToken = (configForm.value.MAPBOX_TOKEN || '').trim()
@@ -1251,7 +1481,7 @@ const saveMapItems = async () => {
   try {
     const mapId = route.params.mapId
     if (mapId === 'default') {
-      alert('Não é possível salvar alterações no mapa padrão')
+      showToast('Não é possível salvar o mapa padrão', 'warning')
       return
     }
     
@@ -1271,11 +1501,11 @@ const saveMapItems = async () => {
       throw new Error(`Erro ao salvar: ${response.status}`)
     }
     
-    alert('Itens salvos com sucesso!')
+    showToast('Itens salvos com sucesso!')
     console.log('[CustomMapViewer] Itens salvos com sucesso')
   } catch (error) {
     console.error('[CustomMapViewer] Erro ao salvar itens:', error)
-    alert('Erro ao salvar itens do mapa')
+    showToast('Erro ao salvar itens do mapa', 'error')
   }
 }
 
@@ -1309,8 +1539,268 @@ watch(
     console.log(`[CustomMapViewer] 🆕 Inicializando ${newProvider}...`)
     // Inicializar novo mapa
     await initMap()
+    _initResizeObserver()
   }
 )
+
+// ── Maintenance Area (Fase 5.2) ─────────────────────────────────────────────
+const maintenanceMode = ref(false)
+const maintenanceVertices = ref([]) // [{ lat, lng }, ...]
+const affectedCables = ref([])
+const affectedDevices = ref([])
+let _maintPolygon = null
+let _maintMapListeners = []
+let _resizeObserver = null
+
+// Observa mudanças no tamanho do container (nav toggle, fullscreen, etc.)
+// e notifica o provider de mapa para recalcular o canvas.
+function _initResizeObserver() {
+  if (!mapContainer.value || typeof ResizeObserver === 'undefined') return
+  if (_resizeObserver) { _resizeObserver.disconnect(); _resizeObserver = null }
+
+  _resizeObserver = new ResizeObserver(() => {
+    const map = googleMap.value
+    const provider = currentMapProvider.value
+    if (!map) return
+    try {
+      if (provider === 'mapbox' && typeof map.resize === 'function') {
+        map.resize()
+      } else if (provider === 'osm' && typeof map.invalidateSize === 'function') {
+        map.invalidateSize({ animate: false })
+      } else if (provider === 'google' && window.google?.maps) {
+        google.maps.event.trigger(map, 'resize')
+      }
+    } catch (e) { /* ignore */ }
+  })
+  _resizeObserver.observe(mapContainer.value)
+}
+
+function _pointInPolygon(point, polygon) {
+  const { lat: py, lng: px } = point
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].lng, yi = polygon[i].lat
+    const xj = polygon[j].lng, yj = polygon[j].lat
+    const intersect = ((yi > py) !== (yj > py)) && (px < ((xj - xi) * (py - yi)) / (yj - yi) + xi)
+    if (intersect) inside = !inside
+  }
+  return inside
+}
+
+function _runMaintenanceSpatialQuery() {
+  const poly = maintenanceVertices.value
+  if (poly.length < 3) return
+
+  affectedCables.value = availableItems.value.cables.filter(cable => {
+    if (!cable.path_coordinates?.length) return false
+    return cable.path_coordinates.some(coord => {
+      const lat = parseFloat(coord.lat ?? coord[1])
+      const lng = parseFloat(coord.lng ?? coord[0])
+      return !isNaN(lat) && !isNaN(lng) && _pointInPolygon({ lat, lng }, poly)
+    })
+  })
+
+  affectedDevices.value = availableItems.value.devices.filter(device => {
+    const lat = parseFloat(device.lat)
+    const lng = parseFloat(device.lng)
+    return !isNaN(lat) && !isNaN(lng) && _pointInPolygon({ lat, lng }, poly)
+  })
+}
+
+function _clearMaintPolygonOverlay() {
+  if (!_maintPolygon) return
+  const map = googleMap.value
+  const provider = currentMapProvider.value
+  try {
+    if (provider === 'google' && typeof _maintPolygon.setMap === 'function') {
+      _maintPolygon.setMap(null)
+    } else if (provider === 'mapbox' && map) {
+      // Remove both line and fill layers/sources
+      for (const id of ['__maint_fill', '__maint_line']) {
+        if (map.getLayer(id)) map.removeLayer(id)
+      }
+      for (const id of ['__maint_fill_src', '__maint_line_src']) {
+        if (map.getSource(id)) map.removeSource(id)
+      }
+    } else if (provider === 'osm' && typeof _maintPolygon.remove === 'function') {
+      _maintPolygon.remove()
+    }
+  } catch (e) { /* ignore */ }
+  _maintPolygon = null
+}
+
+function _drawMaintPolygon() {
+  const verts = maintenanceVertices.value
+  const map = googleMap.value
+  const provider = currentMapProvider.value
+  if (!map || verts.length < 2) return
+
+  if (provider === 'google') {
+    const paths = verts.map(v => ({ lat: v.lat, lng: v.lng }))
+    if (verts.length === 2) {
+      // Polyline para 2 pontos (Polygon com 2 vértices não renderiza bem)
+      if (_maintPolygon) { _maintPolygon.setMap(null); _maintPolygon = null }
+      _maintPolygon = new google.maps.Polyline({
+        path: paths, strokeColor: '#f59e0b', strokeOpacity: 0.9, strokeWeight: 2, map, clickable: false
+      })
+    } else {
+      if (_maintPolygon && typeof _maintPolygon.setPath === 'function') {
+        _maintPolygon.setPath(paths)
+      } else {
+        if (_maintPolygon) { _maintPolygon.setMap(null); _maintPolygon = null }
+        _maintPolygon = new google.maps.Polygon({
+          paths, strokeColor: '#f59e0b', strokeOpacity: 0.9, strokeWeight: 2,
+          fillColor: '#f59e0b', fillOpacity: 0.12, map, clickable: false
+        })
+      }
+    }
+  } else if (provider === 'mapbox') {
+    // LineString: mostra a linha de todos os vértices + fecha para o primeiro quando >= 3
+    const lineCoords = verts.map(v => [v.lng, v.lat])
+    if (verts.length >= 3) lineCoords.push([verts[0].lng, verts[0].lat])
+    const lineGeojson = { type: 'Feature', geometry: { type: 'LineString', coordinates: lineCoords } }
+
+    if (map.getSource('__maint_line_src')) {
+      map.getSource('__maint_line_src').setData(lineGeojson)
+    } else {
+      map.addSource('__maint_line_src', { type: 'geojson', data: lineGeojson })
+      map.addLayer({ id: '__maint_line', type: 'line', source: '__maint_line_src',
+        paint: { 'line-color': '#f59e0b', 'line-width': 2, 'line-opacity': 0.9 } })
+    }
+
+    // Fill só quando polígono tem 3+ vértices (GeoJSON Polygon precisa de ≥4 coords)
+    if (verts.length >= 3) {
+      const polyCoords = [...verts.map(v => [v.lng, v.lat]), [verts[0].lng, verts[0].lat]]
+      const fillGeojson = { type: 'Feature', geometry: { type: 'Polygon', coordinates: [polyCoords] } }
+      if (map.getSource('__maint_fill_src')) {
+        map.getSource('__maint_fill_src').setData(fillGeojson)
+      } else {
+        map.addSource('__maint_fill_src', { type: 'geojson', data: fillGeojson })
+        map.addLayer({ id: '__maint_fill', type: 'fill', source: '__maint_fill_src',
+          paint: { 'fill-color': '#f59e0b', 'fill-opacity': 0.12 } })
+      }
+    }
+    _maintPolygon = '__maint_line_src'
+  } else if (provider === 'osm') {
+    const latlngs = verts.map(v => [v.lat, v.lng])
+    if (verts.length === 2) {
+      if (_maintPolygon) { _maintPolygon.remove(); _maintPolygon = null }
+      _maintPolygon = L.polyline(latlngs, { color: '#f59e0b', weight: 2, opacity: 0.9 }).addTo(map)
+    } else {
+      if (_maintPolygon && typeof _maintPolygon.setLatLngs === 'function') {
+        _maintPolygon.setLatLngs(latlngs)
+      } else {
+        if (_maintPolygon) { _maintPolygon.remove(); _maintPolygon = null }
+        _maintPolygon = L.polygon(latlngs, { color: '#f59e0b', weight: 2, fillOpacity: 0.12 }).addTo(map)
+      }
+    }
+  }
+}
+
+function _setCursor(style) {
+  const map = googleMap.value
+  const provider = currentMapProvider.value
+  if (!map) return
+  try {
+    if (provider === 'google') map.setOptions({ draggableCursor: style || '' })
+    else if (provider === 'mapbox') map.getCanvas().style.cursor = style || ''
+    else if (provider === 'osm') map.getContainer().style.cursor = style || ''
+  } catch (e) { /* ignore */ }
+}
+
+function _attachMaintListeners() {
+  const map = googleMap.value
+  const provider = currentMapProvider.value
+  if (!map) return
+
+  if (provider === 'google') {
+    const listener = google.maps.event.addListener(map, 'click', e => {
+      _onMaintClick(e.latLng.lat(), e.latLng.lng())
+    })
+    _maintMapListeners.push(listener)
+  } else if (provider === 'mapbox') {
+    const handler = e => _onMaintClick(e.lngLat.lat, e.lngLat.lng)
+    map.on('click', handler)
+    _maintMapListeners.push({ type: 'mapbox', handler })
+  } else if (provider === 'osm') {
+    const handler = e => _onMaintClick(e.latlng.lat, e.latlng.lng)
+    map.on('click', handler)
+    _maintMapListeners.push({ type: 'osm', handler })
+  }
+}
+
+function _detachMaintListeners() {
+  const map = googleMap.value
+  const provider = currentMapProvider.value
+  _maintMapListeners.forEach(listener => {
+    try {
+      if (listener.type === 'mapbox' || listener.type === 'osm') {
+        if (map && typeof map.off === 'function') map.off('click', listener.handler)
+      } else if (provider === 'google') {
+        google.maps.event.removeListener(listener)
+      }
+    } catch (e) { /* ignore */ }
+  })
+  _maintMapListeners = []
+}
+
+function _onMaintClick(lat, lng) {
+  maintenanceVertices.value.push({ lat, lng })
+  _drawMaintPolygon()
+  if (maintenanceVertices.value.length >= 3) _runMaintenanceSpatialQuery()
+}
+
+function toggleMaintenanceMode() {
+  if (maintenanceMode.value) exitMaintenanceMode()
+  else enterMaintenanceMode()
+}
+
+function enterMaintenanceMode() {
+  maintenanceMode.value = true
+  maintenanceVertices.value = []
+  affectedCables.value = []
+  affectedDevices.value = []
+  _attachMaintListeners()
+  _setCursor('crosshair')
+}
+
+function exitMaintenanceMode() {
+  _detachMaintListeners()
+  _setCursor('')
+  _clearMaintPolygonOverlay()
+  maintenanceMode.value = false
+  maintenanceVertices.value = []
+  affectedCables.value = []
+  affectedDevices.value = []
+}
+
+function clearMaintenanceArea() {
+  _clearMaintPolygonOverlay()
+  maintenanceVertices.value = []
+  affectedCables.value = []
+  affectedDevices.value = []
+}
+
+function exportMaintenanceCSV() {
+  const rows = [['Tipo', 'Nome', 'Status', 'Site', 'Lat', 'Lng']]
+  affectedCables.value.forEach(cable => {
+    rows.push(['Cabo', cable.name || `Cabo #${cable.id}`, cable.status || '', '', '', ''])
+  })
+  affectedDevices.value.forEach(device => {
+    rows.push(['Equipamento', device.name, device.status || '', device.site_name || '', device.lat || '', device.lng || ''])
+  })
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `area_manutencao_${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Função para abrir detalhes completos do cabo
 const openCableFullDetails = (cable) => {
@@ -1332,6 +1822,8 @@ const handleCableSave = async (cable) => {
 
 onMounted(async () => {
   console.log('[CustomMapViewer] Componente montado, iniciando carregamento...')
+  document.addEventListener('click', _hideCtxMenu)
+  document.addEventListener('keydown', _globalKeydown)
   
   // 1. Carregar inventário primeiro
   await loadInventoryItems()
@@ -1376,8 +1868,14 @@ onMounted(async () => {
   
   // 4. Inicializar mapa (updateMap() será chamado automaticamente após concluir init)
   await initMap()
-  
-  // 5. Marcar que o carregamento inicial foi concluído
+
+  // 4b. Observar mudanças de tamanho do container (nav toggle, fullscreen)
+  _initResizeObserver()
+
+  // 5. Iniciar polling de status Zabbix (Fase 5.1)
+  startStatusPolling()
+
+  // 6. Marcar que o carregamento inicial foi concluído
   // Aguardar um pouco para garantir que a animação inicial aconteceu
   setTimeout(() => {
     isInitialLoad.value = false
@@ -1451,8 +1949,20 @@ onBeforeUnmount(() => {
     googleMap.value = null
   }
   
-  // 5. Remover event listener do window
+  // 5. Parar polling de status (Fase 5.1)
+  stopStatusPolling()
+
+  // 6. Limpar modo de manutenção (Fase 5.2)
+  if (maintenanceMode.value) {
+    _detachMaintListeners()
+    _clearMaintPolygonOverlay()
+  }
+
+  // 6. Remover event listeners e observers
   window.removeEventListener('google-maps-loaded', initMap)
+  document.removeEventListener('click', _hideCtxMenu)
+  document.removeEventListener('keydown', _globalKeydown)
+  if (_resizeObserver) { _resizeObserver.disconnect(); _resizeObserver = null }
   
   console.log('[CustomMapViewer] Recursos limpos')
 })
@@ -1496,6 +2006,43 @@ onBeforeUnmount(() => {
 
 .custom-map-viewer.fullscreen {
   z-index: 10000;
+  margin-left: 0 !important;
+  left: 0 !important;
+}
+
+/* ── Status poll badge (Fase 5.1) ── */
+.status-poll-badge {
+  position: absolute;
+  bottom: 80px;
+  left: 16px;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 0.75rem;
+  color: #cbd5e1;
+  pointer-events: none;
+}
+.spb-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: spb-pulse 2s ease-in-out infinite;
+}
+.spb-dot--ok      { background: #10b981; }
+.spb-dot--warning { background: #f59e0b; }
+.spb-online { color: #6ee7b7; font-weight: 600; }
+.spb-offline { color: #fca5a5; font-weight: 600; }
+.spb-time   { color: #64748b; }
+@keyframes spb-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
 }
 
 /* ==========================================
@@ -2118,6 +2665,8 @@ html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary:hover {
 
 .custom-map-viewer.fullscreen {
   z-index: 10000;
+  margin-left: 0 !important;
+  left: 0 !important;
 }
 
 /* ==========================================
@@ -2232,5 +2781,94 @@ html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary:hover {
 
 .mapboxgl-marker {
   z-index: 1000 !important;
+}
+
+/* ── Notify sent badge ───────────────────────────────────────────────────── */
+.notify-sent-badge {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9400;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 10px 12px;
+  background: rgba(10, 60, 40, 0.96);
+  border: 1px solid #10b981;
+  border-radius: 10px;
+  color: #ecfdf5;
+  font-size: 0.82rem;
+  font-weight: 600;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+  pointer-events: all;
+}
+.nsb-close {
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  padding: 0;
+  margin-left: 4px;
+  transition: color 0.15s;
+}
+.nsb-close:hover { color: #fff; }
+
+/* ── Toast notification ──────────────────────────────────────────────────── */
+.map-toast {
+  position: absolute;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 20px 11px 14px;
+  border-radius: 10px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.map-toast--success {
+  background: rgba(10, 60, 40, 0.96);
+  border: 1px solid #10b981;
+  color: #ecfdf5;
+}
+
+.map-toast--error {
+  background: rgba(80, 10, 10, 0.96);
+  border: 1px solid #ef4444;
+  color: #fff1f2;
+}
+
+.map-toast--warning {
+  background: rgba(70, 45, 0, 0.96);
+  border: 1px solid #f59e0b;
+  color: #fffbeb;
+}
+
+.map-toast__icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.toast-slide-enter-active,
+.toast-slide-leave-active {
+  transition: opacity 0.2s ease, transform 0.25s ease;
+}
+
+.toast-slide-enter-from,
+.toast-slide-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(10px);
 }
 </style>

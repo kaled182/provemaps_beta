@@ -196,12 +196,18 @@ class AlertTemplate(models.Model):
     CATEGORY_OPTICAL_LEVEL = 'optical_level'
     CATEGORY_DEVICE_AVAILABILITY = 'device_availability'
     CATEGORY_INTERFACE_SIGNAL = 'interface_signal'
+    CATEGORY_CABLE_BREAK = 'cable_break'
+    CATEGORY_CABLE_ATTENUATION = 'cable_attenuation'
+    CATEGORY_CABLE_NORMALIZATION = 'cable_normalization'
 
     CATEGORY_CHOICES = [
         (CATEGORY_GENERIC, 'Genérico'),
         (CATEGORY_OPTICAL_LEVEL, 'Nível óptico'),
         (CATEGORY_INTERFACE_SIGNAL, 'Sinal de interface'),
         (CATEGORY_DEVICE_AVAILABILITY, 'Disponibilidade de equipamento'),
+        (CATEGORY_CABLE_BREAK, 'Rompimento de cabo'),
+        (CATEGORY_CABLE_ATTENUATION, 'Atenuação de cabo'),
+        (CATEGORY_CABLE_NORMALIZATION, 'Normalização de serviço'),
     ]
 
     CHANNEL_SMS = 'sms'
@@ -350,6 +356,97 @@ class AlertTemplate(models.Model):
                 'key': 'acknowledged_by',
                 'label': 'Reconhecido por',
                 'description': 'Usuário que reconheceu o incidente, se aplicável.',
+            },
+        ],
+        CATEGORY_CABLE_BREAK: [
+            {
+                'key': 'cable_name',
+                'label': 'Nome do cabo',
+                'description': 'Identificação do enlace de fibra rompido.',
+            },
+            {
+                'key': 'site_a_name',
+                'label': 'Site A',
+                'description': 'Ponto de origem do enlace.',
+            },
+            {
+                'key': 'site_b_name',
+                'label': 'Site B',
+                'description': 'Ponto de destino do enlace.',
+            },
+            {
+                'key': 'incident_time',
+                'label': 'Horário do incidente',
+                'description': 'Timestamp em que o rompimento foi detectado.',
+            },
+            {
+                'key': 'cable_status',
+                'label': 'Status do cabo',
+                'description': 'Estado atual do enlace (Offline/Inativo).',
+            },
+        ],
+        CATEGORY_CABLE_ATTENUATION: [
+            {
+                'key': 'cable_name',
+                'label': 'Nome do cabo',
+                'description': 'Identificação do enlace com atenuação elevada.',
+            },
+            {
+                'key': 'site_a_name',
+                'label': 'Site A',
+                'description': 'Ponto de origem do enlace.',
+            },
+            {
+                'key': 'site_b_name',
+                'label': 'Site B',
+                'description': 'Ponto de destino do enlace.',
+            },
+            {
+                'key': 'signal_level',
+                'label': 'Nível óptico',
+                'description': 'Valor medido do sinal em dBm.',
+            },
+            {
+                'key': 'signal_threshold',
+                'label': 'Limite configurado',
+                'description': 'Threshold de alerta configurado.',
+            },
+            {
+                'key': 'alarm_level',
+                'label': 'Nível do alerta',
+                'description': 'Classificação do alerta (Atenção ou Crítico).',
+            },
+            {
+                'key': 'incident_time',
+                'label': 'Horário do incidente',
+                'description': 'Timestamp do evento de atenuação.',
+            },
+        ],
+        CATEGORY_CABLE_NORMALIZATION: [
+            {
+                'key': 'cable_name',
+                'label': 'Nome do cabo',
+                'description': 'Identificação do enlace que normalizou.',
+            },
+            {
+                'key': 'site_a_name',
+                'label': 'Site A',
+                'description': 'Ponto de origem do enlace.',
+            },
+            {
+                'key': 'site_b_name',
+                'label': 'Site B',
+                'description': 'Ponto de destino do enlace.',
+            },
+            {
+                'key': 'incident_time',
+                'label': 'Horário da normalização',
+                'description': 'Timestamp em que o serviço foi restabelecido.',
+            },
+            {
+                'key': 'downtime_minutes',
+                'label': 'Tempo indisponível (min)',
+                'description': 'Duração estimada da indisponibilidade em minutos.',
             },
         ],
     }

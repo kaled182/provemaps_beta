@@ -257,6 +257,20 @@ class DeviceSerializer(serializers.ModelSerializer[Device]):
     # Alerts como objeto (para compatibilidade com o frontend)
     alerts = serializers.SerializerMethodField()
 
+    # Campos opcionais que o frontend pode enviar como null → converte para ""
+    uptime_item_key = serializers.CharField(allow_null=True, allow_blank=True, required=False)
+    cpu_usage_item_key = serializers.CharField(allow_null=True, allow_blank=True, required=False)
+    memory_usage_item_key = serializers.CharField(allow_null=True, allow_blank=True, required=False)
+
+    def validate_uptime_item_key(self, value):
+        return value or ""
+
+    def validate_cpu_usage_item_key(self, value):
+        return value or ""
+
+    def validate_memory_usage_item_key(self, value):
+        return value or ""
+
     class Meta:
         model = Device
         fields = [
@@ -393,6 +407,36 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
     # Path coordinates (retrocompatibilidade - extrai de PostGIS path)
     path_coordinates = serializers.SerializerMethodField()
     
+    # Cable type classification
+    cable_type_id = serializers.IntegerField(source='cable_type.id', read_only=True, allow_null=True)
+    cable_type_name = serializers.CharField(source='cable_type.name', read_only=True, allow_null=True)
+
+    # Cable group (optical budget group)
+    cable_group_id = serializers.IntegerField(source='cable_group.id', read_only=True, allow_null=True)
+    cable_group_name = serializers.CharField(source='cable_group.name', read_only=True, allow_null=True)
+    cable_group_attenuation = serializers.FloatField(source='cable_group.attenuation_db_per_km', read_only=True, allow_null=True)
+    fiber_count = serializers.IntegerField(source='cable_group.fiber_count', read_only=True, allow_null=True)
+
+    # Folder classification
+    folder_id = serializers.IntegerField(source='folder.id', read_only=True, allow_null=True)
+    folder_name = serializers.CharField(source='folder.name', read_only=True, allow_null=True)
+
+    # Responsible (Responsible model entity)
+    responsible_id = serializers.IntegerField(source='responsible.id', read_only=True, allow_null=True)
+    responsible_name = serializers.CharField(source='responsible.name', read_only=True, allow_null=True)
+    responsible_email = serializers.CharField(source='responsible.email', read_only=True, allow_null=True)
+    responsible_phone = serializers.CharField(source='responsible.phone', read_only=True, allow_null=True)
+
+    # Responsible user (system User)
+    responsible_user_id = serializers.IntegerField(source='responsible_user.id', read_only=True, allow_null=True)
+    responsible_user_name = serializers.SerializerMethodField()
+
+    def get_responsible_user_name(self, obj: FiberCable) -> str | None:
+        if not obj.responsible_user_id:
+            return None
+        u = obj.responsible_user
+        return u.get_full_name() or u.username
+
     # Segments (when cable is split)
     segments = CableSegmentSerializer(many=True, read_only=True)
     
@@ -574,7 +618,25 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
             "infrastructure_points",
             # Segments
             "segments",
+            # Cable type & group
+            "cable_type_id",
+            "cable_type_name",
+            "cable_group_id",
+            "cable_group_name",
+            "cable_group_attenuation",
+            "fiber_count",
+            # Folder
+            "folder_id",
+            "folder_name",
+            # Responsibles
+            "responsible_id",
+            "responsible_name",
+            "responsible_email",
+            "responsible_phone",
+            "responsible_user_id",
+            "responsible_user_name",
             # Metadata
+            "notes",
             "length_km",
             "status",
             "last_status_update",

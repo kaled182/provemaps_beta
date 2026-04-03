@@ -1,26 +1,26 @@
 <template>
-  <div class="relative min-h-full bg-slate-950 text-slate-100 overflow-hidden">
+  <div class="health-page relative min-h-full overflow-hidden">
     <div class="metrics-bg absolute inset-0 opacity-70"></div>
     <div class="relative max-w-7xl mx-auto px-6 py-6 space-y-8">
       <!-- Header -->
       <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <div class="flex items-start gap-4">
-          <div class="h-12 w-12 rounded-2xl bg-emerald-500/10 text-emerald-300 flex items-center justify-center text-xl shadow-inner">
+          <div class="h-12 w-12 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-xl shadow-inner">
             ⚡
           </div>
           <div>
-            <h1 class="text-3xl font-semibold text-white">
+            <h1 class="text-3xl font-semibold health-title">
               Métricas do Sistema
             </h1>
-            <p class="mt-1 text-sm text-slate-400">
+            <p class="mt-1 text-sm health-muted">
               Monitoramento de alta disponibilidade, performance e saúde operacional.
             </p>
-            <div class="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-400">
-              <span class="inline-flex items-center gap-2 rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-1">
+            <div class="mt-4 flex flex-wrap items-center gap-3 text-xs health-muted">
+              <span class="health-badge inline-flex items-center gap-2 rounded-full px-3 py-1">
                 <span class="h-2 w-2 rounded-full" :class="allServicesHealthy ? 'bg-emerald-400' : 'bg-rose-400'"></span>
                 {{ allServicesHealthy ? 'Tudo operacional' : 'Atencao necessaria' }}
               </span>
-              <span class="inline-flex items-center gap-2 rounded-full border border-slate-700/60 bg-slate-900/70 px-3 py-1">
+              <span class="health-badge inline-flex items-center gap-2 rounded-full px-3 py-1">
                 Atualizado: {{ lastUpdate }}
               </span>
             </div>
@@ -28,38 +28,30 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-4">
-          <div class="rounded-2xl border border-slate-800/70 bg-slate-900/70 px-4 py-3 text-right">
-            <div class="text-xs uppercase tracking-wide text-slate-400">Hora local</div>
-            <div class="text-lg font-semibold text-white">{{ currentTime }}</div>
+          <div class="health-card-sm rounded-2xl px-4 py-3 text-right">
+            <div class="text-xs uppercase tracking-wide health-muted">Hora local</div>
+            <div class="text-lg font-semibold health-title">{{ currentTime }}</div>
           </div>
-          <label class="flex items-center gap-2 cursor-pointer text-sm text-slate-300">
+          <label class="flex items-center gap-2 cursor-pointer text-sm health-muted">
             <input
               v-model="autoRefresh"
               type="checkbox"
-              class="w-4 h-4 text-emerald-500 bg-slate-900 border-slate-700 rounded focus:ring-emerald-500"
+              class="w-4 h-4 text-emerald-500 rounded"
             />
             Auto-refresh (10s)
           </label>
-          <div class="flex gap-2 bg-slate-800/70 p-1 rounded-lg border border-slate-700/60">
+          <div class="health-toggle flex gap-2 p-1 rounded-lg">
             <button
               @click="viewMode = 'visual'"
-              :class="[
-                'px-4 py-2 rounded-md text-xs font-semibold transition-colors',
-                viewMode === 'visual'
-                  ? 'bg-slate-950 text-white shadow-sm'
-                  : 'text-slate-300 hover:text-white'
-              ]"
+              class="px-4 py-2 rounded-md text-xs font-semibold transition-colors"
+              :class="viewMode === 'visual' ? 'health-toggle-active' : 'health-toggle-inactive'"
             >
               📊 Visual
             </button>
             <button
               @click="viewMode = 'raw'"
-              :class="[
-                'px-4 py-2 rounded-md text-xs font-semibold transition-colors',
-                viewMode === 'raw'
-                  ? 'bg-slate-950 text-white shadow-sm'
-                  : 'text-slate-300 hover:text-white'
-              ]"
+              class="px-4 py-2 rounded-md text-xs font-semibold transition-colors"
+              :class="viewMode === 'raw' ? 'health-toggle-active' : 'health-toggle-inactive'"
             >
               📄 Raw Metrics
             </button>
@@ -70,87 +62,87 @@
       <!-- Visual Mode -->
       <div v-if="viewMode === 'visual'" class="space-y-8">
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div class="rounded-xl border border-slate-800/80 bg-slate-900/70 px-4 py-3 shadow-sm">
-            <p class="text-xs uppercase tracking-wide text-slate-400">Servicos</p>
-            <p class="mt-2 text-2xl font-semibold text-white">{{ serviceSummary.total }}</p>
-            <p class="text-xs text-slate-500">Total monitorados</p>
+          <div class="health-stat-card rounded-xl px-4 py-3 shadow-sm">
+            <p class="text-xs uppercase tracking-wide health-muted">Servicos</p>
+            <p class="mt-2 text-2xl font-semibold health-title">{{ serviceSummary.total }}</p>
+            <p class="text-xs health-dim">Total monitorados</p>
           </div>
           <div class="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 shadow-sm">
-            <p class="text-xs uppercase tracking-wide text-emerald-200">Online</p>
-            <p class="mt-2 text-2xl font-semibold text-emerald-100">{{ serviceSummary.online }}</p>
-            <p class="text-xs text-emerald-200/80">Operando normal</p>
+            <p class="text-xs uppercase tracking-wide text-emerald-600 dark:text-emerald-200">Online</p>
+            <p class="mt-2 text-2xl font-semibold text-emerald-700 dark:text-emerald-100">{{ serviceSummary.online }}</p>
+            <p class="text-xs text-emerald-600/80 dark:text-emerald-200/80">Operando normal</p>
           </div>
           <div class="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 shadow-sm">
-            <p class="text-xs uppercase tracking-wide text-rose-200">Offline</p>
-            <p class="mt-2 text-2xl font-semibold text-rose-100">{{ serviceSummary.offline }}</p>
-            <p class="text-xs text-rose-200/80">Requer acao</p>
+            <p class="text-xs uppercase tracking-wide text-rose-600 dark:text-rose-200">Offline</p>
+            <p class="mt-2 text-2xl font-semibold text-rose-700 dark:text-rose-100">{{ serviceSummary.offline }}</p>
+            <p class="text-xs text-rose-600/80 dark:text-rose-200/80">Requer acao</p>
           </div>
           <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 shadow-sm">
-            <p class="text-xs uppercase tracking-wide text-amber-200">Pendente</p>
-            <p class="mt-2 text-2xl font-semibold text-amber-100">{{ serviceSummary.pending }}</p>
-            <p class="text-xs text-amber-200/80">Nao configurado</p>
+            <p class="text-xs uppercase tracking-wide text-amber-600 dark:text-amber-200">Pendente</p>
+            <p class="mt-2 text-2xl font-semibold text-amber-700 dark:text-amber-100">{{ serviceSummary.pending }}</p>
+            <p class="text-xs text-amber-600/80 dark:text-amber-200/80">Nao configurado</p>
           </div>
         </div>
 
-        <div class="rounded-2xl border border-slate-800/70 bg-slate-900/60 p-6 shadow-sm">
+        <div class="health-section rounded-2xl p-6 shadow-sm">
           <div class="flex items-center justify-between">
             <div>
-              <h2 class="text-lg font-semibold text-white">Operational Overview</h2>
-              <p class="text-xs text-slate-400">Servicos centrais e configuracoes criticas.</p>
+              <h2 class="text-lg font-semibold health-title">Operational Overview</h2>
+              <p class="text-xs health-muted">Servicos centrais e configuracoes criticas.</p>
             </div>
-            <span class="text-xs text-slate-500">Status central</span>
+            <span class="text-xs health-dim">Status central</span>
           </div>
           <div class="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div class="rounded-xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <div class="health-inner-card rounded-xl p-4">
               <div class="flex items-center justify-between">
-                <span class="text-xs uppercase tracking-wide text-slate-400">Zabbix API</span>
-                <span class="text-slate-500">⚡</span>
+                <span class="text-xs uppercase tracking-wide health-muted">Zabbix API</span>
+                <span class="health-dim">⚡</span>
               </div>
-              <div class="mt-3 text-lg font-semibold text-white">
+              <div class="mt-3 text-lg font-semibold health-title">
                 {{ configStatus.zabbixApi ? 'Conectado' : 'Pendente' }}
               </div>
-              <div class="mt-1 text-xs text-slate-500 truncate">
+              <div class="mt-1 text-xs health-dim truncate">
                 {{ configStatus.zabbixApi || '--' }}
               </div>
             </div>
-            <div class="rounded-xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <div class="health-inner-card rounded-xl p-4">
               <div class="flex items-center justify-between">
-                <span class="text-xs uppercase tracking-wide text-slate-400">Banco de Dados</span>
-                <span class="text-slate-500">🗄️</span>
+                <span class="text-xs uppercase tracking-wide health-muted">Banco de Dados</span>
+                <span class="health-dim">🗄️</span>
               </div>
-              <div class="mt-3 text-lg font-semibold text-white">
+              <div class="mt-3 text-lg font-semibold health-title">
                 {{ configStatus.dbHost || 'localhost' }}
               </div>
-              <div class="mt-1 text-xs text-slate-500">PostgreSQL / PostGIS</div>
+              <div class="mt-1 text-xs health-dim">PostgreSQL / PostGIS</div>
             </div>
-            <div class="rounded-xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <div class="health-inner-card rounded-xl p-4">
               <div class="flex items-center justify-between">
-                <span class="text-xs uppercase tracking-wide text-slate-400">Mapas</span>
-                <span class="text-slate-500">🗺️</span>
+                <span class="text-xs uppercase tracking-wide health-muted">Mapas</span>
+                <span class="health-dim">🗺️</span>
               </div>
-              <div class="mt-3 text-lg font-semibold text-white uppercase">
+              <div class="mt-3 text-lg font-semibold health-title uppercase">
                 {{ configStatus.mapProvider || 'Google' }}
               </div>
-              <div class="mt-1 text-xs text-slate-500">Provedor ativo</div>
+              <div class="mt-1 text-xs health-dim">Provedor ativo</div>
             </div>
-            <div class="rounded-xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <div class="health-inner-card rounded-xl p-4">
               <div class="flex items-center justify-between">
-                <span class="text-xs uppercase tracking-wide text-slate-400">Snapshots</span>
-                <span class="text-slate-500">📦</span>
+                <span class="text-xs uppercase tracking-wide health-muted">Snapshots</span>
+                <span class="health-dim">📦</span>
               </div>
-              <div class="mt-3 text-lg font-semibold text-white">
+              <div class="mt-3 text-lg font-semibold health-title">
                 {{ configStatus.backupCount }}
               </div>
-              <div class="mt-1 text-xs text-slate-500">Arquivos salvos</div>
+              <div class="mt-1 text-xs health-dim">Arquivos salvos</div>
             </div>
           </div>
         </div>
 
         <div class="grid grid-cols-1 xl:grid-cols-[1fr_1.35fr] gap-6">
           <div class="space-y-4">
-            <div class="rounded-2xl border border-slate-800/70 bg-slate-900/60 p-5">
-              <h3 class="text-sm font-semibold text-white">Estado da Placa</h3>
-              <p class="text-xs text-slate-400">CPU, memoria e armazenamento.</p>
+            <div class="health-section rounded-2xl p-5">
+              <h3 class="text-sm font-semibold health-title">Estado da Placa</h3>
+              <p class="text-xs health-muted">CPU, memoria e armazenamento.</p>
               <div class="mt-4 space-y-3">
                 <SystemMetricsCard
                   title="CPU Usage"
@@ -177,9 +169,9 @@
                 />
               </div>
             </div>
-            <div class="rounded-2xl border border-slate-800/70 bg-slate-900/60 p-5">
-              <h3 class="text-sm font-semibold text-white">Latencia de Servicos</h3>
-              <p class="text-xs text-slate-400">Tempo de resposta das integracoes.</p>
+            <div class="health-section rounded-2xl p-5">
+              <h3 class="text-sm font-semibold health-title">Latencia de Servicos</h3>
+              <p class="text-xs health-muted">Tempo de resposta das integracoes.</p>
               <div class="mt-4 space-y-3">
                 <ResponseTimeBar
                   v-for="(service, key) in servicesWithResponseTime"
@@ -190,13 +182,13 @@
               </div>
             </div>
           </div>
-          <div class="rounded-2xl border border-slate-800/70 bg-slate-900/60 p-5">
+          <div class="health-section rounded-2xl p-5">
             <div class="flex items-center justify-between">
               <div>
-                <h3 class="text-sm font-semibold text-white">Status dos Servicos</h3>
-                <p class="text-xs text-slate-400">Camadas monitoradas em tempo real.</p>
+                <h3 class="text-sm font-semibold health-title">Status dos Servicos</h3>
+                <p class="text-xs health-muted">Camadas monitoradas em tempo real.</p>
               </div>
-              <span class="text-xs text-slate-500">Atualizado {{ lastUpdate }}</span>
+              <span class="text-xs health-dim">Atualizado {{ lastUpdate }}</span>
             </div>
             <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
               <ServiceStatusCard
@@ -211,13 +203,13 @@
       </div>
 
       <!-- Raw Metrics Mode -->
-      <div v-else class="rounded-2xl border border-slate-800/70 bg-slate-900/60 overflow-hidden">
-        <div class="border-b border-slate-800/70 bg-slate-950/60 px-6 py-4 flex items-center justify-between">
+      <div v-else class="health-section rounded-2xl overflow-hidden">
+        <div class="health-inner-card border-b px-6 py-4 flex items-center justify-between" style="border-radius: 0;">
           <div>
-            <h2 class="text-lg font-semibold text-white">
+            <h2 class="text-lg font-semibold health-title">
               Prometheus Metrics (Raw)
             </h2>
-            <p class="mt-1 text-sm text-slate-400">
+            <p class="mt-1 text-sm health-muted">
               Native Prometheus format metrics
             </p>
           </div>
@@ -236,7 +228,7 @@
           <div v-if="loadingRawMetrics" class="flex items-center justify-center py-12">
             <ph-spinner class="h-8 w-8 animate-spin text-blue-600" />
           </div>
-          <pre v-else class="bg-slate-950/60 p-4 rounded-lg overflow-x-auto text-xs font-mono text-slate-200 max-h-[600px] overflow-y-auto">{{ rawMetrics }}</pre>
+          <pre class="health-pre p-4 rounded-lg overflow-x-auto text-xs font-mono max-h-[600px] overflow-y-auto">{{ rawMetrics }}</pre>
         </div>
       </div>
 
@@ -376,10 +368,9 @@ const startAutoRefresh = () => {
     if (autoRefresh.value) {
       loadData();
     }
-  }, 10000); // 10 seconds
+  }, 10000);
 };
 
-// Watch for viewMode changes to load raw metrics when switching to raw mode
 watch(viewMode, (newMode) => {
   if (newMode === 'raw' && !rawMetrics.value) {
     fetchRawMetrics();
@@ -401,6 +392,67 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.health-page {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.health-title { color: var(--text-primary); }
+.health-muted { color: var(--text-tertiary); }
+.health-dim   { color: var(--text-disabled); }
+
+.health-badge {
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+}
+
+.health-card-sm {
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+}
+
+.health-section {
+  border: 1px solid var(--border-primary);
+  background: var(--surface-card);
+}
+
+.health-stat-card {
+  border: 1px solid var(--border-primary);
+  background: var(--surface-card);
+}
+
+.health-inner-card {
+  border: 1px solid var(--border-secondary);
+  background: var(--bg-secondary);
+}
+
+.health-toggle {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+}
+
+.health-toggle-active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.health-toggle-inactive {
+  background: transparent;
+  color: var(--text-tertiary);
+}
+
+.health-toggle-inactive:hover {
+  color: var(--text-primary);
+}
+
+.health-pre {
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-secondary);
+}
+
 .metrics-bg {
   background:
     radial-gradient(circle at top left, rgba(16, 185, 129, 0.08), transparent 45%),

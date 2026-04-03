@@ -135,12 +135,9 @@ export function useSystemConfig() {
       loading.value = true
       error.value = null
       
-      console.log('[useSystemConfig] Loading system config from API...')
       const res = await api.get('/setup_app/api/config/')
-      console.log('[useSystemConfig] API response:', res)
-      
+
       if (res.success && res.configuration) {
-        console.log('[useSystemConfig] Configuration received:', res.configuration)
         // Atualizar apenas os campos relevantes ao sistema
         const systemFields = [
           'SECRET_KEY', 'DEBUG', 'ALLOWED_HOSTS', 'ENABLE_DIAGNOSTIC_ENDPOINTS',
@@ -197,9 +194,8 @@ export function useSystemConfig() {
             configForm.value[field] = rawValue
           }
         })
-        console.log('[useSystemConfig] Config form updated:', configForm.value)
       } else {
-        console.warn('[useSystemConfig] Invalid response format:', res)
+        console.warn('[useSystemConfig] Invalid response format: unexpected structure')
       }
     } catch (e) {
       error.value = e.message || 'Erro ao carregar configurações'

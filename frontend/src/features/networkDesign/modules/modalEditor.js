@@ -125,15 +125,15 @@ async function validateCableNameField() {
     
     // Validate required
     if (!name) {
-        validationResults.name = { valid: false, message: 'Cable name is required' };
-        showFieldError(manualRouteNameInput, nameValidationFeedback, 'Cable name is required');
+        validationResults.name = { valid: false, message: 'Nome do cabo é obrigatório' };
+        showFieldError(manualRouteNameInput, nameValidationFeedback, 'Nome do cabo é obrigatório');
         return;
     }
-    
+
     // Validate minimum length
     if (name.length < 3) {
-        validationResults.name = { valid: false, message: 'Cable name must be at least 3 characters' };
-        showFieldError(manualRouteNameInput, nameValidationFeedback, 'Cable name must be at least 3 characters');
+        validationResults.name = { valid: false, message: 'Nome deve ter pelo menos 3 caracteres' };
+        showFieldError(manualRouteNameInput, nameValidationFeedback, 'Nome deve ter pelo menos 3 caracteres');
         return;
     }
     
@@ -183,7 +183,7 @@ async function validatePortField(portSelectElement, feedbackElement, validationK
         const result = await validatePort(portId, editingFiberId);
         
         if (!result.available) {
-            const message = `Port ${result.port_name} is already used by cable "${result.cable_name}"`;
+            const message = `Porta ${result.port_name} já está em uso pelo cabo "${result.cable_name}"`;
             validationResults[validationKey] = { valid: false, message };
             showFieldError(portSelectElement, feedback, message);
         } else {
@@ -350,30 +350,30 @@ export async function validateAllFields() {
     // Highlight missing required fields
     if (!manualRouteNameInput?.value) {
         showFieldError(
-            manualRouteNameInput, 
+            manualRouteNameInput,
             nameValidationFeedback || getOrCreateFeedback(manualRouteNameInput, nameValidationFeedback),
-            'Cable name is required'
+            'Nome do cabo é obrigatório'
         );
     }
-    
+
     if (!manualOriginDeviceSelect?.value) {
         const feedback = getOrCreateFeedback(manualOriginDeviceSelect, null);
-        showFieldError(manualOriginDeviceSelect, feedback, 'Origin device is required');
+        showFieldError(manualOriginDeviceSelect, feedback, 'Dispositivo origem é obrigatório');
     }
-    
+
     if (!manualOriginPortSelect?.value) {
         const feedback = getOrCreateFeedback(manualOriginPortSelect, originPortValidationFeedback);
-        showFieldError(manualOriginPortSelect, feedback, 'Origin port is required');
+        showFieldError(manualOriginPortSelect, feedback, 'Porta origem é obrigatória');
     }
-    
+
     if (!singlePort && !manualDestDeviceSelect?.value) {
         const feedback = getOrCreateFeedback(manualDestDeviceSelect, null);
-        showFieldError(manualDestDeviceSelect, feedback, 'Destination device is required');
+        showFieldError(manualDestDeviceSelect, feedback, 'Dispositivo destino é obrigatório');
     }
-    
+
     if (!singlePort && !manualDestPortSelect?.value) {
         const feedback = getOrCreateFeedback(manualDestPortSelect, destPortValidationFeedback);
-        showFieldError(manualDestPortSelect, feedback, 'Destination port is required');
+        showFieldError(manualDestPortSelect, feedback, 'Porta destino é obrigatória');
     }
     
     return nameValid && originDeviceValid && originPortValid && destValid;
@@ -437,6 +437,7 @@ export async function openModalForEdit(cableData, distanceKm) {
         return;
     }
 
+    clearValidationStates();
     editingFiberId = cableData.id;
 
     if (manualRouteNameInput) {
@@ -473,23 +474,16 @@ export async function openModalForEdit(cableData, distanceKm) {
         manualDestDeviceSelect.value = cableData.dest_device_id
             ? String(cableData.dest_device_id)
             : '';
-        await loadPortsForDestination();
-
-        if (manualDestPortSelect && cableData.dest_port_id) {
-            const ensureValueSet = () => {
-                const optionsCount = manualDestPortSelect.options.length;
-                if (optionsCount <= 1) {
-                    setTimeout(ensureValueSet, 100);
-                    return;
-                }
-                manualDestPortSelect.disabled = false;
-                manualDestPortSelect.value = String(cableData.dest_port_id);
-            };
-            setTimeout(ensureValueSet, 100);
-        }
     }
 
+    // syncDestinationDevice loads dest ports for non-single-port cables;
+    // set the dest port value immediately after it finishes (no polling timer).
     await syncDestinationDevice();
+
+    if (!isSinglePort && manualDestPortSelect && cableData.dest_port_id) {
+        manualDestPortSelect.disabled = false;
+        manualDestPortSelect.value = String(cableData.dest_port_id);
+    }
 
     if (manualRouteDistanceEl) {
         manualRouteDistanceEl.textContent = `${distanceKm.toFixed(3)} km`;
@@ -497,6 +491,9 @@ export async function openModalForEdit(cableData, distanceKm) {
 
     const submitButton = manualForm.querySelector('button[type="submit"]');
     if (submitButton) submitButton.textContent = 'Atualizar cabo';
+
+    const titleEl = document.getElementById('manualSaveModalTitle');
+    if (titleEl) titleEl.textContent = 'Editar dados do cabo';
 
     showModal();
 }

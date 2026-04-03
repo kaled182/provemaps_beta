@@ -41,6 +41,11 @@ ALLOWED_HOSTS = [
     if host.strip()
 ]
 
+# Telemetry — opt-out with TELEMETRY_ENABLED=false in .env
+# Set TELEMETRY_ENDPOINT to the URL where remote installations should send pings
+TELEMETRY_ENABLED = os.getenv("TELEMETRY_ENABLED", "true").lower() not in ("false", "0", "no")
+TELEMETRY_ENDPOINT = os.getenv("TELEMETRY_ENDPOINT", "")
+
 ZABBIX_API_URL = os.getenv("ZABBIX_API_URL", "")
 ZABBIX_API_USER = os.getenv("ZABBIX_API_USER", "")
 ZABBIX_API_PASSWORD = os.getenv("ZABBIX_API_PASSWORD", "")
@@ -250,6 +255,8 @@ INSTALLED_APPS = [
     "monitoring",
     "gpon",
     "dwdm",
+    # Telemetry — anonymous usage stats (opt-out via TELEMETRY_ENABLED=false)
+    "telemetry",
 ]
 
 try:  # Allow tests to run without native spatial libs (GDAL/GEOS)
