@@ -162,10 +162,50 @@ Desktop.ini
 node_modules/
 package-lock.json
 
-# Project-specific generated artifacts
+# Project-specific generated artifacts (post folder-structure refactor)
+backend/logs/
+backend/media/
+backend/staticfiles/
+backend/tmp/
+backend/__pycache__/
+backend/*.sqlite3
+backend/test_db.sqlite3
+backend/test_media/
 logs/
 staticfiles/
+database/*.sqlite3
+database/backups/
+database/runtime.env
 htmlcov/
 dist/
 celerybeat-schedule
 celerybeat.pid
+
+# Test databases and dumps (CRITICAL: Never commit these)
+test_db.sqlite3
+*.dump
+*.sql.gz
+database/backups/*.dump
+database/*.dump
+
+# Sensitive runtime config (CRITICAL: Never commit - use database/env only)
+database/runtime.env
+*.env
+!.env.example
+
+# Debug / temp test scripts (não commitar)
+debug_*.js
+debug_*.py
+test_*.js
+test_*.py
+RELATORIO_TESTES_*.md
+
+# Frontend test artifacts (Playwright/Vitest)
+frontend/playwright-report/
+frontend/test-results/
+frontend/.playwright/
+frontend/coverage/
+
+# Lock file for production setup (security)
+SETUP_LOCKED
+backend/SETUP_LOCKED

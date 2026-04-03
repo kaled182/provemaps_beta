@@ -1,0 +1,2874 @@
+<template>
+  <div class="custom-map-viewer" @contextmenu.prevent="onViewerContextMenu">
+    <!-- Main Content -->
+    <div class="map-content">
+      <!-- Mapa Google Maps -->
+      <div ref="mapContainer" class="map-container"></div>
+
+      <!-- Painel Lateral: Gerenciar Itens -->
+      <MapInventoryPanel
+        :is-visible="showInventoryPanel"
+        :active-category="activeCategory"
+        :search-query="searchQuery"
+        :categories="inventoryCategories"
+        :available-items="availableItems"
+        :selected-items="selectedItems"
+        :expanded-sites="expandedSites"
+        :expanded-camera-sites="expandedCameraSites"
+        :devices-by-site="devicesBySite"
+        :cameras-by-site="camerasBySite"
+        :filtered-items="filteredItems"
+        :folders-tree="foldersTree"
+        @close="showInventoryPanel = false"
+        @update:activeCategory="activeCategory = $event"
+        @update:searchQuery="searchQuery = $event"
+        @toggle-site-expansion="toggleSiteExpansion"
+        @toggle-camera-site-expansion="toggleCameraSiteExpansion"
+        @toggle-site="toggleSite"
+        @toggle-camera-site="toggleCameraSite"
+        @toggle-item="toggleItem"
+        @focus-item="focusOnItem"
+        @highlight-cable="highlightCable"
+        @unhighlight-cable="unhighlightCable"
+        @select-all="selectAll"
+        @save="saveMapItems"
+      />
+    </div>
+
+    <!-- Legend -->
+    <MapLegend :status-legend="statusLegend" />
+
+    <!-- Context Menu (botão direito) -->
+    <MapContextMenu
+      :visible="ctxMenu.visible"
+      :x="ctxMenu.x"
+      :y="ctxMenu.y"
+      :map-name="mapData.name"
+      :map-category="mapData.category"
+      :maintenance-active="maintenanceMode"
+      :is-fullscreen="isFullscreen"
+      @action="onCtxMenuAction"
+      @close="ctxMenu.visible = false"
+    />
+
+    <!-- Painel de resultado da Área de Manutenção (Fase 5.2) -->
+    <MaintenanceAreaPanel
+      :visible="maintenanceMode"
+      :vertex-count="maintenanceVertices.length"
+      :affected-cables="affectedCables"
+      :affected-devices="affectedDevices"
+      @close="exitMaintenanceMode"
+      @clear="clearMaintenanceArea"
+      @export-csv="exportMaintenanceCSV"
+      @notify="showNotifyModal = true"
+    />
+
+    <!-- Modal de notificação de área de manutenção -->
+    <MaintenanceNotifyModal
+      :visible="showNotifyModal"
+      :cables="affectedCables"
+      :devices="affectedDevices"
+      @close="showNotifyModal = false"
+      @sent="onNotifySent"
+    />
+
+    <!-- In-app alert badge de notificação enviada -->
+    <transition name="toast-slide">
+      <div v-if="notifyBadge.visible" class="notify-sent-badge">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <span>{{ notifyBadge.message }}</span>
+        <button class="nsb-close" @click="notifyBadge.visible = false">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    </transition>
+
+    <!-- Status badge — live Zabbix polling indicator (Fase 5.1) -->
+    <div class="status-poll-badge" :class="{ 'status-poll-badge--stale': !lastStatusUpdate }">
+      <span class="spb-dot" :class="`spb-dot--${statusSummary.offline > 0 ? 'warning' : 'ok'}`"></span>
+      <span class="spb-counts">
+        <span class="spb-online">{{ statusSummary.online }} online</span>
+        <template v-if="statusSummary.offline > 0">
+          · <span class="spb-offline">{{ statusSummary.offline }} offline</span>
+        </template>
+      </span>
+      <span v-if="lastUpdateLabel" class="spb-time">· {{ lastUpdateLabel }}</span>
+      <span v-else class="spb-time">· aguardando…</span>
+    </div>
+
+    <!-- Site Details Modal -->
+    <SiteDetailsModal 
+      :is-open="showSiteModal" 
+      :site="selectedSite"
+      @close="showSiteModal = false"
+    />
+
+    <!-- Fiber Cable Quick Modal -->
+    <FiberCableQuickModal
+      :show="showCableModal"
+      :cable="selectedCable"
+      @close="showCableModal = false"
+      @openFullDetails="openCableFullDetails"
+    />
+
+    <!-- Fiber Cable Detail Modal -->
+    <FiberCableDetailModal
+      :show="showCableDetailModal"
+      :cable="selectedCable"
+      :can-edit="true"
+      @close="showCableDetailModal = false"
+      @save="handleCableSave"
+    />
+
+    <!-- Cable Optical Tooltip -->
+    <CableOpticalTooltip
+      :visible="showCableTooltip"
+      :cable-data="hoveredCable"
+      :position="tooltipPosition"
+    />
+
+    <!-- Toast notification -->
+    <transition name="toast-slide">
+      <div v-if="toast.visible" :class="['map-toast', `map-toast--${toast.type}`]">
+        <span class="map-toast__icon">
+          <svg v-if="toast.type === 'success'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          <svg v-else-if="toast.type === 'error'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </span>
+        <span class="map-toast__msg">{{ toast.message }}</span>
+      </div>
+    </transition>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
+import { useApi } from '@/composables/useApi'
+import { useSystemConfig } from '@/composables/useSystemConfig'
+import { loadGoogleMaps } from '@/utils/googleMapsLoader'
+import { getMapStyles } from '@/utils/mapStyles'
+import { useUiStore } from '@/stores/ui'
+// ✅ LAZY LOADING: Bibliotecas de mapas carregadas sob demanda
+import { loadMapbox } from '@/composables/map/providers/useMapbox'
+import { loadLeaflet } from '@/composables/map/providers/useLeaflet'
+import { loadMarkerClusterer } from '@/composables/map/providers/useMarkerClusterer'
+// ✅ FASE 3: Composables de lógica de negócio
+import { useMapMarkers } from '@/composables/map/core/useMapMarkers'
+import { useMapPolylines } from '@/composables/map/core/useMapPolylines'
+import { useMapSelection } from '@/composables/map/core/useMapSelection'
+import { useMapData } from '@/composables/map/core/useMapData'
+import { runMapboxStyleDiagnostics, MAPBOX_STYLE_DIAGNOSTICS_DEFAULTS } from '@/utils/mapboxDiagnostics'
+import SiteDetailsModal from '@/components/SiteDetailsModal.vue'
+import FiberCableQuickModal from '@/components/FiberCableQuickModal.vue'
+import FiberCableDetailModal from '@/components/FiberCableDetailModal.vue'
+import CableOpticalTooltip from '@/components/CableOpticalTooltip.vue'
+import MapLegend from './components/MapLegend.vue'
+import MapInventoryPanel from './components/MapInventoryPanel.vue'
+import MaintenanceAreaPanel from './components/MaintenanceAreaPanel.vue'
+import MapContextMenu from './components/MapContextMenu.vue'
+import MaintenanceNotifyModal from './components/MaintenanceNotifyModal.vue'
+
+// Variáveis para bibliotecas lazy loaded
+let mapboxgl = null
+let L = null
+let MarkerClusterer = null
+
+const route = useRoute()
+const { get, post } = useApi()
+const { configForm, loadSystemConfig } = useSystemConfig()
+const uiStore = useUiStore()
+
+const mapContainer = ref(null)
+
+// ── Toast notifications ────────────────────────────────────────────────────
+const toast = ref({ visible: false, type: 'success', message: '' })
+let _toastTimer = null
+
+function showToast(message, type = 'success', duration = 3000) {
+  if (_toastTimer) clearTimeout(_toastTimer)
+  toast.value = { visible: true, type, message }
+  _toastTimer = setTimeout(() => { toast.value.visible = false }, duration)
+}
+
+// ── Maintenance notification modal ─────────────────────────────────────────
+const showNotifyModal = ref(false)
+const notifyBadge = ref({ visible: false, message: '' })
+let _badgeTimer = null
+
+function onNotifySent(result) {
+  showNotifyModal.value = false
+  if (result.ok) {
+    const total = result.total_sent || 0
+    const msg = total > 0
+      ? `${total} destinatário(s) notificado(s)`
+      : 'Notificação enviada'
+    if (_badgeTimer) clearTimeout(_badgeTimer)
+    notifyBadge.value = { visible: true, message: msg }
+    _badgeTimer = setTimeout(() => { notifyBadge.value.visible = false }, 8000)
+    showToast(msg)
+  } else {
+    showToast(result.error || 'Erro ao enviar notificação', 'error')
+  }
+}
+const googleMap = ref(null)
+const currentMapProvider = ref('google') // Armazena o provedor ativo
+const markerClusterer = ref(null) // Clusterer para agrupar markers próximos
+
+// ✅ FASE 3: Usar composables para lógica de negócio
+const { activeMarkers, createMarker, updateMapMarkers, getMarkerIcon, clearAllMarkers, addMarkerListener, clearMarkerListeners } = useMapMarkers()
+const { activePolylines, createPolyline, updateCablePolylines, highlightCable: highlightCablePolyline, unhighlightCable: unhighlightCablePolyline, clearAllPolylines, addPolylineListener, clearPolylineListeners } = useMapPolylines()
+const { 
+  selectedItems, 
+  expandedSites, 
+  expandedCameraSites, 
+  selectedSites, 
+  selectedCameraSites,
+  toggleSiteExpansion,
+  isSiteExpanded,
+  toggleSite: toggleSiteSelection,
+  isSiteSelected,
+  isSitePartiallySelected,
+  getSiteStatusSummary,
+  toggleCameraSiteExpansion,
+  isCameraSiteExpanded,
+  toggleCameraSite: toggleCameraSiteSelection,
+  isCameraSiteSelected,
+  isCameraSitePartiallySelected,
+  getCameraSiteStatusSummary,
+  toggleItem: toggleItemSelection,
+  selectAll: selectAllItems,
+  clearAllSelections,
+  isItemSelected,
+  getSelectionCount
+} = useMapSelection()
+const { availableItems, sitesMap, foldersTree, loadInventoryItems: loadInventory } = useMapData()
+const showInventoryPanel = ref(false)
+const activeCategory = ref('devices')
+const searchQuery = ref('')
+const isFullscreen = ref(false)
+const isInitialLoad = ref(true)
+
+// ── Context Menu (botão direito) ─────────────────────────────────────────────
+const ctxMenu = ref({ visible: false, x: 0, y: 0 })
+
+function onViewerContextMenu(e) {
+  ctxMenu.value = { visible: true, x: e.clientX, y: e.clientY }
+}
+
+function _hideCtxMenu() {
+  ctxMenu.value.visible = false
+}
+
+function onCtxMenuAction(action) {
+  _hideCtxMenu()
+  if (action === 'inventory') showInventoryPanel.value = !showInventoryPanel.value
+  else if (action === 'maintenance') toggleMaintenanceMode()
+  else if (action === 'fullscreen') toggleFullscreen()
+  else if (action === 'back') window.history.back()
+}
+
+function _globalKeydown(e) {
+  if (e.key !== 'Escape') return
+  _hideCtxMenu()
+  // Fecha em cascata: modal mais específico primeiro, tela cheia por último
+  if (showCableDetailModal.value)  { showCableDetailModal.value = false; return }
+  if (showCableModal.value)        { showCableModal.value = false; return }
+  if (showSiteModal.value)         { showSiteModal.value = false; return }
+  if (maintenanceMode.value)       { exitMaintenanceMode(); return }
+  if (showInventoryPanel.value)    { showInventoryPanel.value = false; return }
+  if (isFullscreen.value)          { toggleFullscreen(); return }
+}
+// ───────────────────────────────────────────────────────────────────────────── // Flag para controlar animação inicial
+
+let detachZoomListener = null
+
+const DEFAULT_ZOOM_FALLBACK = 12
+const MAPBOX_MARKER_SIZE_RULES = {
+  minZoom: 5,
+  maxZoom: 16,
+  minSize: 10,
+  maxSize: 18,
+  minBorder: 2,
+  maxBorder: 3
+}
+
+const clampNumber = (value, min, max) => Math.min(max, Math.max(min, value))
+
+const getActiveMapZoom = () => {
+  if (!googleMap.value || typeof googleMap.value.getZoom !== 'function') {
+    return DEFAULT_ZOOM_FALLBACK
+  }
+  const zoom = googleMap.value.getZoom()
+  return Number.isFinite(zoom) ? zoom : DEFAULT_ZOOM_FALLBACK
+}
+
+const computeMapboxMarkerDimensions = (zoom) => {
+  const clampedZoom = clampNumber(
+    zoom,
+    MAPBOX_MARKER_SIZE_RULES.minZoom,
+    MAPBOX_MARKER_SIZE_RULES.maxZoom
+  )
+  const zoomSpan = Math.max(
+    1,
+    MAPBOX_MARKER_SIZE_RULES.maxZoom - MAPBOX_MARKER_SIZE_RULES.minZoom
+  )
+  const ratio = (clampedZoom - MAPBOX_MARKER_SIZE_RULES.minZoom) / zoomSpan
+  const size =
+    MAPBOX_MARKER_SIZE_RULES.minSize +
+    (MAPBOX_MARKER_SIZE_RULES.maxSize - MAPBOX_MARKER_SIZE_RULES.minSize) * ratio
+  const border =
+    MAPBOX_MARKER_SIZE_RULES.minBorder +
+    (MAPBOX_MARKER_SIZE_RULES.maxBorder - MAPBOX_MARKER_SIZE_RULES.minBorder) * ratio
+
+  return {
+    size: Math.round(size),
+    border: Math.max(1, Math.round(border))
+  }
+}
+
+const applyMapboxMarkerDimensions = (marker, zoom) => {
+  const element = typeof marker?.getElement === 'function' ? marker.getElement() : null
+  if (!element) {
+    return
+  }
+  const { size, border } = computeMapboxMarkerDimensions(zoom)
+  element.style.width = `${size}px`
+  element.style.height = `${size}px`
+  element.style.borderWidth = `${border}px`
+}
+
+const updateMapboxMarkerSizes = () => {
+  if (currentMapProvider.value !== 'mapbox' || activeMarkers.size === 0) {
+    return
+  }
+  const zoom = getActiveMapZoom()
+  activeMarkers.forEach((marker) => {
+    if (typeof marker?._applySize === 'function') {
+      marker._applySize(zoom)
+    } else {
+      applyMapboxMarkerDimensions(marker, zoom)
+    }
+  })
+}
+
+const resetZoomListener = () => {
+  if (typeof detachZoomListener === 'function') {
+    try {
+      detachZoomListener()
+    } catch (error) {
+      console.warn('[CustomMapViewer] Falha ao remover listener de zoom:', error)
+    }
+  }
+  detachZoomListener = null
+}
+
+const registerMapboxZoomListener = () => {
+  resetZoomListener()
+  if (!googleMap.value || typeof googleMap.value.on !== 'function') {
+    return
+  }
+  const mapInstance = googleMap.value
+  const handler = () => updateMapboxMarkerSizes()
+  mapInstance.on('zoom', handler)
+  detachZoomListener = () => {
+    if (mapInstance && typeof mapInstance.off === 'function') {
+      mapInstance.off('zoom', handler)
+    }
+  }
+}
+
+// Modal de detalhes do site
+const showSiteModal = ref(false)
+const selectedSite = ref(null)
+
+// Modal de detalhes do cabo
+const showCableModal = ref(false)
+const showCableDetailModal = ref(false)
+const selectedCable = ref(null)
+
+// Tooltip de níveis ópticos
+const showCableTooltip = ref(false)
+const hoveredCable = ref(null)
+const tooltipPosition = ref({ x: 0, y: 0 })
+let tooltipTimeout = null
+
+// ── Status polling (Fase 5.1) ──────────────────────────────────────────────
+const deviceStatusMap = ref(new Map()) // device_id (string) → 'online'|'offline'|'warning'|'unknown'
+const lastStatusUpdate = ref(null)     // Date | null
+let statusPollTimer = null
+const STATUS_POLL_INTERVAL = 30_000   // 30 segundos
+
+const STATUS_SEVERITY = { offline: 4, critical: 3, warning: 2, online: 1, unknown: 0 }
+
+const statusSummary = computed(() => {
+  const counts = { online: 0, warning: 0, critical: 0, offline: 0, unknown: 0 }
+  availableItems.value.devices.forEach(d => {
+    const k = d.status || 'unknown'
+    counts[k] = (counts[k] || 0) + 1
+  })
+  const total = availableItems.value.devices.length
+  return { ...counts, total }
+})
+
+const lastUpdateLabel = computed(() => {
+  if (!lastStatusUpdate.value) return null
+  const diffMs = Date.now() - lastStatusUpdate.value.getTime()
+  const secs = Math.round(diffMs / 1000)
+  if (secs < 60) return `${secs}s atrás`
+  return `${Math.round(secs / 60)}min atrás`
+})
+
+function _normalizeAvailability(avail) {
+  const s = String(avail ?? '0')
+  if (s === '1') return 'online'
+  if (s === '2') return 'offline'
+  return 'unknown'
+}
+
+function _deriveCableStatus(cable) {
+  const a = deviceStatusMap.value.get(String(cable.origin_device_id)) || 'unknown'
+  const b = deviceStatusMap.value.get(String(cable.destination_device_id)) || 'unknown'
+  if (a === 'unknown' && b === 'unknown') return cable.status
+  const sevA = STATUS_SEVERITY[a] ?? 0
+  const sevB = STATUS_SEVERITY[b] ?? 0
+  return sevA >= sevB ? a : b
+}
+
+async function fetchAndApplyDeviceStatuses() {
+  try {
+    const res = await fetch('/api/v1/monitoring/hosts/status/', { credentials: 'include' })
+    if (!res.ok) return
+    const data = await res.json()
+    const hosts = data.hosts_status || []
+
+    const newMap = new Map()
+    hosts.forEach(host => {
+      const status = _normalizeAvailability(host.available)
+      if (host.device_id) newMap.set(String(host.device_id), status)
+    })
+    deviceStatusMap.value = newMap
+    lastStatusUpdate.value = new Date()
+
+    // Atualizar status dos devices
+    availableItems.value.devices.forEach(device => {
+      const live = newMap.get(String(device.id))
+      if (live) device.status = live
+    })
+
+    // Atualizar status dos cabos derivado dos devices
+    availableItems.value.cables.forEach(cable => {
+      if (cable.origin_device_id || cable.destination_device_id) {
+        cable.status = _deriveCableStatus(cable)
+      }
+    })
+
+    updateMap()
+  } catch (err) {
+    console.warn('[CustomMapViewer] Erro no status poll:', err)
+  }
+}
+
+function startStatusPolling() {
+  fetchAndApplyDeviceStatuses()
+  statusPollTimer = setInterval(fetchAndApplyDeviceStatuses, STATUS_POLL_INTERVAL)
+}
+
+function stopStatusPolling() {
+  if (statusPollTimer) {
+    clearInterval(statusPollTimer)
+    statusPollTimer = null
+  }
+}
+
+const mapData = ref({
+  id: null,
+  name: 'Carregando...',
+  category: 'backbone',
+  description: ''
+})
+
+const inventoryCategories = [
+  { key: 'devices', label: 'Equipamentos', icon: 'fas fa-server' },
+  { key: 'cables', label: 'Cabos', icon: 'fas fa-network-wired' },
+  { key: 'cameras', label: 'Câmeras', icon: 'fas fa-video' },
+  { key: 'racks', label: 'Racks', icon: 'fas fa-database' }
+]
+
+const statusLegend = [
+  { key: 'online', label: 'Online' },
+  { key: 'warning', label: 'Atenção' },
+  { key: 'critical', label: 'Crítico' },
+  { key: 'offline', label: 'Offline' }
+]
+
+const filteredItems = computed(() => {
+  const items = availableItems.value[activeCategory.value] || []
+  if (!searchQuery.value) return items
+  
+  const query = searchQuery.value.toLowerCase()
+  return items.filter(item => 
+    item.name.toLowerCase().includes(query) ||
+    (item.description && item.description.toLowerCase().includes(query))
+  )
+})
+
+const devicesBySite = computed(() => {
+  if (activeCategory.value !== 'devices') return []
+  
+  const devices = filteredItems.value
+  const siteMap = new Map()
+  
+  devices.forEach(device => {
+    const siteKey = device.site_id
+    if (!siteMap.has(siteKey)) {
+      siteMap.set(siteKey, {
+        site_id: siteKey,
+        site_name: device.site_name,
+        devices: []
+      })
+    }
+    siteMap.get(siteKey).devices.push(device)
+  })
+  
+  return Array.from(siteMap.values()).sort((a, b) => 
+    a.site_name.localeCompare(b.site_name)
+  )
+})
+
+const camerasBySite = computed(() => {
+  if (activeCategory.value !== 'cameras') return []
+  
+  const cameras = filteredItems.value
+  const siteMap = new Map()
+  
+  cameras.forEach(camera => {
+    const siteName = camera.site_name || 'Sem Site'
+    if (!siteMap.has(siteName)) {
+      siteMap.set(siteName, {
+        site_name: siteName,
+        cameras: []
+      })
+    }
+    siteMap.get(siteName).cameras.push(camera)
+  })
+  
+  return Array.from(siteMap.values()).sort((a, b) => 
+    a.site_name.localeCompare(b.site_name)
+  )
+})
+
+const getSelectedCount = (category) => {
+  return selectedItems.value[category]?.length || 0
+}
+
+const getAvailableCount = (category) => {
+  return availableItems.value[category]?.length || 0
+}
+
+const getStatusLabel = (status) => {
+  // Garantir que status seja uma string
+  const statusStr = String(status || 'offline').toLowerCase()
+  
+  const labels = {
+    'online': 'ONLINE',
+    'warning': 'ATENÇÃO',
+    'critical': 'CRÍTICO',
+    'offline': 'OFFLINE',
+    'unknown': 'DESCONHECIDO',
+    '0': 'OFFLINE',
+    'null': 'OFFLINE',
+    'undefined': 'OFFLINE',
+    // Aliases para status de cabos
+    'up': 'ONLINE',
+    'down': 'OFFLINE',
+    'degraded': 'ATENÇÃO',
+    'operational': 'ONLINE',
+    'unavailable': 'OFFLINE'
+  }
+  
+  return labels[statusStr] || 'DESCONHECIDO'
+}
+
+const toggleSite = (siteId, devices) => {
+  toggleSiteSelection(siteId, devices)
+  updateMap()
+}
+
+// Funções específicas para câmeras
+const toggleCameraSite = (siteName, cameras) => {
+  toggleCameraSiteSelection(siteName, cameras)
+  updateMap()
+}
+
+// Ajusta o mapa para mostrar todos os itens visíveis (markers + polylines)
+const fitAllItemsBounds = () => {
+  const provider = currentMapProvider.value
+  const mapInstance = googleMap.value
+  if (!mapInstance) return
+
+  const points = []
+
+  // Coletar posições dos markers (devices)
+  activeMarkers.forEach(marker => {
+    if (provider === 'google') {
+      const pos = marker.getPosition()
+      if (pos) points.push({ lat: pos.lat(), lng: pos.lng() })
+    } else if (provider === 'mapbox') {
+      if (typeof marker.getLngLat === 'function') {
+        const lngLat = marker.getLngLat()
+        points.push({ lat: lngLat.lat, lng: lngLat.lng })
+      }
+    } else if (provider === 'osm') {
+      if (typeof marker.getLatLng === 'function') {
+        const latlng = marker.getLatLng()
+        points.push({ lat: latlng.lat, lng: latlng.lng })
+      }
+    }
+  })
+
+  // Coletar pontos dos cabos selecionados
+  const selectedCableIds = new Set(selectedItems.value.cables)
+  availableItems.value.cables
+    .filter(cable => selectedCableIds.has(cable.id) && cable.path_coordinates)
+    .forEach(cable => {
+      cable.path_coordinates.forEach(coord => {
+        const lat = parseFloat(coord.lat)
+        const lng = parseFloat(coord.lng)
+        if (!isNaN(lat) && !isNaN(lng)) points.push({ lat, lng })
+      })
+    })
+
+  if (points.length === 0) {
+    console.log('[fitAllItemsBounds] Nenhum ponto para ajustar bounds')
+    return
+  }
+
+  console.log(`[fitAllItemsBounds] Ajustando bounds para ${points.length} pontos (provider: ${provider})`)
+
+  if (provider === 'google') {
+    const bounds = new google.maps.LatLngBounds()
+    points.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }))
+    mapInstance.fitBounds(bounds)
+    if (points.length === 1) {
+      const listener = google.maps.event.addListener(mapInstance, 'idle', () => {
+        if (mapInstance.getZoom() > 15) mapInstance.setZoom(15)
+        google.maps.event.removeListener(listener)
+      })
+    }
+  } else if (provider === 'mapbox') {
+    if (window.mapboxgl) {
+      const bounds = new window.mapboxgl.LngLatBounds()
+      points.forEach(p => bounds.extend([p.lng, p.lat]))
+      if (!bounds.isEmpty()) {
+        mapInstance.fitBounds(bounds, { padding: 80, maxZoom: 15 })
+      }
+    }
+  } else if (provider === 'osm') {
+    const latlngs = points.map(p => [p.lat, p.lng])
+    mapInstance.fitBounds(latlngs, { padding: [50, 50] })
+  }
+}
+
+// Função unificada para atualizar todo o mapa (markers + polylines)
+const updateMap = (animateItemId = null) => {
+  if (!googleMap.value) return
+
+  const wasInitialLoad = isInitialLoad.value
+
+  // Atualizar markers usando composable (sem auto-fit — faremos depois com todos os itens)
+  updateMapMarkers({
+    mapInstance: googleMap.value,
+    provider: currentMapProvider.value,
+    selectedDeviceIds: selectedItems.value.devices,
+    availableDevices: availableItems.value.devices,
+    sitesMap: sitesMap.value,
+    isInitialLoad: isInitialLoad.value,
+    animateItemId: animateItemId,
+    getMarkerIcon: getMarkerIcon,
+    onMarkerClick: handleDeviceClick,
+    updateMapboxMarkerSizes: updateMapboxMarkerSizes,
+    getActiveMapZoom: getActiveMapZoom,
+    applyMapboxMarkerDimensions: applyMapboxMarkerDimensions,
+    skipAutoFit: true
+  })
+
+  // Marcar que não é mais carregamento inicial
+  if (isInitialLoad.value) {
+    isInitialLoad.value = false
+  }
+
+  // Atualizar polylines usando composable
+  updateCablePolylines({
+    mapInstance: googleMap.value,
+    provider: currentMapProvider.value,
+    selectedCableIds: selectedItems.value.cables,
+    availableCables: availableItems.value.cables,
+    isDarkMode: uiStore.theme === 'dark',
+    onPolylineClick: handleCableClick,
+    onPolylineHover: handleCableHover,
+    onPolylineUnhover: handleCableUnhover
+  })
+
+  // Na carga inicial, ajustar bounds para mostrar TODOS os itens (markers + cabos)
+  if (wasInitialLoad) {
+    fitAllItemsBounds()
+  }
+}
+
+const toggleItem = (itemId) => {
+  const category = activeCategory.value
+  const wasSelected = toggleItemSelection(itemId, category)
+  
+  // Se foi marcado e é device, animar
+  if (wasSelected && category === 'devices') {
+    updateMap(itemId)
+  } else {
+    updateMap()
+  }
+}
+
+const selectAll = () => {
+  const category = activeCategory.value
+  selectAllItems(category, availableItems.value[category])
+  updateMap()
+}
+
+// Função para limpar TODAS as overlays - versão otimizada com Maps
+const clearAllOverlays = () => {
+  // Limpar clusterer primeiro
+  if (markerClusterer.value) {
+    markerClusterer.value.clearMarkers()
+    markerClusterer.value = null
+  }
+  
+  // Limpar todos os markers
+  activeMarkers.forEach((marker, id) => {
+    try {
+      clearMarkerListeners(marker)
+      if (typeof marker.setMap === 'function') {
+        marker.setMap(null)
+      } else if (typeof marker.remove === 'function') {
+        marker.remove()
+      }
+    } catch (e) {
+      // Ignorar erros de limpeza
+    }
+  })
+  activeMarkers.clear()
+  
+  // Limpar todas as polylines
+  activePolylines.forEach((polyline, id) => {
+    try {
+      clearPolylineListeners(polyline)
+      if (typeof polyline.setMap === 'function') {
+        polyline.setMap(null)
+      } else if (currentMapProvider.value === 'mapbox') {
+        if (polyline.layerId && googleMap.value.getLayer(polyline.layerId)) {
+          googleMap.value.removeLayer(polyline.layerId)
+        }
+        if (polyline.sourceId && googleMap.value.getSource(polyline.sourceId)) {
+          googleMap.value.removeSource(polyline.sourceId)
+        }
+      } else if (currentMapProvider.value === 'osm' && typeof polyline.remove === 'function') {
+        polyline.remove()
+      }
+    } catch (e) {
+      // Ignorar erros de limpeza
+    }
+  })
+  activePolylines.clear()
+}
+
+const focusOnItem = (item) => {
+  if (!googleMap.value) return
+  
+  // Para devices e cameras que têm lat/lng diretamente
+  if (item.lat && item.lng) {
+    googleMap.value.setCenter({ lat: parseFloat(item.lat), lng: parseFloat(item.lng) })
+    googleMap.value.setZoom(15)
+    return
+  }
+  
+  // Para cabos que têm path_coordinates
+  if (item.path_coordinates && item.path_coordinates.length > 0) {
+    // Centralizar no ponto médio do cabo
+    const midIndex = Math.floor(item.path_coordinates.length / 2)
+    const midPoint = item.path_coordinates[midIndex]
+    
+    if (midPoint && midPoint.lat && midPoint.lng) {
+      googleMap.value.setCenter({ 
+        lat: parseFloat(midPoint.lat), 
+        lng: parseFloat(midPoint.lng) 
+      })
+      googleMap.value.setZoom(13) // Zoom menor para ver mais da rota
+    }
+  }
+}
+
+const toggleFullscreen = () => {
+  isFullscreen.value = !isFullscreen.value
+  const el = document.querySelector('.custom-map-viewer')
+  if (isFullscreen.value) {
+    el.classList.add('fullscreen')
+  } else {
+    el.classList.remove('fullscreen')
+  }
+  // ResizeObserver detecta a mudança de tamanho automaticamente
+}
+
+const loadMapData = async () => {
+  try {
+    const mapId = route.params.mapId
+    
+    if (mapId === 'default') {
+      // Mapa padrão: carregar tudo
+      mapData.value = {
+        id: 'default',
+        name: 'Mapa Completo',
+        category: route.params.category || 'backbone',
+        description: 'Visualização completa de todos os equipamentos'
+      }
+      console.log('[CustomMapViewer] Mapa padrão configurado')
+    } else {
+      // Carregar mapa customizado
+      const response = await fetch(`/api/v1/maps/custom/${mapId}/`, {
+        credentials: 'include'
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Erro ao carregar mapa: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      mapData.value = data.map
+      selectedItems.value = data.selected_items || selectedItems.value
+      console.log('[CustomMapViewer] Mapa customizado carregado:', mapData.value.name)
+    }
+  } catch (error) {
+    console.error('[CustomMapViewer] Erro ao carregar mapa:', error)
+    // Fallback para mapa padrão
+    mapData.value = {
+      id: 'default',
+      name: 'Mapa Completo',
+      category: route.params.category || 'backbone',
+      description: 'Visualização completa de todos os equipamentos'
+    }
+  }
+}
+
+const loadInventoryItems = async () => {
+  try {
+    await loadInventory()
+  } catch (error) {
+    console.error('[CustomMapViewer] Erro ao carregar inventário:', error)
+  }
+}
+
+const destroyCurrentMap = () => {
+  resetZoomListener()
+  clearAllMarkers(currentMapProvider.value, googleMap.value)
+  clearAllPolylines(currentMapProvider.value, googleMap.value)
+  
+  if (googleMap.value) {
+    if (currentMapProvider.value === 'mapbox' || currentMapProvider.value === 'osm') {
+      googleMap.value.remove()
+    }
+    googleMap.value = null
+  }
+  
+  if (mapContainer.value) {
+    mapContainer.value.innerHTML = ''
+  }
+}
+
+// Handlers para clicks em markers e polylines
+const handleDeviceClick = (device) => {
+  const site = sitesMap.value.get(String(device.site || device.site_id))
+  if (site) {
+    selectedSite.value = site
+    showSiteModal.value = true
+  }
+}
+
+const handleCableClick = (cable) => {
+  selectedCable.value = cable
+  showCableModal.value = true
+}
+
+// Handlers para hover em cabos (tooltip)
+const handleCableHover = (cable, event) => {
+  console.log('[CustomMapViewer] Cable hover detected:', cable.label, event)
+  
+  // Limpar timeout anterior se existir
+  if (tooltipTimeout) {
+    clearTimeout(tooltipTimeout)
+  }
+  
+  // Pequeno delay antes de mostrar tooltip
+  tooltipTimeout = setTimeout(() => {
+    hoveredCable.value = cable
+    tooltipPosition.value = {
+      x: event.clientX || event.pageX || event.point?.x || 0,
+      y: event.clientY || event.pageY || event.point?.y || 0
+    }
+    showCableTooltip.value = true
+    console.log('[CustomMapViewer] Tooltip shown at:', tooltipPosition.value)
+  }, 300) // 300ms de delay
+}
+
+const handleCableUnhover = () => {
+  console.log('[CustomMapViewer] Cable unhover detected')
+  if (tooltipTimeout) {
+    clearTimeout(tooltipTimeout)
+    tooltipTimeout = null
+  }
+  showCableTooltip.value = false
+  hoveredCable.value = null
+}
+
+const initMap = async () => {
+  if (!mapContainer.value) return
+  
+  try {
+    // Carregar configurações do sistema primeiro
+    console.log('[CustomMapViewer] Carregando configurações do sistema...')
+    await loadSystemConfig()
+    
+    // Verificar qual provedor de mapa está configurado
+    const mapProvider = configForm.value.MAP_PROVIDER || 'google'
+    console.log(`[CustomMapViewer] 🔄 Provedor de mapa selecionado: ${mapProvider}`)
+    
+    // 🔒 EXCLUSÃO MÚTUA: Destruir mapa anterior se mudou de provider
+    if (googleMap.value && currentMapProvider.value !== mapProvider) {
+      console.log(`[CustomMapViewer] ⚠️ Trocando de ${currentMapProvider.value} para ${mapProvider}`)
+      destroyCurrentMap()
+    }
+    
+    // Inicializar o provider selecionado (sem fallback)
+    if (mapProvider === 'google') {
+      await initGoogleMap()
+    } else if (mapProvider === 'mapbox') {
+      await initMapboxMap()
+    } else if (mapProvider === 'osm') {
+      await initOpenStreetMap()
+    } else {
+      console.error(`[CustomMapViewer] Provedor de mapa não suportado: ${mapProvider}`)
+      throw new Error(`Provedor de mapa '${mapProvider}' não suportado`)
+    }
+  } catch (error) {
+    console.error('[CustomMapViewer] Erro ao inicializar mapa:', error)
+    showToast('Erro ao carregar o mapa: ' + error.message, 'error', 5000)
+  }
+}
+
+const initGoogleMap = async () => {
+  // Carregar Google Maps API se necessário
+  console.log('[CustomMapViewer] Iniciando carregamento do Google Maps...')
+  await loadGoogleMaps()
+  
+  if (!window.google?.maps) {
+    throw new Error('Google Maps API não carregou corretamente')
+  }
+  resetZoomListener()
+  
+  currentMapProvider.value = 'google'
+  console.log('[CustomMapViewer] Google Maps API disponível, criando mapa...')
+  
+  // Obter configurações do banco de dados
+  const mapZoom = parseInt(configForm.value.MAP_DEFAULT_ZOOM) || 12
+  const mapLat = parseFloat(configForm.value.MAP_DEFAULT_LAT) || -15.7801
+  const mapLng = parseFloat(configForm.value.MAP_DEFAULT_LNG) || -47.9292
+  const mapType = configForm.value.MAP_TYPE || 'roadmap'
+  const mapTheme = configForm.value.MAP_THEME || 'light'
+  const enableStreetView = configForm.value.ENABLE_STREET_VIEW !== false
+  const enableTraffic = configForm.value.ENABLE_TRAFFIC === true
+  const enableFullscreen = configForm.value.ENABLE_FULLSCREEN !== false
+  
+  console.log('[CustomMapViewer] Configurações:', {
+    zoom: mapZoom,
+    center: { lat: mapLat, lng: mapLng },
+    type: mapType,
+    theme: mapTheme,
+    streetView: enableStreetView,
+    traffic: enableTraffic,
+    fullscreen: enableFullscreen
+  })
+    
+    // Determinar tema efetivo usando uiStore (tema do usuário) ao invés do sistema
+    const userTheme = uiStore.theme
+    const effectiveTheme = userTheme || 'dark'
+    const mapStyles = getMapStyles(effectiveTheme, effectiveTheme)
+    
+    console.log('[CustomMapViewer] Aplicando estilos:', {
+      userTheme,
+      effectiveTheme,
+      stylesCount: mapStyles.length,
+      firstStyle: mapStyles[0]
+    })
+    
+    googleMap.value = new google.maps.Map(mapContainer.value, {
+      center: { lat: mapLat, lng: mapLng },
+      zoom: mapZoom,
+      mapTypeId: mapType,  // terrain, roadmap, satellite, hybrid
+      styles: mapStyles,
+      mapTypeControl: true,
+      streetViewControl: enableStreetView,
+      fullscreenControl: enableFullscreen,
+      zoomControl: true,
+      // Opções adicionais para remover grid e otimizar renderização
+      disableDefaultUI: false,
+      clickableIcons: true,
+      backgroundColor: effectiveTheme === 'dark' ? '#242f3e' : '#F1F3F4',  // Azul noite (dark) / Cinza Cloud (light)
+      // Configurações de renderização para evitar artifacts/grid
+      gestureHandling: 'greedy',
+      tilt: 0,  // Vista 2D sem inclinação (evita artifacts 3D)
+      restriction: null,  // Sem restrição de área
+      minZoom: 3,
+      maxZoom: 20
+    })
+    
+    // Habilitar camada de tráfego se configurado
+    if (enableTraffic) {
+      const trafficLayer = new google.maps.TrafficLayer()
+      trafficLayer.setMap(googleMap.value)
+      console.log('[CustomMapViewer] Camada de tráfego ativada')
+    }
+    
+    console.log('[CustomMapViewer] Mapa criado com sucesso - Tipo:', googleMap.value.getMapTypeId())
+    console.log('[CustomMapViewer] Mapa zoom:', googleMap.value.getZoom())
+    console.log('[CustomMapViewer] Mapa center:', googleMap.value.getCenter().toString())
+    
+    // Watch para mudanças de tema do usuário (uiStore)
+    watch(
+      () => uiStore.theme,
+      (newTheme) => {
+        console.log('[CustomMapViewer] Tema do usuário alterado para:', newTheme)
+        if (googleMap.value) {
+          const newStyles = getMapStyles(newTheme, newTheme)
+          const newBgColor = newTheme === 'dark' ? '#242f3e' : '#F1F3F4'
+          googleMap.value.setOptions({
+            styles: newStyles,
+            backgroundColor: newBgColor
+          })
+          console.log('[CustomMapViewer] Estilos do mapa atualizados para:', newTheme)
+          
+          // Atualizar polylines com nova espessura baseada no tema
+          updateCablePolylines()
+        }
+      },
+      { immediate: false }
+    )
+    
+    // ✅ ATUALIZAR MAPA após inicialização completa do Google Maps
+    console.log('[CustomMapViewer] Google Maps pronto - aplicando seleção inicial')
+    updateMap()
+}
+
+const MAPBOX_STYLE_PRESETS = {
+  streets: 'mapbox://styles/mapbox/streets-v12',
+  'streets-v12': 'mapbox://styles/mapbox/streets-v12',
+  'street-v12': 'mapbox://styles/mapbox/streets-v12',
+  satellite: 'mapbox://styles/mapbox/satellite-v9',
+  'satellite-v9': 'mapbox://styles/mapbox/satellite-v9',
+  'satellite-streets': 'mapbox://styles/mapbox/satellite-streets-v12',
+  'satellite-streets-v12': 'mapbox://styles/mapbox/satellite-streets-v12',
+  outdoors: 'mapbox://styles/mapbox/outdoors-v12',
+  'outdoors-v12': 'mapbox://styles/mapbox/outdoors-v12',
+  terrain: 'mapbox://styles/mapbox/outdoors-v12',
+  light: 'mapbox://styles/mapbox/light-v11',
+  'light-v11': 'mapbox://styles/mapbox/light-v11',
+  dark: 'mapbox://styles/mapbox/dark-v11',
+  'dark-v11': 'mapbox://styles/mapbox/dark-v11',
+  navigation: 'mapbox://styles/mapbox/navigation-day-v1',
+  'navigation-day': 'mapbox://styles/mapbox/navigation-day-v1',
+  'navigation-day-v1': 'mapbox://styles/mapbox/navigation-day-v1',
+  'navigation-night': 'mapbox://styles/mapbox/navigation-night-v1',
+  'navigation-night-v1': 'mapbox://styles/mapbox/navigation-night-v1'
+}
+
+const mapboxDiagnosticsState = {
+  running: false
+}
+
+const resolveMapboxStyle = (rawStyle, sourceLabel) => {
+  const style = (rawStyle || '').trim()
+  if (!style) {
+    return ''
+  }
+
+  const lower = style.toLowerCase()
+
+  if (style.startsWith('mapbox://') || style.startsWith('http://') || style.startsWith('https://')) {
+    return style
+  }
+
+  if (MAPBOX_STYLE_PRESETS[lower]) {
+    console.log(`[CustomMapViewer] Normalizando estilo Mapbox (${sourceLabel}):`, style, '→', MAPBOX_STYLE_PRESETS[lower])
+    return MAPBOX_STYLE_PRESETS[lower]
+  }
+
+  console.warn(`[CustomMapViewer] Estilo Mapbox inválido (${sourceLabel}):`, style)
+  return ''
+}
+
+const buildStyleValidationUrl = (styleUrl, token) => {
+  if (!styleUrl) {
+    return null
+  }
+
+  if (styleUrl.startsWith('mapbox://styles/')) {
+    const stylePath = styleUrl.substring('mapbox://styles/'.length)
+    return `https://api.mapbox.com/styles/v1/${stylePath}?access_token=${token}`
+  }
+
+  if (styleUrl.startsWith('https://api.mapbox.com') || styleUrl.startsWith('http://api.mapbox.com')) {
+    try {
+      const url = new URL(styleUrl)
+      if (!url.searchParams.has('access_token')) {
+        url.searchParams.set('access_token', token)
+      }
+      return url.toString()
+    } catch (error) {
+      console.warn('[CustomMapViewer] URL de estilo Mapbox inválida:', styleUrl, error)
+      return null
+    }
+  }
+
+  // URLs externas não podem ser validadas com antecedência (CORS), assumir válidas
+  return null
+}
+
+const validateMapboxStyleReachability = async (styleUrl, token) => {
+  const validationUrl = buildStyleValidationUrl(styleUrl, token)
+  if (!validationUrl) {
+    console.log('[CustomMapViewer] Validação pulada (sem URL) para estilo:', styleUrl)
+    return true
+  }
+
+  try {
+    const response = await fetch(validationUrl, { method: 'GET', mode: 'cors' })
+    if (response.ok) {
+      console.log('[CustomMapViewer] Estilo disponível:', styleUrl)
+      return true
+    }
+
+    const status = response.status
+    let detail = ''
+    try {
+      const raw = await response.text()
+      detail = raw.slice(0, 140)
+    } catch (readError) {
+      detail = String(readError)
+    }
+    console.warn(`[CustomMapViewer] Estilo Mapbox indisponível (${status}) para ${styleUrl}:`, detail)
+    return false
+  } catch (error) {
+    console.error('[CustomMapViewer] Erro ao validar estilo Mapbox:', styleUrl, error)
+    return false
+  }
+}
+
+const buildMapboxStyleCandidates = () => {
+  const customStyle = resolveMapboxStyle(configForm.value.MAPBOX_CUSTOM_STYLE, 'custom')
+  const configuredStyle = resolveMapboxStyle(configForm.value.MAPBOX_STYLE, 'config')
+
+  const styles = Array.from(new Set([
+    customStyle,
+    configuredStyle,
+    'mapbox://styles/mapbox/streets-v12',
+    'mapbox://styles/mapbox/streets-v11',
+    'mapbox://styles/mapbox/outdoors-v12',
+    'mapbox://styles/mapbox/light-v11',
+    'mapbox://styles/mapbox/dark-v11',
+    'mapbox://styles/mapbox/satellite-streets-v12',
+    'mapbox://styles/mapbox/satellite-v9'
+  ].filter(Boolean)))
+
+  return {
+    styles,
+    customStyle,
+    configuredStyle
+  }
+}
+
+const runAutomaticMapboxDiagnostics = async ({ token, styles, center, zoom }) => {
+  if (mapboxDiagnosticsState.running) {
+    console.log('[CustomMapViewer] Diagnóstico Mapbox já em execução, ignorando chamada')
+    return null
+  }
+
+  mapboxDiagnosticsState.running = true
+  try {
+    const diagnosticStyles = styles?.length ? styles : MAPBOX_STYLE_DIAGNOSTICS_DEFAULTS
+    console.log('[CustomMapViewer] Iniciando diagnóstico automático Mapbox com estilos:', diagnosticStyles.map((s) => (typeof s === 'string' ? s : s.url)))
+    const results = await runMapboxStyleDiagnostics({
+      mapboxgl,
+      token,
+      styles: diagnosticStyles,
+      center,
+      zoom,
+      verbose: true
+    })
+    console.log('[CustomMapViewer] Diagnóstico Mapbox concluído:', results)
+    return results
+  } catch (diagnosticError) {
+    console.error('[CustomMapViewer] Falha ao executar diagnóstico Mapbox:', diagnosticError)
+    return null
+  } finally {
+    mapboxDiagnosticsState.running = false
+  }
+}
+
+const createMapboxInstanceForStyle = ({ styleUrl, center, zoom }) => {
+  const containerEl = mapContainer.value
+  if (!containerEl) {
+    throw new Error('Container do mapa não encontrado para inicializar o Mapbox')
+  }
+
+  // Garantir que o container esteja limpo para evitar avisos do Mapbox
+  if (containerEl.firstChild) {
+    containerEl.replaceChildren()
+  }
+
+  console.log(`[CustomMapViewer] Tentando carregar estilo Mapbox: ${styleUrl}`)
+
+  return new Promise((resolve, reject) => {
+    let settled = false
+
+    const map = new mapboxgl.Map({
+      container: containerEl,
+      style: styleUrl,
+      center,
+      zoom,
+      attributionControl: true,
+      cooperativeGestures: true,
+      pitch: 0,
+      bearing: 0
+    })
+
+    const settle = (error) => {
+      if (settled) {
+        return
+      }
+      settled = true
+
+      map.off('load', onLoad)
+      map.off('error', onError)
+      window.clearTimeout(timeoutId)
+
+      if (error) {
+        try {
+          map.remove()
+        } catch (removeError) {
+          console.warn('[CustomMapViewer] Falha ao remover instância Mapbox após erro:', removeError)
+        }
+
+        const normalized = error instanceof Error ? error : new Error(String(error))
+        normalized.mapboxStyle = styleUrl
+        reject(normalized)
+      } else {
+        resolve(map)
+      }
+    }
+
+    const onLoad = () => {
+      console.log(`[CustomMapViewer] ✅ Estilo Mapbox carregado: ${styleUrl}`)
+      settle()
+    }
+
+    const onError = (event) => {
+      const rawError = event?.error || event
+      let detailMessage = 'Erro desconhecido ao carregar Mapbox'
+
+      if (rawError) {
+        if (rawError instanceof Error) {
+          detailMessage = rawError.message
+        } else if (typeof rawError === 'string') {
+          detailMessage = rawError
+        } else if (typeof rawError?.message === 'string') {
+          detailMessage = rawError.message
+        }
+      }
+
+      console.error(`[CustomMapViewer] ❌ Mapbox erro (${styleUrl}):`, rawError)
+      settle(new Error(detailMessage))
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      console.warn(`[CustomMapViewer] ⏱️ Timeout ao carregar estilo Mapbox (${styleUrl})`)
+      settle(new Error('Timeout ao carregar Mapbox'))
+    }, 30000)
+
+    map.once('load', onLoad)
+    map.once('error', onError)
+  })
+}
+
+const initMapboxMap = async () => {
+  console.log('[CustomMapViewer] Iniciando Mapbox com lógica direta (sem proxy)...')
+  resetZoomListener()
+
+  const mapboxToken = (configForm.value.MAPBOX_TOKEN || '').trim()
+  if (!mapboxToken) {
+    console.error('[CustomMapViewer] Token do Mapbox não configurado')
+    console.error('[CustomMapViewer] Campos disponíveis em configForm:', Object.keys(configForm.value))
+    throw new Error('Token do Mapbox não configurado. Configure em Setup > Mapas.')
+  }
+
+  // ✅ LAZY LOADING: Carregar Mapbox apenas quando necessário
+  if (!mapboxgl) {
+    console.log('[CustomMapViewer] Carregando biblioteca Mapbox sob demanda...')
+    mapboxgl = await loadMapbox()
+    // Expor globalmente para uso pelos composables
+    if (mapboxgl && typeof window !== 'undefined') {
+      window.mapboxgl = mapboxgl
+    }
+  }
+
+  mapboxgl.accessToken = mapboxToken
+  console.log('[CustomMapViewer] mapboxgl.version:', mapboxgl.version)
+
+  let candidateStyles = []
+  let selectedStyle = ''
+  let mapZoom = parseInt(configForm.value.MAP_DEFAULT_ZOOM) || 12
+  let mapLat = parseFloat(configForm.value.MAP_DEFAULT_LAT) || -15.7801
+  let mapLng = parseFloat(configForm.value.MAP_DEFAULT_LNG) || -47.9292
+
+  try {
+    currentMapProvider.value = 'mapbox'
+
+    const { styles, customStyle, configuredStyle } = buildMapboxStyleCandidates()
+    candidateStyles = styles
+
+    if (candidateStyles.length === 0) {
+      candidateStyles.push('mapbox://styles/mapbox/streets-v12')
+    }
+
+    const styleErrors = []
+
+    for (const styleCandidate of candidateStyles) {
+      let reachable = true
+      try {
+        reachable = await validateMapboxStyleReachability(styleCandidate, mapboxToken)
+      } catch (validationError) {
+        reachable = false
+        console.warn('[CustomMapViewer] Validação do estilo Mapbox falhou (exceção):', styleCandidate, validationError)
+      }
+
+      if (!reachable) {
+        console.warn('[CustomMapViewer] Estilo reprovado na validação, pulando tentativa direta:', styleCandidate)
+        styleErrors.push({ style: styleCandidate, message: 'Validação falhou (HTTP ou CORS)' })
+        continue
+      }
+
+      try {
+        const mapInstance = await createMapboxInstanceForStyle({
+          styleUrl: styleCandidate,
+          center: [mapLng, mapLat],
+          zoom: mapZoom
+        })
+
+        googleMap.value = mapInstance
+        selectedStyle = styleCandidate
+        break
+      } catch (attemptError) {
+        console.warn('[CustomMapViewer] Falha ao aplicar estilo Mapbox:', styleCandidate, attemptError)
+        styleErrors.push({ style: styleCandidate, message: attemptError.message })
+      }
+    }
+
+    if (!googleMap.value) {
+      const aggregated = styleErrors.map((entry) => `${entry.style}: ${entry.message}`).join(' | ')
+      throw new Error(aggregated ? `Falha ao carregar estilos Mapbox. Detalhes: ${aggregated}` : 'Nenhum estilo Mapbox pôde ser carregado. Verifique o token e tente novamente.')
+    }
+
+    googleMap.value.addControl(new mapboxgl.NavigationControl(), 'top-right')
+    googleMap.value.addControl(new mapboxgl.ScaleControl({ unit: 'metric' }))
+
+    const preferredStyle = customStyle || configuredStyle
+    if (preferredStyle && preferredStyle !== selectedStyle) {
+      console.warn(`[CustomMapViewer] Estilo preferido (${preferredStyle}) indisponível. Aplicando fallback ${selectedStyle}`)
+    } else if (!preferredStyle) {
+      console.warn('[CustomMapViewer] Nenhum estilo Mapbox personalizado configurado. Utilizando fallback automático', selectedStyle)
+    }
+
+    console.log('[CustomMapViewer] Mapbox inicializado com sucesso!', {
+      style: selectedStyle,
+      zoom: mapZoom,
+      center: [mapLng, mapLat]
+    })
+
+    registerMapboxZoomListener()
+    updateMapboxMarkerSizes()
+    
+    console.log('[CustomMapViewer] 🎯 Mapbox inicializado')
+    console.log('[CustomMapViewer] Devices selecionados:', selectedItems.value.devices.length)
+    console.log('[CustomMapViewer] Cabos selecionados:', selectedItems.value.cables.length)
+    
+    // Aguardar 500ms para garantir que o mapa está completamente renderizado
+    setTimeout(() => {
+      console.log('[CustomMapViewer] 🚀 Renderizando overlays após delay...')
+      updateMap()
+    }, 500)
+  } catch (error) {
+    console.error('[CustomMapViewer] Erro detalhado ao inicializar Mapbox:')
+    console.error('  - Message:', error.message)
+    console.error('  - Stack:', error.stack)
+    console.error('  - Error object:', error)
+
+    // Executar diagnóstico expandido em caso de falha
+    runAutomaticMapboxDiagnostics({
+      token: mapboxToken,
+      styles: candidateStyles,
+      center: [mapLng, mapLat],
+      zoom: mapZoom
+    }).catch((diagnosticError) => {
+      console.error('[CustomMapViewer] Diagnóstico automático falhou:', diagnosticError)
+    })
+    throw error
+  }
+}
+
+const initOpenStreetMap = async () => {
+  console.log('[CustomMapViewer] Iniciando OpenStreetMap com Leaflet...')
+  
+  // ✅ LAZY LOADING: Carregar Leaflet apenas quando necessário
+  if (!L) {
+    console.log('[CustomMapViewer] Carregando biblioteca Leaflet sob demanda...')
+    L = await loadLeaflet()
+  }
+  
+  console.log('[CustomMapViewer] L disponível:', !!L)
+  console.log('[CustomMapViewer] L.version:', L.version)
+  
+  currentMapProvider.value = 'osm'
+  resetZoomListener()
+  
+  const mapZoom = parseInt(configForm.value.MAP_DEFAULT_ZOOM) || 12
+  const mapLat = parseFloat(configForm.value.MAP_DEFAULT_LAT) || -15.7801
+  const mapLng = parseFloat(configForm.value.MAP_DEFAULT_LNG) || -47.9292
+  
+  googleMap.value = L.map(mapContainer.value).setView([mapLat, mapLng], mapZoom)
+  
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(googleMap.value)
+  
+  console.log('[CustomMapViewer] OpenStreetMap inicializado com sucesso')
+  
+  // ✅ ATUALIZAR MAPA após inicialização completa do OSM
+  console.log('[CustomMapViewer] OSM pronto - aplicando seleção inicial')
+  updateMap()
+}
+
+// ==========================================
+// CAMADA DE ABSTRAÇÃO PARA MÚLTIPLOS PROVEDORES
+// ==========================================
+// ✅ FASE 3: Funções movidas para composables (useMapMarkers, useMapPolylines)
+
+const saveMapItems = async () => {
+  try {
+    const mapId = route.params.mapId
+    if (mapId === 'default') {
+      showToast('Não é possível salvar o mapa padrão', 'warning')
+      return
+    }
+    
+    const response = await fetch(`/api/v1/maps/custom/${mapId}/items/`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
+      },
+      body: JSON.stringify({
+        selected_items: selectedItems.value
+      })
+    })
+    
+    if (!response.ok) {
+      throw new Error(`Erro ao salvar: ${response.status}`)
+    }
+    
+    showToast('Itens salvos com sucesso!')
+    console.log('[CustomMapViewer] Itens salvos com sucesso')
+  } catch (error) {
+    console.error('[CustomMapViewer] Erro ao salvar itens:', error)
+    showToast('Erro ao salvar itens do mapa', 'error')
+  }
+}
+
+// Observar mudanças nos items selecionados e atualizar mapa
+watch(() => selectedItems.value.devices, () => {
+  if (!googleMap.value) return
+  console.log('[CustomMapViewer] Devices selecionados alterados → updateMap')
+  updateMap()
+}, { deep: true })
+
+watch(() => selectedItems.value.cables, () => {
+  if (!googleMap.value) return
+  console.log('[CustomMapViewer] Cabos selecionados alterados → updateMap')
+  updateMap()
+}, { deep: true })
+
+// 🔄 WATCHER: Detecta mudanças no provider e reinicializa o mapa (EXCLUSÃO MÚTUA)
+watch(
+  () => configForm.value.MAP_PROVIDER,
+  async (newProvider, oldProvider) => {
+    if (!mapContainer.value || !oldProvider) return // Ignora primeira inicialização
+    
+    console.log(`[CustomMapViewer] 🔄 Provider mudou: ${oldProvider} → ${newProvider}`)
+    console.log('[CustomMapViewer] 🗑️ Destruindo mapa anterior...')
+    
+    // Destruir mapa anterior
+    if (googleMap.value) {
+      destroyCurrentMap()
+    }
+    
+    console.log(`[CustomMapViewer] 🆕 Inicializando ${newProvider}...`)
+    // Inicializar novo mapa
+    await initMap()
+    _initResizeObserver()
+  }
+)
+
+// ── Maintenance Area (Fase 5.2) ─────────────────────────────────────────────
+const maintenanceMode = ref(false)
+const maintenanceVertices = ref([]) // [{ lat, lng }, ...]
+const affectedCables = ref([])
+const affectedDevices = ref([])
+let _maintPolygon = null
+let _maintMapListeners = []
+let _resizeObserver = null
+
+// Observa mudanças no tamanho do container (nav toggle, fullscreen, etc.)
+// e notifica o provider de mapa para recalcular o canvas.
+function _initResizeObserver() {
+  if (!mapContainer.value || typeof ResizeObserver === 'undefined') return
+  if (_resizeObserver) { _resizeObserver.disconnect(); _resizeObserver = null }
+
+  _resizeObserver = new ResizeObserver(() => {
+    const map = googleMap.value
+    const provider = currentMapProvider.value
+    if (!map) return
+    try {
+      if (provider === 'mapbox' && typeof map.resize === 'function') {
+        map.resize()
+      } else if (provider === 'osm' && typeof map.invalidateSize === 'function') {
+        map.invalidateSize({ animate: false })
+      } else if (provider === 'google' && window.google?.maps) {
+        google.maps.event.trigger(map, 'resize')
+      }
+    } catch (e) { /* ignore */ }
+  })
+  _resizeObserver.observe(mapContainer.value)
+}
+
+function _pointInPolygon(point, polygon) {
+  const { lat: py, lng: px } = point
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].lng, yi = polygon[i].lat
+    const xj = polygon[j].lng, yj = polygon[j].lat
+    const intersect = ((yi > py) !== (yj > py)) && (px < ((xj - xi) * (py - yi)) / (yj - yi) + xi)
+    if (intersect) inside = !inside
+  }
+  return inside
+}
+
+function _runMaintenanceSpatialQuery() {
+  const poly = maintenanceVertices.value
+  if (poly.length < 3) return
+
+  affectedCables.value = availableItems.value.cables.filter(cable => {
+    if (!cable.path_coordinates?.length) return false
+    return cable.path_coordinates.some(coord => {
+      const lat = parseFloat(coord.lat ?? coord[1])
+      const lng = parseFloat(coord.lng ?? coord[0])
+      return !isNaN(lat) && !isNaN(lng) && _pointInPolygon({ lat, lng }, poly)
+    })
+  })
+
+  affectedDevices.value = availableItems.value.devices.filter(device => {
+    const lat = parseFloat(device.lat)
+    const lng = parseFloat(device.lng)
+    return !isNaN(lat) && !isNaN(lng) && _pointInPolygon({ lat, lng }, poly)
+  })
+}
+
+function _clearMaintPolygonOverlay() {
+  if (!_maintPolygon) return
+  const map = googleMap.value
+  const provider = currentMapProvider.value
+  try {
+    if (provider === 'google' && typeof _maintPolygon.setMap === 'function') {
+      _maintPolygon.setMap(null)
+    } else if (provider === 'mapbox' && map) {
+      // Remove both line and fill layers/sources
+      for (const id of ['__maint_fill', '__maint_line']) {
+        if (map.getLayer(id)) map.removeLayer(id)
+      }
+      for (const id of ['__maint_fill_src', '__maint_line_src']) {
+        if (map.getSource(id)) map.removeSource(id)
+      }
+    } else if (provider === 'osm' && typeof _maintPolygon.remove === 'function') {
+      _maintPolygon.remove()
+    }
+  } catch (e) { /* ignore */ }
+  _maintPolygon = null
+}
+
+function _drawMaintPolygon() {
+  const verts = maintenanceVertices.value
+  const map = googleMap.value
+  const provider = currentMapProvider.value
+  if (!map || verts.length < 2) return
+
+  if (provider === 'google') {
+    const paths = verts.map(v => ({ lat: v.lat, lng: v.lng }))
+    if (verts.length === 2) {
+      // Polyline para 2 pontos (Polygon com 2 vértices não renderiza bem)
+      if (_maintPolygon) { _maintPolygon.setMap(null); _maintPolygon = null }
+      _maintPolygon = new google.maps.Polyline({
+        path: paths, strokeColor: '#f59e0b', strokeOpacity: 0.9, strokeWeight: 2, map, clickable: false
+      })
+    } else {
+      if (_maintPolygon && typeof _maintPolygon.setPath === 'function') {
+        _maintPolygon.setPath(paths)
+      } else {
+        if (_maintPolygon) { _maintPolygon.setMap(null); _maintPolygon = null }
+        _maintPolygon = new google.maps.Polygon({
+          paths, strokeColor: '#f59e0b', strokeOpacity: 0.9, strokeWeight: 2,
+          fillColor: '#f59e0b', fillOpacity: 0.12, map, clickable: false
+        })
+      }
+    }
+  } else if (provider === 'mapbox') {
+    // LineString: mostra a linha de todos os vértices + fecha para o primeiro quando >= 3
+    const lineCoords = verts.map(v => [v.lng, v.lat])
+    if (verts.length >= 3) lineCoords.push([verts[0].lng, verts[0].lat])
+    const lineGeojson = { type: 'Feature', geometry: { type: 'LineString', coordinates: lineCoords } }
+
+    if (map.getSource('__maint_line_src')) {
+      map.getSource('__maint_line_src').setData(lineGeojson)
+    } else {
+      map.addSource('__maint_line_src', { type: 'geojson', data: lineGeojson })
+      map.addLayer({ id: '__maint_line', type: 'line', source: '__maint_line_src',
+        paint: { 'line-color': '#f59e0b', 'line-width': 2, 'line-opacity': 0.9 } })
+    }
+
+    // Fill só quando polígono tem 3+ vértices (GeoJSON Polygon precisa de ≥4 coords)
+    if (verts.length >= 3) {
+      const polyCoords = [...verts.map(v => [v.lng, v.lat]), [verts[0].lng, verts[0].lat]]
+      const fillGeojson = { type: 'Feature', geometry: { type: 'Polygon', coordinates: [polyCoords] } }
+      if (map.getSource('__maint_fill_src')) {
+        map.getSource('__maint_fill_src').setData(fillGeojson)
+      } else {
+        map.addSource('__maint_fill_src', { type: 'geojson', data: fillGeojson })
+        map.addLayer({ id: '__maint_fill', type: 'fill', source: '__maint_fill_src',
+          paint: { 'fill-color': '#f59e0b', 'fill-opacity': 0.12 } })
+      }
+    }
+    _maintPolygon = '__maint_line_src'
+  } else if (provider === 'osm') {
+    const latlngs = verts.map(v => [v.lat, v.lng])
+    if (verts.length === 2) {
+      if (_maintPolygon) { _maintPolygon.remove(); _maintPolygon = null }
+      _maintPolygon = L.polyline(latlngs, { color: '#f59e0b', weight: 2, opacity: 0.9 }).addTo(map)
+    } else {
+      if (_maintPolygon && typeof _maintPolygon.setLatLngs === 'function') {
+        _maintPolygon.setLatLngs(latlngs)
+      } else {
+        if (_maintPolygon) { _maintPolygon.remove(); _maintPolygon = null }
+        _maintPolygon = L.polygon(latlngs, { color: '#f59e0b', weight: 2, fillOpacity: 0.12 }).addTo(map)
+      }
+    }
+  }
+}
+
+function _setCursor(style) {
+  const map = googleMap.value
+  const provider = currentMapProvider.value
+  if (!map) return
+  try {
+    if (provider === 'google') map.setOptions({ draggableCursor: style || '' })
+    else if (provider === 'mapbox') map.getCanvas().style.cursor = style || ''
+    else if (provider === 'osm') map.getContainer().style.cursor = style || ''
+  } catch (e) { /* ignore */ }
+}
+
+function _attachMaintListeners() {
+  const map = googleMap.value
+  const provider = currentMapProvider.value
+  if (!map) return
+
+  if (provider === 'google') {
+    const listener = google.maps.event.addListener(map, 'click', e => {
+      _onMaintClick(e.latLng.lat(), e.latLng.lng())
+    })
+    _maintMapListeners.push(listener)
+  } else if (provider === 'mapbox') {
+    const handler = e => _onMaintClick(e.lngLat.lat, e.lngLat.lng)
+    map.on('click', handler)
+    _maintMapListeners.push({ type: 'mapbox', handler })
+  } else if (provider === 'osm') {
+    const handler = e => _onMaintClick(e.latlng.lat, e.latlng.lng)
+    map.on('click', handler)
+    _maintMapListeners.push({ type: 'osm', handler })
+  }
+}
+
+function _detachMaintListeners() {
+  const map = googleMap.value
+  const provider = currentMapProvider.value
+  _maintMapListeners.forEach(listener => {
+    try {
+      if (listener.type === 'mapbox' || listener.type === 'osm') {
+        if (map && typeof map.off === 'function') map.off('click', listener.handler)
+      } else if (provider === 'google') {
+        google.maps.event.removeListener(listener)
+      }
+    } catch (e) { /* ignore */ }
+  })
+  _maintMapListeners = []
+}
+
+function _onMaintClick(lat, lng) {
+  maintenanceVertices.value.push({ lat, lng })
+  _drawMaintPolygon()
+  if (maintenanceVertices.value.length >= 3) _runMaintenanceSpatialQuery()
+}
+
+function toggleMaintenanceMode() {
+  if (maintenanceMode.value) exitMaintenanceMode()
+  else enterMaintenanceMode()
+}
+
+function enterMaintenanceMode() {
+  maintenanceMode.value = true
+  maintenanceVertices.value = []
+  affectedCables.value = []
+  affectedDevices.value = []
+  _attachMaintListeners()
+  _setCursor('crosshair')
+}
+
+function exitMaintenanceMode() {
+  _detachMaintListeners()
+  _setCursor('')
+  _clearMaintPolygonOverlay()
+  maintenanceMode.value = false
+  maintenanceVertices.value = []
+  affectedCables.value = []
+  affectedDevices.value = []
+}
+
+function clearMaintenanceArea() {
+  _clearMaintPolygonOverlay()
+  maintenanceVertices.value = []
+  affectedCables.value = []
+  affectedDevices.value = []
+}
+
+function exportMaintenanceCSV() {
+  const rows = [['Tipo', 'Nome', 'Status', 'Site', 'Lat', 'Lng']]
+  affectedCables.value.forEach(cable => {
+    rows.push(['Cabo', cable.name || `Cabo #${cable.id}`, cable.status || '', '', '', ''])
+  })
+  affectedDevices.value.forEach(device => {
+    rows.push(['Equipamento', device.name, device.status || '', device.site_name || '', device.lat || '', device.lng || ''])
+  })
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `area_manutencao_${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Função para abrir detalhes completos do cabo
+const openCableFullDetails = (cable) => {
+  console.log('[CustomMapViewer] Abrir detalhes completos do cabo:', cable.name)
+  showCableModal.value = false
+  selectedCable.value = cable
+  showCableDetailModal.value = true
+}
+
+// Função para salvar alterações do cabo
+const handleCableSave = async (cable) => {
+  console.log('[CustomMapViewer] Salvando cabo:', cable)
+  // TODO: Implementar salvamento no backend
+  showCableDetailModal.value = false
+  // Recarregar inventário para atualizar dados
+  await loadInventoryItems()
+  updateMap()
+}
+
+onMounted(async () => {
+  console.log('[CustomMapViewer] Componente montado, iniciando carregamento...')
+  document.addEventListener('click', _hideCtxMenu)
+  document.addEventListener('keydown', _globalKeydown)
+  
+  // 1. Carregar inventário primeiro
+  await loadInventoryItems()
+  
+  // 2. Carregar dados do mapa
+  await loadMapData()
+  
+  // 3. Se for mapa default, selecionar todos os items automaticamente
+  const mapId = route.params.mapId
+  if (mapId === 'default') {
+    if (availableItems.value.devices.length > 0) {
+      selectedItems.value.devices = availableItems.value.devices.map(d => d.id)
+      console.log(`[CustomMapViewer] Mapa default: ${selectedItems.value.devices.length} devices selecionados automaticamente`)
+    }
+    
+    if (availableItems.value.cables.length > 0) {
+      selectedItems.value.cables = availableItems.value.cables.map(c => c.id)
+      console.log(`[CustomMapViewer] Mapa default: ${selectedItems.value.cables.length} cabos selecionados automaticamente`)
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.__runMapboxStyleDiagnostics = async (overrideStyles) => {
+      const token = (configForm.value.MAPBOX_TOKEN || '').trim()
+      const lat = parseFloat(configForm.value.MAP_DEFAULT_LAT) || -15.7801
+      const lng = parseFloat(configForm.value.MAP_DEFAULT_LNG) || -47.9292
+      const zoom = parseInt(configForm.value.MAP_DEFAULT_ZOOM) || 12
+      const candidateSet = buildMapboxStyleCandidates()
+      const styles = overrideStyles && overrideStyles.length ? overrideStyles : candidateSet.styles
+
+      console.log('[CustomMapViewer] Executando diagnóstico manual de estilos Mapbox...', { styles, lat, lng, zoom, candidateSet })
+      const results = await runAutomaticMapboxDiagnostics({
+        token,
+        styles,
+        center: [lng, lat],
+        zoom
+      })
+      console.log('[CustomMapViewer] Resultado diagnóstico manual:', results)
+      return results
+    }
+  }
+  
+  // 4. Inicializar mapa (updateMap() será chamado automaticamente após concluir init)
+  await initMap()
+
+  // 4b. Observar mudanças de tamanho do container (nav toggle, fullscreen)
+  _initResizeObserver()
+
+  // 5. Iniciar polling de status Zabbix (Fase 5.1)
+  startStatusPolling()
+
+  // 6. Marcar que o carregamento inicial foi concluído
+  // Aguardar um pouco para garantir que a animação inicial aconteceu
+  setTimeout(() => {
+    isInitialLoad.value = false
+    console.log('[CustomMapViewer] Carregamento inicial concluído - animações desativadas')
+  }, 2000)
+  
+  console.log('[CustomMapViewer] ✓ onMounted completo')
+})
+
+onBeforeUnmount(() => {
+  console.log('[CustomMapViewer] Limpando recursos antes de desmontar')
+  
+  // 1. Limpar MarkerClusterer
+  if (markerClusterer.value) {
+    markerClusterer.value.clearMarkers()
+    if (typeof markerClusterer.value.setMap === 'function') {
+      markerClusterer.value.setMap(null)
+    }
+    markerClusterer.value = null
+  }
+  
+  // 2. Limpar todos os markers do Map
+  activeMarkers.forEach((marker) => {
+    try {
+      clearMarkerListeners(marker)
+    } catch (error) {
+      console.warn('[CustomMapViewer] Falha ao limpar listeners do marker ao desmontar:', error)
+    }
+
+    if (typeof marker.setMap === 'function') {
+      marker.setMap(null)
+    } else if (typeof marker.remove === 'function') {
+      marker.remove()
+    }
+  })
+  activeMarkers.clear()
+  
+  // 3. Limpar todas as polylines do Map
+  activePolylines.forEach((polyline) => {
+    try {
+      clearPolylineListeners(polyline)
+    } catch (error) {
+      console.warn('[CustomMapViewer] Falha ao limpar listeners da polyline ao desmontar:', error)
+    }
+
+    if (typeof polyline.setMap === 'function') {
+      polyline.setMap(null)
+    } else if (currentMapProvider.value === 'mapbox') {
+      if (polyline.layerId && googleMap.value?.getLayer(polyline.layerId)) {
+        googleMap.value.removeLayer(polyline.layerId)
+      }
+      if (polyline.sourceId && googleMap.value?.getSource(polyline.sourceId)) {
+        googleMap.value.removeSource(polyline.sourceId)
+      }
+    } else if (currentMapProvider.value === 'osm' && typeof polyline.remove === 'function') {
+      polyline.remove()
+    }
+  })
+  activePolylines.clear()
+  
+  // 4. Limpar listeners do mapa
+  if (googleMap.value) {
+    if (currentMapProvider.value === 'mapbox' && typeof googleMap.value.remove === 'function') {
+      googleMap.value.remove()
+    } else if (currentMapProvider.value === 'osm' && typeof googleMap.value.remove === 'function') {
+      googleMap.value.remove()
+    }
+    if (currentMapProvider.value === 'google') {
+      google.maps.event.clearInstanceListeners(googleMap.value)
+    }
+    googleMap.value = null
+  }
+  
+  // 5. Parar polling de status (Fase 5.1)
+  stopStatusPolling()
+
+  // 6. Limpar modo de manutenção (Fase 5.2)
+  if (maintenanceMode.value) {
+    _detachMaintListeners()
+    _clearMaintPolygonOverlay()
+  }
+
+  // 6. Remover event listeners e observers
+  window.removeEventListener('google-maps-loaded', initMap)
+  document.removeEventListener('click', _hideCtxMenu)
+  document.removeEventListener('keydown', _globalKeydown)
+  if (_resizeObserver) { _resizeObserver.disconnect(); _resizeObserver = null }
+  
+  console.log('[CustomMapViewer] Recursos limpos')
+})
+</script>
+
+<style scoped>
+.custom-map-viewer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  /* Ajustar margem baseado no estado do menu */
+  margin-left: var(--nav-menu-width, 72px);
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;
+}
+
+/* Quando o menu está expandido */
+:root[data-nav-menu-open="true"] .custom-map-viewer {
+  margin-left: 280px;
+}
+
+/* Quando o menu está colapsado */
+:root[data-nav-menu-open="false"] .custom-map-viewer {
+  margin-left: 72px;
+}
+
+.map-content {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.map-container {
+  width: 100%;
+  height: 100%;
+}
+
+.custom-map-viewer.fullscreen {
+  z-index: 10000;
+  margin-left: 0 !important;
+  left: 0 !important;
+}
+
+/* ── Status poll badge (Fase 5.1) ── */
+.status-poll-badge {
+  position: absolute;
+  bottom: 80px;
+  left: 16px;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 0.75rem;
+  color: #cbd5e1;
+  pointer-events: none;
+}
+.spb-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: spb-pulse 2s ease-in-out infinite;
+}
+.spb-dot--ok      { background: #10b981; }
+.spb-dot--warning { background: #f59e0b; }
+.spb-online { color: #6ee7b7; font-weight: 600; }
+.spb-offline { color: #fca5a5; font-weight: 600; }
+.spb-time   { color: #64748b; }
+@keyframes spb-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+/* ==========================================
+   LIGHT THEME OVERRIDES
+   ========================================== */
+:root[data-theme="light"] .custom-map-viewer,
+html:not(.dark)[data-theme="light"] .custom-map-viewer {
+  background: var(--bg-primary);
+}
+
+:root[data-theme="light"] .inventory-panel,
+html:not(.dark)[data-theme="light"] .inventory-panel {
+  background: rgba(255, 255, 255, 0.95);
+  border-left: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="light"] .panel-header h3,
+html:not(.dark)[data-theme="light"] .panel-header h3 {
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .btn-close-panel,
+html:not(.dark)[data-theme="light"] .btn-close-panel {
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .panel-header,
+html:not(.dark)[data-theme="light"] .panel-header,
+:root[data-theme="light"] .panel-tabs,
+html:not(.dark)[data-theme="light"] .panel-tabs {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="light"] .tab-btn,
+html:not(.dark)[data-theme="light"] .tab-btn {
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .search-box input,
+html:not(.dark)[data-theme="light"] .search-box input {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .search-box i,
+html:not(.dark)[data-theme="light"] .search-box i {
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .site-row,
+html:not(.dark)[data-theme="light"] .site-row {
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="light"] .site-row:hover,
+html:not(.dark)[data-theme="light"] .site-row:hover {
+  background: rgba(16, 185, 129, 0.05);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+:root[data-theme="light"] .site-name,
+html:not(.dark)[data-theme="light"] .site-name,
+:root[data-theme="light"] .device-name,
+html:not(.dark)[data-theme="light"] .device-name {
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .site-count,
+html:not(.dark)[data-theme="light"] .site-count,
+:root[data-theme="light"] .device-info,
+html:not(.dark)[data-theme="light"] .device-info {
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .btn-expand,
+html:not(.dark)[data-theme="light"] .btn-expand {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .item-name,
+html:not(.dark)[data-theme="light"] .item-name {
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .btn-panel.btn-secondary,
+html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .btn-panel.btn-secondary:hover,
+html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+/* ==========================================
+   MAPBOX MARKERS - Garantir visibilidade
+   ========================================== */
+.mapbox-marker {
+  display: block !important;
+  width: 30px !important;
+  height: 30px !important;
+  z-index: 1000 !important;
+  position: relative !important;
+  pointer-events: auto !important;
+}
+
+.mapboxgl-marker {
+  z-index: 1000 !important;
+}
+
+.panel-tabs {
+  display: flex;
+  padding: 16px 16px 0 16px;
+  gap: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  overflow-x: auto;
+}
+
+/* ==========================================
+   MAPBOX MARKERS - Garantir visibilidade
+  padding: 12px 8px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.tab-btn.active {
+  color: #10b981;
+  border-bottom-color: #10b981;
+}
+
+.tab-btn i {
+  font-size: 16px;
+}
+
+.badge {
+  padding: 2px 8px;
+  background: rgba(16, 185, 129, 0.2);
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tab-btn.active .badge {
+  background: rgba(16, 185, 129, 0.3);
+}
+
+.panel-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.search-box {
+  margin: 16px;
+  position: relative;
+}
+
+.search-box i {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.search-box input {
+  width: 100%;
+  padding: 10px 12px 10px 40px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+}
+
+.search-box input:focus {
+  outline: none;
+  border-color: rgba(16, 185, 129, 0.5);
+}
+
+.items-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 16px;
+}
+
+.site-group {
+  margin-bottom: 4px;
+}
+
+.site-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.site-row:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.btn-expand {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.btn-expand:hover {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #10b981;
+}
+
+.btn-expand i {
+  font-size: 10px;
+}
+
+.site-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+
+.site-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.site-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.site-name {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.site-name i {
+  color: #10b981;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.site-count {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+}
+
+.site-status-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.status-dot {
+  padding: 3px 7px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+}
+
+.status-dot.online {
+  background: rgba(16, 185, 129, 0.3);
+  color: #10b981;
+}
+
+.status-dot.warning {
+  background: rgba(245, 158, 11, 0.3);
+  color: #f59e0b;
+}
+
+.status-dot.critical {
+  background: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.status-dot.offline {
+  background: rgba(107, 114, 128, 0.3);
+  color: #9ca3af;
+}
+
+.devices-list {
+  margin-top: 4px;
+  padding-left: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.device-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.device-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.device-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+
+.device-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.device-details {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.device-name {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.device-ip {
+  color: rgba(139, 92, 246, 0.8);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.device-ip i {
+  font-size: 9px;
+}
+
+.device-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Transi\u00e7\u00e3o de expand/collapse */
+.expand-enter-active,
+.expand-leave-active {
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.expand-enter-from,
+.expand-leave-to {
+  opacity: 0;
+  max-height: 0;
+}
+
+.expand-enter-to,
+.expand-leave-from {
+  opacity: 1;
+  max-height: 1000px;
+}
+
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.item-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.item-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+
+.item-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.item-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.item-name {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-subtitle {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-subtitle i {
+  font-size: 10px;
+}
+
+.item-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ip-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  background: rgba(139, 92, 246, 0.15);
+  color: #a78bfa;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.ip-badge i {
+  font-size: 9px;
+}
+
+.camera-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.camera-badge i {
+  font-size: 10px;
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.status-badge.online {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+}
+
+.status-badge.warning {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+}
+
+.status-badge.critical {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+.status-badge.offline {
+  background: rgba(107, 114, 128, 0.2);
+  color: #9ca3af;
+}
+
+.status-badge.unknown {
+  background: rgba(107, 114, 128, 0.1);
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.btn-focus {
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-focus:hover {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #10b981;
+}
+
+.panel-footer {
+  padding: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  gap: 12px;
+}
+
+.btn-panel {
+  flex: 1;
+  padding: 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+
+.btn-panel.btn-primary {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #fff;
+}
+
+.btn-panel.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.4);
+}
+
+.btn-panel.btn-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.btn-panel.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.custom-map-viewer.fullscreen {
+  z-index: 10000;
+  margin-left: 0 !important;
+  left: 0 !important;
+}
+
+/* ==========================================
+   LIGHT THEME OVERRIDES
+   ========================================== */
+:root[data-theme="light"] .custom-map-viewer,
+html:not(.dark)[data-theme="light"] .custom-map-viewer {
+  background: var(--bg-primary);
+}
+
+:root[data-theme="light"] .inventory-panel,
+html:not(.dark)[data-theme="light"] .inventory-panel {
+  background: rgba(255, 255, 255, 0.95);
+  border-left: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="light"] .panel-header h3,
+html:not(.dark)[data-theme="light"] .panel-header h3 {
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .btn-close-panel,
+html:not(.dark)[data-theme="light"] .btn-close-panel {
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .panel-header,
+html:not(.dark)[data-theme="light"] .panel-header,
+:root[data-theme="light"] .panel-tabs,
+html:not(.dark)[data-theme="light"] .panel-tabs {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="light"] .tab-btn,
+html:not(.dark)[data-theme="light"] .tab-btn {
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .search-box input,
+html:not(.dark)[data-theme="light"] .search-box input {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .search-box i,
+html:not(.dark)[data-theme="light"] .search-box i {
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .site-row,
+html:not(.dark)[data-theme="light"] .site-row {
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="light"] .site-row:hover,
+html:not(.dark)[data-theme="light"] .site-row:hover {
+  background: rgba(16, 185, 129, 0.05);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+:root[data-theme="light"] .site-name,
+html:not(.dark)[data-theme="light"] .site-name,
+:root[data-theme="light"] .device-name,
+html:not(.dark)[data-theme="light"] .device-name {
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .site-count,
+html:not(.dark)[data-theme="light"] .site-count,
+:root[data-theme="light"] .device-info,
+html:not(.dark)[data-theme="light"] .device-info {
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .btn-expand,
+html:not(.dark)[data-theme="light"] .btn-expand {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: var(--text-tertiary);
+}
+
+:root[data-theme="light"] .item-name,
+html:not(.dark)[data-theme="light"] .item-name {
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .btn-panel.btn-secondary,
+html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: var(--text-primary);
+}
+
+:root[data-theme="light"] .btn-panel.btn-secondary:hover,
+html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+/* ==========================================
+   MAPBOX MARKERS - Garantir visibilidade
+   ========================================== */
+.mapbox-marker {
+  display: block !important;
+  width: 30px !important;
+  height: 30px !important;
+  z-index: 1000 !important;
+  position: relative !important;
+  pointer-events: auto !important;
+}
+
+.mapboxgl-marker {
+  z-index: 1000 !important;
+}
+
+/* ── Notify sent badge ───────────────────────────────────────────────────── */
+.notify-sent-badge {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9400;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 10px 12px;
+  background: rgba(10, 60, 40, 0.96);
+  border: 1px solid #10b981;
+  border-radius: 10px;
+  color: #ecfdf5;
+  font-size: 0.82rem;
+  font-weight: 600;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+  pointer-events: all;
+}
+.nsb-close {
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  padding: 0;
+  margin-left: 4px;
+  transition: color 0.15s;
+}
+.nsb-close:hover { color: #fff; }
+
+/* ── Toast notification ──────────────────────────────────────────────────── */
+.map-toast {
+  position: absolute;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 20px 11px 14px;
+  border-radius: 10px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.map-toast--success {
+  background: rgba(10, 60, 40, 0.96);
+  border: 1px solid #10b981;
+  color: #ecfdf5;
+}
+
+.map-toast--error {
+  background: rgba(80, 10, 10, 0.96);
+  border: 1px solid #ef4444;
+  color: #fff1f2;
+}
+
+.map-toast--warning {
+  background: rgba(70, 45, 0, 0.96);
+  border: 1px solid #f59e0b;
+  color: #fffbeb;
+}
+
+.map-toast__icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.toast-slide-enter-active,
+.toast-slide-leave-active {
+  transition: opacity 0.2s ease, transform 0.25s ease;
+}
+
+.toast-slide-enter-from,
+.toast-slide-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(10px);
+}
+</style>

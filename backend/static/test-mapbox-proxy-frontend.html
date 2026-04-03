@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Teste Mapbox via Proxy</title>
+    <script src='https://api.mapbox.com/mapbox-gl-js/v3.1.0/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v3.1.0/mapbox-gl.css' rel='stylesheet' />
+    <style>
+        body { margin: 0; font-family: monospace; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        #status { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); 
+                  color: #0f0; padding: 15px; z-index: 999; border-radius: 5px; max-width: 600px; }
+        .error { color: #f00; }
+        .success { color: #0f0; }
+    </style>
+</head>
+<body>
+    <div id="status">Aguardando...</div>
+    <div id='map'></div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        
+        function log(msg, type = 'info') {
+            const span = document.createElement('div');
+            span.className = type;
+            span.textContent = msg;
+            statusDiv.appendChild(span);
+            console.log(msg);
+        }
+        
+        log('🔍 Testando Mapbox via Proxy Backend...');
+        
+        // Testar proxy primeiro
+        fetch('/maps/api/mapbox-proxy/styles/mapbox/streets-v12')
+            .then(r => {
+                log(`✅ Proxy respondeu: ${r.status} ${r.statusText}`, 'success');
+                return r.json();
+            })
+            .then(style => {
+                log(`✅ Style recebido: ${style.name}`, 'success');
+                log(`📊 Layers: ${style.layers.length}, Sources: ${Object.keys(style.sources).length}`, 'info');
+                
+                // Agora criar mapa usando o proxy
+                log('🗺️ Criando mapa com proxy...', 'info');
+                
+                const map = new mapboxgl.Map({
+                    container: 'map',
+                    style: '/maps/api/mapbox-proxy/styles/mapbox/streets-v12',
+                    center: [-47.9292, -15.7801],
+                    zoom: 12,
+                    transformRequest: (url, resourceType) => {
+                        log(`📡 Request: ${resourceType} → ${url.substring(0, 60)}...`, 'info');
+                        
+                        // Redirecionar para proxy
+                        if (url.includes('api.mapbox.com')) {
+                            const proxiedUrl = url
+                                .replace('https://api.mapbox.com/styles/v1/', '/maps/api/mapbox-proxy/styles/')
+                                .replace('https://api.mapbox.com/fonts/v1/mapbox/', '/maps/api/mapbox-proxy/fonts/')
+                                .replace(/access_token=[^&]+/, '');
+                            
+                            log(`  → Proxy: ${proxiedUrl.substring(0, 60)}...`, 'success');
+                            return { url: proxiedUrl };
+                        }
+                        
+                        return { url };
+                    }
+                });
+                
+                map.on('load', () => {
+                    log('✅ MAPA CARREGADO COM SUCESSO!', 'success');
+                });
+                
+                map.on('error', (e) => {
+                    log(`❌ ERRO: ${e.error.message}`, 'error');
+                    log(`Stack: ${e.error.stack}`, 'error');
+                });
+            })
+            .catch(err => {
+                log(`❌ Erro ao testar proxy: ${err.message}`, 'error');
+            });
+    </script>
+</body>
+</html>

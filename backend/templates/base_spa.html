@@ -1,0 +1,66 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ProveMaps - Dashboard{% endblock %}</title>
+    
+    {# Google Maps API Key #}
+    <!-- GOOGLE_MAPS_API_KEY -->
+    {% if GOOGLE_MAPS_API_KEY %}
+      <meta name="google-maps-api-key" content="{{ GOOGLE_MAPS_API_KEY }}" />
+    {% endif %}
+    
+    {# CSRF Token for Vue app (logout, forms) #}
+    <script>
+      window.CSRF_TOKEN = "{{ csrf_token }}";
+      
+      // Apply dark mode class immediately (before Vue loads)
+      (function() {
+        const theme = localStorage.getItem('ui.theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.classList.toggle('dark', theme === 'dark');
+      })();
+    </script>
+    
+    <link rel="icon" href="{% static 'maps_view/favicon.ico' %}">
+
+    {# Tailwind CSS from CDN (temporary during migration) #}
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+      }
+    </script>
+
+    {# FontAwesome 6 Free #}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+    {% static 'vue-spa/' as vite_base %}
+    {% if VITE_ENTRY %}
+      {% for css in VITE_ENTRY.css %}
+        <link rel="stylesheet" href="{{ vite_base }}{{ css }}">
+      {% endfor %}
+      <script type="module" src="{{ vite_base }}{{ VITE_ENTRY.file }}"></script>
+    {% else %}
+      {# Fallback for older builds without manifest #}
+      <link rel="stylesheet" href="{% static 'vue-spa/assets/main.css' %}?v={{ STATIC_ASSET_VERSION|default:'1' }}">
+      <script type="module" src="{% static 'vue-spa/assets/main.js' %}?v={{ STATIC_ASSET_VERSION|default:'1' }}"></script>
+    {% endif %}
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="h-full overflow-hidden bg-white dark:bg-gray-900">
+    {# Vue app mount point #}
+    <div id="app" class="h-full"></div>
+    
+    <noscript>
+        <div style="padding: 2rem; text-align: center; background: #fee; color: #900;">
+            Este aplicativo requer JavaScript habilitado para funcionar.
+        </div>
+    </noscript>
+    
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

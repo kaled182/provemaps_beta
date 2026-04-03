@@ -1,0 +1,409 @@
+﻿services:
+  web:
+    build:
+      context: ..
+      dockerfile: docker/dockerfile
+    command: >
+      gunicorn core.asgi:application
+      -k uvicorn.workers.UvicornWorker
+      -b 0.0.0.0:8000
+      --workers 3
+      --timeout 120
+      --max-requests 1000
+    entrypoint: ["/docker-entrypoint.sh"]
+    ports:
+      - "8100:8000"
+    env_file:
+      - ../.env
+    working_dir: /app/backend
+    environment:
+      DB_ENGINE: postgis
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: app
+      DB_USER: app
+      DB_PASSWORD: app
+      DJANGO_SETTINGS_MODULE: settings.dev
+      SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
+      PYTHONPATH: "/app/backend:/app"
+      PYTHONUNBUFFERED: 1
+      GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
+      GEOS_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgeos_c.so
+      PROJ_LIB: /usr/share/proj
+      REDIS_URL: redis://redis:6379/0
+      # Static Asset Cache Busting - Generated dynamically by settings.dev
+      # Remove STATIC_ASSET_VERSION env var to use git-sha + timestamp from settings
+      # STATIC_ASSET_VERSION: "1.0.2"  # REMOVIDO - usar timestamp dinâmico
+      # Sprint 1 Feature Flags (Filters & Search)
+      ENABLE_FILTERS: "True"
+      ENABLE_SEARCH: "True"
+      ENABLE_URL_PERSISTENCE: "True"
+      # Disable Debug Toolbar in Docker (prevents redirect interception)
+      ENABLE_DEBUG_TOOLBAR: "False"
+      # Vue 3 Dashboard Feature Flags (Phase 11 - Canary Rollout)
+      # Permite rollout gradual: 0% (desabilitado) -> 10% -> 25% -> 50% -> 100%
+      # Usar scripts/rollout_vue.ps1 para ajustar percentual com segurança
+      USE_VUE_DASHBOARD: "${USE_VUE_DASHBOARD:-true}"
+      VUE_DASHBOARD_ROLLOUT_PERCENTAGE: "${VUE_DASHBOARD_ROLLOUT_PERCENTAGE:-0}"
+      # Sentry APM (Phase 12 - Error Tracking & Performance Monitoring)
+      SENTRY_DSN: "https://2b2a767ff10ec5ce098ba093c054a300@o4510353484742656.ingest.us.sentry.io/4510353502371840"
+      SENTRY_ENVIRONMENT: "development"
+      SENTRY_TRACES_SAMPLE_RATE: "0.1"
+      SENTRY_PROFILES_SAMPLE_RATE: "0.1"
+      INIT_MIGRATE: "true"
+      # Ensure collectstatic runs in the container so static files are available to the web server
+      INIT_COLLECTSTATIC: "true"
+      INIT_ENSURE_SUPERUSER: "true"
+      CELERY_STATUS_TIMEOUT: "6"
+      CELERY_PING_TIMEOUT: "2"
+      CELERY_METRICS_ENABLED: "true"
+      CELERY_METRICS_UPDATE_INTERVAL: "30"
+      HEALTHCHECK_DB_TIMEOUT: "5"
+      HEALTHCHECK_FORCE_NO_TIMEOUT: "true"
+      SERVICE_ACCOUNT_ROTATION_INTERVAL_SECONDS: "3600"
+      SERVICE_ACCOUNT_WEBHOOK_CONNECT_TIMEOUT: "3"
+      SERVICE_ACCOUNT_WEBHOOK_READ_TIMEOUT: "5"
+      ENV_FILE_PATH: /app/database/runtime.env
+      VIDEO_TRANSMUXER_URL: "http://video-transmuxer:9000"
+      VIDEO_HLS_BASE_URL: "http://video-hls:8080/hls"
+      VIDEO_HLS_PUBLIC_BASE_URL: "http://localhost:8083/hls"
+      VIDEO_WEBRTC_PUBLIC_BASE_URL: "http://localhost:8083/camera-stream"
+      WHATSAPP_QR_SERVICE_URL: "http://whatsapp-qr:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; resp = urllib.request.urlopen('http://localhost:8000/ready', timeout=5); exit(0 if resp.getcode() == 200 else 1)\" || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    volumes:
+      - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - ../backend:/app/backend
+      # Bind vue-spa assets so fresh builds are picked up without rebuilding the image
+      - ../backend/staticfiles/vue-spa:/app/backend/staticfiles/vue-spa
+      - ../frontend:/app/frontend
+      - ../database:/app/database
+      - ../doc:/app/doc
+      - ../scripts:/app/scripts
+      - ../.env:/app/.env:ro
+      - ../logs:/app/backend/logs
+
+  whatsapp-qr:
+    build:
+      context: ../services/whatsapp-qr
+      dockerfile: Dockerfile
+    environment:
+      LOG_LEVEL: "info"
+      DATA_DIR: /data
+    ports:
+      - "3001:3000"
+    volumes:
+      - whatsapp_qr_data:/data
+    restart: unless-stopped
+
+  celery:
+    build:
+      context: ..
+      dockerfile: docker/dockerfile
+    command: celery -A core.celery_app worker -Q default,zabbix,maps -l info -c 4
+    entrypoint: ["/docker-entrypoint.sh"]
+    env_file:
+      - ../.env
+    working_dir: /app/backend
+    environment:
+      DB_ENGINE: postgis
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: app
+      DB_USER: app
+      DB_PASSWORD: app
+      DJANGO_SETTINGS_MODULE: settings.dev
+      SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
+      PYTHONPATH: "/app/backend:/app"
+      PYTHONUNBUFFERED: 1
+      GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
+      GEOS_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgeos_c.so
+      PROJ_LIB: /usr/share/proj
+      REDIS_URL: redis://redis:6379/0
+      WAIT_FOR_DB: "true"
+      WAIT_FOR_REDIS: "true"
+      CELERY_METRICS_ENABLED: "true"
+      CELERY_METRICS_UPDATE_INTERVAL: "30"
+      SERVICE_ACCOUNT_ROTATION_INTERVAL_SECONDS: "3600"
+      SERVICE_ACCOUNT_WEBHOOK_CONNECT_TIMEOUT: "3"
+      SERVICE_ACCOUNT_WEBHOOK_READ_TIMEOUT: "5"
+      ENV_FILE_PATH: /app/database/runtime.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A core.celery_app inspect ping -d celery@$$HOSTNAME -t 5 | grep -qi pong || ps aux | grep -q '[c]elery worker'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    volumes:
+      - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - ../backend:/app/backend
+      - ../frontend:/app/frontend
+      - ../database:/app/database
+      - ../doc:/app/doc
+      - ../scripts:/app/scripts
+      - ../.env:/app/.env:ro
+      - ../logs:/app/backend/logs
+
+  beat:
+    build:
+      context: ..
+      dockerfile: docker/dockerfile
+    command: celery -A core.celery_app beat -l info --pidfile=/tmp/celerybeat.pid
+    entrypoint: ["/docker-entrypoint.sh"]
+    env_file:
+      - ../.env
+    working_dir: /app/backend
+    environment:
+      DB_ENGINE: postgis
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: app
+      DB_USER: app
+      DB_PASSWORD: app
+      DJANGO_SETTINGS_MODULE: settings.dev
+      SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
+      PYTHONPATH: "/app/backend:/app"
+      PYTHONUNBUFFERED: 1
+      GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
+      GEOS_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgeos_c.so
+      PROJ_LIB: /usr/share/proj
+      REDIS_URL: redis://redis:6379/0
+      WAIT_FOR_DB: "true"
+      WAIT_FOR_REDIS: "true"
+      CELERY_METRICS_ENABLED: "true"
+      CELERY_METRICS_UPDATE_INTERVAL: "30"
+      SERVICE_ACCOUNT_ROTATION_INTERVAL_SECONDS: "3600"
+      SERVICE_ACCOUNT_WEBHOOK_CONNECT_TIMEOUT: "3"
+      SERVICE_ACCOUNT_WEBHOOK_READ_TIMEOUT: "5"
+      ENV_FILE_PATH: /app/database/runtime.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'celery beat' >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    volumes:
+      - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - ../backend:/app/backend
+      - ../frontend:/app/frontend
+      - ../database:/app/database
+      - ../doc:/app/doc
+      - ../scripts:/app/scripts
+      - ../.env:/app/.env:ro
+      - ../logs:/app/backend/logs
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.utf8"
+      POSTGIS_GDAL_ENABLED_DRIVERS: ENABLE_ALL
+      POSTGIS_ENABLE_OUTDB_RASTERS: 1
+    # Map to host port 5433 to avoid conflicts with local Postgres installations on 5432
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init_postgis.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # Prometheus - Metrics collection and alerting
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: docker-prometheus-1
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--storage.tsdb.retention.time=30d'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts:/etc/prometheus/alerts:ro
+      - prometheus_data:/prometheus
+    restart: unless-stopped
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Grafana - Metrics visualization and dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: docker-grafana-1
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      - GF_INSTALL_PLUGINS=
+    ports:
+      - "3002:3000"
+    volumes:
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - grafana_data:/var/lib/grafana
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  video-hls:
+    build:
+      context: ./hls
+    image: docker-video-hls:latest
+    container_name: docker-video-hls-1
+    ports:
+      - "1935:1935"
+      - "8083:8080"
+    volumes:
+      - hls_cache:/var/www/hls
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  video-transmuxer:
+    build:
+      context: ../services/video-transmuxer
+    container_name: docker-video-transmuxer-1
+    environment:
+      VIDEO_HLS_RTMP_URL: "rtmp://mediamtx:1935/live"
+      VIDEO_HLS_STORAGE_PATH: "/var/www/hls"
+    depends_on:
+      video-hls:
+        condition: service_started
+      mediamtx:
+        condition: service_started
+    ports:
+      - "9000:9000"
+    restart: unless-stopped
+    volumes:
+      - hls_cache:/var/www/hls
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: docker-mediamtx-1
+    environment:
+      - MTX_PROTOCOLS=tcp
+      - MTX_WEBRTC=yes
+      - MTX_WEBRTCICESERVERS2=[{"urls":["stun:stun.l.google.com:19302"]}]
+      - MTX_WEBRTCICEUDPMUXADDRESS=:8189
+      - MTX_WEBRTCICEHOSTNAT=localhost
+    ports:
+      - "8554:8554"   # RTSP
+      - "8888:8888"   # HLS (LL-HLS)
+      - "8889:8889"   # WebRTC (HTTP signaling)
+      - "8189:8189/udp" # WebRTC ICE/UDP candidates
+    restart: unless-stopped
+
+  # Serviço para testes E2E (Playwright)
+  test-e2e:
+    build:
+      context: ..
+      dockerfile: docker/dockerfile
+    command: pytest /app/test_mosaic_rendering.py -v --headed
+    entrypoint: []
+    env_file:
+      - ../.env
+    working_dir: /app
+    environment:
+      DB_ENGINE: postgis
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: app
+      DB_USER: app
+      DB_PASSWORD: app
+      DJANGO_SETTINGS_MODULE: settings.test
+      SECRET_KEY: "django-insecure-test-key"
+      PYTHONPATH: "/app/backend:/app"
+      PYTHONUNBUFFERED: 1
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      # Apontar para o serviço web
+      TEST_BASE_URL: "http://web:8000"
+    depends_on:
+      web:
+        condition: service_healthy
+    profiles:
+      - testing
+    volumes:
+      - ../backend:/app/backend
+      - ../test_mosaic_rendering.py:/app/test_mosaic_rendering.py
+      - ../frontend:/app/frontend
+      - ../.env:/app/.env:ro
+
+volumes:
+  redis_data:
+  postgres_data:
+  prometheus_data:
+  grafana_data:
+  whatsapp_qr_data:
+  hls_cache:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=256m

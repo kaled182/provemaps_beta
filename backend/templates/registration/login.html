@@ -1,0 +1,121 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <title>Login | Monitoring Portal</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" type="image/x-icon" href="{% static 'favicon.ico' %}">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            portal: {
+              light: '#E6F0FF',
+              DEFAULT: '#004AAD',
+              dark: '#002E6D',
+            },
+          },
+        },
+      },
+    };
+  </script>
+</head>
+<body class="h-full bg-portal-dark flex items-center justify-center p-6">
+
+  <div class="w-full max-w-sm animate-fade-in">
+    <div class="bg-white/10 backdrop-blur-md rounded-2xl shadow-2xl border border-white/20 p-8">
+      <div class="flex flex-col items-center mb-6">
+        {% with setup=setup_logo %}
+          {% if setup and setup.logo %}
+            <img src="{{ setup.logo.url }}" alt="Logo" class="h-16 w-auto mb-3">
+          {% else %}
+            <img src="{% static 'img/logo.png' %}" alt="Logo" class="h-16 w-auto mb-3">
+          {% endif %}
+        {% endwith %}
+        <h1 class="text-xl font-semibold text-white text-center tracking-wide">
+          Monitoring Portal
+        </h1>
+      </div>
+
+      {% if form.errors %}
+        <div class="mb-4 text-sm text-red-200 bg-red-500/20 border border-red-400/50 rounded-md p-2 text-center">
+          {% if form.non_field_errors %}
+            {{ form.non_field_errors|join:', ' }}
+          {% else %}
+            Invalid username or password.
+          {% endif %}
+        </div>
+      {% endif %}
+      {% if request.GET.otp == 'locked' %}
+        <div class="mb-4 text-sm text-yellow-200 bg-yellow-500/20 border border-yellow-400/50 rounded-md p-2 text-center">
+          Voce excedeu as tentativas de OTP. Faca login novamente.
+        </div>
+      {% endif %}
+      {% if next %}
+        {% if user.is_authenticated %}
+          <p class="mb-4 text-sm text-gray-200 text-center">
+            Your account does not have access to this page.
+          </p>
+        {% else %}
+          <p class="mb-4 text-sm text-gray-200 text-center">
+            Sign in to continue.
+          </p>
+        {% endif %}
+      {% endif %}
+
+      <form method="post" novalidate class="space-y-5">
+        {% csrf_token %}
+
+        <div>
+          <label for="id_username" class="block text-sm font-medium text-gray-100">Username</label>
+          <input type="text" name="username" autofocus required id="id_username" autocomplete="username"
+                 class="mt-1 w-full rounded-lg border border-white/20 bg-white/10 text-white placeholder-gray-300 focus:ring-2 focus:ring-portal-light focus:border-portal-light transition duration-150 ease-in-out">
+        </div>
+
+        <div>
+          <label for="id_password" class="block text-sm font-medium text-gray-100">Password</label>
+          <input type="password" name="password" required id="id_password" autocomplete="current-password"
+                 class="mt-1 w-full rounded-lg border border-white/20 bg-white/10 text-white placeholder-gray-300 focus:ring-2 focus:ring-portal-light focus:border-portal-light transition duration-150 ease-in-out">
+        </div>
+
+        <div class="flex items-center justify-between">
+          <label class="flex items-center gap-2 text-xs text-gray-200">
+            <input id="remember" name="remember" type="checkbox"
+                   class="h-4 w-4 rounded border-gray-400 bg-white/10 text-portal-light focus:ring-portal-light">
+            Remember me
+          </label>
+          <a href="/accounts/password_reset/"
+             class="text-xs text-portal-light hover:text-white hover:underline transition">
+             Forgot password
+          </a>
+        </div>
+
+        <button type="submit"
+                class="w-full rounded-lg bg-portal-light py-2.5 text-portal-dark font-semibold hover:bg-white hover:text-portal-dark focus:outline-none focus:ring-4 focus:ring-portal-light/40 transition-all duration-200 shadow-lg">
+          Sign in
+        </button>
+
+        <input type="hidden" name="next" value="{{ next }}">
+      </form>
+
+      <p class="mt-6 text-center text-xs text-gray-300">
+        &copy; {% now 'Y' %} Fiber Monitoring
+      </p>
+    </div>
+  </div>
+
+  <style>
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+      animation: fade-in 0.6s ease-out;
+    }
+  </style>
+
+</body>
+</html>

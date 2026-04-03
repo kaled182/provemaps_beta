@@ -1,30 +1,26 @@
 -- ============================================================================
--- Script para configurar permissões de teste no MariaDB
+-- Test database permissions setup for MariaDB
 -- ============================================================================
--- 
--- Este script concede ao usuário 'app' permissões necessárias para:
--- 1. Criar base de dados de teste (test_app)
--- 2. Executar migrations
--- 3. Criar/dropar tabelas durante testes
--- 4. Inserir/atualizar/deletar dados de teste
 --
--- Uso:
---   docker exec -i mapsprovefiber-db-1 mariadb -u root -padmin < scripts/setup_test_db_permissions.sql
+-- Grants the `app` user the privileges required to:
+-- 1. Create the test database (test_app)
+-- 2. Run migrations
+-- 3. Create/drop tables during test runs
+-- 4. Insert/update/delete test data
 --
--- Ou interativamente:
---   docker exec -it mapsprovefiber-db-1 mariadb -u root -padmin
---   source /app/scripts/setup_test_db_permissions.sql
--- ============================================================================
-
--- Concede todas as permissões ao usuário 'app' para criar e gerenciar databases de teste
+-- Usage:
+--   docker compose -f docker/docker-compose.yml exec db mariadb -u root -proot < scripts/setup_test_db_permissions.sql
+-- Interactive alternative:
+--   docker compose -f docker/docker-compose.yml exec db mariadb -u root -proot
+-- Grant all privileges to user `app` so it can manage test databases
 GRANT ALL PRIVILEGES ON *.* TO 'app'@'%' WITH GRANT OPTION;
 
--- Aplica as mudanças imediatamente
+-- Apply changes immediately
 FLUSH PRIVILEGES;
 
--- Verifica as permissões concedidas
+-- Inspect the granted permissions
 SHOW GRANTS FOR 'app'@'%';
 
--- Mensagem de confirmação
-SELECT '✅ Permissões de teste configuradas com sucesso!' AS Status;
-SELECT 'O usuário app agora pode criar/dropar databases de teste.' AS Info;
+-- Confirmation messages
+SELECT 'OK: Test permissions configured successfully.' AS Status;
+SELECT 'INFO: User app can now create/drop test databases.' AS Info;

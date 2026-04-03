@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Teste: Validação de Vídeos no DOM</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #fff; }
+    .test { margin: 20px 0; padding: 15px; border-radius: 8px; }
+    .pass { background: #1a4d1a; border: 2px solid #4caf50; }
+    .fail { background: #4d1a1a; border: 2px solid #f44336; }
+    .warn { background: #4d4d1a; border: 2px solid #ff9800; }
+    h2 { margin: 0 0 10px 0; }
+    pre { background: #000; padding: 10px; overflow-x: auto; }
+    button { padding: 10px 20px; background: #2196f3; color: white; border: none; cursor: pointer; margin: 5px; }
+    button:hover { background: #1976d2; }
+  </style>
+</head>
+<body>
+  <h1>🧪 Teste: Elementos de Vídeo no Modal de Mosaico</h1>
+  
+  <div>
+    <button onclick="testLocalConnection()">1. Testar Conexão Local</button>
+    <button onclick="testModalStructure()">2. Validar Estrutura do Modal</button>
+    <button onclick="testVideoElements()">3. Verificar Elementos &lt;video&gt;</button>
+    <button onclick="testWhepEndpoints()">4. Testar Endpoints WHEP</button>
+    <button onclick="runAllTests()">▶ Executar Todos os Testes</button>
+  </div>
+
+  <div id="results"></div>
+
+  <script>
+    const API_BASE = 'http://localhost:8000';
+    const results = document.getElementById('results');
+
+    function addResult(title, status, details) {
+      const div = document.createElement('div');
+      div.className = `test ${status}`;
+      div.innerHTML = `
+        <h2>${status === 'pass' ? '✓' : status === 'fail' ? '✗' : '⚠'} ${title}</h2>
+        <pre>${details}</pre>
+      `;
+      results.appendChild(div);
+    }
+
+    async function testLocalConnection() {
+      results.innerHTML = '';
+      try {
+        const response = await fetch(`${API_BASE}/api/v1/sites/`, {
+          credentials: 'include'
+        });
+        
+        if (!response.ok) {
+          addResult('Conexão com Backend', 'fail', 
+            `HTTP ${response.status}: ${response.statusText}\n` +
+            `URL: ${API_BASE}\n` +
+            `Certifique-se de que o servidor Django está rodando.`
+          );
+          return false;
+        }
+
+        const data = await response.json();
+        addResult('Conexão com Backend', 'pass',
+          `✓ Conectado ao Django em ${API_BASE}\n` +
+          `Sites encontrados: ${data.count || 0}\n` +
+          `Resposta: ${JSON.stringify(data, null, 2).substring(0, 200)}...`
+        );
+        return true;
+      } catch (error) {
+        addResult('Conexão com Backend', 'fail',
+          `Erro: ${error.message}\n` +
+          `Verifique:\n` +
+          `1. Docker containers estão rodando: docker ps\n` +
+          `2. Web server está ativo: docker logs docker-web-1\n` +
+          `3. URL correta: ${API_BASE}`
+        );
+        return false;
+      }
+    }
+
+    async function testModalStructure() {
+      try {
+        // Simular abertura do modal
+        const modal = document.createElement('div');
+        modal.id = 'test-modal';
+        modal.innerHTML = `
+          <div class="mosaic-grid">
+            <div class="mosaic-cell">
+              <video id="test-video-1" autoplay muted playsinline></video>
+            </div>
+            <div class="mosaic-cell">
+              <video id="test-video-2" autoplay muted playsinline></video>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+
+        // Aguardar renderização
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        const videos = modal.querySelectorAll('video');
+        const modalDiv = document.getElementById('test-modal');
+        
+        if (videos.length > 0) {
+          addResult('Estrutura do Modal', 'pass',
+            `✓ Modal renderizado corretamente\n` +
+            `Elementos <video> encontrados: ${videos.length}\n` +
+            `IDs: ${Array.from(videos).map(v => v.id).join(', ')}\n` +
+            `Parent: ${modalDiv ? 'Presente' : 'Ausente'}`
+          );
+          document.body.removeChild(modal);
+          return true;
+        } else {
+          addResult('Estrutura do Modal', 'fail',
+            `✗ Nenhum elemento <video> encontrado\n` +
+            `Modal HTML: ${modal.innerHTML.substring(0, 200)}`
+          );
+          document.body.removeChild(modal);
+          return false;
+        }
+      } catch (error) {
+        addResult('Estrutura do Modal', 'fail', `Erro: ${error.message}`);
+        return false;
+      }
+    }
+
+    async function testVideoElements() {
+      // Verificar vídeos no DOM principal
+      const allVideos = document.querySelectorAll('video');
+      const mosaicVideos = document.querySelectorAll('.mosaic-video, [class*="mosaic"] video');
+      
+      const info = {
+        total: allVideos.length,
+        mosaicSpecific: mosaicVideos.length,
+        ids: Array.from(allVideos).map((v, i) => v.id || `unnamed-${i}`),
+        classes: Array.from(allVideos).map(v => v.className),
+        parents: Array.from(allVideos).map(v => v.parentElement?.className || 'no-parent')
+      };
+
+      if (allVideos.length > 0) {
+        addResult('Elementos <video> no DOM', 'pass',
+          `✓ Vídeos encontrados: ${info.total}\n` +
+          `Vídeos de mosaico: ${info.mosaicSpecific}\n` +
+          `IDs: ${info.ids.join(', ')}\n` +
+          `Classes: ${info.classes.join(', ')}\n` +
+          `Containers: ${info.parents.join(', ')}`
+        );
+        return true;
+      } else {
+        addResult('Elementos <video> no DOM', 'warn',
+          `⚠ Nenhum elemento <video> encontrado no DOM\n` +
+          `Possíveis causas:\n` +
+          `1. Modal não está aberto\n` +
+          `2. v-if/v-show está impedindo renderização\n` +
+          `3. Vue não montou os componentes\n\n` +
+          `Instruções: Abra o modal de mosaico manualmente e execute este teste novamente.`
+        );
+        return false;
+      }
+    }
+
+    async function testWhepEndpoints() {
+      try {
+        const response = await fetch(`${API_BASE}/api/v1/cameras/`, {
+          credentials: 'include'
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        const cameras = data.results || [];
+        
+        if (cameras.length === 0) {
+          addResult('Endpoints WHEP', 'warn',
+            `⚠ Nenhuma câmera encontrada na API\n` +
+            `Endpoint: ${API_BASE}/api/v1/cameras/\n` +
+            `Configure câmeras em: Configurações > Câmeras`
+          );
+          return false;
+        }
+
+        const whepUrls = cameras
+          .map(c => ({
+            name: c.name,
+            whep: c.whep_url,
+            playback: c.playback_url
+          }))
+          .slice(0, 5); // Primeiras 5 câmeras
+
+        // Testar se os endpoints WHEP respondem
+        const testResults = await Promise.all(
+          whepUrls.map(async cam => {
+            if (!cam.whep) return { ...cam, status: 'NO_URL' };
+            
+            try {
+              const testResponse = await fetch(cam.whep, {
+                method: 'OPTIONS',
+                headers: { 'Origin': window.location.origin }
+              });
+              return { ...cam, status: testResponse.status };
+            } catch (error) {
+              return { ...cam, status: 'ERROR', error: error.message };
+            }
+          })
+        );
+
+        const summary = testResults.map(r => 
+          `${r.name}:\n` +
+          `  WHEP: ${r.whep || 'N/A'}\n` +
+          `  Status: ${r.status} ${r.error ? `(${r.error})` : ''}`
+        ).join('\n\n');
+
+        const allOk = testResults.every(r => r.status === 200 || r.status === 204 || r.status === 404);
+        
+        addResult('Endpoints WHEP', allOk ? 'pass' : 'warn',
+          `Câmeras testadas: ${cameras.length}\n\n${summary}\n\n` +
+          `Nota: 404 é esperado se o stream não estiver ativo ainda.`
+        );
+        
+        return allOk;
+      } catch (error) {
+        addResult('Endpoints WHEP', 'fail',
+          `Erro ao buscar câmeras: ${error.message}\n` +
+          `Endpoint: ${API_BASE}/api/v1/cameras/`
+        );
+        return false;
+      }
+    }
+
+    async function runAllTests() {
+      results.innerHTML = '<h2>Executando todos os testes...</h2>';
+      
+      await testLocalConnection();
+      await new Promise(r => setTimeout(r, 500));
+      
+      await testModalStructure();
+      await new Promise(r => setTimeout(r, 500));
+      
+      await testVideoElements();
+      await new Promise(r => setTimeout(r, 500));
+      
+      await testWhepEndpoints();
+      
+      addResult('Resumo', 'pass',
+        `Testes concluídos!\n\n` +
+        `Próximos passos:\n` +
+        `1. Se "Elementos <video> no DOM" falhou, abra o modal de mosaico manualmente\n` +
+        `2. Execute o teste 3 novamente\n` +
+        `3. Verifique os logs do console da aplicação principal\n` +
+        `4. Compare com os logs deste teste`
+      );
+    }
+  </script>
+</body>
+</html>

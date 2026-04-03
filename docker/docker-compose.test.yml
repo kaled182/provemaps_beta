@@ -1,0 +1,122 @@
+version: "3.9"
+
+services:
+  # Primary test service
+  tests:
+    build:
+      context: ..
+      dockerfile: docker/dockerfile
+    entrypoint: ["/docker-entrypoint.sh"]
+    command: >
+      sh -c "
+      set -e
+  export DJANGO_SETTINGS_MODULE=$${DJANGO_SETTINGS_MODULE:-settings.test}
+  export PYTHONPATH=/app/backend:/app
+      
+      echo '🎯 Environment: '$$DJANGO_SETTINGS_MODULE
+      echo '🐍 Python: '$(python --version)
+      echo '📦 Django: '$(python -c \"import django; print(django.get_version())\")
+      
+      # Run tests with the appropriate configuration
+      if [ \"$$CI\" = \"true\" ]; then
+        echo '🏗️  CI mode detected'
+        pytest -v --junitxml=reports/junit.xml \
+               --cov-report=xml:reports/coverage.xml \
+               --cov-report=term-missing \
+               --tb=short
+      else
+        echo '💻 Development mode'
+        pytest -v --cov --cov-report=html:reports/coverage \
+               --cov-report=term-missing \
+               --tb=short \
+               -n $$(nproc)
+      fi
+      "
+    env_file:
+      - ../.env.example
+    environment:
+      # Environment settings
+      TESTING: "true"
+      CI: "$${CI:-false}"
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      # Database (override as needed)
+      DB_ENGINE: "$${DB_ENGINE:-sqlite}"
+      DB_NAME: "$${DB_NAME:-:memory:}"
+      # Cache
+      REDIS_URL: "$${REDIS_URL:-}"
+    # Optional dependencies for integration tests
+    depends_on:
+      db-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    volumes:
+      # Development: source code
+      - ../:/app
+      # Entrypoint (required because it is not copied in the Dockerfile)
+      - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      # Reports
+      - ../reports:/app/reports
+      # Pytest cache (optional)
+      - pytest-cache:/app/.pytest_cache
+    working_dir: /app
+    # Healthcheck unnecessary for a test job
+    healthcheck:
+      disable: true
+    # Resource configuration
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # Support services for tests that need real dependencies
+  db-test:
+    image: mariadb:11
+    environment:
+      MARIADB_DATABASE: test_mapsprovefiber
+      MARIADB_USER: test_user
+      MARIADB_PASSWORD: test_pass
+      MARIADB_ROOT_PASSWORD: test_root
+      MARIADB_INITDB_SKIP_TZINFO: 1
+    command: >
+      mysqld
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --innodb-buffer-pool-size=256M
+      --innodb-log-file-size=48M
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    # Performance: use tmpfs for temporary data
+    tmpfs:
+      - /var/lib/mysql:rw,noexec,nosuid,size=512m
+    ports:
+      - "3307:3306"  # Alternate port to avoid conflicts
+
+  redis-test:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --save ""           # Do not persist to disk
+      --appendonly no     # Disable AOF
+      --maxmemory 128mb   # Memory limit
+      --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    tmpfs:
+      - /data:rw,noexec,nosuid,size=128m
+    ports:
+      - "6380:6379"  # Alternate port
+
+volumes:
+  pytest-cache:
+    driver: local

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste Mapbox Token</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .log {
+            background: #2a2a2a;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid #10b981;
+        }
+        .error {
+            border-left-color: #ef4444;
+        }
+        .success {
+            border-left-color: #10b981;
+        }
+        pre {
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 3px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🗺️ Teste de Configuração do Mapbox</h1>
+    <div id="output"></div>
+
+    <script>
+        const output = document.getElementById('output');
+
+        function log(message, type = 'log') {
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            if (typeof message === 'object') {
+                div.innerHTML = '<pre>' + JSON.stringify(message, null, 2) + '</pre>';
+            } else {
+                div.textContent = message;
+            }
+            output.appendChild(div);
+        }
+
+        async function testMapboxConfig() {
+            try {
+                log('🔄 Carregando configuração do sistema...', 'log');
+                
+                const response = await fetch('http://localhost:8000/api/v1/setup/system-config/');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                log('✅ Configuração carregada com sucesso!', 'success');
+                
+                // Verificar campos relacionados a mapas
+                const mapConfig = {
+                    MAP_PROVIDER: data.MAP_PROVIDER,
+                    MAPBOX_TOKEN: data.MAPBOX_TOKEN,
+                    MAPBOX_STYLE: data.MAPBOX_STYLE,
+                    MAP_DEFAULT_LAT: data.MAP_DEFAULT_LAT,
+                    MAP_DEFAULT_LNG: data.MAP_DEFAULT_LNG,
+                    MAP_DEFAULT_ZOOM: data.MAP_DEFAULT_ZOOM,
+                    GOOGLE_MAPS_API_KEY: data.GOOGLE_MAPS_API_KEY
+                };
+                
+                log('📍 Configuração de Mapas:', 'log');
+                log(mapConfig, 'log');
+                
+                // Validar token
+                if (data.MAPBOX_TOKEN) {
+                    log(`✅ Token do Mapbox encontrado: ${data.MAPBOX_TOKEN.substring(0, 30)}... (${data.MAPBOX_TOKEN.length} caracteres)`, 'success');
+                    
+                    // Verificar se começa com pk. (public key)
+                    if (data.MAPBOX_TOKEN.startsWith('pk.')) {
+                        log('✅ Token parece ser válido (começa com pk.)', 'success');
+                    } else {
+                        log('⚠️ Token não começa com pk. - pode ser inválido', 'error');
+                    }
+                } else {
+                    log('❌ Token do Mapbox NÃO está configurado!', 'error');
+                }
+                
+                // Testar se a chave existe no objeto
+                log(`📝 MAPBOX_TOKEN existe no objeto? ${('MAPBOX_TOKEN' in data)}`, 'log');
+                log(`📝 Tipo do MAPBOX_TOKEN: ${typeof data.MAPBOX_TOKEN}`, 'log');
+                log(`📝 Valor é null/undefined? ${data.MAPBOX_TOKEN === null || data.MAPBOX_TOKEN === undefined}`, 'log');
+                
+            } catch (error) {
+                log(`❌ Erro ao carregar configuração: ${error.message}`, 'error');
+                console.error('Erro completo:', error);
+            }
+        }
+
+        // Executar teste
+        testMapboxConfig();
+    </script>
+</body>
+</html>

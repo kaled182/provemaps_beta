@@ -1,0 +1,42 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{% block title %}Fiber Network Dashboard{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/x-icon" href="{% static 'favicon.ico' %}">
+
+  <!-- Tailwind is pulled from CDN for local work; wire up a build step in production -->
+  <script>
+    (function() {
+      const theme = localStorage.getItem('ui.theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+    })();
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-white dark:bg-gray-900 text-gray-900 dark:text-white flex flex-col min-h-screen">
+
+  {% include 'partials/header_dashboard.html' %}
+
+  <main class="flex-1 container mx-auto p-6">
+    {% block content %}
+    <p>Content goes here.</p>
+    {% endblock %}
+  </main>
+
+  <footer class="bg-gray-800 text-white text-center p-4">
+    &copy; {% now "Y" %} Fiber Network Dashboard
+  </footer>
+
+  {% include 'partials/add_device.html' %}
+
+  {% include 'partials/import_kml.html' %}
+
+  {% block extra_scripts %}{% endblock %}
+
+</body>
+</html>

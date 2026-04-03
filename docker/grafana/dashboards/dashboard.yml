@@ -1,0 +1,13 @@
+apiVersion: 1
+
+providers:
+  - name: 'Phase 7 Dashboards'
+    orgId: 1
+    folder: 'Production'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: true

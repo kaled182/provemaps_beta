@@ -1,0 +1,223 @@
+{% load static %}
+<!-- ========================================= -->
+<!-- PRIMARY HEADER -->
+<!-- ========================================= -->
+<header
+  role="banner"
+  class="bg-gradient-to-r from-blue-600 to-blue-500 dark:from-gray-900 dark:to-gray-800
+         backdrop-blur border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40 shadow-sm"
+>
+  <div class="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex h-16 items-center justify-between">
+
+      <!-- ========================================= -->
+      <!-- LOGO / BRAND -->
+      <!-- ========================================= -->
+      <div class="flex items-center gap-3">
+        <a href="/" class="flex items-center gap-2" aria-label="Home page">
+          <img 
+            src="{% static 'img/logo.png' %}" 
+            alt="Logo" 
+            class="h-9 w-auto" 
+            loading="lazy"
+          >
+          <span class="hidden sm:block font-semibold text-white">
+            
+          </span>
+        </a>
+      </div>
+
+      <!-- ========================================= -->
+      <!-- DESKTOP NAVIGATION -->
+      <!-- ========================================= -->
+      <nav class="hidden md:flex" aria-label="Primary navigation">
+        <ul class="flex items-center gap-6 text-sm font-medium">
+          {% with current=request.resolver_match.url_name %}
+
+          <!-- Nav Item: Dashboard -->
+          <li>
+            <a href="{% url 'maps_view:dashboard_view' %}"
+              class="px-2 py-2 rounded-md transition-colors duration-200 
+              {% if current == 'dashboard_view' %}
+                bg-white/20 text-white
+              {% else %}
+                text-gray-100 hover:text-white hover:bg-white/10
+              {% endif %}">
+              Dashboard
+            </a>
+          </li>
+
+          <!-- Nav Item: Metrics -->
+          <li>
+            <a href="{% url 'maps_view:metrics_dashboard' %}"
+              class="px-2 py-2 rounded-md transition-colors duration-200
+              {% if current == 'metrics_dashboard' %}
+                bg-white/20 text-white
+              {% else %}
+                text-gray-100 hover:text-white hover:bg-white/10
+              {% endif %}">
+              Metrics
+            </a>
+          </li>
+
+          <!-- Nav Item: Network Design -->
+          <li>
+            <a href="{% url 'inventory:network_design' %}"
+              class="px-2 py-2 rounded-md transition-colors duration-200
+              {% if current == 'network_design' %}
+                bg-white/20 text-white
+              {% else %}
+                text-gray-100 hover:text-white hover:bg-white/10
+              {% endif %}">
+              Network Design
+            </a>
+          </li>
+
+          {% endwith %}
+        </ul>
+      </nav>
+
+      <!-- ========================================= -->
+      <!-- RIGHT SECTION (Theme, User, Mobile Menu) -->
+      <!-- ========================================= -->
+      <div class="flex items-center gap-4">
+        <a href="{% url 'zabbix_lookup' %}"
+           class="hidden md:inline-flex items-center gap-2 px-2 py-2 rounded-md transition-colors duration-200 text-gray-100 hover:text-white hover:bg-white/10">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
+            <path fill-rule="evenodd"
+                  d="M10 3.25a.75.75 0 01.75.75v5.25H16a.75.75 0 010 1.5h-5.25V16a.75.75 0 01-1.5 0v-5.25H4a.75.75 0 010-1.5h5.25V4a.75.75 0 01.75-.75z"
+                  clip-rule="evenodd" />
+          </svg>
+          Add Device
+        </a>
+
+        <!-- ========================================= -->
+        <!-- USER MENU -->
+        <!-- ========================================= -->
+        {% include 'partials/user_menu.html' with login_classes='text-sm font-medium text-white hover:underline' %}
+
+        <!-- ========================================= -->
+        <!-- MOBILE NAV BUTTON -->
+        <!-- ========================================= -->
+        <button
+          type="button"
+          data-mobile-toggle
+          aria-controls="mobileNav"
+          aria-expanded="false"
+          class="md:hidden inline-flex items-center justify-center rounded-md p-2 
+                 text-gray-200 hover:text-white hover:bg-white/10 focus:outline-none 
+                 focus:ring-2 focus:ring-white"
+        >
+          <span class="sr-only">Open menu</span>
+          <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2"
+            viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- Header behaviour -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  
+  // ========================================= 
+  // USER DROPDOWN
+  // ========================================= 
+  const userMenuButton = document.getElementById('userMenuButton');
+  const userMenuDropdown = document.getElementById('userMenuDropdown');
+  const userMenuArrow = document.getElementById('userMenuArrow');
+
+  if (userMenuButton && userMenuDropdown) {
+    // Toggle dropdown visibility
+    userMenuButton.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const isHidden = userMenuDropdown.classList.contains('hidden');
+      
+      if (isHidden) {
+        userMenuDropdown.classList.remove('hidden');
+        userMenuArrow.style.transform = 'rotate(180deg)';
+      } else {
+        userMenuDropdown.classList.add('hidden');
+        userMenuArrow.style.transform = 'rotate(0deg)';
+      }
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+      if (!userMenuButton.contains(e.target) && !userMenuDropdown.contains(e.target)) {
+        userMenuDropdown.classList.add('hidden');
+        userMenuArrow.style.transform = 'rotate(0deg)';
+      }
+    });
+
+    // Close dropdown with ESC
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        userMenuDropdown.classList.add('hidden');
+        userMenuArrow.style.transform = 'rotate(0deg)';
+      }
+    });
+  }
+
+  // ========================================= 
+  // THEME TOGGLE (if present)
+  // ========================================= 
+  const themeToggle = document.getElementById('themeToggle');
+  const iconSun = document.getElementById('iconSun');
+  const iconMoon = document.getElementById('iconMoon');
+
+  if (themeToggle && iconSun && iconMoon) {
+    // Check current theme
+    const currentTheme = localStorage.getItem('ui.theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', currentTheme);
+    document.documentElement.classList.toggle('dark', currentTheme === 'dark');
+    
+    // Display the correct icon
+    if (currentTheme === 'dark') {
+      iconSun.classList.remove('hidden');
+      iconMoon.classList.add('hidden');
+    } else {
+      iconSun.classList.add('hidden');
+      iconMoon.classList.remove('hidden');
+    }
+
+    // Theme toggle handler
+    themeToggle.addEventListener('click', function() {
+      const isDark = document.documentElement.classList.contains('dark');
+      
+      if (isDark) {
+        document.documentElement.classList.remove('dark');
+        document.documentElement.setAttribute('data-theme', 'light');
+        localStorage.setItem('ui.theme', 'light');
+        iconSun.classList.add('hidden');
+        iconMoon.classList.remove('hidden');
+      } else {
+        document.documentElement.classList.add('dark');
+        document.documentElement.setAttribute('data-theme', 'dark');
+        localStorage.setItem('ui.theme', 'dark');
+        iconSun.classList.remove('hidden');
+        iconMoon.classList.add('hidden');
+      }
+    });
+  }
+
+  // ========================================= 
+  // MOBILE MENU (if present)
+  // ========================================= 
+  const mobileToggle = document.querySelector('[data-mobile-toggle]');
+  const mobileNav = document.getElementById('mobileNav');
+
+  if (mobileToggle && mobileNav) {
+    mobileToggle.addEventListener('click', function() {
+      const isExpanded = mobileToggle.getAttribute('aria-expanded') === 'true';
+      
+      mobileToggle.setAttribute('aria-expanded', !isExpanded);
+      mobileNav.classList.toggle('hidden');
+    });
+  }
+});
+</script>

@@ -1,0 +1,25 @@
+{
+  "typeCheckingMode": "strict",
+  "reportPrivateUsage": "warning",
+  "reportMissingTypeStubs": false,
+  "venvPath": ".",
+  "venv": "venv",
+  "include": [
+    "inventory/api",
+    "inventory/models_routes.py",
+    "inventory/tests",
+    "inventory/usecases",
+    "inventory/services",
+    "monitoring/usecases.py",
+    "monitoring/tests",
+    "integrations/zabbix"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "staticfiles",
+    "media",
+    "legacy_backup",
+    "setup_app",
+    "tests"
+  ]
+}

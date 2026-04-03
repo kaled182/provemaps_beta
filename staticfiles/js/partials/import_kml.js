@@ -40,7 +40,7 @@ async function populatePorts(deviceId, targetSelect) {
     }
 
     try {
-        const response = await fetch(`/zabbix_api/api/device-ports/${deviceId}/`, {
+    const response = await fetch(`/api/v1/inventory/devices/${deviceId}/ports/`, {
             method: 'GET',
             headers: {
                 'Accept': 'application/json',
@@ -121,7 +121,7 @@ if (importFormEl) {
         const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
 
         try {
-            const response = await fetch('/zabbix_api/api/fibers/import-kml/', {
+            const response = await fetch('/api/v1/inventory/fibers/import-kml/', {
                 method: 'POST',
                 headers: {
                     'X-CSRFToken': csrfToken,
@@ -139,7 +139,7 @@ if (importFormEl) {
                 await populatePorts('', kmlDestPortSelect);
                 await syncKmlDestination();
                 
-                // Disparar evento para limpar mapa e recarregar lista
+                // Dispatch event to clear the map and reload the list
                 document.dispatchEvent(new CustomEvent('fiber:cable-created', {
                     detail: { fiberId: data.fiber_id },
                 }));

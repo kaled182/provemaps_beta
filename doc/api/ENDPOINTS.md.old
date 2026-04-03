@@ -1,0 +1,280 @@
+# API Documentation - MapsProveFiber v2.0.0
+
+This document describes every REST endpoint exposed by MapsProveFiber, including integration with Zabbix, the local inventory, fiber routes, Celery jobs, and health probes. The material is organized by module to emphasize clarity, security, and quick diagnostics.
+
+> **⚠️ BREAKING CHANGES**: v2.0.0 introduces modular architecture. See [`BREAKING_CHANGES_v2.0.0.md`](../releases/BREAKING_CHANGES_v2.0.0.md) for migration guide.
+
+---
+
+## Module overview
+
+| Module | Path | Primary responsibility | Status |
+|--------|------|------------------------|--------|
+| **Inventory API** | `api/v1/inventory/` | Devices, ports, fibers, routes, operational metadata | ✅ Active |
+| **Monitoring** | `monitoring/` | Health checks, combined Zabbix + inventory status | ✅ Active |
+| **Integrations (Zabbix)** | `integrations/zabbix/` | Resilient Zabbix API client (circuit breaker, retry) | ✅ Active |
+| **Routes Builder** | `routes_builder/` | Celery tasks for route calculation (legacy) | ⚠️ Deprecated |
+| **Setup App** | `setup_app/` | Runtime settings and credential management | ✅ Active |
+| **Core** | `core/` | Django configuration, Celery, URLs, health probes | ✅ Active |
+| **~~Zabbix API~~** | ~~`zabbix_api/`~~ | ~~Legacy integration module~~ | ❌ **REMOVED in v2.0.0** |
+
+---
+
+## Access and security
+
+- Every endpoint requires a logged-in Django user.
+- Administrative endpoints require a staff user.
+- Diagnostic routes are guarded by the `ENABLE_DIAGNOSTIC_ENDPOINTS` flag:
+  ```bash
+  ENABLE_DIAGNOSTIC_ENDPOINTS=true
+  ```
+  When the flag is `false`, the routes respond with **HTTP 403** without executing external actions.
+
+---
+
+## Base URLs
+
+- Public endpoints: `http://localhost:8000/`
+- **Inventory API (v2.0.0+)**: `http://localhost:8000/api/v1/inventory/` ✅
+- ~~Zabbix integration (legacy)~~: ~~`http://localhost:8000/zabbix_api/`~~ ❌ **REMOVED**
+
+> **Migration Note**: All `/zabbix_api/*` endpoints have been removed. Use `/api/v1/inventory/*` instead.  
+> Replace `localhost` with the production domain in deployed environments.
+
+---
+
+## Health and status
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/healthz/` | GET | Full system health check (database, cache, storage, runtime) |
+| `/ready/` | GET | Readiness probe - reports when the app can receive traffic |
+| `/live/` | GET | Liveness probe - verifies that the process is alive |
+
+Example response:
+```json
+{
+  "status": "ok",
+  "timestamp": 1731109200.123,
+  "checks": {
+    "db": {"ok": true, "type": "mysql"},
+    "cache": {"ok": true, "backend": "RedisCache"},
+    "storage": {"ok": true, "free_gb": 42.3}
+  },
+  "latency_ms": 23.6
+```
+
+---
+
+## ~~Zabbix API~~ (REMOVED in v2.0.0)
+
+> **⚠️ DEPRECATED**: All endpoints under `/zabbix_api/*` have been **removed** in v2.0.0.  
+> **Migration Required**: Use Inventory API (`/api/v1/inventory/*`) and Monitoring endpoints instead.  
+> **See**: [`BREAKING_CHANGES_v2.0.0.md`](../releases/BREAKING_CHANGES_v2.0.0.md) for migration guide.
+
+### Legacy Endpoint Migration Map
+
+| ❌ Removed Endpoint (v1.x) | ✅ New Endpoint (v2.0.0+) | Notes |
+|----------------------------|---------------------------|-------|
+| `/zabbix_api/inventory/sites/` | `/api/v1/inventory/sites/` | Direct replacement |
+| `/zabbix_api/inventory/devices/` | `/api/v1/inventory/devices/` | Direct replacement |
+| `/zabbix_api/inventory/fibers/` | `/api/v1/inventory/fibers/` | Direct replacement |
+| `/zabbix_api/api/fibers/oper-status/` | `/api/v1/inventory/fibers/oper-status/` | Direct replacement |
+| `/zabbix_api/api/test/*` | `/api/v1/inventory/diagnostics/*` | Diagnostic endpoints moved |
+| `/zabbix_api/status/` | Use `integrations.zabbix.zabbix_service.zabbix_request()` | Backend only |
+| `/zabbix_api/monitoring/*` | Use `monitoring.usecases.HostStatusProcessor` | Backend only |
+
+### Status and monitoring
+
+**STATUS**: ❌ **ALL ENDPOINTS REMOVED**
+
+Endpoints are grouped by category. Default prefix: ~~`/zabbix_api/`~~ **DELETED**
+
+| Endpoint | Method | Description | Status |
+|----------|--------|-------------|--------|
+| ~~`/status/`~~ | ~~GET~~ | ~~Overall health of the Zabbix environment~~ | ❌ Removed |
+| ~~`/monitoring/overview/`~~ | ~~GET~~ | ~~Summary view of hosts and active issues~~ | ❌ Removed |
+| ~~`/monitoring/performance/`~~ | ~~GET~~ | ~~Aggregated metrics (CPU, memory, disk)~~ | ❌ Removed |
+| ~~`/monitoring/availability/`~~ | ~~GET~~ | ~~Uptime percentages~~ | ❌ Removed |
+| ~~`/monitoring/latest_all/`~~ | ~~GET~~ | ~~Latest values for all tracked hosts~~ | ❌ Removed |
+
+**Migration**: Use `monitoring.usecases.HostStatusProcessor` for backend integration.
+
+---
+
+### Hosts and items
+
+**STATUS**: ❌ **ALL ENDPOINTS REMOVED**
+
+| Endpoint | Method | Description | Status |
+|----------|--------|-------------|--------|
+| ~~`/hosts/`~~ | ~~GET~~ | ~~List hosts with basic metadata~~ | ❌ Removed |
+| ~~`/hosts/{id}/`~~ | ~~GET~~ | ~~Detailed information for a host~~ | ❌ Removed |
+| ~~`/hosts/{id}/items/`~~ | ~~GET~~ | ~~Items grouped by category~~ | ❌ Removed |
+| ~~`/hosts/{id}/triggers/`~~ | ~~GET~~ | ~~Triggers grouped by severity~~ | ❌ Removed |
+| ~~`/hosts/{id}/graphs/`~~ | ~~GET~~ | ~~Available graphs~~ | ❌ Removed |
+| ~~`/hosts/{id}/latest/`~~ | ~~GET~~ | ~~Latest metrics for the host~~ | ❌ Removed |
+| ~~`/hosts/{id}/performance/`~~ | ~~GET~~ | ~~CPU, memory, and disk performance~~ | ❌ Removed |
+| ~~`/items/{hostid}/{itemid}/history/`~~ | ~~GET~~ | ~~24 hour history for the item~~ | ❌ Removed |
+
+**Migration**: Use `integrations.zabbix.client.resilient_client.call()` for direct Zabbix API access.
+
+---
+
+### Problems and events
+
+**STATUS**: ❌ **ALL ENDPOINTS REMOVED**
+**STATUS**: ❌ **ALL ENDPOINTS REMOVED**
+
+| Endpoint | Method | Description | Status |
+|----------|--------|-------------|--------|
+| ~~`/problems/`~~ | ~~GET~~ | ~~Active problems~~ | ❌ Removed |
+| ~~`/problems/summary/`~~ | ~~GET~~ | ~~Breakdown by severity~~ | ❌ Removed |
+| ~~`/problems/by-severity/`~~ | ~~GET~~ | ~~Count by severity level~~ | ❌ Removed |
+| ~~`/problems/critical/`~~ | ~~GET~~ | ~~Critical incidents only~~ | ❌ Removed |
+| ~~`/events/recent/`~~ | ~~GET~~ | ~~Condensed chronological feed~~ | ❌ Removed |
+| ~~`/events/summary/`~~ | ~~GET~~ | ~~Distribution by status and severity~~ | ❌ Removed |
+
+---
+
+### Network and inventory bridge (legacy)
+
+**STATUS**: ❌ **REMOVED** — Inventory-related endpoints now live exclusively under `/api/v1/inventory/`.
+
+The `/zabbix_api/` versions have been **permanently removed** in v2.0.0. Update all client code to use the new inventory namespace.
+
+---
+
+### Diagnostic tools
+
+**STATUS**: ⚠️ **MOVED** to `/api/v1/inventory/diagnostics/`
+
+**STATUS**: ⚠️ **MOVED** to `/api/v1/inventory/diagnostics/`
+
+Prefix: `/api/v1/inventory/diagnostics/` (updated in v2.0.0)
+
+> Available only when `ENABLE_DIAGNOSTIC_ENDPOINTS=true` and the user has the staff flag.
+
+| Endpoint | Method | Description | Status |
+|----------|--------|-------------|--------|
+| `/ping/` | GET | Remote ping test | ✅ Active |
+| `/telnet/` | GET | Port check via Telnet | ✅ Active |
+| `/ping-telnet/` | GET | Combined ping and Telnet checks | ✅ Active |
+| `/cables/{id}/up/` | POST | Mark fiber cable as active | ✅ Active |
+| `/cables/{id}/down/` | POST | Mark fiber cable as inactive | ✅ Active |
+| `/cables/{id}/unknown/` | POST | Mark fiber cable as unknown | ✅ Active |
+
+~~Legacy diagnostic routes under `/zabbix_api/api/test/*` have been removed~~; all integrations must use the inventory diagnostic endpoints.
+
+---
+
+### Lookup endpoints
+
+Used by autocomplete widgets and interactive UI components.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/lookup/hosts/` | GET | Lightweight host search |
+| `/lookup/hosts/{id}/interfaces/` | GET | Interfaces for a host |
+| `/lookup/interfaces/{id}/details/` | GET | Interface details |
+
+---
+
+## Inventory API
+
+Prefix: `/api/v1/inventory/`
+
+### Sites and devices
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/sites/` | GET | List sites in the inventory |
+| `/devices/add-from-zabbix/` | POST | Create a device populated from Zabbix |
+| `/zabbix/discover-hosts/` | GET | Preview hosts available for import |
+| `/bulk/` | POST | Bulk device and port ingestion |
+
+### Ports and telemetry
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/devices/<device_id>/ports/` | GET | Ports registered for a device |
+| `/devices/<device_id>/ports/optical/` | GET | Ports with optical telemetry |
+| `/ports/<port_id>/optical/` | GET | Optical measurements for a port |
+| `/ports/<port_id>/traffic/` | GET | Historical RX/TX series for a port |
+
+### Fibers and routes
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/fibers/` | GET | List fiber cables with metadata |
+| `/fibers/<cable_id>/` | GET/PUT/DELETE | Retrieve, update, or remove a cable |
+| `/fibers/manual-create/` | POST | Create a cable manually |
+| `/fibers/import-kml/` | POST | Import fiber geometry from a KML file |
+| `/fibers/import-kml/modal/` | GET | Render the HTML modal for KML imports |
+
+### Fiber status and diagnostics
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/fibers/<cable_id>/oper-status/` | GET | Refresh operational status for a cable |
+| `/fibers/<cable_id>/live-status/` | GET | Live status for a single cable |
+| `/fibers/live-status/` | GET | Live status snapshot for all cables |
+| `/fibers/refresh-status/` | GET | Force a refresh for cached fiber statuses |
+| `/fibers/<cable_id>/value-mapping/` | GET | Zabbix value mapping for a cable |
+
+---
+
+## Routes Builder task API
+
+Prefix: `/routes/tasks/`
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/tasks/build/` | POST | Enqueue a route calculation |
+| `/tasks/batch/` | POST | Enqueue multiple routes |
+| `/tasks/invalidate/` | POST | Invalidate the cached route |
+| `/tasks/health/` | GET | Worker health check |
+| `/tasks/status/{task_id}/` | GET | Task status lookup |
+| `/tasks/bulk/` | POST | Batch operations (build plus invalidate) |
+
+Example request:
+```json
+{
+  "route_id": 12,
+  "force": true,
+  "options": {"recalc_topology": true}
+}
+```
+Example response:
+```json
+{
+  "status": "enqueued",
+  "task_id": "a23b9cfa-22bb-44c8-8c1f-bcd56f0",
+  "queue": "maps"
+}
+```
+
+---
+
+## Standard error structure
+
+| Code | Type | Description |
+|------|------|-------------|
+| **400** | `Bad Request` | Invalid JSON payload or missing parameters |
+| **401** | `Unauthorized` | User is not authenticated |
+| **403** | `Forbidden` | Permission denied or diagnostics disabled |
+| **404** | `Not Found` | Resource not found |
+| **409** | `Conflict` | Route locked by another process |
+| **500** | `Server Error` | Internal failure - check Celery and Django logs |
+
+---
+
+## Best practices
+
+- Return `HTTP 202` for asynchronous operations.
+- Always validate the `task_id` before polling the status endpoint.
+- Set `DEBUG=false` in production.
+- Monitor workers with:
+  ```bash
+  celery -A core.celery_app inspect active
+  ```

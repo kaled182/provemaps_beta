@@ -1,0 +1,228 @@
+﻿{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ page_title }} - SIMPLES INTERNET{% endblock %}
+
+{% block extra_head %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ maps_api_key }}&libraries=geometry,places&callback=initMap" async defer></script>
+<style>
+  .panel { background: #ffffff; border-radius: 12px; box-shadow: 0 20px 60px rgba(15, 23, 42, 0.12); padding: 1.25rem; }
+  .map-shell { height: 620px; width: 100%; border-radius: 12px; background: linear-gradient(135deg, rgba(191, 219, 254, 0.35), rgba(221, 214, 254, 0.35)); }
+  #contextMenu { width: 260px; background: #ffffff; border-radius: 12px; box-shadow: 0 20px 45px rgba(15, 23, 42, 0.18); padding: 1rem; color: #111827; }
+  #contextMenu.hidden { display: none; }
+  #contextMenu h3 { font-size: 0.875rem; font-weight: 600; margin-bottom: 0.5rem; color: #111827; }
+  #contextMenu button { width: 100%; text-align: left; padding: 0.5rem 0.75rem; border-radius: 0.6rem; transition: background-color 0.2s ease; font-size: 0.875rem; color: #1f2937; }
+  #contextMenu button:hover { background-color: #eff6ff; }
+  #contextMenu button[data-variant="danger"] { color: #b91c1c; }
+  #contextMenu button[data-variant="danger"]:hover { background-color: #fee2e2; }
+  #contextCableInfo { margin-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.75rem; }
+  #contextCableName { font-weight: 600; font-size: 0.95rem; color: #1f2937; }
+  .toast-host { position: fixed; top: 1.25rem; right: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; z-index: 2147483647; pointer-events: none; }
+  .toast-card { display: flex; gap: 0.75rem; align-items: flex-start; background: #111827; color: #f9fafb; padding: 0.75rem 1rem; border-radius: 0.75rem; box-shadow: 0 18px 48px rgba(15, 23, 42, 0.35); transition: opacity 0.16s ease; }
+  .toast-card strong { font-weight: 600; }
+  .toast-card.toast-success { border-left: 4px solid #22c55e; }
+  .toast-card.toast-error { border-left: 4px solid #ef4444; }
+  .toast-card.toast-warning { border-left: 4px solid #f97316; }
+  .toast-card.toast-info { border-left: 4px solid #3b82f6; }
+  .confirm-host { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 2147483646; }
+  .confirm-backdrop { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.55); }
+  .confirm-card { position: relative; background: #ffffff; padding: 1.5rem; border-radius: 1rem; box-shadow: 0 22px 48px rgba(15, 23, 42, 0.25); max-width: 420px; width: 100%; display: flex; flex-direction: column; gap: 1rem; z-index: 1; }
+  .confirm-card h3 { font-size: 1.15rem; font-weight: 600; color: #111827; }
+  .confirm-card p { font-size: 0.95rem; color: #4b5563; }
+  .confirm-card .confirm-buttons { display: flex; justify-content: flex-end; gap: 0.75rem; }
+  .confirm-card .confirm-buttons button { padding: 0.5rem 1.25rem; border-radius: 0.75rem; font-size: 0.9rem; font-weight: 500; transition: background-color 0.2s ease, color 0.2s ease; }
+  .confirm-card .confirm-buttons button[data-variant="secondary"] { background: #e5e7eb; color: #111827; }
+  .confirm-card .confirm-buttons button[data-variant="secondary"]:hover { background: #d1d5db; }
+  .confirm-card .confirm-buttons button[data-variant="primary"] { background: #2563eb; color: #ffffff; }
+  .confirm-card .confirm-buttons button[data-variant="primary"]:hover { background: #1d4ed8; }
+  .confirm-card .confirm-buttons button[data-variant="danger"] { background: #dc2626; color: #ffffff; }
+  .confirm-card .confirm-buttons button[data-variant="danger"]:hover { background: #b91c1c; }
+  .modal-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(17, 24, 39, 0.55); z-index: 2147483645; transition: opacity 0.3s ease; }
+  .modal-card { background: #ffffff; border-radius: 1rem; width: 100%; max-width: 540px; padding: 1.5rem; position: relative; transition: opacity 0.3s ease, transform 0.3s ease; }
+  .modal-card h2 { font-size: 1.25rem; font-weight: 600; color: #111827; }
+  #builderMap { min-height: 480px; }
+  #pointsList { max-height: 260px; overflow-y: auto; margin-top: 1rem; border: 1px dashed #cbd5f5; border-radius: 0.75rem; padding: 0.75rem; }
+  #pointsList li { padding: 0.35rem 0.5rem; border-radius: 0.5rem; font-size: 0.85rem; color: #1f2937; cursor: grab; }
+  #pointsList li + li { margin-top: 0.35rem; }
+  #pointsList li.bg-blue-100 { background-color: #dbeafe; }
+  #pointsList li.bg-blue-50 { background-color: #eff6ff; }
+  .glow-card { position: relative; overflow: hidden; }
+  .glow-card::after { content: ""; position: absolute; inset: -40%; background: radial-gradient(circle at top right, rgba(59, 130, 246, 0.18), transparent 55%); opacity: 0.7; pointer-events: none; }
+  .glow-card > * { position: relative; z-index: 1; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6 space-y-6">
+  <div class="flex flex-col gap-2">
+    <h1 class="text-3xl font-semibold text-slate-900">{{ page_title }}</h1>
+    <p class="text-slate-600">Draw, edit, and monitor fiber routes using the interactive map and the advanced context menu.</p>
+  </div>
+
+  <section class="panel flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+    <div>
+      <h2 class="text-base font-semibold text-slate-900">Map workflow</h2>
+      <p class="text-sm text-slate-600">Right-click anywhere on the map to open the context menu, manage existing cables, import KML files, or save a new route.</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <button id="toggleRoutePoints" type="button" class="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm font-medium hover:bg-slate-200 transition">Route points</button>
+      <button id="toggleHelp" type="button" class="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm font-medium hover:bg-slate-200 transition">Help tips</button>
+    </div>
+  </section>
+
+  <section class="panel p-0 overflow-hidden">
+    <div id="builderMap" class="map-shell"></div>
+  </section>
+
+  <div class="grid gap-6 lg:grid-cols-2">
+    <section id="routePointsPanel" class="panel hidden">
+      <div class="flex items-center justify-between gap-3 mb-4">
+        <h3 class="text-lg font-semibold text-slate-900">Route points</h3>
+        <div class="text-sm text-slate-500">Total distance: <span id="distanceKm" class="font-semibold text-slate-800">0.000</span> km</div>
+      </div>
+      <p class="text-sm text-slate-600">Drag points to reorder them or right-click the map to access additional options.</p>
+      <ul id="pointsList" class="mt-3 bg-slate-50/80"></ul>
+      <div class="mt-4 flex justify-end">
+        <button id="manualCancelButton" type="button" class="px-4 py-2 rounded-lg bg-rose-100 text-rose-700 text-sm font-medium hover:bg-rose-200 transition">Cancel editing</button>
+      </div>
+    </section>
+
+    <section id="helpPanel" class="panel hidden">
+      <h3 class="text-lg font-semibold text-slate-900 mb-3">Tips</h3>
+      <ul class="space-y-2 text-sm text-slate-600">
+        <li><span class="font-medium text-slate-800">1.</span> Click the map to add points. Drag markers to adjust their position or reorder them in the list.</li>
+        <li><span class="font-medium text-slate-800">2.</span> Use the <span class="font-medium">context menu</span> (right-click) to save, edit, import from KML, or delete cables.</li>
+        <li><span class="font-medium text-slate-800">3.</span> When editing, the selected cable is highlighted while the remaining cables stay visible with lower opacity.</li>
+        <li><span class="font-medium text-slate-800">4.</span> Press <kbd class="border px-1 py-0.5 rounded bg-slate-100 text-slate-600 text-xs">Esc</kbd> to quickly exit the current edit session.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+
+<div id="contextMenu" class="hidden">
+  <div id="contextCableInfo" class="hidden">
+    <h3 class="text-xs uppercase tracking-wide text-slate-500">Selected cable</h3>
+    <p id="contextCableName">&mdash;</p>
+  </div>
+
+  <div id="contextGeneralOptions" class="space-y-2">
+    <h3>Map actions</h3>
+    <button id="contextLoadAll" type="button">
+      <span id="contextLoadAllText">Reload all cables</span>
+    </button>
+    <button id="contextImportKML" type="button">Import route from KML</button>
+  </div>
+
+  <div id="contextSelectedOptions" class="hidden space-y-2 mt-3">
+    <h3>Editing cable</h3>
+    <button id="contextEditCable" type="button">Edit cable metadata</button>
+    <button id="contextSavePath" type="button">Save updated path</button>
+    <button id="contextCancelEdit" type="button">Cancel editing</button>
+    <button id="contextDeleteCable" type="button" data-variant="danger">Delete cable</button>
+  </div>
+
+  <div id="contextCreatingOptions" class="hidden space-y-2 mt-3">
+    <h3>New route</h3>
+    <button id="contextSaveNewCable" type="button">Save as new cable</button>
+    <button id="contextClearNew" type="button">Clear drawn points</button>
+  </div>
+</div>
+
+<div id="toastHost" class="toast-host hidden"></div>
+<div id="confirmHost" class="confirm-host hidden"></div>
+
+<div id="manualSaveModal" class="modal-overlay opacity-0 pointer-events-none">
+  <div id="manualSaveModalContent" class="modal-card opacity-0 scale-95">
+    <button type="button" onclick="closeManualSaveModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+    <h2 class="mb-1">Save cable manually</h2>
+    <p class="text-sm text-slate-500 mb-4">Link the drawn path to inventory devices and their monitored ports.</p>
+
+    <div class="mb-4 rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-700">
+      Current route distance: <span id="manualRouteDistance" class="font-semibold">0.000 km</span>
+    </div>
+
+    <form id="manualSaveForm" class="space-y-4">
+      {% csrf_token %}
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1" for="manualRouteName">Cable name</label>
+        <input id="manualRouteName" name="name" type="text" required placeholder="e.g. Confresa backbone"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="manualOriginDeviceSelect">Origin device</label>
+          <input id="manualOriginDeviceSelect" type="text" placeholder="Type to search devices..." autocomplete="off"
+                 class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+          <input type="hidden" id="manualOriginDeviceId" name="origin_device_id" required />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="manualOriginPortSelect">Origin port</label>
+          <select id="manualOriginPortSelect" name="origin_port_id" required
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            <option value="">Select...</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between gap-3">
+        <label for="manualSinglePortOnly" class="text-sm text-slate-700 select-none">Monitor origin port only</label>
+        <input id="manualSinglePortOnly" name="single_port" type="checkbox" value="true"
+               class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+      </div>
+
+      <div id="manualDestNotice" class="hidden rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+        Destination fields are disabled because only the origin port will be monitored.
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="manualDestDeviceSelect">Destination device</label>
+          <input id="manualDestDeviceSelect" type="text" placeholder="Type to search devices..." autocomplete="off"
+                 class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+          <input type="hidden" id="manualDestDeviceId" name="dest_device_id" required />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1" for="manualDestPortSelect">Destination port</label>
+          <select id="manualDestPortSelect" name="dest_port_id" required
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            <option value="">Select...</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" class="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm font-medium hover:bg-slate-200 transition" onclick="closeManualSaveModal()">Cancel</button>
+        <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition">Save route</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{{ devices|json_script:"fiber-device-options-data" }}
+<script>
+  (function preloadDeviceOptions() {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    try {
+      const el = document.getElementById('fiber-device-options-data');
+      if (!el) {
+        return;
+      }
+      const parsed = JSON.parse(el.textContent || '[]');
+      if (Array.isArray(parsed)) {
+        window.__FIBER_DEVICE_OPTIONS = parsed;
+      }
+    } catch (error) {
+      console.error('[NetworkDesign] Failed to preload device options.', error);
+    }
+  }());
+</script>
+{% include "partials/import_kml.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script type="module" src="{% static 'js/fiber_route_builder.js' %}?v={{ STATIC_ASSET_VERSION }}"></script>
+
+{% endblock %}

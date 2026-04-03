@@ -622,7 +622,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    // Menu de contexto - Opções ao criar novo cabo
+    // Context menu - options when creating a new cable
     document.getElementById('contextSaveNewCable')?.addEventListener('click', () => {
         hideContextMenu();
         if (getPath().length >= 2) {
@@ -634,7 +634,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     document.getElementById('contextClearNew')?.addEventListener('click', () => {
         hideContextMenu();
-        // Limpar pontos desenhados
+    // Clear drawn points
         clearPath();
         clearAllMarkers();
         clearPolyline();
@@ -642,7 +642,7 @@ document.addEventListener('DOMContentLoaded', () => {
         refreshList();
     });
     
-    // Fechar menu de contexto ao clicar fora
+    // Close context menu when clicking outside
     document.addEventListener('click', (e) => {
         const menu = document.getElementById('contextMenu');
         if (menu && !menu.contains(e.target)) {
@@ -650,7 +650,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    // Botão de carregar cabo removido do layout; listener protegido
+    // Load cable button removed from layout; listener kept for safety
     document.getElementById('loadFiber')?.addEventListener('click', () => {
         const id = document.getElementById('fiberSelect')?.value;
         if (!id) {
@@ -660,12 +660,12 @@ document.addEventListener('DOMContentLoaded', () => {
         loadFiberDetail(id);
     });
     
-    // Botão Clear não existe mais - funcionalidade no menu de contexto
+    // Clear button no longer exists - functionality lives in the context menu
     
-    // Autoload de cabos movido para initMap para garantir que o mapa exista
+    // Auto-loading cables moved to initMap to ensure the map exists
     
-    // Event listeners antigos removidos (savePath, deleteCable, editFiber)
-    // Agora tudo é via menu de contexto
+    // Legacy listeners removed (savePath, deleteCable, editFiber)
+    // Everything now routes through the context menu
     
     if (manualForm) {
         manualForm.addEventListener('submit', handleManualFormSubmit);
@@ -690,10 +690,10 @@ window.loadFiberDetail = loadFiberDetail;
 document.addEventListener('fiber:cable-created', async (event) => {
     const fiberId = event.detail?.fiberId;
     
-    // Limpar o mapa e resetar estado
+    // Clear the map and reset application state
     clearMapAndResetState();
     
-    // Recarregar lista de cabos
+    // Reload cable list
     await loadFibers();
     
     if (fiberId) {

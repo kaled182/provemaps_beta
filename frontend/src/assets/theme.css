@@ -1,0 +1,455 @@
+/* ==========================================
+   THEME VARIABLES - Dark & Light Mode
+   ========================================== */
+
+:root[data-theme="dark"] {
+  /* Background Colors */
+  --bg-primary: #0f172a;
+  --bg-secondary: #111827;
+  --bg-secondary-rgb: 17, 24, 39;
+  --bg-tertiary: #1e293b;
+  --bg-elevated: #1f2937;
+  --surface-card: #1e293b;
+  --surface-muted: #111827;
+  --surface-highlight: rgba(148, 163, 184, 0.12);
+  --scrollbar-track: rgba(148, 163, 184, 0.12);
+  --scrollbar-thumb: rgba(148, 163, 184, 0.35);
+  --scrollbar-thumb-hover: rgba(148, 163, 184, 0.5);
+  --badge-info-bg: rgba(59, 130, 246, 0.2);
+  --badge-info-text: #bfdbfe;
+  --badge-neutral-bg: rgba(148, 163, 184, 0.18);
+  --badge-neutral-text: #e2e8f0;
+  --warning-soft-bg: rgba(245, 158, 11, 0.2);
+  --warning-soft-text: #fbbf24;
+  --danger-soft-bg: rgba(248, 113, 113, 0.2);
+  --danger-soft-text: #fecaca;
+  --info-soft-bg: rgba(59, 130, 246, 0.2);
+  --info-soft-text: #93c5fd;
+  
+  /* Menu & Sidebar Colors */
+  --menu-bg: rgba(17, 24, 39, 0.97);
+  --menu-bg-start: rgba(15, 23, 42, 0.98);
+  --menu-bg-end: rgba(17, 24, 39, 0.98);
+  --menu-item-base: rgba(255, 255, 255, 0.03);
+  --menu-item-hover: rgba(255, 255, 255, 0.08);
+  --menu-item-active-start: #10b981;
+  --menu-item-active-end: #059669;
+  --menu-text-primary: #f8fafc;
+  --menu-text-secondary: #e2e8f0;
+  --menu-text-tertiary: #94a3b8;
+  --menu-border-primary: rgba(255, 255, 255, 0.14);
+  --menu-border-secondary: rgba(255, 255, 255, 0.08);
+  
+  /* Text Colors */
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5f5;
+  --text-tertiary: #94a3b8;
+  --text-disabled: #64748b;
+  
+  /* Border Colors */
+  --border-primary: rgba(148, 163, 184, 0.25);
+  --border-secondary: rgba(148, 163, 184, 0.14);
+  
+  /* Status Colors */
+  --status-online: #22c55e;
+  --status-online-light: rgba(34, 197, 94, 0.3);
+  --status-offline: #f87171;
+  --status-offline-light: rgba(248, 113, 113, 0.25);
+  --status-warning: #f59e0b;
+  --status-warning-light: rgba(245, 158, 11, 0.25);
+  --status-unknown: #94a3b8;
+  
+  /* Status Gradients for charts */
+  --gradient-online: linear-gradient(90deg, #22c55e, #16a34a);
+  --gradient-offline: linear-gradient(90deg, #f87171, #dc2626);
+  --gradient-warning: linear-gradient(90deg, #f59e0b, #d97706);
+  --gradient-unknown: linear-gradient(90deg, #94a3b8, #64748b);
+  
+  /* Accent Colors */
+  --accent-primary: #22c55e;
+  --accent-secondary: #16a34a;
+  --accent-danger: #f87171;
+  --accent-info: #60a5fa;
+  --accent-info-dark: #2563eb;
+  --accent-info-light: rgba(59, 130, 246, 0.2);
+  
+  /* Shadow */
+  --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.45);
+  --shadow-md: 0 10px 30px rgba(15, 23, 42, 0.5);
+  --shadow-lg: 0 20px 60px rgba(15, 23, 42, 0.55);
+  --shadow-accent: 0 16px 40px rgba(15, 23, 42, 0.55);
+}
+
+:root[data-theme="light"] {
+  /* Background Colors */
+  --bg-primary: #f8fafc;
+  --bg-secondary: #f1f5f9;
+  --bg-secondary-rgb: 241, 245, 249;
+  --bg-tertiary: #e2e8f0;
+  --bg-elevated: #ffffff;
+  --surface-card: #ffffff;
+  --surface-muted: #f1f5f9;
+  --surface-highlight: rgba(15, 23, 42, 0.04);
+  --scrollbar-track: rgba(15, 23, 42, 0.08);
+  --scrollbar-thumb: rgba(100, 116, 139, 0.35);
+  --scrollbar-thumb-hover: rgba(100, 116, 139, 0.5);
+  --badge-info-bg: #dbeafe;
+  --badge-info-text: #1d4ed8;
+  --badge-neutral-bg: rgba(15, 23, 42, 0.06);
+  --badge-neutral-text: #334155;
+  --warning-soft-bg: #fef3c7;
+  --warning-soft-text: #b45309;
+  --danger-soft-bg: #fee2e2;
+  --danger-soft-text: #b91c1c;
+  --info-soft-bg: #dbeafe;
+  --info-soft-text: #1d4ed8;
+  
+  /* Menu & Sidebar Colors */
+  --menu-bg: rgba(255, 255, 255, 0.96);
+  --menu-bg-start: rgba(255, 255, 255, 0.98);
+  --menu-bg-end: rgba(241, 245, 249, 0.9);
+  --menu-item-base: rgba(15, 23, 42, 0.03);
+  --menu-item-hover: rgba(15, 23, 42, 0.08);
+  --menu-item-active-start: #10b981;
+  --menu-item-active-end: #047857;
+  --menu-text-primary: #0f172a;
+  --menu-text-secondary: #334155;
+  --menu-text-tertiary: #64748b;
+  --menu-border-primary: rgba(15, 23, 42, 0.12);
+  --menu-border-secondary: rgba(15, 23, 42, 0.06);
+  
+  /* Text Colors */
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-tertiary: #64748b;
+  --text-disabled: #94a3b8;
+  
+  /* Border Colors */
+  --border-primary: rgba(148, 163, 184, 0.35);
+  --border-secondary: rgba(148, 163, 184, 0.2);
+  
+  /* Status Colors */
+  --status-online: #16a34a;
+  --status-online-light: rgba(34, 197, 94, 0.2);
+  --status-offline: #dc2626;
+  --status-offline-light: rgba(248, 113, 113, 0.2);
+  --status-warning: #d97706;
+  --status-warning-light: rgba(245, 158, 11, 0.2);
+  --status-unknown: #94a3b8;
+  
+  /* Status Gradients for charts */
+  --gradient-online: linear-gradient(90deg, #22c55e, #15803d);
+  --gradient-offline: linear-gradient(90deg, #f87171, #dc2626);
+  --gradient-warning: linear-gradient(90deg, #f59e0b, #d97706);
+  --gradient-unknown: linear-gradient(90deg, #94a3b8, #64748b);
+  
+  /* Accent Colors */
+  --accent-primary: #16a34a;
+  --accent-secondary: #15803d;
+  --accent-danger: #dc2626;
+  --accent-info: #2563eb;
+  --accent-info-dark: #1d4ed8;
+  --accent-info-light: rgba(59, 130, 246, 0.16);
+  
+  /* Shadow */
+  --shadow-sm: 0 2px 6px rgba(15, 23, 42, 0.1);
+  --shadow-md: 0 10px 30px rgba(15, 23, 42, 0.15);
+  --shadow-lg: 0 18px 50px rgba(15, 23, 42, 0.18);
+  --shadow-accent: 0 10px 30px rgba(15, 23, 42, 0.12);
+}
+
+/* Default to dark theme if no attribute is set */
+:root {
+  --bg-primary: #0f172a;
+  --bg-secondary: #111827;
+  --bg-tertiary: #1e293b;
+  --bg-elevated: #1f2937;
+  --surface-card: #1e293b;
+  --surface-muted: #111827;
+  --surface-highlight: rgba(148, 163, 184, 0.12);
+  --scrollbar-track: rgba(148, 163, 184, 0.12);
+  --scrollbar-thumb: rgba(148, 163, 184, 0.35);
+  --scrollbar-thumb-hover: rgba(148, 163, 184, 0.5);
+  --badge-info-bg: rgba(59, 130, 246, 0.2);
+  --badge-info-text: #bfdbfe;
+  --badge-neutral-bg: rgba(148, 163, 184, 0.18);
+  --badge-neutral-text: #e2e8f0;
+  --warning-soft-bg: rgba(245, 158, 11, 0.2);
+  --warning-soft-text: #fbbf24;
+  --danger-soft-bg: rgba(248, 113, 113, 0.2);
+  --danger-soft-text: #fecaca;
+  --info-soft-bg: rgba(59, 130, 246, 0.2);
+  --info-soft-text: #93c5fd;
+  --menu-bg: rgba(17, 24, 39, 0.97);
+  --menu-bg-start: rgba(15, 23, 42, 0.98);
+  --menu-bg-end: rgba(17, 24, 39, 0.98);
+  --menu-item-base: rgba(255, 255, 255, 0.03);
+  --menu-item-hover: rgba(255, 255, 255, 0.08);
+  --menu-item-active-start: #10b981;
+  --menu-item-active-end: #059669;
+  --menu-text-primary: #f8fafc;
+  --menu-text-secondary: #e2e8f0;
+  --menu-text-tertiary: #94a3b8;
+  --menu-border-primary: rgba(255, 255, 255, 0.14);
+  --menu-border-secondary: rgba(255, 255, 255, 0.08);
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5f5;
+  --text-tertiary: #94a3b8;
+  --text-disabled: #64748b;
+  --border-primary: rgba(148, 163, 184, 0.25);
+  --border-secondary: rgba(148, 163, 184, 0.14);
+  --status-online: #22c55e;
+  --status-online-light: rgba(34, 197, 94, 0.3);
+  --status-offline: #f87171;
+  --status-offline-light: rgba(248, 113, 113, 0.25);
+  --status-warning: #f59e0b;
+  --status-warning-light: rgba(245, 158, 11, 0.25);
+  --status-unknown: #94a3b8;
+  --gradient-online: linear-gradient(90deg, #22c55e, #16a34a);
+  --gradient-offline: linear-gradient(90deg, #f87171, #dc2626);
+  --gradient-warning: linear-gradient(90deg, #f59e0b, #d97706);
+  --gradient-unknown: linear-gradient(90deg, #94a3b8, #64748b);
+  --accent-primary: #22c55e;
+  --accent-secondary: #16a34a;
+  --accent-danger: #f87171;
+  --accent-info: #60a5fa;
+  --accent-info-dark: #2563eb;
+  --accent-info-light: rgba(59, 130, 246, 0.2);
+  --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.45);
+  --shadow-md: 0 10px 30px rgba(15, 23, 42, 0.5);
+  --shadow-lg: 0 20px 60px rgba(15, 23, 42, 0.55);
+  --shadow-accent: 0 16px 40px rgba(15, 23, 42, 0.55);
+}
+
+/* Google Maps InfoWindow theming - força tema nos modais do Google Maps */
+/* Especificidade aumentada para Chrome com body > div */
+:root[data-theme="light"] .gm-style-iw,
+:root[data-theme="light"] .gm-style-iw-c,
+:root[data-theme="light"] .gm-style-iw-d,
+body :root[data-theme="light"] .gm-style-iw,
+body :root[data-theme="light"] .gm-style-iw-c,
+body :root[data-theme="light"] .gm-style-iw-d {
+  background-color: var(--surface-card) !important;
+  color: var(--text-secondary) !important;
+  border: none !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+:root[data-theme="dark"] .gm-style-iw,
+:root[data-theme="dark"] .gm-style-iw-c,
+:root[data-theme="dark"] .gm-style-iw-d,
+body :root[data-theme="dark"] .gm-style-iw,
+body :root[data-theme="dark"] .gm-style-iw-c,
+body :root[data-theme="dark"] .gm-style-iw-d {
+  background-color: var(--surface-card) !important;
+  color: var(--text-secondary) !important;
+  border: none !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+/* ------------------------------------------
+   Theme utility classes (global)
+   ------------------------------------------ */
+.app-page {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.app-page-muted {
+  background: var(--bg-secondary);
+}
+
+.app-surface {
+  background: var(--surface-card);
+  border: 1px solid var(--border-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.app-surface-muted {
+  background: var(--surface-muted);
+  border: 1px solid var(--border-secondary);
+}
+
+.app-divider {
+  border-color: var(--border-primary);
+}
+
+.app-text-primary {
+  color: var(--text-primary);
+}
+
+.app-text-secondary {
+  color: var(--text-secondary);
+}
+
+.app-text-tertiary {
+  color: var(--text-tertiary);
+}
+
+.app-input {
+  background: var(--surface-muted);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 0.5rem;
+}
+
+.app-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.app-input:focus {
+  outline: none;
+  border-color: var(--accent-info);
+  box-shadow: 0 0 0 3px var(--accent-info-light);
+}
+
+.app-tab {
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.app-tab.is-active {
+  background: var(--accent-info);
+  color: #ffffff;
+  box-shadow: var(--shadow-sm);
+}
+
+.app-tab:not(.is-active):hover {
+  background: var(--menu-item-hover);
+  color: var(--text-primary);
+}
+
+.app-tab-underline {
+  border-bottom: 2px solid transparent;
+  color: var(--text-tertiary);
+}
+
+.app-tab-underline.is-active {
+  border-color: var(--accent-info);
+  color: var(--accent-info);
+}
+
+.app-btn {
+  border: 1px solid var(--border-primary);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+}
+
+.app-btn:hover {
+  background: var(--menu-item-hover);
+  color: var(--text-primary);
+}
+
+.app-btn-primary {
+  background: var(--accent-info);
+  border-color: var(--accent-info);
+  color: #ffffff;
+}
+
+.app-btn-primary:hover {
+  background: var(--accent-info-dark);
+}
+
+.app-btn-success {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #ffffff;
+}
+
+.app-btn-success:hover {
+  background: var(--accent-secondary);
+}
+
+.app-btn-danger {
+  background: var(--accent-danger);
+  border-color: var(--accent-danger);
+  color: #ffffff;
+}
+
+.app-btn-danger:hover {
+  background: #dc2626;
+}
+
+.app-btn-warning {
+  background: var(--status-warning);
+  border-color: var(--status-warning);
+  color: #ffffff;
+}
+
+.app-btn-warning:hover {
+  background: #d97706;
+}
+
+.app-chip {
+  background: var(--menu-item-hover);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-secondary);
+}
+
+.app-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.app-badge-info {
+  background: var(--badge-info-bg);
+  color: var(--badge-info-text);
+  border-color: var(--accent-info);
+}
+
+.app-badge-success {
+  background: var(--status-online-light);
+  color: var(--status-online);
+  border-color: var(--status-online);
+}
+
+.app-badge-warning {
+  background: var(--status-warning-light);
+  color: var(--status-warning);
+  border-color: var(--status-warning);
+}
+
+.app-badge-danger {
+  background: var(--status-offline-light);
+  color: var(--status-offline);
+  border-color: var(--status-offline);
+}
+
+.app-badge-muted {
+  background: var(--badge-neutral-bg);
+  color: var(--badge-neutral-text);
+  border-color: var(--border-secondary);
+}
+
+.app-divide > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border-primary);
+}
+
+.app-row:hover {
+  background: var(--menu-item-hover);
+}
+
+.app-spinner {
+  border-bottom-color: var(--accent-info);
+}
+
+/* Remove seta branca do InfoWindow */
+.gm-style .gm-style-iw-t::after,
+body .gm-style .gm-style-iw-t::after {
+  background: var(--surface-card) !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+/* Remove borda do botão de fechar */
+.gm-ui-hover-effect,
+body .gm-ui-hover-effect {
+  background-color: transparent !important;
+  border: none !important;
+}

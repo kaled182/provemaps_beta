@@ -1,0 +1,70 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}System Configuration - ProveMaps{% endblock %}</title>
+    
+    {# CSRF Token #}
+    <script>
+      window.CSRF_TOKEN = "{{ csrf_token }}";
+
+      // Apply theme early for Django + Vue mixed pages
+      (function() {
+        const theme = localStorage.getItem('ui.theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.classList.toggle('dark', theme === 'dark');
+      })();
+    </script>
+    
+    {# Tailwind CSS from CDN #}
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              primary: { DEFAULT: '#3b82f6', dark: '#1e40af' },
+            }
+          }
+        }
+      }
+    </script>
+    
+    {% static 'vue-spa/' as vite_base %}
+    {% if VITE_ENTRY %}
+      {% for css in VITE_ENTRY.css %}
+        <link rel="stylesheet" href="{{ vite_base }}{{ css }}">
+      {% endfor %}
+    {% else %}
+      {# Fallback for older builds without manifest #}
+      <link rel="stylesheet" href="{% static 'vue-spa/assets/main.css' %}?v={{ STATIC_ASSET_VERSION|default:'1' }}">
+    {% endif %}
+    
+    {% block extra_head %}{% endblock %}
+</head>
+    <body class="h-full overflow-hidden bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+    <div class="flex h-screen overflow-hidden">
+        {# Sidebar Vue.js #}
+        <div id="app"></div>
+        
+        {# Conteúdo Django #}
+        <main class="flex-1 relative overflow-auto bg-white dark:bg-gray-900">
+            {% block content %}
+            <p class="p-6 text-gray-600">Content goes here.</p>
+            {% endblock %}
+        </main>
+    </div>
+    
+    {% if VITE_ENTRY %}
+      <script type="module" src="{{ vite_base }}{{ VITE_ENTRY.file }}"></script>
+    {% else %}
+      {# Fallback for older builds without manifest #}
+      <script type="module" src="{% static 'vue-spa/assets/main.js' %}?v={{ STATIC_ASSET_VERSION|default:'1' }}"></script>
+    {% endif %}
+    
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

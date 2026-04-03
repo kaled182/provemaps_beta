@@ -1,0 +1,595 @@
+<template>
+  <div class="contact-list">
+    <!-- Loading -->
+    <div v-if="loading" class="loading-container">
+      <div class="spinner"></div>
+      <p>Carregando contatos...</p>
+    </div>
+    
+    <!-- Empty State -->
+    <div v-else-if="contacts.length === 0" class="empty-state">
+      <i class="fas fa-address-book empty-icon"></i>
+      <h3>Nenhum contato encontrado</h3>
+      <p>Adicione um novo contato ou importe de um arquivo CSV/Excel</p>
+    </div>
+    
+    <!-- Table -->
+    <div v-else class="table-container">
+      <table class="contacts-table">
+        <thead>
+          <tr>
+            <th class="checkbox-col">
+              <input 
+                type="checkbox" 
+                :checked="isAllSelected"
+                @change="handleSelectAll"
+              />
+            </th>
+            <th>Nome</th>
+            <th>Telefone</th>
+            <th>Email</th>
+            <th>Empresa</th>
+            <th>Grupos</th>
+            <th>Mensagens</th>
+            <th>Status</th>
+            <th class="actions-col">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr 
+            v-for="contact in contacts" 
+            :key="contact.id"
+            :class="{ selected: isSelected(contact.id), inactive: !contact.is_active }"
+          >
+            <td class="checkbox-col">
+              <input 
+                type="checkbox" 
+                :checked="isSelected(contact.id)"
+                @change="$emit('toggleSelection', contact.id)"
+              />
+            </td>
+            <td class="contact-name">
+              <i class="fas fa-user contact-icon"></i>
+              {{ contact.name }}
+            </td>
+            <td>
+              <a :href="`https://wa.me/${contact.formatted_phone}`" target="_blank" class="phone-link">
+                {{ contact.phone }}
+              </a>
+            </td>
+            <td>{{ contact.email || '-' }}</td>
+            <td>{{ contact.company || '-' }}</td>
+            <td>
+              <div class="groups-tags">
+                <span 
+                  v-for="groupName in contact.group_names" 
+                  :key="groupName" 
+                  class="group-tag"
+                >
+                  {{ groupName }}
+                </span>
+                <span v-if="!contact.group_names || contact.group_names.length === 0" class="text-muted">
+                  Sem grupo
+                </span>
+              </div>
+            </td>
+            <td class="text-center">
+              <div class="message-count">
+                <i class="fas fa-paper-plane"></i>
+                {{ contact.message_count || 0 }}
+              </div>
+              <div v-if="contact.last_message_sent" class="last-message-date">
+                {{ formatDate(contact.last_message_sent) }}
+              </div>
+            </td>
+            <td>
+              <span :class="['status-badge', contact.is_active ? 'active' : 'inactive']">
+                {{ contact.is_active ? 'Ativo' : 'Inativo' }}
+              </span>
+            </td>
+            <td class="actions-col">
+              <div class="action-buttons">
+                <button 
+                  @click="handleSendMessage(contact)" 
+                  class="btn-action btn-send"
+                  title="Enviar Mensagem"
+                  :disabled="!contact.is_active"
+                >
+                  <i class="fas fa-paper-plane"></i>
+                </button>
+                <button 
+                  @click="$emit('edit', contact)" 
+                  class="btn-action btn-edit"
+                  title="Editar"
+                >
+                  <i class="fas fa-edit"></i>
+                </button>
+                <button 
+                  @click="$emit('delete', contact.id)" 
+                  class="btn-action btn-delete"
+                  title="Excluir"
+                >
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    
+    <!-- Send Message Dialog -->
+    <div v-if="showSendMessageDialog" class="modal-overlay" @click="closeSendMessage">
+      <div class="modal-dialog" @click.stop>
+        <div class="modal-header">
+          <h3>Enviar Mensagem para {{ selectedContactForMessage?.name }}</h3>
+          <button @click="closeSendMessage" class="btn-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Gateway WhatsApp</label>
+            <select v-model="messageGatewayId" class="form-control">
+              <option value="">Selecione um gateway...</option>
+              <!-- TODO: buscar gateways WhatsApp ativos -->
+              <option value="1">Gateway Padrão</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Mensagem</label>
+            <textarea 
+              v-model="messageText" 
+              class="form-control" 
+              rows="5"
+              placeholder="Digite sua mensagem..."
+            ></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button @click="closeSendMessage" class="btn btn-secondary">Cancelar</button>
+          <button 
+            @click="confirmSendMessage" 
+            class="btn btn-primary"
+            :disabled="!messageText || !messageGatewayId"
+          >
+            <i class="fas fa-paper-plane"></i>
+            Enviar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed } from 'vue'
+
+const props = defineProps({
+  contacts: {
+    type: Array,
+    required: true
+  },
+  loading: {
+    type: Boolean,
+    default: false
+  },
+  selectedContacts: {
+    type: Array,
+    default: () => []
+  }
+})
+
+const emit = defineEmits(['edit', 'delete', 'sendMessage', 'toggleSelection', 'selectAll'])
+
+// Local state
+const showSendMessageDialog = ref(false)
+const selectedContactForMessage = ref(null)
+const messageText = ref('')
+const messageGatewayId = ref('')
+
+// Computed
+const isAllSelected = computed(() => {
+  return props.contacts.length > 0 && 
+         props.contacts.every(c => props.selectedContacts.includes(c.id))
+})
+
+const isSelected = (contactId) => {
+  return props.selectedContacts.includes(contactId)
+}
+
+// Methods
+const handleSelectAll = () => {
+  emit('selectAll')
+}
+
+const handleSendMessage = (contact) => {
+  selectedContactForMessage.value = contact
+  messageText.value = ''
+  messageGatewayId.value = ''
+  showSendMessageDialog.value = true
+}
+
+const closeSendMessage = () => {
+  showSendMessageDialog.value = false
+  selectedContactForMessage.value = null
+  messageText.value = ''
+  messageGatewayId.value = ''
+}
+
+const confirmSendMessage = () => {
+  if (selectedContactForMessage.value && messageText.value && messageGatewayId.value) {
+    emit('sendMessage', selectedContactForMessage.value.id, messageText.value, messageGatewayId.value)
+    closeSendMessage()
+  }
+
+const formatDate = (dateString) => {
+  if (!dateString) return '-'
+  const date = new Date(dateString)
+  return date.toLocaleDateString('pt-BR', { 
+    day: '2-digit', 
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+</script>
+
+<style scoped>
+.contact-list {
+  background: var(--surface-card);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.loading-container {
+  padding: 60px;
+  text-align: center;
+  color: #666;
+}
+
+.spinner {
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #007bff;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 15px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+
+.empty-state {
+  padding: 60px;
+  text-align: center;
+  color: var(--text-tertiary);
+}
+
+.empty-icon {
+  font-size: 64px;
+  color: var(--text-disabled);
+  margin-bottom: 20px;
+}
+
+.empty-state h3 {
+  color: inherit;
+}
+
+.empty-state p {
+  color: inherit;
+}
+
+.table-container {
+  overflow-x: auto;
+}
+
+.contacts-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.contacts-table thead {
+  background: var(--bg-secondary);
+  border-bottom: 2px solid var(--border-primary);
+}
+
+.contacts-table th {
+  padding: 12px 15px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-transform: uppercase;
+}
+
+.contacts-table td {
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--border-secondary);
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.contacts-table tbody tr {
+  transition: background 0.2s;
+  background: var(--surface-card);
+}
+
+.contacts-table tbody tr:hover {
+  background: var(--surface-highlight);
+}
+
+.contacts-table tbody tr.selected {
+  background: var(--accent-info-light);
+}
+
+.contacts-table tbody tr.inactive {
+  opacity: 0.6;
+}
+
+.checkbox-col {
+  width: 40px;
+  text-align: center;
+}
+
+.checkbox-col input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+.contact-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.contact-icon {
+  color: var(--accent-info);
+  margin-right: 8px;
+}
+
+.phone-link {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+.phone-link:hover {
+  text-decoration: underline;
+}
+
+.groups-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.group-tag {
+  display: inline-block;
+  padding: 3px 8px;
+  background: #007bff;
+  color: white;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.message-count {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.last-message-date {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 3px;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-badge.active {
+  background: var(--status-online-light);
+  color: var(--status-online);
+}
+
+.status-badge.inactive {
+  background: var(--status-offline-light);
+  color: var(--status-offline);
+}
+
+.actions-col {
+  width: 140px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+}
+
+.btn-action {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 13px;
+}
+
+.btn-action:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.btn-send {
+  background: #28a745;
+  color: white;
+}
+
+.btn-send:hover:not(:disabled) {
+  background: #218838;
+}
+
+.btn-edit {
+  background: #007bff;
+  color: white;
+}
+
+.btn-edit:hover {
+  background: #0056b3;
+}
+
+.btn-delete {
+  background: #dc3545;
+  color: white;
+}
+
+.btn-delete:hover {
+  background: #c82333;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-muted {
+  color: var(--text-tertiary);
+  font-style: italic;
+  font-size: 12px;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-dialog {
+  background: var(--surface-card);
+  border-radius: 8px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+.modal-header {
+  padding: 20px;
+  border-bottom: 1px solid var(--border-secondary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.btn-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  line-height: 1;
+}
+
+.btn-close:hover {
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-footer {
+  padding: 15px 20px;
+  border-top: 1px solid var(--border-secondary);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.form-control {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+textarea.form-control {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: #007bff;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #0056b3;
+}
+
+.btn-secondary {
+  background: #6c757d;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background: #545b62;
+}
+</style>
