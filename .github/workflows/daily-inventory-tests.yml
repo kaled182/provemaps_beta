@@ -15,6 +15,8 @@ jobs:
           POSTGRES_DB: app
           POSTGRES_USER: app
           POSTGRES_PASSWORD: app
+        ports:
+          - 5432:5432
         options: >-
           --health-cmd "pg_isready -U app -d app"
           --health-interval 10s
@@ -30,7 +32,7 @@ jobs:
       DB_USER: "app"
       DB_PASSWORD: "app"
       DB_HOST: "127.0.0.1"
-      DB_PORT: "${{ job.services.postgres.ports[5432] }}"
+      DB_PORT: "5432"
       GDAL_LIBRARY_PATH: "/usr/lib/x86_64-linux-gnu/libgdal.so"
       GEOS_LIBRARY_PATH: "/usr/lib/x86_64-linux-gnu/libgeos_c.so"
       PROJ_LIB: "/usr/share/proj"
