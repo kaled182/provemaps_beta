@@ -18,15 +18,20 @@ import django
 # Prevent pytest from collecting script-style files and non-pytest artifacts
 collect_ignore = [
     "test_errors.txt",
-    # Diagnostic scripts — not pytest tests (call django.setup() / exit() at module level)
+    # Diagnostic scripts — not pytest tests (call django.setup() at module level)
     "tests/test_backup_config.py",
     "tests/test_cable_serializer.py",
     "tests/test_user_sync.py",
-    # E2E Playwright test — requires a running server (not available in unit CI)
+    # HTTP scripts — hit localhost:8000, require a running server
+    "tests/test_fiber_cable_endpoint.py",
+    "tests/test_fiber_modal_data_flow.py",
+    "tests/test_ports_endpoint.py",
+    "tests/test_mosaic_refs.py",
+    # E2E Playwright — requires a running server (not available in CI)
     "tests/test_mosaic_rendering.py",
 ]
 collect_ignore_glob = [
-    # scripts/ directory contains diagnostic shell-style scripts, not pytest tests
+    # scripts/ contains diagnostic shell-style scripts, not pytest tests
     "tests/scripts/*.py",
 ]
 
@@ -123,7 +128,7 @@ def clear_cache() -> Iterator[None]:
         cache.clear()
     except Exception:
         pass  # Ignore cache failures (useful when Redis is offline)
-    
+
     try:
         yield
     finally:

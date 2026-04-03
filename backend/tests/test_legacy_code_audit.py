@@ -211,14 +211,14 @@ class LegacyDataIntegrityTest(TestCase):
     def setUpTestData(cls):
         """Criar dados de teste realistas"""
         cls.site_a = Site.objects.create(
-            name="Site A",
+            display_name="Legacy Audit Site A",
             latitude=-15.7942,
-            longitude=-47.8822
+            longitude=-47.8822,
         )
         cls.site_b = Site.objects.create(
-            name="Site B", 
+            display_name="Legacy Audit Site B",
             latitude=-15.8000,
-            longitude=-47.9000
+            longitude=-47.9000,
         )
     
     def test_site_queries_work_without_legacy_tables(self):
