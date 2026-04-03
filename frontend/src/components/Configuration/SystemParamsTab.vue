@@ -265,9 +265,7 @@ const handleReset = () => {
 
 // Lifecycle
 onMounted(async () => {
-  console.log('[SystemParamsTab] Mounting component, loading config...')
   await loadSystemConfig()
-  console.log('[SystemParamsTab] Config loaded:', config)
 })
 </script>
 

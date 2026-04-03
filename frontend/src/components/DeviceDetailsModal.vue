@@ -542,8 +542,7 @@ const closeTrafficModal = () => {
 
 watch(() => props.isOpen, (newVal) => {
   if (newVal && props.device) {
-    loadNetworkThresholds()
-    loadPorts()
+    Promise.allSettled([loadNetworkThresholds(), loadPorts()])
   }
 })
 
@@ -576,9 +575,9 @@ watch(() => props.device, (newDevice) => {
 .device-modal-container {
   background: #ffffff;
   border-radius: 16px;
-  max-width: 1400px;
+  max-width: 1200px;
   width: 100%;
-  max-height: 90vh;
+  max-height: 88vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -592,7 +591,7 @@ watch(() => props.device, (newDevice) => {
 
 /* Header */
 .device-modal-header {
-  padding: 24px 32px;
+  padding: 16px 24px;
   border-bottom: 1px solid #e2e8f0;
   display: flex;
   align-items: center;
@@ -612,14 +611,14 @@ watch(() => props.device, (newDevice) => {
 }
 
 .device-icon-large {
-  width: 64px;
-  height: 64px;
+  width: 44px;
+  height: 44px;
   background: rgba(255, 255, 255, 0.2);
-  border-radius: 12px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 28px;
+  font-size: 20px;
   backdrop-filter: blur(10px);
 }
 
@@ -630,14 +629,14 @@ watch(() => props.device, (newDevice) => {
 }
 
 .device-name {
-  font-size: 24px;
+  font-size: 18px;
   font-weight: 700;
   margin: 0;
   color: white;
 }
 
 .device-meta {
-  font-size: 14px;
+  font-size: 12px;
   margin: 0;
   opacity: 0.9;
   color: white;
@@ -666,10 +665,10 @@ watch(() => props.device, (newDevice) => {
 
 /* Metrics Summary */
 .metrics-summary {
-  padding: 20px 32px;
+  padding: 12px 24px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
   background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
 }
@@ -681,11 +680,11 @@ watch(() => props.device, (newDevice) => {
 
 .metric-card {
   background: white;
-  padding: 16px;
-  border-radius: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
@@ -694,13 +693,14 @@ watch(() => props.device, (newDevice) => {
 }
 
 .metric-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 15px;
+  flex-shrink: 0;
 }
 
 .metric-icon.cpu {
@@ -753,7 +753,7 @@ watch(() => props.device, (newDevice) => {
 }
 
 .metric-value {
-  font-size: 20px;
+  font-size: 15px;
   font-weight: 700;
   color: #1e293b;
 }
@@ -766,7 +766,7 @@ watch(() => props.device, (newDevice) => {
 .ports-section {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 32px;
+  padding: 16px 20px;
 }
 
 .section-header {
@@ -919,8 +919,8 @@ watch(() => props.device, (newDevice) => {
 /* Ports Grid */
 .ports-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 12px;
 }
 
 .port-card {
@@ -1102,8 +1102,9 @@ watch(() => props.device, (newDevice) => {
 .optical-signals {
   grid-column: 2 / -1;
   display: flex;
-  gap: 12px;
+  gap: 8px;
   margin-top: 4px;
+  flex-wrap: nowrap;
 }
 
 .signal-item {
@@ -1113,6 +1114,7 @@ watch(() => props.device, (newDevice) => {
   padding: 6px 12px;
   background: #f1f5f9;
   border-radius: 6px;
+  white-space: nowrap;
 }
 
 .device-modal-container.dark .signal-item {

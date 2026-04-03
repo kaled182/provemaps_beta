@@ -22,7 +22,7 @@ import {
 import { fetchFibers, fetchFiber, createFiberManual, updateFiber, removeFiber, validateNearbyCables } from './modules/apiClient.js';
 
 // Business logic modules
-import { initCableService, loadCableList, loadCableDetails, createCable, updateCableData, deleteCable, loadAllCablesForVisualization, validateCablePayload, removeCableVisualization, cleanupCableService } from './modules/cableService.js';
+import { initCableService, loadCableList, loadCableDetails, createCable, updateCableData, deleteCable, loadAllCablesForVisualization, validateCablePayload, removeCableVisualization, cleanupCableService, highlightCable } from './modules/cableService.js';
 
 // UI helper modules
 import { refreshPointsList, updateDistanceDisplay, updateSaveButtonState, extractFormData, showSuccessMessage, showErrorMessage, togglePanel, setFormSubmitting, updateCableSelect, showConfirmDialog, cleanupUIHelpers } from './modules/uiHelpers.js';
@@ -36,6 +36,8 @@ let currentFiberMeta = null;
 // Preview state: cable selected (right-clicked) but NOT in edit mode
 let previewCableId = null;
 let previewCableMeta = null;
+// When true, the modal was opened from preview (metadata-only); path must be preserved
+let metadataOnlyEdit = false;
 // REMOVED: let allCablesPolylines = []; // Managed inside cableService.js
 
 // DOM elements
@@ -84,15 +86,47 @@ function populateCableDetailsPanel(meta) {
     set('cableDetailName', meta.name);
     const distance = meta.path_length_km != null ? `${parseFloat(meta.path_length_km).toFixed(3)} km` : '—';
     set('cableDetailDistance', distance);
-    const originDevice = meta.origin?.device_name || meta.origin?.device_id || null;
-    const originPort = meta.origin?.port_name || meta.origin?.port_id || null;
+    const originDevice = meta.origin?.device || meta.origin?.device_name || meta.origin?.device_id || null;
+    const originPort = meta.origin?.port || meta.origin?.port_name || meta.origin?.port_id || null;
     set('cableDetailOrigin', originDevice ? `${originDevice}${originPort ? ` / ${originPort}` : ''}` : '—');
+    const destDevice = meta.destination?.device || meta.destination?.device_name || meta.destination?.device_id || null;
+    const destPort = meta.destination?.port || meta.destination?.port_name || meta.destination?.port_id || null;
     if (meta.single_port) {
-        set('cableDetailDestination', '— (porta única)');
+        set('cableDetailDestination', destDevice ? `${destDevice} / ${destPort || '—'} (porta única)` : '— (porta única)');
     } else {
-        const destDevice = meta.destination?.device_name || meta.destination?.device_id || null;
-        const destPort = meta.destination?.port_name || meta.destination?.port_id || null;
         set('cableDetailDestination', destDevice ? `${destDevice}${destPort ? ` / ${destPort}` : ''}` : '—');
+    }
+    set('cableDetailType', meta.cable_type?.name || '—');
+    set('cableDetailGroup', meta.cable_group?.name || '—');
+    const responsibleLabel = meta.responsible_user?.full_name || meta.responsible_user?.username
+        || meta.responsible?.name || '—';
+    set('cableDetailResponsible', responsibleLabel);
+    set('cableDetailFolder', meta.folder?.name || '—');
+
+    // Estimated optical loss
+    const lossRow = document.getElementById('cableDetailLossRow');
+    const lossValEl = document.getElementById('cableDetailLossValue');
+    const lossWarnEl = document.getElementById('cableDetailLossWarn');
+    const attenuation = meta.cable_group?.attenuation_db_per_km;
+    const lengthKm = meta.path_length_km ?? meta.length_km;
+    if (lossRow && attenuation != null && lengthKm != null) {
+        const loss = attenuation * parseFloat(lengthKm);
+        if (lossValEl) lossValEl.textContent = `${loss.toFixed(2)} dB`;
+        if (lossWarnEl) lossWarnEl.style.display = loss > 30 ? '' : 'none';
+        lossRow.style.display = '';
+    } else if (lossRow) {
+        lossRow.style.display = 'none';
+    }
+    // Show warning banner if cable has no stored path
+    const noPathWarning = document.getElementById('cableNoPathWarning');
+    if (noPathWarning) {
+        noPathWarning.style.display = (!meta.path || meta.path.length < 2) ? 'block' : 'none';
+    }
+
+    // Expose preview state to Vue layer
+    window.__ndPreviewCableId = meta.id;
+    if (typeof window.__ndOnPreviewFolderChanged === 'function') {
+        window.__ndOnPreviewFolderChanged(meta.folder ?? null);
     }
 }
 
@@ -108,6 +142,7 @@ async function previewCable(id) {
         setRoutePointsPanelVisible(false);
         populateCableDetailsPanel(data);
         setCableDetailsPanelVisible(true);
+        _setHelpMode('preview');
         updateContextMenuStateWrapper();
     } catch (err) {
         console.error('[previewCable] Error loading cable metadata', err);
@@ -118,10 +153,22 @@ async function previewCable(id) {
 /**
  * Clear preview state and hide the details panel.
  */
+function _setHelpMode(mode) {
+    if (typeof window.__ndSetHelpMode === 'function') window.__ndSetHelpMode(mode);
+}
+
 function clearPreview() {
     previewCableId = null;
     previewCableMeta = null;
+    window.__ndPreviewCableId = null;
+    _setHelpMode('visualizacao');
+    if (typeof window.__ndOnPreviewFolderChanged === 'function') {
+        window.__ndOnPreviewFolderChanged(null);
+    }
+    const noPathWarning = document.getElementById('cableNoPathWarning');
+    if (noPathWarning) noPathWarning.style.display = 'none';
     setCableDetailsPanelVisible(false);
+    if (typeof window.__ndResetCableDetailPos === 'function') window.__ndResetCableDetailPos();
     updateContextMenuStateWrapper();
 }
 
@@ -431,10 +478,11 @@ function destroyNetworkDesignApp() {
     // Clear application state
     clearMapAndResetState();
     
-    // Cleanup modules
+    // Cleanup modules — cable polylines MUST be removed before map is destroyed
+    // (polylines hold a reference to the map; calling remove() after map.destroy() crashes)
+    cleanupCableService();
     cleanupMap();
     cleanupContextMenu();
-    cleanupCableService();
     cleanupUIHelpers();
     
     // Clear path state
@@ -474,6 +522,11 @@ onPathChange(({ path, distance }) => {
     console.log('[DEBUG onPathChange] Received distance - Type:', typeof distance, 'Value:', distance);
     if (currentFiberMeta) {
         currentFiberMeta.path = path.map((point) => ({ ...point }));
+    }
+
+    // Update help mode based on current drawing state
+    if (path.length > 0) {
+        _setHelpMode(activeFiberId ? 'edicao' : 'desenho');
     }
 
     // Redraw polyline for the currently edited path
@@ -536,13 +589,43 @@ onPathChange(({ path, distance }) => {
 
     // Update context menu state
     updateContextMenuStateWrapper();
+
+    // Update optical loss estimate
+    _updateLossEstimate(typeof distance === 'number' && !Number.isNaN(distance) ? distance : 0);
 });
+
+const _LOSS_THRESHOLD_DB = 30;
+
+function _updateLossEstimate(distanceKm) {
+    const lossEl = document.getElementById('manualLossEstimate');
+    const lossValEl = document.getElementById('manualLossValue');
+    const lossWarnEl = document.getElementById('manualLossWarning');
+    if (!lossEl || !lossValEl) return;
+
+    const groupSelect = document.getElementById('manualCableGroupSelect');
+    const selectedOpt = groupSelect?.options[groupSelect.selectedIndex];
+    const attenuation = selectedOpt ? parseFloat(selectedOpt.dataset.attenuation || '') : NaN;
+
+    if (!isNaN(attenuation) && attenuation > 0 && distanceKm > 0) {
+        const loss = attenuation * distanceKm;
+        lossValEl.textContent = `${loss.toFixed(2)} dB`;
+        lossEl.style.display = '';
+        const isWarning = loss > _LOSS_THRESHOLD_DB;
+        lossEl.classList.toggle('modal-loss-estimate--warning', isWarning);
+        if (lossWarnEl) lossWarnEl.style.display = isWarning ? '' : 'none';
+    } else {
+        lossEl.style.display = 'none';
+    }
+}
 
 // REMOVED: clearAllCablesFromMap() - moved into cableService.js
 // REMOVED: loadAllCablesForVisualization_local() - replaced by modular cableService version
 
 // Expose function globally for use in import_kml.js
 window.clearMapAndResetState = clearMapAndResetState;
+
+// Exposed for admin panel: reload all cables visualization without fitting bounds
+window.__ndReloadAllCables = () => loadAllCablesForVisualization({ fitToBounds: false });
 
 updateEditButtonState();
 
@@ -620,8 +703,10 @@ function addMarker(point, markerType = 'intermediate', removable = true) {
         const index = markers.indexOf(marker);
         if (index > -1) {
             const newPos = marker.getPosition();
-            console.log(`[addMarker] Marker #${index} dragged to:`, newPos.lat(), newPos.lng());
-            updatePoint(index, newPos.lat(), newPos.lng());
+            // getPosition() returns {lat, lng} as plain numbers (provider-agnostic)
+            const lat = typeof newPos.lat === 'function' ? newPos.lat() : newPos.lat;
+            const lng = typeof newPos.lng === 'function' ? newPos.lng() : newPos.lng;
+            updatePoint(index, lat, lng);
             // onPathChange callback will redraw
         }
     });
@@ -897,6 +982,7 @@ async function loadFiberDetail(id) {
         previewCableMeta = null;
         setCableDetailsPanelVisible(false);
         setRoutePointsPanelVisible(true);
+        _setHelpMode('edicao');
         currentFiberMeta = {
             id: data.id,
             name: data.name || '',
@@ -905,6 +991,8 @@ async function loadFiberDetail(id) {
             dest_device_id: data.destination?.device_id || null,
             dest_port_id: data.destination?.port_id || null,
             single_port: Boolean(data.single_port),
+            cable_group: data.cable_group || null,
+            responsible: data.responsible || null,
         };
         resetActiveEndpoint();
         updateEditButtonState();
@@ -936,6 +1024,8 @@ async function cancelEditing() {
 }
 
 window.cancelFiberEditing = cancelEditing;
+export { cancelEditing as cancelNetworkDesignEditing };
+export { handleSaveClick as saveNetworkDesignRoute };
 
 
 
@@ -945,9 +1035,76 @@ async function openEditFiberModal() {
         return;
     }
 
+    openManualSaveModal(true);  // loads groups/responsibles/folders (async, non-blocking)
     syncModalParent();
+    resetModalTabs();
     await ensureDeviceOptionsLoaded();
     await openModalForEdit(currentFiberMeta, totalDistance());
+    // Pre-select cable group, responsible and folder after modal is populated
+    const groupSelect = document.getElementById('manualCableGroupSelect');
+    if (groupSelect && currentFiberMeta?.cable_group?.id) {
+        groupSelect.value = String(currentFiberMeta.cable_group.id);
+    }
+    const responsibleSelect = document.getElementById('manualResponsibleSelect');
+    if (responsibleSelect && currentFiberMeta?.responsible_user?.id) {
+        responsibleSelect.value = String(currentFiberMeta.responsible_user.id);
+    }
+    const folderSelect = document.getElementById('manualFolderSelect');
+    if (folderSelect && currentFiberMeta?.folder?.id) {
+        folderSelect.value = String(currentFiberMeta.folder.id);
+    }
+    _updateLossEstimate(currentFiberMeta?.path_length_km || totalDistance());
+}
+
+/**
+ * Open the metadata modal for a cable that is in preview mode (not in route-edit mode).
+ * Sets activeFiberId/currentFiberMeta temporarily from preview state so the existing
+ * save mechanism works, without drawing path markers or entering route-edit mode.
+ */
+async function openMetadataModalForPreview() {
+    if (!previewCableId || !previewCableMeta) return;
+
+    // Temporarily promote preview state to active so openEditFiberModal can read it.
+    // Normalize nested API response to the flat format expected by openModalForEdit.
+    const data = previewCableMeta;
+    activeFiberId = previewCableId;
+    currentFiberMeta = {
+        id: data.id,
+        name: data.name || '',
+        origin_device_id: data.origin?.device_id || null,
+        origin_port_id: data.origin?.port_id || null,
+        dest_device_id: data.destination?.device_id || null,
+        dest_port_id: data.destination?.port_id || null,
+        single_port: Boolean(data.single_port),
+        cable_group: data.cable_group || null,
+        responsible: data.responsible || null,
+        responsible_user: data.responsible_user || null,
+        folder: data.folder || null,
+        cable_type: data.cable_type || '',
+        path: data.path || [],
+        path_length_km: data.path_length_km || 0,
+    };
+    metadataOnlyEdit = true;
+
+    openManualSaveModal(true);  // loads groups/responsibles/folders (async, non-blocking)
+    syncModalParent();
+    resetModalTabs();
+    await ensureDeviceOptionsLoaded();
+    await openModalForEdit(currentFiberMeta, previewCableMeta.path_length_km ?? 0);
+
+    const groupSelect = document.getElementById('manualCableGroupSelect');
+    if (groupSelect && currentFiberMeta?.cable_group?.id) {
+        groupSelect.value = String(currentFiberMeta.cable_group.id);
+    }
+    const responsibleSelect = document.getElementById('manualResponsibleSelect');
+    if (responsibleSelect && currentFiberMeta?.responsible_user?.id) {
+        responsibleSelect.value = String(currentFiberMeta.responsible_user.id);
+    }
+    const folderSelect = document.getElementById('manualFolderSelect');
+    if (folderSelect && currentFiberMeta?.folder?.id) {
+        folderSelect.value = String(currentFiberMeta.folder.id);
+    }
+    _updateLossEstimate(currentFiberMeta?.path_length_km || totalDistance());
 }
 
 function buildDefaultFromEndpoints(fiber) {
@@ -984,8 +1141,106 @@ async function updateExistingPath() {
 }
 
 // Modal management wrappers - delegate to modalEditor module
+function resetModalTabs() {
+    // Switch back to first tab whenever the modal is opened
+    const tabs = ['tabBtnIdentification', 'tabBtnConnections'];
+    const panels = ['tabPanelIdentification', 'tabPanelConnections'];
+    tabs.forEach((id, i) => {
+        const btn = document.getElementById(id);
+        const panel = document.getElementById(panels[i]);
+        if (btn) {
+            btn.classList.toggle('active', i === 0);
+            btn.setAttribute('aria-selected', String(i === 0));
+        }
+        if (panel) panel.classList.toggle('hidden', i !== 0);
+    });
+}
+
 function openManualSaveModal(skipReset = false) {
     syncModalParent();
+    resetModalTabs();
+    // Reload groups and responsibles each time (keeps lists fresh after inline creation)
+    const select = document.getElementById('manualCableGroupSelect');
+    if (select) {
+        const currentVal = select.value;
+        fetch('/api/v1/inventory/cable-groups/', { credentials: 'same-origin' })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data) return;
+                select.innerHTML = '<option value="">— Sem grupo —</option>';
+                (data.results || []).forEach(g => {
+                    const opt = document.createElement('option');
+                    opt.value = g.id;
+                    opt.textContent = g.name + (g.manufacturer ? ` (${g.manufacturer})` : '');
+                    if (g.attenuation_db_per_km != null) {
+                        opt.dataset.attenuation = g.attenuation_db_per_km;
+                    }
+                    select.appendChild(opt);
+                });
+                // In edit mode (skipReset) use meta only; in create mode preserve currentVal
+                const targetId = skipReset
+                    ? String(currentFiberMeta?.cable_group?.id || '')
+                    : String(currentVal || '');
+                if (targetId) select.value = targetId;
+                const dist = currentFiberMeta?.path_length_km || totalDistance();
+                _updateLossEstimate(dist);
+            })
+            .catch(() => {});
+        if (!select._lossListenerAttached) {
+            select._lossListenerAttached = true;
+            select.addEventListener('change', () => {
+                const dist = currentFiberMeta?.path_length_km || totalDistance();
+                _updateLossEstimate(dist);
+            });
+        }
+    }
+    const rSelect = document.getElementById('manualResponsibleSelect');
+    if (rSelect) {
+        const currentVal = rSelect.value;
+        fetch('/api/users/?is_active=true', { credentials: 'same-origin' })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data) return;
+                rSelect.innerHTML = '<option value="">— Sem responsável —</option>';
+                (data.users || []).forEach(u => {
+                    const opt = document.createElement('option');
+                    opt.value = u.id;
+                    opt.textContent = u.full_name || u.username;
+                    rSelect.appendChild(opt);
+                });
+                const targetResponsibleId = skipReset
+                    ? String(currentFiberMeta?.responsible_user?.id || '')
+                    : String(currentVal || '');
+                if (targetResponsibleId) rSelect.value = targetResponsibleId;
+            })
+            .catch(() => {});
+    }
+    const fSelect = document.getElementById('manualFolderSelect');
+    if (fSelect) {
+        const currentVal = fSelect.value;
+        fetch('/api/v1/inventory/cable-folders/', { credentials: 'same-origin' })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data) return;
+                fSelect.innerHTML = '<option value="">— Sem pasta —</option>';
+                function appendFolderOptions(nodes, prefix) {
+                    (nodes || []).forEach(node => {
+                        const opt = document.createElement('option');
+                        opt.value = node.id;
+                        opt.textContent = prefix + node.name;
+                        fSelect.appendChild(opt);
+                        appendFolderOptions(node.children, prefix + '\u00a0\u00a0\u00a0');
+                    });
+                }
+                appendFolderOptions(data.tree, '');
+                const targetFolderId = skipReset
+                    ? String(currentFiberMeta?.folder?.id || '')
+                    : String(currentVal || '');
+                if (targetFolderId) fSelect.value = targetFolderId;
+            })
+            .catch(() => {});
+    }
+    _loadTypeSelect(skipReset);
     if (skipReset) {
         // Editing mode - modal already populated by openModalForEdit
         return;
@@ -994,7 +1249,39 @@ function openManualSaveModal(skipReset = false) {
     openModalForCreate(totalDistance());
 }
 
+function _loadTypeSelect(skipReset = false) {
+    const tSelect = document.getElementById('manualCableTypeSelect');
+    if (!tSelect) return;
+    const currentVal = tSelect.value;
+    fetch('/api/v1/inventory/cable-types/', { credentials: 'same-origin' })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            if (!data) return;
+            tSelect.innerHTML = '<option value="">— Sem tipo —</option>';
+            (data.results || []).forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t.id;
+                opt.textContent = t.name;
+                tSelect.appendChild(opt);
+            });
+            const targetTypeId = skipReset
+                ? String(currentFiberMeta?.cable_type?.id || '')
+                : String(currentVal || '');
+            if (targetTypeId) tSelect.value = targetTypeId;
+        })
+        .catch(() => {});
+}
+
+// Expose so Vue admin panel can reload after CRUD
+window.__ndReloadCableTypes = () => _loadTypeSelect(true);
+
 function closeManualSaveModal() {
+    // If canceling a metadata-only edit, clean up the promoted state
+    if (metadataOnlyEdit) {
+        metadataOnlyEdit = false;
+        activeFiberId = null;
+        currentFiberMeta = null;
+    }
     closeModal();
     if (!getFullscreenElement() && modalDefaultParent.current && manualModal?.parentElement !== modalDefaultParent.current) {
         modalDefaultParent.current.appendChild(manualModal);
@@ -1020,14 +1307,24 @@ async function performCreateFiber(payload) {
 }
 
 async function performUpdateFiber(fiberId, payload) {
+    const wasMetadataOnly = metadataOnlyEdit;
+    metadataOnlyEdit = false;
     try {
         await updateFiber(fiberId, payload);
         showSuccessMessage('Cable updated successfully.');
         closeManualSaveModal();
-        clearMapAndResetState();
+        if (wasMetadataOnly) {
+            // Came from preview panel: reset active state but keep map clean
+            activeFiberId = null;
+            currentFiberMeta = null;
+            clearPreview();
+        } else {
+            clearMapAndResetState();
+        }
         await loadFibers();
-        await reloadCableVisualization({ fitToBounds: true });
+        await reloadCableVisualization({ fitToBounds: false });
     } catch (error) {
+        metadataOnlyEdit = wasMetadataOnly; // restore on error
         console.error('Error updating cable:', error);
         throw error;
     }
@@ -1040,14 +1337,14 @@ async function handleManualFormSubmit(event) {
     const path = getPath();
 
     if (!isEditing && path.length < 2) {
-        showErrorMessage('Add at least two points on the map before saving the route.');
+        showErrorMessage('Adicione pelo menos dois pontos no mapa antes de salvar a rota.');
         return;
     }
 
     // Validate all fields in real-time
     const isValid = await validateAllFields();
     if (!isValid) {
-        showErrorMessage('Please fix validation errors before saving.');
+        showErrorMessage('Corrija os erros de validação antes de salvar.');
         return;
     }
 
@@ -1055,8 +1352,16 @@ async function handleManualFormSubmit(event) {
     const singlePortCheckbox = manualSinglePortCheckbox || document.getElementById('manualSinglePortOnly');
     const singlePort = singlePortCheckbox && singlePortCheckbox.checked;
 
+    const cableGroupRaw = formData.get('cable_group_id');
+    const responsibleRaw = formData.get('responsible_user_id');
+    const folderRaw = formData.get('folder_id');
+    const cableTypeRaw = formData.get('cable_type_id');
     const payload = {
         name: (formData.get('name') || '').trim(),
+        cable_group_id: cableGroupRaw ? parseInt(cableGroupRaw, 10) : null,
+        responsible_user_id: responsibleRaw ? parseInt(responsibleRaw, 10) : null,
+        folder_id: folderRaw ? parseInt(folderRaw, 10) : null,
+        cable_type_id: cableTypeRaw ? parseInt(cableTypeRaw, 10) : null,
         origin_device_id: formData.get('origin_device_id'),
         origin_port_id: formData.get('origin_port_id'),
         dest_device_id: singlePort
@@ -1067,16 +1372,20 @@ async function handleManualFormSubmit(event) {
     };
 
     if (!payload.name || !payload.origin_device_id || !payload.origin_port_id) {
-        showErrorMessage('Fill in all required fields.');
+        showErrorMessage('Preencha todos os campos obrigatórios.');
         return;
     }
     if (!singlePort && !payload.dest_port_id) {
-        showErrorMessage('Fill in all required fields.');
+        showErrorMessage('Preencha todos os campos obrigatórios.');
         return;
     }
 
-    // Always include path, both when creating and editing
-    payload.path = path.map((point) => ({ lat: point.lat, lng: point.lng }));
+    // When editing metadata only (from preview panel), do NOT include path in the
+    // payload so the backend skips update_fiber_path and preserves the stored path.
+    // Only include path when actually editing the route.
+    if (!metadataOnlyEdit) {
+        payload.path = path.map((point) => ({ lat: point.lat, lng: point.lng }));
+    }
 
     const submitButton = manualForm.querySelector('button[type="submit"]');
     if (submitButton) submitButton.disabled = true;
@@ -1172,6 +1481,18 @@ function initializeDomBindings() {
         setCableDetailsPanelVisible(true);
     });
 
+    document.getElementById('contextViewPhotos')?.addEventListener('click', () => {
+        hideContextMenu();
+        setCableDetailsPanelVisible(true);
+        // Switch to Photos tab after panel is visible
+        setTimeout(() => document.getElementById('tabBtnPhotos')?.click(), 50);
+    });
+
+    document.getElementById('contextEditMetaPreview')?.addEventListener('click', () => {
+        hideContextMenu();
+        if (previewCableId) openEditFiberModal();
+    });
+
     document.getElementById('contextStartEdit')?.addEventListener('click', async () => {
         hideContextMenu();
         if (previewCableId) {
@@ -1200,6 +1521,12 @@ function initializeDomBindings() {
     // Cable Details panel buttons
     document.getElementById('closeCableDetails')?.addEventListener('click', () => {
         clearPreview();
+    });
+
+    document.getElementById('cableDetailMetaBtn')?.addEventListener('click', async () => {
+        if (previewCableId) {
+            await openMetadataModalForPreview();
+        }
     });
 
     document.getElementById('cableDetailEditBtn')?.addEventListener('click', async () => {
@@ -1354,8 +1681,13 @@ function initializeDomBindings() {
                     event.preventDefault();
                     return;
                 }
-                if (activeFiberId) {
+                if (activeFiberId || getPath().length > 0) {
                     cancelEditing().catch((err) => console.error('[cancelEditing] Error on ESC (editing active):', err));
+                    event.preventDefault();
+                    return;
+                }
+                if (previewCableId) {
+                    clearPreview();
                     event.preventDefault();
                     return;
                 }
@@ -1406,6 +1738,362 @@ function initializeDomBindings() {
     // Event listeners antigos removidos (savePath, deleteCable, editFiber)
     // All actions now flow through the context menu
     
+    // ── Tab switching ─────────────────────────────────────────
+    const TAB_IDS = ['tabBtnIdentification', 'tabBtnConnections', 'tabBtnHistory', 'tabBtnPhotos'];
+    const PANEL_IDS = ['tabPanelIdentification', 'tabPanelConnections', 'tabPanelHistory', 'tabPanelPhotos'];
+
+    function activateTab(tabId) {
+        TAB_IDS.forEach((id, i) => {
+            const btn = document.getElementById(id);
+            const panel = document.getElementById(PANEL_IDS[i]);
+            const isActive = id === tabId;
+            if (btn) {
+                btn.classList.toggle('active', isActive);
+                btn.setAttribute('aria-selected', String(isActive));
+            }
+            if (panel) panel.classList.toggle('hidden', !isActive);
+        });
+        if (tabId === 'tabBtnHistory') {
+            loadAuditLog();
+        }
+        if (tabId === 'tabBtnPhotos') {
+            loadPhotos();
+        }
+    }
+
+    async function loadAuditLog() {
+        const listEl = document.getElementById('auditLogList');
+        if (!listEl) return;
+        const editingId = getEditingFiberId();
+        if (!editingId) {
+            listEl.innerHTML = '<p class="audit-log-empty">Salve o cabo primeiro para ver o histórico.</p>';
+            return;
+        }
+        listEl.innerHTML = '<p class="audit-log-loading">Carregando…</p>';
+        try {
+            const res = await fetch(`/api/v1/inventory/fibers/${editingId}/audit-log/`, { credentials: 'same-origin' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (!data.results?.length) {
+                listEl.innerHTML = '<p class="audit-log-empty">Nenhum registro encontrado.</p>';
+                return;
+            }
+            listEl.innerHTML = data.results.map(entry => {
+                const dt = new Date(entry.timestamp).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+                const badge = `<span class="audit-log-badge audit-log-badge--${entry.action}">${entry.action_display}</span>`;
+                return `<div class="audit-log-entry">
+                    <div class="audit-log-entry__header">${badge}<span class="audit-log-entry__meta">${dt}</span></div>
+                    <div class="audit-log-entry__meta">por ${entry.username}</div>
+                </div>`;
+            }).join('');
+        } catch (err) {
+            listEl.innerHTML = '<p class="audit-log-empty">Erro ao carregar histórico.</p>';
+        }
+    }
+
+    document.getElementById('tabBtnIdentification')?.addEventListener('click', () => activateTab('tabBtnIdentification'));
+    document.getElementById('tabBtnConnections')?.addEventListener('click', () => activateTab('tabBtnConnections'));
+    document.getElementById('tabBtnHistory')?.addEventListener('click', () => activateTab('tabBtnHistory'));
+    document.getElementById('tabBtnPhotos')?.addEventListener('click', () => activateTab('tabBtnPhotos'));
+
+    // ── Photo gallery ─────────────────────────────────────────
+    async function loadPhotos() {
+        const gallery = document.getElementById('photoGallery');
+        if (!gallery) return;
+        const editingId = getEditingFiberId();
+        if (!editingId) {
+            gallery.innerHTML = '<p class="photo-empty">Salve o cabo primeiro para adicionar fotos.</p>';
+            return;
+        }
+        gallery.innerHTML = '<p class="photo-empty">Carregando…</p>';
+        try {
+            const res = await fetch(`/api/v1/inventory/fibers/${editingId}/photos/`, { credentials: 'same-origin' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            _renderPhotoGallery(data.photos, editingId);
+        } catch {
+            gallery.innerHTML = '<p class="photo-empty">Erro ao carregar fotos.</p>';
+        }
+    }
+
+    function _renderPhotoGallery(photos, cableId) {
+        const gallery = document.getElementById('photoGallery');
+        if (!gallery) return;
+        if (!photos.length) {
+            gallery.innerHTML = '<p class="photo-empty">Nenhuma foto. Envie imagens acima.</p>';
+            return;
+        }
+        gallery.innerHTML = photos.map(p => `
+            <div class="photo-thumb" data-id="${p.id}">
+                <img src="${p.url}" alt="${p.caption || 'Foto'}" loading="lazy" />
+                ${p.caption ? `<div class="photo-thumb__caption">${p.caption}</div>` : ''}
+                <button class="photo-thumb__del" data-photo-id="${p.id}" data-cable-id="${cableId}" title="Excluir foto" type="button">&times;</button>
+            </div>
+        `).join('');
+        gallery.querySelectorAll('.photo-thumb__del').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (!confirm('Excluir esta foto?')) return;
+                const { photoId, cableId } = btn.dataset;
+                try {
+                    const res = await fetch(`/api/v1/inventory/fibers/${cableId}/photos/${photoId}/`, {
+                        method: 'DELETE',
+                        credentials: 'same-origin',
+                        headers: { 'X-CSRFToken': _getCsrfToken() },
+                    });
+                    if (!res.ok) throw new Error();
+                    btn.closest('.photo-thumb').remove();
+                    if (!gallery.querySelector('.photo-thumb')) {
+                        gallery.innerHTML = '<p class="photo-empty">Nenhuma foto. Envie imagens acima.</p>';
+                    }
+                } catch {
+                    alert('Erro ao excluir foto.');
+                }
+            });
+        });
+        // Lightbox on thumb click
+        gallery.querySelectorAll('.photo-thumb').forEach((thumb, idx) => {
+            thumb.addEventListener('click', (e) => {
+                if (e.target.closest('.photo-thumb__del')) return;
+                _openLightbox(photos, idx);
+            });
+        });
+    }
+
+    // ── Vanilla JS lightbox ───────────────────────────────────────────
+    let _lbPhotos = [];
+    let _lbIndex = 0;
+    let _lbEl = null;
+
+    function _injectLightboxStyles() {
+        if (document.getElementById('nd-lightbox-style')) return;
+        const style = document.createElement('style');
+        style.id = 'nd-lightbox-style';
+        style.textContent = `
+#nd-lightbox-root{position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.88);
+  display:flex;align-items:center;justify-content:center;}
+#nd-lightbox-root .lb-close{position:absolute;top:1rem;right:1.25rem;background:none;
+  border:none;color:#fff;font-size:2.2rem;line-height:1;cursor:pointer;opacity:.75;padding:0;}
+#nd-lightbox-root .lb-close:hover{opacity:1;}
+#nd-lightbox-root .lb-nav{background:none;border:none;color:#fff;font-size:3.5rem;
+  line-height:1;cursor:pointer;padding:0 1rem;opacity:.6;user-select:none;flex-shrink:0;}
+#nd-lightbox-root .lb-nav:hover{opacity:1;}
+#nd-lightbox-root .lb-nav.hidden{visibility:hidden;}
+#nd-lightbox-root .lb-body{display:flex;flex-direction:column;align-items:center;
+  max-width:calc(100vw - 10rem);max-height:calc(100vh - 4rem);}
+#nd-lightbox-root .lb-body img{max-width:100%;max-height:calc(100vh - 8rem);
+  object-fit:contain;border-radius:.5rem;box-shadow:0 8px 40px rgba(0,0,0,.6);}
+#nd-lightbox-root .lb-caption{margin-top:.75rem;color:rgba(255,255,255,.8);
+  font-size:.875rem;text-align:center;}
+#nd-lightbox-root .lb-counter{margin-top:.375rem;color:rgba(255,255,255,.4);font-size:.75rem;}
+        `;
+        document.head.appendChild(style);
+    }
+
+    function _buildLightboxEl() {
+        _injectLightboxStyles();
+        const el = document.createElement('div');
+        el.id = 'nd-lightbox-root';
+        el.innerHTML = `
+            <button class="lb-close" aria-label="Fechar">&times;</button>
+            <button class="lb-nav lb-prev" aria-label="Anterior">&#8249;</button>
+            <div class="lb-body">
+                <img src="" alt="" />
+                <p class="lb-caption" style="display:none"></p>
+                <span class="lb-counter" style="display:none"></span>
+            </div>
+            <button class="lb-nav lb-next" aria-label="Próxima">&#8250;</button>
+        `;
+        el.querySelector('.lb-close').addEventListener('click', _closeLightbox);
+        el.addEventListener('click', (e) => { if (e.target === el) _closeLightbox(); });
+        el.querySelector('.lb-prev').addEventListener('click', () => _lbGo(_lbIndex - 1));
+        el.querySelector('.lb-next').addEventListener('click', () => _lbGo(_lbIndex + 1));
+        return el;
+    }
+
+    function _lbKeydown(e) {
+        if (!_lbEl) return;
+        if (e.key === 'Escape') _closeLightbox();
+        if (e.key === 'ArrowLeft') _lbGo(_lbIndex - 1);
+        if (e.key === 'ArrowRight') _lbGo(_lbIndex + 1);
+    }
+
+    function _lbGo(idx) {
+        _lbIndex = (_lbPhotos.length + idx) % _lbPhotos.length;
+        _lbRender();
+    }
+
+    function _lbRender() {
+        if (!_lbEl) return;
+        const p = _lbPhotos[_lbIndex];
+        _lbEl.querySelector('img').src = p.url;
+        _lbEl.querySelector('img').alt = p.caption || 'Foto';
+        const cap = _lbEl.querySelector('.lb-caption');
+        cap.textContent = p.caption || '';
+        cap.style.display = p.caption ? '' : 'none';
+        const multi = _lbPhotos.length > 1;
+        const counter = _lbEl.querySelector('.lb-counter');
+        counter.textContent = `${_lbIndex + 1} / ${_lbPhotos.length}`;
+        counter.style.display = multi ? '' : 'none';
+        _lbEl.querySelector('.lb-prev').classList.toggle('hidden', !multi);
+        _lbEl.querySelector('.lb-next').classList.toggle('hidden', !multi);
+    }
+
+    function _openLightbox(photos, index) {
+        _lbPhotos = photos;
+        _lbIndex = index;
+        if (!_lbEl) {
+            _lbEl = _buildLightboxEl();
+            document.body.appendChild(_lbEl);
+        }
+        _lbRender();
+        _lbEl.style.display = 'flex';
+        document.addEventListener('keydown', _lbKeydown);
+    }
+
+    function _closeLightbox() {
+        if (_lbEl) { _lbEl.style.display = 'none'; }
+        document.removeEventListener('keydown', _lbKeydown);
+    }
+
+    function _getCsrfToken() {
+        return document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+    }
+
+    async function _uploadPhotos(files, cableId) {
+        const progress = document.getElementById('photoUploadProgress');
+        const fill = document.getElementById('photoProgressFill');
+        const label = document.getElementById('photoProgressLabel');
+        const prompt = document.getElementById('photoUploadPrompt');
+        if (progress) { progress.style.display = 'flex'; }
+        if (prompt) { prompt.style.display = 'none'; }
+        const total = files.length;
+        let done = 0;
+        for (const file of files) {
+            if (label) label.textContent = `Enviando ${done + 1} de ${total}…`;
+            if (fill) fill.style.width = `${Math.round((done / total) * 100)}%`;
+            const fd = new FormData();
+            fd.append('image', file);
+            try {
+                const res = await fetch(`/api/v1/inventory/fibers/${cableId}/photos/`, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'X-CSRFToken': _getCsrfToken() },
+                    body: fd,
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    alert(err.error || `Erro ao enviar ${file.name}`);
+                }
+            } catch {
+                alert(`Erro ao enviar ${file.name}`);
+            }
+            done++;
+        }
+        if (fill) fill.style.width = '100%';
+        if (label) label.textContent = 'Concluído!';
+        await new Promise(r => setTimeout(r, 600));
+        if (progress) progress.style.display = 'none';
+        if (prompt) prompt.style.display = 'flex';
+        loadPhotos();
+    }
+
+    // Wire up file input and drag & drop
+    const photoFileInput = document.getElementById('photoFileInput');
+    const photoDropZone = document.getElementById('photoDropZone');
+    photoFileInput?.addEventListener('change', () => {
+        const cableId = getEditingFiberId();
+        if (!cableId || !photoFileInput.files.length) return;
+        _uploadPhotos(Array.from(photoFileInput.files), cableId);
+        photoFileInput.value = '';
+    });
+    photoDropZone?.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        photoDropZone.classList.add('dragover');
+    });
+    photoDropZone?.addEventListener('dragleave', () => photoDropZone.classList.remove('dragover'));
+    photoDropZone?.addEventListener('drop', (e) => {
+        e.preventDefault();
+        photoDropZone.classList.remove('dragover');
+        const cableId = getEditingFiberId();
+        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+        if (!cableId) { alert('Salve o cabo primeiro.'); return; }
+        if (files.length) _uploadPhotos(files, cableId);
+    });
+
+    // ── Cable groups ──────────────────────────────────────────
+    async function loadCableGroups() {
+        const select = document.getElementById('manualCableGroupSelect');
+        if (!select) return;
+        try {
+            const res = await fetch('/api/v1/inventory/cable-groups/', { credentials: 'same-origin' });
+            if (!res.ok) return;
+            const data = await res.json();
+            const current = select.value;
+            // Keep the first "no group" option and rebuild the rest
+            select.innerHTML = '<option value="">— Sem grupo —</option>';
+            (data.results || []).forEach(g => {
+                const opt = document.createElement('option');
+                opt.value = g.id;
+                opt.textContent = g.name + (g.manufacturer ? ` (${g.manufacturer})` : '');
+                select.appendChild(opt);
+            });
+            if (current) select.value = current;
+        } catch (err) {
+            console.warn('[loadCableGroups] Failed to load cable groups:', err);
+        }
+    }
+    void loadCableGroups();
+
+    document.getElementById('addCableGroupBtn')?.addEventListener('click', async () => {
+        const name = window.prompt('Nome do novo grupo de cabos:');
+        if (!name || !name.trim()) return;
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+        try {
+            const res = await fetch('/api/v1/inventory/cable-groups/create/', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify({ name: name.trim() }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                showErrorMessage(data.error || 'Erro ao criar grupo.');
+                return;
+            }
+            await loadCableGroups();
+            const select = document.getElementById('manualCableGroupSelect');
+            if (select) select.value = String(data.id);
+            showSuccessMessage(`Grupo "${data.name}" criado.`);
+        } catch (err) {
+            showErrorMessage('Erro ao criar grupo.');
+        }
+    });
+
+    // ── Responsáveis ──────────────────────────────────────────
+    // Load system users as responsibles
+    async function loadResponsibles() {
+        const select = document.getElementById('manualResponsibleSelect');
+        if (!select) return;
+        try {
+            const res = await fetch('/api/users/?is_active=true', { credentials: 'same-origin' });
+            if (!res.ok) return;
+            const data = await res.json();
+            const current = select.value;
+            select.innerHTML = '<option value="">— Sem responsável —</option>';
+            (data.users || []).forEach(u => {
+                const opt = document.createElement('option');
+                opt.value = u.id;
+                opt.textContent = u.full_name || u.username;
+                select.appendChild(opt);
+            });
+            if (current) select.value = current;
+        } catch (err) {
+            console.warn('[loadResponsibles] Failed:', err);
+        }
+    }
+    void loadResponsibles();
+
     if (manualForm) {
         manualForm.addEventListener('submit', handleManualFormSubmit);
     }
@@ -1466,3 +2154,60 @@ window.closeManualSaveModal = closeManualSaveModal;
 window.loadFibers = loadFibers;
 window.loadFiberDetail = loadFiberDetail;
 window.destroyNetworkDesignApp = destroyNetworkDesignApp;
+
+/**
+ * Fly the map to a given location. Used by the global search bar.
+ * @param {number} lng
+ * @param {number} lat
+ * @param {number} zoom
+ */
+export function flyToLocation(lng, lat, zoom = 14) {
+    const mapInstance = getMapInstance();
+    if (!mapInstance) return;
+    mapInstance.flyTo({ lat, lng }, zoom);
+}
+
+const _HIGHLIGHT_SRC = '__nd_search_highlight_src';
+const _HIGHLIGHT_LAYER = '__nd_search_highlight_layer';
+let _highlightTimer = null;
+
+function _removeHighlightPoint(map) {
+    if (map.getLayer(_HIGHLIGHT_LAYER)) map.removeLayer(_HIGHLIGHT_LAYER);
+    if (map.getSource(_HIGHLIGHT_SRC)) map.removeSource(_HIGHLIGHT_SRC);
+}
+
+function _addHighlightPoint(map, lng, lat) {
+    _removeHighlightPoint(map);
+    map.addSource(_HIGHLIGHT_SRC, {
+        type: 'geojson',
+        data: { type: 'Feature', geometry: { type: 'Point', coordinates: [lng, lat] } },
+    });
+    map.addLayer({
+        id: _HIGHLIGHT_LAYER,
+        type: 'circle',
+        source: _HIGHLIGHT_SRC,
+        paint: {
+            'circle-radius': 20,
+            'circle-color': '#facc15',
+            'circle-opacity': 0.55,
+            'circle-stroke-color': '#f59e0b',
+            'circle-stroke-width': 3,
+            'circle-stroke-opacity': 0.9,
+        },
+    });
+    clearTimeout(_highlightTimer);
+    _highlightTimer = setTimeout(() => _removeHighlightPoint(map), 4000);
+}
+
+export function highlightSearchResult(item) {
+    const mapInstance = getMapInstance();
+    if (!mapInstance || !mapInstance.mapboxMap) return;
+    const map = mapInstance.mapboxMap;
+
+    if (item.type === 'cable') {
+        highlightCable(item.id);
+    }
+    if (item.lat != null && item.lng != null) {
+        _addHighlightPoint(map, item.lng, item.lat);
+    }
+}

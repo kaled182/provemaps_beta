@@ -24,7 +24,7 @@ from inventory.domain.geometry import (
 )
 from inventory.spatial import coords_to_linestring, linestring_to_coords
 # NOTE: fetch_port_optical_snapshot no longer used directly here
-from inventory.models import FiberCable, FiberEvent, Port
+from inventory.models import FiberCable, FiberCableAuditLog, FiberEvent, Port
 from inventory.services.fiber_status import (
     combine_cable_status as combine_cable_status_service,
     evaluate_cable_status_for_cable,
@@ -48,6 +48,28 @@ OPTICAL_STATUS_SEVERITY = {
     "online": 1,
     "unknown": 0,
 }
+
+
+def _log_audit(
+    cable: FiberCable | None,
+    cable_name: str,
+    action: str,
+    user=None,
+    changes: dict | None = None,
+) -> None:
+    """Create a FiberCableAuditLog entry. Silently swallows errors to avoid
+    breaking the main operation if audit logging fails."""
+    try:
+        FiberCableAuditLog.objects.create(
+            cable=cable,
+            cable_name=cable_name,
+            user=user,
+            username=getattr(user, "username", "") or "",
+            action=action,
+            changes=changes or {},
+        )
+    except Exception:
+        logger.exception("[audit] Failed to write audit log for cable '%s'", cable_name)
 
 
 def _float_or_none(value: Any) -> float | None:
@@ -292,6 +314,8 @@ def create_fiber_from_kml(
     dest_port_id: str,
     kml_file: Any,
     single_port: bool = False,
+    cable_group_id: Optional[int] = None,
+    responsible_user_id: Optional[int] = None,
 ) -> Dict[str, object]:
     if FiberCable.objects.filter(name__iexact=name).exists():
         raise FiberValidationError("A fiber with this name already exists")
@@ -328,6 +352,22 @@ def create_fiber_from_kml(
     # CRITICAL: Gerar path PostGIS para permitir operações de infraestrutura
     path_geom = coords_to_linestring(sanitized)
 
+    from inventory.models import CableGroup  # local import to avoid circular
+    group = None
+    if cable_group_id:
+        try:
+            group = CableGroup.objects.get(id=cable_group_id)
+        except CableGroup.DoesNotExist:
+            pass
+    responsible_user = None
+    if responsible_user_id:
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        try:
+            responsible_user = User.objects.get(id=responsible_user_id)
+        except User.DoesNotExist:
+            pass
+
     fiber = FiberCable.objects.create(
         name=name,
         origin_port=origin_port,
@@ -335,6 +375,8 @@ def create_fiber_from_kml(
         path=path_geom,  # PostGIS LineString
         length_km=length_km,
         status=FiberCable.STATUS_UNKNOWN,
+        cable_group=group,
+        responsible_user=responsible_user,
     )
     invalidate_fiber_cache()
     payload = fiber_to_payload(fiber, coords=sanitized)
@@ -472,6 +514,8 @@ def list_fiber_cables() -> List[Dict[str, object]]:
     cables = FiberCable.objects.select_related(
         "origin_port__device__site",
         "destination_port__device__site",
+        "cable_group",
+        "folder",
     )
     payload = []
     for cable in cables:
@@ -537,6 +581,21 @@ def list_fiber_cables() -> List[Dict[str, object]]:
                 "path": (
                     linestring_to_coords(cable.path) if cable.path else []
                 ),
+                "cable_group": (
+                    {"id": cable.cable_group.id, "name": cable.cable_group.name}
+                    if cable.cable_group_id
+                    else None
+                ),
+                "folder": (
+                    {"id": cable.folder.id, "name": cable.folder.name}
+                    if cable.folder_id
+                    else None
+                ),
+                "cable_type": (
+                    {"id": cable.cable_type.id, "name": cable.cable_type.name}
+                    if cable.cable_type_id
+                    else None
+                ),
             }
         )
     return payload
@@ -572,6 +631,11 @@ def fiber_detail_payload(cable: FiberCable) -> Dict[str, object]:
         "id": cable.id,
         "name": cable.name,
         "status": cable.status,
+        "cable_type": (
+            {"id": cable.cable_type.id, "name": cable.cable_type.name}
+            if cable.cable_type_id
+            else None
+        ),
         "length_km": (
             float(cable.length_km) if cable.length_km is not None else None
         ),
@@ -610,8 +674,47 @@ def fiber_detail_payload(cable: FiberCable) -> Dict[str, object]:
             "port_id": cable.destination_port.id,
         },
         "path": linestring_to_coords(cable.path) if cable.path else [],
+        "path_length_km": (
+            float(cable.length_km) if cable.length_km is not None else None
+        ),
         "infrastructure_points": infrastructure_points,
         "single_port": cable.origin_port == cable.destination_port,
+        "cable_group": (
+            {
+                "id": cable.cable_group.id,
+                "name": cable.cable_group.name,
+                "attenuation_db_per_km": (
+                    float(cable.cable_group.attenuation_db_per_km)
+                    if cable.cable_group.attenuation_db_per_km is not None
+                    else None
+                ),
+            }
+            if cable.cable_group_id
+            else None
+        ),
+        "responsible": (
+            {
+                "id": cable.responsible.id,
+                "name": cable.responsible.name,
+                "type": cable.responsible.type,
+            }
+            if cable.responsible_id
+            else None
+        ),
+        "responsible_user": (
+            {
+                "id": cable.responsible_user.id,
+                "username": cable.responsible_user.username,
+                "full_name": cable.responsible_user.get_full_name() or cable.responsible_user.username,
+            }
+            if cable.responsible_user_id
+            else None
+        ),
+        "folder": (
+            {"id": cable.folder.id, "name": cable.folder.name}
+            if cable.folder_id
+            else None
+        ),
     }
 
 
@@ -648,9 +751,16 @@ def update_fiber_metadata(
     name: Optional[str] = None,
     origin_port_id: Optional[int] = None,
     dest_port_id: Optional[int] = None,
+    cable_group_id: Optional[int] = None,
+    responsible_id: Optional[int] = None,
+    responsible_user_id: Optional[int] = None,
+    folder_id: Optional[int] = None,
+    cable_type: Optional[str] = None,
+    user=None,
 ) -> Dict[str, object]:
     """Update fiber metadata such as name and endpoint ports."""
     updated_fields = []
+    changes: dict = {}
 
     if name is not None:
         name = name.strip()
@@ -679,9 +789,66 @@ def update_fiber_metadata(
         cable.destination_port = dest_port
         updated_fields.append("destination_port")
 
+    if cable_group_id is not None:
+        from inventory.models import CableGroup
+        if cable_group_id == 0:
+            cable.cable_group = None
+        else:
+            try:
+                cable.cable_group = CableGroup.objects.get(id=cable_group_id)
+            except CableGroup.DoesNotExist:
+                pass
+        updated_fields.append("cable_group")
+
+    if responsible_id is not None:
+        from inventory.models import Responsible
+        if responsible_id == 0:
+            cable.responsible = None
+        else:
+            try:
+                cable.responsible = Responsible.objects.get(id=responsible_id)
+            except Responsible.DoesNotExist:
+                pass
+        updated_fields.append("responsible")
+
+    if responsible_user_id is not None:
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        if responsible_user_id == 0:
+            cable.responsible_user = None
+        else:
+            try:
+                cable.responsible_user = User.objects.get(id=responsible_user_id)
+            except User.DoesNotExist:
+                pass
+        updated_fields.append("responsible_user")
+
+    if folder_id is not None:
+        from inventory.models import CableFolder
+        if folder_id == 0:
+            cable.folder = None
+        else:
+            try:
+                cable.folder = CableFolder.objects.get(id=folder_id)
+            except CableFolder.DoesNotExist:
+                pass
+        updated_fields.append("folder")
+
+    if cable_type is not None:
+        from inventory.models import CableType
+        if cable_type == 0 or cable_type == "0":
+            cable.cable_type = None
+        else:
+            try:
+                cable.cable_type = CableType.objects.get(id=int(cable_type))
+            except (CableType.DoesNotExist, ValueError, TypeError):
+                cable.cable_type = None
+        updated_fields.append("cable_type")
+
     if updated_fields:
         cable.save(update_fields=updated_fields)
         invalidate_fiber_cache()
+        _log_audit(cable, cable.name, FiberCableAuditLog.Action.UPDATED, user=user, changes=changes)
 
     return {
         "status": "ok",
@@ -691,7 +858,9 @@ def update_fiber_metadata(
     }
 
 
-def delete_fiber(cable: FiberCable) -> None:
+def delete_fiber(cable: FiberCable, user=None) -> None:
+    cable_name = cable.name
+    _log_audit(cable, cable_name, FiberCableAuditLog.Action.DELETED, user=user)
     cable.delete()
     invalidate_fiber_cache()
 
@@ -933,7 +1102,7 @@ def refresh_fibers_status(cables: Iterable[FiberCable]) -> Dict[str, object]:
     return {"updated": updated, "total": len(results), "results": results}
 
 
-def create_manual_fiber(data: Dict[str, object]) -> Dict[str, object]:
+def create_manual_fiber(data: Dict[str, object], user=None) -> Dict[str, object]:
     name = (data.get("name") or "").strip()
     origin_device_id = data.get("origin_device_id")
     origin_port_id = data.get("origin_port_id")
@@ -977,6 +1146,43 @@ def create_manual_fiber(data: Dict[str, object]) -> Dict[str, object]:
     # CRITICAL: Gerar path PostGIS para permitir operações de infraestrutura
     path_geom = coords_to_linestring(sanitized)
 
+    cable_group_id = data.get("cable_group_id") or None
+    cable_group = None
+    if cable_group_id:
+        from inventory.models import CableGroup  # local import avoids circular
+        try:
+            cable_group = CableGroup.objects.get(id=cable_group_id)
+        except CableGroup.DoesNotExist:
+            pass
+
+    responsible_user_id = data.get("responsible_user_id") or None
+    responsible_user = None
+    if responsible_user_id:
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        try:
+            responsible_user = User.objects.get(id=responsible_user_id)
+        except User.DoesNotExist:
+            pass
+
+    folder_id = data.get("folder_id") or None
+    folder = None
+    if folder_id:
+        from inventory.models import CableFolder
+        try:
+            folder = CableFolder.objects.get(id=folder_id)
+        except CableFolder.DoesNotExist:
+            pass
+
+    cable_type_id = data.get("cable_type_id") or None
+    cable_type_obj = None
+    if cable_type_id:
+        from inventory.models import CableType
+        try:
+            cable_type_obj = CableType.objects.get(id=cable_type_id)
+        except CableType.DoesNotExist:
+            pass
+
     fiber = FiberCable.objects.create(
         name=name,
         origin_port=origin_port,
@@ -985,8 +1191,13 @@ def create_manual_fiber(data: Dict[str, object]) -> Dict[str, object]:
         length_km=length_km,
         status=FiberCable.STATUS_UNKNOWN,
         notes="single-port-monitoring" if single_port else "",
+        cable_group=cable_group,
+        responsible_user=responsible_user,
+        folder=folder,
+        cable_type=cable_type_obj,
     )
     invalidate_fiber_cache()
+    _log_audit(fiber, fiber.name, FiberCableAuditLog.Action.CREATED, user=user)
     return {
         "fiber": fiber,
         "payload": {

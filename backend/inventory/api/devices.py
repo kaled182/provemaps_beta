@@ -738,6 +738,7 @@ def api_import_batch(request: HttpRequest) -> JsonResponse:
         created_count = 0
         updated_count = 0
         errors = []
+        proximity_warnings = []
         
         with transaction.atomic():
             for idx, item in enumerate(items_to_process):
@@ -770,60 +771,96 @@ def api_import_batch(request: HttpRequest) -> JsonResponse:
                     site_id_or_name = item.get('site')
                     is_new_site = item.get('is_new_site', False)
                     site_coordinates = item.get('site_coordinates')
-                    
+                    # Flag: site omitido intencionalmente (batch sem site comum)
+                    site_omitted = 'site' not in item
+
                     if not site_id_or_name:
-                        # Tenta pegar o primeiro site ou cria um padrão
-                        default_site = Site.objects.first()
-                        if not default_site:
-                            # Cria site padrão se não existir
-                            default_site = Site.objects.create(
-                                display_name="Site Padrão",
-                                city="Default"
-                            )
-                            logger.info(
-                                "Site padrão criado automaticamente"
-                            )
-                        site_instance = default_site
+                        if site_omitted:
+                            # Batch sem site definido: site_instance fica None
+                            # e será resolvido após identificar o device
+                            # (mantém site existente ou usa default)
+                            pass
+                        else:
+                            # Tenta pegar o primeiro site ou cria um padrão
+                            default_site = Site.objects.first()
+                            if not default_site:
+                                default_site = Site.objects.create(
+                                    display_name="Site Padrão",
+                                    city="Default"
+                                )
+                                logger.info("Site padrão criado automaticamente")
+                            site_instance = default_site
                     elif is_new_site:
                         # Criar novo Site com coordenadas
                         from django.contrib.gis.geos import Point
-                        
+                        import math
+
+                        PROXIMITY_RADIUS_KM = 0.1  # 100 metros
+
+                        def _haversine_km(lat1, lon1, lat2, lon2):
+                            R = 6371.0088
+                            phi1, phi2 = math.radians(lat1), math.radians(lat2)
+                            dphi = math.radians(lat2 - lat1)
+                            dlambda = math.radians(lon2 - lon1)
+                            a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+                            return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
                         new_site_name = site_id_or_name
-                        site_defaults = {
-                            'city': 'A definir',
-                        }
-                        
-                        # Adiciona coordenadas se fornecidas
+                        site_defaults = {'city': 'A definir'}
+
                         has_coords = (
                             site_coordinates
                             and 'lat' in site_coordinates
                             and 'lng' in site_coordinates
                         )
+
                         if has_coords:
                             lat = float(site_coordinates['lat'])
                             lng = float(site_coordinates['lng'])
-                            site_defaults['latitude'] = lat
-                            site_defaults['longitude'] = lng
-                            # PostGIS Point: (longitude, latitude) order!
-                            site_defaults['location'] = Point(lng, lat)
-                            logger.info(
-                                f"Criando site '{new_site_name}' com "
-                                f"coordenadas: ({lat}, {lng})"
-                            )
-                        
-                        site_instance, created = (
-                            Site.objects.get_or_create(
-                                display_name=new_site_name,
-                                defaults=site_defaults
-                            )
-                        )
-                        if created:
-                            logger.info(f"Novo site criado: {new_site_name}")
+
+                            # Regra 100 m: se já existe um site próximo, reutilizá-lo
+                            nearest_site = None
+                            nearest_dist = None
+                            for candidate in Site.objects.exclude(latitude=None).exclude(longitude=None):
+                                dist = _haversine_km(lat, lng, float(candidate.latitude), float(candidate.longitude))
+                                if dist <= PROXIMITY_RADIUS_KM:
+                                    if nearest_dist is None or dist < nearest_dist:
+                                        nearest_site = candidate
+                                        nearest_dist = dist
+
+                            if nearest_site:
+                                site_instance = nearest_site
+                                logger.info(
+                                    f"Site '{nearest_site.display_name}' encontrado a "
+                                    f"{nearest_dist * 1000:.0f}m das coordenadas fornecidas — "
+                                    f"reutilizado em vez de criar '{new_site_name}'"
+                                )
+                                proximity_warnings.append({
+                                    'new_site_name': new_site_name,
+                                    'reused_site': nearest_site.display_name,
+                                    'distance_m': round(nearest_dist * 1000),
+                                })
+                            else:
+                                site_defaults['latitude'] = lat
+                                site_defaults['longitude'] = lng
+                                site_defaults['location'] = Point(lng, lat)
+                                site_instance, created = Site.objects.get_or_create(
+                                    display_name=new_site_name,
+                                    defaults=site_defaults,
+                                )
+                                if created:
+                                    logger.info(f"Novo site criado: {new_site_name} ({lat}, {lng})")
+                                else:
+                                    logger.info(f"Site '{new_site_name}' já existe, reutilizado")
                         else:
-                            logger.info(
-                                f"Site '{new_site_name}' já existe, "
-                                f"reutilizado"
+                            site_instance, created = Site.objects.get_or_create(
+                                display_name=new_site_name,
+                                defaults=site_defaults,
                             )
+                            if created:
+                                logger.info(f"Novo site criado sem coordenadas: {new_site_name}")
+                            else:
+                                logger.info(f"Site '{new_site_name}' já existe, reutilizado")
                     else:
                         # Usar Site existente por ID
                         try:
@@ -881,17 +918,28 @@ def api_import_batch(request: HttpRequest) -> JsonResponse:
                         device.name = item.get('name', device.name)
                         device.category = item.get('category', device.category)
                         device.monitoring_group = group_instance
+                        # Só sobrescreve site se um site foi explicitamente selecionado
+                        if site_instance is not None:
+                            device.site = site_instance
                         updated_count += 1
                         logger.info(f"Device atualizado: {device.name}")
                     else:
-                        # Criar novo
+                        # Criar novo — se site omitido no batch, usa default
+                        resolved_site = site_instance
+                        if resolved_site is None:
+                            resolved_site = Site.objects.first()
+                            if not resolved_site:
+                                resolved_site = Site.objects.create(
+                                    display_name="Site Padrão",
+                                    city="Default"
+                                )
                         device = Device(
                             name=item.get('name', f'Device-{idx+1}'),
                             primary_ip=(
                                 item.get('ip') or item.get('ip_address')
                             ),
                             zabbix_hostid=zabbix_id or '',
-                            site=site_instance,
+                            site=resolved_site,
                             category=item.get('category', 'backbone'),
                             monitoring_group=group_instance,
                             vendor=item.get('vendor', ''),
@@ -976,7 +1024,8 @@ def api_import_batch(request: HttpRequest) -> JsonResponse:
             "created": created_count,
             "updated": updated_count,
             "total": len(items_to_process),
-            "errors": errors if errors else None
+            "errors": errors if errors else None,
+            "proximity_warnings": proximity_warnings if proximity_warnings else None,
         }
         
         return JsonResponse(response_data)
@@ -995,14 +1044,93 @@ def api_import_batch(request: HttpRequest) -> JsonResponse:
         )
 
 
-@require_http_methods(["DELETE"])
+@require_http_methods(["DELETE", "PATCH"])
 @login_required
-def api_device_delete(request: HttpRequest, device_id: int) -> JsonResponse:
+def api_device_detail(request: HttpRequest, device_id: int) -> JsonResponse:
+    """
+    PATCH  /api/v1/inventory/devices/{device_id}/ — atualiza campos do dispositivo
+    DELETE /api/v1/inventory/devices/{device_id}/ — exclui o dispositivo
+    """
+    from inventory.models import Device, Site, DeviceGroup
+
+    if request.method == "PATCH":
+        logger.info(f"[PATCH device] device_id={device_id} user={request.user}")
+        try:
+            device = Device.objects.get(id=device_id)
+        except Device.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Dispositivo não encontrado"}, status=404)
+
+        try:
+            data = json.loads(request.body or "{}")
+            logger.info(f"[PATCH device] payload keys={list(data.keys())}")
+        except json.JSONDecodeError:
+            return JsonResponse({"success": False, "error": "JSON inválido"}, status=400)
+
+        # CharField: None → '' (coluna NOT NULL no DB)
+        char_fields = [
+            "name", "primary_ip",
+            "uptime_item_key", "cpu_usage_item_key", "memory_usage_item_key",
+            "category",
+        ]
+        for field in char_fields:
+            if field in data:
+                setattr(device, field, data[field] if data[field] is not None else "")
+
+        # Campos numéricos nullable
+        nullable_numeric = ["cpu_usage_manual_percent", "memory_usage_manual_percent"]
+        for field in nullable_numeric:
+            if field in data:
+                setattr(device, field, data[field])
+
+        # Campos booleanos
+        bool_fields = ["alert_screen", "alert_whatsapp", "alert_email"]
+        for field in bool_fields:
+            if field in data:
+                setattr(device, field, bool(data[field]))
+
+        # Site (aceita id ou nome)
+        if "site" in data:
+            site_val = data["site"]
+            if site_val is None or site_val == "":
+                pass  # mantém site atual
+            else:
+                try:
+                    site_id = int(site_val)
+                    device.site = Site.objects.get(id=site_id)
+                except (ValueError, TypeError, Site.DoesNotExist):
+                    # tenta por nome
+                    site_obj = Site.objects.filter(display_name=str(site_val)).first()
+                    if site_obj:
+                        device.site = site_obj
+
+        # Grupo de monitoramento
+        if "monitoring_group" in data:
+            grp_val = data["monitoring_group"]
+            if grp_val:
+                try:
+                    device.monitoring_group = DeviceGroup.objects.get(id=int(grp_val))
+                except (ValueError, TypeError, DeviceGroup.DoesNotExist):
+                    pass
+
+        try:
+            device.save()
+        except Exception as exc:
+            logger.error(f"[PATCH device] save failed: {exc!r}")
+            return JsonResponse({"success": False, "error": str(exc) or repr(exc)}, status=400)
+
+        logger.info(f"[PATCH device] saved ok id={device.id}")
+        return JsonResponse({"success": True, "id": device.id})
+
+    # ---- DELETE ----
+    return _api_device_delete(request, device_id)
+
+
+def _api_device_delete(request: HttpRequest, device_id: int) -> JsonResponse:
     """
     Exclui um dispositivo do inventário.
-    
+
     Endpoint: DELETE /api/v1/inventory/devices/{device_id}/
-    
+
     Response:
     {
         "success": true,

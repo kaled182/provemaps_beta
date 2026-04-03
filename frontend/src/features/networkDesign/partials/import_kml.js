@@ -6,6 +6,8 @@ let kmlDestDeviceSelect;
 let kmlDestPortSelect;
 let kmlSinglePortCheckbox;
 let kmlDestNotice;
+let kmlGroupSelect;
+let kmlResponsibleSelect;
 let importFormEl;
 let deviceOptions = Array.isArray(window.__FIBER_DEVICE_OPTIONS)
     ? window.__FIBER_DEVICE_OPTIONS
@@ -51,7 +53,7 @@ const importSubmitHandler = async (event) => {
 
         const data = await response.json();
         if (response.ok) {
-            alert(`Import completed successfully. Imported points: ${data.points ?? '?'}`);
+            showKmlToast(`Rota importada com sucesso (${data.points ?? '?'} pontos).`, 'success');
             closeKmlModal();
             importFormEl.reset();
             await populatePorts('', kmlOriginPortSelect);
@@ -62,11 +64,11 @@ const importSubmitHandler = async (event) => {
                 detail: { fiberId: data.fiber_id },
             }));
         } else {
-            alert(`Import failed: ${data.error || 'Upload error'}`);
+            showKmlToast(data.error || 'Erro ao importar rota.', 'error');
         }
     } catch (error) {
         console.error('KML import failed:', error);
-        alert('Network or server error during upload.');
+        showKmlToast('Erro de rede ao importar rota.', 'error');
     }
 };
 
@@ -117,6 +119,49 @@ function populateDeviceSelect(select, options = []) {
 function refreshDeviceSelects() {
     populateDeviceSelect(kmlOriginDeviceSelect, deviceOptions);
     populateDeviceSelect(kmlDestDeviceSelect, deviceOptions);
+}
+
+function showKmlToast(message, type) {
+    const host = document.getElementById('toastHost');
+    if (!host) { alert(message); return; }
+    const toast = document.createElement('div');
+    toast.style.cssText = `background:${type === 'success' ? '#065f46' : '#7f1d1d'};color:#fff;padding:.75rem 1rem;border-radius:.5rem;margin-top:.5rem;font-size:.875rem;box-shadow:0 4px 12px rgba(0,0,0,.3)`;
+    toast.textContent = message;
+    host.classList.remove('hidden');
+    host.appendChild(toast);
+    setTimeout(() => { toast.remove(); if (!host.children.length) host.classList.add('hidden'); }, 4000);
+}
+
+async function loadKmlGroups() {
+    if (!kmlGroupSelect) return;
+    try {
+        const res = await fetch('/api/v1/inventory/cable-groups/', { credentials: 'same-origin' });
+        if (!res.ok) return;
+        const data = await res.json();
+        kmlGroupSelect.innerHTML = '<option value="">— Sem grupo —</option>';
+        (data.results || []).forEach(g => {
+            const opt = document.createElement('option');
+            opt.value = g.id;
+            opt.textContent = g.name;
+            kmlGroupSelect.appendChild(opt);
+        });
+    } catch { /* ignore */ }
+}
+
+async function loadKmlResponsibles() {
+    if (!kmlResponsibleSelect) return;
+    try {
+        const res = await fetch('/api/users/?is_active=true', { credentials: 'same-origin' });
+        if (!res.ok) return;
+        const data = await res.json();
+        kmlResponsibleSelect.innerHTML = '<option value="">— Sem responsável —</option>';
+        (data.users || []).forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.id;
+            opt.textContent = u.full_name || u.username;
+            kmlResponsibleSelect.appendChild(opt);
+        });
+    } catch { /* ignore */ }
 }
 
 function openKmlModal() {
@@ -256,6 +301,8 @@ export async function initializeKmlModal(force = false) {
     kmlDestPortSelect = findElement('kmlDestPortSelect');
     kmlSinglePortCheckbox = findElement('kmlSinglePortOnly');
     kmlDestNotice = findElement('kmlDestNotice');
+    kmlGroupSelect = findElement('kmlCableGroupSelect');
+    kmlResponsibleSelect = findElement('kmlResponsibleSelect');
     importFormEl = findElement('importKmlForm');
 
     if (!kmlModal || !kmlModalContent || !importFormEl) {
@@ -266,6 +313,8 @@ export async function initializeKmlModal(force = false) {
     refreshDeviceSelects();
     attachEventListeners();
     void syncKmlDestination();
+    void loadKmlGroups();
+    void loadKmlResponsibles();
 
     if (kmlOriginDeviceSelect && kmlOriginDeviceSelect.value) {
         await populatePorts(kmlOriginDeviceSelect.value, kmlOriginPortSelect);
@@ -313,6 +362,8 @@ export function cleanupKmlModal() {
     kmlDestPortSelect = null;
     kmlSinglePortCheckbox = null;
     kmlDestNotice = null;
+    kmlGroupSelect = null;
+    kmlResponsibleSelect = null;
     importFormEl = null;
     deviceOptions = [];
     initialized = false;

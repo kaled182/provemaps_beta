@@ -21,7 +21,7 @@ from integrations.zabbix.decorators import (
 )
 from integrations.zabbix.guards import diagnostics_guard, staff_guard
 
-from inventory.models import Device, FiberCable
+from inventory.models import Device, FiberCable, FiberCableAuditLog
 from inventory.usecases import fibers as fiber_uc
 from inventory.usecases.fibers import (
     FiberNotFound,
@@ -50,6 +50,18 @@ def api_import_fiber_kml(request: HttpRequest) -> JsonResponse:
     dest_port_id = request.POST.get("dest_port_id")
     single_port = request.POST.get("single_port") == "true"
     kml_file = request.FILES.get("kml_file")
+    cable_group_id = request.POST.get("cable_group_id") or None
+    responsible_user_id = request.POST.get("responsible_user_id") or None
+    if cable_group_id:
+        try:
+            cable_group_id = int(cable_group_id)
+        except ValueError:
+            cable_group_id = None
+    if responsible_user_id:
+        try:
+            responsible_user_id = int(responsible_user_id)
+        except ValueError:
+            responsible_user_id = None
 
     if not (name and origin_device_id and origin_port_id and kml_file):
         return JsonResponse({"error": "Missing required fields"}, status=400)
@@ -77,6 +89,8 @@ def api_import_fiber_kml(request: HttpRequest) -> JsonResponse:
             str(dest_port_id),
             kml_file,
             single_port=single_port,
+            cable_group_id=cable_group_id,
+            responsible_user_id=responsible_user_id,
         )
     except FiberValidationError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
@@ -329,7 +343,7 @@ def api_fiber_detail(
 
     if request.method == "DELETE":
         try:
-            fiber_uc.delete_fiber(cable)
+            fiber_uc.delete_fiber(cable, user=request.user)
             return HttpResponse(status=204)
         except ProtectedError as exc:
             blockers = fiber_uc.get_delete_blockers(cable)
@@ -367,6 +381,11 @@ def api_fiber_detail(
         "name": payload.get("name"),
         "origin_port_id": payload.get("origin_port_id"),
         "dest_port_id": payload.get("dest_port_id"),
+        "cable_group_id": payload.get("cable_group_id"),
+        "responsible_id": payload.get("responsible_id"),
+        "responsible_user_id": payload.get("responsible_user_id"),
+        "folder_id": payload.get("folder_id"),
+        "cable_type": payload.get("cable_type_id"),
     }
 
     if any(value is not None for value in metadata_kwargs.values()):
@@ -375,6 +394,12 @@ def api_fiber_detail(
             name=metadata_kwargs["name"],
             origin_port_id=metadata_kwargs["origin_port_id"],
             dest_port_id=metadata_kwargs["dest_port_id"],
+            cable_group_id=metadata_kwargs["cable_group_id"],
+            responsible_id=metadata_kwargs["responsible_id"],
+            responsible_user_id=metadata_kwargs["responsible_user_id"],
+            folder_id=metadata_kwargs["folder_id"],
+            cable_type=metadata_kwargs["cable_type"],
+            user=request.user,
         )
         updated = True
 
@@ -446,7 +471,7 @@ def api_create_manual_fiber(request: HttpRequest) -> JsonResponse:
         )
 
     try:
-        result = fiber_uc.create_manual_fiber(data)
+        result = fiber_uc.create_manual_fiber(data, user=request.user)
     except FiberValidationError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
 
@@ -786,6 +811,31 @@ def api_validate_nearby_cables(request: HttpRequest) -> JsonResponse:
         "has_nearby": len(nearby_cables) > 0,
         "nearby_cables": nearby_cables[:5],  # Return top 5 closest
         "threshold_meters": PROXIMITY_THRESHOLD_METERS
+    })
+
+
+@require_GET
+@login_required
+@handle_api_errors
+def api_fiber_audit_log(request: HttpRequest, cable_id: int) -> JsonResponse:
+    """Return audit log entries for a specific cable (most recent first)."""
+    limit = min(int(request.GET.get("limit", 50)), 200)
+    entries = (
+        FiberCableAuditLog.objects.filter(cable_id=cable_id)
+        .order_by("-timestamp")[:limit]
+    )
+    return JsonResponse({
+        "results": [
+            {
+                "id": e.id,
+                "action": e.action,
+                "action_display": e.get_action_display(),
+                "username": e.username or "—",
+                "timestamp": e.timestamp.isoformat(),
+                "changes": e.changes,
+            }
+            for e in entries
+        ]
     })
 
 

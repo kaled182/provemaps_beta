@@ -117,36 +117,12 @@
     <div class="nav-menu-footer">
       <div class="divider"></div>
       
-      <!-- Status de Conexão -->
-      <div class="nav-item status-item" :data-status="connectionStatus.status">
-        <span class="nav-icon">
-          <component :is="connectionStatus.icon" :size="22" weight="regular" />
-        </span>
-        <transition name="fade">
-          <span v-if="uiStore.isNavMenuOpen" class="nav-label">{{ connectionStatus.text }}</span>
-        </transition>
-      </div>
-      
-      <a 
-        href="/admin/" 
-        class="nav-item"
-          :class="{ 'active': isPathActive('/admin/') }"
-        :title="!uiStore.isNavMenuOpen ? 'Admin' : ''"
-      >
-        <span class="nav-icon">
-          <PhFaders :size="22" weight="regular" />
-        </span>
-        <transition name="fade">
-          <span v-if="uiStore.isNavMenuOpen" class="nav-label">Admin</span>
-        </transition>
-      </a>
-
       <!-- System com submenu -->
       <div class="nav-group footer-group" :class="{ 'has-children': true, 'expanded': isGroupExpanded('System') }">
         <button
           @click="toggleGroup('System')"
           class="nav-item nav-item-toggle"
-          :class="{ 'active': isPathActive('/setup/config') || isPathActive('/metrics/health') }"
+          :class="{ 'active': isPathActive('/setup/config') || isPathActive('/metrics/health') || isPathActive('/admin/') || isPathActive('/docs') }"
           :title="!uiStore.isNavMenuOpen ? 'System' : ''"
         >
           <span class="nav-icon">
@@ -223,57 +199,77 @@
               </span>
               <span class="nav-label">Metrics</span>
             </RouterLink>
+            <a
+              href="/admin/"
+              class="nav-item nav-item-child"
+              :class="{ 'active': isPathActive('/admin/') }"
+              title="Admin"
+            >
+              <span class="nav-icon child-icon">
+                <PhFaders :size="18" weight="regular" />
+              </span>
+              <span class="nav-label">Admin</span>
+            </a>
+            <RouterLink
+              to="/docs"
+              class="nav-item nav-item-child"
+              :class="{ 'active': isPathActive('/docs') }"
+              title="Docs"
+            >
+              <span class="nav-icon child-icon">
+                <PhBook :size="18" weight="regular" />
+              </span>
+              <span class="nav-label">Docs</span>
+            </RouterLink>
           </div>
         </transition>
       </div>
-
-      <RouterLink
-        to="/docs"
-        class="nav-item"
-        :class="{ 'active': isPathActive('/docs') }"
-        :title="!uiStore.isNavMenuOpen ? 'Docs' : ''"
-      >
-        <span class="nav-icon">
-          <PhBook :size="22" weight="regular" />
-        </span>
-        <transition name="fade">
-          <span v-if="uiStore.isNavMenuOpen" class="nav-label">Docs</span>
-        </transition>
-      </RouterLink>
       
-      <!-- Theme Toggle Button -->
-      <button 
-        @click="uiStore.toggleTheme()"
-        class="nav-item theme-toggle"
-        :title="!uiStore.isNavMenuOpen ? (uiStore.theme === 'dark' ? 'Modo Claro' : 'Modo Escuro') : ''"
-      >
-        <span class="nav-icon">
-          <PhSun v-if="uiStore.theme === 'dark'" :size="22" weight="regular" />
-          <PhMoon v-else :size="22" weight="regular" />
-        </span>
-        <transition name="fade">
-          <span v-if="uiStore.isNavMenuOpen" class="nav-label">
-            {{ uiStore.theme === 'dark' ? 'Modo Claro' : 'Modo Escuro' }}
-          </span>
-        </transition>
-      </button>
-      
-      <!-- Botão Sair -->
-      <form action="/accounts/logout/" method="post">
-        <input type="hidden" name="csrfmiddlewaretoken" :value="csrfToken">
-        <button 
-          type="submit" 
-          class="nav-item logout-item"
-          :title="!uiStore.isNavMenuOpen ? 'Sair' : ''"
+      <!-- Linha compacta: status + sistema + changelog + tema + sair -->
+      <div class="footer-icon-row">
+        <span
+          class="icon-btn status-icon-btn"
+          :data-status="connectionStatus.status"
+          :title="connectionStatus.text"
         >
-          <span class="nav-icon">
-            <PhSignOut :size="22" weight="regular" />
-          </span>
-          <transition name="fade">
-            <span v-if="uiStore.isNavMenuOpen" class="nav-label">Sair</span>
-          </transition>
+          <component :is="connectionStatus.icon" :size="20" weight="regular" />
+        </span>
+
+        <button
+          @click="showSystemPanel = true"
+          class="icon-btn"
+          title="Sistema & Servidores"
+        >
+          <PhHardDrives :size="20" weight="regular" />
         </button>
-      </form>
+
+        <button
+          @click="showChangelog = true"
+          class="icon-btn"
+          title="Changelog & Sugestões"
+        >
+          <PhInfo :size="20" weight="regular" />
+        </button>
+
+        <button
+          @click="uiStore.toggleTheme()"
+          class="icon-btn theme-icon-btn"
+          :title="uiStore.theme === 'dark' ? 'Modo Claro' : 'Modo Escuro'"
+        >
+          <PhSun v-if="uiStore.theme === 'dark'" :size="20" weight="regular" />
+          <PhMoon v-else :size="20" weight="regular" />
+        </button>
+
+        <form action="/accounts/logout/" method="post" style="display:contents">
+          <input type="hidden" name="csrfmiddlewaretoken" :value="csrfToken">
+          <button type="submit" class="icon-btn logout-icon-btn" title="Sair">
+            <PhSignOut :size="20" weight="regular" />
+          </button>
+        </form>
+      </div>
+
+      <ChangelogModal :show="showChangelog" @close="showChangelog = false" />
+      <SystemPanel :show="showSystemPanel" @close="showSystemPanel = false" />
     </div>
   </aside>
 </template>
@@ -282,6 +278,8 @@
 import { ref, computed, onBeforeMount, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useUiStore } from '@/stores/ui';
+import ChangelogModal from './ChangelogModal.vue';
+import SystemPanel from './SystemPanel.vue';
 import {
   PhChartBar,
   PhGitBranch,
@@ -307,7 +305,12 @@ import {
   PhUsersThree,
   PhUser,
   PhSquaresFour,
+  PhInfo,
+  PhHardDrives,
 } from '@phosphor-icons/vue';
+
+const showChangelog = ref(false);
+const showSystemPanel = ref(false);
 
 const uiStore = useUiStore();
 const route = useRoute();
@@ -748,7 +751,7 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
   white-space: nowrap;
   background: var(--menu-item-base);
   border: 1px solid var(--menu-border-secondary);
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--shadow-sm);
   transform: translateY(0);
   backdrop-filter: blur(8px);
 }
@@ -794,15 +797,15 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
   color: var(--menu-text-primary);
   border-color: var(--menu-border-primary);
   transform: translateY(-1px);
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2);
+  box-shadow: var(--shadow-md);
 }
 
 .nav-item.router-link-active,
 .nav-item.router-link-exact-active,
 .nav-item.active {
   background: linear-gradient(160deg, var(--menu-item-active-start) 0%, var(--menu-item-active-end) 100%);
-  color: white;
-  box-shadow: 0 18px 48px rgba(16, 185, 129, 0.35);
+  color: var(--menu-text-primary);
+  box-shadow: 0 8px 24px var(--status-online-light);
   border-color: transparent;
   transform: translateY(-1px);
 }
@@ -832,21 +835,21 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
 
 .nav-badge {
   margin-left: auto;
-  background: rgba(16, 185, 129, 0.18);
-  color: #10b981;
+  background: var(--status-online-light);
+  color: var(--status-online);
   border-radius: 999px;
   font-size: 0.75rem;
   font-weight: 700;
   padding: 0.2rem 0.55rem;
-  border: 1px solid rgba(16, 185, 129, 0.35);
+  border: 1px solid var(--status-online-light);
 }
 
 .nav-item.router-link-active .nav-badge,
 .nav-item.router-link-exact-active .nav-badge,
 .nav-item.active .nav-badge {
-  background: rgba(16, 185, 129, 0.3);
-  color: white;
-  border-color: rgba(16, 185, 129, 0.45);
+  background: var(--status-online-light);
+  color: var(--menu-text-primary);
+  border-color: transparent;
 }
 
 .nav-item-icon {
@@ -900,7 +903,7 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
   overflow: hidden;
   white-space: nowrap;
   transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.1);
+  box-shadow: var(--shadow-sm);
 }
 
 .nav-menu-collapsed .ws-status {
@@ -1035,25 +1038,25 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
 .status-item {
   background: var(--menu-item-base);
   border: 1px solid var(--menu-border-secondary);
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.1);
+  box-shadow: var(--shadow-sm);
 }
 
 .status-item[data-status="online"] {
-  background: rgba(16, 185, 129, 0.18);
-  border-color: rgba(16, 185, 129, 0.45);
-  color: #10b981;
+  background: var(--status-online-light);
+  border-color: var(--status-online-light);
+  color: var(--status-online);
 }
 
 .status-item[data-status="connecting"] {
-  background: rgba(245, 158, 11, 0.18);
-  border-color: rgba(245, 158, 11, 0.35);
-  color: #f59e0b;
+  background: var(--status-warning-light);
+  border-color: var(--status-warning-light);
+  color: var(--status-warning);
 }
 
 .status-item[data-status="offline"] {
-  background: rgba(248, 113, 113, 0.18);
-  border-color: rgba(248, 113, 113, 0.35);
-  color: #f87171;
+  background: var(--status-offline-light);
+  border-color: var(--status-offline-light);
+  color: var(--status-offline);
 }
 
 .nav-item.theme-toggle .nav-icon {
@@ -1086,6 +1089,64 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
 /* Hidden logout form */
 #logout-form {
   display: none;
+}
+
+/* Linha compacta de ícones (tema + sair) */
+.footer-icon-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 8px;
+}
+
+.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s;
+  color: var(--menu-text-secondary);
+  flex-shrink: 0;
+}
+
+.icon-btn:hover {
+  background: var(--menu-item-hover);
+  color: var(--menu-text-primary);
+}
+
+.logout-icon-btn {
+  color: var(--status-offline);
+}
+
+.logout-icon-btn:hover {
+  background: var(--status-offline-light);
+  color: var(--status-offline);
+}
+
+.status-icon-btn {
+  cursor: default;
+}
+
+.status-icon-btn:hover {
+  background: transparent;
+}
+
+.status-icon-btn[data-status="online"] {
+  color: var(--status-online);
+}
+
+.status-icon-btn[data-status="connecting"] {
+  color: var(--status-warning);
+}
+
+.status-icon-btn[data-status="offline"] {
+  color: var(--status-offline);
 }
 
 /* Responsivo */

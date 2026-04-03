@@ -247,7 +247,8 @@ onMounted(() => {
 <style scoped>
 .custom-maps-manager {
   min-height: 100vh;
-  background: #1a1d2e;
+  background: var(--bg-primary);
+  color: var(--text-primary);
   padding: 24px;
 }
 
@@ -266,7 +267,7 @@ onMounted(() => {
 .title {
   font-size: 28px;
   font-weight: 700;
-  color: #fff;
+  color: var(--text-primary);
   margin: 0;
   display: flex;
   align-items: center;
@@ -301,8 +302,8 @@ onMounted(() => {
 }
 
 .map-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--surface-card);
+  border: 1px solid var(--border-primary);
   border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
@@ -311,14 +312,14 @@ onMounted(() => {
 }
 
 .map-card:hover {
-  border-color: rgba(16, 185, 129, 0.5);
+  border-color: var(--status-online);
   transform: translateY(-4px);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-md);
 }
 
 .map-preview {
   height: 140px;
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(6, 78, 59, 0.1) 100%);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(6, 78, 59, 0.08) 100%);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -329,15 +330,15 @@ onMounted(() => {
 
 .map-preview i {
   font-size: 48px;
-  color: rgba(16, 185, 129, 0.6);
+  color: var(--status-online);
 }
 
 .map-preview.default {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(67, 56, 202, 0.1) 100%);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(67, 56, 202, 0.08) 100%);
 }
 
 .map-preview.default i {
-  color: rgba(99, 102, 241, 0.6);
+  color: #6366f1;
 }
 
 .items-count {
@@ -345,11 +346,12 @@ onMounted(() => {
   top: 12px;
   right: 12px;
   padding: 4px 12px;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
   border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
-  color: #fff;
+  color: var(--text-secondary);
 }
 
 .default-badge {
@@ -357,7 +359,7 @@ onMounted(() => {
   top: 12px;
   left: 12px;
   padding: 4px 12px;
-  background: rgba(99, 102, 241, 0.2);
+  background: rgba(99, 102, 241, 0.15);
   border: 1px solid rgba(99, 102, 241, 0.4);
   border-radius: 12px;
   font-size: 11px;
@@ -373,13 +375,13 @@ onMounted(() => {
 .map-name {
   font-size: 18px;
   font-weight: 700;
-  color: #fff;
+  color: var(--text-primary);
   margin: 0 0 8px 0;
 }
 
 .map-description {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-tertiary);
   margin: 0 0 16px 0;
   line-height: 1.5;
 }
@@ -394,12 +396,12 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   font-weight: 600;
 }
 
 .stat i {
-  color: rgba(16, 185, 129, 0.6);
+  color: var(--status-online);
 }
 
 .map-actions {
@@ -419,10 +421,10 @@ onMounted(() => {
 .btn-icon {
   width: 32px;
   height: 32px;
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
-  color: #fff;
+  color: var(--text-secondary);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -431,13 +433,15 @@ onMounted(() => {
 }
 
 .btn-icon:hover {
-  background: rgba(16, 185, 129, 0.2);
-  border-color: rgba(16, 185, 129, 0.5);
+  background: var(--status-online-light);
+  border-color: var(--status-online);
+  color: var(--status-online);
 }
 
 .btn-icon.btn-danger:hover {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.5);
+  background: var(--status-offline-light);
+  border-color: var(--status-offline);
+  color: var(--status-offline);
 }
 
 .modal-overlay {
@@ -446,7 +450,7 @@ onMounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -455,8 +459,8 @@ onMounted(() => {
 }
 
 .modal-content {
-  background: #1e2139;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--surface-card);
+  border: 1px solid var(--border-primary);
   border-radius: 16px;
   width: 90%;
   max-width: 600px;
@@ -464,11 +468,12 @@ onMounted(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-shadow: var(--shadow-lg);
 }
 
 .modal-header {
   padding: 24px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--border-primary);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -477,13 +482,13 @@ onMounted(() => {
 .modal-header h2 {
   margin: 0;
   font-size: 20px;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .btn-close {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-tertiary);
   font-size: 32px;
   cursor: pointer;
   padding: 0;
@@ -496,7 +501,7 @@ onMounted(() => {
 }
 
 .btn-close:hover {
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .modal-body {
@@ -511,7 +516,7 @@ onMounted(() => {
 .form-group label {
   display: block;
   margin-bottom: 8px;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-secondary);
   font-size: 14px;
   font-weight: 600;
 }
@@ -521,10 +526,10 @@ onMounted(() => {
 .form-group select {
   width: 100%;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--surface-muted);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 14px;
 }
 
@@ -532,8 +537,8 @@ onMounted(() => {
 .form-group textarea:focus,
 .form-group select:focus {
   outline: none;
-  border-color: rgba(16, 185, 129, 0.5);
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--status-online-light);
 }
 
 .form-group input[type="checkbox"] {
@@ -542,7 +547,7 @@ onMounted(() => {
 
 .modal-footer {
   padding: 24px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--border-primary);
   display: flex;
   gap: 12px;
   justify-content: flex-end;
@@ -568,12 +573,13 @@ onMounted(() => {
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: var(--surface-muted);
+  border: 1px solid var(--border-primary);
+  color: var(--text-secondary);
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--menu-item-hover);
+  color: var(--text-primary);
 }
 </style>

@@ -27,8 +27,8 @@
   --info-soft-text: #93c5fd;
   
   /* Menu & Sidebar Colors */
-  --menu-bg: rgba(30, 33, 57, 0.95);
-  --menu-bg-start: rgba(30, 33, 57, 0.98);
+  --menu-bg: rgba(17, 24, 39, 0.97);
+  --menu-bg-start: rgba(15, 23, 42, 0.98);
   --menu-bg-end: rgba(17, 24, 39, 0.98);
   --menu-item-base: rgba(255, 255, 255, 0.03);
   --menu-item-hover: rgba(255, 255, 255, 0.08);
@@ -180,8 +180,8 @@
   --danger-soft-text: #fecaca;
   --info-soft-bg: rgba(59, 130, 246, 0.2);
   --info-soft-text: #93c5fd;
-  --menu-bg: rgba(30, 33, 57, 0.95);
-  --menu-bg-start: rgba(30, 33, 57, 0.98);
+  --menu-bg: rgba(17, 24, 39, 0.97);
+  --menu-bg-start: rgba(15, 23, 42, 0.98);
   --menu-bg-end: rgba(17, 24, 39, 0.98);
   --menu-item-base: rgba(255, 255, 255, 0.03);
   --menu-item-hover: rgba(255, 255, 255, 0.08);

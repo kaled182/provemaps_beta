@@ -13,7 +13,10 @@ export function useMapData() {
     cameras: [],
     racks: []
   })
-  
+
+  // Árvore de pastas de cabos
+  const foldersTree = ref([])
+
   // Mapa de sites para lookup de coordenadas
   const sitesMap = ref(new Map())
   
@@ -330,7 +333,32 @@ export function useMapData() {
           site_b_name: cable.site_b_name,
           length_km: cable.length_km,
           is_connected: cable.is_connected,
-          connection_status: cable.connection_status
+          connection_status: cable.connection_status,
+          origin_device_id: cable.origin_device_id || null,
+          destination_device_id: cable.destination_device_id || null,
+          folder_id: cable.folder_id ?? null,
+          folder_name: cable.folder_name ?? null,
+          responsible_id: cable.responsible_id ?? null,
+          responsible_name: cable.responsible_name ?? null,
+          responsible_email: cable.responsible_email ?? null,
+          responsible_phone: cable.responsible_phone ?? null,
+          responsible_user_id: cable.responsible_user_id ?? null,
+          responsible_user_name: cable.responsible_user_name ?? null,
+          // Cable type & group
+          cable_type_id: cable.cable_type_id ?? null,
+          cable_type_name: cable.cable_type_name ?? null,
+          cable_group_id: cable.cable_group_id ?? null,
+          cable_group_name: cable.cable_group_name ?? null,
+          cable_group_attenuation: cable.cable_group_attenuation ?? null,
+          fiber_count: cable.fiber_count ?? null,
+          // Port/device info
+          origin_device_name: cable.origin_device_name ?? null,
+          origin_port_name: cable.origin_port_name ?? null,
+          destination_device_name: cable.destination_device_name ?? null,
+          destination_port_name: cable.destination_port_name ?? null,
+          // Extra
+          notes: cable.notes ?? '',
+          last_status_update: cable.last_status_update ?? null,
         }
       })
       
@@ -350,6 +378,26 @@ export function useMapData() {
     }
   }
   
+  /**
+   * Carrega árvore de pastas de cabos
+   */
+  const loadFolderTree = async () => {
+    try {
+      const response = await fetch('/api/v1/inventory/cable-folders/', {
+        credentials: 'include'
+      })
+      if (!response.ok) throw new Error(`Erro ao carregar pastas: ${response.status}`)
+      const data = await response.json()
+      foldersTree.value = data.tree || []
+      console.log(`[useMapData] ${foldersTree.value.length} pastas raiz carregadas`)
+      return foldersTree.value
+    } catch (error) {
+      console.error('[useMapData] Erro ao carregar pastas:', error)
+      foldersTree.value = []
+      return []
+    }
+  }
+
   /**
    * Carrega câmeras
    */
@@ -408,9 +456,9 @@ export function useMapData() {
       // 3. Carregar devices com coordenadas e status
       await loadDevices(statusMap)
       
-      // 4. Carregar cabos
-      await loadCables()
-      
+      // 4. Carregar cabos e pastas (em paralelo)
+      await Promise.all([loadCables(), loadFolderTree()])
+
       // 5. Carregar câmeras
       await loadCameras()
       
@@ -449,13 +497,15 @@ export function useMapData() {
     // Estado
     availableItems,
     sitesMap,
-    
+    foldersTree,
+
     // Funções de carregamento
     loadInventoryItems,
     loadSites,
     loadZabbixStatus,
     loadDevices,
     loadCables,
+    loadFolderTree,
     loadCameras,
     
     // Funções de normalização

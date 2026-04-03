@@ -93,6 +93,7 @@
       :device="selectedDevice"
       :devices="selectedDevices"
       :is-new="isEditingNewDevice"
+      :saving="isSaving"
       :available-groups="availableGroups"
       :available-sites="availableSites"
       @close="closeModal"
@@ -219,6 +220,7 @@ const { success, error: notifyError } = useNotification();
 // Estado
 const loading = ref(false);
 const loadingZabbix = ref(false);
+const isSaving = ref(false);
 const currentTab = ref('inventory');
 const showModal = ref(false);
 const selectedDevice = ref(null);
@@ -340,24 +342,31 @@ const refreshData = async () => {
   }
 };
 
-const openEditModal = async (device, isNew = false) => {
-  // Se for device existente, buscar dados atualizados do servidor
+const openEditModal = async (device, isNew = false, devices = null) => {
+  // Batch mode: multiple devices from bulk selection
+  if (devices && Array.isArray(devices) && devices.length > 0) {
+    selectedDevices.value = devices.map(d => JSON.parse(JSON.stringify(d)));
+    selectedDevice.value = null;
+    isEditingNewDevice.value = true;
+    showModal.value = true;
+    return;
+  }
+
+  // Single device mode
+  selectedDevices.value = [];
+
   if (!isNew && device?.id) {
     try {
-      console.log('[DeviceImportManager] Fetching fresh device data for id:', device.id);
       const freshData = await api.get(`/api/v1/devices/${device.id}/`);
-      selectedDevice.value = JSON.parse(JSON.stringify(freshData)); // Deep copy dos dados atualizados
-      console.log('[DeviceImportManager] Fresh data loaded:', freshData);
+      selectedDevice.value = JSON.parse(JSON.stringify(freshData));
     } catch (error) {
       console.warn('[DeviceImportManager] Error fetching fresh device data, using cached:', error);
-      // Fallback: usa dados cached se fetch falhar
       selectedDevice.value = JSON.parse(JSON.stringify(device));
     }
   } else {
-    // Para novos devices, usa dados passados como estão
-    selectedDevice.value = JSON.parse(JSON.stringify(device)); // Deep copy
+    selectedDevice.value = device ? JSON.parse(JSON.stringify(device)) : null;
   }
-  
+
   isEditingNewDevice.value = isNew;
   showModal.value = true;
 };
@@ -395,32 +404,39 @@ const matchGroup = (zabbixGroupName) => {
 };
 
 const saveDeviceChanges = async (payload) => {
-  try {
-    // Validação antes de enviar
-    if (payload.mode === 'batch') {
-      const validation = validateDevices(payload.devices);
-      if (!validation.valid) {
-        const errorMessages = Object.values(validation.deviceErrors)
-          .flat()
-          .join(', ');
-        notifyError('Validação Falhou', errorMessages);
-        return;
-      }
+  // Validação antes de enviar
+  if (payload.mode === 'batch') {
+    const validation = validateDevices(payload.devices);
+    if (!validation.valid) {
+      const errorMessages = Object.values(validation.deviceErrors).flat().join(', ');
+      notifyError('Validação Falhou', errorMessages);
+      return;
     }
+  }
 
+  isSaving.value = true;
+  try {
     const response = await api.post('/api/v1/inventory/devices/import-batch/', payload);
-    
+
     if (response.success) {
+      const total = response.created + response.updated;
       const message = payload.mode === 'batch'
-        ? `${response.created + response.updated} dispositivos processados`
+        ? `${total} dispositivo${total !== 1 ? 's' : ''} processado${total !== 1 ? 's' : ''}`
         : 'Dispositivo salvo com sucesso';
-      
-      success(
-        'Importação Concluída',
-        `${message} (${response.created} novos, ${response.updated} atualizados)`
-      );
-      
+
+      success('Importação Concluída', `${message} (${response.created} novos, ${response.updated} atualizados)`);
+
+      if (response.proximity_warnings?.length) {
+        response.proximity_warnings.forEach(w => {
+          notifyError(
+            'Regra de Proximidade Aplicada',
+            `O site "${w.new_site_name}" não foi criado pois já existe "${w.reused_site}" a ${w.distance_m}m. O equipamento foi associado ao site existente.`
+          );
+        });
+      }
+
       closeModal();
+      currentTab.value = 'inventory';
       await refreshData();
     } else {
       throw new Error(response.error || 'Erro desconhecido');
@@ -428,6 +444,8 @@ const saveDeviceChanges = async (payload) => {
   } catch (error) {
     console.error('Erro ao salvar dispositivo:', error);
     notifyError('Erro ao Salvar', error.message || 'Não foi possível processar a importação.');
+  } finally {
+    isSaving.value = false;
   }
 };
 

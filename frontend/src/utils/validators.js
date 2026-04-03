@@ -51,7 +51,7 @@ export function isValidDeviceName(name) {
   
   // Nome deve ter entre 1 e 120 caracteres
   // Pode conter letras, números, hífen, underscore e ponto
-  const nameRegex = /^[a-zA-Z0-9._-]{1,120}$/;
+  const nameRegex = /^[a-zA-Z0-9 ._\-()[\]]{1,120}$/;
   return nameRegex.test(name);
 }
 

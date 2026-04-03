@@ -130,6 +130,16 @@ export class IMap {
   }
 
   /**
+   * Voa suavemente para uma localização com zoom
+   * @param {{ lat: number, lng: number }} latLng
+   * @param {number} zoom
+   */
+  flyTo(latLng, zoom) {
+    // Fallback: comportamento básico via panTo + setZoom
+    this.panTo(latLng);
+  }
+
+  /**
    * Adiciona listener de eventos
    * @param {string} event - Nome do evento (click, rightclick, etc.)
    * @param {Function} callback

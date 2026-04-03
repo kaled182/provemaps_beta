@@ -181,18 +181,122 @@
             </div>
           </template>
           
-          <!-- Lista simples para outras categorias (cabos, racks) -->
+          <!-- Hierarquia de pastas para cabos -->
+          <template v-else-if="activeCategory === 'cables'">
+            <!-- Modo busca: lista plana filtrada -->
+            <template v-if="searchQuery">
+              <div
+                v-for="cable in filteredItems"
+                :key="cable.id"
+                class="item-row"
+                @mouseenter="$emit('highlight-cable', cable.id)"
+                @mouseleave="$emit('unhighlight-cable', cable.id)"
+              >
+                <label class="item-checkbox">
+                  <input
+                    type="checkbox"
+                    :checked="isItemSelected(cable.id)"
+                    @change="$emit('toggle-item', cable.id)"
+                  >
+                  <span class="item-name">{{ cable.name }}</span>
+                </label>
+                <div class="item-info">
+                  <span v-if="cable.status" :class="['status-badge', cable.status]">
+                    {{ getStatusLabel(cable.status) }}
+                  </span>
+                  <button @click="$emit('focus-item', cable)" class="btn-focus">
+                    <i class="fas fa-crosshairs"></i>
+                  </button>
+                </div>
+              </div>
+            </template>
+
+            <!-- Modo árvore: pastas + cabos sem pasta -->
+            <template v-else>
+              <template v-for="row in cableTreeRows" :key="row.key">
+                <!-- Linha de pasta -->
+                <div v-if="row.type === 'folder'" class="folder-row" :style="{ paddingLeft: (12 + row.depth * 16) + 'px' }">
+                  <button class="btn-expand" @click="toggleFolder(row.folder.id)">
+                    <i :class="isFolderExpanded(row.folder.id) ? 'fas fa-chevron-down' : 'fas fa-chevron-right'"></i>
+                  </button>
+                  <label class="folder-checkbox">
+                    <input
+                      type="checkbox"
+                      :checked="isFolderFullySelected(row.folder)"
+                      :indeterminate.prop="isFolderPartiallySelected(row.folder)"
+                      @change="toggleFolderCables(row.folder)"
+                    >
+                    <div class="folder-details">
+                      <span class="folder-name">
+                        <i class="fas fa-folder" style="color:#f59e0b;margin-right:4px;font-size:11px"></i>
+                        {{ row.folder.name }}
+                      </span>
+                      <span class="folder-count">{{ row.folder.cable_count }} cabo(s)</span>
+                    </div>
+                  </label>
+                </div>
+
+                <!-- Cabo dentro de pasta -->
+                <div
+                  v-else-if="row.type === 'cable'"
+                  class="item-row item-row--indented"
+                  :style="{ paddingLeft: (28 + row.depth * 16) + 'px' }"
+                  @mouseenter="$emit('highlight-cable', row.cable.id)"
+                  @mouseleave="$emit('unhighlight-cable', row.cable.id)"
+                >
+                  <label class="item-checkbox">
+                    <input
+                      type="checkbox"
+                      :checked="isItemSelected(row.cable.id)"
+                      @change="$emit('toggle-item', row.cable.id)"
+                    >
+                    <span class="item-name">{{ row.cable.name }}</span>
+                  </label>
+                  <div class="item-info">
+                    <span v-if="row.cable.status" :class="['status-badge', row.cable.status]">
+                      {{ getStatusLabel(row.cable.status) }}
+                    </span>
+                    <button @click="$emit('focus-item', row.cable)" class="btn-focus">
+                      <i class="fas fa-crosshairs"></i>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Cabeçalho "Sem pasta" -->
+                <div v-else-if="row.type === 'no-folder-header'" class="folder-row">
+                  <button class="btn-expand" @click="toggleFolder('__no_folder__')">
+                    <i :class="isFolderExpanded('__no_folder__') ? 'fas fa-chevron-down' : 'fas fa-chevron-right'"></i>
+                  </button>
+                  <label class="folder-checkbox">
+                    <input
+                      type="checkbox"
+                      :checked="isNoFolderFullySelected(row.cables)"
+                      :indeterminate.prop="isNoFolderPartiallySelected(row.cables)"
+                      @change="toggleNoFolderCables(row.cables)"
+                    >
+                    <div class="folder-details">
+                      <span class="folder-name" style="color:rgba(255,255,255,0.5)">
+                        <i class="fas fa-folder-open" style="color:#64748b;margin-right:4px;font-size:11px"></i>
+                        Sem pasta
+                      </span>
+                      <span class="folder-count">{{ row.cables.length }} cabo(s)</span>
+                    </div>
+                  </label>
+                </div>
+              </template>
+            </template>
+          </template>
+
+          <!-- Lista simples para racks -->
           <template v-else>
-            <div 
-              v-for="item in filteredItems" 
+            <div
+              v-for="item in filteredItems"
               :key="item.id"
               class="item-row"
-              @mouseenter="$emit('highlight-cable', item.id)"
-              @mouseleave="$emit('unhighlight-cable', item.id)"
             >
               <label class="item-checkbox">
-                <input 
-                  type="checkbox" 
+                <input
+                  type="checkbox"
                   :checked="isItemSelected(item.id)"
                   @change="$emit('toggle-item', item.id)"
                 >
@@ -224,7 +328,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const props = defineProps({
   isVisible: Boolean,
@@ -237,10 +341,99 @@ const props = defineProps({
   expandedCameraSites: Set,
   devicesBySite: Array,
   camerasBySite: Array,
-  filteredItems: Array
+  filteredItems: Array,
+  foldersTree: { type: Array, default: () => [] }
 })
 
-defineEmits([
+// ── Folder expansion (local state) ──────────────────────────────────────────
+const expandedFolders = ref(new Set())
+
+function toggleFolder(id) {
+  const next = new Set(expandedFolders.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  expandedFolders.value = next
+}
+
+function isFolderExpanded(id) {
+  return expandedFolders.value.has(id)
+}
+
+// ── Cable tree rows ──────────────────────────────────────────────────────────
+// Returns a flat list of { type, key, depth, folder?, cable?, cables? } for rendering
+const cableTreeRows = computed(() => {
+  const rows = []
+  const cables = props.availableItems.cables || []
+
+  // Group cables by folder_id
+  const byFolder = new Map()
+  cables.forEach(c => {
+    const k = c.folder_id ?? null
+    if (!byFolder.has(k)) byFolder.set(k, [])
+    byFolder.get(k).push(c)
+  })
+
+  function walkFolder(folder, depth) {
+    rows.push({ type: 'folder', key: `folder-${folder.id}`, folder, depth })
+    if (isFolderExpanded(folder.id)) {
+      for (const child of (folder.children || [])) {
+        walkFolder(child, depth + 1)
+      }
+      for (const cable of (byFolder.get(folder.id) || [])) {
+        rows.push({ type: 'cable', key: `cable-${cable.id}`, cable, depth: depth + 1 })
+      }
+    }
+  }
+
+  for (const folder of (props.foldersTree || [])) {
+    walkFolder(folder, 0)
+  }
+
+  // "Sem pasta" section
+  const noCables = byFolder.get(null) || []
+  if (noCables.length > 0) {
+    rows.push({ type: 'no-folder-header', key: '__no_folder__', cables: noCables })
+    if (isFolderExpanded('__no_folder__')) {
+      for (const cable of noCables) {
+        rows.push({ type: 'cable', key: `cable-${cable.id}`, cable, depth: 1 })
+      }
+    }
+  }
+
+  return rows
+})
+
+// Returns all cable ids in a folder and its sub-folders recursively
+function collectFolderCableIds(folder) {
+  const cables = props.availableItems.cables || []
+  const ids = cables.filter(c => c.folder_id === folder.id).map(c => c.id)
+  for (const child of (folder.children || [])) {
+    ids.push(...collectFolderCableIds(child))
+  }
+  return ids
+}
+
+function isFolderFullySelected(folder) {
+  const ids = collectFolderCableIds(folder)
+  return ids.length > 0 && ids.every(id => props.selectedItems.cables?.includes(id))
+}
+
+function isFolderPartiallySelected(folder) {
+  const ids = collectFolderCableIds(folder)
+  const count = ids.filter(id => props.selectedItems.cables?.includes(id)).length
+  return count > 0 && count < ids.length
+}
+
+function isNoFolderFullySelected(cables) {
+  return cables.length > 0 && cables.every(c => props.selectedItems.cables?.includes(c.id))
+}
+
+function isNoFolderPartiallySelected(cables) {
+  const count = cables.filter(c => props.selectedItems.cables?.includes(c.id)).length
+  return count > 0 && count < cables.length
+}
+
+const emit = defineEmits([
   'close',
   'update:activeCategory',
   'update:searchQuery',
@@ -255,6 +448,25 @@ defineEmits([
   'select-all',
   'save'
 ])
+
+function toggleFolderCables(folder) {
+  const ids = collectFolderCableIds(folder)
+  const allSelected = isFolderFullySelected(folder)
+  ids.forEach(id => {
+    const selected = props.selectedItems.cables?.includes(id)
+    if (allSelected && selected) emit('toggle-item', id)
+    else if (!allSelected && !selected) emit('toggle-item', id)
+  })
+}
+
+function toggleNoFolderCables(cables) {
+  const allSelected = isNoFolderFullySelected(cables)
+  cables.forEach(c => {
+    const selected = props.selectedItems.cables?.includes(c.id)
+    if (allSelected && selected) emit('toggle-item', c.id)
+    else if (!allSelected && !selected) emit('toggle-item', c.id)
+  })
+}
 
 const getCategoryCount = (category) => {
   return props.availableItems[category]?.length || 0
@@ -717,6 +929,72 @@ const getStatusLabel = (status) => {
   max-height: 1000px;
 }
 
+/* ── Folder rows ─────────────────────────────────────────────────────────── */
+.folder-row {
+  display: flex;
+  align-items: center;
+  padding: 7px 12px 7px 12px;
+  gap: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.15s;
+}
+
+.folder-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.folder-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+
+.folder-checkbox input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.folder-details {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.folder-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folder-count {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.item-row--indented {
+  margin-bottom: 0;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.item-row--indented:hover {
+  background: rgba(16, 185, 129, 0.06);
+}
+
+/* ── Cable item rows ─────────────────────────────────────────────────────── */
 .item-row {
   display: flex;
   justify-content: space-between;

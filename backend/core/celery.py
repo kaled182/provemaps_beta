@@ -181,6 +181,12 @@ app.conf.update(
             "schedule": _service_account_rotation_interval,
             "options": {"queue": "default"},
         },
+        # Telemetry: daily anonymous ping (opt-out via TELEMETRY_ENABLED=false)
+        "telemetry-daily-ping": {
+            "task": "telemetry.tasks.send_ping",
+            "schedule": 86400.0,  # Every 24 hours
+            "options": {"queue": "default"},
+        },
     },
 )
 

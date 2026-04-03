@@ -12,12 +12,11 @@ let creatingOptionsEl = null;
 let previewOptionsEl = null;
 let cableInfoEl = null;
 let cableNameEl = null;
+let cableBadgesEl = null;
 let savePathEl = null;
 let generalOptionsEl = null;
 let reloadButtonEl = null;
 let reloadTextEl = null;
-
-const MENU_Z_INDEX = 50;
 
 function fullscreenElement() {
     return (
@@ -29,14 +28,14 @@ function fullscreenElement() {
     );
 }
 
-function attachMenuTo(parent) {
-    if (!menuElement || !parent) {
-        return;
-    }
-    if (menuElement.parentElement !== parent) {
-        parent.appendChild(menuElement);
-    }
-    menuElement.style.zIndex = String(MENU_Z_INDEX);
+function _renderCableBadges(meta) {
+    if (!cableBadgesEl) return;
+    const parts = [];
+    const typeName = meta?.cable_type?.name;
+    const groupName = meta?.cable_group?.name;
+    if (typeName) parts.push(`<span class="ctx-badge ctx-badge--type">${typeName}</span>`);
+    if (groupName) parts.push(`<span class="ctx-badge ctx-badge--group">${groupName}</span>`);
+    cableBadgesEl.innerHTML = parts.join('');
 }
 
 export function initContextMenu() {
@@ -50,6 +49,7 @@ export function initContextMenu() {
     previewOptionsEl = searchRoot.querySelector('#contextPreviewOptions') || document.getElementById('contextPreviewOptions');
     cableInfoEl = searchRoot.querySelector('#contextCableInfo') || document.getElementById('contextCableInfo');
     cableNameEl = searchRoot.querySelector('#contextCableName') || document.getElementById('contextCableName');
+    cableBadgesEl = searchRoot.querySelector('#contextCableBadges') || document.getElementById('contextCableBadges');
     savePathEl = searchRoot.querySelector('#contextSavePath') || document.getElementById('contextSavePath');
     generalOptionsEl = searchRoot.querySelector('#contextGeneralOptions') || document.getElementById('contextGeneralOptions');
     reloadButtonEl = searchRoot.querySelector('#contextLoadAll') || document.getElementById('contextLoadAll');
@@ -158,16 +158,18 @@ export function updateContextMenuState({ hasActiveFiber, fiberMeta, pathLength, 
         previewOptionsEl?.classList.remove('hidden');
         cableInfoEl?.classList.remove('hidden');
         if (cableNameEl) {
-            cableNameEl.textContent = previewCableMeta.name || `Cable #${previewCableId}`;
+            cableNameEl.textContent = previewCableMeta.name || `Cabo #${previewCableId}`;
         }
+        _renderCableBadges(previewCableMeta);
     } else if (isEditingCable) {
         selectedOptionsEl?.classList.remove('hidden');
         cableInfoEl?.classList.remove('hidden');
         if (cableNameEl) {
             const editingSuffix = pathLength > 0 ? ' — editando' : '';
-            const displayName = fiberMeta.name || `Cable #${fiberMeta.id ?? '?'}`;
+            const displayName = fiberMeta.name || `Cabo #${fiberMeta.id ?? '?'}`;
             cableNameEl.textContent = `${displayName}${editingSuffix}`;
         }
+        _renderCableBadges(fiberMeta);
         if (reloadButtonEl && reloadTextEl) {
             reloadButtonEl.classList.remove('hidden');
             reloadTextEl.textContent = 'Reload This Cable';
@@ -209,6 +211,7 @@ export function cleanupContextMenu() {
     previewOptionsEl = null;
     cableInfoEl = null;
     cableNameEl = null;
+    cableBadgesEl = null;
     savePathEl = null;
     generalOptionsEl = null;
     reloadButtonEl = null;

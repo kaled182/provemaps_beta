@@ -282,6 +282,11 @@ class GoogleMapClass extends IMap {
     this.googleMap.panTo(latLng);
   }
 
+  flyTo(latLng, zoom = 14) {
+    this.googleMap.panTo(latLng);
+    this.googleMap.setZoom(zoom);
+  }
+
   on(event, callback) {
     if (!this.listeners[event]) {
       this.listeners[event] = [];

@@ -304,7 +304,7 @@ watch(
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.58);
+  background: rgba(0, 0, 0, 0.55);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -315,10 +315,11 @@ watch(
 .modal {
   width: min(820px, 100%);
   max-height: 92vh;
-  background: var(--surface-modal, #0f172a);
-  color: #f8fafc;
+  background: var(--surface-card);
+  color: var(--text-primary);
   border-radius: 18px;
-  box-shadow: 0 24px 54px rgba(15, 23, 42, 0.45);
+  border: 1px solid var(--border-primary);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -329,7 +330,7 @@ watch(
   justify-content: space-between;
   align-items: flex-start;
   padding: 24px 28px 20px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .modal-header h3 {
@@ -340,14 +341,14 @@ watch(
 
 .subtitle {
   margin: 6px 0 0;
-  color: rgba(226, 232, 240, 0.72);
+  color: var(--text-tertiary);
   font-size: 13px;
 }
 
 .btn-icon {
   background: transparent;
   border: none;
-  color: rgba(226, 232, 240, 0.72);
+  color: var(--text-tertiary);
   font-size: 18px;
   cursor: pointer;
   padding: 6px;
@@ -355,8 +356,8 @@ watch(
 }
 
 .btn-icon:hover {
-  background: rgba(148, 163, 184, 0.16);
-  color: #f8fafc;
+  background: var(--menu-item-hover);
+  color: var(--text-primary);
 }
 
 .modal-body {
@@ -378,16 +379,16 @@ label {
   flex-direction: column;
   gap: 6px;
   font-size: 13px;
-  color: rgba(226, 232, 240, 0.82);
+  color: var(--text-secondary);
 }
 
 input,
 select,
 textarea {
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  background: rgba(15, 23, 42, 0.65);
-  color: #f8fafc;
+  border: 1px solid var(--border-primary);
+  background: var(--surface-muted);
+  color: var(--text-primary);
   padding: 10px 12px;
   font-size: 14px;
   outline: none;
@@ -397,8 +398,8 @@ textarea {
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: rgba(96, 165, 250, 0.8);
-  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.25);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--status-online-light);
 }
 
 textarea {
@@ -407,13 +408,13 @@ textarea {
 }
 
 .placeholders {
-  border: 1px solid rgba(148, 163, 184, 0.22);
+  border: 1px solid var(--border-primary);
   border-radius: 14px;
   padding: 18px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: rgba(15, 23, 42, 0.55);
+  background: var(--bg-secondary);
 }
 
 .placeholders-header {
@@ -427,12 +428,12 @@ textarea {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: var(--text-primary);
 }
 
 .hint {
   font-size: 12px;
-  color: rgba(148, 163, 184, 0.7);
+  color: var(--text-tertiary);
 }
 
 .placeholder-chips {
@@ -444,7 +445,7 @@ textarea {
 .chip {
   border: 1px solid rgba(96, 165, 250, 0.45);
   background: rgba(59, 130, 246, 0.08);
-  color: #93c5fd;
+  color: #60a5fa;
   border-radius: 999px;
   padding: 4px 12px;
   font-size: 12px;
@@ -465,20 +466,20 @@ textarea {
   padding: 0;
   list-style: none;
   font-size: 12px;
-  color: rgba(148, 163, 184, 0.76);
+  color: var(--text-tertiary);
 }
 
 .placeholder-descriptions strong {
   display: block;
-  color: rgba(226, 232, 240, 0.92);
+  color: var(--text-secondary);
   margin-bottom: 2px;
 }
 
 .preview {
-  border: 1px solid rgba(37, 99, 235, 0.32);
+  border: 1px solid var(--border-primary);
   border-radius: 16px;
   padding: 18px;
-  background: rgba(15, 23, 42, 0.65);
+  background: var(--bg-secondary);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -495,7 +496,7 @@ pre {
   font-size: 13px;
   font-family: 'JetBrains Mono', 'Fira Mono', monospace;
   white-space: pre-wrap;
-  color: #f8fafc;
+  color: var(--text-primary);
 }
 
 .modal-footer {
@@ -508,14 +509,15 @@ pre {
 .btn-secondary {
   padding: 10px 16px;
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.38);
-  background: transparent;
-  color: #e2e8f0;
+  border: 1px solid var(--border-primary);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
   cursor: pointer;
 }
 
 .btn-secondary:hover {
-  background: rgba(148, 163, 184, 0.16);
+  background: var(--menu-item-hover);
+  color: var(--text-primary);
 }
 
 .btn-primary {

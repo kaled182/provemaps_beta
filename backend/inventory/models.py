@@ -158,6 +158,67 @@ class DeviceGroup(models.Model):
         return self.name
 
 
+class CableGroup(models.Model):
+    """
+    Cable group for categorizing fiber cables by type/manufacturer.
+    Examples: "ASU 12FO", "FO Geleado 36FO", "ADSS 48FO".
+    """
+
+    name = models.CharField(max_length=255, unique=True)
+    manufacturer = models.CharField(max_length=255, blank=True)
+    fiber_count = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Number of fibers in the cable",
+    )
+    attenuation_db_per_km = models.DecimalField(
+        max_digits=5,
+        decimal_places=3,
+        null=True,
+        blank=True,
+        help_text="Attenuation in dB/km for optical budget calculation",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        db_table = "inventory_cable_group"
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Responsible(models.Model):
+    """
+    Responsible person or team for network infrastructure elements.
+    Examples: field technician, NOC team, third-party contractor.
+    """
+
+    class TypeChoices(models.TextChoices):
+        TECHNICIAN = "technician", "Técnico"
+        TEAM = "team", "Equipe"
+        CONTRACTOR = "contractor", "Terceirizado"
+
+    name = models.CharField(max_length=255)
+    email = models.EmailField(blank=True)
+    phone = models.CharField(max_length=30, blank=True)
+    type = models.CharField(
+        max_length=20,
+        choices=TypeChoices.choices,
+        default=TypeChoices.TECHNICIAN,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        db_table = "inventory_responsible"
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.get_type_display()})"
+
+
 class Device(models.Model):
     """
     Network device (router, switch, OLT, etc.) at a site.
@@ -493,6 +554,43 @@ class SpliceBoxTemplate(models.Model):
         return f"{self.manufacturer} {self.name} ({self.total_capacity()}FO)"
 
 
+class CableType(models.Model):
+    """Operational category for a fibre cable (e.g. Backbone, Drop)."""
+
+    name = models.CharField(max_length=50, unique=True)
+    order = models.PositiveSmallIntegerField(default=0, help_text="Display order in lists")
+
+    class Meta:
+        db_table = "inventory_cable_type"
+        ordering = ["order", "name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class CableFolder(models.Model):
+    """Hierarchical folder to organise FiberCable entries."""
+
+    name = models.CharField(max_length=100)
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="children",
+    )
+    order = models.PositiveSmallIntegerField(default=0, help_text="Display order among siblings")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "name"]
+        db_table = "inventory_cable_folder"
+        unique_together = [("parent", "name")]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class FiberCable(models.Model):
     """
     Fiber optic cable connecting two ports.
@@ -591,8 +689,48 @@ class FiberCable(models.Model):
         choices=STATUS_CHOICES,
         default=STATUS_UNKNOWN,
     )
+    cable_type = models.ForeignKey(
+        "CableType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cables",
+        help_text="Categoria operacional do cabo (Backbone, Distribuição, Drop, Acesso)",
+    )
     last_status_update = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True)
+    cable_group = models.ForeignKey(
+        "CableGroup",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cables",
+        help_text="Cable type/group for categorization and optical budget",
+    )
+    folder = models.ForeignKey(
+        "CableFolder",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cables",
+        help_text="Organising folder for this cable",
+    )
+    responsible = models.ForeignKey(
+        "Responsible",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cables",
+        help_text="Person or team responsible for this cable",
+    )
+    responsible_user = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cable_responsibles",
+        help_text="System user responsible for this cable",
+    )
 
     # Cached operational status values (Phase 9.1)
     # Populated asynchronously by refresh_cables_oper_status Celery task
@@ -696,11 +834,13 @@ class FiberCableAlarmConfig(models.Model):
     TARGET_DEPARTMENT_GROUP = "department_group"
     TARGET_SYSTEM_USER = "system_user"
     TARGET_CONTACT = "contact"
+    TARGET_DEPARTMENT = "department"
 
     TARGET_TYPE_CHOICES = [
         (TARGET_DEPARTMENT_GROUP, "Department group"),
         (TARGET_SYSTEM_USER, "System user"),
         (TARGET_CONTACT, "Contact"),
+        (TARGET_DEPARTMENT, "Departamento"),
     ]
 
     TRIGGER_WARNING = "warning"
@@ -709,6 +849,16 @@ class FiberCableAlarmConfig(models.Model):
     TRIGGER_LEVEL_CHOICES = [
         (TRIGGER_WARNING, "Warning"),
         (TRIGGER_CRITICAL, "Critical"),
+    ]
+
+    ALERT_BREAK = "break"
+    ALERT_ATTENUATION = "attenuation"
+    ALERT_NORMALIZATION = "normalization"
+
+    ALERT_TYPE_CHOICES = [
+        (ALERT_BREAK, "Rompimento"),
+        (ALERT_ATTENUATION, "Atenuação"),
+        (ALERT_NORMALIZATION, "Normalização"),
     ]
 
     fiber_cable = models.ForeignKey(
@@ -746,6 +896,14 @@ class FiberCableAlarmConfig(models.Model):
         related_name="fiber_alarm_configs",
         help_text="Usuário do sistema alvo quando target_type=system_user.",
     )
+    department = models.ForeignKey(
+        "core.Department",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="fiber_alarm_configs",
+        help_text="Departamento alvo quando target_type=department.",
+    )
     target_snapshot = models.JSONField(
         default=dict,
         blank=True,
@@ -761,6 +919,13 @@ class FiberCableAlarmConfig(models.Model):
         choices=TRIGGER_LEVEL_CHOICES,
         default=TRIGGER_WARNING,
         help_text="Nível que dispara o alarme (warning ou critical).",
+    )
+    alert_type = models.CharField(
+        max_length=16,
+        choices=ALERT_TYPE_CHOICES,
+        blank=True,
+        default="",
+        help_text="Tipo de evento: rompimento, atenuação ou normalização.",
     )
     persist_minutes = models.PositiveIntegerField(
         default=0,
@@ -1050,6 +1215,87 @@ class FiberEvent(models.Model):
             f"{self.fiber.name} {self.previous_status}->{self.new_status} "
             f"@ {self.timestamp:%Y-%m-%d %H:%M:%S}"
         )
+
+
+class FiberCableAuditLog(models.Model):
+    """
+    Audit log for FiberCable CRUD operations.
+    Records who did what and when, with a JSON diff of changed fields.
+    """
+
+    class Action(models.TextChoices):
+        CREATED = "created", "Criado"
+        UPDATED = "updated", "Atualizado"
+        DELETED = "deleted", "Excluído"
+
+    cable = models.ForeignKey(
+        "FiberCable",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_logs",
+    )
+    cable_name = models.CharField(
+        max_length=150,
+        help_text="Nome do cabo no momento da ação (preservado mesmo após exclusão)",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    username = models.CharField(
+        max_length=150,
+        blank=True,
+        help_text="Login do usuário no momento da ação",
+    )
+    action = models.CharField(max_length=10, choices=Action.choices)
+    changes = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Dict of {field: {old: ..., new: ...}} for updated fields",
+    )
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-timestamp"]
+        db_table = "inventory_fibercable_audit_log"
+
+    def __str__(self) -> str:
+        return f"{self.cable_name} — {self.action} @ {self.timestamp:%Y-%m-%d %H:%M}"
+
+
+def _cable_photo_upload_path(instance: "FiberCablePhoto", filename: str) -> str:
+    return f"cable_photos/{instance.cable_id}/{filename}"
+
+
+class FiberCablePhoto(models.Model):
+    """Photo attached to a fiber cable (installation record)."""
+
+    cable = models.ForeignKey(
+        "FiberCable",
+        on_delete=models.CASCADE,
+        related_name="photos",
+    )
+    image = models.ImageField(upload_to=_cable_photo_upload_path)
+    caption = models.CharField(max_length=200, blank=True)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "inventory_cable_photo"
+        ordering = ["-uploaded_at"]
+
+    def __str__(self) -> str:
+        return f"Foto {self.pk} — {self.cable_id}"
 
 
 class FiberInfrastructure(models.Model):

@@ -4,7 +4,7 @@
 
 import { useApi } from '@/composables/useApi'
 
-const { get, post } = useApi()
+const { get, post, patch, delete: del } = useApi()
 
 /**
  * Busca status óptico em cache de um cabo
@@ -37,25 +37,23 @@ export async function getPortOpticalHistory(portId, hours = 24) {
 }
 
 /**
- * Busca histórico óptico completo de um cabo (origem + destino)
- * Retorna dados separados por porta com informações de dispositivo
+ * Busca histórico óptico completo de um cabo (origem + destino) em uma única requisição.
+ * O backend paraleliza todas as chamadas ao Zabbix server-side.
  */
 export async function getCableOpticalHistory(cableId, hours = 24) {
   try {
     console.log(`[FiberService] Buscando histórico completo do cabo ${cableId}`)
-    
-    // Primeiro buscar informações do cabo para obter port_ids e device info
-    const cableStatus = await getCableOpticalStatus(cableId)
-    if (!cableStatus || !cableStatus.origin_port_id || !cableStatus.destination_port_id) {
-      console.warn('[FiberService] Cabo não possui portas configuradas')
+
+    const response = await get(`/api/v1/fiber-cables/${cableId}/optical-history/?hours=${hours}`)
+    if (!response || (!response.origin_history?.length && !response.destination_history?.length)) {
+      console.warn('[FiberService] Sem dados ópticos disponíveis')
       return null
     }
-    
-    // Buscar histórico de ambas as portas em paralelo
-    const [originHistory, destHistory] = await Promise.all([
-      getPortOpticalHistory(cableStatus.origin_port_id, hours),
-      getPortOpticalHistory(cableStatus.destination_port_id, hours)
-    ])
+
+    // Adaptar resposta para o formato esperado pelo modal
+    const cableStatus = response
+    const originHistory = response.origin_history || []
+    const destHistory = response.destination_history || []
 
     const extractThresholds = (opticalInfo) => {
       const parseValue = (value) => {
@@ -251,5 +249,38 @@ export async function createCableAlarm(cableId, payload) {
   } catch (error) {
     console.error('[FiberService] Erro ao criar configuração de alarme:', error)
     throw error
+  }
+}
+
+export async function deleteCableAlarm(cableId, alarmId) {
+  try {
+    await del(`/api/v1/fiber-cables/${cableId}/alarms/${alarmId}/`)
+  } catch (error) {
+    console.error('[FiberService] Erro ao excluir configuração de alarme:', error)
+    throw error
+  }
+}
+
+export async function updateCableAlarm(cableId, alarmId, payload) {
+  try {
+    const response = await patch(`/api/v1/fiber-cables/${cableId}/alarms/${alarmId}/`, payload)
+    return response
+  } catch (error) {
+    console.error('[FiberService] Erro ao atualizar configuração de alarme:', error)
+    throw error
+  }
+}
+
+/**
+ * Busca histórico de tráfego de rede (IN/OUT) de ambas as portas do cabo.
+ * O backend paraleliza as chamadas ao Zabbix server-side.
+ */
+export async function getCableTrafficHistory(cableId, hours = 24) {
+  try {
+    const response = await get(`/api/v1/fiber-cables/${cableId}/traffic-history/?hours=${hours}`)
+    return response || null
+  } catch (error) {
+    console.error('[FiberService] Erro ao buscar tráfego do cabo:', error)
+    return null
   }
 }

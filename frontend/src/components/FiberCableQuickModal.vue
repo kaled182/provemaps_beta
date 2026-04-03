@@ -273,7 +273,7 @@ const getAttenuationQuality = () => {
 }
 
 .quick-modal-container {
-  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  background: linear-gradient(135deg, var(--surface-card) 0%, var(--bg-secondary) 100%);
   border-radius: 16px;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   max-width: 480px;

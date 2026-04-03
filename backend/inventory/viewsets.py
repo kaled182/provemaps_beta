@@ -817,7 +817,15 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
     queryset = FiberCable.objects.filter(
         parent_cable__isnull=True  # Only cables without parent (main cables)
     ).select_related(
-        "origin_port__device__site", "destination_port__device__site"
+        "origin_port__device__site",
+        "destination_port__device__site",
+        "site_a",
+        "site_b",
+        "cable_type",
+        "cable_group",
+        "folder",
+        "responsible",
+        "responsible_user",
     ).prefetch_related(
         "segments__start_infrastructure",
         "segments__end_infrastructure"
@@ -1218,6 +1226,245 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         serializer = self.get_serializer(cable)
         return Response(serializer.data)
 
+    @action(detail=True, methods=["get"], url_path="optical-history", permission_classes=[IsAuthenticated])
+    def optical_history(self, request, pk=None):
+        """
+        Fetch optical history for both ports of a cable in a single request.
+
+        Replaces the 3-step frontend flow (cached-status → 2× port history) with
+        one server-side call that parallelises all Zabbix requests.
+
+        Query params:
+            hours: history window (default=24, max=168)
+        """
+        from datetime import datetime, timedelta, timezone as dt_timezone
+        from concurrent.futures import ThreadPoolExecutor
+        from django.utils import timezone
+        from integrations.zabbix.zabbix_service import zabbix_request
+        from inventory.usecases.fibers import build_optical_summary
+
+        cable = FiberCable.objects.select_related(
+            "origin_port__device",
+            "destination_port__device",
+        ).get(pk=pk)
+
+        hours = min(int(request.query_params.get("hours", 24)), 168)
+        time_from = int((timezone.now() - timedelta(hours=hours)).timestamp())
+        time_till = int(timezone.now().timestamp())
+
+        def _fetch_items(hostid, key):
+            """Return first Zabbix item matching key on host, or None."""
+            if not key:
+                return None
+            items = zabbix_request("item.get", {
+                "hostids": [str(hostid)],
+                "filter": {"key_": key},
+                "output": ["itemid", "value_type"],
+            })
+            return items[0] if items else None
+
+        def _fetch_history(item):
+            """Return history list for a Zabbix item dict."""
+            if not item:
+                return []
+            return zabbix_request("history.get", {
+                "itemids": [item["itemid"]],
+                "history": int(item.get("value_type", 0)),
+                "time_from": time_from,
+                "time_till": time_till,
+                "sortfield": "clock",
+                "sortorder": "ASC",
+            }) or []
+
+        def _fetch_port_history(port):
+            """Fetch and merge RX+TX history for one port using parallel Zabbix calls."""
+            if not port or not port.device or not port.device.zabbix_hostid:
+                return []
+            hostid = port.device.zabbix_hostid
+            rx_key = port.rx_power_item_key
+            tx_key = port.tx_power_item_key
+
+            # Stage 1: get item IDs for RX and TX in parallel
+            with ThreadPoolExecutor(max_workers=2) as ex:
+                rx_item_f = ex.submit(_fetch_items, hostid, rx_key)
+                tx_item_f = ex.submit(_fetch_items, hostid, tx_key)
+                rx_item = rx_item_f.result()
+                tx_item = tx_item_f.result()
+
+            # Stage 2: fetch history for both in parallel
+            with ThreadPoolExecutor(max_workers=2) as ex:
+                rx_hist_f = ex.submit(_fetch_history, rx_item)
+                tx_hist_f = ex.submit(_fetch_history, tx_item)
+                rx_history = rx_hist_f.result()
+                tx_history = tx_hist_f.result()
+
+            # Merge by clock timestamp
+            merged: dict[int, dict] = {}
+            for entry in rx_history:
+                clock = int(entry["clock"])
+                merged[clock] = {
+                    "timestamp": datetime.fromtimestamp(clock, tz=dt_timezone.utc).isoformat(),
+                    "rx_power": float(entry["value"]),
+                    "tx_power": None,
+                }
+            for entry in tx_history:
+                clock = int(entry["clock"])
+                if clock in merged:
+                    merged[clock]["tx_power"] = float(entry["value"])
+                else:
+                    merged[clock] = {
+                        "timestamp": datetime.fromtimestamp(clock, tz=dt_timezone.utc).isoformat(),
+                        "rx_power": None,
+                        "tx_power": float(entry["value"]),
+                    }
+            return sorted(merged.values(), key=lambda x: x["timestamp"])
+
+        # Fetch history for both ports in parallel
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            origin_f = ex.submit(_fetch_port_history, cable.origin_port)
+            dest_f = ex.submit(_fetch_port_history, cable.destination_port)
+            origin_history = origin_f.result()
+            dest_history = dest_f.result()
+
+        # Thresholds from cached optical summary (no Zabbix call)
+        summary = build_optical_summary(cable)
+        origin_sum = summary.get("origin", {}) if isinstance(summary, dict) else {}
+        dest_sum = summary.get("destination", {}) if isinstance(summary, dict) else {}
+
+        origin_port = cable.origin_port
+        dest_port = cable.destination_port
+
+        return Response({
+            "origin_port_id": origin_port.id if origin_port else None,
+            "destination_port_id": dest_port.id if dest_port else None,
+            "origin_optical": {
+                "port_name": origin_port.name if origin_port else None,
+                "device_name": (origin_port.device.name if origin_port and origin_port.device else None),
+                "warning_threshold": origin_sum.get("warning_threshold"),
+                "critical_threshold": origin_sum.get("critical_threshold"),
+            },
+            "destination_optical": {
+                "port_name": dest_port.name if dest_port else None,
+                "device_name": (dest_port.device.name if dest_port and dest_port.device else None),
+                "warning_threshold": dest_sum.get("warning_threshold"),
+                "critical_threshold": dest_sum.get("critical_threshold"),
+            },
+            "origin_history": origin_history,
+            "destination_history": dest_history,
+        })
+
+    @action(detail=True, methods=["get"], url_path="traffic-history", permission_classes=[IsAuthenticated])
+    def traffic_history(self, request, pk=None):
+        """
+        Fetch traffic history (IN/OUT) for both ports of a cable in a single request.
+        Uses stored zabbix_item_id_traffic_in/out — no item.get call needed.
+
+        Query params:
+            hours: history window (default=24, max=168)
+        """
+        from datetime import datetime, timedelta, timezone as dt_timezone
+        from concurrent.futures import ThreadPoolExecutor
+        from django.utils import timezone
+        from integrations.zabbix.zabbix_service import zabbix_request
+        import statistics as stats_lib
+
+        cable = FiberCable.objects.select_related(
+            "origin_port__device",
+            "destination_port__device",
+        ).get(pk=pk)
+
+        hours = min(int(request.query_params.get("hours", 24)), 168)
+        time_from = int((timezone.now() - timedelta(hours=hours)).timestamp())
+        time_till = int(timezone.now().timestamp())
+
+        def _fetch_history(item_id):
+            if not item_id:
+                return []
+            return zabbix_request("history.get", {
+                "itemids": [item_id],
+                "history": 3,
+                "time_from": time_from,
+                "time_till": time_till,
+                "sortfield": "clock",
+                "sortorder": "ASC",
+            }) or []
+
+        def _fetch_port_traffic(port):
+            if not port:
+                return {"history": [], "statistics": None, "device": None, "port": None}
+
+            in_id = port.zabbix_item_id_traffic_in
+            out_id = port.zabbix_item_id_traffic_out
+
+            # Fetch IN and OUT in parallel
+            with ThreadPoolExecutor(max_workers=2) as ex:
+                in_f = ex.submit(_fetch_history, in_id)
+                out_f = ex.submit(_fetch_history, out_id)
+                in_raw = in_f.result()
+                out_raw = out_f.result()
+
+            # Merge by clock
+            merged: dict[int, dict] = {}
+            in_values, out_values = [], []
+
+            for entry in in_raw:
+                clock = int(entry["clock"])
+                val = float(entry["value"])
+                in_values.append(val)
+                merged[clock] = {
+                    "timestamp": datetime.fromtimestamp(clock, tz=dt_timezone.utc).isoformat(),
+                    "traffic_in": val,
+                    "traffic_out": None,
+                }
+            for entry in out_raw:
+                clock = int(entry["clock"])
+                val = float(entry["value"])
+                out_values.append(val)
+                if clock in merged:
+                    merged[clock]["traffic_out"] = val
+                else:
+                    merged[clock] = {
+                        "timestamp": datetime.fromtimestamp(clock, tz=dt_timezone.utc).isoformat(),
+                        "traffic_in": None,
+                        "traffic_out": val,
+                    }
+
+            history = sorted(merged.values(), key=lambda x: x["timestamp"])
+
+            def _p95(values):
+                if not values:
+                    return None
+                s = sorted(values)
+                return s[min(int(len(s) * 0.95), len(s) - 1)]
+
+            statistics = {
+                "percentile_95_in": _p95(in_values),
+                "percentile_95_out": _p95(out_values),
+                "avg_in": stats_lib.mean(in_values) if in_values else None,
+                "avg_out": stats_lib.mean(out_values) if out_values else None,
+                "max_in": max(in_values) if in_values else None,
+                "max_out": max(out_values) if out_values else None,
+            }
+
+            return {
+                "history": history,
+                "statistics": statistics,
+                "device": port.device.name if port.device else None,
+                "port": port.name,
+            }
+
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            origin_f = ex.submit(_fetch_port_traffic, cable.origin_port)
+            dest_f = ex.submit(_fetch_port_traffic, cable.destination_port)
+            origin_data = origin_f.result()
+            dest_data = dest_f.result()
+
+        return Response({
+            "origin": origin_data,
+            "destination": dest_data,
+            "period_hours": hours,
+        })
+
     @action(detail=True, methods=["get", "post"], url_path="alarms")
     def alarms(self, request, pk=None):
         """List or create alarm configurations for the selected cable."""
@@ -1254,6 +1501,41 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             logger.debug("Unable to invalidate dashboard cache after alarm creation", exc_info=True)
 
         return Response(result, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["delete", "patch"], url_path="alarms/(?P<alarm_id>[0-9]+)")
+    def alarm_detail(self, request, pk=None, alarm_id=None):
+        """Delete or update a specific alarm configuration."""
+        from inventory.models import FiberCableAlarmConfig
+
+        cable = self.get_object()
+        try:
+            config = FiberCableAlarmConfig.objects.get(pk=alarm_id, fiber_cable=cable)
+        except FiberCableAlarmConfig.DoesNotExist:
+            return Response({"error": "Configuração não encontrada"}, status=status.HTTP_404_NOT_FOUND)
+
+        if request.method.lower() == "delete":
+            config.delete()
+            try:
+                invalidate_fiber_cache()
+            except Exception:
+                pass
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        # PATCH — replace config with updated data (atomic: rollback delete if create fails)
+        from django.db import transaction as db_transaction
+
+        try:
+            with db_transaction.atomic():
+                config.delete()
+                result = fiber_alarm_configs.create_alarm_config(cable, request.data, request.user)
+        except fiber_alarm_configs.FiberCableAlarmValidationError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            invalidate_fiber_cache()
+        except Exception:
+            pass
+        return Response(result, status=status.HTTP_200_OK)
 
 
 class DeviceGroupViewSet(  # type: ignore[misc]
