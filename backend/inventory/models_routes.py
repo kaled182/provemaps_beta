@@ -198,6 +198,13 @@ class RouteSegment(models.Model):
     def __str__(self) -> str:
         return f"{self.route.name}#{self.order}"
 
+    @property
+    def path_coordinates(self):
+        """Legacy compatibility: returns path as list of {"lat", "lng"} dicts."""
+        if self.path:
+            return [{"lat": lat, "lng": lng} for lng, lat in self.path.coords]
+        return None
+
     def clean(self) -> None:
         """Ensure segment endpoints are consistent."""
 

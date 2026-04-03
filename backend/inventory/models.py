@@ -769,6 +769,13 @@ class FiberCable(models.Model):
     def __str__(self) -> str:
         return self.name
 
+    @property
+    def path_coordinates(self):
+        """Legacy compatibility: returns path as list of {"lat", "lng"} dicts."""
+        if self.path:
+            return [{"lat": lat, "lng": lng} for lng, lat in self.path.coords]
+        return None
+
     def update_status(self, new_status: str) -> None:
         """Update fiber status with timestamp."""
         if new_status not in dict(self.STATUS_CHOICES):
