@@ -61,6 +61,8 @@ class DashboardViewTests(TestCase):
     def test_uses_legacy_template_when_rollout_zero(self):
         from maps_view.views import dashboard_view
         request = self.factory.get("/")
+        request.session = MagicMock()
+        request.session.session_key = "somesessionkey"
         mock_config = MagicMock()
         mock_config.google_maps_api_key = ""
         with patch("maps_view.views.runtime_settings") as mock_rs, \
@@ -121,9 +123,15 @@ class MetricsDashboardViewTests(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
 
+    def _make_request(self, url="/metrics-dashboard/", query=""):
+        path = f"{url}?q={query}" if query else url
+        request = self.factory.get(path)
+        request.user = MagicMock(is_authenticated=True)
+        return request
+
     def test_renders_metrics_template(self):
         from maps_view.views import metrics_dashboard
-        request = self.factory.get("/metrics-dashboard/")
+        request = self._make_request()
         metrics_output = b"# HELP my_metric A metric\n# TYPE my_metric gauge\nmy_metric 1\n"
         with patch("maps_view.views.generate_latest", return_value=metrics_output), \
              patch("maps_view.views.render") as mock_render:
@@ -134,7 +142,7 @@ class MetricsDashboardViewTests(TestCase):
 
     def test_filters_metrics_by_query(self):
         from maps_view.views import metrics_dashboard
-        request = self.factory.get("/metrics-dashboard/?q=my_metric")
+        request = self._make_request(query="my_metric")
         metrics_output = (
             b"# HELP my_metric A metric\n"
             b"# TYPE my_metric gauge\n"
@@ -154,7 +162,7 @@ class MetricsDashboardViewTests(TestCase):
 
     def test_empty_query_returns_all_metrics(self):
         from maps_view.views import metrics_dashboard
-        request = self.factory.get("/metrics-dashboard/")
+        request = self._make_request()
         metrics_output = (
             b"# HELP metric_a First\n# TYPE metric_a gauge\nmetric_a 1\n"
             b"# HELP metric_b Second\n# TYPE metric_b gauge\nmetric_b 2\n"
@@ -168,7 +176,7 @@ class MetricsDashboardViewTests(TestCase):
 
     def test_context_has_metrics_source_url(self):
         from maps_view.views import metrics_dashboard
-        request = self.factory.get("/metrics-dashboard/")
+        request = self._make_request()
         request.build_absolute_uri = lambda path: f"http://testserver{path}"
         with patch("maps_view.views.generate_latest", return_value=b""), \
              patch("maps_view.views.render") as mock_render:
