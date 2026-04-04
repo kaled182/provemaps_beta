@@ -1,533 +1,266 @@
-﻿# MapsProveFiber
+# ProVeMaps
 
-**Version:** 2.1.0 (Production Package Release)  
-**Status:** ✅ Production-ready with Docker deployment automation
+**Versão:** 1.4.1  
+**Status:** 🚧 Beta ativo — funcionalidades em produção, desenvolvimento contínuo
 
-MapsProveFiber is a Django 5.x platform for fiber optic network infrastructure management, integrating real-time monitoring with Zabbix telemetry and advanced route planning capabilities.
-
-## Core Features
-- 🗺️ **Real-time Network Dashboard** — Live status visualization with WebSocket updates
-- 🔌 **Fiber Route Management** — KML import, power budget analysis, and segment workflows
-- 📊 **Zabbix Integration** — Resilient API client with circuit breaker, retry logic, and caching
-- 🏗️ **Inventory Management** — Authoritative models for Sites, Devices, Ports, Routes, and Fiber Cables
-- 📈 **Observability** — Prometheus metrics, health checks, structured logging, and request tracing
-- ⚡ **Async Processing** — Celery workers for background tasks and Channels for real-time WebSocket
-- 🐳 **Docker Production** — One-command deployment with automated SSL, backup, and monitoring
-- 🎨 **First-Time Setup Wizard** — Modern UI for initial configuration with encrypted credential storage
+ProVeMaps é uma plataforma full-stack para gestão de infraestrutura de redes de fibra óptica. Combina um backend Django 5.x com um frontend Vue 3 para monitoramento em tempo real via integração Zabbix, gerenciamento de inventário físico e fluxos de campo (fusões, rastreamento de rota, câmeras).
 
 ---
 
-## 🏛️ Architecture (v2.0 — Modular)
+## ✨ Funcionalidades principais
 
-### Django Apps Structure
-- **`core/`** — Settings, root URLs, ASGI/WSGI, Channels routing, middleware, health checks
-- **`inventory/`** — Authoritative domain models (Site, Device, Port, Route, FiberCable, etc.)
-  - REST APIs at `/api/v1/inventory/*`
-  - Usecases, services, domain logic, cache management
-- **`monitoring/`** — Health checks, combined Zabbix + inventory status
-  - Usecases: `get_devices_with_zabbix()`, `build_zabbix_map()`, `process_host_status()`
-- **`integrations/zabbix/`** — Resilient Zabbix API client
-  - Circuit breaker, exponential backoff, connection pooling
-  - Prometheus metrics for API calls, failures, cache hits
-- **`maps_view/`** — Network dashboard views and real-time WebSocket publisher
-  - SWR cache pattern for dashboard data
-  - Templates and static assets for map visualization
-- *(Legacy `routes_builder/` assets have been retired; route logic now lives in `inventory.models_routes`.)*
-- **`setup_app/`** — Runtime credentials, encrypted settings (Fernet), documentation viewer
-
-### Database Schema (Post-Migration)
-```
-inventory_site               # Physical locations
-inventory_device             # Network devices (OLTs, switches, routers)
-inventory_port               # Device interfaces
-inventory_fibercable         # Fiber connections between ports
-inventory_route              # Planned/active fiber routes (renamed from routes_builder_route)
-inventory_routesegment       # Route segments (renamed from routes_builder_routesegment)
-inventory_routeevent         # Route change events (renamed from routes_builder_routeevent)
-```
-
-### External Integrations
-- **Zabbix** — Network monitoring platform (API v6.x+)
-- **Redis** — Cache and Celery broker (optional; graceful degradation if unavailable)
-- **Prometheus** — Metrics scraping endpoint at `/metrics/`
+- **📡 Dashboard de rede em tempo real** — Mapa interativo com status live via WebSocket (Google Maps / Mapbox)
+- **🔌 Inventário físico completo** — Sites, dispositivos, portas, cabos de fibra, rotas e segmentos com PostGIS
+- **📊 Integração Zabbix** — Client resiliente com circuit breaker, retry exponencial, cache e métricas Prometheus
+- **🔬 Gestão de fusões** — Splice matrix, view de cabo despojado, rastreamento de rota por fibra
+- **🚨 Configuração de alarmes** — Templates de alerta por categoria/canal (WhatsApp, SMS, e-mail, Telegram)
+- **📈 Tráfego e sinal óptico** — Gráficos IN/OUT e nível óptico com exportação PNG/PDF
+- **📥 Importação em lote** — Import de devices via KML com regra de proximidade 100 m anti-duplicatas
+- **🎥 Câmeras e vídeo** — Player integrado, suporte HLS, gateway de vídeo configurável
+- **⚡ Processamento assíncrono** — Celery workers + beat scheduler para tarefas em background
+- **🔔 Notificações e contatos** — Gestão de grupos de contatos e templates de mensagem
+- **🛠️ Setup Wizard** — Configuração inicial com credenciais criptografadas (Fernet)
+- **📚 Observabilidade** — Prometheus metrics, health checks, logging estruturado, request tracing
 
 ---
 
-## 🚀 Quick Start
+## 🏛️ Arquitetura
 
-### Prerequisites
-- **Production**: Linux (Debian/Ubuntu), Docker & Docker Compose
-- **Development**: Python 3.11+, MariaDB/MySQL or SQLite, Redis (optional)
+### Backend (Django 5.x + Python 3.12)
 
-### Production Deployment (Docker - Recommended) 🐳
+| App | Responsabilidade |
+|---|---|
+| `core/` | Settings, URLs root, ASGI/WSGI, middleware, auth (2FA TOTP), health checks |
+| `inventory/` | Modelos de domínio (Site, Device, Port, FiberCable, Route, RouteSegment) + REST API `/api/v1/inventory/*` |
+| `monitoring/` | Combinação status Zabbix + inventário, health checks de dispositivos |
+| `integrations/zabbix/` | Client Zabbix com circuit breaker, pool de conexões, métricas |
+| `maps_view/` | Views do dashboard, publisher WebSocket, cache SWR |
+| `setup_app/` | Configuração runtime, credenciais criptografadas, docs viewer, gateways de notificação |
+| `dwdm/` | Modelos específicos para equipamentos DWDM |
+| `gpon/` | Modelos específicos para redes GPON |
+| `telemetry/` | Coleta e armazenamento de dados de telemetria |
 
-**One-command installation** for Linux production servers:
+### Frontend (Vue 3 + Vite)
 
-```bash
-# Clone repository
-git clone https://github.com/kaled182/provemaps_beta.git
-cd provemaps_beta
+Componentes principais:
 
-# Run automated installation
-chmod +x scripts/deploy-docker.sh
-sudo ./scripts/deploy-docker.sh install
+- **`MapView.vue`** — Mapa interativo principal (Google Maps / Mapbox)
+- **`DeviceDetailsModal.vue`** — Detalhes, tráfego e sinal óptico de dispositivos
+- **`FiberCableDetailModal.vue`** — Detalhes de cabo com gráficos de tráfego e export
+- **`Fusion/`** — Splice matrix e view de cabo despojado
+- **`TraceRoute/`** — Rastreamento de rota por fibra
+- **`DeviceImport/`** — Import em lote com mapa de preview
+- **`AlarmConfigModal.vue`** — Configuração de alarmes por dispositivo
+- **`Video/`** — Player de câmeras HLS
 
-# Access your system
-# https://your-domain.com → First-Time Setup Wizard
+### Banco de dados
+
+PostgreSQL 15 + PostGIS para dados geoespaciais.
+
+```
+inventory_site               # Localizações físicas (com coordenadas geográficas)
+inventory_device             # Equipamentos de rede (OLTs, switches, roteadores)
+inventory_port               # Interfaces de dispositivos
+inventory_fibercable         # Conexões de fibra entre portas
+inventory_route              # Rotas planejadas/ativas
+inventory_routesegment       # Segmentos de rota
+setup_alert_templates        # Templates de mensagens de alerta
+setup_contacts               # Contatos para notificações
 ```
 
-**Duration**: 10-15 minutes (fully automated)
+### Integrações externas
 
-**Includes**:
-- ✅ Nginx with SSL/TLS (Let's Encrypt)
-- ✅ PostgreSQL 15 + PostGIS
-- ✅ Redis cache
-- ✅ Django + Celery workers
-- ✅ Auto-migrations
-- ✅ Health checks
-- ✅ Backup automation
+- **Zabbix** — Monitoramento de rede (API v6.x+)
+- **Redis** — Cache e broker Celery (degradação graciosa se indisponível)
+- **Prometheus + Grafana** — Métricas e dashboards
+- **Google Maps / Mapbox** — Renderização do mapa
 
-📚 **Full guide**: [Docker Production Deployment](./doc/operations/DOCKER_PRODUCTION.md)
+---
 
-### Local Development (Docker)
+## 🚀 Quick Start (Docker)
+
+### Pré-requisitos
+- Docker e Docker Compose
+- Linux (Debian/Ubuntu recomendado para produção)
+
+### Subir ambiente local
+
 ```bash
-# Clone repository
 git clone https://github.com/kaled182/provemaps_beta.git
 cd provemaps_beta
 
-# Copy environment template
-cp .env.example .env
+# Iniciar todos os serviços
+cd docker
+docker compose up -d
 
-# Edit .env with your Zabbix credentials
-# ZABBIX_API_URL=http://your-zabbix-server/api_jsonrpc.php
-# ZABBIX_API_USER=your_user
-# ZABBIX_API_PASSWORD=your_password
-
-# Start all services
-docker compose -f docker/docker-compose.yml up -d
-
-# Check health
+# Verificar saúde
 curl http://localhost:8100/healthz
 ```
 
-**🔑 Credenciais Padrão:**
-- **Admin URL:** http://localhost:8100/admin
-- **Username:** `admin`
-- **Senha:** `admin123`
-- ⚠️ Altere a senha após primeiro acesso!
+**Credenciais padrão:**
+- Admin: http://localhost:8100/admin — `admin` / `admin123` ⚠️ Troque após o primeiro acesso
 
-**📍 Portas dos Serviços:**
-- Django Web: `8100` (http://localhost:8100)
-- PostgreSQL: `5433`
-- Redis: `6380`
-- Prometheus: `9090`
-- Grafana: `3002` (http://localhost:3002)
-- Video HLS: `8083`
-- WhatsApp QR: `3001`
+**Portas dos serviços:**
 
-### Local Development (Manual)
+| Serviço | Porta |
+|---|---|
+| Django Web | `8100` |
+| PostgreSQL | `5433` |
+| Redis | `6380` |
+| Prometheus | `9090` |
+| Grafana | `3002` |
+| Video HLS | `8083` |
+| WhatsApp QR | `3001` |
+
+### Build do frontend
+
 ```bash
-# Create virtual environment
-python -m venv venv
-venv\Scripts\activate  # Windows
-# source venv/bin/activate  # Linux/Mac
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Apply migrations
-python manage.py migrate
-
-# Create superuser
-python manage.py createsuperuser
-
-# Start development server
-python manage.py runserver
-
-# In separate terminals:
-celery -A core worker --loglevel=info
-celery -A core beat --loglevel=info
+# Na raiz do projeto (fora do Docker)
+npm install
+npm run build
 ```
 
-### First-Time Setup Wizard 🎨
+---
 
-After installation, access your domain and you'll be **automatically redirected** to the setup wizard:
+## 🧪 Testes
 
-1. **Access**: `https://your-domain.com` → `/setup_app/first_time/`
-2. **Configure** (modern UI with dark mode):
-   - 🏢 Company info (name, logo)
-   - 📊 Zabbix integration (URL, API token)
-   - 🗺️ Google Maps API key
-   - 🔑 License key
-3. **Save** → Credentials encrypted with Fernet
-4. **Redirect** → Dashboard ready!
+```bash
+# Dentro do container
+docker compose exec web python -m pytest -q
 
-**Features**:
-- Modern gradient design (blue → emerald)
-- Dark mode synchronized with dashboard
-- Visual cards per section
-- Encrypted credential storage
-- One-time configuration lock
+# Com cobertura
+docker compose exec web bash -c "coverage run -m pytest -q && coverage report"
+
+# App específico
+docker compose exec web python -m pytest inventory/tests/ -v
+```
+
+**Estado atual dos testes:**
+- **971 testes passando** (0 falhas)
+- **Cobertura:** 60% (threshold mínimo do CI)
+- **Pre-push hook:** executa suite de testes críticos automaticamente antes de cada push
 
 ---
 
-## 📡 API Endpoints
+## 📡 API
 
-### Inventory API (`/api/v1/inventory/`)
-- `GET /api/v1/inventory/sites/` — List all sites
-- `GET /api/v1/inventory/devices/` — List devices (with Zabbix status)
-- `GET /api/v1/inventory/ports/` — List ports
-- `GET /api/v1/inventory/fibers/` — List fiber cables
-- `GET /api/v1/inventory/fibers/oper-status/` — Fiber operational status (cached)
-- `POST /api/v1/inventory/fibers/` — Create fiber cable
-- `PUT /api/v1/inventory/fibers/<id>/` — Update fiber cable
-- `DELETE /api/v1/inventory/fibers/<id>/` — Delete fiber cable
+### Inventory REST API (`/api/v1/inventory/`)
 
-### Health & Observability
-- `GET /healthz` — Basic health check (database connectivity)
-- `GET /ready` — Readiness probe (services ready to accept traffic)
-- `GET /live` — Liveness probe (application is alive)
-- `GET /celery/status` — Celery workers health
-- `GET /metrics/` — Prometheus metrics endpoint
+```
+GET/POST   /api/v1/inventory/sites/
+GET/POST   /api/v1/inventory/devices/
+PATCH      /api/v1/inventory/devices/<id>/
+GET/POST   /api/v1/inventory/ports/
+GET/POST   /api/v1/inventory/fibers/
+GET        /api/v1/inventory/fibers/oper-status/   # status operacional (cached)
+GET/POST   /api/v1/inventory/routes/
+GET        /api/v1/inventory/spatial/radius/        # busca geoespacial por raio
+```
 
-### Legacy Endpoints (⚠️ Deprecated)
-- `/zabbix_api/*` — **REMOVED in v2.0.0** (use `/api/v1/inventory/*`)
-- `/routes_builder/api/*` — **REMOVED in v2.0.0** (use inventory APIs)
+### Setup App API (`/setup_app/api/`)
+
+```
+GET        /setup_app/api/config/
+POST       /setup_app/api/config/update/
+GET        /setup_app/api/company-profile/
+GET/POST   /setup_app/api/monitoring-servers/
+GET/POST   /setup_app/api/gateways/
+GET        /setup_app/api/audit-history/
+GET/POST   /setup_app/api/alert-templates/    # DRF ViewSet (CRUD completo)
+GET/POST   /setup_app/api/contacts/           # DRF ViewSet (CRUD completo)
+```
+
+### Health & Observabilidade
+
+```
+GET /healthz          # health check básico (DB)
+GET /ready            # readiness probe
+GET /live             # liveness probe
+GET /celery/status    # status dos workers
+GET /metrics/         # Prometheus scrape endpoint
+```
 
 ---
 
-## 🔧 Configuration
+## ⚙️ Configuração
 
-### Environment Variables (Production)
+### Variáveis de ambiente principais
+
 ```bash
 # Django
-SECRET_KEY=your-secret-key-here
+SECRET_KEY=sua-chave-secreta
 DEBUG=False
-ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
+ALLOWED_HOSTS=seu-dominio.com
+DJANGO_SETTINGS_MODULE=settings.prod
 
-# Database
-DB_ENGINE=mysql  # or postgresql
+# Banco de dados (PostgreSQL + PostGIS)
+DB_HOST=postgres
+DB_PORT=5432
 DB_NAME=mapsprovefiber
 DB_USER=mapsprove_user
-DB_PASSWORD=secure_password
-DB_HOST=localhost
-DB_PORT=3306
+DB_PASSWORD=senha_segura
 
 # Zabbix
-ZABBIX_API_URL=https://zabbix.yourdomain.com/api_jsonrpc.php
-ZABBIX_API_USER=zabbix_api_user
-ZABBIX_API_PASSWORD=zabbix_api_password
-# Or use API key (Zabbix 6.4+)
-ZABBIX_API_KEY=your_api_key_here
+ZABBIX_API_URL=https://zabbix.seudominio.com/api_jsonrpc.php
+ZABBIX_API_KEY=sua_api_key          # Zabbix 6.4+
+# ou usuário/senha:
+ZABBIX_API_USER=usuario
+ZABBIX_API_PASSWORD=senha
 
-# Redis (optional)
-REDIS_URL=redis://localhost:6379/0
+# Redis
+REDIS_URL=redis://redis:6379/0
 
-# Security
+# Mapas
+GOOGLE_MAPS_API_KEY=sua_chave_google_maps
+
+# Criptografia (credenciais runtime)
+FERNET_KEY=sua_fernet_key
+# Gerar: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# Segurança (produção)
 SECURE_SSL_REDIRECT=True
-SECURE_HSTS_SECONDS=31536000
-CSRF_TRUSTED_ORIGINS=https://yourdomain.com
-
-# Google Maps (optional)
-GOOGLE_MAPS_API_KEY=your_google_maps_key
-
-# Fernet Encryption
-FERNET_KEY=your_fernet_key  # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+CSRF_TRUSTED_ORIGINS=https://seu-dominio.com
 ```
 
-### Django Settings Modules
-- `settings.dev` — Development (DEBUG=True, SQLite default)
-- `settings.test` — Testing (in-memory database, minimal logging)
-- `settings.prod` — Production (HTTPS enforced, security hardened)
+### Settings modules
 
-Set via: `DJANGO_SETTINGS_MODULE=settings.prod`
-
----
-
-## 🧪 Testing
-
-### Run Full Test Suite
-```bash
-# All tests
-pytest -q
-
-# With coverage
-pytest --cov --cov-report=term-missing
-
-# Specific app
-pytest inventory/tests/ -v
-
-# Parallel execution
-pytest -n auto
-```
-
-### Test Results (v2.0.0)
-- **199 tests passing** (100% success rate)
-- Coverage: ~85% (excluding migrations and static files)
-- Test execution time: ~116 seconds
+- `settings.dev` — Desenvolvimento (DEBUG=True, SQLite opcional)
+- `settings.test` — Testes (banco em memória, logging mínimo)
+- `settings.prod` — Produção (HTTPS forçado, hardened)
 
 ---
 
----
+## 🛡️ Segurança
 
-## 📚 Documentation
-
-Comprehensive documentation is available at `/setup_app/docs/` or in the `doc/` directory.
-
-### Key Documents
-
-#### Getting Started
-- 🚀 **[Quick Start Guide](./doc/getting-started/QUICKSTART.md)** — Get started in 5 minutes
-- 📦 **[Installation Guide](./doc/getting-started/INSTALLATION_GUIDE.md)** — Complete installation manual (14 steps)
-- 🐳 **[Docker Production](./doc/operations/DOCKER_PRODUCTION.md)** — One-command Docker deployment
-
-#### Architecture & Development
-- 🏗️ **[Architecture Overview](./doc/architecture/OVERVIEW.md)** — System design and modules
-- 🛠️ **[Development Guide](./doc/guides/DEVELOPMENT.md)** — Local development workflow
-- 🔄 **[Migration Guide](./doc/developer/REFATORAR.md)** — v1.x → v2.0 migration (Phases 0-5)
-
-#### Testing & Quality
-- 🧪 **[Testing Guide](./doc/testing/TESTING_GUIDE.md)** — Complete testing documentation (600+ lines)
-- 📊 **[Testing Structure](./doc/testing/README.md)** — Test organization overview
-- 📝 **[Testing Index](./doc/testing/INDEX.md)** — Navigation guide
-
-#### Operations & Deployment
-- 🚢 **[Deployment Guide](./doc/operations/DEPLOYMENT.md)** — Production deployment steps
-- 🐳 **[Docker Setup](./doc/developer/DOCKER_SETUP.md)** — Containerized environment
-- 📡 **[API Reference](./doc/api/ENDPOINTS.md)** — Complete endpoint documentation
-
-#### Security
-- 🔒 **[Security Practices](./doc/security/SECURITY.md)** — Security hardening guide
-
-### Breaking Changes (v2.0.0)
-⚠️ **Important**: Version 2.0.0 introduces significant architectural changes. See:
-- **[Breaking Changes v2.0.0](./doc/releases/v2.0.0/BREAKING_CHANGES_v2.0.0.md)**
-- **[Migration Playbook](./doc/developer/REFATORAR.md#guia-de-migração-para-desenvolvedores--fase-5)**
-
-**Key Changes:**
-- Removed `/zabbix_api/*` endpoints → Use `/api/v1/inventory/*`
-- Renamed database tables: `routes_builder_route*` → `inventory_route*`
-- Removed `zabbix_api` app completely
-- Retired `routes_builder` app; route services now consolidated under `inventory`
+- Credenciais runtime criptografadas com Fernet (nunca no `.env`)
+- 2FA TOTP opcional por usuário
+- Middleware de autenticação obrigatória em todas as rotas (whitelist configurável)
+- Security headers: CSP, HSTS, X-Frame-Options, X-Content-Type-Options
+- CSRF protection com trusted origins
+- Audit log de todas as alterações de configuração
 
 ---
 
-## 🔍 Observability & Monitoring
+## 📋 Changelog recente
 
-### Health Checks
-```bash
-# Basic health (database connectivity)
-curl http://localhost:8100/healthz
+| Versão | Data | Destaques |
+|---|---|---|
+| **1.4.1** | 2026-04-03 | Paleta de cores do menu unificada, status WebSocket compacto |
+| **1.4.0** | 2026-04-03 | Import em lote de devices, regra 100 m anti-duplicatas, Modal de Changelog |
+| **1.3.0** | 2026-03-28 | Gráficos de tráfego IN/OUT, export PNG/PDF, carregamento paralelo nos modais |
+| **1.2.0** | 2026-03-15 | Painel de detalhes de cabo, lazy-load de providers de mapa |
+| **2.0.0** | 2025-01-07 | Refatoração interna — migração `zabbix_api/` → `inventory/` + `integrations/` |
 
-# Readiness probe (all services ready)
-curl http://localhost:8100/ready
-
-# Liveness probe (application alive)
-curl http://localhost:8100/live
-
-# Celery workers status
-curl http://localhost:8100/celery/status
-```
-
-### Prometheus Metrics
-```bash
-# Scrape endpoint
-curl http://localhost:8100/metrics/
-
-# Key metrics:
-# - django_http_requests_total_by_view_transport_method
-# - django_http_responses_total_by_status
-# - celery_task_duration_seconds
-# - zabbix_api_requests_total
-# - zabbix_api_errors_total
-# - zabbix_circuit_breaker_state
-```
-
-### Logs & Tracing
-- Structured JSON logging to `logs/app.log`
-- Request ID tracing via `X-Request-ID` header
-- Celery task execution logs
-- Zabbix API client debug logs
+Histórico completo: [CHANGELOG.md](./CHANGELOG.md)
 
 ---
 
-## 🛡️ Security
+## 📞 Suporte
 
-### Best Practices Implemented
-- ✅ **No hard-coded credentials** — All secrets via environment variables
-- ✅ **Encrypted storage** — Fernet encryption for sensitive runtime config
-- ✅ **HTTPS enforcement** — `SECURE_SSL_REDIRECT` in production
-- ✅ **HSTS enabled** — 1-year HSTS with subdomains and preload
-- ✅ **CSP headers** — Content Security Policy middleware
-- ✅ **CSRF protection** — Django CSRF with trusted origins
-- ✅ **SQL injection prevention** — Django ORM with parameterized queries
-- ✅ **XSS protection** — Template auto-escaping enabled
-- ✅ **Dependency scanning** — Regular `pip-audit` checks
-
-### Security Audit Results (Phase 5)
-- ✅ **0 hard-coded credentials** in production code
-- ✅ **0 deprecation warnings** (Django 5.x compatible)
-- ✅ **0 N+1 queries** detected (all queries optimized with `select_related`)
-- ✅ **100% test coverage** for authentication and authorization
-
-See [Security Audit Report](./doc/developer/REFATORAR.md#-auditorias-de-segurança-e-performance--fase-5)
+- 🐛 **Bugs**: [GitHub Issues](https://github.com/kaled182/provemaps_beta/issues)
+- 📧 **Contato**: maintainers@simplesinternet.com
 
 ---
 
-## 🚀 Deployment
-
-### Docker Production Commands
-
-```bash
-# Gerenciamento
-sudo ./scripts/deploy-docker.sh start         # Iniciar containers
-sudo ./scripts/deploy-docker.sh stop          # Parar containers
-sudo ./scripts/deploy-docker.sh restart       # Reiniciar containers
-sudo ./scripts/deploy-docker.sh status        # Ver status
-
-# Logs
-sudo ./scripts/deploy-docker.sh logs          # Todos os logs
-sudo ./scripts/deploy-docker.sh logs web      # Logs do Django
-sudo ./scripts/deploy-docker.sh logs nginx    # Logs do Nginx
-
-# Atualização
-sudo ./scripts/deploy-docker.sh update        # Atualizar código + rebuild
-
-# Banco de dados
-sudo ./scripts/deploy-docker.sh backup        # Backup PostgreSQL
-sudo ./scripts/deploy-docker.sh restore <file> # Restore backup
-
-# Django
-sudo ./scripts/deploy-docker.sh migrate       # Executar migrations
-sudo ./scripts/deploy-docker.sh collectstatic # Coletar static files
-sudo ./scripts/deploy-docker.sh createsuperuser # Criar admin
-
-# SSL
-sudo ./scripts/deploy-docker.sh ssl           # Configurar Let's Encrypt
-
-# Shell
-sudo ./scripts/deploy-docker.sh shell         # Bash no container Django
-```
-
-### Production Checklist
-- [ ] Set `DEBUG=False` and `SECRET_KEY` from secure vault
-- [ ] Configure `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS`
-- [ ] Enable HTTPS with `SECURE_SSL_REDIRECT=True`
-- [ ] Apply database migrations: `python manage.py migrate`
-- [ ] Collect static files: `python manage.py collectstatic --noinput`
-- [ ] Configure Redis for caching and Celery broker
-- [ ] Set up Celery workers and beat scheduler
-- [ ] Configure reverse proxy (nginx/Caddy) for static files
-- [ ] Set up monitoring (Prometheus + Grafana)
-- [ ] Configure backup strategy for database
-- [ ] Test all health endpoints and metrics
-
-### Migration from v1.x to v2.0
-```bash
-# 1. Backup database
-mysqldump -u user -p mapsprovefiber > backup_pre_v2.sql
-
-# 2. Verify pre-migration state
-python scripts/migration_phase5_verify.py --phase pre --snapshot pre.json
-
-# 3. Apply migrations
-python manage.py migrate
-
-# 4. Verify post-migration state
-python scripts/migration_phase5_verify.py --phase post --compare pre.json
-
-# 5. Restart services
-systemctl restart mapsprovefiber
-systemctl restart celery-worker
-systemctl restart celery-beat
-```
-
-See [Complete Deployment Playbook](./doc/developer/REFATORAR.md#playbook-de-deploy-em-produção--fase-5)
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Please read:
-- [Contributing Guidelines](./doc/contributing/README.md)
-- [Code Style Guide](./doc/contributing/CODE_STYLE.md)
-- [PR Guidelines](./doc/contributing/PR_GUIDELINES.md)
-- [Testing Standards](./doc/contributing/TESTING_STANDARDS.md)
-
-### Development Workflow
-```bash
-# 1. Fork and clone repository
-git clone https://github.com/YOUR_USERNAME/provemaps_beta.git
-
-# 2. Create feature branch
-git checkout -b feature/your-feature-name
-
-# 3. Make changes and add tests
-# ... code ...
-
-# 4. Run tests and linting
-pytest -q
-make lint
-make fmt
-
-# 5. Commit and push
-git commit -m "feat: add your feature description"
-git push origin feature/your-feature-name
-
-# 6. Open Pull Request against 'inicial' branch
-```
-
----
-
-## 📊 Project Status
-
-### Version 2.1.0 (Current)
-- ✅ **199/199 tests passing** (100%)
-- ✅ **Modular architecture** complete (Phases 0-5)
-- ✅ **Security audits** passed (0 vulnerabilities)
-- ✅ **Performance optimized** (0 N+1 queries)
-- ✅ **Docker Production** deployment ready
-- ✅ **First-Time Setup Wizard** with modern UI
-- ✅ **Comprehensive testing documentation** (1000+ lines)
-- ✅ **One-command installation** script
-- ✅ **SSL auto-renewal** with Let's Encrypt
-
-### Version 2.0.0 (Previous)
-- ✅ Modular architecture refactor
-- ✅ Production-ready deployment playbook
-
-### Roadmap
-- 🔄 PostGIS integration for spatial queries
-- 🔄 Advanced catalog management
-- 🔄 Multi-tenant support
-- 🔄 GraphQL API
-- 🔄 Mobile-responsive dashboard
-- 🔄 Advanced monitoring dashboards (Grafana)
-
----
-
-## 📞 Support
-
-- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/kaled182/provemaps_beta/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/kaled182/provemaps_beta/discussions)
-- 🔒 **Security**: See [Security Policy](./doc/security/SECURITY.md)
-- 📧 **Contact**: maintainers@simplesinternet.com
-
----
-
-## 📄 License
-
-MIT License - see [LICENSE](./LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- Django Software Foundation for the excellent framework
-- Zabbix for monitoring capabilities
-- Contributors and maintainers of all dependencies
-
----
-
-**© 2025 — MapsProveFiber by Simples Internet**  
-Built with ❤️ using Django 5.x
+**© 2025-2026 — ProVeMaps by Simples Internet**  
+Django 5.x · Vue 3 · PostgreSQL + PostGIS · Docker
