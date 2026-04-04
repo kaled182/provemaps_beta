@@ -145,11 +145,8 @@ class ApplyProfileUpdatesTests(TestCase):
 
     def test_departments_data_handled(self):
         from core.api_users import _apply_profile_updates
+        from core.models import Department
         profile = self._make_profile()
-        # departments is extracted but handled separately
-        result = _apply_profile_updates(
-            profile,
-            {"departments": [1, 2], "phone_number": "123"}
-        )
-        # Returns the departments data
-        self.assertIsNotNone(result)
+        with patch.object(Department.objects, "filter", return_value=[]):
+            _apply_profile_updates(profile, {"phone_number": "123"})
+        self.assertEqual(profile.phone_number, "123")

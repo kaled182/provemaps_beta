@@ -11,7 +11,7 @@ class ConfigurationAuditLogChangeTests(TestCase):
         from setup_app.models_audit import ConfigurationAudit
         with patch.object(ConfigurationAudit.objects, "create") as mock_create:
             mock_create.return_value = MagicMock()
-            result = ConfigurationAudit.log_change(
+            ConfigurationAudit.log_change(
                 user=None,
                 action="update",
                 section="Zabbix",
@@ -41,11 +41,8 @@ class ConfigurationAuditLogChangeTests(TestCase):
     def test_falls_back_to_remote_addr(self):
         from setup_app.models_audit import ConfigurationAudit
         request = MagicMock()
-        request.META = {
-            "REMOTE_ADDR": "192.168.1.1",
-            "HTTP_USER_AGENT": "TestAgent",
-        }
-        request.META.get = lambda key, default=None: {
+        request.META = MagicMock()
+        request.META.get.side_effect = lambda key, default=None: {
             "HTTP_X_FORWARDED_FOR": None,
             "REMOTE_ADDR": "192.168.1.1",
             "HTTP_USER_AGENT": "TestAgent",

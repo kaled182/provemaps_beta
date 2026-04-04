@@ -178,16 +178,22 @@ class TestCacheStaleHit:
         self, mock_site_data
     ):
         """Stale cache should return data + trigger async refresh."""
-        set_cached_radius_search(-15.7801, -47.9292, 10, 100, mock_site_data)
-        
-        # Simulate time passage (make data stale)
-        # Manual timestamp manipulation (test helper)
-        with patch("time.time", return_value=time.time() + 35):
-            # Age = 35s (> FRESH_TTL=30s, < STALE_TTL=60s)
-            
-            fetch_fn = Mock()  # Should NOT be called (stale-while-revalidate)
+        # Use module-level time mock with real-time base so LocMemCache TTLs
+        # (which use unpatched time.time()) don't see the entries as expired.
+        real_now = time.time()
+        # Use FRESH_TTL+30 so the data is always in the stale window regardless
+        # of environment overrides (e.g. SWR_FRESH_TTL=300 in Docker).
+        stale_offset = RADIUS_SEARCH_FRESH_TTL + 30
+        with patch("inventory.cache.radius_search.time") as mock_time:
+            # Phase 1: store data at T=real_now
+            mock_time.time.return_value = real_now
+            set_cached_radius_search(-15.7801, -47.9292, 10, 100, mock_site_data)
+
+            # Phase 2: read at T=real_now+stale_offset (past FRESH_TTL)
+            mock_time.time.return_value = real_now + stale_offset
+            fetch_fn = Mock()   # Should NOT be called (stale-while-revalidate)
             async_task = Mock()  # Should be called
-            
+
             result = get_radius_search_with_cache(
                 lat=-15.7801,
                 lng=-47.9292,
@@ -196,14 +202,14 @@ class TestCacheStaleHit:
                 fetch_fn=fetch_fn,
                 async_refresh_task=async_task,
             )
-            
-            # Returns stale data immediately
-            assert result["data"] == mock_site_data
-            assert result["cache_hit"] is True
-            assert result["is_stale"] is True
-            
-            # Triggers async refresh
-            assert async_task.called
+
+        # Returns stale data immediately
+        assert result["data"] == mock_site_data
+        assert result["cache_hit"] is True
+        assert result["is_stale"] is True
+
+        # Triggers async refresh
+        assert async_task.called
 
 
 class TestCacheInvalidation:

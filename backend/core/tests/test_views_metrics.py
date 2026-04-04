@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
 
 
 class StaffCheckTests(TestCase):
@@ -84,6 +84,7 @@ class SystemHealthMetricsTests(TestCase):
         self.assertIn("system", data)
         self.assertIn("timestamp", data)
 
+    @override_settings(REDIS_URL="redis://localhost:6379/0")
     def test_redis_offline_when_connection_fails(self):
         with patch("core.views_metrics.connection") as mock_conn, \
              patch("core.views_metrics.psutil.cpu_percent", return_value=5.0), \
@@ -102,7 +103,7 @@ class SystemHealthMetricsTests(TestCase):
         self.assertEqual(data["services"]["redis"]["status"], "offline")
 
     def test_db_offline_when_connection_fails(self):
-        with patch("core.views_metrics.connection") as mock_conn, \
+        with patch("django.db.connection") as mock_conn, \
              patch("core.views_metrics.psutil.cpu_percent", return_value=5.0), \
              patch("core.views_metrics.psutil.virtual_memory",
                    return_value=MagicMock(percent=40.0, used=1024**3, total=4 * 1024**3)), \
@@ -160,10 +161,8 @@ class SystemHealthMetricsTests(TestCase):
                    return_value=MagicMock(percent=20.0, used=20 * 1024**3, total=100 * 1024**3)):
             cursor = mock_conn.cursor.return_value.__enter__.return_value
             cursor.fetchone.return_value = ("PostgreSQL 16.0",)
-            # celery raises during import
-            with patch("builtins.__import__",
-                       side_effect=lambda name, *a, **k: (_ for _ in ()).throw(ImportError("no celery"))
-                       if name == "celery" else __import__(name, *a, **k)):
+            with patch("celery.current_app") as mock_celery:
+                mock_celery.control.inspect.return_value.stats.side_effect = Exception("no celery")
                 request = self._make_request()
                 from core.views_metrics import system_health_metrics
                 response = system_health_metrics(request)

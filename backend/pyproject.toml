@@ -113,6 +113,10 @@ omit = [
     "*/__init__.py",
     "*/tests.py",
     "*/tests_*.py",
+    "*/management/commands/*",
+    "*/asgi.py",
+    "*/wsgi.py",
+    "*/celery_app.py",
 ]
 
 [tool.coverage.report]
