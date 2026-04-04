@@ -63,8 +63,8 @@ class GetEnvFileTests(TestCase):
 
 class EnsureBackupDirTests(TestCase):
     def test_creates_backup_dir(self):
-        from setup_app.api_views import _ensure_backup_dir, BACKUP_DIR
-        with patch.object(BACKUP_DIR, "mkdir") as mock_mkdir:
+        from setup_app.api_views import _ensure_backup_dir
+        with patch("pathlib.Path.mkdir") as mock_mkdir:
             _ensure_backup_dir()
         mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
 
