@@ -198,6 +198,9 @@ debug_*.js
 debug_*.py
 test_*.js
 test_*.py
+# Mas os diretórios de testes reais são rastreados
+!backend/**/tests/test_*.py
+!backend/tests/test_*.py
 RELATORIO_TESTES_*.md
 
 # Frontend test artifacts (Playwright/Vitest)

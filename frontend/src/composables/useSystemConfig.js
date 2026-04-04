@@ -29,6 +29,7 @@ export function useSystemConfig() {
     SECRET_KEY: '',
     DEBUG: false,
     ALLOWED_HOSTS: '',
+    CSRF_TRUSTED_ORIGINS: '',
     ENABLE_DIAGNOSTIC_ENDPOINTS: false,
     // Database
     DB_HOST: '',
@@ -38,6 +39,12 @@ export function useSystemConfig() {
     DB_PASSWORD: '',
     // Redis
     REDIS_URL: '',
+    REDIS_PASSWORD: '',
+    // Deploy / SSL
+    DOMAIN_NAME: '',
+    CERTBOT_EMAIL: '',
+    // Observability
+    SENTRY_DSN: '',
     // Services
     SERVICE_RESTART_COMMANDS: '',
     // Backups / Cloud
@@ -140,9 +147,10 @@ export function useSystemConfig() {
       if (res.success && res.configuration) {
         // Atualizar apenas os campos relevantes ao sistema
         const systemFields = [
-          'SECRET_KEY', 'DEBUG', 'ALLOWED_HOSTS', 'ENABLE_DIAGNOSTIC_ENDPOINTS',
+          'SECRET_KEY', 'DEBUG', 'ALLOWED_HOSTS', 'CSRF_TRUSTED_ORIGINS', 'ENABLE_DIAGNOSTIC_ENDPOINTS',
           'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD',
-          'REDIS_URL', 'SERVICE_RESTART_COMMANDS',
+          'REDIS_URL', 'REDIS_PASSWORD', 'DOMAIN_NAME', 'CERTBOT_EMAIL', 'SENTRY_DSN',
+          'SERVICE_RESTART_COMMANDS',
           'BACKUP_ZIP_PASSWORD',
           'BACKUP_AUTO_ENABLED', 'BACKUP_FREQUENCY', 'BACKUP_RETENTION_DAYS',
           'BACKUP_CLOUD_UPLOAD', 'BACKUP_CLOUD_PROVIDER', 'BACKUP_CLOUD_PATH',
@@ -326,6 +334,7 @@ export function useSystemConfig() {
       SECRET_KEY: '',
       DEBUG: false,
       ALLOWED_HOSTS: '',
+      CSRF_TRUSTED_ORIGINS: '',
       ENABLE_DIAGNOSTIC_ENDPOINTS: false,
       DB_HOST: '',
       DB_PORT: '',
@@ -333,6 +342,10 @@ export function useSystemConfig() {
       DB_USER: '',
       DB_PASSWORD: '',
       REDIS_URL: '',
+      REDIS_PASSWORD: '',
+      DOMAIN_NAME: '',
+      CERTBOT_EMAIL: '',
+      SENTRY_DSN: '',
       SERVICE_RESTART_COMMANDS: '',
       BACKUP_ZIP_PASSWORD: '',
       FTP_ENABLED: false,
