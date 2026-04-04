@@ -62,8 +62,9 @@ def dashboard_view(request):
                 request.session.create()
 
             # Hash session ID to get consistent user assignment
+            session_key = request.session.session_key or ""
             session_hash = hashlib.md5(
-                request.session.session_key.encode()
+                session_key.encode()
             ).hexdigest()
             user_bucket = int(session_hash[:8], 16) % 100
 
