@@ -138,8 +138,6 @@ class TwoStepLoginViewTests(TestCase):
         user = MagicMock()
         user.profile = None
         mock_form.get_user.return_value = user
-        with patch.object(TwoStepLoginView, "__bases__", ()):
-            pass
         # Just test that the view class is importable and has expected attributes
         self.assertEqual(view.template_name, "registration/login.html")
 
