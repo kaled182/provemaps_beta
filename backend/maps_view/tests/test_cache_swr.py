@@ -160,11 +160,12 @@ class SWRCacheGetOrFetchTests(TestCase):
         from maps_view.cache_swr import SWRCache
         self.swr = SWRCache(key="test:key", fresh_ttl=30, stale_ttl=60)
 
-    @override_settings(SWR_ENABLED=False)
     def test_swr_disabled_fetches_directly(self):
         fetch_fn = MagicMock(return_value={"data": "fresh"})
         from maps_view.cache_swr import SWRCache
         swr = SWRCache(key="test:disabled")
+        # Patch the module-level constant directly — override_settings won't
+        # work because SWR_ENABLED is captured at import time.
         with patch("maps_view.cache_swr.SWR_ENABLED", False):
             result = swr.get_or_fetch(fetch_fn)
         fetch_fn.assert_called_once()
@@ -172,7 +173,8 @@ class SWRCacheGetOrFetchTests(TestCase):
 
     def test_empty_cache_fetches_sync_and_stores(self):
         fetch_fn = MagicMock(return_value={"data": "synced"})
-        with patch.object(self.swr, "get_cached_data", return_value=None), \
+        with patch("maps_view.cache_swr.SWR_ENABLED", True), \
+             patch.object(self.swr, "get_cached_data", return_value=None), \
              patch.object(self.swr, "set_cached_data") as mock_set:
             result = self.swr.get_or_fetch(fetch_fn)
         fetch_fn.assert_called_once()
@@ -187,7 +189,8 @@ class SWRCacheGetOrFetchTests(TestCase):
             "is_stale": False,
         }
         fetch_fn = MagicMock()
-        with patch.object(self.swr, "get_cached_data", return_value=cached):
+        with patch("maps_view.cache_swr.SWR_ENABLED", True), \
+             patch.object(self.swr, "get_cached_data", return_value=cached):
             result = self.swr.get_or_fetch(fetch_fn)
         fetch_fn.assert_not_called()
         self.assertTrue(result["cache_hit"])
@@ -201,7 +204,8 @@ class SWRCacheGetOrFetchTests(TestCase):
         }
         async_task = MagicMock()
         fetch_fn = MagicMock()
-        with patch.object(self.swr, "get_cached_data", return_value=cached):
+        with patch("maps_view.cache_swr.SWR_ENABLED", True), \
+             patch.object(self.swr, "get_cached_data", return_value=cached):
             result = self.swr.get_or_fetch(fetch_fn, async_task=async_task)
         async_task.assert_called_once()
         fetch_fn.assert_not_called()
@@ -215,7 +219,8 @@ class SWRCacheGetOrFetchTests(TestCase):
             "is_stale": True,
         }
         fetch_fn = MagicMock()
-        with patch.object(self.swr, "get_cached_data", return_value=cached):
+        with patch("maps_view.cache_swr.SWR_ENABLED", True), \
+             patch.object(self.swr, "get_cached_data", return_value=cached):
             result = self.swr.get_or_fetch(fetch_fn, async_task=None)
         fetch_fn.assert_not_called()
         self.assertTrue(result["cache_hit"])
@@ -229,9 +234,11 @@ class SWRCacheGetOrFetchTests(TestCase):
         }
         async_task = MagicMock(side_effect=Exception("Celery down"))
         fetch_fn = MagicMock()
-        with patch.object(self.swr, "get_cached_data", return_value=cached):
+        with patch("maps_view.cache_swr.SWR_ENABLED", True), \
+             patch.object(self.swr, "get_cached_data", return_value=cached):
             result = self.swr.get_or_fetch(fetch_fn, async_task=async_task)
-        self.assertTrue(result["cache_hit"])  # still returns stale data
+        # Still returns stale data — exception must not propagate
+        self.assertTrue(result["cache_hit"])
 
 
 class DashboardCacheHelpersTests(TestCase):

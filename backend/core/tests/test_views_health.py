@@ -198,18 +198,26 @@ class TimeoutContextManagerTests(TestCase):
 
 
 class CeleryStatusViewTests(TestCase):
+    """
+    celery_status() imports `ping` and `get_queue_stats` locally inside
+    the function body with `from core.celery import ...`.  Patching at
+    the `core.views_health` namespace therefore has no effect — we must
+    patch the *source* module (`core.celery`) so the local import picks
+    up the mock.
+    """
+
     def setUp(self):
         self.factory = RequestFactory()
 
-    @patch("core.views_health.ping", create=True)
-    @patch("core.views_health.get_queue_stats", create=True)
-    def test_celery_ok_when_ping_succeeds(self, mock_stats, mock_ping):
+    def test_celery_ok_when_ping_succeeds(self):
         from core.views_health import celery_status
 
+        mock_ping = MagicMock()
         mock_result = MagicMock()
         mock_result.get.return_value = "pong"
         mock_ping.delay.return_value = mock_result
 
+        mock_stats = MagicMock()
         stats_result = MagicMock()
         stats_result.get.return_value = {
             "workers": ["w1"],
@@ -219,18 +227,25 @@ class CeleryStatusViewTests(TestCase):
         }
         mock_stats.delay.return_value = stats_result
 
-        with patch(
-            "core.views_health.get_queue_stats", mock_stats
-        ), patch("core.views_health.ping", mock_ping):
+        with patch("core.celery.ping", mock_ping, create=True), \
+             patch("core.celery.get_queue_stats", mock_stats, create=True):
             response = celery_status(self.factory.get("/celery/status"))
 
         self.assertIn(response.status_code, [200, 503])
 
-    @patch("core.views_health.ping", side_effect=Exception("timeout"), create=True)
-    @patch("core.views_health.get_queue_stats", MagicMock(), create=True)
-    def test_celery_degraded_on_ping_fail(self, mock_ping):
+    def test_celery_degraded_on_ping_fail(self):
         from core.views_health import celery_status
-        with patch("core.views_health.ping", mock_ping):
+
+        mock_ping = MagicMock()
+        mock_ping.delay.side_effect = Exception("timeout")
+
+        mock_stats = MagicMock()
+
+        # Patch at the source so the in-function `from core.celery import`
+        # picks up the mock.
+        with patch("core.celery.ping", mock_ping, create=True), \
+             patch("core.celery.get_queue_stats", mock_stats, create=True):
             response = celery_status(self.factory.get("/celery/status"))
+
         data = json.loads(response.content)
         self.assertEqual(data["status"], "degraded")
