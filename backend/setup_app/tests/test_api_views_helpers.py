@@ -130,12 +130,10 @@ class UserCanAccessVideoGatewayTests(TestCase):
 
     def test_user_without_profile_returns_false(self):
         from setup_app.api_views import _user_can_access_video_gateway
-        user = MagicMock(is_superuser=False, spec=["is_superuser"])
+        user = MagicMock(is_superuser=False)
         user.profile = None
         gateway = MagicMock()
         gateway.departments.exists.return_value = True
-        # getattr(user, "profile", None) will return None when profile attr missing
-        type(user).profile = property(lambda self: None)
         result = _user_can_access_video_gateway(user, gateway)
         self.assertFalse(result)
 
