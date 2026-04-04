@@ -1698,6 +1698,7 @@ def get_configuration(request):
             "ENABLE_DRAWING_TOOLS",
             "ENABLE_FULLSCREEN",
             "ALLOWED_HOSTS",
+            "CSRF_TRUSTED_ORIGINS",
             "ENABLE_DIAGNOSTIC_ENDPOINTS",
             "DB_HOST",
             "DB_PORT",
@@ -1705,6 +1706,10 @@ def get_configuration(request):
             "DB_USER",
             "DB_PASSWORD",
             "REDIS_URL",
+            "REDIS_PASSWORD",
+            "DOMAIN_NAME",
+            "CERTBOT_EMAIL",
+            "SENTRY_DSN",
             "SERVICE_RESTART_COMMANDS",
             "BACKUP_ZIP_PASSWORD",
             "FTP_ENABLED",
@@ -1796,6 +1801,7 @@ def get_configuration(request):
             "ENABLE_DRAWING_TOOLS": True,
             "ENABLE_FULLSCREEN": True,
             "ALLOWED_HOSTS": allowed_hosts_fallback,
+            "CSRF_TRUSTED_ORIGINS": current_values.get("CSRF_TRUSTED_ORIGINS", ""),
             "ENABLE_DIAGNOSTIC_ENDPOINTS": runtime_config.diagnostics_enabled,
             "DB_HOST": runtime_config.db_host,
             "DB_PORT": runtime_config.db_port,
@@ -2119,6 +2125,7 @@ def update_configuration(request):
             "ENABLE_DRAWING_TOOLS": "True" if _to_bool(data.get("ENABLE_DRAWING_TOOLS", True)) else "False",
             "ENABLE_FULLSCREEN": "True" if _to_bool(data.get("ENABLE_FULLSCREEN", True)) else "False",
             "ALLOWED_HOSTS": data.get("ALLOWED_HOSTS") or runtime_config.allowed_hosts or "",
+            "CSRF_TRUSTED_ORIGINS": data.get("CSRF_TRUSTED_ORIGINS", "").strip(),
             "ENABLE_DIAGNOSTIC_ENDPOINTS": (
                 "True" if _to_bool(data.get("ENABLE_DIAGNOSTIC_ENDPOINTS", False)) 
                 else "False"
@@ -2129,6 +2136,10 @@ def update_configuration(request):
             "DB_USER": data.get("DB_USER") or runtime_config.db_user or "",
             "DB_PASSWORD": data.get("DB_PASSWORD") or runtime_config.db_password or "",
             "REDIS_URL": data.get("REDIS_URL", "").strip(),
+            "REDIS_PASSWORD": data.get("REDIS_PASSWORD", "").strip(),
+            "DOMAIN_NAME": data.get("DOMAIN_NAME", "").strip(),
+            "CERTBOT_EMAIL": data.get("CERTBOT_EMAIL", "").strip(),
+            "SENTRY_DSN": data.get("SENTRY_DSN", "").strip(),
             "SERVICE_RESTART_COMMANDS": data.get(
                 "SERVICE_RESTART_COMMANDS", ""
             ).strip(),

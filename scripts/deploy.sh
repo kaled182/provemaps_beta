@@ -1,260 +1,313 @@
 #!/usr/bin/env bash
-# scripts/deploy.sh - Orchestrated deployment helper for MapsProveFiber
-# - Builds Docker images
-# - Starts dependencies (database/redis)
-# - Runs migrations and collectstatic (with per-step timeouts)
-# - Starts web/celery/beat services
-# - Executes a /healthz check
-# - Adds safeguards: environment validation, pre-deploy backup, automatic rollback, timestamped logs,
-#   resource verification (disk), docker compose version check, final service verification
+# scripts/deploy.sh — Production deployment for MapsProveFiber
+#
+# Workflow:
+#   1. Validate environment + secrets
+#   2. Check disk space
+#   3. Bootstrap SSL (first run only) OR renew certificate
+#   4. Pre-deploy database backup
+#   5. Build Docker images
+#   6. Start DB + Redis
+#   7. Run migrations + collectstatic + init_app_data
+#   8. Start/recreate all services
+#   9. Health check + rollback on failure
 #
 # Usage:
-#   ./scripts/deploy.sh [--compose docker/docker-compose.yml] [--settings settings.prod] [--health http://HOST:8000/healthz] [--timeout 180]
+#   ./scripts/deploy.sh [OPTIONS]
 #
-# Optional environment overrides:
-#   COMPOSE_FILE=docker/docker-compose.yml
-#   DJANGO_SETTINGS_MODULE=settings.prod
-#   HEALTHCHECK_URL=http://localhost:8000/healthz
-#   HEALTHCHECK_TIMEOUT=180
-#   MIGRATE_TIMEOUT=300
-#   COLLECTSTATIC_TIMEOUT=120
-#   SERVICE_WEB=web
-#   SERVICE_WORKER=celery
-#   SERVICE_BEAT=beat
+# Options:
+#   --profile    PROFILE   Compose profile to activate (default: minimal)
+#   --compose    FILE      Path to compose file (default: docker/docker-compose.prod.yml)
+#   --health     URL       Health check URL (default: https://$DOMAIN_NAME/healthz/)
+#   --timeout    SECONDS   Health check timeout (default: 180)
+#   --no-build             Skip image build (deploy with current images)
+#   --no-certbot           Skip certbot SSL bootstrap/renewal
+#   --init-data            Run init_app_data management command
+#   -h, --help             Show this message
 #
-# Requirements:
-#   - docker and docker compose v2
-#   - /healthz endpoint exposed by Django (core.urls -> path("healthz", ...))
+# Environment variables (loaded from .env.production if present):
+#   DOMAIN_NAME, CERTBOT_EMAIL, COMPOSE_PROFILES, REDIS_PASSWORD,
+#   SECRET_KEY, DB_PASSWORD, ALLOWED_HOSTS, CSRF_TRUSTED_ORIGINS
 
 set -Eeuo pipefail
 
-### ---- UI / LOG ----
+# ---- ui helpers ----
 NC=$'\e[0m'; RED=$'\e[31m'; GRN=$'\e[32m'; YLW=$'\e[33m'; BLU=$'\e[34m'
-ts() { date '+%Y-%m-%d %H:%M:%S'; }
-log()   { echo "$(ts) ${BLU}[deploy]${NC} $*"; }
-log_step(){ echo "$(ts) --> ${BLU}[deploy]${NC} $*"; }
-log_end(){ echo  "$(ts) <-- ${GRN}[done]${NC} $*"; }
-ok()    { echo "$(ts) ${GRN}[ok]${NC} $*"; }
-warn()  { echo "$(ts) ${YLW}[warn]${NC} $*"; }
-err()   { echo "$(ts) ${RED}[err]${NC} $*" >&2; }
-die()   { err "$*"; exit 1; }
+ts()       { date '+%Y-%m-%d %H:%M:%S'; }
+log()      { echo "$(ts) ${BLU}[deploy]${NC} $*"; }
+log_step() { echo "$(ts) --> ${BLU}$*${NC}"; }
+log_end()  { echo "$(ts) <-- ${GRN}done:${NC} $*"; }
+ok()       { echo "$(ts) ${GRN}[ok]${NC} $*"; }
+warn()     { echo "$(ts) ${YLW}[warn]${NC} $*"; }
+err()      { echo "$(ts) ${RED}[err]${NC} $*" >&2; }
+die()      { err "$*"; exit 1; }
 
-### ---- METADATA ----
-SCRIPT_VERSION="1.1.0"
-COMPOSE_MIN_VERSION="2.0.0"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-### ---- DEFAULTS ----
-COMPOSE_FILE="${COMPOSE_FILE:-docker/docker-compose.yml}"
-DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-settings.prod}"
-HEALTHCHECK_URL="${HEALTHCHECK_URL:-http://localhost:8000/healthz}"
+# ---- defaults ----
+COMPOSE_FILE="${COMPOSE_FILE:-${REPO_ROOT}/docker/docker-compose.prod.yml}"
+ENV_FILE="${ENV_FILE:-${REPO_ROOT}/.env.production}"
+PROFILE="${PROFILE:-${COMPOSE_PROFILES:-minimal}}"
 HEALTHCHECK_TIMEOUT="${HEALTHCHECK_TIMEOUT:-180}"
-MIGRATE_TIMEOUT="${MIGRATE_TIMEOUT:-300}"
-COLLECTSTATIC_TIMEOUT="${COLLECTSTATIC_TIMEOUT:-120}"
-SERVICE_WEB="${SERVICE_WEB:-web}"
-SERVICE_WORKER="${SERVICE_WORKER:-celery}"
-SERVICE_BEAT="${SERVICE_BEAT:-beat}"
+DO_BUILD=true
+DO_CERTBOT=true
+DO_INIT_DATA=false
 
-### ---- ARGS ----
+# ---- parse args ----
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --compose) COMPOSE_FILE="$2"; shift 2;;
-    --settings) DJANGO_SETTINGS_MODULE="$2"; shift 2;;
-    --health) HEALTHCHECK_URL="$2"; shift 2;;
-    --timeout) HEALTHCHECK_TIMEOUT="$2"; shift 2;;
+    --profile)    PROFILE="$2"; shift 2;;
+    --compose)    COMPOSE_FILE="$2"; shift 2;;
+    --health)     HEALTHCHECK_URL="$2"; shift 2;;
+    --timeout)    HEALTHCHECK_TIMEOUT="$2"; shift 2;;
+    --no-build)   DO_BUILD=false; shift;;
+    --no-certbot) DO_CERTBOT=false; shift;;
+    --init-data)  DO_INIT_DATA=true; shift;;
     -h|--help)
-      cat <<EOF
-Usage: $0 [options]
-
-Options:
-  --compose FILE          Path to docker/docker-compose.yml (default: $COMPOSE_FILE)
-  --settings MODULE       DJANGO_SETTINGS_MODULE (default: $DJANGO_SETTINGS_MODULE)
-  --health URL            Healthcheck URL (default: $HEALTHCHECK_URL)
-  --timeout SECONDS       Healthcheck timeout (default: $HEALTHCHECK_TIMEOUT)
-  -h, --help              Show this help message
-
-Environment:
-  SERVICE_WEB, SERVICE_WORKER, SERVICE_BEAT to override compose service names.
-Versions:
-  script v${SCRIPT_VERSION} | recommended minimum compose ${COMPOSE_MIN_VERSION}
-EOF
+      sed -n '3,30p' "${BASH_SOURCE[0]}"
       exit 0;;
-    *) die "Unknown option: $1";;
+    *) die "Unknown option: $1 (use --help)";;
   esac
 done
 
-### ---- HELPERS ----
-compose() { docker compose -f "$COMPOSE_FILE" "$@"; }
+# ---- load .env.production if exists ----
+if [[ -f "${ENV_FILE}" ]]; then
+  # shellcheck disable=SC1090
+  set -a; source "${ENV_FILE}"; set +a
+  ok "Loaded ${ENV_FILE}"
+else
+  warn ".env.production not found — relying on shell environment"
+fi
 
-wait_for_url() {
-  local url="$1" timeout="$2" t=0
-  log "Waiting for health endpoint: $url"
-  until curl -fsS "$url" >/dev/null 2>&1; do
-    sleep 2; t=$((t+2))
-    if (( t >= timeout )); then
-      return 1
-    fi
-  done
-  return 0
+DOMAIN_NAME="${DOMAIN_NAME:-localhost}"
+HEALTHCHECK_URL="${HEALTHCHECK_URL:-https://${DOMAIN_NAME}/healthz/}"
+
+# ---- compose wrapper ----
+compose() {
+  docker compose -f "${COMPOSE_FILE}" --profile "${PROFILE}" "$@"
 }
 
-### ---- VALIDATION AND SAFETY ----
-check_compose_version() {
-  local cv
-  cv="$(docker compose version --short || echo "0")"
-  if [[ "$(printf '%s\n' "$COMPOSE_MIN_VERSION" "$cv" | sort -V | head -n1)" != "$COMPOSE_MIN_VERSION" ]]; then
-    warn "docker compose ($cv) may be older than recommended ($COMPOSE_MIN_VERSION)"
-  else
-    ok "docker compose version $cv"
-  fi
-}
-
+# =============================================================
+# validate_environment — check required secrets + tools
+# =============================================================
 validate_environment() {
   log_step "Validating environment"
-  command -v docker >/dev/null || die "docker binary not found"
-  docker compose version >/dev/null || die "docker compose v2 not available"
-  [[ -f "$COMPOSE_FILE" ]] || die "compose file not found: $COMPOSE_FILE"
+  command -v docker >/dev/null || die "docker not found"
+  docker compose version >/dev/null 2>&1 || die "docker compose v2 not available"
+  [[ -f "${COMPOSE_FILE}" ]] || die "Compose file not found: ${COMPOSE_FILE}"
 
-  local critical_vars=("DJANGO_SETTINGS_MODULE" "COMPOSE_FILE")
-  for var in "${critical_vars[@]}"; do
-    if [[ -z "${!var}" ]]; then
-      warn "Environment variable $var is empty"
+  local required_vars=(
+    SECRET_KEY DB_PASSWORD REDIS_PASSWORD
+    ALLOWED_HOSTS CSRF_TRUSTED_ORIGINS
+  )
+  local missing=()
+  for var in "${required_vars[@]}"; do
+    if [[ -z "${!var:-}" ]]; then
+      missing+=("$var")
     fi
   done
-
-  if ! compose config -q; then
-    die "Invalid compose file: $COMPOSE_FILE"
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    die "Missing required env vars: ${missing[*]}
+  Copy .env.production.example to .env.production and fill in the values."
   fi
-  log_end "Environment verified"
+
+  # Warn if still using placeholder values
+  if [[ "${SECRET_KEY}" == *"change-me"* || "${SECRET_KEY}" == *"insecure"* ]]; then
+    die "SECRET_KEY looks like a placeholder — set a real secret key"
+  fi
+
+  compose config -q 2>/dev/null || die "Compose config validation failed"
+  log_end "Environment OK (profile: ${PROFILE})"
 }
 
+# =============================================================
+# check_disk_space — require at least 3 GB free
+# =============================================================
 check_disk_space() {
   log_step "Checking disk space"
-  local available_kb min_kb
-  available_kb=$(df / | awk 'NR==2 {print $4}')
-  min_kb=$((1024 * 1024 * 2)) # 2GB
-  if [[ "$available_kb" -lt "$min_kb" ]]; then
-    warn "Low disk space: ${available_kb}KB available"
-    return 1
+  local avail_kb min_kb
+  avail_kb=$(df "${REPO_ROOT}" | awk 'NR==2{print $4}')
+  min_kb=$((3 * 1024 * 1024))
+  if [[ "${avail_kb}" -lt "${min_kb}" ]]; then
+    warn "Low disk: ${avail_kb}KB free (recommended: ≥3GB)"
+  else
+    log_end "Disk OK (${avail_kb}KB free)"
   fi
-  log_end "Disk space sufficient"
-  return 0
 }
 
-# Preventive backup: try MariaDB first, then PostgreSQL; warn if both fail.
-create_pre_deploy_backup() {
-  log_step "Creating preventive database backup (when available)"
-  if ! compose ps db | grep -q "Up"; then
-    warn "Database service is not running, skipping preventive backup"
+# =============================================================
+# bootstrap_ssl — obtain Let's Encrypt cert on first deploy
+# =============================================================
+bootstrap_ssl() {
+  if [[ "${DO_CERTBOT}" == "false" ]]; then
+    warn "Certbot skipped (--no-certbot)"
+    return 0
+  fi
+  if [[ "${DOMAIN_NAME}" == "localhost" ]]; then
+    warn "DOMAIN_NAME=localhost — skipping SSL bootstrap"
     return 0
   fi
 
-  local tsf="backup_pre_deploy_$(date +%Y%m%d_%H%M%S)"
-  local out_mysql="/tmp/${tsf}.sql"
-  local out_pg="/tmp/${tsf}.pg.sql"
-
-  # MariaDB/MySQL (default for MapsProveFiber)
-  if compose exec -T db sh -lc 'command -v mysqldump >/dev/null 2>&1'; then
-    if compose exec -T db sh -lc 'mysqldump --version >/dev/null 2>&1'; then
-      if compose exec -T db sh -lc 'mysqldump -uroot -p"$MARIADB_ROOT_PASSWORD" --all-databases' > "$out_mysql" 2>/dev/null; then
-        log_end "Backup (MySQL/MariaDB) created: $out_mysql"
-        return 0
-      fi
-    fi
+  local cert_path="/etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem"
+  if docker volume ls -q | grep -q "letsencrypt" && \
+     docker run --rm -v letsencrypt:/etc/letsencrypt alpine test -f "${cert_path}" 2>/dev/null; then
+    log "Certificate already exists — checking renewal"
+    # Renewal handled by certbot container (runs every 12h automatically)
+    return 0
   fi
 
-  # PostgreSQL (fallback)
-  if compose exec -T db sh -lc 'command -v pg_dumpall >/dev/null 2>&1'; then
-    if compose exec -T db sh -lc 'pg_dumpall -U postgres' > "$out_pg" 2>/dev/null; then
-      log_end "Backup (PostgreSQL) created: $out_pg"
-      return 0
-    fi
+  log_step "Obtaining SSL certificate for ${DOMAIN_NAME}"
+  if [[ -z "${CERTBOT_EMAIL:-}" ]]; then
+    warn "CERTBOT_EMAIL not set — certbot will register without email"
   fi
 
-  warn "Unable to create preventive backup (non-fatal)"
-  return 0
+  # Temporarily serve HTTP using the bootstrap config
+  local initial_conf="${REPO_ROOT}/docker/nginx/nginx.initial.conf"
+  if [[ ! -f "${initial_conf}" ]]; then
+    die "Missing ${initial_conf} — cannot bootstrap SSL"
+  fi
+
+  log "Starting nginx with HTTP-only bootstrap config"
+  docker compose -f "${COMPOSE_FILE}" run --rm \
+    -v "${initial_conf}:/etc/nginx/nginx.conf:ro" \
+    -p "80:80" \
+    --entrypoint "nginx -g 'daemon off;'" \
+    nginx &
+  local nginx_pid=$!
+  sleep 3
+
+  docker run --rm \
+    -v letsencrypt:/etc/letsencrypt \
+    -v certbot_webroot:/var/www/certbot \
+    certbot/certbot certonly \
+      --webroot \
+      --webroot-path /var/www/certbot \
+      --email "${CERTBOT_EMAIL:-}" \
+      --agree-tos \
+      --no-eff-email \
+      -d "${DOMAIN_NAME}" \
+      && ok "Certificate obtained for ${DOMAIN_NAME}" \
+      || { kill "${nginx_pid}" 2>/dev/null || true; die "certbot failed"; }
+
+  kill "${nginx_pid}" 2>/dev/null || true
+  log_end "SSL bootstrap complete"
 }
 
+# =============================================================
+# pre_deploy_backup — pg_dump into /tmp
+# =============================================================
+pre_deploy_backup() {
+  log_step "Pre-deploy database backup"
+  if ! compose ps postgres 2>/dev/null | grep -q "running\|Up"; then
+    warn "postgres not running — skipping backup"
+    return 0
+  fi
+
+  local tsf out
+  tsf="$(date +%Y%m%d_%H%M%S)"
+  out="/tmp/backup_pre_deploy_${tsf}.sql"
+
+  if compose exec -T postgres \
+       pg_dump -U "${DB_USER:-mapsprovefiber}" "${DB_NAME:-mapsprovefiber}" \
+       > "${out}" 2>/dev/null; then
+    ok "Backup saved: ${out}"
+  else
+    warn "pg_dump failed — continuing without backup"
+  fi
+}
+
+# =============================================================
+# rollback — stop everything on error
+# =============================================================
 rollback() {
-  err "Starting rollback"
+  err "Deployment failed — stopping services"
   compose down --timeout 30 || true
-  ok "Rollback completed - services stopped"
+  err "Rollback complete"
   exit 1
 }
 
-setup_error_handling() {
-  # Trigger rollback on any error or signal
-  trap rollback ERR SIGINT SIGTERM
-}
-
-check_services_health() {
-  log_step "Validating service health"
-  local services=("$SERVICE_WEB" "$SERVICE_WORKER" "$SERVICE_BEAT")
-  for service in "${services[@]}"; do
-    if compose ps "$service" | grep -q "Up"; then
-      ok "Service $service is running"
-    else
-      warn "Service $service is not running"
+# =============================================================
+# wait_for_url — poll until URL returns 2xx
+# =============================================================
+wait_for_url() {
+  local url="$1" timeout="$2" elapsed=0
+  log "Waiting for: ${url} (timeout ${timeout}s)"
+  until curl -fsS --max-time 5 "${url}" >/dev/null 2>&1; do
+    sleep 3; elapsed=$((elapsed + 3))
+    if (( elapsed >= timeout )); then
+      return 1
     fi
+    printf "."
   done
-  log_end "Service verification completed"
+  echo ""
+  return 0
 }
 
-### ---- SUMMARY ----
-log "Script v${SCRIPT_VERSION}"
-log "Compose file: $COMPOSE_FILE"
-log "DJANGO_SETTINGS_MODULE: $DJANGO_SETTINGS_MODULE"
-log "Healthcheck: $HEALTHCHECK_URL (timeout ${HEALTHCHECK_TIMEOUT}s)"
-log "Services: web=${SERVICE_WEB} worker=${SERVICE_WORKER} beat=${SERVICE_BEAT}"
+# =============================================================
+# MAIN
+# =============================================================
+trap rollback ERR SIGINT SIGTERM
 
-### ---- MAIN EXECUTION FLOW ----
-setup_error_handling
-check_compose_version
+log "=== MapsProveFiber Deploy ==="
+log "Compose : ${COMPOSE_FILE}"
+log "Profile : ${PROFILE}"
+log "Domain  : ${DOMAIN_NAME}"
+
 validate_environment
-check_disk_space || warn "Disk space may be insufficient"
-create_pre_deploy_backup
+check_disk_space
+bootstrap_ssl
+pre_deploy_backup
 
-### ---- BUILD ----
-log_step "Building images (pull + build)"
-compose build --pull
-log_end "Build complete"
+# Build
+if [[ "${DO_BUILD}" == "true" ]]; then
+  log_step "Building images"
+  compose build --pull
+  log_end "Build done"
+fi
 
-### ---- DEPENDENCIES: DB/REDIS ----
-log_step "Starting dependencies (db/redis) in background"
-compose up -d db || true
-compose up -d redis || true
-log_end "Dependencies ready"
+# Start infrastructure
+log_step "Starting postgres + redis"
+compose up -d postgres redis
+log "Waiting 10s for services to initialize..."
+sleep 10
+log_end "Infrastructure up"
 
-### ---- MIGRATIONS ----
-log_step "Running migrations (timeout ${MIGRATE_TIMEOUT}s)"
+# Migrations + collectstatic
+log_step "Migrations"
 compose run --rm \
-  -e DJANGO_SETTINGS_MODULE="$DJANGO_SETTINGS_MODULE" \
-  "$SERVICE_WEB" timeout "$MIGRATE_TIMEOUT" python manage.py migrate --noinput
+  -e INIT_MIGRATE=true \
+  -e INIT_COLLECTSTATIC=false \
+  web python manage.py migrate --noinput
 log_end "Migrations applied"
 
-### ---- COLLECTSTATIC ----
-log_step "Executing collectstatic (timeout ${COLLECTSTATIC_TIMEOUT}s)"
-compose run --rm \
-  -e DJANGO_SETTINGS_MODULE="$DJANGO_SETTINGS_MODULE" \
-  "$SERVICE_WEB" timeout "$COLLECTSTATIC_TIMEOUT" python manage.py collectstatic --noinput
-log_end "Collectstatic finished"
+log_step "Collectstatic"
+compose run --rm web python manage.py collectstatic --noinput
+log_end "Collectstatic done"
 
-### ---- START SERVICES ----
-log_step "Starting services: $SERVICE_WEB $SERVICE_WORKER $SERVICE_BEAT"
-compose up -d "$SERVICE_WEB" || die "failed to start $SERVICE_WEB"
-compose up -d "$SERVICE_WORKER" || warn "worker did not start (optional service?)"
-compose up -d "$SERVICE_BEAT" || warn "beat did not start (optional service?)"
-log_end "Services running (initial start)"
+# Optional init_app_data
+if [[ "${DO_INIT_DATA}" == "true" ]]; then
+  log_step "Running init_app_data"
+  compose run --rm web python manage.py init_app_data
+  log_end "App data initialized"
+fi
 
-### ---- HEALTHCHECK ----
-if wait_for_url "$HEALTHCHECK_URL" "$HEALTHCHECK_TIMEOUT"; then
-  ok "Application healthy at: $HEALTHCHECK_URL"
+# Start all services
+log_step "Starting all services (profile: ${PROFILE})"
+compose up -d --remove-orphans
+log_end "Services started"
+
+# Health check
+if wait_for_url "${HEALTHCHECK_URL}" "${HEALTHCHECK_TIMEOUT}"; then
+  ok "Application healthy: ${HEALTHCHECK_URL}"
 else
-  err "Healthcheck failed after ${HEALTHCHECK_TIMEOUT}s"
-  err "Recent web service logs:"
-  compose logs --since=10m "$SERVICE_WEB" || true
+  err "Health check failed after ${HEALTHCHECK_TIMEOUT}s"
+  err "=== Recent web logs ==="
+  compose logs --tail=50 web || true
   rollback
 fi
 
-### ---- FINAL SERVICE VERIFICATION ----
-check_services_health
-ok "Deployment finished successfully"
+# Final status
+log_step "Service status"
+compose ps
+ok "=== Deployment complete ==="

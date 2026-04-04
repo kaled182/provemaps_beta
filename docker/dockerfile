@@ -1,79 +1,75 @@
-# ------------------------------------------------------------
-# Dockerfile - multi-stage (slim) for Django (mapsprovefiber)
-# - Optimized layers (wheel cache)
-# - Frontend build included (Node.js multi-stage)
-# - Lean and secure runtime (non-root, tz, ca-certs)
-# - Compatible with docker-compose.yml (web/celery/beat)
-# - Gunicorn + Uvicorn + Celery installed
-# - Sprint 1: Includes frontend build with cache busting
-# - HEALTHCHECK defined in docker-compose.yml (preferred)
-# ------------------------------------------------------------
+# =============================================================================
+# Dockerfile - multi-stage (slim) for MapsProveFiber
+# =============================================================================
+# Stage 1 (builder)        — compila wheels Python (inclui GDAL/PostGIS)
+# Stage 2 (frontend-build) — build do frontend Vue 3 com Vite
+# Stage 3 (runtime)        — imagem final de produção (sem Playwright, sem MySQL)
+#
+# Labels OCI para publicação no GHCR:
+#   org.opencontainers.image.source = https://github.com/ORG/REPO
+# =============================================================================
+
+ARG PYTHON_VERSION=3.12
 
 ############################
-# Stage 1: build Python dependency wheels
+# Stage 1: Python wheels
 ############################
-FROM python:3.12-slim AS builder
+FROM python:${PYTHON_VERSION}-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    GDAL_VERSION=3.10.3
+    PIP_NO_CACHE_DIR=1
 
-# Dependencies required to compile native Python libraries (e.g. mysqlclient, pillow)
+# Build deps: compilação de extensões nativas (PostGIS, Pillow, psycopg)
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
     python3-dev \
-    default-libmysqlclient-dev \
     libpq-dev \
     pkg-config \
     gdal-bin \
     libgdal-dev \
     libgeos-dev \
     proj-bin \
-  && rm -rf /var/lib/apt/lists/* \
-  && apt-get clean
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app/backend
 
-# Copy backend requirements first (folder structure reorganized)
 COPY backend/requirements.txt ./requirements.txt
 
-# Build wheels for every requirement
 RUN pip install --upgrade pip wheel && \
     pip wheel --no-deps --wheel-dir=/wheels -r requirements.txt
 
 
 ############################
-# Stage 2: build frontend (Node.js)
+# Stage 2: Frontend build
 ############################
 FROM node:20-slim AS frontend-builder
 
 WORKDIR /app/frontend
 
-# Copy package files and install dependencies
 COPY frontend/package*.json ./
 RUN npm ci
 
-# Create backend directory structure (needed for vite build output)
 RUN mkdir -p /app/backend/staticfiles/vue-spa/assets
 
-# Copy frontend source code
 COPY frontend/ ./
-
-# Build production frontend
-# This creates optimized assets in ../backend/staticfiles/vue-spa/
 RUN npm run build
 
-# Verify build output
-RUN ls -lah /app/backend/staticfiles/vue-spa/ || echo "Build output not found" && \
-    ls -lah /app/backend/staticfiles/vue-spa/assets/ || echo "Assets not found"
+RUN ls -lah /app/backend/staticfiles/vue-spa/ && \
+    ls -lah /app/backend/staticfiles/vue-spa/assets/
 
 
 ############################
-# Stage 3: runtime
+# Stage 3: Runtime
 ############################
-FROM python:3.12-slim AS runtime
+FROM python:${PYTHON_VERSION}-slim AS runtime
+
+LABEL org.opencontainers.image.title="MapsProveFiber" \
+      org.opencontainers.image.description="Fiber Optic Network Management Platform" \
+      org.opencontainers.image.url="https://github.com/kaled182/provemaps_beta" \
+      org.opencontainers.image.source="https://github.com/kaled182/provemaps_beta" \
+      org.opencontainers.image.licenses="Proprietary"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -82,15 +78,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     TZ=UTC \
     DJANGO_SETTINGS_MODULE=settings.prod \
     PYTHONPATH=/app/backend:/app \
-    GDAL_VERSION=3.10.3 \
     GDAL_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/libgdal.so \
     GEOS_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/libgeos_c.so \
     PROJ_LIB=/usr/share/proj \
     LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu
 
-# Minimal runtime plus useful utilities (without the build toolchain)
+# Runtime deps: apenas bibliotecas necessárias para execução
+# Sem: libmariadb3, Playwright/Chromium (removidos)
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    libmariadb3 \
     libpq5 \
     postgresql-client \
     ca-certificates \
@@ -98,30 +93,11 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     netcat-openbsd \
     tzdata \
     gdal-bin \
-    # Playwright browser dependencies (Chromium)
-    libnss3 \
-    libnspr4 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libdbus-1-3 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libpango-1.0-0 \
-    libcairo2 \
-    libasound2 \
-    libatspi2.0-0 \
     libgdal-dev \
     libgeos-dev \
     proj-bin \
     procps \
   && rm -rf /var/lib/apt/lists/* \
-  && apt-get clean \
   && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Non-root user
@@ -133,41 +109,29 @@ RUN groupadd -g ${APP_GID} ${APP_USER} && \
 
 WORKDIR /app/backend
 
-# Copy wheels and install dependencies
+# Instalar dependências a partir dos wheels compilados no Stage 1
 COPY --from=builder /wheels /wheels
 COPY backend/requirements.txt /app/backend/requirements.txt
 RUN pip install --no-index --find-links=/wheels -r requirements.txt && \
     pip install --no-cache-dir gunicorn uvicorn celery && \
-    pip install --no-cache-dir playwright pytest-playwright && \
     rm -rf /wheels /root/.cache
 
-# Install Playwright browsers (Chromium only for tests)
-RUN playwright install chromium --with-deps
-
-# Copy backend application source and utility scripts (frontend handled separately)
-# Note: backend/ already includes manage.py after folder restructure
+# Código da aplicação
 COPY backend/ /app/backend/
 COPY scripts/ /app/scripts/
 
-# Copy frontend build output from frontend-builder stage
+# Assets do frontend (compilados no Stage 2)
 COPY --from=frontend-builder /app/backend/staticfiles/vue-spa/ /app/backend/staticfiles/vue-spa/
 
-# Verify frontend assets were copied
 RUN ls -lah /app/backend/staticfiles/vue-spa/assets/ || echo "Frontend assets not found"
 
-# Permissions and writable directories
+# Diretórios de runtime
 RUN mkdir -p /app/backend/logs /app/backend/media /app/backend/staticfiles /app/backend/tmp && \
     chown -R ${APP_USER}:${APP_USER} /app && \
     chmod -R 755 /app
 
 USER ${APP_USER}
 
-# Application port (web)
 EXPOSE 8000
 
-# The final command is defined in docker-compose.yml:
-#   web:    gunicorn core.asgi:application -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000 --workers 3 --timeout 120 --max-requests 1000
-#   celery: celery -A core.celery_app worker -Q default -l info
-#   beat:   celery -A core.celery_app beat -l info --pidfile=/tmp/celerybeat.pid
-#
-# HEALTHCHECK remains in docker-compose.yml for environment specific overrides
+# Comando definido no docker-compose (web/celery/beat)

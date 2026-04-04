@@ -32,6 +32,7 @@ WAIT_FOR_REDIS="${WAIT_FOR_REDIS:-}"
 INIT_MIGRATE="${INIT_MIGRATE:-false}"
 INIT_COLLECTSTATIC="${INIT_COLLECTSTATIC:-false}"
 INIT_ENSURE_SUPERUSER="${INIT_ENSURE_SUPERUSER:-false}"
+INIT_APP_DATA="${INIT_APP_DATA:-false}"
 MIGRATE_TIMEOUT="${MIGRATE_TIMEOUT:-300}"
 COLLECTSTATIC_TIMEOUT="${COLLECTSTATIC_TIMEOUT:-120}"
 
@@ -51,7 +52,7 @@ print_startup_info() {
   log "DB: ${DB_HOST:-Not set}:${DB_PORT:-N/A}"
   log "Redis: ${REDIS_URL:-Not set}"
   log "Flags: WAIT_FOR_DB=${WAIT_FOR_DB}, WAIT_FOR_REDIS=${WAIT_FOR_REDIS}"
-  log "Init: MIGRATE=${INIT_MIGRATE}, COLLECTSTATIC=${INIT_COLLECTSTATIC}"
+  log "Init: MIGRATE=${INIT_MIGRATE}, COLLECTSTATIC=${INIT_COLLECTSTATIC}, APP_DATA=${INIT_APP_DATA}"
   log "=================================="
 }
 
@@ -145,6 +146,18 @@ maybe_ensure_superuser() {
   fi
 }
 
+maybe_init_app_data() {
+  # Only run for web/gunicorn workers, not celery/beat
+  if [[ "${INIT_APP_DATA:-false}" == "true" ]]; then
+    if [[ "$*" == *"celery"* ]]; then
+      return 0
+    fi
+    log "Running init_app_data (superuser + periodic tasks)..."
+    run_manage init_app_data
+    ok "init_app_data completed"
+  fi
+}
+
 setup_signal_handlers() {
   trap 'log "Received interrupt signal..."; exit 0' SIGINT SIGTERM
 }
@@ -192,6 +205,7 @@ main() {
   maybe_migrate
   maybe_collectstatic
   maybe_ensure_superuser
+  maybe_init_app_data "$@"
 
   # Clean the Celery Beat PID file when the command invokes celery beat
   if [[ "$*" == *"celery"* && "$*" == *"beat"* ]]; then
