@@ -48,6 +48,9 @@ def _get_hls_public_base_url(config: Optional[Dict[str, object]] = None) -> str:
 	)
 	if value:
 		return value.rstrip("/")
+	probe_url = getattr(settings, "VIDEO_HLS_BASE_URL", None) or os.environ.get("VIDEO_HLS_BASE_URL")
+	if probe_url:
+		return probe_url.rstrip("/")
 	return ""
 
 
