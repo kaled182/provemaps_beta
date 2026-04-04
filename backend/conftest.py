@@ -29,6 +29,12 @@ collect_ignore = [
     "tests/test_mosaic_refs.py",
     # E2E Playwright — requires a running server (not available in CI)
     "tests/test_mosaic_rendering.py",
+    # Script-style diagnostics — call django.setup() at module level
+    "tests/test_smoke.py",
+    "tests/test_optical_endpoint.py",
+    "tests/test_session_persistence.py",
+    "tests/test_zabbix_api_key_flow.py",
+    "tests/validate_optical_endpoint.py",
 ]
 collect_ignore_glob = [
     # scripts/ contains diagnostic shell-style scripts, not pytest tests
