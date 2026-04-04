@@ -769,6 +769,31 @@ class FiberCable(models.Model):
     def __str__(self) -> str:
         return self.name
 
+    @property
+    def path_coordinates(self):
+        """Legacy compatibility: returns path as list of {"lat", "lng"} dicts."""
+        if self.path:
+            return [{"lat": lat, "lng": lng} for lng, lat in self.path.coords]
+        return None
+
+    @property
+    def calculated_length_km(self):
+        """Haversine length of path in kilometres."""
+        if not self.path:
+            return None
+        from math import radians, sin, cos, sqrt, atan2
+        total = 0.0
+        coords = list(self.path.coords)
+        for i in range(len(coords) - 1):
+            lng1, lat1 = coords[i]
+            lng2, lat2 = coords[i + 1]
+            R = 6371.0
+            dlat = radians(lat2 - lat1)
+            dlng = radians(lng2 - lng1)
+            a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlng / 2) ** 2
+            total += R * 2 * atan2(sqrt(a), sqrt(1 - a))
+        return total
+
     def update_status(self, new_status: str) -> None:
         """Update fiber status with timestamp."""
         if new_status not in dict(self.STATUS_CHOICES):

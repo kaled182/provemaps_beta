@@ -9,6 +9,8 @@ from django.contrib.auth.models import User
 from django.test import Client
 from django.urls import reverse
 
+from django.contrib.gis.geos import LineString
+
 from inventory.models import Device, FiberCable, Port, Site
 
 
@@ -67,10 +69,10 @@ class TestFiberEditPersistence:
             name="Test Cable",
             origin_port=port_origin,
             destination_port=port_dest_old,
-            path_coordinates=[
-                {"lat": -16.6869, "lng": -49.2648},
-                {"lat": -16.6900, "lng": -49.2700}
-            ]
+            path=LineString(
+                [(-49.2648, -16.6869), (-49.2700, -16.6900)],
+                srid=4326,
+            ),
         )
 
         return {

@@ -7,7 +7,9 @@ from rest_framework.test import APIClient
 from rest_framework.routers import DefaultRouter
 from django.http import HttpResponse
 
-from inventory.models import Device, FiberCable, Port, Site, FiberCableAlarmConfig
+from inventory.models import (
+    Device, FiberCable, Port, Site, FiberCableAlarmConfig,
+)
 from inventory.viewsets import FiberCableViewSet
 from setup_app.models import AlertTemplate
 from setup_app.models_contacts import Contact, ContactGroup
@@ -16,8 +18,10 @@ from setup_app.models_contacts import Contact, ContactGroup
 router = DefaultRouter()
 router.register(r"fibers", FiberCableViewSet, basename="fibercable")
 
+
 def _dummy_setup_view(request):  # pragma: no cover - simple stub
     return HttpResponse("ok")
+
 
 setup_patterns = (
     [path("first-time-setup/", _dummy_setup_view, name="first_time_setup")],
@@ -33,7 +37,9 @@ urlpatterns = [
 @pytest.fixture(autouse=True)
 def override_urls() -> None:
     """Isolate URL configuration to avoid GIS dependencies during tests."""
-    with override_settings(ROOT_URLCONF="inventory.tests.test_fiber_alarm_configs_api"):
+    with override_settings(
+        ROOT_URLCONF="inventory.tests.test_fiber_alarm_configs_api"
+    ):
         yield
 
 
@@ -63,26 +69,26 @@ def inventory_setup(django_user_model):
 
     group = ContactGroup.objects.create(name="NOC", description="Equipe NOC")
     contact = Contact.objects.create(
-        name="João da Silva",
+        name="Joao da Silva",
         phone="+5561999999999",
         email="noc@example.com",
     )
     contact.groups.add(group)
 
     email_template = AlertTemplate.objects.create(
-        name="Email Óptico",
+        name="Email Optico",
         category=AlertTemplate.CATEGORY_OPTICAL_LEVEL,
-        channel=AlertTemplate.CHANNEL_EMAIL,
-        subject="Alerta nível óptico {{site_name}}",
-        content="Nível óptico {{signal_level}} em {{device_name}}",
+        channel="email",
+        subject="Alerta nivel optico {{site_name}}",
+        content="Nivel optico {{signal_level}} em {{device_name}}",
         is_default=True,
     )
 
     whatsapp_template = AlertTemplate.objects.create(
-        name="WhatsApp Óptico",
+        name="WhatsApp Optico",
         category=AlertTemplate.CATEGORY_OPTICAL_LEVEL,
         channel=AlertTemplate.CHANNEL_WHATSAPP,
-        content="Alerta óptico {{signal_level}}",
+        content="Alerta optico {{signal_level}}",
         is_default=True,
     )
 
@@ -106,7 +112,6 @@ def test_create_and_list_alarm_configs(inventory_setup):
 
     url = reverse("fibercable-alarms", kwargs={"pk": cable.pk})
 
-    # Initially empty
     response = client.get(url)
     assert response.status_code == 200
     assert response.json() == {"results": []}
@@ -132,9 +137,15 @@ def test_create_and_list_alarm_configs(inventory_setup):
     assert data["target_display"].startswith(group.name)
     assert data["channels"] == ["email", "whatsapp"]
     assert data["persist_minutes"] == 5
-    assert data["templates"]["category"] == AlertTemplate.CATEGORY_OPTICAL_LEVEL
-    assert data["templates"]["bindings"]["email"] == inventory_setup["email_template"].pk
-    assert data["templates"]["bindings"]["whatsapp"] == inventory_setup["whatsapp_template"].pk
+
+    expected_category = AlertTemplate.CATEGORY_OPTICAL_LEVEL
+    assert data["templates"]["category"] == expected_category
+
+    email_pk = inventory_setup["email_template"].pk
+    assert data["templates"]["bindings"]["email"] == email_pk
+
+    whatsapp_pk = inventory_setup["whatsapp_template"].pk
+    assert data["templates"]["bindings"]["whatsapp"] == whatsapp_pk
 
     assert FiberCableAlarmConfig.objects.count() == 1
     config = FiberCableAlarmConfig.objects.first()
@@ -142,18 +153,21 @@ def test_create_and_list_alarm_configs(inventory_setup):
     assert config.contact_group_id == group.pk
     assert config.fiber_cable_id == cable.pk
 
-    # GET should now return the saved configuration
     response = client.get(url)
     assert response.status_code == 200
     results = response.json()["results"]
     assert len(results) == 1
     assert results[0]["id"] == data["id"]
     assert results[0]["target_display"].startswith(group.name)
-    assert results[0]["templates"]["bindings"]["email"] == inventory_setup["email_template"].pk
+
+    email_pk = inventory_setup["email_template"].pk
+    assert results[0]["templates"]["bindings"]["email"] == email_pk
 
 
 @pytest.mark.django_db
-def test_create_alarm_uses_default_template_when_not_provided(inventory_setup):
+def test_create_alarm_uses_default_template_when_not_provided(
+    inventory_setup,
+):
     client = APIClient()
     client.force_authenticate(user=inventory_setup["user"])
 
@@ -167,12 +181,14 @@ def test_create_alarm_uses_default_template_when_not_provided(inventory_setup):
         "contact": contact.pk,
         "channels": ["whatsapp"],
         "trigger_level": "critical",
+        "template_category": AlertTemplate.CATEGORY_OPTICAL_LEVEL,
     }
 
     response = client.post(url, payload, format="json")
     assert response.status_code == 201
     body = response.json()
-    assert body["templates"]["bindings"]["whatsapp"] == inventory_setup["whatsapp_template"].pk
+    whatsapp_pk = inventory_setup["whatsapp_template"].pk
+    assert body["templates"]["bindings"]["whatsapp"] == whatsapp_pk
 
 
 @pytest.mark.django_db

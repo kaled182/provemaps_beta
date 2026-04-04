@@ -1,10 +1,16 @@
-from django.test import TestCase, override_settings
+from django.test import TestCase, modify_settings, override_settings
 from django.urls import reverse
 
 from setup_app.models import FirstTimeSetup
 
 
+# settings/test.py strips FirstTimeSetupRedirectMiddleware to avoid stray
+# 302s in unrelated tests.  Re-add it here so this class can exercise the
+# middleware specifically, while also forcing the first-time flow.
 @override_settings(FORCE_FIRST_TIME_FLOW=True)
+@modify_settings(MIDDLEWARE={"append": (
+    "core.middleware.first_time_setup.FirstTimeSetupRedirectMiddleware"
+)})
 class FirstTimeSetupRedirectMiddlewareTests(TestCase):
     def test_redirects_to_setup_when_not_configured(self):
         FirstTimeSetup.objects.all().delete()

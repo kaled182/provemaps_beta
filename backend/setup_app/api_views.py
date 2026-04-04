@@ -4062,7 +4062,7 @@ def video_cameras_list(request):
                 return None
             restream_key = (cfg.get("restream_key") or f"gateway_{gw.id}")
             base = str(webrtc_base).rstrip('/')
-            return f"{base}/{restream_key}/whep"
+            return f"{base}/whep/{restream_key}"
 
         results = []
         for gw in gateways:

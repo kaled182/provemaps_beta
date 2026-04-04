@@ -15,8 +15,31 @@ from django.test import override_settings
 from django.core.cache import cache
 import django
 
-# Prevent pytest from attempting to collect a binary/text artifact file
-collect_ignore = ["test_errors.txt"]
+# Prevent pytest from collecting script-style files and non-pytest artifacts
+collect_ignore = [
+    "test_errors.txt",
+    # Diagnostic scripts — not pytest tests (call django.setup() at module level)
+    "tests/test_backup_config.py",
+    "tests/test_cable_serializer.py",
+    "tests/test_user_sync.py",
+    # HTTP scripts — hit localhost:8000, require a running server
+    "tests/test_fiber_cable_endpoint.py",
+    "tests/test_fiber_modal_data_flow.py",
+    "tests/test_ports_endpoint.py",
+    "tests/test_mosaic_refs.py",
+    # E2E Playwright — requires a running server (not available in CI)
+    "tests/test_mosaic_rendering.py",
+    # Script-style diagnostics — call django.setup() at module level
+    "tests/test_smoke.py",
+    "tests/test_optical_endpoint.py",
+    "tests/test_session_persistence.py",
+    "tests/test_zabbix_api_key_flow.py",
+    "tests/validate_optical_endpoint.py",
+]
+collect_ignore_glob = [
+    # scripts/ contains diagnostic shell-style scripts, not pytest tests
+    "tests/scripts/*.py",
+]
 
 
 def pytest_configure() -> None:
@@ -111,7 +134,7 @@ def clear_cache() -> Iterator[None]:
         cache.clear()
     except Exception:
         pass  # Ignore cache failures (useful when Redis is offline)
-    
+
     try:
         yield
     finally:

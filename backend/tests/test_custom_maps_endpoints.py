@@ -165,9 +165,9 @@ class TestCustomMapsEndpoints:
         client = Client()
         client.force_login(user)
         
-        # Teste DELETE
+        # Teste DELETE — implementação retorna 204 No Content
         response = client.delete(f'/api/v1/maps/custom/{map_id}/')
-        assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+        assert response.status_code == 204, f"Expected 204, got {response.status_code}"
         
         # Verificar se foi deletado
         assert not CustomMap.objects.filter(id=map_id).exists()

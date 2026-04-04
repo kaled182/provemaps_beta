@@ -105,11 +105,11 @@ def test_mosaic_modal_rendering():
             for selector in camera_selectors:
                 try:
                     btn = page.locator(selector).first
-              7. Verificar elementos <video> no DOM
-            print("7    camera_button = btn
+                    if btn.is_visible():
+                        camera_button = btn
                         print(f"  ✓ Encontrado com seletor: {selector}")
                         break
-                except:
+                except Exception:
                     continue
             
             if not camera_button:

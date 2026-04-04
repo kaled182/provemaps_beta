@@ -106,14 +106,11 @@ def test_segments_with_spatial(db, test_route):
         length_km=1.5,
     )
     
-    # Segment 3: No spatial data (legacy path_coordinates only)
+    # Segment 3: No spatial data (path=None, legacy compatibility test)
     seg3 = RouteSegment.objects.create(
         route=test_route,
         order=3,
-        path_coordinates=[
-            {'lat': -15.7700, 'lng': -47.9100},
-            {'lat': -15.7650, 'lng': -47.9050},
-        ],
+        path=None,
         length_km=0.8,
     )
     
