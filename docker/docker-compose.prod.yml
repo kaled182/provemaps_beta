@@ -28,10 +28,10 @@ services:
       - "443:443"
     volumes:
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot_webroot:/var/www/certbot:ro
       - ../backend/staticfiles:/app/staticfiles:ro
       - ../backend/media:/app/media:ro
-      - ../frontend/dist:/app/frontend:ro
       - nginx_logs:/var/log/nginx
     depends_on:
       web:
@@ -50,6 +50,29 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+
+  # ==========================================
+  # CERTBOT — Let's Encrypt SSL
+  # ==========================================
+  certbot:
+    image: certbot/certbot:latest
+    container_name: mapsprovefiber_certbot
+    restart: "no"
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot_webroot:/var/www/certbot
+    # Run once on demand — see scripts/certbot-renew.sh for renewal
+    entrypoint: >
+      sh -c "trap exit TERM;
+             while :; do
+               certbot renew --webroot -w /var/www/certbot --quiet;
+               sleep 12h & wait $$!;
+             done"
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
 
   # ==========================================
   # DJANGO - Web Application (Gunicorn + ASGI)
@@ -436,6 +459,133 @@ services:
           cpus: '0.1'
           memory: 128M
 
+  # ==========================================
+  # PROMETHEUS — perfil: monitoring
+  # ==========================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: mapsprovefiber_prometheus
+    restart: unless-stopped
+    profiles: [monitoring, full]
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--storage.tsdb.retention.time=30d'
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts:/etc/prometheus/alerts:ro
+      - prometheus_data:/prometheus
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================
+  # GRAFANA — perfil: monitoring
+  # ==========================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: mapsprovefiber_grafana
+    restart: unless-stopped
+    profiles: [monitoring, full]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:?Grafana admin password required}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    ports:
+      - "127.0.0.1:3002:3000"
+    volumes:
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================
+  # MEDIAMTX (RTMP/RTSP/WebRTC) — perfil: video
+  # ==========================================
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: mapsprovefiber_mediamtx
+    restart: unless-stopped
+    profiles: [video, full]
+    environment:
+      MTX_PROTOCOLS: tcp
+      MTX_WEBRTC: "yes"
+      MTX_WEBRTCICESERVERS2: '[{"urls":["stun:stun.l.google.com:19302"]}]'
+    ports:
+      - "8554:8554"
+      - "8888:8888"
+      - "8889:8889"
+      - "8189:8189/udp"
+      - "1935:1935"
+    networks:
+      - backend
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================
+  # WHATSAPP QR — perfil: whatsapp
+  # ==========================================
+  whatsapp-qr:
+    build:
+      context: ../services/whatsapp-qr
+    container_name: mapsprovefiber_whatsapp_qr
+    restart: unless-stopped
+    profiles: [whatsapp, full]
+    environment:
+      NODE_ENV: production
+    ports:
+      - "127.0.0.1:3001:3000"
+    volumes:
+      - whatsapp_qr_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 # ==========================================
 # NETWORKS
 # ==========================================
@@ -463,4 +613,14 @@ volumes:
   app_staticfiles:
     driver: local
   nginx_logs:
+    driver: local
+  certbot_webroot:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  whatsapp_qr_data:
+    driver: local
+  letsencrypt:
     driver: local

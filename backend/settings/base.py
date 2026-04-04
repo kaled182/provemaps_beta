@@ -238,6 +238,9 @@ INSTALLED_APPS = [
     # Observability
     "django_prometheus",
 
+    # Celery Beat — periodic task scheduler (DatabaseScheduler)
+    "django_celery_beat",
+
     # Realtime / WebSockets
     "channels",
 

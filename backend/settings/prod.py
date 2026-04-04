@@ -272,6 +272,12 @@ SERVER_EMAIL = DEFAULT_FROM_EMAIL  # Used for error reports
 # -----------------------------------------------------
 # Logging (production-ready with structlog)
 # -----------------------------------------------------
+try:
+    import pythonjsonlogger  # noqa: F401
+    _json_logger_available = True
+except ImportError:
+    _json_logger_available = False
+
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 DJANGO_LOG_LEVEL = os.getenv("DJANGO_LOG_LEVEL", "WARNING")
 
@@ -286,6 +292,12 @@ LOGGING: Dict[str, Any] = {
                 "%(levelname)s %(asctime)s %(name)s %(module)s "
                 "%(process)d %(thread)d %(message)s"
             ),
+        } if _json_logger_available else {
+            "format": (
+                '{"level":"%(levelname)s","time":"%(asctime)s",'
+                '"name":"%(name)s","message":"%(message)s"}'
+            ),
+            "datefmt": "%Y-%m-%dT%H:%M:%S",
         },
         "simple": {
             "format": "[%(levelname)s] %(asctime)s %(name)s: %(message)s",
