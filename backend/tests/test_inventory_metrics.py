@@ -133,7 +133,7 @@ class ViewSetMetricsInstrumentationTest(APITestCase):
             "name": "New Device",
             "site": self.site.id,
             "zabbix_hostid": "10002",
-        })
+        }, format="json")
         self.assertEqual(response.status_code, 201)
 
         final_count = 0
