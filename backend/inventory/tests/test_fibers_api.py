@@ -82,6 +82,7 @@ def test_api_import_fiber_kml_success(
         kml_file: object,
         *,
         single_port: bool = False,
+        **kwargs: object,
     ) -> dict[str, object]:
         captured.update(
             {
