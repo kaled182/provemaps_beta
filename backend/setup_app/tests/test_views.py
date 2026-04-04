@@ -5,8 +5,7 @@ import tempfile
 import os
 from unittest.mock import MagicMock, patch
 
-import pytest
-from django.contrib.auth.models import AnonymousUser, User
+from django.contrib.auth.models import AnonymousUser
 from django.test import RequestFactory, TestCase, override_settings
 
 

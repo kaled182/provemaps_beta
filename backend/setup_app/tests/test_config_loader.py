@@ -1,9 +1,9 @@
 """Tests for setup_app.services.config_loader."""
 from __future__ import annotations
 
+import os
 from unittest.mock import MagicMock, patch
 
-import pytest
 from django.test import TestCase
 
 
@@ -143,7 +143,7 @@ class GetConfigValueTests(TestCase):
 
     def test_env_takes_precedence(self):
         from setup_app.services.config_loader import get_config_value
-        with patch.dict("os.environ", {"MY_KEY": "env-value"}):
+        with patch.dict(os.environ, {"MY_KEY": "env-value"}):
             result = get_config_value("MY_KEY", "default")
         self.assertEqual(result, "env-value")
 
@@ -151,16 +151,17 @@ class GetConfigValueTests(TestCase):
         from django.core.cache import cache
         from setup_app.services.config_loader import get_config_value, _CONFIG_CACHE_KEY
         cache.set(_CONFIG_CACHE_KEY, {"DB_HOST": "db.local"}, 60)
-        import os
-        os.environ.pop("DB_HOST", None)
-        result = get_config_value("DB_HOST", "localhost")
+        # Ensure DB_HOST is not in environment (safe via patch.dict)
+        with patch.dict(os.environ, {}):
+            os.environ.pop("DB_HOST", None)
+            result = get_config_value("DB_HOST", "localhost")
         self.assertEqual(result, "db.local")
 
     def test_returns_default_when_key_missing(self):
         from django.core.cache import cache
         from setup_app.services.config_loader import get_config_value, _CONFIG_CACHE_KEY
         cache.set(_CONFIG_CACHE_KEY, {}, 60)
-        import os
-        os.environ.pop("NONEXISTENT_KEY", None)
-        result = get_config_value("NONEXISTENT_KEY", "my-default")
+        with patch.dict(os.environ, {}):
+            os.environ.pop("NONEXISTENT_KEY_XYZ", None)
+            result = get_config_value("NONEXISTENT_KEY_XYZ", "my-default")
         self.assertEqual(result, "my-default")

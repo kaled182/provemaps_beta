@@ -1,9 +1,9 @@
 """Tests for setup_app.services.video_gateway — pure helper functions."""
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch, call
+import os
+from unittest.mock import MagicMock, patch
 
-import pytest
 from django.test import TestCase, override_settings
 
 
@@ -16,17 +16,17 @@ class GetTransmuxerUrlTests(TestCase):
 
     def test_reads_from_env(self):
         from setup_app.services.video_gateway import _get_transmuxer_url
-        with patch.dict("os.environ", {"VIDEO_TRANSMUXER_URL": "http://env-transmuxer:9001"}), \
-             override_settings(VIDEO_TRANSMUXER_URL=None):
+        with override_settings(VIDEO_TRANSMUXER_URL=None), \
+             patch.dict(os.environ, {"VIDEO_TRANSMUXER_URL": "http://env-transmuxer:9001"}):
             url = _get_transmuxer_url()
         self.assertEqual(url, "http://env-transmuxer:9001")
 
-    @override_settings(VIDEO_TRANSMUXER_URL=None)
     def test_default_value(self):
         from setup_app.services.video_gateway import _get_transmuxer_url
-        import os
-        os.environ.pop("VIDEO_TRANSMUXER_URL", None)
-        url = _get_transmuxer_url()
+        with override_settings(VIDEO_TRANSMUXER_URL=None), \
+             patch.dict(os.environ, {}):
+            os.environ.pop("VIDEO_TRANSMUXER_URL", None)  # safe: inside patch.dict
+            url = _get_transmuxer_url()
         self.assertIn("video-transmuxer", url)
 
     def test_strips_trailing_slash(self):
@@ -63,12 +63,12 @@ class GetHlsPublicBaseUrlTests(TestCase):
         url = _get_hls_public_base_url()
         self.assertEqual(url, "http://settings-public")
 
-    @override_settings(VIDEO_HLS_PUBLIC_BASE_URL=None, VIDEO_HLS_BASE_URL="http://probe:8080/hls")
     def test_falls_back_to_probe_url(self):
         from setup_app.services.video_gateway import _get_hls_public_base_url
-        import os
-        os.environ.pop("VIDEO_HLS_PUBLIC_BASE_URL", None)
-        url = _get_hls_public_base_url()
+        with override_settings(VIDEO_HLS_PUBLIC_BASE_URL=None, VIDEO_HLS_BASE_URL="http://probe:8080/hls"), \
+             patch.dict(os.environ, {}):
+            os.environ.pop("VIDEO_HLS_PUBLIC_BASE_URL", None)
+            url = _get_hls_public_base_url()
         self.assertIn("probe", url)
 
     def test_empty_config_override_uses_settings(self):
@@ -86,12 +86,12 @@ class GetWebrtcManifestTimeoutTests(TestCase):
         timeout = _get_webrtc_manifest_timeout(config)
         self.assertEqual(timeout, 45.0)
 
-    @override_settings(VIDEO_WEBRTC_HLS_GRACE_SECONDS=None)
     def test_default_fallback(self):
         from setup_app.services.video_gateway import _get_webrtc_manifest_timeout
-        import os
-        os.environ.pop("VIDEO_WEBRTC_HLS_GRACE_SECONDS", None)
-        timeout = _get_webrtc_manifest_timeout()
+        with override_settings(VIDEO_WEBRTC_HLS_GRACE_SECONDS=None), \
+             patch.dict(os.environ, {}):
+            os.environ.pop("VIDEO_WEBRTC_HLS_GRACE_SECONDS", None)
+            timeout = _get_webrtc_manifest_timeout()
         self.assertEqual(timeout, 20.0)
 
     def test_clamps_minimum_to_3(self):
@@ -109,11 +109,18 @@ class GetWebrtcManifestTimeoutTests(TestCase):
     def test_invalid_config_value_uses_fallback(self):
         from setup_app.services.video_gateway import _get_webrtc_manifest_timeout
         config = {"webrtc_manifest_grace_seconds": "not-a-number"}
-        with override_settings(VIDEO_WEBRTC_HLS_GRACE_SECONDS=None):
-            import os
+        with override_settings(VIDEO_WEBRTC_HLS_GRACE_SECONDS=None), \
+             patch.dict(os.environ, {}):
             os.environ.pop("VIDEO_WEBRTC_HLS_GRACE_SECONDS", None)
             timeout = _get_webrtc_manifest_timeout(config)
         self.assertEqual(timeout, 20.0)
+
+    def test_reads_grace_seconds_from_env(self):
+        from setup_app.services.video_gateway import _get_webrtc_manifest_timeout
+        with override_settings(VIDEO_WEBRTC_HLS_GRACE_SECONDS=None), \
+             patch.dict(os.environ, {"VIDEO_WEBRTC_HLS_GRACE_SECONDS": "30"}):
+            timeout = _get_webrtc_manifest_timeout()
+        self.assertEqual(timeout, 30.0)
 
 
 class GetStreamKeyTests(TestCase):
@@ -160,6 +167,7 @@ class BuildInternalHlsUrlTests(TestCase):
     def test_strips_leading_slash_from_resource(self):
         from setup_app.services.video_gateway import build_internal_hls_url
         url = build_internal_hls_url("key", "/index.m3u8")
+        # No double-slash after the authority
         self.assertFalse("//" in url.split("//", 1)[1])
 
 
@@ -200,8 +208,8 @@ class BuildPlaybackUrlTests(TestCase):
         gw = MagicMock()
         gw.config = {}
         gw.id = 5
-        with override_settings(VIDEO_HLS_PUBLIC_BASE_URL=None, VIDEO_HLS_BASE_URL=None):
-            import os
+        with override_settings(VIDEO_HLS_PUBLIC_BASE_URL=None, VIDEO_HLS_BASE_URL=None), \
+             patch.dict(os.environ, {}):
             os.environ.pop("VIDEO_HLS_PUBLIC_BASE_URL", None)
             os.environ.pop("VIDEO_HLS_BASE_URL", None)
             url = build_playback_url(gw)
@@ -221,12 +229,12 @@ class GetWebrtcPublicBaseUrlTests(TestCase):
         url = _get_webrtc_public_base_url()
         self.assertEqual(url, "http://settings-webrtc")
 
-    @override_settings(VIDEO_WEBRTC_PUBLIC_BASE_URL=None)
     def test_returns_none_when_no_config(self):
         from setup_app.services.video_gateway import _get_webrtc_public_base_url
-        import os
-        os.environ.pop("VIDEO_WEBRTC_PUBLIC_BASE_URL", None)
-        url = _get_webrtc_public_base_url()
+        with override_settings(VIDEO_WEBRTC_PUBLIC_BASE_URL=None), \
+             patch.dict(os.environ, {}):
+            os.environ.pop("VIDEO_WEBRTC_PUBLIC_BASE_URL", None)
+            url = _get_webrtc_public_base_url()
         self.assertIsNone(url)
 
     def test_strips_trailing_slash(self):
@@ -242,7 +250,6 @@ class StopStreamForGatewayTests(TestCase):
         gw = MagicMock()
         gw.config = {"restream_key": "stream1"}
         gw.id = 1
-
         with patch("setup_app.services.video_gateway.requests.delete") as mock_del, \
              patch("setup_app.services.video_gateway._persist_config") as mock_persist:
             mock_del.return_value = MagicMock(status_code=200)
@@ -251,17 +258,15 @@ class StopStreamForGatewayTests(TestCase):
         mock_persist.assert_called_once()
 
     def test_handles_request_exception(self):
+        import requests as _requests
         from setup_app.services.video_gateway import stop_stream_for_gateway
-        import requests
         gw = MagicMock()
         gw.config = {"restream_key": "stream1"}
         gw.id = 1
-
         with patch("setup_app.services.video_gateway.requests.delete",
-                   side_effect=requests.RequestException("timeout")), \
+                   side_effect=_requests.RequestException("timeout")), \
              patch("setup_app.services.video_gateway._persist_config") as mock_persist:
             stop_stream_for_gateway(gw)
-        # Should still persist even on request failure
         mock_persist.assert_called_once()
 
     def test_clear_preview_removes_urls(self):
@@ -269,7 +274,6 @@ class StopStreamForGatewayTests(TestCase):
         gw = MagicMock()
         gw.config = {"restream_key": "stream1"}
         gw.id = 1
-
         with patch("setup_app.services.video_gateway.requests.delete") as mock_del, \
              patch("setup_app.services.video_gateway._persist_config") as mock_persist:
             mock_del.return_value = MagicMock(status_code=404)
@@ -283,11 +287,10 @@ class StopStreamForGatewayTests(TestCase):
         gw = MagicMock()
         gw.config = {}
         gw.id = 1
-
         with patch("setup_app.services.video_gateway.requests.delete") as mock_del, \
              patch("setup_app.services.video_gateway._persist_config"):
             mock_del.return_value = MagicMock(status_code=500, text="err")
-            stop_stream_for_gateway(gw)
+            stop_stream_for_gateway(gw)  # should not raise
 
 
 class SyncGatewayStreamTests(TestCase):
