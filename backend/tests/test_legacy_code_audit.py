@@ -59,27 +59,27 @@ class LegacyDatabaseAuditTest(TestCase):
             print("\n✅ Nenhuma tabela zabbix_api_* encontrada")
     
     def test_inventory_tables_exist(self):
-        """Verifica que tabelas inventory_* existem e têm dados"""
+        """Verifica que tabelas de sites e cabos existem e têm dados"""
         with connection.cursor() as cursor:
-            # Verificar tabela de sites
+            # Tabela real do Site usa db_table = "zabbix_api_site"
             cursor.execute("""
-                SELECT COUNT(*) FROM inventory_site
+                SELECT COUNT(*) FROM zabbix_api_site
             """)
             site_count = cursor.fetchone()[0]
-            
-            # Verificar tabela de cabos
+
+            # Tabela real do FiberCable usa db_table = "zabbix_api_fibercable"
             cursor.execute("""
-                SELECT COUNT(*) FROM inventory_fibercable
+                SELECT COUNT(*) FROM zabbix_api_fibercable
             """)
             cable_count = cursor.fetchone()[0]
-        
+
         print(f"\n📊 Estatísticas:")
         print(f"   Sites: {site_count}")
         print(f"   Fiber Cables: {cable_count}")
-        
+
         # Tabelas devem existir
-        assert site_count >= 0, "Tabela inventory_site não existe"
-        assert cable_count >= 0, "Tabela inventory_fibercable não existe"
+        assert site_count >= 0, "Tabela zabbix_api_site não existe"
+        assert cable_count >= 0, "Tabela zabbix_api_fibercable não existe"
 
 
 class LegacyFieldMigrationAuditTest(TestCase):
@@ -301,12 +301,15 @@ class LegacyPerformanceBaselineTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Criar dataset para testes de performance"""
-        # Criar 100 sites
+        # Criar 100 sites — slug deve ser definido explicitamente porque
+        # bulk_create() ignora save() e o auto-slug nunca seria gerado,
+        # causando violação de constraint unique(slug).
         sites = [
             Site(
-                name=f"Site {i}",
+                display_name=f"Perf Site {i}",
+                slug=f"perf-site-{i}",
                 latitude=-15.7942 + (i * 0.01),
-                longitude=-47.8822 + (i * 0.01)
+                longitude=-47.8822 + (i * 0.01),
             )
             for i in range(100)
         ]
