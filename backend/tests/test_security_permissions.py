@@ -69,7 +69,7 @@ class APIPermissionsSecurityTest(TestCase):
         print(f"\n Site List sem auth: {response.status_code}")
 
         if response.status_code == status.HTTP_200_OK:
-            print("   PROBLEMA DE SEGURANCA: Acesso permitido sem autenticacao")
+            print("   PROBLEMA: Acesso permitido sem autenticacao")
             pytest.skip("Endpoint permite acesso nao autenticado")
         else:
             print("   Acesso negado corretamente")
@@ -127,7 +127,7 @@ class APIPermissionsSecurityTest(TestCase):
         self.client.force_authenticate(user=self.admin_user)
 
         data = {
-            'display_name': 'New Site',
+            'name': 'New Site',
             'latitude': -15.8000,
             'longitude': -47.9000
         }
@@ -271,7 +271,7 @@ class PostFixRegressionTest(TestCase):
         self.client.force_authenticate(user=self.admin)
 
         data = {
-            'display_name': 'Admin Site',
+            'name': 'Admin Site',
             'latitude': -15.0,
             'longitude': -47.0,
         }
