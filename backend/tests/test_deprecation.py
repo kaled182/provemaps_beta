@@ -10,7 +10,7 @@ Executar: docker compose -f docker/docker-compose.yml exec web pytest backend/te
 
 import warnings
 import pytest
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 
 from inventory.deprecation import (
     deprecated,
@@ -308,9 +308,10 @@ class DeprecationUsageExamplesTest(TestCase):
         # When called, issues deprecation warning
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            # Simulated call
-            old_sites_endpoint(None)
-            
+            # Simulated call — api_view requires a real HttpRequest, not None
+            request = RequestFactory().get('/api/sites/')
+            old_sites_endpoint(request)
+
             # Should have at least 1 warning
             self.assertGreater(len(w), 0)
 
