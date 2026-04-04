@@ -48,7 +48,10 @@ def _get_hls_public_base_url(config: Optional[Dict[str, object]] = None) -> str:
 	)
 	if value:
 		return value.rstrip("/")
-	return _get_hls_probe_base_url()
+	probe_url = getattr(settings, "VIDEO_HLS_BASE_URL", None) or os.environ.get("VIDEO_HLS_BASE_URL")
+	if probe_url:
+		return probe_url.rstrip("/")
+	return ""
 
 
 def _get_webrtc_manifest_timeout(config: Optional[Dict[str, object]] = None) -> float:
@@ -220,7 +223,7 @@ def ensure_stream_for_gateway(
 		return
 
 	stream_key = _get_stream_key(gateway)
-	public_base = _get_hls_public_base_url(config)
+	public_base = _get_hls_public_base_url(config) or _get_hls_probe_base_url()
 	webrtc_base = _get_webrtc_public_base_url(config)
 	use_webrtc = bool(webrtc_base)
 	if use_webrtc:

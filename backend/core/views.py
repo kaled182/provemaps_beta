@@ -1,5 +1,6 @@
 # core/views.py
 import os
+import shutil
 import time
 import platform
 import logging
@@ -58,7 +59,6 @@ def healthz(request: HttpRequest) -> JsonResponse:
 
     # Storage check (optional)
     try:
-        import shutil
         stat = shutil.disk_usage("/")
         free_gb = stat.free / (1024**3)
         checks["storage"] = {

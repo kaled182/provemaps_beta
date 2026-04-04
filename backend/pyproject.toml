@@ -111,6 +111,12 @@ omit = [
     "*/migrations/*",
     "*/settings/*",
     "*/__init__.py",
+    "*/tests.py",
+    "*/tests_*.py",
+    "*/management/commands/*",
+    "*/asgi.py",
+    "*/wsgi.py",
+    "*/celery_app.py",
 ]
 
 [tool.coverage.report]
@@ -128,7 +134,7 @@ exclude_lines = [
 
 [tool.pytest.ini_options]
 addopts = "-ra -q --strict-markers --strict-config"
-testpaths = ["tests", "core/tests"]
+testpaths = ["tests", "core/tests", "maps_view/tests", "setup_app/tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*", "*Test"]
 python_functions = ["test_*"]
