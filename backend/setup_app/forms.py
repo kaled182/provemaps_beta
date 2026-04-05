@@ -107,6 +107,17 @@ class FirstTimeSetupForm(forms.Form):
         initial="redis://redis:6379/1",
         help_text="Example: redis://redis:6379/1",
     )
+    domain_name = forms.CharField(
+        label="Domain name",
+        max_length=255,
+        required=False,
+        help_text="Optional. Ex: maps.suaempresa.com.br",
+    )
+    certbot_email = forms.EmailField(
+        label="E-mail for SSL notifications",
+        required=False,
+        help_text="Optional. Used by Let's Encrypt for certificate expiry alerts.",
+    )
 
 
 class EnvConfigForm(forms.Form):

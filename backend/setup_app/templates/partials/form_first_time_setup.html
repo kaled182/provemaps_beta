@@ -341,21 +341,22 @@
         </div>
       </div>
 
-      <!-- ── PASSO 5: Redis ── -->
+      <!-- ── PASSO 5: Infraestrutura (Redis + Domínio) ── -->
       <div class="step-panel px-8 py-6 space-y-5 hidden" data-panel="5">
         <div class="flex items-center gap-3 mb-2">
           <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold">5</div>
           <div>
-            <h2 class="text-base font-semibold text-white">Redis</h2>
-            <p class="text-xs text-gray-400">Cache and task queue connection</p>
+            <h2 class="text-base font-semibold text-white">Infraestrutura</h2>
+            <p class="text-xs text-gray-400">Redis e configuração de domínio HTTPS</p>
           </div>
         </div>
 
+        <!-- Redis -->
         <div class="p-3 rounded-xl bg-blue-900/20 border border-blue-800 text-xs text-blue-300 flex items-start gap-2">
           <svg class="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
           </svg>
-          <span>If running with Docker, the default below is already correct.</span>
+          <span>Rodando com Docker? O Redis padrão abaixo já está correto.</span>
         </div>
 
         <div>
@@ -363,7 +364,45 @@
           <input type="text" name="redis_url" value="redis://redis:6379/0"
             class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm font-mono
               focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
-          <p class="mt-1 text-xs text-gray-500">Format: redis://host:port/db</p>
+          <p class="mt-1 text-xs text-gray-500">Formato: redis://host:porta/db</p>
+        </div>
+
+        <!-- Separador -->
+        <div class="border-t border-gray-700 pt-4">
+          <div class="flex items-center gap-2 mb-4">
+            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+            </svg>
+            <h3 class="text-sm font-semibold text-white">HTTPS / Domínio
+              <span class="ml-2 px-1.5 py-0.5 rounded text-xs bg-gray-700 text-gray-400 font-normal">opcional</span>
+            </h3>
+          </div>
+
+          <div class="p-3 rounded-xl bg-emerald-900/20 border border-emerald-800 text-xs text-emerald-300 flex items-start gap-2 mb-4">
+            <svg class="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span>Se preenchido, o sistema configurará HTTPS automaticamente via <strong>Let's Encrypt</strong> após o setup. O domínio precisa estar apontando para este servidor antes de finalizar.</span>
+          </div>
+
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">Domínio</label>
+              <input type="text" name="domain_name" id="domain_name"
+                placeholder="maps.suaempresa.com.br"
+                class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm font-mono
+                  focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all placeholder:text-gray-600">
+              <p class="mt-1 text-xs text-gray-500">Deixe em branco para continuar usando somente HTTP (pode configurar depois)</p>
+            </div>
+            <div id="certbot-email-wrap" class="hidden">
+              <label class="block text-sm font-medium text-gray-300 mb-1.5">E-mail para notificações SSL</label>
+              <input type="email" name="certbot_email" id="certbot_email"
+                placeholder="admin@suaempresa.com.br"
+                class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm
+                  focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all placeholder:text-gray-600">
+              <p class="mt-1 text-xs text-gray-500">Let's Encrypt envia aviso antes do certificado expirar</p>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -398,12 +398,42 @@
       - ../test_mosaic_rendering.py:/app/test_mosaic_rendering.py
       - ../frontend:/app/frontend
 
+  # ── nginx + Let's Encrypt ─────────────────────────────────────────────────
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: docker-nginx-1
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN_NAME: "${DOMAIN_NAME:-}"
+      CERTBOT_EMAIL: "${CERTBOT_EMAIL:-}"
+    volumes:
+      - ./nginx:/etc/nginx/setup:ro          # configs e templates
+      - certbot_www:/var/www/certbot         # desafio ACME
+      - certbot_certs:/etc/letsencrypt       # certificados
+      - ../backend/staticfiles:/app/staticfiles:ro  # static files
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t 2>/dev/null && wget -qO- http://localhost/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
 volumes:
   redis_data:
   postgres_data:
   prometheus_data:
   grafana_data:
   whatsapp_qr_data:
+  certbot_www:
+  certbot_certs:
   hls_cache:
     driver: local
     driver_opts:

@@ -386,5 +386,17 @@ window.togglePasswordVisibility = togglePasswordVisibility;
 window.generateDbPassword = generateDbPassword;
 window.copyDbPassword = copyDbPassword;
 
+/* ══════════════════════════════════════════════
+   DOMAIN FIELD (step 5) — mostra e-mail se domínio preenchido
+══════════════════════════════════════════════ */
+const domainInput    = document.getElementById('domain_name');
+const emailWrap      = document.getElementById('certbot-email-wrap');
+
+if (domainInput && emailWrap) {
+  domainInput.addEventListener('input', () => {
+    emailWrap.classList.toggle('hidden', domainInput.value.trim() === '');
+  });
+}
+
 /* ── Initial render ── */
 goTo(1);

@@ -143,6 +143,8 @@ def first_time_setup(request):
                 "DB_USER": db_user,
                 "DB_PASSWORD": db_password,
                 "REDIS_URL": data["redis_url"],
+                "DOMAIN_NAME": data.get("domain_name", "").strip(),
+                "CERTBOT_EMAIL": data.get("certbot_email", "").strip(),
             }
             if data["auth_type"] == "token":
                 env_payload.update(
