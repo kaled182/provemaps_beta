@@ -75,7 +75,7 @@ class FirstTimeSetupForm(forms.Form):
         required=False,
         help_text="Necessário apenas se usar Mapbox",
     )
-    unique_licence = forms.CharField(label="License key", max_length=255)
+    unique_licence = forms.CharField(label="License key", max_length=255, required=False)
     db_host = forms.CharField(
         label="Database host",
         max_length=255,
