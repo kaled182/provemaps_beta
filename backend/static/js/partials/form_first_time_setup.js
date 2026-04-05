@@ -311,6 +311,64 @@ function checkPasswordStrength(value) {
     : msgs[score - 1] || msgs[0];
 }
 
+function generateDbPassword() {
+  const upper   = 'ABCDEFGHJKLMNPQRSTUVWXYZ';   // sem I, O (confusos)
+  const lower   = 'abcdefghjkmnpqrstuvwxyz';     // sem i, l, o
+  const digits  = '23456789';                    // sem 0, 1
+  const symbols = '!@#$%&*-_=+?';
+  const all     = upper + lower + digits + symbols;
+
+  const len = 64;
+  const arr = new Uint32Array(len + 8);
+  crypto.getRandomValues(arr);
+
+  // Garante pelo menos 1 de cada categoria
+  const pick = (charset, randIdx) => charset[arr[randIdx] % charset.length];
+  let pass = [
+    pick(upper,   0),
+    pick(upper,   1),
+    pick(lower,   2),
+    pick(lower,   3),
+    pick(digits,  4),
+    pick(digits,  5),
+    pick(symbols, 6),
+    pick(symbols, 7),
+  ];
+
+  // Preenche o resto com chars aleatórios do conjunto completo
+  for (let i = 8; i < len; i++) {
+    pass.push(all[arr[i] % all.length]);
+  }
+
+  // Embaralha com Fisher-Yates usando mais entropia
+  const shuffle = new Uint32Array(len);
+  crypto.getRandomValues(shuffle);
+  for (let i = len - 1; i > 0; i--) {
+    const j = shuffle[i] % (i + 1);
+    [pass[i], pass[j]] = [pass[j], pass[i]];
+  }
+
+  const password = pass.join('');
+  const input = document.getElementById('db_password');
+  if (input) {
+    input.value = password;
+    input.type = 'text';          // mostra para o usuário confirmar
+    checkPasswordStrength(password);
+  }
+}
+
+function copyDbPassword() {
+  const input = document.getElementById('db_password');
+  if (!input || !input.value) return;
+  navigator.clipboard.writeText(input.value).then(() => {
+    const btn = document.getElementById('btn-copy-pass');
+    if (!btn) return;
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>';
+    setTimeout(() => { btn.innerHTML = orig; }, 1500);
+  });
+}
+
 function togglePasswordVisibility(inputId, btn) {
   const input = document.getElementById(inputId);
   if (!input) return;
@@ -325,6 +383,8 @@ function togglePasswordVisibility(inputId, btn) {
 window.previewLogo = previewLogo;
 window.checkPasswordStrength = checkPasswordStrength;
 window.togglePasswordVisibility = togglePasswordVisibility;
+window.generateDbPassword = generateDbPassword;
+window.copyDbPassword = copyDbPassword;
 
 /* ── Initial render ── */
 goTo(1);
