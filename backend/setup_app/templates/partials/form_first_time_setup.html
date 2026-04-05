@@ -1,237 +1,393 @@
 {% load static %}
 
-<form method="post" enctype="multipart/form-data"
-  class="max-w-4xl mx-auto mt-8 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden">
-  {% csrf_token %}
+<div class="min-h-screen flex flex-col items-center justify-center px-4 py-10">
 
-  <!-- Header com gradiente -->
-  <div class="bg-gradient-to-r from-blue-600 to-emerald-600 dark:from-blue-700 dark:to-emerald-700 px-8 py-10 text-center">
-    <div class="inline-flex items-center justify-center w-20 h-20 mb-4 bg-white dark:bg-gray-800 rounded-full shadow-lg">
-      <svg class="w-12 h-12 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-      </svg>
-    </div>
-    <h2 class="text-3xl font-bold text-white mb-2">Configuração Inicial</h2>
-    <p class="text-blue-100 dark:text-emerald-100">Configure as integrações do sistema com Zabbix e Google Maps</p>
-  </div>
+  <!-- Card principal -->
+  <div class="w-full max-w-2xl bg-gray-900 border border-gray-700 rounded-3xl shadow-2xl overflow-hidden">
 
-  <!-- Form Content -->
-  <div class="px-8 py-8 space-y-8">
-
-    <!-- Seção: Informações da Empresa -->
-    <div class="bg-gray-50 dark:bg-gray-900 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-        <svg class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+    <!-- Hero header -->
+    <div class="bg-gradient-to-br from-blue-700 via-blue-600 to-emerald-600 px-8 pt-10 pb-6 text-center">
+      <div class="inline-flex items-center justify-center w-16 h-16 mb-4 bg-white/10 backdrop-blur rounded-2xl">
+        <svg class="w-9 h-9 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M13 10V3L4 14h7v7l9-11h-7z"/>
         </svg>
-        Informações da Empresa
-      </h3>
-      
-      <div class="space-y-4">
-        <div>
-          <label for="company_name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Nome da empresa
-          </label>
-          <input type="text" id="company_name" name="company_name" required
-            class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 py-3 px-4 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-            placeholder="Fiber Networks LTDA">
-        </div>
+      </div>
+      <h1 class="text-2xl font-bold text-white tracking-tight">Welcome to MapsProveFiber</h1>
+      <p class="mt-1 text-sm text-blue-100">Let's set up your fiber optic network management platform in just a few steps</p>
+    </div>
 
-        <div>
-          <label for="custom_logo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Logo da empresa (PNG, recomendado 200x60px)
-          </label>
-          <input type="file" id="custom_logo" name="custom_logo" accept="image/png"
-            class="block w-full text-sm text-gray-900 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 file:mr-4 file:py-2.5 file:px-4 file:border-0 file:bg-blue-600 file:text-white file:font-medium file:rounded-l-lg hover:file:bg-blue-700 transition-colors">
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Upload de arquivo PNG para branding personalizado</p>
+    <!-- Progress bar -->
+    <div class="px-8 pt-6 pb-2">
+      <div class="flex items-center justify-between mb-1" id="progress-steps">
+        {% for step in steps %}
+        <div class="flex flex-col items-center gap-1 step-indicator" data-step="{{ forloop.counter }}">
+          <div class="w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-300
+            {% if forloop.first %}border-blue-500 bg-blue-600 text-white{% else %}border-gray-600 bg-gray-800 text-gray-400{% endif %}
+            step-circle">
+            {{ step.icon|safe }}
+          </div>
+          <span class="text-xs font-medium transition-colors duration-300
+            {% if forloop.first %}text-blue-400{% else %}text-gray-500{% endif %}
+            step-label">{{ step.label }}</span>
         </div>
+        {% if not forloop.last %}
+        <div class="flex-1 h-0.5 mx-1 mb-5 bg-gray-700 step-connector" data-after="{{ forloop.counter }}"></div>
+        {% endif %}
+        {% endfor %}
       </div>
     </div>
 
-    <!-- Seção: Integração Zabbix -->
-    <div class="bg-gray-50 dark:bg-gray-900 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-        <svg class="w-5 h-5 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-        </svg>
-        Integração Zabbix
-      </h3>
-      
-      <div class="space-y-4">
-        <div>
-          <label for="zabbix_url" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            URL do Zabbix
-          </label>
-          <input type="text" id="zabbix_url" name="zabbix_url" required
-            class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 py-3 px-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
-            placeholder="https://zabbix.example.com">
-        </div>
+    <!-- Form -->
+    <form method="post" enctype="multipart/form-data" id="setup-form" novalidate>
+      {% csrf_token %}
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-            Método de autenticação
-          </label>
-          <div class="flex items-center gap-6 bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-            <label class="flex items-center gap-3 cursor-pointer text-base">
-              <input type="radio" name="auth_type" value="token" checked class="w-4 h-4 text-emerald-600 focus:ring-emerald-500">
-              <span class="text-gray-700 dark:text-gray-300 font-medium">API Token</span>
-            </label>
-            <label class="flex items-center gap-3 cursor-pointer text-base">
-              <input type="radio" name="auth_type" value="login" class="w-4 h-4 text-emerald-600 focus:ring-emerald-500">
-              <span class="text-gray-700 dark:text-gray-300 font-medium">Usuário e Senha</span>
-        </label>
-      </div>
-    </div>
-
-        <div id="token_field">
-          <label for="zabbix_api_key" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Token da API Zabbix
-          </label>
-          <input type="text" id="zabbix_api_key" name="zabbix_api_key"
-            class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 py-3 px-4 font-mono text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
-            placeholder="Cole o token da API aqui...">
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Recomendado: mais seguro e não expira com senha</p>
-        </div>
-
-        <div id="login_fields" class="hidden space-y-4">
+      <!-- ── PASSO 1: Empresa ── -->
+      <div class="step-panel px-8 py-6 space-y-5" data-panel="1">
+        <div class="flex items-center gap-3 mb-2">
+          <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold">1</div>
           <div>
-            <label for="zabbix_user" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Usuário Zabbix
+            <h2 class="text-base font-semibold text-white">Company Information</h2>
+            <p class="text-xs text-gray-400">Tell us about your organization</p>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1.5">Company Name <span class="text-red-400">*</span></label>
+          <input type="text" name="company_name" id="company_name" required
+            placeholder="Fiber Networks LTDA"
+            class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm
+              focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all
+              placeholder:text-gray-500">
+          <p class="mt-1 text-xs text-gray-500">This name will appear throughout the platform</p>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1.5">Company Logo <span class="text-gray-500 font-normal">(PNG, optional)</span></label>
+          <div class="relative">
+            <input type="file" name="logo" id="logo_upload" accept="image/png,image/jpeg,image/svg+xml"
+              class="hidden" onchange="previewLogo(this)">
+            <label for="logo_upload"
+              class="flex items-center gap-3 w-full bg-gray-800 border border-dashed border-gray-600 rounded-xl px-4 py-3 cursor-pointer
+                hover:border-blue-500 hover:bg-gray-750 transition-all group">
+              <div class="w-8 h-8 rounded-lg bg-gray-700 group-hover:bg-blue-900/40 flex items-center justify-center transition-colors">
+                <svg class="w-4 h-4 text-gray-400 group-hover:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+              </div>
+              <div>
+                <span class="text-sm text-gray-300 group-hover:text-white" id="logo-label">Click to upload logo</span>
+                <span class="block text-xs text-gray-500">PNG, JPG or SVG · Max 2MB · Recommended 200×60px</span>
+              </div>
             </label>
-            <input type="text" id="zabbix_user" name="zabbix_user"
-              class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 py-3 px-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
-              placeholder="Nome de usuário">
+          </div>
+          <img id="logo-preview" class="hidden mt-2 h-12 rounded" alt="Logo preview">
+        </div>
+      </div>
+
+      <!-- ── PASSO 2: Zabbix ── -->
+      <div class="step-panel px-8 py-6 space-y-5 hidden" data-panel="2">
+        <div class="flex items-center gap-3 mb-2">
+          <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold">2</div>
+          <div>
+            <h2 class="text-base font-semibold text-white">Zabbix Integration</h2>
+            <p class="text-xs text-gray-400">Connect to your Zabbix monitoring server</p>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1.5">Zabbix URL <span class="text-red-400">*</span></label>
+          <input type="url" name="zabbix_url" id="zabbix_url" required
+            placeholder="http://zabbix.example.com/api_jsonrpc.php"
+            class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm font-mono
+              focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-gray-500">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Authentication Method</label>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="auth-option flex items-center gap-3 p-3.5 rounded-xl border-2 border-blue-500 bg-blue-500/10 cursor-pointer transition-all">
+              <input type="radio" name="auth_type" value="token" checked class="hidden">
+              <div class="w-4 h-4 rounded-full border-2 border-blue-500 bg-blue-500 flex items-center justify-center flex-shrink-0">
+                <div class="w-2 h-2 rounded-full bg-white"></div>
+              </div>
+              <div>
+                <span class="block text-sm font-medium text-white">API Token</span>
+                <span class="block text-xs text-gray-400">Recommended · More secure</span>
+              </div>
+            </label>
+            <label class="auth-option flex items-center gap-3 p-3.5 rounded-xl border-2 border-gray-600 bg-gray-800 cursor-pointer transition-all">
+              <input type="radio" name="auth_type" value="login" class="hidden">
+              <div class="w-4 h-4 rounded-full border-2 border-gray-500 flex items-center justify-center flex-shrink-0 radio-indicator">
+              </div>
+              <div>
+                <span class="block text-sm font-medium text-white">User & Password</span>
+                <span class="block text-xs text-gray-400">Classic authentication</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div id="field_token">
+          <label class="block text-sm font-medium text-gray-300 mb-1.5">API Token</label>
+          <input type="text" name="zabbix_api_key" id="zabbix_api_key"
+            placeholder="Paste your Zabbix API token here..."
+            class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm font-mono
+              focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-gray-500">
+          <p class="mt-1 text-xs text-gray-500">Found in Zabbix → Administration → API tokens</p>
+        </div>
+
+        <div id="field_login" class="hidden space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">Username</label>
+            <input type="text" name="zabbix_user"
+              placeholder="admin"
+              class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm
+                focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-gray-500">
           </div>
           <div>
-            <label for="zabbix_password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Senha Zabbix
-            </label>
-            <input type="password" id="zabbix_password" name="zabbix_password"
-              class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 py-3 px-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
-              placeholder="Senha do usuário">
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">Password</label>
+            <input type="password" name="zabbix_password"
+              placeholder="••••••••"
+              class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm
+                focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-gray-500">
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Seção: Provedor de Mapa -->
-    <div class="bg-gray-50 dark:bg-gray-900 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-        <svg class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path>
-        </svg>
-        Provedor de Mapa
-      </h3>
-
-      <div class="space-y-4">
-        <!-- Seleção do provider -->
-        <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Escolha o provedor</label>
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <label class="flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 dark:border-gray-700 cursor-pointer hover:border-blue-400 transition-colors has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 dark:has-[:checked]:bg-blue-900/20">
-              <input type="radio" name="map_provider" value="osm" checked class="w-4 h-4 text-blue-600 focus:ring-blue-500">
-              <div>
-                <span class="block text-sm font-semibold text-gray-800 dark:text-gray-200">OpenStreetMap</span>
-                <span class="block text-xs text-green-600 dark:text-green-400">Gratuito, sem chave</span>
-              </div>
-            </label>
-            <label class="flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 dark:border-gray-700 cursor-pointer hover:border-blue-400 transition-colors has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 dark:has-[:checked]:bg-blue-900/20">
-              <input type="radio" name="map_provider" value="mapbox" class="w-4 h-4 text-blue-600 focus:ring-blue-500">
-              <div>
-                <span class="block text-sm font-semibold text-gray-800 dark:text-gray-200">Mapbox</span>
-                <span class="block text-xs text-gray-500 dark:text-gray-400">Requer token</span>
-              </div>
-            </label>
-            <label class="flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 dark:border-gray-700 cursor-pointer hover:border-blue-400 transition-colors has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 dark:has-[:checked]:bg-blue-900/20">
-              <input type="radio" name="map_provider" value="google" class="w-4 h-4 text-blue-600 focus:ring-blue-500">
-              <div>
-                <span class="block text-sm font-semibold text-gray-800 dark:text-gray-200">Google Maps</span>
-                <span class="block text-xs text-gray-500 dark:text-gray-400">Requer chave de API</span>
-              </div>
-            </label>
+      <!-- ── PASSO 3: Mapa ── -->
+      <div class="step-panel px-8 py-6 space-y-5 hidden" data-panel="3">
+        <div class="flex items-center gap-3 mb-2">
+          <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold">3</div>
+          <div>
+            <h2 class="text-base font-semibold text-white">Map Provider</h2>
+            <p class="text-xs text-gray-400">Choose how maps are rendered in the platform</p>
           </div>
         </div>
 
-        <!-- Campo Google Maps API key (visível apenas quando google selecionado) -->
-        <div id="field_google" class="hidden">
-          <label for="maps_api_key" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Chave da API Google Maps
-          </label>
-          <input type="text" id="maps_api_key" name="maps_api_key"
-            class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 py-3 px-4 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-            placeholder="AIza...">
-          <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-            APIs necessárias: Maps JavaScript API, Geocoding API, Directions API, Places API
-          </p>
-        </div>
-
-        <!-- Campo Mapbox Token (visível apenas quando mapbox selecionado) -->
-        <div id="field_mapbox" class="hidden">
-          <label for="mapbox_token" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Mapbox Token
-          </label>
-          <input type="text" id="mapbox_token" name="mapbox_token"
-            class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 py-3 px-4 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-            placeholder="pk.eyJ1...">
-          <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-            Obtenha gratuitamente em <span class="font-medium">mapbox.com</span> (plano gratuito disponível)
-          </p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Seção: Licença -->
-    <div class="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-gray-900 dark:to-gray-800 rounded-xl p-6 border-2 border-amber-200 dark:border-amber-900">
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-        <svg class="w-5 h-5 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
-        </svg>
-        Chave de Licença
-      </h3>
-      
-      <div>
-        <label for="unique_licence" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Licença do Produto
-        </label>
-        <div class="flex flex-col sm:flex-row sm:items-end gap-3">
-          <div class="flex-1">
-            <input type="text" id="unique_licence" name="unique_licence" required
-              class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 py-3 px-4 font-mono text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-              placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX">
-          </div>
-          <button type="button" id="validate-licence-btn"
-            class="px-5 py-3 bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-200 shadow-md hover:shadow-lg">
-            <span class="flex items-center gap-2">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        <div class="grid grid-cols-1 gap-3">
+          <label class="map-option flex items-center gap-4 p-4 rounded-xl border-2 border-green-500 bg-green-500/10 cursor-pointer transition-all">
+            <input type="radio" name="map_provider" value="osm" checked class="hidden">
+            <div class="w-10 h-10 rounded-xl bg-green-900/40 border border-green-700 flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064"/>
               </svg>
-              Validar
-            </span>
-          </button>
-        </div>
-        <p class="mt-2 text-xs text-amber-700 dark:text-amber-400">
-          Insira a chave de licença fornecida pelo fornecedor do MapsProveFiber
-        </p>
-      </div>
-    </div>
-  </div>
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-semibold text-white">OpenStreetMap</span>
+                <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-green-900/60 text-green-400 border border-green-700">Free · No key needed</span>
+              </div>
+              <p class="text-xs text-gray-400 mt-0.5">Open-source maps, great for most use cases</p>
+            </div>
+            <div class="w-5 h-5 rounded-full border-2 border-green-500 bg-green-500 flex items-center justify-center flex-shrink-0 map-radio-indicator">
+              <div class="w-2.5 h-2.5 rounded-full bg-white"></div>
+            </div>
+          </label>
 
-  <!-- Footer com botão de ação -->
-  <div class="px-8 py-6 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row items-center justify-between gap-4">
-    <p class="text-sm text-gray-600 dark:text-gray-400">
-      Após salvar, você será redirecionado para o dashboard
-    </p>
-    <button type="submit"
-      class="px-8 py-3.5 bg-gradient-to-r from-blue-600 to-emerald-600 hover:from-blue-700 hover:to-emerald-700 text-white text-sm font-bold rounded-lg focus:outline-none focus:ring-4 focus:ring-blue-300 dark:focus:ring-blue-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105">
-      <span class="flex items-center gap-2">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-        </svg>
-        Salvar Configuração
-      </span>
-    </button>
+          <label class="map-option flex items-center gap-4 p-4 rounded-xl border-2 border-gray-600 bg-gray-800 cursor-pointer transition-all">
+            <input type="radio" name="map_provider" value="mapbox" class="hidden">
+            <div class="w-10 h-10 rounded-xl bg-gray-700 border border-gray-600 flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 0C5.383 0 0 5.383 0 12s5.383 12 12 12 12-5.383 12-12S18.617 0 12 0zm5.196 7.99l-3.86 1.854a1.5 1.5 0 00-.782.782l-1.854 3.86a.25.25 0 01-.46-.032L8.072 7.347a.25.25 0 01.315-.315l7.107 2.168a.25.25 0 01.032.46z"/>
+              </svg>
+            </div>
+            <div class="flex-1">
+              <span class="text-sm font-semibold text-white">Mapbox</span>
+              <p class="text-xs text-gray-400 mt-0.5">Beautiful styles, satellite imagery, 3D terrain</p>
+            </div>
+            <div class="w-5 h-5 rounded-full border-2 border-gray-500 flex items-center justify-center flex-shrink-0 map-radio-indicator"></div>
+          </label>
+
+          <label class="map-option flex items-center gap-4 p-4 rounded-xl border-2 border-gray-600 bg-gray-800 cursor-pointer transition-all">
+            <input type="radio" name="map_provider" value="google" class="hidden">
+            <div class="w-10 h-10 rounded-xl bg-gray-700 border border-gray-600 flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+            </div>
+            <div class="flex-1">
+              <span class="text-sm font-semibold text-white">Google Maps</span>
+              <p class="text-xs text-gray-400 mt-0.5">Street View, Traffic, Places API integration</p>
+            </div>
+            <div class="w-5 h-5 rounded-full border-2 border-gray-500 flex items-center justify-center flex-shrink-0 map-radio-indicator"></div>
+          </label>
+        </div>
+
+        <div id="field_mapbox_token" class="hidden">
+          <label class="block text-sm font-medium text-gray-300 mb-1.5">Mapbox Token</label>
+          <input type="text" name="mapbox_token"
+            placeholder="pk.eyJ1..."
+            class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm font-mono
+              focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-gray-500">
+          <p class="mt-1 text-xs text-gray-500">Get a free token at <span class="text-blue-400">mapbox.com</span></p>
+        </div>
+
+        <div id="field_google_key" class="hidden">
+          <label class="block text-sm font-medium text-gray-300 mb-1.5">Google Maps API Key</label>
+          <input type="text" name="maps_api_key"
+            placeholder="AIza..."
+            class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm font-mono
+              focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-gray-500">
+          <p class="mt-1 text-xs text-gray-500">Requires: Maps JavaScript API, Geocoding API, Directions API</p>
+        </div>
+      </div>
+
+      <!-- ── PASSO 4: Database ── -->
+      <div class="step-panel px-8 py-6 space-y-5 hidden" data-panel="4">
+        <div class="flex items-center gap-3 mb-2">
+          <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold">4</div>
+          <div>
+            <h2 class="text-base font-semibold text-white">Database</h2>
+            <p class="text-xs text-gray-400">PostgreSQL connection settings</p>
+          </div>
+        </div>
+
+        <div class="p-3 rounded-xl bg-blue-900/20 border border-blue-800 text-xs text-blue-300 flex items-start gap-2">
+          <svg class="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <span>If running with Docker, the defaults below are already correct.</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div class="col-span-2">
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">Host</label>
+            <input type="text" name="db_host" value="postgres"
+              class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm font-mono
+                focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">Port</label>
+            <input type="text" name="db_port" value="5432"
+              class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm font-mono
+                focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">Database Name</label>
+            <input type="text" name="db_name" value="app"
+              class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm font-mono
+                focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">User</label>
+            <input type="text" name="db_user" value="app"
+              class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm font-mono
+                focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">Password</label>
+            <input type="password" name="db_password" value="app"
+              class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm font-mono
+                focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+          </div>
+        </div>
+      </div>
+
+      <!-- ── PASSO 5: Redis ── -->
+      <div class="step-panel px-8 py-6 space-y-5 hidden" data-panel="5">
+        <div class="flex items-center gap-3 mb-2">
+          <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold">5</div>
+          <div>
+            <h2 class="text-base font-semibold text-white">Redis</h2>
+            <p class="text-xs text-gray-400">Cache and task queue connection</p>
+          </div>
+        </div>
+
+        <div class="p-3 rounded-xl bg-blue-900/20 border border-blue-800 text-xs text-blue-300 flex items-start gap-2">
+          <svg class="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <span>If running with Docker, the default below is already correct.</span>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1.5">Redis URL</label>
+          <input type="text" name="redis_url" value="redis://redis:6379/0"
+            class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm font-mono
+              focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+          <p class="mt-1 text-xs text-gray-500">Format: redis://host:port/db</p>
+        </div>
+      </div>
+
+      <!-- ── PASSO 6: Licença ── -->
+      <div class="step-panel px-8 py-6 space-y-5 hidden" data-panel="6">
+        <div class="flex items-center gap-3 mb-2">
+          <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold">6</div>
+          <div>
+            <h2 class="text-base font-semibold text-white">License Activation</h2>
+            <p class="text-xs text-gray-400">Activate your MapsProveFiber license</p>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1.5">
+            <svg class="inline w-4 h-4 mr-1 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+            </svg>
+            License key
+          </label>
+          <input type="text" name="unique_licence" id="unique_licence"
+            placeholder="XXXXX-XXXXX-XXXXX-XXXXX"
+            class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm font-mono tracking-widest
+              focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all placeholder:text-gray-500 uppercase">
+          <p class="mt-1 text-xs text-gray-500">Enter the license key provided by your supplier</p>
+        </div>
+
+        <!-- Summary card -->
+        <div class="p-4 rounded-xl bg-gray-800 border border-gray-700 space-y-2">
+          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Setup Summary</p>
+          <div class="flex justify-between text-xs"><span class="text-gray-400">Company</span><span class="text-white font-medium" id="summary-company">—</span></div>
+          <div class="flex justify-between text-xs"><span class="text-gray-400">Zabbix URL</span><span class="text-white font-medium truncate max-w-xs" id="summary-zabbix">—</span></div>
+          <div class="flex justify-between text-xs"><span class="text-gray-400">Map Provider</span><span class="text-white font-medium" id="summary-map">—</span></div>
+          <div class="flex justify-between text-xs"><span class="text-gray-400">Database</span><span class="text-white font-medium" id="summary-db">—</span></div>
+        </div>
+      </div>
+
+      <!-- ── Navegação ── -->
+      <div class="flex items-center justify-between px-8 py-5 border-t border-gray-700 bg-gray-900/60">
+        <button type="button" id="btn-prev"
+          class="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-600 text-gray-300 text-sm font-medium
+            hover:bg-gray-700 hover:text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+          disabled>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+          </svg>
+          Previous
+        </button>
+
+        <div class="flex gap-1.5" id="step-dots">
+          {% for step in steps %}
+          <div class="w-2 h-2 rounded-full transition-all duration-300 {% if forloop.first %}bg-blue-500 w-4{% else %}bg-gray-600{% endif %} dot" data-dot="{{ forloop.counter }}"></div>
+          {% endfor %}
+        </div>
+
+        <button type="button" id="btn-next"
+          class="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500
+            hover:from-blue-500 hover:to-blue-400 text-white text-sm font-semibold shadow-lg shadow-blue-900/30
+            transition-all active:scale-95">
+          Next
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </button>
+
+        <button type="submit" id="btn-submit"
+          class="hidden flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-green-500
+            hover:from-emerald-500 hover:to-green-400 text-white text-sm font-semibold shadow-lg shadow-emerald-900/30
+            transition-all active:scale-95">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          Complete Setup
+        </button>
+      </div>
+
+    </form>
   </div>
-</form>
+</div>
 
 <script src="{% static 'js/partials/form_first_time_setup.js' %}"></script>
