@@ -18,6 +18,38 @@ BACKEND_DIR = BASE_DIR / 'backend'
 FRONTEND_DIR = BASE_DIR / 'frontend'
 DATABASE_DIR = BASE_DIR / 'database'
 
+
+def _load_runtime_env() -> None:
+    """
+    Load DB credentials from /app/database/runtime.env (or DATABASE_DIR/runtime.env).
+
+    This runs before DATABASES is constructed so that os.getenv("DB_PASSWORD")
+    returns the value written by the setup wizard — even if the bash entrypoint
+    failed to export it correctly due to special characters in the password.
+    """
+    runtime_env = Path(os.environ.get("RUNTIME_ENV_PATH", "")) or (DATABASE_DIR / "runtime.env")
+    if not runtime_env.exists():
+        return
+    try:
+        with open(runtime_env, "r", encoding="utf-8") as fh:
+            for raw_line in fh:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip()
+                # Strip surrounding quotes added by env_manager._quote()
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                    value = value[1:-1]
+                if key in {"DB_USER", "DB_PASSWORD", "DB_NAME", "DB_HOST", "DB_PORT"}:
+                    os.environ[key] = value
+    except OSError:
+        pass  # File not readable — fall back to existing env vars
+
+
+_load_runtime_env()
+
 _secret_key = os.getenv("SECRET_KEY")
 
 if not _secret_key:
