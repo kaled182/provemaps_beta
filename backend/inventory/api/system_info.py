@@ -10,26 +10,22 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from django.conf import settings
 
-# Path: backend/inventory/api/system_info.py
-# Base dir is three levels up: api/ → inventory/ → backend/ → project root
-_BASE_DIR = os.path.dirname(  # project root
-    os.path.dirname(           # backend/
-        os.path.dirname(       # inventory/
-            os.path.dirname(   # api/
-                os.path.abspath(__file__)
-            )
-        )
-    )
-)
-
-
 def _read_version() -> str:
-    version_file = os.path.join(_BASE_DIR, "VERSION")
-    try:
-        with open(version_file) as f:
-            return f.read().strip()
-    except FileNotFoundError:
-        return "unknown"
+    # Search for VERSION file: try /app/VERSION (Docker), then walk up from this file
+    candidates = [
+        "/app/VERSION",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "VERSION"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "VERSION"),
+    ]
+    for path in candidates:
+        try:
+            with open(os.path.normpath(path)) as f:
+                version = f.read().strip()
+                if version:
+                    return version
+        except (FileNotFoundError, OSError):
+            continue
+    return "unknown"
 
 
 @require_http_methods(["GET"])
