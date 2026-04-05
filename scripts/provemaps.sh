@@ -20,7 +20,7 @@ err()  { echo -e "${RED}[erro]${NC} $*\n${YLW}[!] Detalhes no log: ${LOG_FILE}${
 sep()  { echo -e "\n${BLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"; }
 
 # ─── Barra de Progresso ───────────────────────────────────────────────────────
-TOTAL_STEPS=7
+TOTAL_STEPS=9
 CURRENT_STEP=0
 
 show_step() {
@@ -38,14 +38,16 @@ show_step() {
     echo -e "${BLU}➔ ${msg}${NC}"
 }
 
+# ─── Spinner ──────────────────────────────────────────────────────────────────
 spinner() {
     local pid=$1
+    local label="${2:-Processando...}"
     local delay=0.1
     local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
     tput civis 2>/dev/null || true
     while ps -p "$pid" > /dev/null 2>&1; do
         local temp=${spinstr#?}
-        printf " ${BLU}%c${NC} Processando..." "$spinstr"
+        printf " ${BLU}%c${NC} %s" "$spinstr" "$label"
         spinstr=$temp${spinstr%"$temp"}
         sleep $delay
         printf "\r\033[K"
@@ -150,7 +152,7 @@ run_install() {
         apt-get update -y
         apt-get install -y git curl ca-certificates gnupg
     ) >> "$LOG_FILE" 2>&1 &
-    spinner $! || err "Falha ao instalar dependências."
+    spinner $! "Instalando dependências..." || err "Falha ao instalar dependências."
     ok "Dependências instaladas."
 
     # ── 2. Docker ─────────────────────────────────────────────────────────────
@@ -171,7 +173,7 @@ run_install() {
             apt-get update -y
             apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
         ) >> "$LOG_FILE" 2>&1 &
-        spinner $! || err "Falha ao instalar o Docker."
+        spinner $! "Instalando Docker..." || err "Falha ao instalar o Docker."
         ok "Docker instalado: $(docker --version)"
     fi
     systemctl enable docker --quiet
@@ -191,7 +193,7 @@ run_install() {
             curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
             apt-get install -y nodejs
         ) >> "$LOG_FILE" 2>&1 &
-        spinner $! || err "Falha ao instalar o Node.js."
+        spinner $! "Instalando Node.js..." || err "Falha ao instalar o Node.js."
         ok "Node.js instalado: $(node --version)"
     fi
 
@@ -206,11 +208,11 @@ run_install() {
             git clone "${REPO_URL}" "${INSTALL_DIR}"
         fi
     ) >> "$LOG_FILE" 2>&1 &
-    spinner $! || err "Falha ao configurar o repositório Git."
+    spinner $! "Clonando repositório..." || err "Falha ao configurar o repositório Git."
     ok "Código fonte pronto em ${INSTALL_DIR}."
     if [[ "${REAL_USER}" != "root" ]]; then
         chown -R "${REAL_USER}:${REAL_USER}" "${INSTALL_DIR}" >> "$LOG_FILE" 2>&1 &
-        spinner $! || warn "Não foi possível ajustar o dono dos arquivos."
+        spinner $! "Ajustando permissões..." || warn "Não foi possível ajustar o dono dos arquivos."
     fi
 
     # ── 5. Permissões ─────────────────────────────────────────────────────────
@@ -242,7 +244,7 @@ run_install() {
             npm run build
         fi
     ) >> "$LOG_FILE" 2>&1 &
-    spinner $! || err "Falha na compilação do Vue 3. Consulte: ${LOG_FILE}"
+    spinner $! "Compilando Vue 3..." || err "Falha na compilação do Vue 3. Consulte: ${LOG_FILE}"
     ok "Frontend compilado com sucesso."
 
     # ── .env ──────────────────────────────────────────────────────────────────
@@ -252,8 +254,8 @@ run_install() {
         [[ "${REAL_USER}" != "root" ]] && chown "${REAL_USER}:${REAL_USER}" "${ENV_FILE}"
     fi
 
-    # ── 7. Docker Compose + Health check ─────────────────────────────────────
-    show_step "Iniciando serviços e aguardando aplicação ficar pronta..."
+    # ── 7. Docker Compose ─────────────────────────────────────────────────────
+    show_step "Iniciando containers do Docker Compose..."
     COMPOSE_FILE="${INSTALL_DIR}/docker/docker-compose.yml"
     (
         if docker compose -f "${COMPOSE_FILE}" ps -q 2>/dev/null | grep -q .; then
@@ -261,9 +263,11 @@ run_install() {
         fi
         docker compose -f "${COMPOSE_FILE}" up -d
     ) >> "$LOG_FILE" 2>&1 &
-    spinner $! || err "Falha ao iniciar containers do Docker Compose."
-    ok "Serviços iniciados."
+    spinner $! "Iniciando containers..." || err "Falha ao iniciar containers do Docker Compose."
+    ok "Containers iniciados."
 
+    # ── 8. Health check ───────────────────────────────────────────────────────
+    show_step "Aguardando aplicação ficar online..."
     (
         for i in $(seq 1 90); do
             if curl -sf "http://localhost:8100/healthz" > /dev/null 2>&1; then
@@ -273,13 +277,18 @@ run_install() {
         done
         exit 1
     ) &
-    spinner $!
+    spinner $! "Verificando health check (até 90s)..."
     if [[ $? -eq 0 ]]; then
         ok "Aplicação online e respondendo!"
     else
         warn "Timeout ao aguardar /healthz."
         warn "Verifique com: docker compose -f ${COMPOSE_FILE} logs -f web"
     fi
+
+    # ── 9. Finalização (100%) ─────────────────────────────────────────────────
+    show_step "Finalizando instalação..."
+    sleep 1
+    ok "Tudo pronto!"
 
     # ── Resumo ────────────────────────────────────────────────────────────────
     sep
