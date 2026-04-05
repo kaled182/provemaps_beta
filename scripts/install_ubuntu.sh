@@ -121,7 +121,7 @@ chmod -R 777 \
     "${INSTALL_DIR}/database" \
     "${INSTALL_DIR}/logs"
 
-chmod -R 755 "${INSTALL_DIR}/backend/staticfiles"
+chmod -R 777 "${INSTALL_DIR}/backend/staticfiles"
 
 ok "Permissões configuradas."
 

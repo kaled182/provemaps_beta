@@ -256,8 +256,8 @@ main() {
   fi
 
   # Ensure writable directories exist (bind-mounted from host may be missing)
-  mkdir -p /app/backend/media /app/backend/logs /app/database 2>/dev/null || true
-  chmod -R 777 /app/backend/media /app/backend/logs /app/database 2>/dev/null || warn "Could not set permissions on data dirs"
+  mkdir -p /app/backend/media /app/backend/logs /app/backend/staticfiles /app/database 2>/dev/null || true
+  chmod -R 777 /app/backend/media /app/backend/logs /app/backend/staticfiles /app/database 2>/dev/null || warn "Could not set permissions on data dirs"
 
   # Optional initialization steps
   maybe_load_runtime_env
