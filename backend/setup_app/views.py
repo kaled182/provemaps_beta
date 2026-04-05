@@ -91,15 +91,6 @@ def first_time_setup(request):
             db_password = data["db_password"]
             db_name = _DB_NAME_FIXED
 
-            # Alterar senha no PostgreSQL se diferente da atual
-            current_db_password = os.environ.get("DB_PASSWORD", "")
-            if db_password != current_db_password:
-                try:
-                    _alter_db_password(db_user, db_password)
-                    logger.info("Senha do banco alterada via ALTER ROLE para: %s", db_user)
-                except Exception as exc:
-                    logger.error("Falha ao executar ALTER ROLE: %s", exc)
-
             # Mark any existing configs as not configured (cleanup)
             FirstTimeSetup.objects.all().update(configured=False)
 
@@ -164,6 +155,16 @@ def first_time_setup(request):
                 )
             env_payload["SERVICE_RESTART_COMMANDS"] = commands
             env_manager.write_values(env_payload)
+
+            # Alterar senha no PostgreSQL apenas após gravar runtime.env com sucesso
+            current_db_password = os.environ.get("DB_PASSWORD", "")
+            if db_password != current_db_password:
+                try:
+                    _alter_db_password(db_user, db_password)
+                    logger.info("Senha do banco alterada via ALTER ROLE para: %s", db_user)
+                except Exception as exc:
+                    logger.error("Falha ao executar ALTER ROLE: %s", exc)
+
             runtime_settings.reload_config()
             from integrations.zabbix.zabbix_service import clear_token_cache
 
