@@ -210,6 +210,8 @@ run_install() {
     ) >> "$LOG_FILE" 2>&1 &
     spinner $! "Clonando repositório..." || err "Falha ao configurar o repositório Git."
     ok "Código fonte pronto em ${INSTALL_DIR}."
+    # Remove bytecode obsoleto para evitar que .pyc antigos mascarem mudanças de código
+    find "${INSTALL_DIR}/backend" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
     if [[ "${REAL_USER}" != "root" ]]; then
         chown -R "${REAL_USER}:${REAL_USER}" "${INSTALL_DIR}" >> "$LOG_FILE" 2>&1 &
         spinner $! "Ajustando permissões..." || warn "Não foi possível ajustar o dono dos arquivos."

@@ -136,6 +136,8 @@ log "PASSO 4/5 — Baixando/Atualizando repositório..."
 
 spinner $! || err "Falha ao configurar o repositório Git."
 ok "Código fonte pronto em ${INSTALL_DIR}."
+# Remove bytecode obsoleto para evitar que .pyc antigos mascarem mudanças de código
+find "${INSTALL_DIR}/backend" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
 # Ajustar dono (só quando não é root)
 if [[ "${REAL_USER}" != "root" ]]; then
