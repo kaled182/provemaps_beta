@@ -3,6 +3,7 @@
 import { getPath, setPath as setPathState, addPoint, updatePoint, removePoint, reorderPath, clearPath, totalDistance as calculateDistance, onPathChange } from './modules/pathState.js';
 import { initMap as initializeMap, onMapClick, onMapRightClick, drawPolyline, clearPolyline, addMarker as createMarker, removeMarker, clearMarkers as clearAllMarkers, attachPolylineRightClick, createCablePolyline, getMapInstance, cleanupMap, fitMapToBounds } from './modules/mapCore-refactored.js';
 import { latLngToPixel, distanceBetweenPixels, distancePointToSegmentPx } from '@/utils/mapUtils.js';
+import { getCurrentProviderName } from '@/providers/maps/MapProviderFactory.js';
 import { initContextMenu, showContextMenu, hideContextMenu, updateContextMenuState, cleanupContextMenu } from './modules/contextMenu.js';
 import {
     initModalEditor,
@@ -940,11 +941,30 @@ function waitForGoogleMaps() {
     }
 }
 
-function startGoogleMapsWatcher() {
+async function startGoogleMapsWatcher() {
     if (mapsInitStarted) {
         return;
     }
     mapsInitStarted = true;
+
+    // Check configured map provider; only wait for Google when provider is 'google'
+    let provider = 'google';
+    try {
+        provider = await getCurrentProviderName();
+    } catch (e) {
+        console.warn('[startGoogleMapsWatcher] Could not detect provider, assuming google:', e);
+    }
+
+    if (provider !== 'google') {
+        console.log(`[startGoogleMapsWatcher] Provider is '${provider}', calling initMap() directly.`);
+        try {
+            await initMap();
+        } catch (e) {
+            console.error('[startGoogleMapsWatcher] Error calling initMap():', e);
+        }
+        return;
+    }
+
     waitForGoogleMaps();
 }
 
