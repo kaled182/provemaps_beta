@@ -97,6 +97,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     libgeos-dev \
     proj-bin \
     procps \
+    docker.io \
   && rm -rf /var/lib/apt/lists/* \
   && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 

@@ -169,6 +169,16 @@ def first_time_setup(request):
                 try:
                     _alter_db_password(db_user, db_password)
                     logger.info("Senha do banco alterada via ALTER ROLE para: %s", db_user)
+                    # Atualiza os.environ e fecha conexões para que os workers
+                    # reconectem com a nova senha sem precisar reiniciar o container
+                    os.environ["DB_PASSWORD"] = db_password
+                    os.environ["DB_USER"] = db_user
+                    from django.db import connections as _dj_conns
+                    for _alias in _dj_conns:
+                        try:
+                            _dj_conns[_alias].close()
+                        except Exception:
+                            pass
                 except Exception as exc:
                     logger.error("Falha ao executar ALTER ROLE: %s", exc)
 
