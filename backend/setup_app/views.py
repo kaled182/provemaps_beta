@@ -24,10 +24,20 @@ from .models import CompanyProfile, FirstTimeSetup
 
 logger = logging.getLogger(__name__)
 
+_COMPOSE_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "..", "docker", "docker-compose.yml",
+)
+_COMPOSE_FILE = os.path.normpath(_COMPOSE_FILE)
+
 DEFAULT_SERVICE_RESTART_COMMANDS = (
     settings.SERVICE_RESTART_COMMANDS
     if getattr(settings, "SERVICE_RESTART_COMMANDS", "")
-    else "docker compose restart web; docker compose restart celery; docker compose restart beat"
+    else (
+        f"docker compose -f {_COMPOSE_FILE} restart web; "
+        f"docker compose -f {_COMPOSE_FILE} restart celery; "
+        f"docker compose -f {_COMPOSE_FILE} restart beat"
+    )
 )
 
 
@@ -165,26 +175,12 @@ def first_time_setup(request):
 
             # Alterar senha no PostgreSQL apenas após gravar runtime.env com sucesso
             current_db_password = os.environ.get("DB_PASSWORD", "")
+            _db_password_changed = False
             if db_password != current_db_password:
                 try:
                     _alter_db_password(db_user, db_password)
+                    _db_password_changed = True
                     logger.info("Senha do banco alterada via ALTER ROLE para: %s", db_user)
-                    # Atualiza settings.DATABASES (único lugar que Django/psycopg usa
-                    # para abrir novas conexões) e os.environ para sub-processos.
-                    # CONN_MAX_AGE=0 garante que cada worker abre nova conexão por
-                    # request, então todos os workers adoptam a nova senha no próximo
-                    # request sem precisar de restart do container.
-                    from django.conf import settings as _dj_settings
-                    from django.db import connections as _dj_conns
-                    _dj_settings.DATABASES["default"]["PASSWORD"] = db_password
-                    _dj_settings.DATABASES["default"]["USER"] = db_user
-                    os.environ["DB_PASSWORD"] = db_password
-                    os.environ["DB_USER"] = db_user
-                    for _alias in _dj_conns:
-                        try:
-                            _dj_conns[_alias].close()
-                        except Exception:
-                            pass
                 except Exception as exc:
                     logger.error("Falha ao executar ALTER ROLE: %s", exc)
 
@@ -197,24 +193,13 @@ def first_time_setup(request):
             os.environ["SERVICE_RESTART_COMMANDS"] = command_string
             logger.info("Setup completed for company: %s", data["company_name"])
 
-            if command_string:
-                # Delay restart by 3 s so the browser receives the redirect first
+            # Restart é necessário quando a senha mudou (container precisa recarregar
+            # o runtime.env via entrypoint para conectar com a nova senha).
+            # Sempre garante que há um comando de restart disponível.
+            _restart_cmds = command_string or DEFAULT_SERVICE_RESTART_COMMANDS
+            if _db_password_changed or command_string:
+                os.environ["SERVICE_RESTART_COMMANDS"] = _restart_cmds
                 threading.Timer(3.0, trigger_restart).start()
-            else:
-                # Sem SERVICE_RESTART_COMMANDS: envia SIGHUP ao master gunicorn para
-                # que todos os workers recarreguem o os.environ / DATABASES atualizado.
-                # Gunicorn PID 1 = master (entrypoint usa exec), então os filhos são workers.
-                def _graceful_reload():
-                    import signal as _signal
-                    try:
-                        # Gunicorn master é o processo pai deste worker
-                        import os as _os
-                        ppid = _os.getppid()
-                        _os.kill(ppid, _signal.SIGHUP)
-                        logger.info("SIGHUP enviado ao gunicorn master PID %s", ppid)
-                    except Exception as _e:
-                        logger.warning("Não foi possível enviar SIGHUP: %s", _e)
-                threading.Timer(3.0, _graceful_reload).start()
 
             return redirect("setup_app:first_time_restarting")
     else:
