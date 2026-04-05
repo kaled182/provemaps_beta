@@ -86,13 +86,7 @@
     restart: unless-stopped
     volumes:
       - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
-      - ../backend:/app/backend
-      # Bind vue-spa assets so fresh builds are picked up without rebuilding the image
-      - ../backend/staticfiles/vue-spa:/app/backend/staticfiles/vue-spa
-      - ../frontend:/app/frontend
       - ../database:/app/database
-      - ../doc:/app/doc
-      - ../scripts:/app/scripts
       - ../logs:/app/backend/logs
 
   whatsapp-qr:
@@ -156,11 +150,7 @@
     restart: unless-stopped
     volumes:
       - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
-      - ../backend:/app/backend
-      - ../frontend:/app/frontend
       - ../database:/app/database
-      - ../doc:/app/doc
-      - ../scripts:/app/scripts
       - ../logs:/app/backend/logs
 
   beat:
@@ -210,11 +200,7 @@
     restart: unless-stopped
     volumes:
       - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
-      - ../backend:/app/backend
-      - ../frontend:/app/frontend
       - ../database:/app/database
-      - ../doc:/app/doc
-      - ../scripts:/app/scripts
       - ../logs:/app/backend/logs
 
   redis:
