@@ -211,7 +211,7 @@ import { useApi } from '@/composables/useApi';
 const props = defineProps({ show: { type: Boolean, default: false } });
 defineEmits(['close']);
 
-const { api } = useApi();
+const api = useApi();
 
 const activeTab = ref('system');
 const loading = ref(false);
