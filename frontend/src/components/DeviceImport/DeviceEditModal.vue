@@ -845,7 +845,7 @@
 
 <script setup>
 import { reactive, ref, computed, watch, nextTick, onUnmounted } from 'vue';
-import { loadGoogleMaps } from '@/utils/googleMapsLoader';
+import { createMap } from '@/providers/maps/MapProviderFactory.js';
 import { useApi } from '@/composables/useApi';
 import { useNotification } from '@/composables/useNotification';
 
@@ -1148,84 +1148,50 @@ const confirmLocation = () => {
   nextTick(() => newSiteInput.value?.focus());
 };
 
-// --- GOOGLE MAPS FUNCTIONS ---
+// --- MAP FUNCTIONS (provider-agnostic) ---
 
 const initializeMap = async () => {
   mapLoading.value = true;
   mapError.value = null;
 
   try {
-    console.log('[DeviceEditModal] Initializing Google Maps...');
-    
-    // Carrega API do Google Maps
-    await loadGoogleMaps();
-    
-    if (!window.google?.maps) {
-      throw new Error('Google Maps API not available');
-    }
+    console.log('[DeviceEditModal] Initializing map...');
 
     // Aguarda o container estar disponível no DOM
     await nextTick();
-    
+
     if (!mapContainer.value) {
       throw new Error('Map container not found');
     }
 
     console.log('[DeviceEditModal] Creating map instance...');
 
-    // Cria instância do mapa
-    mapInstance.value = new window.google.maps.Map(mapContainer.value, {
+    // Cria instância do mapa usando o provider configurado (Google, Mapbox, etc.)
+    mapInstance.value = await createMap(mapContainer.value, {
       center: { lat: mapLat.value, lng: mapLng.value },
       zoom: 15,
-      mapTypeControl: true,
-      streetViewControl: false,
-      fullscreenControl: true,
-      zoomControl: true,
-      mapTypeId: 'roadmap',
-      styles: [
-        {
-          featureType: 'poi',
-          elementType: 'labels',
-          stylers: [{ visibility: 'off' }]
-        }
-      ]
     });
 
-    // Cria marcador
-    mapMarker.value = new window.google.maps.Marker({
+    // Cria marcador arrastável
+    mapMarker.value = mapInstance.value.createMarker({
       position: { lat: mapLat.value, lng: mapLng.value },
-      map: mapInstance.value,
       draggable: true,
-      animation: window.google.maps.Animation.DROP,
-      title: 'Posição do Site'
+      title: 'Posição do Site',
     });
 
     // Event: arrastar marcador
-    mapMarker.value.addListener('dragend', (event) => {
-      const newLat = event.latLng.lat();
-      const newLng = event.latLng.lng();
-      mapLat.value = newLat;
-      mapLng.value = newLng;
-      console.log('[DeviceEditModal] Marker dragged to:', newLat, newLng);
+    mapMarker.value.on('dragend', ({ lat, lng }) => {
+      mapLat.value = lat;
+      mapLng.value = lng;
+      console.log('[DeviceEditModal] Marker dragged to:', lat, lng);
     });
 
     // Event: clicar no mapa
-    mapInstance.value.addListener('click', (event) => {
-      const newLat = event.latLng.lat();
-      const newLng = event.latLng.lng();
-      mapLat.value = newLat;
-      mapLng.value = newLng;
-      
-      // Move o marcador
-      mapMarker.value.setPosition(event.latLng);
-      
-      // Anima marcador
-      mapMarker.value.setAnimation(window.google.maps.Animation.BOUNCE);
-      setTimeout(() => {
-        mapMarker.value.setAnimation(null);
-      }, 750);
-      
-      console.log('[DeviceEditModal] Map clicked:', newLat, newLng);
+    mapInstance.value.on('click', ({ lat, lng }) => {
+      mapLat.value = lat;
+      mapLng.value = lng;
+      mapMarker.value.setPosition({ lat, lng });
+      console.log('[DeviceEditModal] Map clicked:', lat, lng);
     });
 
     console.log('[DeviceEditModal] ✅ Map initialized successfully');
