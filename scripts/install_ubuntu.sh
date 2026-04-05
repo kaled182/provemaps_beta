@@ -126,9 +126,12 @@ fi
 
 # ─── 5. Build do frontend ────────────────────────────────────────────────────
 sep
-log "PASSO 4b — Corrigindo permissões de scripts..."
+log "PASSO 4b — Corrigindo permissões de scripts e diretórios..."
 chmod +x "${INSTALL_DIR}/docker/docker-entrypoint.sh"
 find "${INSTALL_DIR}/scripts" -name "*.sh" -exec chmod +x {} \;
+# Garantir que staticfiles seja gravável pelo container (volume bind ../backend:/app/backend)
+mkdir -p "${INSTALL_DIR}/backend/staticfiles"
+chmod -R 755 "${INSTALL_DIR}/backend/staticfiles"
 ok "Permissões corrigidas."
 
 # ─── 5. Build do frontend ────────────────────────────────────────────────────

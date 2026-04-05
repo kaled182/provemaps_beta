@@ -296,6 +296,17 @@ npm run build
 docker compose restart web
 ```
 
+**Erro `PermissionError` no collectstatic (web não sobe):**
+
+O container monta o diretório `backend/` do host como volume. Se `staticfiles/` tiver arquivos com permissão errada de execuções anteriores, o collectstatic falha.
+
+```bash
+# Remover arquivos estáticos gerados (exceto vue-spa)
+find /opt/provemaps/backend/staticfiles/ -maxdepth 1 -type f -delete
+chmod -R 755 /opt/provemaps/backend/staticfiles/
+docker compose restart web
+```
+
 **Conexão com Zabbix falha:**
 - Verifique se `ZABBIX_API_URL` no `.env` está acessível a partir do servidor
 - Teste: `curl http://SEU_ZABBIX/api_jsonrpc.php`
