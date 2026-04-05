@@ -586,29 +586,36 @@ def test_database_connection(request):
                 status=400,
             )
 
-        # Test connection
+        # Test connection using Django's DB backend (avoids psycopg2 dependency)
         try:
-            import psycopg2
+            from django.db import connections
+            from django.db.utils import OperationalError as DjangoOperationalError
 
-            conn = psycopg2.connect(
-                host=db_host,
-                port=int(db_port),
-                user=db_user,
-                password=db_password,
-                database=db_name,
-                connect_timeout=5,
-            )
-
-            cursor = conn.cursor()
-            cursor.execute("SELECT version()")
-            version_full = cursor.fetchone()[0]
-            # Extract PostgreSQL version (e.g., "PostgreSQL 16.1")
-            if ',' in version_full:
-                version = version_full.split(',')[0]
-            else:
-                version = version_full
-            cursor.close()
-            conn.close()
+            test_alias = "_setup_test_conn"
+            connections.databases[test_alias] = {
+                "ENGINE": "django.contrib.gis.db.backends.postgis",
+                "HOST": db_host,
+                "PORT": db_port,
+                "NAME": db_name,
+                "USER": db_user,
+                "PASSWORD": db_password,
+                "CONN_MAX_AGE": 0,
+                "OPTIONS": {"connect_timeout": 5},
+            }
+            try:
+                conn = connections[test_alias]
+                cursor = conn.cursor()
+                cursor.execute("SELECT version()")
+                version_full = cursor.fetchone()[0]
+                if ',' in version_full:
+                    version = version_full.split(',')[0]
+                else:
+                    version = version_full
+                cursor.close()
+                conn.close()
+            finally:
+                connections[test_alias].close()
+                del connections.databases[test_alias]
 
             # Log successful test
             ConfigurationAudit.log_change(
