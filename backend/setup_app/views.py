@@ -122,7 +122,7 @@ def first_time_setup(request):
                 setup_instance.configured = True
                 setup_instance.save()
 
-            commands = settings.SERVICE_RESTART_COMMANDS or DEFAULT_SERVICE_RESTART_COMMANDS
+            commands = getattr(settings, "SERVICE_RESTART_COMMANDS", "")
             env_payload = {
                 "COMPANY_NAME": data["company_name"],
                 "ZABBIX_API_URL": data["zabbix_url"],
