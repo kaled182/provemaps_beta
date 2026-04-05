@@ -255,6 +255,9 @@ main() {
     fi
   fi
 
+  # Ensure writable directories exist (bind-mounted from host may be missing)
+  mkdir -p /app/backend/media /app/backend/logs
+
   # Optional initialization steps
   maybe_load_runtime_env
   maybe_generate_fernet_key
