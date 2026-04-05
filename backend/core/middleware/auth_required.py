@@ -38,13 +38,13 @@ class AuthRequiredMiddleware:
         '/live',
         '/favicon.ico',
         '/celery/status',
-        '/setup_app/first_time/',
         '/api/config/',  # Frontend configuration (map provider, API keys, etc)
     ]
-    
+
     WHITELIST_PREFIXES = [
         '/api/v1/',  # API endpoints have their own auth (DRF)
         '/setup_app/docs/',
+        '/setup_app/first_time/',  # setup wizard + restarting page (no auth needed)
     ]
     
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]):
