@@ -69,11 +69,14 @@ DEBUG = True  # type: ignore[assignment]
 
 # Development hosts — aceita qualquer host para facilitar instalação em qualquer servidor
 # Para restringir em produção, defina ALLOWED_HOSTS no .env
-ALLOWED_HOSTS = [  # type: ignore[assignment]
-    host.strip()
-    for host in os.getenv("ALLOWED_HOSTS", "*").split(",")
-    if host.strip()
-]
+ALLOWED_HOSTS = (  # type: ignore[assignment]
+    [
+        host.strip()
+        for host in os.getenv("ALLOWED_HOSTS", "*").split(",")
+        if host.strip()
+    ]
+    or ["*"]  # fallback: aceita qualquer host em dev
+)
 
 # CSRF in development
 CSRF_TRUSTED_ORIGINS = [  # type: ignore[assignment]
