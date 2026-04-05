@@ -35,11 +35,14 @@ if not _secret_key:
 SECRET_KEY = _secret_key or ""
 
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
-ALLOWED_HOSTS = [
-    host.strip()
-    for host in os.getenv("ALLOWED_HOSTS", "*").split(",")
-    if host.strip()
-]
+ALLOWED_HOSTS = (
+    [
+        host.strip()
+        for host in os.getenv("ALLOWED_HOSTS", "*").split(",")
+        if host.strip()
+    ]
+    or ["*"]
+)
 
 # Telemetry — opt-out with TELEMETRY_ENABLED=false in .env
 # Set TELEMETRY_ENDPOINT to the URL where remote installations should send pings

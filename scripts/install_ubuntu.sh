@@ -211,7 +211,8 @@ COMPOSE_FILE="${INSTALL_DIR}/docker/docker-compose.yml"
     if docker compose -f "${COMPOSE_FILE}" ps -q 2>/dev/null | grep -q .; then
         docker compose -f "${COMPOSE_FILE}" down --remove-orphans
     fi
-    docker compose -f "${COMPOSE_FILE}" up -d
+    # --build garante que a imagem é sempre recompilada com o código mais recente
+    docker compose -f "${COMPOSE_FILE}" up -d --build
 ) >> "$LOG_FILE" 2>&1 &
 
 spinner $! || err "Falha ao iniciar containers do Docker Compose."
