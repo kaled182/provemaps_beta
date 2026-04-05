@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import os
+import socket
 import subprocess
 
 import psutil
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -34,29 +37,63 @@ def _disk() -> dict:
     }
 
 
-def _service_status(name: str, check_cmd: list[str]) -> dict:
-    """Run a check command; return online/offline based on exit code."""
+def _tcp_check(host: str, port: int, timeout: float = 2.0) -> bool:
+    """Return True if a TCP connection to host:port succeeds."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _pgrep(pattern: str) -> bool:
+    """Return True if a process matching pattern exists in this container."""
     try:
         result = subprocess.run(
-            check_cmd,
+            ["pgrep", "-f", pattern],
             capture_output=True,
-            timeout=5,
+            timeout=3,
         )
-        online = result.returncode == 0
+        return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        online = False
-    return {"name": name, "online": online}
+        return False
+
+
+def _http_check(url: str, timeout: float = 2.0) -> bool:
+    """Return True if an HTTP GET to url returns any response."""
+    import urllib.request
+    try:
+        urllib.request.urlopen(url, timeout=timeout)
+        return True
+    except Exception:
+        return False
 
 
 def _services() -> list[dict]:
-    checks = [
-        ("Gunicorn", ["pgrep", "-f", "gunicorn"]),
-        ("Celery", ["pgrep", "-f", "celery"]),
-        ("Nginx", ["pgrep", "-x", "nginx"]),
-        ("Redis", ["pgrep", "-x", "redis-server"]),
-        ("PostgreSQL", ["pgrep", "-x", "postgres"]),
+    # DB settings
+    db_cfg = settings.DATABASES.get("default", {})
+    db_host = db_cfg.get("HOST") or os.getenv("DB_HOST", "postgres")
+    db_port = int(db_cfg.get("PORT") or os.getenv("DB_PORT", 5432))
+
+    # Redis
+    redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+    redis_host = "redis"
+    redis_port = 6379
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(redis_url)
+        redis_host = parsed.hostname or "redis"
+        redis_port = parsed.port or 6379
+    except Exception:
+        pass
+
+    return [
+        {"name": "Gunicorn",   "online": _pgrep("gunicorn")},
+        {"name": "Celery",     "online": _pgrep("celery")},
+        {"name": "Nginx",      "online": _tcp_check("nginx", 80)},
+        {"name": "Redis",      "online": _tcp_check(redis_host, redis_port)},
+        {"name": "PostgreSQL", "online": _tcp_check(db_host, db_port)},
     ]
-    return [_service_status(name, cmd) for name, cmd in checks]
 
 
 @require_http_methods(["GET"])
