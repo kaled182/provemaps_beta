@@ -95,9 +95,10 @@ def first_time_setup(request):
             FirstTimeSetup.objects.all().update(configured=False)
 
             # Create new configuration with configured=True
-            setup_instance = FirstTimeSetup.objects.create(
+            logo_file = request.FILES.get("logo")
+            create_kwargs = dict(
                 company_name=data["company_name"],
-                logo=request.FILES.get("logo"),
+                logo=logo_file,
                 zabbix_url=data["zabbix_url"],
                 auth_type=data["auth_type"],
                 zabbix_api_key=data.get("zabbix_api_key"),
@@ -106,7 +107,7 @@ def first_time_setup(request):
                 map_provider=data.get("map_provider", "osm"),
                 maps_api_key=data.get("maps_api_key", ""),
                 mapbox_token=data.get("mapbox_token", ""),
-                unique_licence=data["unique_licence"],
+                unique_licence=data.get("unique_licence", ""),
                 db_host=data["db_host"],
                 db_port=data["db_port"],
                 db_name=db_name,
@@ -115,7 +116,13 @@ def first_time_setup(request):
                 redis_url=data["redis_url"],
                 configured=True,
             )
-            
+            try:
+                setup_instance = FirstTimeSetup.objects.create(**create_kwargs)
+            except PermissionError:
+                logger.warning("Could not save logo (media dir permission denied) — proceeding without logo")
+                create_kwargs["logo"] = None
+                setup_instance = FirstTimeSetup.objects.create(**create_kwargs)
+
             # Verify it was saved correctly
             if not setup_instance.configured:
                 logger.error("Setup instance was not marked as configured after creation")
