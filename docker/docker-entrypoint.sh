@@ -159,11 +159,15 @@ maybe_load_runtime_env() {
   local runtime_env="/app/database/runtime.env"
   [[ -f "$runtime_env" ]] || return 0
 
-  local key value
-  while IFS='=' read -r key value; do
+  local line key value
+  while IFS= read -r line; do
     # ignora comentários e linhas vazias
-    [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
-    [[ "$key" != *=* && -n "$value" ]] || true  # já separado pelo IFS
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" != *=* ]] && continue
+    # divide apenas no PRIMEIRO '=' para preservar '=' em senhas
+    key="${line%%=*}"
+    value="${line#*=}"
+    key="${key// /}"  # remove espaços do key
     # remove aspas duplas ou simples ao redor do valor
     value="${value%\"}"  ; value="${value#\"}"
     value="${value%\'}"  ; value="${value#\'}"
