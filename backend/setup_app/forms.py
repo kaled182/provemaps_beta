@@ -32,7 +32,28 @@ class FirstTimeSetupForm(forms.Form):
         required=False,
         widget=forms.PasswordInput,
     )
-    maps_api_key = forms.CharField(label="Google Maps API key", max_length=255)
+    map_provider = forms.ChoiceField(
+        label="Provedor de mapa",
+        choices=[
+            ("google", "Google Maps"),
+            ("mapbox", "Mapbox"),
+            ("osm", "OpenStreetMap (gratuito, sem chave)"),
+        ],
+        initial="osm",
+        widget=forms.RadioSelect,
+    )
+    maps_api_key = forms.CharField(
+        label="Google Maps API key",
+        max_length=255,
+        required=False,
+        help_text="Necessário apenas se usar Google Maps",
+    )
+    mapbox_token = forms.CharField(
+        label="Mapbox Token",
+        max_length=512,
+        required=False,
+        help_text="Necessário apenas se usar Mapbox",
+    )
     unique_licence = forms.CharField(label="License key", max_length=255)
     db_host = forms.CharField(
         label="Database host",

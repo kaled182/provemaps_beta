@@ -115,25 +115,69 @@
       </div>
     </div>
 
-    <!-- Seção: Google Maps -->
+    <!-- Seção: Provedor de Mapa -->
     <div class="bg-gray-50 dark:bg-gray-900 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
       <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
         <svg class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path>
         </svg>
-        Integração Google Maps
+        Provedor de Mapa
       </h3>
-      
-      <div>
-        <label for="maps_api_key" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Chave da API Google Maps
-        </label>
-        <input type="text" id="maps_api_key" name="maps_api_key" required
-          class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 py-3 px-4 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-          placeholder="Cole sua chave da API Google Maps...">
-        <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-          <span class="font-medium">APIs necessárias:</span> Maps JavaScript API, Geocoding API, Directions API, Places API
-        </p>
+
+      <div class="space-y-4">
+        <!-- Seleção do provider -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Escolha o provedor</label>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <label class="flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 dark:border-gray-700 cursor-pointer hover:border-blue-400 transition-colors has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 dark:has-[:checked]:bg-blue-900/20">
+              <input type="radio" name="map_provider" value="osm" checked class="w-4 h-4 text-blue-600 focus:ring-blue-500">
+              <div>
+                <span class="block text-sm font-semibold text-gray-800 dark:text-gray-200">OpenStreetMap</span>
+                <span class="block text-xs text-green-600 dark:text-green-400">Gratuito, sem chave</span>
+              </div>
+            </label>
+            <label class="flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 dark:border-gray-700 cursor-pointer hover:border-blue-400 transition-colors has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 dark:has-[:checked]:bg-blue-900/20">
+              <input type="radio" name="map_provider" value="mapbox" class="w-4 h-4 text-blue-600 focus:ring-blue-500">
+              <div>
+                <span class="block text-sm font-semibold text-gray-800 dark:text-gray-200">Mapbox</span>
+                <span class="block text-xs text-gray-500 dark:text-gray-400">Requer token</span>
+              </div>
+            </label>
+            <label class="flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 dark:border-gray-700 cursor-pointer hover:border-blue-400 transition-colors has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 dark:has-[:checked]:bg-blue-900/20">
+              <input type="radio" name="map_provider" value="google" class="w-4 h-4 text-blue-600 focus:ring-blue-500">
+              <div>
+                <span class="block text-sm font-semibold text-gray-800 dark:text-gray-200">Google Maps</span>
+                <span class="block text-xs text-gray-500 dark:text-gray-400">Requer chave de API</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Campo Google Maps API key (visível apenas quando google selecionado) -->
+        <div id="field_google" class="hidden">
+          <label for="maps_api_key" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Chave da API Google Maps
+          </label>
+          <input type="text" id="maps_api_key" name="maps_api_key"
+            class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 py-3 px-4 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+            placeholder="AIza...">
+          <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            APIs necessárias: Maps JavaScript API, Geocoding API, Directions API, Places API
+          </p>
+        </div>
+
+        <!-- Campo Mapbox Token (visível apenas quando mapbox selecionado) -->
+        <div id="field_mapbox" class="hidden">
+          <label for="mapbox_token" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Mapbox Token
+          </label>
+          <input type="text" id="mapbox_token" name="mapbox_token"
+            class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 py-3 px-4 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+            placeholder="pk.eyJ1...">
+          <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            Obtenha gratuitamente em <span class="font-medium">mapbox.com</span> (plano gratuito disponível)
+          </p>
+        </div>
       </div>
     </div>
 
