@@ -71,6 +71,7 @@ from inventory.api.maintenance_alert import (
 )
 from inventory.api.alarm_sources import api_alarm_config_sources
 from inventory.api.system_info import api_system_info
+from inventory.api.server_stats import api_server_stats
 from inventory.api.trace_route import trace_fiber_route
 from inventory.api.infrastructure import (
     api_create_infrastructure,
@@ -91,6 +92,7 @@ app_name = "inventory-api"
 urlpatterns = [
     # System info / admin panel base
     path("system/info/", api_system_info, name="system-info"),
+    path("system/stats/", api_server_stats, name="system-stats"),
     # Global search
     path("search/", api_global_search, name="global-search"),
     # Cable folders
