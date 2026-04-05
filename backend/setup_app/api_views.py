@@ -2023,10 +2023,11 @@ def update_configuration(request):
             }, status=400)
 
         # For backup password, use existing from database if not provided
+        existing_backup_password = getattr(existing_record, 'backup_password', '') if existing_record else ''
         backup_zip_password = data.get("BACKUP_ZIP_PASSWORD", "").strip()
         if not backup_zip_password and existing_record:
             # Read from database if available
-            backup_zip_password = getattr(existing_record, 'backup_password', '')
+            backup_zip_password = existing_backup_password
         
         if backup_zip_password and len(backup_zip_password) < _MIN_BACKUP_PASSWORD_LEN:
             return JsonResponse(
