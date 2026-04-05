@@ -129,6 +129,12 @@ maybe_migrate() {
 maybe_collectstatic() {
   if [[ "${INIT_COLLECTSTATIC}" == "true" ]]; then
     log "Running collectstatic (timeout ${COLLECTSTATIC_TIMEOUT}s)"
+    # Ensure staticfiles is writable — bind mount ../backend:/app/backend means
+    # files created on a previous run may be owned by a different UID on the host.
+    local static_root="${DJANGO_STATIC_ROOT:-/app/backend/staticfiles}"
+    if [[ -d "$static_root" ]]; then
+      chmod -R a+w "$static_root" 2>/dev/null || warn "chmod on staticfiles failed (continuing)"
+    fi
     if command -v timeout >/dev/null 2>&1; then
       timeout "${COLLECTSTATIC_TIMEOUT}" env PYTHONUNBUFFERED=1 DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-settings.dev}" \
         python manage.py collectstatic --noinput
