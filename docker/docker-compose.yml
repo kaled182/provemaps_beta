@@ -94,8 +94,6 @@
       - ../doc:/app/doc
       - ../scripts:/app/scripts
       - ../logs:/app/backend/logs
-      # Docker socket permite que o setup_app reinicie os serviços via docker compose
-      - /var/run/docker.sock:/var/run/docker.sock
 
   whatsapp-qr:
     build:

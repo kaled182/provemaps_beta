@@ -2,11 +2,41 @@ from __future__ import annotations
 
 import logging
 import os
+import signal
 import subprocess
 import threading
 from typing import Iterable, List
 
 logger = logging.getLogger(__name__)
+
+
+def restart_via_sigterm(delay: float = 3.0) -> None:
+    """
+    Reinicia o container enviando SIGTERM ao PID 1.
+
+    Como o entrypoint usa ``exec "$@"``, o gunicorn roda como PID 1.
+    SIGTERM causa seu encerramento gracioso; o Docker reinicia o
+    container automaticamente (restart: unless-stopped) e o entrypoint
+    recarrega o runtime.env com as novas credenciais antes de iniciar
+    o gunicorn.
+
+    O sinal é enviado em background após ``delay`` segundos para
+    garantir que a resposta HTTP já chegou ao navegador do usuário.
+    """
+    def _send_sigterm() -> None:
+        try:
+            os.kill(1, signal.SIGTERM)
+            logger.info(
+                "SIGTERM enviado ao PID 1 — "
+                "container será reiniciado pelo Docker"
+            )
+        except Exception as exc:
+            logger.error("Falha ao enviar SIGTERM ao PID 1: %s", exc)
+
+    timer = threading.Timer(delay, _send_sigterm)
+    timer.daemon = True
+    timer.start()
+    logger.info("Restart via SIGTERM agendado em %.1fs", delay)
 
 
 def _collect_base_commands() -> list[str]:

@@ -7,7 +7,6 @@ import logging
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db import connection
-import threading
 
 from django.shortcuts import redirect, render
 from django.http import HttpResponse, HttpResponseForbidden
@@ -17,28 +16,12 @@ from integrations.zabbix.guards import reload_diagnostics_flag_cache
 from .forms import EnvConfigForm, FirstTimeSetupForm
 from setup_app.utils import env_manager
 from setup_app.services import runtime_settings
-from .services.service_reloader import trigger_restart
+from .services.service_reloader import restart_via_sigterm, trigger_restart
 from types import SimpleNamespace
 
 from .models import CompanyProfile, FirstTimeSetup
 
 logger = logging.getLogger(__name__)
-
-_COMPOSE_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "..", "docker", "docker-compose.yml",
-)
-_COMPOSE_FILE = os.path.normpath(_COMPOSE_FILE)
-
-DEFAULT_SERVICE_RESTART_COMMANDS = (
-    settings.SERVICE_RESTART_COMMANDS
-    if getattr(settings, "SERVICE_RESTART_COMMANDS", "")
-    else (
-        f"docker compose -f {_COMPOSE_FILE} restart web; "
-        f"docker compose -f {_COMPOSE_FILE} restart celery; "
-        f"docker compose -f {_COMPOSE_FILE} restart beat"
-    )
-)
 
 
 _DB_NAME_FIXED = "app"  # nome do banco nunca muda; só user/senha são configuráveis
@@ -173,14 +156,16 @@ def first_time_setup(request):
             env_payload["SERVICE_RESTART_COMMANDS"] = commands
             env_manager.write_values(env_payload)
 
-            # Alterar senha no PostgreSQL apenas após gravar runtime.env com sucesso
+            # ALTER ROLE apenas após gravar runtime.env com sucesso.
+            # Executa com a conexão atual (senha antiga ainda válida).
             current_db_password = os.environ.get("DB_PASSWORD", "")
-            _db_password_changed = False
             if db_password != current_db_password:
                 try:
                     _alter_db_password(db_user, db_password)
-                    _db_password_changed = True
-                    logger.info("Senha do banco alterada via ALTER ROLE para: %s", db_user)
+                    logger.info(
+                        "Senha do banco alterada via ALTER ROLE: %s",
+                        db_user,
+                    )
                 except Exception as exc:
                     logger.error("Falha ao executar ALTER ROLE: %s", exc)
 
@@ -189,17 +174,16 @@ def first_time_setup(request):
 
             clear_token_cache()
             reload_diagnostics_flag_cache()
-            command_string = env_payload.get("SERVICE_RESTART_COMMANDS", "").strip()
-            os.environ["SERVICE_RESTART_COMMANDS"] = command_string
-            logger.info("Setup completed for company: %s", data["company_name"])
+            logger.info(
+                "Setup completed for company: %s", data["company_name"]
+            )
 
-            # Restart é necessário quando a senha mudou (container precisa recarregar
-            # o runtime.env via entrypoint para conectar com a nova senha).
-            # Sempre garante que há um comando de restart disponível.
-            _restart_cmds = command_string or DEFAULT_SERVICE_RESTART_COMMANDS
-            if _db_password_changed or command_string:
-                os.environ["SERVICE_RESTART_COMMANDS"] = _restart_cmds
-                threading.Timer(3.0, trigger_restart).start()
+            # Reinicia o container via SIGTERM ao PID 1.
+            # O Docker reinicia automaticamente (restart: unless-stopped)
+            # e o entrypoint recarrega o runtime.env antes do gunicorn
+            # iniciar — garantindo que a nova senha DB esteja disponível
+            # para todos os workers sem janela de falha.
+            restart_via_sigterm(delay=3.0)
 
             return redirect("setup_app:first_time_restarting")
     else:
