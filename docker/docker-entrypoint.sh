@@ -153,7 +153,7 @@ maybe_ensure_superuser() {
 }
 
 maybe_generate_fernet_key() {
-  # Se FERNET_KEY não está definida, gera e persiste em database/fernet.key
+  # Se FERNET_KEY não está definida, gera e tenta persistir em database/fernet.key
   # O valor é exportado para que gunicorn/celery herdem via exec
   if [[ -z "${FERNET_KEY:-}" ]]; then
     local key_file="/app/database/fernet.key"
@@ -164,10 +164,14 @@ maybe_generate_fernet_key() {
     else
       export FERNET_KEY
       FERNET_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
-      mkdir -p "$(dirname "$key_file")"
-      echo "$FERNET_KEY" > "$key_file"
-      ok "FERNET_KEY gerada automaticamente → $key_file"
-      warn "Para produção, copie essa chave para FERNET_KEY no .env e remova $key_file"
+      # Tenta persistir — falha silenciosa se sem permissão (não trava o boot)
+      mkdir -p "$(dirname "$key_file")" 2>/dev/null || true
+      if echo "$FERNET_KEY" > "$key_file" 2>/dev/null; then
+        ok "FERNET_KEY gerada e salva em $key_file"
+        warn "Para produção, defina FERNET_KEY no .env para garantir persistência"
+      else
+        warn "FERNET_KEY gerada (sessão apenas) — defina FERNET_KEY no .env para persistir entre reinicializações"
+      fi
     fi
   fi
 }
