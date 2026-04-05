@@ -89,7 +89,7 @@ def _services() -> list[dict]:
 
     return [
         {"name": "Gunicorn",   "online": _pgrep("gunicorn")},
-        {"name": "Celery",     "online": _pgrep("celery")},
+        {"name": "Celery",     "online": _http_check("http://localhost:8000/celery/status")},
         {"name": "Nginx",      "online": _tcp_check("nginx", 80)},
         {"name": "Redis",      "online": _tcp_check(redis_host, redis_port)},
         {"name": "PostgreSQL", "online": _tcp_check(db_host, db_port)},
