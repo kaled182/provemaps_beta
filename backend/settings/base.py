@@ -43,6 +43,10 @@ ALLOWED_HOSTS = (
     ]
     or ["*"]
 )
+print(
+    f"[settings.base] DJANGO_SETTINGS_MODULE={os.getenv('DJANGO_SETTINGS_MODULE')} "
+    f"ALLOWED_HOSTS={ALLOWED_HOSTS} DEBUG={DEBUG}"
+)
 
 # Telemetry — opt-out with TELEMETRY_ENABLED=false in .env
 # Set TELEMETRY_ENDPOINT to the URL where remote installations should send pings
