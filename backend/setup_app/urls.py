@@ -18,6 +18,7 @@ router.register(r'alert-templates', AlertTemplateViewSet, basename='alert-templa
 urlpatterns = [
     path('dashboard/', views.setup_dashboard, name='setup_dashboard'),
     path('first_time/', views.first_time_setup, name='first_time_setup'),
+    path('first_time/restarting/', views.first_time_restarting, name='first_time_restarting'),
     path('config/', views.manage_environment, name='manage_environment'),
 
     # API endpoints for configuration management

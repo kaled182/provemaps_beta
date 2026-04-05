@@ -7,8 +7,10 @@ import logging
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db import connection
+import threading
+
 from django.shortcuts import redirect, render
-from django.http import HttpResponseForbidden
+from django.http import HttpResponse, HttpResponseForbidden
 
 from integrations.zabbix.guards import reload_diagnostics_flag_cache
 
@@ -167,21 +169,13 @@ def first_time_setup(request):
             reload_diagnostics_flag_cache()
             command_string = env_payload.get("SERVICE_RESTART_COMMANDS", "").strip()
             os.environ["SERVICE_RESTART_COMMANDS"] = command_string
+            logger.info("Setup completed for company: %s", data["company_name"])
+
             if command_string:
-                trigger_restart()
-            
-            # Log success and verify configuration before redirecting
-            logger.info(f"Setup completed successfully for company: {data['company_name']}")
-            configured_count = FirstTimeSetup.objects.filter(configured=True).count()
-            logger.info(f"Configured instances in database: {configured_count}")
-            
-            if configured_count == 0:
-                logger.error("No configured instances found after setup! Forcing configuration.")
-                setup_instance.configured = True
-                setup_instance.save(update_fields=['configured'])
-                
-            # After successful first-time setup, send user to the default backbone map
-            return redirect("/monitoring/backbone/map/default")
+                # Delay restart by 3 s so the browser receives the redirect first
+                threading.Timer(3.0, trigger_restart).start()
+
+            return redirect("setup_app:first_time_restarting")
     else:
         form = FirstTimeSetupForm()
 
@@ -220,6 +214,101 @@ def first_time_setup(request):
             "steps": steps,
         },
     )
+
+
+def first_time_restarting(request):
+    """
+    Intermediate page shown after first-time setup is saved.
+    Polls /healthz until the service is back up, then redirects to /login.
+    Fully self-contained — no static file dependencies.
+    """
+    html = """<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reiniciando — MapsProveFiber</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: #0f172a; font-family: system-ui, -apple-system, sans-serif; color: #f1f5f9;
+    }
+    .card {
+      background: #1e293b; border: 1px solid #334155; border-radius: 1.5rem;
+      padding: 3rem 2.5rem; max-width: 460px; width: 90%; text-align: center;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,.6);
+    }
+    .spinner-wrap { display: flex; justify-content: center; margin-bottom: 2rem; }
+    .spinner {
+      width: 64px; height: 64px; border-radius: 50%;
+      border: 4px solid #1e3a5f;
+      border-top-color: #3b82f6;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    h1 { font-size: 1.25rem; font-weight: 700; color: #f1f5f9; margin-bottom: .75rem; }
+    p  { font-size: .875rem; color: #94a3b8; line-height: 1.6; }
+    .dots span {
+      display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+      background: #3b82f6; margin: 0 3px; animation: pulse 1.2s ease-in-out infinite;
+    }
+    .dots span:nth-child(2) { animation-delay: .2s; }
+    .dots span:nth-child(3) { animation-delay: .4s; }
+    @keyframes pulse { 0%,100%{opacity:.2;transform:scale(.8)} 50%{opacity:1;transform:scale(1)} }
+    .status { margin-top: 1.5rem; font-size: .75rem; color: #475569; min-height: 1.2em; }
+    .check {
+      display: none; width: 64px; height: 64px; border-radius: 50%;
+      background: #065f46; border: 4px solid #10b981;
+      align-items: center; justify-content: center; margin: 0 auto 2rem;
+    }
+    .check svg { width: 32px; height: 32px; stroke: #10b981; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="spinner-wrap">
+      <div class="spinner" id="spinner"></div>
+      <div class="check" id="check">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+        </svg>
+      </div>
+    </div>
+    <h1>Configuração salva com sucesso!</h1>
+    <p>
+      O serviço está reiniciando com as novas configurações<br>
+      <span class="dots"><span></span><span></span><span></span></span>
+    </p>
+    <div class="status" id="status">Aguardando reinicialização...</div>
+  </div>
+  <script>
+    const status = document.getElementById('status');
+    const spinner = document.getElementById('spinner');
+    const check = document.getElementById('check');
+    let attempts = 0;
+
+    function redirectToLogin() {
+      check.style.display = 'flex';
+      spinner.style.display = 'none';
+      status.textContent = 'Pronto! Redirecionando para o login...';
+      setTimeout(() => { window.location.href = '/login'; }, 1200);
+    }
+
+    function poll() {
+      attempts++;
+      status.textContent = 'Verificando serviço... (tentativa ' + attempts + ')';
+      fetch('/healthz', { cache: 'no-store' })
+        .then(r => { if (r.ok) { redirectToLogin(); } else { setTimeout(poll, 2000); } })
+        .catch(() => { setTimeout(poll, 2000); });
+    }
+
+    // Aguarda 5 s antes de começar a polling (tempo para o container reiniciar)
+    setTimeout(poll, 5000);
+  </script>
+</body>
+</html>"""
+    return HttpResponse(html)
 
 
 @login_required
