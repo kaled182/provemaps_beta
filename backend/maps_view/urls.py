@@ -8,7 +8,7 @@ app_name = 'maps_view'
 urlpatterns = [
     path(
         'dashboard/',
-        views.dashboard_view,
+        RedirectView.as_view(url='/', permanent=True),
         name='dashboard_view',
     ),
     path(

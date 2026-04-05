@@ -680,7 +680,7 @@ REST_FRAMEWORK: dict[str, object] = {
 UNFOLD = {
     "SITE_TITLE": "Maps Prove Fiber",
     "SITE_HEADER": "SIMPLES INTERNET",
-    "SITE_URL": "/maps_view/dashboard/",
+    "SITE_URL": "/",
     "SITE_ICON": {
         "light": lambda request: "admin/img/si-logo.svg",
         "dark": lambda request: "admin/img/si-logo.svg",
@@ -731,7 +731,7 @@ UNFOLD = {
                     {
                         "title": "Ver Dashboard",
                         "icon": "home",
-                        "link": "/maps_view/dashboard/",
+                        "link": "/",
                     },
                 ],
             },

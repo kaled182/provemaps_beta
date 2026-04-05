@@ -79,7 +79,7 @@ def first_time_setup(request):
         )
     
     if FirstTimeSetup.objects.filter(configured=True).exists():
-        return redirect("/maps_view/dashboard/")
+        return redirect("/")
 
     if request.method == "POST":
         form = FirstTimeSetupForm(request.POST, request.FILES)
