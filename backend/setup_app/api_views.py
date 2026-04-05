@@ -586,11 +586,11 @@ def test_database_connection(request):
                 status=400,
             )
 
-        # Test connection using psycopg2 directly (avoids Django alias bookkeeping)
+        # Test connection using psycopg (v3) directly (avoids Django alias bookkeeping)
         try:
-            import psycopg2
+            import psycopg
 
-            conn = psycopg2.connect(
+            conn = psycopg.connect(
                 host=db_host,
                 port=int(db_port),
                 dbname=db_name,
