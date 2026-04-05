@@ -234,9 +234,13 @@ const updateLabel = computed(() => ({
 
 async function fetchSystemInfo() {
   loading.value = true;
+  console.log('[SystemPanel] fetchSystemInfo iniciado');
   try {
-    sysInfo.value = await api.get('/api/v1/inventory/system/info/');
-  } catch {
+    const data = await api.get('/api/v1/inventory/system/info/');
+    console.log('[SystemPanel] system/info resposta:', data);
+    sysInfo.value = data;
+  } catch (err) {
+    console.error('[SystemPanel] system/info erro:', err);
     sysInfo.value = null;
   } finally {
     loading.value = false;
@@ -255,12 +259,15 @@ async function fetchStats() {
 }
 
 async function checkForUpdates() {
+  console.log('[SystemPanel] checkForUpdates clicado');
   updateState.value = 'checking';
   try {
-    sysInfo.value = await api.get('/api/v1/inventory/system/info/');
-    // Future: compare against a remote latest-version endpoint.
+    const data = await api.get('/api/v1/inventory/system/info/');
+    console.log('[SystemPanel] checkForUpdates resposta:', data);
+    sysInfo.value = data;
     updateState.value = 'latest';
-  } catch {
+  } catch (err) {
+    console.error('[SystemPanel] checkForUpdates erro:', err);
     updateState.value = 'idle';
   }
 }
