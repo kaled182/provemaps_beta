@@ -51,6 +51,16 @@ class AuthRequiredMiddleware:
         self.get_response = get_response
     
     def __call__(self, request: HttpRequest) -> HttpResponse:
+        # When system is not yet configured, let FirstTimeSetupRedirectMiddleware
+        # handle the redirect — don't intercept with auth check first.
+        try:
+            from setup_app.models import FirstTimeSetup
+            force_flow = getattr(settings, 'FORCE_FIRST_TIME_FLOW', False)
+            if force_flow and not FirstTimeSetup.objects.filter(configured=True).exists():
+                return self.get_response(request)
+        except Exception:
+            pass
+
         # Check if path is whitelisted
         if self._is_whitelisted(request.path):
             return self.get_response(request)
