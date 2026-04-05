@@ -72,45 +72,27 @@ cd /opt/provemaps
 
 ---
 
-## 4. Configurar variáveis de ambiente
+## 4. Criar o arquivo .env (mínimo, sem edição necessária)
 
-> **Atenção:** O arquivo `.env` **precisa existir** antes de subir o Docker Compose.
-> Se não for criado, o `docker compose up -d` vai falhar com erro `env file not found`.
-
-```bash
-# Copiar o arquivo de exemplo (obrigatório)
-cp /opt/provemaps/.env.example /opt/provemaps/.env
-
-# Editar com seu editor preferido
-nano /opt/provemaps/.env
-```
-
-**Variáveis obrigatórias para alterar:**
-
-| Variável | O que colocar |
-|---|---|
-| `SECRET_KEY` | Uma string longa e aleatória (mín. 50 caracteres) |
-| `FERNET_KEY` | Chave Fernet — gerar com o comando abaixo |
-| `ZABBIX_API_URL` | URL da sua instância Zabbix (ex: `http://192.168.1.10/api_jsonrpc.php`) |
-| `ZABBIX_API_USER` | Usuário Zabbix (ou deixe vazio e use `ZABBIX_API_KEY`) |
-| `ZABBIX_API_PASSWORD` | Senha Zabbix |
-| `GOOGLE_MAPS_API_KEY` | Chave do Google Maps (necessária para o mapa) |
-| `ALLOWED_HOSTS` | IP ou domínio do servidor (ex: `192.168.1.50,meudominio.com`) |
-
-**Gerar SECRET_KEY e FERNET_KEY:**
+O `.env` precisa existir, mas pode estar **completamente vazio** — todas as configurações essenciais já estão no `docker/docker-compose.yml`. As configurações de Zabbix, Google Maps e SMTP são feitas pelo painel web após a instalação.
 
 ```bash
-# SECRET_KEY
-python3 -c "import secrets; print(secrets.token_urlsafe(60))"
-
-# FERNET_KEY
-python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-# Se cryptography não estiver instalado:
-pip3 install cryptography --quiet
-python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+touch /opt/provemaps/.env
 ```
 
-> **Nota:** As credenciais do banco de dados PostgreSQL já estão configuradas no `docker/docker-compose.yml` para uso local. Não é necessário alterar para instalação inicial.
+> **Configuração avançada (opcional):** Se quiser sobrescrever alguma variável padrão, copie o exemplo e edite:
+> ```bash
+> cp /opt/provemaps/.env.example /opt/provemaps/.env
+> nano /opt/provemaps/.env
+> ```
+>
+> Variáveis que podem ser úteis sobrescrever em produção:
+>
+> | Variável | Descrição |
+> |---|---|
+> | `SECRET_KEY` | Chave secreta Django (padrão inseguro já definido no compose) |
+> | `FERNET_KEY` | Gerada automaticamente na primeira inicialização |
+> | `GOOGLE_MAPS_API_KEY` | Chave Google Maps (pode ser configurada pelo painel web) |
 
 ---
 
@@ -302,7 +284,7 @@ O container monta o diretório `backend/` do host como volume. Se `staticfiles/`
 
 ```bash
 # Remover arquivos estáticos gerados (exceto vue-spa)
-find /opt/provemaps/backend/staticfiles/ -maxdepth 1 -type f -delete
+find /opt/provemaps/backend/staticfiles/ -maxdepth 1 -type f -delete  # apaga só arquivos na raiz, sem entrar em vue-spa/
 chmod -R 755 /opt/provemaps/backend/staticfiles/
 docker compose restart web
 ```

@@ -152,6 +152,26 @@ maybe_ensure_superuser() {
   fi
 }
 
+maybe_generate_fernet_key() {
+  # Se FERNET_KEY não está definida, gera e persiste em database/fernet.key
+  # O valor é exportado para que gunicorn/celery herdem via exec
+  if [[ -z "${FERNET_KEY:-}" ]]; then
+    local key_file="/app/database/fernet.key"
+    if [[ -f "$key_file" ]]; then
+      export FERNET_KEY
+      FERNET_KEY="$(cat "$key_file")"
+      log "FERNET_KEY carregada de $key_file"
+    else
+      export FERNET_KEY
+      FERNET_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+      mkdir -p "$(dirname "$key_file")"
+      echo "$FERNET_KEY" > "$key_file"
+      ok "FERNET_KEY gerada automaticamente → $key_file"
+      warn "Para produção, copie essa chave para FERNET_KEY no .env e remova $key_file"
+    fi
+  fi
+}
+
 maybe_init_app_data() {
   # Only run for web/gunicorn workers, not celery/beat
   if [[ "${INIT_APP_DATA:-false}" == "true" ]]; then
@@ -208,6 +228,7 @@ main() {
   fi
 
   # Optional initialization steps
+  maybe_generate_fernet_key
   maybe_migrate
   maybe_collectstatic
   maybe_ensure_superuser

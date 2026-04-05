@@ -14,7 +14,8 @@
     ports:
       - "8100:8000"
     env_file:
-      - ../.env
+      - path: ../.env
+        required: false   # .env é opcional — todas as config essenciais já estão aqui
     working_dir: /app/backend
     environment:
       DB_ENGINE: postgis
@@ -25,6 +26,8 @@
       DB_PASSWORD: app
       DJANGO_SETTINGS_MODULE: settings.dev
       SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
+      # Aceita qualquer host/IP — configuração via web, sem precisar editar .env
+      ALLOWED_HOSTS: "*"
       PYTHONPATH: "/app/backend:/app"
       PYTHONUNBUFFERED: 1
       GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
@@ -90,7 +93,6 @@
       - ../database:/app/database
       - ../doc:/app/doc
       - ../scripts:/app/scripts
-      - ../.env:/app/.env:ro
       - ../logs:/app/backend/logs
 
   whatsapp-qr:
@@ -113,7 +115,8 @@
     command: celery -A core.celery_app worker -Q default,zabbix,maps -l info -c 4
     entrypoint: ["/docker-entrypoint.sh"]
     env_file:
-      - ../.env
+      - path: ../.env
+        required: false
     working_dir: /app/backend
     environment:
       DB_ENGINE: postgis
@@ -124,6 +127,7 @@
       DB_PASSWORD: app
       DJANGO_SETTINGS_MODULE: settings.dev
       SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
+      ALLOWED_HOSTS: "*"
       PYTHONPATH: "/app/backend:/app"
       PYTHONUNBUFFERED: 1
       GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
@@ -157,7 +161,6 @@
       - ../database:/app/database
       - ../doc:/app/doc
       - ../scripts:/app/scripts
-      - ../.env:/app/.env:ro
       - ../logs:/app/backend/logs
 
   beat:
@@ -167,7 +170,8 @@
     command: celery -A core.celery_app beat -l info --pidfile=/tmp/celerybeat.pid
     entrypoint: ["/docker-entrypoint.sh"]
     env_file:
-      - ../.env
+      - path: ../.env
+        required: false
     working_dir: /app/backend
     environment:
       DB_ENGINE: postgis
@@ -178,6 +182,7 @@
       DB_PASSWORD: app
       DJANGO_SETTINGS_MODULE: settings.dev
       SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
+      ALLOWED_HOSTS: "*"
       PYTHONPATH: "/app/backend:/app"
       PYTHONUNBUFFERED: 1
       GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
@@ -210,7 +215,6 @@
       - ../database:/app/database
       - ../doc:/app/doc
       - ../scripts:/app/scripts
-      - ../.env:/app/.env:ro
       - ../logs:/app/backend/logs
 
   redis:
@@ -393,7 +397,6 @@
       - ../backend:/app/backend
       - ../test_mosaic_rendering.py:/app/test_mosaic_rendering.py
       - ../frontend:/app/frontend
-      - ../.env:/app/.env:ro
 
 volumes:
   redis_data:

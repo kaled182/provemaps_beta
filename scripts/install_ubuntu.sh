@@ -98,30 +98,18 @@ fi
 
 # ─── 4. Criar arquivo .env ───────────────────────────────────────────────────
 sep
-log "PASSO 4/5 — Configurando variáveis de ambiente..."
+log "PASSO 4/5 — Arquivo .env (opcional)..."
 
 ENV_FILE="${INSTALL_DIR}/.env"
-ENV_EXAMPLE="${INSTALL_DIR}/.env.example"
 
 if [[ -f "${ENV_FILE}" ]]; then
     ok ".env já existe — mantendo configurações existentes."
 else
-    cp "${ENV_EXAMPLE}" "${ENV_FILE}"
+    # Criar .env mínimo vazio — todas as config essenciais já estão no docker-compose.yml
+    touch "${ENV_FILE}"
     chown "${REAL_USER}:${REAL_USER}" "${ENV_FILE}"
-    ok ".env criado a partir do .env.example"
-
-    warn "IMPORTANTE: Edite ${ENV_FILE} com suas configurações antes de usar em produção."
-    warn "Variáveis principais:"
-    warn "  SECRET_KEY      — gere com: python3 -c \"import secrets; print(secrets.token_urlsafe(60))\""
-    warn "  FERNET_KEY      — gere com: python3 -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
-    warn "  ZABBIX_API_URL  — URL da sua instância Zabbix"
-    warn "  GOOGLE_MAPS_API_KEY — chave do Google Maps"
-    echo ""
-    read -r -p "Deseja editar o .env agora? [s/N] " EDIT_ENV
-    if [[ "${EDIT_ENV,,}" == "s" ]]; then
-        EDITOR="${EDITOR:-nano}"
-        "${EDITOR}" "${ENV_FILE}"
-    fi
+    ok ".env criado (vazio). Todas as configurações essenciais já estão no docker-compose.yml."
+    log "Para personalizar (Zabbix, Google Maps, etc.), edite ${ENV_FILE} ou use o painel web após instalar."
 fi
 
 # ─── 5. Build do frontend ────────────────────────────────────────────────────
