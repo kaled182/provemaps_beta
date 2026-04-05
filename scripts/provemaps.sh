@@ -19,6 +19,25 @@ warn() { echo -e "${YLW}[aviso]${NC} $*"; }
 err()  { echo -e "${RED}[erro]${NC} $*\n${YLW}[!] Detalhes no log: ${LOG_FILE}${NC}" >&2; exit 1; }
 sep()  { echo -e "\n${BLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"; }
 
+# ─── Barra de Progresso ───────────────────────────────────────────────────────
+TOTAL_STEPS=7
+CURRENT_STEP=0
+
+show_step() {
+    local msg="$1"
+    CURRENT_STEP=$((CURRENT_STEP + 1))
+    local percent=$((CURRENT_STEP * 100 / TOTAL_STEPS))
+    local completed=$((percent * 40 / 100))
+    local remaining=$((40 - completed))
+    local bar_color="${BLU}"
+    [[ $percent -eq 100 ]] && bar_color="${GRN}"
+    local bar=""
+    for ((i=0; i<completed; i++)); do bar+="█"; done
+    for ((i=0; i<remaining; i++)); do bar+="░"; done
+    echo -e "\n${BLD}Progresso: ${bar_color}[${bar}] ${percent}%${NC}"
+    echo -e "${BLU}➔ ${msg}${NC}"
+}
+
 spinner() {
     local pid=$1
     local delay=0.1
@@ -114,20 +133,19 @@ run_uninstall() {
 #  FUNÇÃO: INSTALAR
 # ══════════════════════════════════════════════════════════════════════════════
 run_install() {
+    # Reinicia contadores (importante para opção "reinstalar")
+    CURRENT_STEP=0
+
     > "$LOG_FILE"
     [[ "${REAL_USER}" != "root" ]] && chown "${REAL_USER}:${REAL_USER}" "$LOG_FILE" 2>/dev/null || true
 
     sep
     echo -e "${BLD}  ProVeMaps — Instalação${NC}"
+    echo -e "  Diretório: ${BLD}${INSTALL_DIR}${NC}   Log: ${BLD}${LOG_FILE}${NC}"
     sep
-    echo ""
-    log "Diretório: ${INSTALL_DIR}"
-    log "Log:       ${LOG_FILE}"
-    echo ""
 
     # ── 1. Dependências ───────────────────────────────────────────────────────
-    sep
-    log "PASSO 1/5 — Instalando dependências (git, curl)..."
+    show_step "Instalando dependências do sistema (git, curl)..."
     (
         apt-get update -y
         apt-get install -y git curl ca-certificates gnupg
@@ -136,8 +154,7 @@ run_install() {
     ok "Dependências instaladas."
 
     # ── 2. Docker ─────────────────────────────────────────────────────────────
-    sep
-    log "PASSO 2/5 — Instalando Docker..."
+    show_step "Instalando Docker..."
     if command -v docker &>/dev/null && docker compose version &>/dev/null; then
         ok "Docker já instalado: $(docker --version)"
     else
@@ -166,8 +183,7 @@ run_install() {
     fi
 
     # ── 3. Node.js ────────────────────────────────────────────────────────────
-    sep
-    log "PASSO 3/5 — Instalando Node.js 20 LTS..."
+    show_step "Instalando Node.js 20 LTS..."
     if command -v node &>/dev/null && node --version | grep -q "^v20"; then
         ok "Node.js já instalado: $(node --version)"
     else
@@ -180,8 +196,7 @@ run_install() {
     fi
 
     # ── 4. Repositório ────────────────────────────────────────────────────────
-    sep
-    log "PASSO 4/5 — Baixando/Atualizando repositório..."
+    show_step "Baixando/Atualizando repositório..."
     (
         if [[ -d "${INSTALL_DIR}/.git" ]]; then
             git -C "${INSTALL_DIR}" fetch origin
@@ -193,15 +208,13 @@ run_install() {
     ) >> "$LOG_FILE" 2>&1 &
     spinner $! || err "Falha ao configurar o repositório Git."
     ok "Código fonte pronto em ${INSTALL_DIR}."
-
     if [[ "${REAL_USER}" != "root" ]]; then
         chown -R "${REAL_USER}:${REAL_USER}" "${INSTALL_DIR}" >> "$LOG_FILE" 2>&1 &
         spinner $! || warn "Não foi possível ajustar o dono dos arquivos."
     fi
 
-    # ── 4b. Permissões ────────────────────────────────────────────────────────
-    sep
-    log "Configurando permissões de diretórios..."
+    # ── 5. Permissões ─────────────────────────────────────────────────────────
+    show_step "Configurando permissões e diretórios de dados..."
     chmod +x "${INSTALL_DIR}/docker/docker-entrypoint.sh"
     find "${INSTALL_DIR}/scripts" -name "*.sh" -exec chmod +x {} \;
     mkdir -p \
@@ -216,9 +229,8 @@ run_install() {
         "${INSTALL_DIR}/logs"
     ok "Permissões configuradas."
 
-    # ── 5. Frontend ───────────────────────────────────────────────────────────
-    sep
-    log "PASSO 5/5 — Compilando frontend Vue 3 (pode demorar alguns minutos)..."
+    # ── 6. Frontend ───────────────────────────────────────────────────────────
+    show_step "Compilando frontend Vue 3 (pode demorar alguns minutos)..."
     (
         cd "${INSTALL_DIR}/frontend"
         if [[ "${REAL_USER}" != "root" ]]; then
@@ -240,9 +252,8 @@ run_install() {
         [[ "${REAL_USER}" != "root" ]] && chown "${REAL_USER}:${REAL_USER}" "${ENV_FILE}"
     fi
 
-    # ── Docker Compose ────────────────────────────────────────────────────────
-    sep
-    log "Iniciando serviços com Docker Compose..."
+    # ── 7. Docker Compose + Health check ─────────────────────────────────────
+    show_step "Iniciando serviços e aguardando aplicação ficar pronta..."
     COMPOSE_FILE="${INSTALL_DIR}/docker/docker-compose.yml"
     (
         if docker compose -f "${COMPOSE_FILE}" ps -q 2>/dev/null | grep -q .; then
@@ -253,9 +264,6 @@ run_install() {
     spinner $! || err "Falha ao iniciar containers do Docker Compose."
     ok "Serviços iniciados."
 
-    # ── Health check ──────────────────────────────────────────────────────────
-    sep
-    log "Aguardando aplicação iniciar..."
     (
         for i in $(seq 1 90); do
             if curl -sf "http://localhost:8100/healthz" > /dev/null 2>&1; then
