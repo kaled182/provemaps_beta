@@ -205,7 +205,7 @@ run_install() {
             git -C "${INSTALL_DIR}" reset --hard origin/main
         else
             mkdir -p "${INSTALL_DIR}"
-            git clone "${REPO_URL}" "${INSTALL_DIR}"
+            git clone --branch main "${REPO_URL}" "${INSTALL_DIR}"
         fi
     ) >> "$LOG_FILE" 2>&1 &
     spinner $! "Clonando repositório..." || err "Falha ao configurar o repositório Git."

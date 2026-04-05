@@ -130,7 +130,7 @@ log "PASSO 4/5 — Baixando/Atualizando repositório..."
         git -C "${INSTALL_DIR}" reset --hard origin/main
     else
         mkdir -p "${INSTALL_DIR}"
-        git clone "${REPO_URL}" "${INSTALL_DIR}"
+        git clone --branch main "${REPO_URL}" "${INSTALL_DIR}"
     fi
 ) >> "$LOG_FILE" 2>&1 &
 
