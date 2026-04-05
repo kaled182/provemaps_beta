@@ -242,7 +242,7 @@
           <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold">4</div>
           <div>
             <h2 class="text-base font-semibold text-white">Database</h2>
-            <p class="text-xs text-gray-400">PostgreSQL connection settings</p>
+            <p class="text-xs text-gray-400">Credenciais PostgreSQL — defina uma senha forte</p>
           </div>
         </div>
 
@@ -250,40 +250,72 @@
           <svg class="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
           </svg>
-          <span>If running with Docker, the defaults below are already correct.</span>
+          <span>Rodando com Docker? Host e porta já estão corretos. <strong>Altere a senha</strong> antes de finalizar.</span>
         </div>
 
+        <!-- Host + Port -->
         <div class="grid grid-cols-2 gap-4">
-          <div class="col-span-2">
+          <div class="col-span-2 sm:col-span-1">
             <label class="block text-sm font-medium text-gray-300 mb-1.5">Host</label>
             <input type="text" name="db_host" value="postgres"
               class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm font-mono
                 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
           </div>
-          <div>
+          <div class="col-span-2 sm:col-span-1">
             <label class="block text-sm font-medium text-gray-300 mb-1.5">Port</label>
             <input type="text" name="db_port" value="5432"
               class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm font-mono
                 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-300 mb-1.5">Database Name</label>
-            <input type="text" name="db_name" value="app"
-              class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm font-mono
-                focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+        </div>
+
+        <!-- User (read-only) + DB Name (oculto) -->
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1.5">
+            Usuário do banco
+            <span class="ml-1.5 px-1.5 py-0.5 rounded text-xs bg-gray-700 text-gray-400 font-normal">fixo</span>
+          </label>
+          <div class="flex items-center gap-3 w-full bg-gray-800/60 border border-gray-700 rounded-xl px-4 py-3">
+            <svg class="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+            </svg>
+            <span class="text-sm font-mono text-gray-300" id="db-user-display">app</span>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-300 mb-1.5">User</label>
-            <input type="text" name="db_user" value="app"
-              class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm font-mono
-                focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+          <input type="hidden" name="db_user" id="db_user" value="app">
+          <input type="hidden" name="db_name" value="app">
+          <p class="mt-1 text-xs text-gray-500">Usuário interno do Docker — não pode ser alterado aqui</p>
+        </div>
+
+        <!-- Password com indicador de força -->
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1.5">
+            Senha do banco <span class="text-red-400">*</span>
+          </label>
+          <div class="relative">
+            <input type="password" name="db_password" id="db_password"
+              placeholder="••••••••••••"
+              oninput="checkPasswordStrength(this.value)"
+              class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 pr-11 text-sm font-mono
+                focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-gray-600">
+            <button type="button" onclick="togglePasswordVisibility('db_password', this)"
+              class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 transition-colors">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+              </svg>
+            </button>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-300 mb-1.5">Password</label>
-            <input type="password" name="db_password" value="app"
-              class="w-full bg-gray-800 border border-gray-600 text-white rounded-xl px-4 py-3 text-sm font-mono
-                focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+
+          <!-- Barra de força -->
+          <div class="mt-2 flex gap-1" id="strength-bars">
+            <div class="h-1.5 flex-1 rounded-full bg-gray-700 transition-colors duration-300" id="bar-1"></div>
+            <div class="h-1.5 flex-1 rounded-full bg-gray-700 transition-colors duration-300" id="bar-2"></div>
+            <div class="h-1.5 flex-1 rounded-full bg-gray-700 transition-colors duration-300" id="bar-3"></div>
+            <div class="h-1.5 flex-1 rounded-full bg-gray-700 transition-colors duration-300" id="bar-4"></div>
           </div>
+          <p class="mt-1 text-xs" id="strength-label">
+            <span class="text-gray-500">Mínimo: 12 caracteres · maiúscula · minúscula · número · símbolo</span>
+          </p>
         </div>
       </div>
 

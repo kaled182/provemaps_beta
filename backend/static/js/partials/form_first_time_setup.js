@@ -276,8 +276,55 @@ function previewLogo(input) {
   }
 }
 
-/* ── expose globally (used by inline onchange) ── */
+/* ══════════════════════════════════════════════
+   PASSWORD STRENGTH INDICATOR (step 4)
+══════════════════════════════════════════════ */
+
+function checkPasswordStrength(value) {
+  const bars  = [1, 2, 3, 4].map(i => document.getElementById(`bar-${i}`));
+  const label = document.getElementById('strength-label');
+  if (!bars[0] || !label) return;
+
+  const checks = [
+    value.length >= 12,
+    /[A-Z]/.test(value) && /[a-z]/.test(value),
+    /[0-9]/.test(value),
+    /[^A-Za-z0-9]/.test(value),
+  ];
+  const score = checks.filter(Boolean).length;
+
+  const colors = ['bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-emerald-500'];
+  const msgs   = [
+    '<span class="text-red-400">Muito fraca</span>',
+    '<span class="text-orange-400">Fraca — adicione números e símbolos</span>',
+    '<span class="text-yellow-400">Razoável — adicione um símbolo especial</span>',
+    '<span class="text-emerald-400 font-medium">Forte ✓</span>',
+  ];
+
+  bars.forEach((bar, i) => {
+    bar.className = 'h-1.5 flex-1 rounded-full transition-colors duration-300 ';
+    bar.className += i < score ? colors[score - 1] : 'bg-gray-700';
+  });
+
+  label.innerHTML = value.length === 0
+    ? '<span class="text-gray-500">Mínimo: 12 caracteres · maiúscula · minúscula · número · símbolo</span>'
+    : msgs[score - 1] || msgs[0];
+}
+
+function togglePasswordVisibility(inputId, btn) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const isText = input.type === 'text';
+  input.type = isText ? 'password' : 'text';
+  const eyeOpen  = 'M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z';
+  const eyeClosed = 'M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21';
+  btn.querySelector('path:first-child').setAttribute('d', isText ? eyeOpen.split('z')[0] + 'z' : eyeClosed.split('m')[0]);
+}
+
+/* ── expose globally ── */
 window.previewLogo = previewLogo;
+window.checkPasswordStrength = checkPasswordStrength;
+window.togglePasswordVisibility = togglePasswordVisibility;
 
 /* ── Initial render ── */
 goTo(1);

@@ -1,9 +1,30 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 from django import forms
+from django.core.exceptions import ValidationError
+
+
+def validate_db_password(value: str) -> None:
+    """Exige senha de banco de dados com complexidade mínima."""
+    errors = []
+    if len(value) < 12:
+        errors.append("mínimo 12 caracteres")
+    if not re.search(r"[A-Z]", value):
+        errors.append("pelo menos 1 letra maiúscula")
+    if not re.search(r"[a-z]", value):
+        errors.append("pelo menos 1 letra minúscula")
+    if not re.search(r"[0-9]", value):
+        errors.append("pelo menos 1 número")
+    if not re.search(r"[^A-Za-z0-9]", value):
+        errors.append("pelo menos 1 caractere especial (!@#$%...)")
+    if errors:
+        raise ValidationError(
+            f"Senha fraca. Necessário: {', '.join(errors)}."
+        )
 
 
 def _env_default(*keys: str, fallback: str = "") -> str:
@@ -65,20 +86,20 @@ class FirstTimeSetupForm(forms.Form):
         max_length=16,
         initial=_env_default("DB_PORT", "DATABASE_PORT", fallback="5432"),
     )
-    db_name = forms.CharField(
-        label="Database name",
-        max_length=255,
-        initial=_env_default("DB_NAME", "DATABASE_NAME", fallback="mapsprovefiber"),
-    )
     db_user = forms.CharField(
         label="Database user",
         max_length=255,
-        initial=_env_default("DB_USER", "DATABASE_USER", fallback="provemaps"),
+        initial=_env_default("DB_USER", "DATABASE_USER", fallback="app"),
     )
     db_password = forms.CharField(
         label="Database password",
         max_length=255,
-        widget=forms.PasswordInput,
+        widget=forms.PasswordInput(render_value=True),
+        validators=[validate_db_password],
+        help_text=(
+            "Mínimo 12 caracteres · maiúscula · minúscula"
+            " · número · caractere especial"
+        ),
     )
     redis_url = forms.CharField(
         label="Redis URL",

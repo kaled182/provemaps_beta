@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import os
+import re
 import logging
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, user_passes_test
+from django.db import connection
 from django.shortcuts import redirect, render
 from django.http import HttpResponseForbidden
 
@@ -25,6 +27,21 @@ DEFAULT_SERVICE_RESTART_COMMANDS = (
     if getattr(settings, "SERVICE_RESTART_COMMANDS", "")
     else "docker compose restart web; docker compose restart celery; docker compose restart beat"
 )
+
+
+_DB_NAME_FIXED = "app"  # nome do banco nunca muda; só user/senha são configuráveis
+
+
+def _alter_db_password(db_user: str, new_password: str) -> None:
+    """Executa ALTER ROLE no PostgreSQL para trocar a senha do usuário."""
+    if not re.match(r"^[a-zA-Z0-9_]+$", db_user):
+        raise ValueError(f"db_user inválido: {db_user!r}")
+    quoted = connection.ops.quote_name(db_user)
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"ALTER ROLE {quoted} WITH PASSWORD %s",
+            [new_password],
+        )
 
 
 def get_setup_logo():
@@ -67,9 +84,23 @@ def first_time_setup(request):
         if form.is_valid():
             data = form.cleaned_data
             
+            # Credenciais do banco: user vem do form, name é fixo
+            db_user = data.get("db_user") or os.environ.get("DB_USER", "app")
+            db_password = data["db_password"]
+            db_name = _DB_NAME_FIXED
+
+            # Alterar senha no PostgreSQL se diferente da atual
+            current_db_password = os.environ.get("DB_PASSWORD", "")
+            if db_password != current_db_password:
+                try:
+                    _alter_db_password(db_user, db_password)
+                    logger.info("Senha do banco alterada via ALTER ROLE para: %s", db_user)
+                except Exception as exc:
+                    logger.error("Falha ao executar ALTER ROLE: %s", exc)
+
             # Mark any existing configs as not configured (cleanup)
             FirstTimeSetup.objects.all().update(configured=False)
-            
+
             # Create new configuration with configured=True
             setup_instance = FirstTimeSetup.objects.create(
                 company_name=data["company_name"],
@@ -85,9 +116,9 @@ def first_time_setup(request):
                 unique_licence=data["unique_licence"],
                 db_host=data["db_host"],
                 db_port=data["db_port"],
-                db_name=data["db_name"],
-                db_user=data["db_user"],
-                db_password=data["db_password"],
+                db_name=db_name,
+                db_user=db_user,
+                db_password=db_password,
                 redis_url=data["redis_url"],
                 configured=True,
             )
@@ -102,13 +133,13 @@ def first_time_setup(request):
             env_payload = {
                 "COMPANY_NAME": data["company_name"],
                 "ZABBIX_API_URL": data["zabbix_url"],
-                "GOOGLE_MAPS_API_KEY": data["maps_api_key"],
+                "GOOGLE_MAPS_API_KEY": data.get("maps_api_key", ""),
                 "UNIQUE_LICENCE": data["unique_licence"],
                 "DB_HOST": data["db_host"],
                 "DB_PORT": data["db_port"],
-                "DB_NAME": data["db_name"],
-                "DB_USER": data["db_user"],
-                "DB_PASSWORD": data["db_password"],
+                "DB_NAME": db_name,
+                "DB_USER": db_user,
+                "DB_PASSWORD": db_password,
                 "REDIS_URL": data["redis_url"],
             }
             if data["auth_type"] == "token":

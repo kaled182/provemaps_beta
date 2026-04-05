@@ -152,6 +152,30 @@ maybe_ensure_superuser() {
   fi
 }
 
+maybe_load_runtime_env() {
+  # Se runtime.env existir, exporta variáveis DB_* para sobrescrever os
+  # valores hardcoded do docker-compose. Isso garante que credenciais
+  # alteradas via First-Time Setup persistam entre restarts do container.
+  local runtime_env="/app/database/runtime.env"
+  [[ -f "$runtime_env" ]] || return 0
+
+  local key value
+  while IFS='=' read -r key value; do
+    # ignora comentários e linhas vazias
+    [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+    [[ "$key" != *=* && -n "$value" ]] || true  # já separado pelo IFS
+    # remove aspas duplas ou simples ao redor do valor
+    value="${value%\"}"  ; value="${value#\"}"
+    value="${value%\'}"  ; value="${value#\'}"
+    case "$key" in
+      DB_USER|DB_PASSWORD|DB_NAME|DB_HOST|DB_PORT)
+        export "$key=$value"
+        log "runtime.env: $key carregado"
+        ;;
+    esac
+  done < "$runtime_env"
+}
+
 maybe_generate_fernet_key() {
   # Se FERNET_KEY não está definida, gera e tenta persistir em database/fernet.key
   # O valor é exportado para que gunicorn/celery herdem via exec
@@ -232,6 +256,7 @@ main() {
   fi
 
   # Optional initialization steps
+  maybe_load_runtime_env
   maybe_generate_fernet_key
   maybe_migrate
   maybe_collectstatic
