@@ -399,4 +399,12 @@ if (domainInput && emailWrap) {
 }
 
 /* ── Initial render ── */
-goTo(1);
+(function () {
+  const form = document.getElementById('setup-form');
+  const errorStep = form && parseInt(form.dataset.errorStep, 10);
+  goTo(errorStep > 0 ? errorStep : 1);
+
+  // Auto-dismiss error toast after 8 s
+  const toast = document.getElementById('setup-error-toast');
+  if (toast) setTimeout(() => toast.remove(), 8000);
+})();

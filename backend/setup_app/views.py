@@ -181,6 +181,26 @@ def first_time_setup(request):
     else:
         form = FirstTimeSetupForm()
 
+    # Map each form field to its wizard step so the JS can navigate there on error
+    _FIELD_STEP = {
+        "company_name": 1, "logo": 1,
+        "zabbix_url": 2, "auth_type": 2, "zabbix_api_key": 2, "zabbix_user": 2, "zabbix_password": 2,
+        "map_provider": 3, "maps_api_key": 3, "mapbox_token": 3,
+        "db_host": 4, "db_port": 4, "db_user": 4, "db_password": 4,
+        "redis_url": 5, "domain_name": 5, "certbot_email": 5,
+        "unique_licence": 6,
+    }
+    error_step = None
+    form_errors = []
+    if form.errors:
+        for field, errors in form.errors.items():
+            step_num = _FIELD_STEP.get(field, 1)
+            if error_step is None or step_num < error_step:
+                error_step = step_num
+            label = form.fields[field].label if field in form.fields else field
+            for msg in errors:
+                form_errors.append(f"{label}: {msg}")
+
     steps = [
         {
             "label": "Company",
@@ -214,6 +234,8 @@ def first_time_setup(request):
             "form": form,
             "setup_logo": get_setup_logo(),
             "steps": steps,
+            "error_step": error_step,
+            "form_errors": form_errors,
         },
     )
 

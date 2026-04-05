@@ -38,7 +38,7 @@ def _env_default(*keys: str, fallback: str = "") -> str:
 
 class FirstTimeSetupForm(forms.Form):
     company_name = forms.CharField(label="Company name", max_length=255)
-    logo = forms.ImageField(label="Company logo (PNG)", required=True)
+    logo = forms.ImageField(label="Company logo (PNG)", required=False)
     zabbix_url = forms.CharField(label="Zabbix URL", max_length=255)
     auth_type = forms.ChoiceField(
         label="Authentication method",

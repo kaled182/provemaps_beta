@@ -39,7 +39,8 @@
     </div>
 
     <!-- Form -->
-    <form method="post" enctype="multipart/form-data" id="setup-form" novalidate>
+    <form method="post" enctype="multipart/form-data" id="setup-form" novalidate
+      {% if error_step %}data-error-step="{{ error_step }}"{% endif %}>
       {% csrf_token %}
 
       <!-- ── PASSO 1: Empresa ── -->
@@ -484,3 +485,24 @@
 </div>
 
 <script src="{% static 'js/partials/form_first_time_setup.js' %}"></script>
+
+{% if form_errors %}
+<div id="setup-error-toast" class="fixed bottom-6 right-6 z-50 max-w-sm w-full bg-red-900/95 border border-red-700 rounded-2xl shadow-2xl p-4 flex gap-3 items-start backdrop-blur-sm">
+  <div class="flex-shrink-0 w-8 h-8 rounded-full bg-red-700 flex items-center justify-center mt-0.5">
+    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856C18.448 19 19 18.105 19 17l-7-10.5L5 17c0 1.105.552 2 1.082 2z"/>
+    </svg>
+  </div>
+  <div class="flex-1 min-w-0">
+    <p class="text-sm font-semibold text-red-100 mb-1">Por favor, corrija os erros abaixo:</p>
+    <ul class="text-xs text-red-200 space-y-0.5 list-disc list-inside">
+      {% for err in form_errors %}<li>{{ err }}</li>{% endfor %}
+    </ul>
+  </div>
+  <button onclick="document.getElementById('setup-error-toast').remove()" class="flex-shrink-0 text-red-400 hover:text-white transition-colors mt-0.5">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+    </svg>
+  </button>
+</div>
+{% endif %}
