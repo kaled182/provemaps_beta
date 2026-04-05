@@ -256,7 +256,7 @@ main() {
   fi
 
   # Ensure writable directories exist (bind-mounted from host may be missing)
-  mkdir -p /app/backend/media /app/backend/logs
+  mkdir -p /app/backend/media /app/backend/logs 2>/dev/null || warn "Could not create media/logs dirs — check host permissions"
 
   # Optional initialization steps
   maybe_load_runtime_env
