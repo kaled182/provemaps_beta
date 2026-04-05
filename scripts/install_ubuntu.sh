@@ -126,6 +126,13 @@ fi
 
 # ─── 5. Build do frontend ────────────────────────────────────────────────────
 sep
+log "PASSO 4b — Corrigindo permissões de scripts..."
+chmod +x "${INSTALL_DIR}/docker/docker-entrypoint.sh"
+find "${INSTALL_DIR}/scripts" -name "*.sh" -exec chmod +x {} \;
+ok "Permissões corrigidas."
+
+# ─── 5. Build do frontend ────────────────────────────────────────────────────
+sep
 log "PASSO 5/5 — Compilando frontend Vue 3..."
 
 FRONTEND_DIR="${INSTALL_DIR}/frontend"
