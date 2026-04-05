@@ -586,24 +586,19 @@ def test_database_connection(request):
                 status=400,
             )
 
-        # Test connection using Django's DB backend (avoids psycopg2 dependency)
+        # Test connection using psycopg2 directly (avoids Django alias bookkeeping)
         try:
-            from django.db import connections
-            from django.db.utils import OperationalError as DjangoOperationalError
+            import psycopg2
 
-            test_alias = "_setup_test_conn"
-            connections.databases[test_alias] = {
-                "ENGINE": "django.contrib.gis.db.backends.postgis",
-                "HOST": db_host,
-                "PORT": db_port,
-                "NAME": db_name,
-                "USER": db_user,
-                "PASSWORD": db_password,
-                "CONN_MAX_AGE": 0,
-                "OPTIONS": {"connect_timeout": 5},
-            }
+            conn = psycopg2.connect(
+                host=db_host,
+                port=int(db_port),
+                dbname=db_name,
+                user=db_user,
+                password=db_password,
+                connect_timeout=5,
+            )
             try:
-                conn = connections[test_alias]
                 cursor = conn.cursor()
                 cursor.execute("SELECT version()")
                 version_full = cursor.fetchone()[0]
@@ -612,10 +607,8 @@ def test_database_connection(request):
                 else:
                     version = version_full
                 cursor.close()
-                conn.close()
             finally:
-                connections[test_alias].close()
-                del connections.databases[test_alias]
+                conn.close()
 
             # Log successful test
             ConfigurationAudit.log_change(
