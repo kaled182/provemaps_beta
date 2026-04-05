@@ -67,13 +67,12 @@ if TYPE_CHECKING:  # pragma: no cover - assists type checkers only
 # -----------------------------------------------------
 DEBUG = True  # type: ignore[assignment]
 
-# Development hosts (includes Docker/Compose)
+# Development hosts — aceita qualquer host para facilitar instalação em qualquer servidor
+# Para restringir em produção, defina ALLOWED_HOSTS no .env
 ALLOWED_HOSTS = [  # type: ignore[assignment]
-    "localhost",
-    "127.0.0.1",
-    "0.0.0.0",
-    "web",                    # docker-compose service name
-    "host.docker.internal",   # allows the Docker host to reach the app
+    host.strip()
+    for host in os.getenv("ALLOWED_HOSTS", "*").split(",")
+    if host.strip()
 ]
 
 # CSRF in development
