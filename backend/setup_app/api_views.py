@@ -1779,10 +1779,10 @@ def get_configuration(request):
             "GOOGLE_MAPS_API_KEY": runtime_config.google_maps_api_key,
             "MAP_PROVIDER": runtime_config.map_provider or "google",
             "MAPBOX_TOKEN": runtime_config.mapbox_token,
-            # Map configuration defaults - Google Maps
-            "MAP_DEFAULT_ZOOM": "12",
-            "MAP_DEFAULT_LAT": "-15.7801",
-            "MAP_DEFAULT_LNG": "-47.9292",
+            # Map configuration defaults - Google Maps (reads from DB via runtime_config)
+            "MAP_DEFAULT_ZOOM": str(runtime_config.map_default_zoom),
+            "MAP_DEFAULT_LAT": str(runtime_config.map_default_lat),
+            "MAP_DEFAULT_LNG": str(runtime_config.map_default_lng),
             "MAP_TYPE": "terrain",
             "MAP_STYLES": "",
             "ENABLE_STREET_VIEW": True,
