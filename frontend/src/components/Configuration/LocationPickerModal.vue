@@ -3,7 +3,6 @@
     <div
       v-if="isOpen"
       class="location-picker-overlay"
-      :class="{ dark: isDark }"
       @click.self="handleClose"
     >
       <div class="location-picker-modal">
@@ -84,9 +83,8 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick, computed } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import { createMap } from '@/providers/maps/MapProviderFactory.js'
-import { useUiStore } from '@/stores/ui.js'
 
 const props = defineProps({
   isOpen: { type: Boolean, default: false },
@@ -96,9 +94,6 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['confirm', 'close'])
-
-const uiStore = useUiStore()
-const isDark  = computed(() => uiStore.theme === 'dark')
 
 const mapContainer = ref(null)
 const mapInstance  = ref(null)
@@ -206,7 +201,7 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   overflow: hidden;
 }
 
-.dark .location-picker-modal {
+:global(html.dark) .location-picker-modal {
   background: #1f2937;
   color: #f9fafb;
 }
@@ -220,7 +215,7 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   border-bottom: 1px solid #e5e7eb;
 }
 
-.dark .location-picker-header {
+:global(html.dark) .location-picker-header {
   border-color: #374151;
 }
 
@@ -234,7 +229,7 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   background: #f3f4f6;
   color: #111827;
 }
-.dark .location-picker-close:hover {
+:global(html.dark) .location-picker-close:hover {
   background: #374151;
   color: #f9fafb;
 }
@@ -249,7 +244,7 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   border-bottom: 1px solid #e5e7eb;
   flex-wrap: wrap;
 }
-.dark .location-picker-coords {
+:global(html.dark) .location-picker-coords {
   background: #111827;
   border-color: #374151;
 }
@@ -270,7 +265,7 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   color: #111827;
   font-family: monospace;
 }
-.dark .coord-value {
+:global(html.dark) .coord-value {
   color: #f9fafb;
 }
 .coord-divider {
@@ -307,8 +302,8 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   justify-content: center;
   background: rgba(255, 255, 255, 0.85);
 }
-.dark .location-picker-loading,
-.dark .location-picker-error {
+:global(html.dark) .location-picker-loading,
+:global(html.dark) .location-picker-error {
   background: rgba(17, 24, 39, 0.85);
 }
 
@@ -320,7 +315,7 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   padding: 0.875rem 1.25rem;
   border-top: 1px solid #e5e7eb;
 }
-.dark .location-picker-footer {
+:global(html.dark) .location-picker-footer {
   border-color: #374151;
 }
 
@@ -352,10 +347,10 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   transition: background 0.15s;
 }
 .btn-secondary-sm:hover { background: #f9fafb; }
-.dark .btn-secondary-sm {
+:global(html.dark) .btn-secondary-sm {
   background: #374151;
   color: #f9fafb;
   border-color: #4b5563;
 }
-.dark .btn-secondary-sm:hover { background: #4b5563; }
+:global(html.dark) .btn-secondary-sm:hover { background: #4b5563; }
 </style>
