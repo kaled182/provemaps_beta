@@ -194,6 +194,7 @@ CSP_CONNECT_SRC = os.getenv(
     "https://events.mapbox.com "
     "https://*.tiles.mapbox.com "
     "https://nominatim.openstreetmap.org "
+    "https://api.github.com "
     "http://localhost:8082 "
     "http://video-hls:8080 "
     "http://localhost:8889",

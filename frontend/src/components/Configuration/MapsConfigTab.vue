@@ -251,27 +251,44 @@
       <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Configurações Gerais</h3>
       
       <div class="space-y-4">
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="label-custom">Latitude Inicial</label>
-            <input 
-              v-model.number="config.common.default_lat" 
-              type="number" 
-              step="0.000001"
-              class="input-custom" 
-              placeholder="-15.7801"
-            />
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="label-custom !mb-0">Localização Inicial</label>
+            <button
+              @click="showLocationPicker = true"
+              type="button"
+              class="inline-flex items-center gap-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
+              title="Selecionar no mapa"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+              </svg>
+              Selecionar no mapa
+            </button>
           </div>
-
-          <div>
-            <label class="label-custom">Longitude Inicial</label>
-            <input 
-              v-model.number="config.common.default_lng" 
-              type="number" 
-              step="0.000001"
-              class="input-custom" 
-              placeholder="-47.9292"
-            />
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="label-custom text-xs text-gray-500 dark:text-gray-400">Latitude</label>
+              <input
+                v-model.number="config.common.default_lat"
+                type="number"
+                step="0.000001"
+                class="input-custom"
+                placeholder="-15.7801"
+              />
+            </div>
+            <div>
+              <label class="label-custom text-xs text-gray-500 dark:text-gray-400">Longitude</label>
+              <input
+                v-model.number="config.common.default_lng"
+                type="number"
+                step="0.000001"
+                class="input-custom"
+                placeholder="-47.9292"
+              />
+            </div>
           </div>
         </div>
 
@@ -337,6 +354,16 @@
       </div>
     </div>
 
+    <!-- Location Picker Modal -->
+    <LocationPickerModal
+      :is-open="showLocationPicker"
+      :lat="config.common.default_lat"
+      :lng="config.common.default_lng"
+      :zoom="parseInt(configForm.MAP_DEFAULT_ZOOM) || 6"
+      @confirm="onLocationPicked"
+      @close="showLocationPicker = false"
+    />
+
     <!-- Action Buttons -->
     <div class="flex justify-end gap-3">
       <button @click="handleReset" class="btn-secondary">
@@ -357,6 +384,7 @@
 import { ref, reactive, onMounted, h, computed, watch } from 'vue'
 import { useNotification } from '@/composables/useNotification'
 import { useSystemConfig } from '@/composables/useSystemConfig'
+import LocationPickerModal from '@/components/Configuration/LocationPickerModal.vue'
 
 // Simple icon components
 const GoogleMapsIcon = (props) => h('svg', { ...props, fill: 'currentColor', viewBox: '0 0 24 24' }, [
@@ -376,8 +404,15 @@ const { notify } = useNotification()
 const { configForm, loadSystemConfig, saveSystemConfig, loading } = useSystemConfig()
 
 // Local state
-const selectedProvider = ref('google')
-const saving = ref(false)
+const selectedProvider   = ref('google')
+const saving             = ref(false)
+const showLocationPicker = ref(false)
+
+function onLocationPicked({ lat, lng }) {
+  configForm.value.MAP_DEFAULT_LAT = String(lat)
+  configForm.value.MAP_DEFAULT_LNG = String(lng)
+  showLocationPicker.value = false
+}
 
 // Map local reactive config to configForm
 const config = reactive({

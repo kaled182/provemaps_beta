@@ -178,10 +178,13 @@ const changelog = [
     version: '1.4.2',
     date: '06 Abr 2026',
     latest: true,
-    features: [],
+    features: [
+      'Seletor de localização com mapa e PIN arrastável em Setup > Mapas — clique ou arraste o marcador para definir as coordenadas iniciais',
+    ],
     improvements: [
       'Botão "Reenquadrar" no mapa do backbone para ajustar a visão a todos os itens visíveis',
       '"Selecionar todos" no painel lateral reenquadra automaticamente o mapa',
+      'CSP ampliada para permitir verificação de atualizações via api.github.com',
     ],
     fixes: [
       'Coordenadas padrão do mapa (lat/lng em Setup > Mapas) não persistiam após salvar — .env sobrescrevia o valor do banco',
