@@ -27,7 +27,8 @@ def _load_runtime_env() -> None:
     returns the value written by the setup wizard — even if the bash entrypoint
     failed to export it correctly due to special characters in the password.
     """
-    runtime_env = Path(os.environ.get("RUNTIME_ENV_PATH", "")) or (DATABASE_DIR / "runtime.env")
+    _runtime_env_path = os.environ.get("RUNTIME_ENV_PATH", "")
+    runtime_env = Path(_runtime_env_path) if _runtime_env_path else (DATABASE_DIR / "runtime.env")
     if not runtime_env.exists():
         return
     try:
