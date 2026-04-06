@@ -174,7 +174,7 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
 })
 </script>
 
-<style scoped>
+<style>
 /* ── Overlay ───────────────────────────────────────────────────────────────── */
 .location-picker-overlay {
   position: fixed;
@@ -201,7 +201,7 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   overflow: hidden;
 }
 
-:global(html.dark) .location-picker-modal {
+html.dark .location-picker-modal {
   background: #1f2937;
   color: #f9fafb;
 }
@@ -215,7 +215,7 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   border-bottom: 1px solid #e5e7eb;
 }
 
-:global(html.dark) .location-picker-header {
+html.dark .location-picker-header {
   border-color: #374151;
 }
 
@@ -229,7 +229,7 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   background: #f3f4f6;
   color: #111827;
 }
-:global(html.dark) .location-picker-close:hover {
+html.dark .location-picker-close:hover {
   background: #374151;
   color: #f9fafb;
 }
@@ -244,7 +244,7 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   border-bottom: 1px solid #e5e7eb;
   flex-wrap: wrap;
 }
-:global(html.dark) .location-picker-coords {
+html.dark .location-picker-coords {
   background: #111827;
   border-color: #374151;
 }
@@ -265,7 +265,7 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   color: #111827;
   font-family: monospace;
 }
-:global(html.dark) .coord-value {
+html.dark .coord-value {
   color: #f9fafb;
 }
 .coord-divider {
@@ -302,8 +302,8 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   justify-content: center;
   background: rgba(255, 255, 255, 0.85);
 }
-:global(html.dark) .location-picker-loading,
-:global(html.dark) .location-picker-error {
+html.dark .location-picker-loading,
+html.dark .location-picker-error {
   background: rgba(17, 24, 39, 0.85);
 }
 
@@ -315,7 +315,7 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   padding: 0.875rem 1.25rem;
   border-top: 1px solid #e5e7eb;
 }
-:global(html.dark) .location-picker-footer {
+html.dark .location-picker-footer {
   border-color: #374151;
 }
 
@@ -347,10 +347,10 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   transition: background 0.15s;
 }
 .btn-secondary-sm:hover { background: #f9fafb; }
-:global(html.dark) .btn-secondary-sm {
+html.dark .btn-secondary-sm {
   background: #374151;
   color: #f9fafb;
   border-color: #4b5563;
 }
-:global(html.dark) .btn-secondary-sm:hover { background: #4b5563; }
+html.dark .btn-secondary-sm:hover { background: #4b5563; }
 </style>
