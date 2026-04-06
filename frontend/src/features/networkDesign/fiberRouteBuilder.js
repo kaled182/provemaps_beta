@@ -4,6 +4,7 @@ import { getPath, setPath as setPathState, addPoint, updatePoint, removePoint, r
 import { initMap as initializeMap, onMapClick, onMapRightClick, drawPolyline, clearPolyline, addMarker as createMarker, removeMarker, clearMarkers as clearAllMarkers, attachPolylineRightClick, createCablePolyline, getMapInstance, cleanupMap, fitMapToBounds } from './modules/mapCore-refactored.js';
 import { latLngToPixel, distanceBetweenPixels, distancePointToSegmentPx } from '@/utils/mapUtils.js';
 import { getCurrentProviderName } from '@/providers/maps/MapProviderFactory.js';
+import { getMapConfig } from '@/utils/mapLoader.js';
 import { initContextMenu, showContextMenu, hideContextMenu, updateContextMenuState, cleanupContextMenu } from './modules/contextMenu.js';
 import {
     initModalEditor,
@@ -749,10 +750,22 @@ function setPath(points) {
     // onPathChange callback will handle polyline drawing
 }
 
-function initMap() {
+async function initMap() {
+    let centerLat = -16.6869;
+    let centerLng = -49.2648;
+    let defaultZoom = 6;
+    try {
+        const config = await getMapConfig();
+        if (config.mapDefaultLat) centerLat = parseFloat(config.mapDefaultLat);
+        if (config.mapDefaultLng) centerLng = parseFloat(config.mapDefaultLng);
+        if (config.mapDefaultZoom) defaultZoom = parseInt(config.mapDefaultZoom);
+    } catch (e) {
+        console.warn('[initMap] Could not load map config, using defaults:', e);
+    }
+
     map = initializeMap('builderMap', {
-        center: { lat: -16.6869, lng: -49.2648 },
-        zoom: 6,
+        center: { lat: centerLat, lng: centerLng },
+        zoom: defaultZoom,
         mapTypeId: 'terrain',
     });
 
@@ -917,7 +930,7 @@ console.log('[SelfCheck] Modules loaded:', {
 });
 
 // Initialize map when Google Maps API is ready
-function waitForGoogleMaps() {
+async function waitForGoogleMaps() {
     const key = getGoogleApiKey();
     if (!key) {
         console.warn('[waitForGoogleMaps] Google Maps API key not configured; skipping init.');
@@ -930,7 +943,7 @@ function waitForGoogleMaps() {
     if (typeof google !== 'undefined' && google.maps) {
         console.log('[waitForGoogleMaps] Google Maps API is ready, calling initMap()');
         try {
-            initMap();
+            await initMap();
         } catch (e) {
             console.error('[waitForGoogleMaps] Error calling initMap():', e);
         }

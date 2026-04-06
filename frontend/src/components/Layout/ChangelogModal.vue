@@ -175,9 +175,22 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
+    version: '1.4.2',
+    date: '06 Abr 2026',
+    latest: true,
+    features: [],
+    improvements: [],
+    fixes: [
+      'Mapa do Network Design agora respeita a localização inicial configurada em Setup > Mapas',
+      'Modal de localização do site (importação de dispositivos) usa o provider configurado (Mapbox/Google)',
+      'Importação de rotas KML bloqueada incorretamente quando diagnósticos estavam desabilitados',
+      'Network Design inicializa mapa com Mapbox sem aguardar Google Maps API',
+    ],
+  },
+  {
     version: '1.4.1',
     date: '03 Abr 2026',
-    latest: true,
+    latest: false,
     features: [],
     improvements: [
       'Paleta de cores do menu unificada com as páginas — removido tom azul-escuro',
