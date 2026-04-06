@@ -3,6 +3,7 @@
     <div
       v-if="isOpen"
       class="location-picker-overlay"
+      :class="{ dark: isDark }"
       @click.self="handleClose"
     >
       <div class="location-picker-modal">
@@ -14,7 +15,7 @@
                 d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
             </svg>
-            <h3 class="text-base font-semibold text-gray-900 dark:text-white">
+            <h3 class="text-base font-semibold" style="color: inherit">
               Selecionar Localização Inicial do Mapa
             </h3>
           </div>
@@ -83,8 +84,9 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, computed } from 'vue'
 import { createMap } from '@/providers/maps/MapProviderFactory.js'
+import { useUiStore } from '@/stores/ui.js'
 
 const props = defineProps({
   isOpen: { type: Boolean, default: false },
@@ -94,6 +96,9 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['confirm', 'close'])
+
+const uiStore = useUiStore()
+const isDark  = computed(() => uiStore.theme === 'dark')
 
 const mapContainer = ref(null)
 const mapInstance  = ref(null)
@@ -175,6 +180,7 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
 </script>
 
 <style scoped>
+/* ── Overlay ───────────────────────────────────────────────────────────────── */
 .location-picker-overlay {
   position: fixed;
   inset: 0;
@@ -186,8 +192,10 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   padding: 1rem;
 }
 
+/* ── Modal shell ───────────────────────────────────────────────────────────── */
 .location-picker-modal {
-  background: white;
+  background: #ffffff;
+  color: #111827;
   border-radius: 0.75rem;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
   display: flex;
@@ -198,10 +206,12 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   overflow: hidden;
 }
 
-:global(.dark) .location-picker-modal {
+.dark .location-picker-modal {
   background: #1f2937;
+  color: #f9fafb;
 }
 
+/* ── Header ────────────────────────────────────────────────────────────────── */
 .location-picker-header {
   display: flex;
   align-items: center;
@@ -210,7 +220,7 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   border-bottom: 1px solid #e5e7eb;
 }
 
-:global(.dark) .location-picker-header {
+.dark .location-picker-header {
   border-color: #374151;
 }
 
@@ -224,11 +234,12 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   background: #f3f4f6;
   color: #111827;
 }
-:global(.dark) .location-picker-close:hover {
+.dark .location-picker-close:hover {
   background: #374151;
   color: #f9fafb;
 }
 
+/* ── Coords bar ────────────────────────────────────────────────────────────── */
 .location-picker-coords {
   display: flex;
   align-items: center;
@@ -238,7 +249,7 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   border-bottom: 1px solid #e5e7eb;
   flex-wrap: wrap;
 }
-:global(.dark) .location-picker-coords {
+.dark .location-picker-coords {
   background: #111827;
   border-color: #374151;
 }
@@ -259,7 +270,7 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   color: #111827;
   font-family: monospace;
 }
-:global(.dark) .coord-value {
+.dark .coord-value {
   color: #f9fafb;
 }
 .coord-divider {
@@ -273,6 +284,7 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   font-style: italic;
 }
 
+/* ── Map ───────────────────────────────────────────────────────────────────── */
 .location-picker-map-wrap {
   position: relative;
   flex: 1;
@@ -295,11 +307,12 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   justify-content: center;
   background: rgba(255, 255, 255, 0.85);
 }
-:global(.dark) .location-picker-loading,
-:global(.dark) .location-picker-error {
+.dark .location-picker-loading,
+.dark .location-picker-error {
   background: rgba(17, 24, 39, 0.85);
 }
 
+/* ── Footer ────────────────────────────────────────────────────────────────── */
 .location-picker-footer {
   display: flex;
   justify-content: flex-end;
@@ -307,10 +320,11 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   padding: 0.875rem 1.25rem;
   border-top: 1px solid #e5e7eb;
 }
-:global(.dark) .location-picker-footer {
+.dark .location-picker-footer {
   border-color: #374151;
 }
 
+/* ── Buttons ───────────────────────────────────────────────────────────────── */
 .btn-primary-sm {
   display: inline-flex;
   align-items: center;
@@ -329,7 +343,7 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   display: inline-flex;
   align-items: center;
   padding: 0.5rem 1rem;
-  background: white;
+  background: #ffffff;
   color: #374151;
   border: 1px solid #d1d5db;
   border-radius: 0.5rem;
@@ -338,10 +352,10 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   transition: background 0.15s;
 }
 .btn-secondary-sm:hover { background: #f9fafb; }
-:global(.dark) .btn-secondary-sm {
+.dark .btn-secondary-sm {
   background: #374151;
   color: #f9fafb;
   border-color: #4b5563;
 }
-:global(.dark) .btn-secondary-sm:hover { background: #4b5563; }
+.dark .btn-secondary-sm:hover { background: #4b5563; }
 </style>
