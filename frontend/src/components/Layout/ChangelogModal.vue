@@ -175,9 +175,29 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
+    version: '1.4.3',
+    date: '07 Abr 2026',
+    latest: true,
+    features: [
+      'Gerenciamento de Cron Jobs via UI em Configurações > Sistema > Cron — crie, edite, ative/desative e aplique tarefas agendadas no servidor sem editar arquivos manualmente',
+    ],
+    improvements: [
+      'Novo Cron Job "Limpeza Docker Semanal" pré-configurável para remover cache de build acumulado (docker builder prune)',
+      'Botão "Aplicar no Servidor" gera o arquivo crontab em /app/database/provemaps.crontab com instruções de ativação',
+      'Modal de criação de cron com presets de agendamento (A cada hora, Todo dia 3h, Semanal, Mensal, Seg-Sex)',
+    ],
+    fixes: [
+      'Modal LocationPicker (seleção de ponto no mapa) não respeitava o modo escuro — reescrito com classes Tailwind dark:',
+      'SiteEditModal substituiu mapa inline por botão PIN que abre o LocationPickerModal — interface mais limpa e mapa maior',
+      'Geocode reverso automático ao digitar lat/lng manualmente no formulário de novo site',
+      'Bug crítico em _load_runtime_env(): Path("") é truthy em Python, impedindo leitura da senha real do banco em runtime',
+      'Opções inválidas read_timeout/write_timeout removidas do settings/prod.py — causavam ProgrammingError no psycopg',
+    ],
+  },
+  {
     version: '1.4.2',
     date: '06 Abr 2026',
-    latest: true,
+    latest: false,
     features: [
       'Seletor de localização com mapa e PIN arrastável em Setup > Mapas — clique ou arraste o marcador para definir as coordenadas iniciais',
     ],
