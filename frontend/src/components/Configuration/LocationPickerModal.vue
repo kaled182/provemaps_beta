@@ -5,7 +5,7 @@
       class="location-picker-overlay"
       @click.self="handleClose"
     >
-      <div class="location-picker-modal" :class="{ 'lpm-dark': isDark }">
+      <div class="location-picker-modal">
         <!-- Header -->
         <div class="location-picker-header">
           <div class="flex items-center gap-2">
@@ -67,10 +67,10 @@
 
         <!-- Footer -->
         <div class="location-picker-footer">
-          <button @click="handleClose" class="btn-secondary-sm">
+          <button @click="handleClose" class="lpm-btn-secondary">
             Cancelar
           </button>
-          <button @click="handleConfirm" :disabled="mapLoading || !!mapError" class="btn-primary-sm">
+          <button @click="handleConfirm" :disabled="mapLoading || !!mapError" class="lpm-btn-primary">
             <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
             </svg>
@@ -83,9 +83,8 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick, computed } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import { createMap } from '@/providers/maps/MapProviderFactory.js'
-import { useUiStore } from '@/stores/ui.js'
 
 const props = defineProps({
   isOpen: { type: Boolean, default: false },
@@ -95,9 +94,6 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['confirm', 'close'])
-
-const uiStore = useUiStore()
-const isDark   = computed(() => uiStore.theme === 'dark')
 
 const mapContainer = ref(null)
 const mapInstance  = ref(null)
@@ -179,7 +175,6 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
 </script>
 
 <style>
-/* ── Overlay ───────────────────────────────────────────────────────────────── */
 .location-picker-overlay {
   position: fixed;
   inset: 0;
@@ -191,12 +186,12 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   padding: 1rem;
 }
 
-/* ── Modal shell ───────────────────────────────────────────────────────────── */
 .location-picker-modal {
-  background: #ffffff;
-  color: #111827;
+  background: var(--bg-elevated, #ffffff);
+  color: var(--text-primary, #111827);
+  border: 1px solid var(--border-primary, #e5e7eb);
   border-radius: 0.75rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -205,96 +200,43 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   overflow: hidden;
 }
 
-.lpm-dark {
-  background: #1f2937 !important;
-  color: #f9fafb !important;
-}
-
-/* ── Header ────────────────────────────────────────────────────────────────── */
 .location-picker-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.25rem;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.lpm-dark .location-picker-header {
-  border-color: #374151;
+  border-bottom: 1px solid var(--border-primary, #e5e7eb);
 }
 
 .location-picker-close {
   padding: 0.25rem;
   border-radius: 0.375rem;
-  color: #6b7280;
+  color: var(--text-tertiary, #6b7280);
   transition: background 0.15s, color 0.15s;
 }
 .location-picker-close:hover {
-  background: #f3f4f6;
-  color: #111827;
-}
-.lpm-dark .location-picker-close:hover {
-  background: #374151;
-  color: #f9fafb;
+  background: var(--bg-secondary, #f3f4f6);
+  color: var(--text-primary, #111827);
 }
 
-/* ── Coords bar ────────────────────────────────────────────────────────────── */
 .location-picker-coords {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   padding: 0.625rem 1.25rem;
-  background: #f9fafb;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--bg-secondary, #f9fafb);
+  border-bottom: 1px solid var(--border-primary, #e5e7eb);
   flex-wrap: wrap;
 }
-.lpm-dark .location-picker-coords {
-  background: #111827;
-  border-color: #374151;
-}
 
-.coord-item {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-}
-.coord-label {
-  font-size: 0.75rem;
-  color: #6b7280;
-  font-weight: 500;
-}
-.coord-value {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #111827;
-  font-family: monospace;
-}
-.lpm-dark .coord-value {
-  color: #f9fafb;
-}
-.coord-divider {
-  color: #d1d5db;
-  font-size: 1rem;
-}
-.coord-hint {
-  margin-left: auto;
-  font-size: 0.7rem;
-  color: #9ca3af;
-  font-style: italic;
-}
+.coord-item { display: flex; align-items: center; gap: 0.375rem; }
+.coord-label { font-size: 0.75rem; color: var(--text-tertiary, #6b7280); font-weight: 500; }
+.coord-value { font-size: 0.875rem; font-weight: 600; color: var(--text-primary, #111827); font-family: monospace; }
+.coord-divider { color: var(--border-primary, #d1d5db); font-size: 1rem; }
+.coord-hint { margin-left: auto; font-size: 0.7rem; color: var(--text-tertiary, #9ca3af); font-style: italic; }
 
-/* ── Map ───────────────────────────────────────────────────────────────────── */
-.location-picker-map-wrap {
-  position: relative;
-  flex: 1;
-  min-height: 420px;
-}
-
-.location-picker-map {
-  width: 100%;
-  height: 100%;
-  min-height: 420px;
-}
+.location-picker-map-wrap { position: relative; flex: 1; min-height: 420px; }
+.location-picker-map { width: 100%; height: 100%; min-height: 420px; }
 
 .location-picker-loading,
 .location-picker-error {
@@ -304,27 +246,19 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.85);
-}
-.lpm-dark .location-picker-loading,
-.lpm-dark .location-picker-error {
-  background: rgba(17, 24, 39, 0.85);
+  background: var(--bg-elevated, #ffffff);
+  opacity: 0.92;
 }
 
-/* ── Footer ────────────────────────────────────────────────────────────────── */
 .location-picker-footer {
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;
   padding: 0.875rem 1.25rem;
-  border-top: 1px solid #e5e7eb;
-}
-.lpm-dark .location-picker-footer {
-  border-color: #374151;
+  border-top: 1px solid var(--border-primary, #e5e7eb);
 }
 
-/* ── Buttons ───────────────────────────────────────────────────────────────── */
-.btn-primary-sm {
+.lpm-btn-primary {
   display: inline-flex;
   align-items: center;
   padding: 0.5rem 1rem;
@@ -335,26 +269,20 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   font-weight: 600;
   transition: background 0.15s;
 }
-.btn-primary-sm:hover:not(:disabled) { background: #0284c7; }
-.btn-primary-sm:disabled { opacity: 0.5; cursor: not-allowed; }
+.lpm-btn-primary:hover:not(:disabled) { background: #0284c7; }
+.lpm-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.btn-secondary-sm {
+.lpm-btn-secondary {
   display: inline-flex;
   align-items: center;
   padding: 0.5rem 1rem;
-  background: #ffffff;
-  color: #374151;
-  border: 1px solid #d1d5db;
+  background: var(--bg-secondary, #f3f4f6);
+  color: var(--text-primary, #374151);
+  border: 1px solid var(--border-primary, #d1d5db);
   border-radius: 0.5rem;
   font-size: 0.875rem;
   font-weight: 500;
   transition: background 0.15s;
 }
-.btn-secondary-sm:hover { background: #f9fafb; }
-.lpm-dark .btn-secondary-sm {
-  background: #374151;
-  color: #f9fafb;
-  border-color: #4b5563;
-}
-.lpm-dark .btn-secondary-sm:hover { background: #4b5563; }
+.lpm-btn-secondary:hover { background: var(--bg-tertiary, #e5e7eb); }
 </style>
