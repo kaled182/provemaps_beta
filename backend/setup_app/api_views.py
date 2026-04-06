@@ -4546,9 +4546,17 @@ def _write_crontab_file(jobs):
     crontab_path.write_text("\n".join(lines))
 
 
-@user_passes_test(lambda u: u.is_active and (u.is_staff or u.is_superuser))
+def _cron_auth(request):
+    """Returns True if user can manage cron jobs (staff or superuser)."""
+    u = request.user
+    return u.is_authenticated and u.is_active and (u.is_staff or u.is_superuser)
+
+
 @require_http_methods(["GET", "POST"])
 def cron_jobs_list(request):
+    if not _cron_auth(request):
+        return JsonResponse({"error": "Acesso negado"}, status=403)
+
     if request.method == "GET":
         jobs = CronJob.objects.all()
         return JsonResponse({"jobs": [_cron_to_dict(j) for j in jobs]})
@@ -4565,9 +4573,10 @@ def cron_jobs_list(request):
     return JsonResponse({"success": True, "job": _cron_to_dict(job)}, status=201)
 
 
-@user_passes_test(lambda u: u.is_active and (u.is_staff or u.is_superuser))
 @require_http_methods(["GET", "PUT", "DELETE"])
 def cron_job_detail(request, job_id):
+    if not _cron_auth(request):
+        return JsonResponse({"error": "Acesso negado"}, status=403)
     try:
         job = CronJob.objects.get(id=job_id)
     except CronJob.DoesNotExist:
@@ -4592,9 +4601,10 @@ def cron_job_detail(request, job_id):
     return JsonResponse({"success": True, "job": _cron_to_dict(job)})
 
 
-@user_passes_test(lambda u: u.is_active and (u.is_staff or u.is_superuser))
 @require_POST
 def cron_job_toggle(request, job_id):
+    if not _cron_auth(request):
+        return JsonResponse({"error": "Acesso negado"}, status=403)
     try:
         job = CronJob.objects.get(id=job_id)
     except CronJob.DoesNotExist:
@@ -4605,10 +4615,10 @@ def cron_job_toggle(request, job_id):
     return JsonResponse({"success": True, "job": _cron_to_dict(job)})
 
 
-@user_passes_test(lambda u: u.is_active and (u.is_staff or u.is_superuser))
 @require_POST
 def cron_apply(request):
-    """Regenerate the crontab file in the shared volume."""
+    if not _cron_auth(request):
+        return JsonResponse({"error": "Acesso negado"}, status=403)
     jobs = CronJob.objects.all()
     _write_crontab_file(jobs)
     enabled_count = jobs.filter(enabled=True).count()

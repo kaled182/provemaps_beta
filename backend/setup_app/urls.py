@@ -1,4 +1,5 @@
 from django.urls import path, include
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework.routers import DefaultRouter
 from . import views
 from . import views_docs  # Import docs_index and docs_view endpoints
@@ -70,10 +71,10 @@ urlpatterns = [
     path('video/api/mosaics/<int:mosaic_id>/', api_views.video_mosaic_detail, name='video_mosaic_detail'),
 
     # Cron Jobs
-    path('api/cron/', api_views.cron_jobs_list, name='cron_jobs_list'),
-    path('api/cron/<int:job_id>/', api_views.cron_job_detail, name='cron_job_detail'),
-    path('api/cron/<int:job_id>/toggle/', api_views.cron_job_toggle, name='cron_job_toggle'),
-    path('api/cron/apply/', api_views.cron_apply, name='cron_apply'),
+    path('api/cron/', csrf_exempt(api_views.cron_jobs_list), name='cron_jobs_list'),
+    path('api/cron/<int:job_id>/', csrf_exempt(api_views.cron_job_detail), name='cron_job_detail'),
+    path('api/cron/<int:job_id>/toggle/', csrf_exempt(api_views.cron_job_toggle), name='cron_job_toggle'),
+    path('api/cron/apply/', csrf_exempt(api_views.cron_apply), name='cron_apply'),
 
     # Documentation endpoints
     path("docs/", views_docs.docs_index, name="docs_index"),
