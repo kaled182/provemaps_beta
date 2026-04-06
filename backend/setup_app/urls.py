@@ -1,11 +1,11 @@
 from django.urls import path, include
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework.routers import DefaultRouter
 from . import views
 from . import views_docs  # Import docs_index and docs_view endpoints
 from . import api_views  # Import API endpoints for testing and management
 from .viewsets_contacts import ContactViewSet, ContactGroupViewSet, ImportHistoryViewSet
 from .viewsets_alert_templates import AlertTemplateViewSet
+from .views_cron import CronJobsView, CronJobDetailView, CronJobToggleView, CronApplyView
 
 app_name = 'setup_app'
 
@@ -70,11 +70,11 @@ urlpatterns = [
     path('video/api/mosaics/', api_views.video_mosaics_list, name='video_mosaics_list'),
     path('video/api/mosaics/<int:mosaic_id>/', api_views.video_mosaic_detail, name='video_mosaic_detail'),
 
-    # Cron Jobs
-    path('api/cron/', csrf_exempt(api_views.cron_jobs_list), name='cron_jobs_list'),
-    path('api/cron/<int:job_id>/', csrf_exempt(api_views.cron_job_detail), name='cron_job_detail'),
-    path('api/cron/<int:job_id>/toggle/', csrf_exempt(api_views.cron_job_toggle), name='cron_job_toggle'),
-    path('api/cron/apply/', csrf_exempt(api_views.cron_apply), name='cron_apply'),
+    # Cron Jobs (DRF — CsrfExemptSessionAuthentication)
+    path('api/cron/', CronJobsView.as_view(), name='cron_jobs_list'),
+    path('api/cron/<int:job_id>/', CronJobDetailView.as_view(), name='cron_job_detail'),
+    path('api/cron/<int:job_id>/toggle/', CronJobToggleView.as_view(), name='cron_job_toggle'),
+    path('api/cron/apply/', CronApplyView.as_view(), name='cron_apply'),
 
     # Documentation endpoints
     path("docs/", views_docs.docs_index, name="docs_index"),
