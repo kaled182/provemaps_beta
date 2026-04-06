@@ -71,7 +71,12 @@
 
                   <div v-if="updateState === 'available'" class="sp-update-notice">
                     <PhWarning :size="14" weight="fill" />
-                    Nova versão disponível. Contate o administrador para realizar o update.
+                    Nova versão <strong>v{{ latestVersion }}</strong> disponível.
+                    <a v-if="releaseUrl" :href="releaseUrl" target="_blank" rel="noopener" class="sp-update-link">Ver release</a>
+                  </div>
+                  <div v-if="updateState === 'error'" class="sp-update-notice sp-update-error">
+                    <PhWarning :size="14" weight="fill" />
+                    {{ updateError }}
                   </div>
                 </div>
 
@@ -264,7 +269,10 @@ const api = useApi();
 const activeTab = ref('system');
 const loading = ref(false);
 const sysInfo = ref(null);
-const updateState = ref('idle'); // idle | checking | latest | available
+const updateState = ref('idle'); // idle | checking | latest | available | error
+const latestVersion = ref('');
+const releaseUrl = ref('');
+const updateError = ref('');
 const stats = ref(null);
 const statsLoading = ref(false);
 const serverStats = ref(null);
@@ -286,6 +294,7 @@ const updateLabel = computed(() => ({
   checking:  'Verificando…',
   latest:    'Versão mais recente',
   available: 'Atualização disponível',
+  error:     'Falha ao verificar',
 }[updateState.value] ?? 'Não verificado'));
 
 async function fetchSystemInfo() {
@@ -317,14 +326,22 @@ async function fetchStats() {
 async function checkForUpdates() {
   console.log('[SystemPanel] checkForUpdates clicado');
   updateState.value = 'checking';
+  updateError.value = '';
   try {
-    const data = await api.get('/api/v1/inventory/system/info/');
+    const data = await api.get('/api/v1/inventory/system/check-update/');
     console.log('[SystemPanel] checkForUpdates resposta:', data);
-    sysInfo.value = data;
-    updateState.value = 'latest';
+    if (data.error) {
+      updateError.value = data.error;
+      updateState.value = 'error';
+      return;
+    }
+    latestVersion.value = data.latest_version || '';
+    releaseUrl.value = data.release_url || '';
+    updateState.value = data.update_available ? 'available' : 'latest';
   } catch (err) {
     console.error('[SystemPanel] checkForUpdates erro:', err);
-    updateState.value = 'idle';
+    updateError.value = 'Não foi possível verificar atualizações.';
+    updateState.value = 'error';
   }
 }
 
@@ -611,6 +628,24 @@ watch(() => props.show, (val) => {
   border: 1px solid var(--status-warning-light);
   border-radius: 8px;
   padding: 0.5rem 0.75rem;
+}
+
+.sp-update-error {
+  color: var(--status-danger, #ef4444);
+  background: color-mix(in srgb, var(--status-danger, #ef4444) 10%, transparent);
+  border-color: color-mix(in srgb, var(--status-danger, #ef4444) 20%, transparent);
+}
+
+.sp-update-link {
+  margin-left: auto;
+  color: var(--accent-primary);
+  text-decoration: underline;
+  font-size: 0.75rem;
+}
+
+.sp-version-status.error {
+  color: var(--status-danger, #ef4444);
+  background: color-mix(in srgb, var(--status-danger, #ef4444) 12%, transparent);
 }
 
 /* ── Info grid ── */

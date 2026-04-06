@@ -185,6 +185,7 @@ const changelog = [
       'Modal de localização do site (importação de dispositivos) usa o provider configurado (Mapbox/Google)',
       'Importação de rotas KML bloqueada incorretamente quando diagnósticos estavam desabilitados',
       'Network Design inicializa mapa com Mapbox sem aguardar Google Maps API',
+      'Botão "Verificar atualizações" agora consulta o GitHub e exibe se há nova versão disponível',
     ],
   },
   {
