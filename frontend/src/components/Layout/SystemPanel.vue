@@ -323,24 +323,34 @@ async function fetchStats() {
   }
 }
 
+function _parseVersion(v) {
+  return (v || '').replace(/^v/, '').split('.').map(Number);
+}
+
 async function checkForUpdates() {
   console.log('[SystemPanel] checkForUpdates clicado');
   updateState.value = 'checking';
   updateError.value = '';
   try {
-    const data = await api.get('/api/v1/inventory/system/check-update/');
-    console.log('[SystemPanel] checkForUpdates resposta:', data);
-    if (data.error) {
-      updateError.value = data.error;
-      updateState.value = 'error';
-      return;
-    }
-    latestVersion.value = data.latest_version || '';
-    releaseUrl.value = data.release_url || '';
-    updateState.value = data.update_available ? 'available' : 'latest';
+    // Chama GitHub API diretamente do browser (evita dependência de rede no servidor)
+    const resp = await fetch('https://api.github.com/repos/kaled182/provemaps_beta/releases/latest', {
+      headers: { 'Accept': 'application/vnd.github+json' },
+    });
+    if (!resp.ok) throw new Error(`GitHub API: ${resp.status}`);
+    const release = await resp.json();
+    const tag = (release.tag_name || '').replace(/^v/, '');
+    const current = (sysInfo.value?.version || '0').replace(/^v/, '');
+    const latestParts = _parseVersion(tag);
+    const currentParts = _parseVersion(current);
+    const isNewer = latestParts.some((n, i) => n > (currentParts[i] || 0))
+      && !latestParts.every((n, i) => n === (currentParts[i] || 0));
+    latestVersion.value = tag;
+    releaseUrl.value = release.html_url || '';
+    updateState.value = isNewer ? 'available' : 'latest';
+    console.log('[SystemPanel] versão atual:', current, '| última:', tag, '| atualização:', isNewer);
   } catch (err) {
     console.error('[SystemPanel] checkForUpdates erro:', err);
-    updateError.value = 'Não foi possível verificar atualizações.';
+    updateError.value = 'Não foi possível verificar. Verifique a conexão com a internet.';
     updateState.value = 'error';
   }
 }

@@ -180,12 +180,17 @@ const changelog = [
     latest: true,
     features: [],
     improvements: [],
+    improvements: [
+      'Botão "Reenquadrar" no mapa do backbone para ajustar a visão a todos os itens visíveis',
+      '"Selecionar todos" no painel lateral reenquadra automaticamente o mapa',
+    ],
     fixes: [
       'Mapa do Network Design agora respeita a localização inicial configurada em Setup > Mapas',
       'Modal de localização do site (importação de dispositivos) usa o provider configurado (Mapbox/Google)',
       'Importação de rotas KML bloqueada incorretamente quando diagnósticos estavam desabilitados',
       'Network Design inicializa mapa com Mapbox sem aguardar Google Maps API',
-      'Botão "Verificar atualizações" agora consulta o GitHub e exibe se há nova versão disponível',
+      'Botão "Verificar atualizações" chamava API do GitHub pelo servidor (sem internet no container) — movido para o browser',
+      'Mapa do backbone não reenquadrava automaticamente ao selecionar itens após carga inicial',
     ],
   },
   {
