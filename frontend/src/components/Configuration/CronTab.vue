@@ -263,7 +263,7 @@ const scheduleHuman = computed(() => scheduleLabels[form.value.schedule] || '')
 async function fetchJobs() {
   loading.value = true
   try {
-    const res = await fetch('/setup/api/cron/')
+    const res = await fetch('/setup_app/api/cron/')
     const data = await res.json()
     jobs.value = data.jobs || []
   } finally {
@@ -293,7 +293,7 @@ async function saveJob() {
   saving.value = true
   formError.value = ''
   try {
-    const url = editingJob.value ? `/setup/api/cron/${editingJob.value.id}/` : '/setup/api/cron/'
+    const url = editingJob.value ? `/setup_app/api/cron/${editingJob.value.id}/` : '/setup_app/api/cron/'
     const method = editingJob.value ? 'PUT' : 'POST'
     const res = await fetch(url, {
       method,
@@ -316,7 +316,7 @@ function confirmDelete(job) {
 
 async function deleteJob() {
   if (!deleteTarget.value) return
-  await fetch(`/setup/api/cron/${deleteTarget.value.id}/`, {
+  await fetch(`/setup_app/api/cron/${deleteTarget.value.id}/`, {
     method: 'DELETE',
     headers: { 'X-CSRFToken': getCsrf() },
   })
@@ -325,7 +325,7 @@ async function deleteJob() {
 }
 
 async function toggleJob(job) {
-  await fetch(`/setup/api/cron/${job.id}/toggle/`, {
+  await fetch(`/setup_app/api/cron/${job.id}/toggle/`, {
     method: 'POST',
     headers: { 'X-CSRFToken': getCsrf() },
   })
@@ -336,7 +336,7 @@ async function applyToServer() {
   applying.value = true
   applyResult.value = null
   try {
-    const res = await fetch('/setup/api/cron/apply/', {
+    const res = await fetch('/setup_app/api/cron/apply/', {
       method: 'POST',
       headers: { 'X-CSRFToken': getCsrf() },
     })
