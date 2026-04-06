@@ -179,12 +179,12 @@ const changelog = [
     date: '06 Abr 2026',
     latest: true,
     features: [],
-    improvements: [],
     improvements: [
       'Botão "Reenquadrar" no mapa do backbone para ajustar a visão a todos os itens visíveis',
       '"Selecionar todos" no painel lateral reenquadra automaticamente o mapa',
     ],
     fixes: [
+      'Coordenadas padrão do mapa (lat/lng em Setup > Mapas) não persistiam após salvar — .env sobrescrevia o valor do banco',
       'Mapa do Network Design agora respeita a localização inicial configurada em Setup > Mapas',
       'Modal de localização do site (importação de dispositivos) usa o provider configurado (Mapbox/Google)',
       'Importação de rotas KML bloqueada incorretamente quando diagnósticos estavam desabilitados',

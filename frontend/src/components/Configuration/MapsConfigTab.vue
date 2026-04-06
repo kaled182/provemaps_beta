@@ -445,11 +445,11 @@ const config = reactive({
   },
   common: {
     default_lat: computed({
-      get: () => parseFloat(configForm.value.MAP_DEFAULT_LAT) || -15.7801,
+      get: () => { const v = parseFloat(configForm.value.MAP_DEFAULT_LAT); return isNaN(v) ? -15.7801 : v },
       set: (val) => configForm.value.MAP_DEFAULT_LAT = String(val)
     }),
     default_lng: computed({
-      get: () => parseFloat(configForm.value.MAP_DEFAULT_LNG) || -47.9292,
+      get: () => { const v = parseFloat(configForm.value.MAP_DEFAULT_LNG); return isNaN(v) ? -47.9292 : v },
       set: (val) => configForm.value.MAP_DEFAULT_LNG = String(val)
     }),
     language: computed({

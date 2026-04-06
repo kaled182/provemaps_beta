@@ -1869,12 +1869,23 @@ def get_configuration(request):
             "BACKUP_CLOUD_PATH": "/backups/provemaps",
         }
 
+        # Fields whose authoritative value lives in FirstTimeSetup (DB), not in .env.
+        # .env may contain stale defaults written by older code — DB must always win.
+        _DB_AUTHORITATIVE_KEYS = {
+            "MAP_DEFAULT_LAT", "MAP_DEFAULT_LNG", "MAP_DEFAULT_ZOOM",
+            "MAP_PROVIDER", "MAPBOX_TOKEN",
+        }
+
         # Convert boolean strings to actual booleans for JSON, fallback to runtime/config defaults
         config_data = {}
         for key in editable_keys:
-            value = current_values.get(key, "")
-            if value == "":
+            if key in _DB_AUTHORITATIVE_KEYS:
+                # Always read from DB (fallback_values already populated from db_record above)
                 value = fallback_values.get(key, "")
+            else:
+                value = current_values.get(key, "")
+                if value == "":
+                    value = fallback_values.get(key, "")
             if key in ["DEBUG", "ENABLE_DIAGNOSTIC_ENDPOINTS", "FTP_ENABLED", "GDRIVE_ENABLED", "SMTP_ENABLED", "SMS_ENABLED", "BACKUP_AUTO_ENABLED", "BACKUP_CLOUD_UPLOAD", "ENABLE_STREET_VIEW", "ENABLE_TRAFFIC", "MAPBOX_ENABLE_3D", "ENABLE_MAP_CLUSTERING", "ENABLE_DRAWING_TOOLS", "ENABLE_FULLSCREEN"]:
                 if isinstance(value, bool):
                     config_data[key] = value
@@ -2238,6 +2249,14 @@ def update_configuration(request):
         
         # DO NOT write to .env - all configuration is stored in database only
         # env_manager.write_values(payload)  # REMOVED: .env is only a template
+
+        # Remove stale DB-authoritative keys from .env (older code may have written defaults there).
+        # These keys are now managed exclusively via the database.
+        _stale_env_keys = {"MAP_DEFAULT_LAT", "MAP_DEFAULT_LNG", "MAP_DEFAULT_ZOOM", "MAP_PROVIDER", "MAPBOX_TOKEN"}
+        env_map = env_manager.read_env()
+        stale_keys_in_env = _stale_env_keys & env_map.keys()
+        if stale_keys_in_env:
+            env_manager.write_values({k: "" for k in stale_keys_in_env})
         
         # Update runtime environment and settings for immediate effect (without restart)
         os.environ["OPTICAL_RX_WARNING_THRESHOLD"] = payload["OPTICAL_RX_WARNING_THRESHOLD"]
