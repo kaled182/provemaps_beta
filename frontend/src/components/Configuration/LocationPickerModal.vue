@@ -2,80 +2,87 @@
   <Teleport to="body">
     <div
       v-if="isOpen"
-      class="location-picker-overlay"
-      @click.self="handleClose"
+      class="fixed inset-0 z-[9999] overflow-y-auto"
     >
-      <div class="location-picker-modal" :style="modalStyle">
-        <!-- Header -->
-        <div class="location-picker-header" :style="{ borderBottomColor: modalStyle.borderColor }">
-          <div class="flex items-center gap-2">
-            <svg class="w-5 h-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-            </svg>
-            <h3 class="text-base font-semibold" style="color: inherit">
-              Selecionar Localização Inicial do Mapa
-            </h3>
-          </div>
-          <button @click="handleClose" class="location-picker-close" :style="closeBtnStyle">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-            </svg>
-          </button>
-        </div>
+      <div class="flex min-h-screen items-center justify-center p-4">
+        <!-- Backdrop -->
+        <div class="fixed inset-0 bg-black/50 dark:bg-black/70 transition-opacity" @click="handleClose"></div>
 
-        <!-- Coordinates display -->
-        <div class="location-picker-coords" :style="coordsStyle">
-          <div class="coord-item">
-            <span class="coord-label" :style="{ color: isDark ? '#9ca3af' : '#6b7280' }">Latitude</span>
-            <span class="coord-value" :style="{ color: isDark ? '#f9fafb' : '#111827' }">{{ currentLat.toFixed(6) }}</span>
-          </div>
-          <div class="coord-divider" :style="{ color: isDark ? '#4b5563' : '#d1d5db' }">·</div>
-          <div class="coord-item">
-            <span class="coord-label" :style="{ color: isDark ? '#9ca3af' : '#6b7280' }">Longitude</span>
-            <span class="coord-value" :style="{ color: isDark ? '#f9fafb' : '#111827' }">{{ currentLng.toFixed(6) }}</span>
-          </div>
-          <div class="coord-hint">
-            Clique no mapa ou arraste o marcador para definir a localização
-          </div>
-        </div>
+        <!-- Modal -->
+        <div class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700">
 
-        <!-- Map container -->
-        <div class="location-picker-map-wrap">
-          <div ref="mapContainer" class="location-picker-map"></div>
-
-          <!-- Loading overlay -->
-          <div v-if="mapLoading" class="location-picker-loading" :style="{ background: isDark ? '#1f2937' : '#ffffff' }">
-            <svg class="animate-spin w-8 h-8 text-primary-500" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-              <path class="opacity-75" fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
-            </svg>
-            <span class="mt-2 text-sm text-gray-500 dark:text-gray-400">Carregando mapa...</span>
+          <!-- Header -->
+          <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+              </svg>
+              <h3 class="text-base font-semibold text-gray-900 dark:text-white">
+                Selecionar Localização Inicial do Mapa
+              </h3>
+            </div>
+            <button @click="handleClose" class="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
           </div>
 
-          <!-- Error overlay -->
-          <div v-if="mapError" class="location-picker-error">
-            <svg class="w-8 h-8 text-red-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-            </svg>
-            <p class="text-sm text-red-500">{{ mapError }}</p>
+          <!-- Coordinates display -->
+          <div class="flex items-center gap-3 px-5 py-2.5 bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700 flex-wrap">
+            <div class="flex items-center gap-1.5">
+              <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Latitude</span>
+              <span class="text-sm font-semibold font-mono text-gray-900 dark:text-white">{{ currentLat.toFixed(6) }}</span>
+            </div>
+            <div class="text-gray-300 dark:text-gray-600">·</div>
+            <div class="flex items-center gap-1.5">
+              <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Longitude</span>
+              <span class="text-sm font-semibold font-mono text-gray-900 dark:text-white">{{ currentLng.toFixed(6) }}</span>
+            </div>
+            <div class="ml-auto text-xs italic text-gray-400 dark:text-gray-500">
+              Clique no mapa ou arraste o marcador para definir a localização
+            </div>
           </div>
-        </div>
 
-        <!-- Footer -->
-        <div class="location-picker-footer" :style="footerStyle">
-          <button @click="handleClose" class="lpm-btn-secondary">
-            Cancelar
-          </button>
-          <button @click="handleConfirm" :disabled="mapLoading || !!mapError" class="lpm-btn-primary">
-            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-            </svg>
-            Confirmar localização
-          </button>
+          <!-- Map container -->
+          <div class="relative" style="min-height: 420px; flex: 1;">
+            <div ref="mapContainer" style="width: 100%; height: 100%; min-height: 420px;"></div>
+
+            <!-- Loading overlay -->
+            <div v-if="mapLoading" class="absolute inset-0 flex flex-col items-center justify-center bg-white dark:bg-gray-800" style="opacity: 0.92;">
+              <svg class="animate-spin w-8 h-8 text-primary-500" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+              </svg>
+              <span class="mt-2 text-sm text-gray-500 dark:text-gray-400">Carregando mapa...</span>
+            </div>
+
+            <!-- Error overlay -->
+            <div v-if="mapError" class="absolute inset-0 flex flex-col items-center justify-center bg-white dark:bg-gray-800">
+              <svg class="w-8 h-8 text-red-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+              </svg>
+              <p class="text-sm text-red-500">{{ mapError }}</p>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="flex justify-end gap-3 px-5 py-3.5 border-t border-gray-200 dark:border-gray-700">
+            <button @click="handleClose" class="inline-flex items-center px-4 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-200 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+              Cancelar
+            </button>
+            <button @click="handleConfirm" :disabled="mapLoading || !!mapError" class="inline-flex items-center px-4 py-2 bg-sky-500 hover:bg-sky-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors">
+              <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              </svg>
+              Confirmar localização
+            </button>
+          </div>
+
         </div>
       </div>
     </div>
@@ -83,29 +90,8 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick, computed } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import { createMap } from '@/providers/maps/MapProviderFactory.js'
-import { useUiStore } from '@/stores/ui.js'
-
-const uiStore = useUiStore()
-const isDark = computed(() => uiStore.theme === 'dark')
-
-const modalStyle = computed(() => isDark.value
-  ? { background: '#1f2937', color: '#f8fafc', borderColor: '#374151' }
-  : { background: '#ffffff', color: '#0f172a', borderColor: '#e5e7eb' }
-)
-const coordsStyle = computed(() => isDark.value
-  ? { background: '#111827', borderBottomColor: '#374151' }
-  : { background: '#f9fafb', borderBottomColor: '#e5e7eb' }
-)
-const footerStyle = computed(() => isDark.value
-  ? { borderTopColor: '#374151' }
-  : { borderTopColor: '#e5e7eb' }
-)
-const closeBtnStyle = computed(() => isDark.value
-  ? { color: '#9ca3af' }
-  : { color: '#6b7280' }
-)
 
 const props = defineProps({
   isOpen: { type: Boolean, default: false },
@@ -194,116 +180,3 @@ watch(() => [props.lat, props.lng], ([lat, lng]) => {
   currentLng.value = lng
 })
 </script>
-
-<style>
-.location-picker-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-}
-
-.location-picker-modal {
-  background: var(--bg-elevated, #ffffff);
-  color: var(--text-primary, #111827);
-  border: 1px solid var(--border-primary, #e5e7eb);
-  border-radius: 0.75rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  max-width: 780px;
-  max-height: 90vh;
-  overflow: hidden;
-}
-
-.location-picker-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--border-primary, #e5e7eb);
-}
-
-.location-picker-close {
-  padding: 0.25rem;
-  border-radius: 0.375rem;
-  color: var(--text-tertiary, #6b7280);
-  transition: background 0.15s, color 0.15s;
-}
-.location-picker-close:hover {
-  background: var(--bg-secondary, #f3f4f6);
-  color: var(--text-primary, #111827);
-}
-
-.location-picker-coords {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.625rem 1.25rem;
-  background: var(--bg-secondary, #f9fafb);
-  border-bottom: 1px solid var(--border-primary, #e5e7eb);
-  flex-wrap: wrap;
-}
-
-.coord-item { display: flex; align-items: center; gap: 0.375rem; }
-.coord-label { font-size: 0.75rem; color: var(--text-tertiary, #6b7280); font-weight: 500; }
-.coord-value { font-size: 0.875rem; font-weight: 600; color: var(--text-primary, #111827); font-family: monospace; }
-.coord-divider { color: var(--border-primary, #d1d5db); font-size: 1rem; }
-.coord-hint { margin-left: auto; font-size: 0.7rem; color: var(--text-tertiary, #9ca3af); font-style: italic; }
-
-.location-picker-map-wrap { position: relative; flex: 1; min-height: 420px; }
-.location-picker-map { width: 100%; height: 100%; min-height: 420px; }
-
-.location-picker-loading,
-.location-picker-error {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-elevated, #ffffff);
-  opacity: 0.92;
-}
-
-.location-picker-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  padding: 0.875rem 1.25rem;
-  border-top: 1px solid var(--border-primary, #e5e7eb);
-}
-
-.lpm-btn-primary {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.5rem 1rem;
-  background: #0ea5e9;
-  color: white;
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  transition: background 0.15s;
-}
-.lpm-btn-primary:hover:not(:disabled) { background: #0284c7; }
-.lpm-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.lpm-btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.5rem 1rem;
-  background: var(--bg-secondary, #f3f4f6);
-  color: var(--text-primary, #374151);
-  border: 1px solid var(--border-primary, #d1d5db);
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  transition: background 0.15s;
-}
-.lpm-btn-secondary:hover { background: var(--bg-tertiary, #e5e7eb); }
-</style>
