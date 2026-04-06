@@ -698,7 +698,7 @@ const updateMap = (animateItemId = null) => {
 
   const wasInitialLoad = isInitialLoad.value
 
-  // Atualizar markers usando composable (sem auto-fit — faremos depois com todos os itens)
+  // Atualizar markers
   updateMapMarkers({
     mapInstance: googleMap.value,
     provider: currentMapProvider.value,
@@ -720,7 +720,7 @@ const updateMap = (animateItemId = null) => {
     isInitialLoad.value = false
   }
 
-  // Atualizar polylines usando composable
+  // Atualizar polylines
   updateCablePolylines({
     mapInstance: googleMap.value,
     provider: currentMapProvider.value,
@@ -732,6 +732,13 @@ const updateMap = (animateItemId = null) => {
     onPolylineUnhover: handleCableUnhover
   })
 
+  // Carga inicial: ajusta bounds se há itens; sem itens permanece na localização configurada
+  if (wasInitialLoad) {
+    const hasItems = selectedItems.value.devices.length > 0 || selectedItems.value.cables.length > 0
+    if (hasItems) {
+      setTimeout(() => fitAllItemsBounds(), 300)
+    }
+  }
 }
 
 const toggleItem = (itemId) => {

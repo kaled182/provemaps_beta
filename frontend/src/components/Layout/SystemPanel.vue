@@ -332,10 +332,15 @@ async function checkForUpdates() {
   updateState.value = 'checking';
   updateError.value = '';
   try {
-    // Chama GitHub API diretamente do browser (evita dependência de rede no servidor)
+    // Chama GitHub API diretamente do browser
     const resp = await fetch('https://api.github.com/repos/kaled182/provemaps_beta/releases/latest', {
       headers: { 'Accept': 'application/vnd.github+json' },
     });
+    if (resp.status === 404) {
+      // Repositório privado ou sem releases publicadas — considera versão atual como a mais recente
+      updateState.value = 'latest';
+      return;
+    }
     if (!resp.ok) throw new Error(`GitHub API: ${resp.status}`);
     const release = await resp.json();
     const tag = (release.tag_name || '').replace(/^v/, '');
