@@ -19,6 +19,7 @@ from django.db import connection
 from django.db.models import Q
 from django.http import FileResponse, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.core.management import call_command
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_GET, require_POST
 from django.urls import reverse
 
@@ -4552,6 +4553,7 @@ def _cron_auth(request):
     return u.is_authenticated and u.is_active and (u.is_staff or u.is_superuser)
 
 
+@csrf_exempt
 @require_http_methods(["GET", "POST"])
 def cron_jobs_list(request):
     if not _cron_auth(request):
@@ -4573,6 +4575,7 @@ def cron_jobs_list(request):
     return JsonResponse({"success": True, "job": _cron_to_dict(job)}, status=201)
 
 
+@csrf_exempt
 @require_http_methods(["GET", "PUT", "DELETE"])
 def cron_job_detail(request, job_id):
     if not _cron_auth(request):
@@ -4601,6 +4604,7 @@ def cron_job_detail(request, job_id):
     return JsonResponse({"success": True, "job": _cron_to_dict(job)})
 
 
+@csrf_exempt
 @require_POST
 def cron_job_toggle(request, job_id):
     if not _cron_auth(request):
@@ -4615,6 +4619,7 @@ def cron_job_toggle(request, job_id):
     return JsonResponse({"success": True, "job": _cron_to_dict(job)})
 
 
+@csrf_exempt
 @require_POST
 def cron_apply(request):
     if not _cron_auth(request):
