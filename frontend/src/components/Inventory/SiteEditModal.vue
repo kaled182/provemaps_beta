@@ -144,7 +144,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
 import LocationPickerModal from '@/components/Configuration/LocationPickerModal.vue'
 
 const props = defineProps({
@@ -212,6 +212,18 @@ const onLocationPicked = ({ lat, lng }) => {
   showPicker.value = false
   reverseGeocodeNominatim(lat, lng)
 }
+
+// ─── Watcher: geocode reverso ao digitar lat/lng manualmente ──
+let geocodeTimer = null
+watch([() => form.value.lat, () => form.value.lng], ([lat, lng]) => {
+  const latN = Number(lat)
+  const lngN = Number(lng)
+  if (!lat || !lng || isNaN(latN) || isNaN(lngN)) return
+  if (latN < -90 || latN > 90 || lngN < -180 || lngN > 180) return
+  clearTimeout(geocodeTimer)
+  geocodeTimer = setTimeout(() => reverseGeocodeNominatim(latN, lngN), 800)
+})
+onUnmounted(() => clearTimeout(geocodeTimer))
 
 // ─── Address search (Nominatim) ───────────────────────────────
 const onAddressInput = () => {
