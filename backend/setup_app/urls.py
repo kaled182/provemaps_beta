@@ -69,6 +69,12 @@ urlpatterns = [
     path('video/api/mosaics/', api_views.video_mosaics_list, name='video_mosaics_list'),
     path('video/api/mosaics/<int:mosaic_id>/', api_views.video_mosaic_detail, name='video_mosaic_detail'),
 
+    # Cron Jobs
+    path('api/cron/', api_views.cron_jobs_list, name='cron_jobs_list'),
+    path('api/cron/<int:job_id>/', api_views.cron_job_detail, name='cron_job_detail'),
+    path('api/cron/<int:job_id>/toggle/', api_views.cron_job_toggle, name='cron_job_toggle'),
+    path('api/cron/apply/', api_views.cron_apply, name='cron_apply'),
+
     # Documentation endpoints
     path("docs/", views_docs.docs_index, name="docs_index"),
     path("docs/<path:filename>/", views_docs.docs_view, name="docs_view"),

@@ -5,6 +5,7 @@ from typing import Dict, List, Optional
 from .fields import EncryptedCharField
 from .models_audit import ConfigurationAudit  # Import audit model
 from .models_contacts import Contact, ContactGroup, ImportHistory  # Import contact models
+from .models_cron import CronJob  # Import cron job model
 
 
 User = get_user_model()

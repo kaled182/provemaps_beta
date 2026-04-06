@@ -28,6 +28,7 @@ from integrations.zabbix.zabbix_client import zabbix_request
 from integrations.zabbix.guards import reload_diagnostics_flag_cache
 from .models import FirstTimeSetup, MonitoringServer, MessagingGateway, CompanyProfile
 from .models_audit import ConfigurationAudit
+from .models_cron import CronJob
 from .services import runtime_settings, video_gateway as video_gateway_service
 from .services.cloud_backups import test_gdrive_connection, upload_backup_to_gdrive
 from .services.config_loader import clear_runtime_config_cache
@@ -4506,3 +4507,122 @@ def test_stream(request):
     except Exception as exc:
         logger.exception("Error testing stream connection")
         return JsonResponse({"success": False, "message": str(exc)}, status=500)
+
+
+# ─── Cron Jobs ────────────────────────────────────────────────────────────────
+
+def _cron_to_dict(job: CronJob) -> dict:
+    return {
+        "id":          job.id,
+        "name":        job.name,
+        "description": job.description,
+        "schedule":    job.schedule,
+        "command":     job.command,
+        "enabled":     job.enabled,
+        "created_at":  job.created_at.isoformat(),
+        "updated_at":  job.updated_at.isoformat(),
+    }
+
+
+def _write_crontab_file(jobs):
+    """Write enabled cron jobs to the shared database volume so the host can apply them."""
+    crontab_path = Path(settings.BASE_DIR).parent / "database" / "provemaps.crontab"
+    lines = [
+        "# ProVeMaps Cron Jobs — gerenciado via interface web",
+        "# Aplicar no host: crontab /opt/provemaps/database/provemaps.crontab",
+        "# Ou configurar aplicação automática (ver DOCKER_QUICKREF.md)",
+        "",
+        "SHELL=/bin/bash",
+        "PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin",
+        "",
+    ]
+    for job in jobs:
+        if job.enabled:
+            lines.append(f"# {job.name}")
+            if job.description:
+                lines.append(f"# {job.description}")
+            lines.append(f"{job.schedule} root {job.command}")
+            lines.append("")
+    crontab_path.write_text("\n".join(lines))
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def cron_jobs_list(request):
+    if not request.user.is_staff:
+        return JsonResponse({"error": "Acesso negado"}, status=403)
+
+    if request.method == "GET":
+        jobs = CronJob.objects.all()
+        return JsonResponse({"jobs": [_cron_to_dict(j) for j in jobs]})
+
+    data = json.loads(request.body)
+    job = CronJob.objects.create(
+        name=data.get("name", "").strip(),
+        description=data.get("description", "").strip(),
+        schedule=data.get("schedule", "").strip(),
+        command=data.get("command", "").strip(),
+        enabled=data.get("enabled", True),
+    )
+    _write_crontab_file(CronJob.objects.all())
+    return JsonResponse({"success": True, "job": _cron_to_dict(job)}, status=201)
+
+
+@login_required
+@require_http_methods(["GET", "PUT", "DELETE"])
+def cron_job_detail(request, job_id):
+    if not request.user.is_staff:
+        return JsonResponse({"error": "Acesso negado"}, status=403)
+    try:
+        job = CronJob.objects.get(id=job_id)
+    except CronJob.DoesNotExist:
+        return JsonResponse({"error": "Não encontrado"}, status=404)
+
+    if request.method == "GET":
+        return JsonResponse(_cron_to_dict(job))
+
+    if request.method == "DELETE":
+        job.delete()
+        _write_crontab_file(CronJob.objects.all())
+        return JsonResponse({"success": True})
+
+    data = json.loads(request.body)
+    job.name        = data.get("name", job.name).strip()
+    job.description = data.get("description", job.description).strip()
+    job.schedule    = data.get("schedule", job.schedule).strip()
+    job.command     = data.get("command", job.command).strip()
+    job.enabled     = data.get("enabled", job.enabled)
+    job.save()
+    _write_crontab_file(CronJob.objects.all())
+    return JsonResponse({"success": True, "job": _cron_to_dict(job)})
+
+
+@login_required
+@require_POST
+def cron_job_toggle(request, job_id):
+    if not request.user.is_staff:
+        return JsonResponse({"error": "Acesso negado"}, status=403)
+    try:
+        job = CronJob.objects.get(id=job_id)
+    except CronJob.DoesNotExist:
+        return JsonResponse({"error": "Não encontrado"}, status=404)
+    job.enabled = not job.enabled
+    job.save()
+    _write_crontab_file(CronJob.objects.all())
+    return JsonResponse({"success": True, "job": _cron_to_dict(job)})
+
+
+@login_required
+@require_POST
+def cron_apply(request):
+    """Regenerate the crontab file in the shared volume."""
+    if not request.user.is_staff:
+        return JsonResponse({"error": "Acesso negado"}, status=403)
+    jobs = CronJob.objects.all()
+    _write_crontab_file(jobs)
+    enabled_count = jobs.filter(enabled=True).count()
+    return JsonResponse({
+        "success": True,
+        "message": f"Arquivo crontab gerado com {enabled_count} job(s) ativo(s).",
+        "path": "/opt/provemaps/database/provemaps.crontab",
+    })
