@@ -5,9 +5,9 @@
       class="location-picker-overlay"
       @click.self="handleClose"
     >
-      <div class="location-picker-modal">
+      <div class="location-picker-modal" :style="modalStyle">
         <!-- Header -->
-        <div class="location-picker-header">
+        <div class="location-picker-header" :style="{ borderBottomColor: modalStyle.borderColor }">
           <div class="flex items-center gap-2">
             <svg class="w-5 h-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -18,7 +18,7 @@
               Selecionar Localização Inicial do Mapa
             </h3>
           </div>
-          <button @click="handleClose" class="location-picker-close">
+          <button @click="handleClose" class="location-picker-close" :style="closeBtnStyle">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
             </svg>
@@ -26,15 +26,15 @@
         </div>
 
         <!-- Coordinates display -->
-        <div class="location-picker-coords">
+        <div class="location-picker-coords" :style="coordsStyle">
           <div class="coord-item">
-            <span class="coord-label">Latitude</span>
-            <span class="coord-value">{{ currentLat.toFixed(6) }}</span>
+            <span class="coord-label" :style="{ color: isDark ? '#9ca3af' : '#6b7280' }">Latitude</span>
+            <span class="coord-value" :style="{ color: isDark ? '#f9fafb' : '#111827' }">{{ currentLat.toFixed(6) }}</span>
           </div>
-          <div class="coord-divider">·</div>
+          <div class="coord-divider" :style="{ color: isDark ? '#4b5563' : '#d1d5db' }">·</div>
           <div class="coord-item">
-            <span class="coord-label">Longitude</span>
-            <span class="coord-value">{{ currentLng.toFixed(6) }}</span>
+            <span class="coord-label" :style="{ color: isDark ? '#9ca3af' : '#6b7280' }">Longitude</span>
+            <span class="coord-value" :style="{ color: isDark ? '#f9fafb' : '#111827' }">{{ currentLng.toFixed(6) }}</span>
           </div>
           <div class="coord-hint">
             Clique no mapa ou arraste o marcador para definir a localização
@@ -46,7 +46,7 @@
           <div ref="mapContainer" class="location-picker-map"></div>
 
           <!-- Loading overlay -->
-          <div v-if="mapLoading" class="location-picker-loading">
+          <div v-if="mapLoading" class="location-picker-loading" :style="{ background: isDark ? '#1f2937' : '#ffffff' }">
             <svg class="animate-spin w-8 h-8 text-primary-500" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
               <path class="opacity-75" fill="currentColor"
@@ -66,7 +66,7 @@
         </div>
 
         <!-- Footer -->
-        <div class="location-picker-footer">
+        <div class="location-picker-footer" :style="footerStyle">
           <button @click="handleClose" class="lpm-btn-secondary">
             Cancelar
           </button>
@@ -83,8 +83,29 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, computed } from 'vue'
 import { createMap } from '@/providers/maps/MapProviderFactory.js'
+import { useUiStore } from '@/stores/ui.js'
+
+const uiStore = useUiStore()
+const isDark = computed(() => uiStore.theme === 'dark')
+
+const modalStyle = computed(() => isDark.value
+  ? { background: '#1f2937', color: '#f8fafc', borderColor: '#374151' }
+  : { background: '#ffffff', color: '#0f172a', borderColor: '#e5e7eb' }
+)
+const coordsStyle = computed(() => isDark.value
+  ? { background: '#111827', borderBottomColor: '#374151' }
+  : { background: '#f9fafb', borderBottomColor: '#e5e7eb' }
+)
+const footerStyle = computed(() => isDark.value
+  ? { borderTopColor: '#374151' }
+  : { borderTopColor: '#e5e7eb' }
+)
+const closeBtnStyle = computed(() => isDark.value
+  ? { color: '#9ca3af' }
+  : { color: '#6b7280' }
+)
 
 const props = defineProps({
   isOpen: { type: Boolean, default: false },
