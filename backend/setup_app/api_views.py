@@ -1769,6 +1769,10 @@ def get_configuration(request):
         runtime_config = runtime_settings.get_runtime_config()
         allowed_hosts_fallback = ",".join(runtime_config.allowed_hosts)
 
+        # Lê o registro diretamente do banco para campos que podem mudar sem reiniciar
+        # (evita stale lru_cache em workers do Gunicorn que não processaram o POST de save)
+        db_record = FirstTimeSetup.objects.filter(configured=True).order_by("-configured_at").first()
+
         fallback_values = {
             "SECRET_KEY": getattr(settings, "SECRET_KEY", ""),
             "DEBUG": getattr(settings, "DEBUG", False),
@@ -1777,12 +1781,12 @@ def get_configuration(request):
             "ZABBIX_API_PASSWORD": runtime_config.zabbix_api_password,
             "ZABBIX_API_KEY": runtime_config.zabbix_api_key,
             "GOOGLE_MAPS_API_KEY": runtime_config.google_maps_api_key,
-            "MAP_PROVIDER": runtime_config.map_provider or "google",
-            "MAPBOX_TOKEN": runtime_config.mapbox_token,
-            # Map configuration defaults - Google Maps (reads from DB via runtime_config)
-            "MAP_DEFAULT_ZOOM": str(runtime_config.map_default_zoom),
-            "MAP_DEFAULT_LAT": str(runtime_config.map_default_lat),
-            "MAP_DEFAULT_LNG": str(runtime_config.map_default_lng),
+            "MAP_PROVIDER": (db_record.map_provider if db_record else None) or runtime_config.map_provider or "google",
+            "MAPBOX_TOKEN": (db_record.mapbox_token if db_record else None) or runtime_config.mapbox_token or "",
+            # Map configuration — lê direto do banco (não usa lru_cache)
+            "MAP_DEFAULT_ZOOM": str(db_record.map_default_zoom) if db_record and db_record.map_default_zoom is not None else "12",
+            "MAP_DEFAULT_LAT": str(db_record.map_default_lat) if db_record and db_record.map_default_lat is not None else "-15.7801",
+            "MAP_DEFAULT_LNG": str(db_record.map_default_lng) if db_record and db_record.map_default_lng is not None else "-47.9292",
             "MAP_TYPE": "terrain",
             "MAP_STYLES": "",
             "ENABLE_STREET_VIEW": True,
