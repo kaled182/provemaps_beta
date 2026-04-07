@@ -1,0 +1,6 @@
+{
+  "version": "1.4.3",
+  "date": "2026-04-07",
+  "critical": false,
+  "changelog": "Gerenciamento de Cron Jobs via UI, correção do modo escuro no LocationPicker, geocode reverso automático no SiteEditModal, fixes críticos em settings de produção."
+}
