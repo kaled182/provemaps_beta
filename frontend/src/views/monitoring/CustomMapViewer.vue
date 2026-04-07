@@ -2010,6 +2010,13 @@ onBeforeUnmount(() => {
   margin-left: 72px;
 }
 
+/* Mobile: menu é overlay fixo, mapa ocupa tela toda */
+@media (max-width: 768px) {
+  .custom-map-viewer {
+    margin-left: 0 !important;
+  }
+}
+
 .map-content {
   flex: 1;
   position: relative;

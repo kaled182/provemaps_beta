@@ -346,11 +346,18 @@ const isMobile = ref(window.innerWidth <= 768);
 function handleResize() {
   const wasMobile = isMobile.value;
   isMobile.value = window.innerWidth <= 768;
-  // Ao sair do mobile para desktop, restaurar estado do store
-  if (wasMobile && !isMobile.value) {
+
+  if (!wasMobile && isMobile.value) {
+    // Desktop → mobile: fechar menu e zerar CSS var
+    uiStore.isNavMenuOpen = false;
+    document.documentElement.setAttribute('data-nav-menu-open', 'false');
+    applyWidth('0px');
+  } else if (wasMobile && !isMobile.value) {
+    // Mobile → desktop: restaurar estado salvo
     const storedValue = localStorage.getItem('ui.navMenuOpen');
     const shouldBeOpen = storedValue === null ? true : storedValue === 'true';
     uiStore.isNavMenuOpen = shouldBeOpen;
+    document.documentElement.setAttribute('data-nav-menu-open', String(shouldBeOpen));
     applyWidth(shouldBeOpen ? '280px' : '60px');
   }
 }
@@ -403,6 +410,8 @@ onBeforeMount(() => {
   // No mobile, sempre fechar o menu ao montar (evita menu aberto sobrepondo conteúdo)
   if (isMobile.value) {
     uiStore.isNavMenuOpen = false;
+    document.documentElement.setAttribute('data-nav-menu-open', 'false');
+    applyWidth('0px');
     return;
   }
 

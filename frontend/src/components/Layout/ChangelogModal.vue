@@ -175,9 +175,27 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
-    version: '1.4.3',
+    version: '1.4.4',
     date: '07 Abr 2026',
     latest: true,
+    features: [],
+    improvements: [
+      'Menu lateral recolhido automaticamente ao acessar via dispositivo móvel',
+      'Botão hambúrguer fixo (canto superior esquerdo) para abrir o menu no mobile',
+      'Backdrop semitransparente ao abrir o menu no mobile — clique fora para fechar',
+      'Mapa ocupa 100% da tela em mobile (margin-left zerada via CSS e CSS variable)',
+      'Transição desktop ↔ mobile: estado do menu restaurado corretamente ao girar o dispositivo',
+    ],
+    fixes: [
+      'Serviços Celery e Beat em loop de restart — imagem Docker reconstruída com django-celery-beat instalado',
+      'CustomMapViewer aplicava margin-left de 72–280px no mobile mesmo com menu como overlay fixo',
+      'data-nav-menu-open e --nav-menu-width não eram zerados ao montar em mobile, causando deslocamento no mapa',
+    ],
+  },
+  {
+    version: '1.4.3',
+    date: '07 Abr 2026',
+    latest: false,
     features: [
       'Gerenciamento de Cron Jobs via UI em Configurações > Sistema > Cron — crie, edite, ative/desative e aplique tarefas agendadas no servidor sem editar arquivos manualmente',
     ],

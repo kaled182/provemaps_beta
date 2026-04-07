@@ -1,6 +1,6 @@
 {
-  "version": "1.4.3",
+  "version": "1.4.4",
   "date": "2026-04-07",
   "critical": false,
-  "changelog": "Gerenciamento de Cron Jobs via UI, correção do modo escuro no LocationPicker, geocode reverso automático no SiteEditModal, fixes críticos em settings de produção."
+  "changelog": "Compatibilidade mobile: nav-menu como overlay fixo, mapa ocupa tela toda, hambúrguer e backdrop, serviços Celery/Beat corrigidos."
 }
