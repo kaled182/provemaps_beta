@@ -175,9 +175,23 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
-    version: '1.4.5',
+    version: '1.4.6',
     date: '07 Abr 2026',
     latest: true,
+    features: [
+      'Script update.sh — atualização automática com 4 passos: git pull, npm build, rebuild dos containers e health check',
+    ],
+    improvements: [
+      'update.sh sempre reconstrói web + celery + beat, garantindo que backend Python e frontend estejam sempre sincronizados',
+      'Script segue o mesmo padrão visual do install_ubuntu.sh: spinner, cores, log em /var/log/provemaps_update.log',
+      'Exibe versão antes e depois da atualização',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.5',
+    date: '07 Abr 2026',
+    latest: false,
     features: [
       'Botão "Atualizar agora" no Painel do Sistema — com confirmação de comandos, barra de progresso e log em tempo real via SSE',
     ],
