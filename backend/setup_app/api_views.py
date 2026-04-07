@@ -574,7 +574,7 @@ def test_database_connection(request):
     try:
         data = json.loads(request.body)
         db_host = data.get("db_host", "").strip()
-        db_port = data.get("db_port", "").strip()
+        db_port = str(data.get("db_port") or "").strip()
         db_name = data.get("db_name", "").strip()
         db_user = data.get("db_user", "").strip()
         db_password = data.get("db_password", "").strip()
@@ -745,7 +745,7 @@ def test_ftp_connection(request):
     try:
         data = json.loads(request.body or "{}")
         host = data.get("ftp_host", "").strip()
-        port_raw = data.get("ftp_port", "").strip()
+        port_raw = str(data.get("ftp_port") or "").strip()
         username = data.get("ftp_user", "").strip()
         password = data.get("ftp_password", "").strip()
         remote_path = data.get("ftp_path", "").strip()
@@ -831,7 +831,7 @@ def test_smtp_connection(request):
     try:
         data = json.loads(request.body or "{}")
         host = data.get("smtp_host", "").strip()
-        port_raw = data.get("smtp_port", "").strip()
+        port_raw = str(data.get("smtp_port") or "").strip()
         security = data.get("smtp_security", "").strip().lower()
         username = data.get("smtp_user", "").strip()
         password = data.get("smtp_password", "")
