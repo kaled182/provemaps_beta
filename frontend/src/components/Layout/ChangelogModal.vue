@@ -175,9 +175,21 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
-    version: '1.4.6',
+    version: '1.4.7',
     date: '07 Abr 2026',
     latest: true,
+    features: [],
+    improvements: [],
+    fixes: [
+      'Botão "Atualizar agora" não reportava mais erros falsos: git pull dentro do container é não-crítico (código baked na imagem)',
+      'Avisos de arquivo duplicado do collectstatic tratados como warning, não como erro — progresso conclui com sucesso',
+      'Ícone âmbar (⚠) para etapas com aviso; apenas falhas reais marcam a atualização como erro',
+    ],
+  },
+  {
+    version: '1.4.6',
+    date: '07 Abr 2026',
+    latest: false,
     features: [
       'Script update.sh — atualização automática com 4 passos: git pull, npm build, rebuild dos containers e health check',
     ],

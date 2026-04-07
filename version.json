@@ -1,6 +1,6 @@
 {
-  "version": "1.4.6",
+  "version": "1.4.7",
   "date": "2026-04-07",
   "critical": false,
-  "changelog": "Script update.sh para atualização automática com git pull, npm build, rebuild obrigatório dos containers e health check."
+  "changelog": "Corrige erros falsos no botão Atualizar: git pull não-crítico no container, warnings do collectstatic tratados como aviso."
 }

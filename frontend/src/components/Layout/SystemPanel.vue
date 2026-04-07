@@ -116,6 +116,7 @@
                     >
                       <PhCircleNotch v-if="s.state === 'running'" :size="14" class="spin" />
                       <PhCheckCircle v-else-if="s.state === 'ok'" :size="14" />
+                      <PhWarning v-else-if="s.state === 'warning'" :size="14" />
                       <PhWarningCircle v-else-if="s.state === 'error'" :size="14" />
                       <PhCircle v-else :size="14" />
                       <span class="sp-progress-label">{{ s.label }}</span>
@@ -387,8 +388,14 @@ async function performUpdate() {
           if (evt.running) {
             step.state = 'running';
           } else {
-            step.state = evt.ok === false ? 'error' : 'ok';
-            if (!evt.ok) hasError = true;
+            if (evt.ok === false) {
+              step.state = 'error';
+              hasError = true;
+            } else if (evt.warning) {
+              step.state = 'warning';   // ok mas com aviso — não bloqueia
+            } else {
+              step.state = 'ok';
+            }
             if (evt.msg) updateLog.value = evt.msg;
           }
         }
@@ -858,9 +865,10 @@ watch(() => props.show, (val) => {
   color: var(--text-tertiary);
   font-family: monospace;
 }
-.sp-progress-step.running { color: var(--accent-info, #3b82f6); }
-.sp-progress-step.ok      { color: var(--accent-success, #22c55e); }
-.sp-progress-step.error   { color: var(--status-danger, #ef4444); }
+.sp-progress-step.running  { color: var(--accent-info, #3b82f6); }
+.sp-progress-step.ok       { color: var(--accent-success, #22c55e); }
+.sp-progress-step.warning  { color: var(--status-warning, #f59e0b); }
+.sp-progress-step.error    { color: var(--status-danger, #ef4444); }
 
 .sp-update-log {
   font-size: 0.72rem;
