@@ -842,6 +842,7 @@ def test_smtp_connection(request):
         from_name = data.get("smtp_from_name", "").strip()
         from_email = data.get("smtp_from_email", "").strip()
         recipient = data.get("smtp_test_recipient", "").strip()
+        test_message = data.get("smtp_test_message", "").strip()
 
         values = env_manager.read_values(
             [
@@ -908,7 +909,8 @@ def test_smtp_connection(request):
         msg["Subject"] = "Teste SMTP - ProveMaps"
         msg["From"] = sender
         msg["To"] = recipient
-        msg.set_content("Este é um email de teste do ProveMaps.")
+        body = test_message or "Este é um email de teste do ProveMaps."
+        msg.set_content(body)
 
         if security == "ssl":
             server = smtplib.SMTP_SSL(
