@@ -187,6 +187,8 @@ const changelog = [
       'Modal de criação de cron com presets de agendamento (A cada hora, Todo dia 3h, Semanal, Mensal, Seg-Sex)',
     ],
     fixes: [
+      'Modal de teste SMTP: ao clicar no ⚡ do gateway, abre modal pedindo destinatário e mensagem antes de enviar — mesmo padrão do teste SMS',
+      'Erro "int object has no attribute strip" nos endpoints de teste SMTP, DB e FTP — porta enviada como número inteiro pelo frontend agora convertida corretamente',
       'Modal LocationPicker (seleção de ponto no mapa) não respeitava o modo escuro — reescrito com classes Tailwind dark:',
       'SiteEditModal substituiu mapa inline por botão PIN que abre o LocationPickerModal — interface mais limpa e mapa maior',
       'Geocode reverso automático ao digitar lat/lng manualmente no formulário de novo site',
