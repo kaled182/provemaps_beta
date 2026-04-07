@@ -88,6 +88,7 @@
       - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
       - ../database:/app/database
       - ../logs:/app/backend/logs
+      - ../backend/staticfiles:/app/backend/staticfiles  # serve static files directly from host build output
 
   whatsapp-qr:
     build:

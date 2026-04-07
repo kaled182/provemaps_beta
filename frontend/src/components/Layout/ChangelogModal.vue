@@ -175,9 +175,24 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
-    version: '1.4.4',
+    version: '1.4.5',
     date: '07 Abr 2026',
     latest: true,
+    features: [
+      'Botão "Atualizar agora" no Painel do Sistema — com confirmação de comandos, barra de progresso e log em tempo real via SSE',
+    ],
+    improvements: [
+      'Bind mount de staticfiles no container web: builds do frontend refletidos imediatamente sem rebuild da imagem',
+      'Changelog e versão agora sempre atualizados após cada entrega',
+    ],
+    fixes: [
+      'Changelog exibia versão anterior porque o container web servia arquivos baked na imagem, não o build do host',
+    ],
+  },
+  {
+    version: '1.4.4',
+    date: '07 Abr 2026',
+    latest: false,
     features: [],
     improvements: [
       'Menu lateral recolhido automaticamente ao acessar via dispositivo móvel',

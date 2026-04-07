@@ -1,6 +1,6 @@
 {
-  "version": "1.4.4",
+  "version": "1.4.5",
   "date": "2026-04-07",
   "critical": false,
-  "changelog": "Compatibilidade mobile: nav-menu como overlay fixo, mapa ocupa tela toda, hambúrguer e backdrop, serviços Celery/Beat corrigidos."
+  "changelog": "Botão de atualização com progresso SSE no Painel do Sistema. Fix definitivo do changelog: bind mount de staticfiles no container web."
 }
