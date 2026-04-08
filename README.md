@@ -77,39 +77,17 @@ setup_contacts               # Contatos para notificações
 
 ---
 
-## 🚀 Instalação
+## 🚀 Quick Start (Docker)
 
-### Opção 1 — Script automático (Ubuntu)
+### Pré-requisitos
+- Docker e Docker Compose
+- Linux (Debian/Ubuntu recomendado para produção)
 
-Para instalação completa em um único comando:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/kaled182/provemaps_beta/main/scripts/install_ubuntu.sh | sudo bash
-```
-
-O script instala Docker, Node.js, clona o repositório, compila o frontend e sobe todos os serviços automaticamente.
-
-### Opção 2 — Instalação manual passo a passo (Ubuntu)
-
-Consulte o guia completo: [INSTALL_UBUNTU.md](./INSTALL_UBUNTU.md)
-
-### Opção 3 — Quick Start (Docker, qualquer sistema)
-
-**Pré-requisitos:** Docker, Docker Compose e Node.js instalados.
+### Subir ambiente local
 
 ```bash
 git clone https://github.com/kaled182/provemaps_beta.git
 cd provemaps_beta
-
-# Criar arquivo de configuração
-cp .env.example .env
-# Edite o .env com suas credenciais (Zabbix, Google Maps, etc.)
-
-# Compilar o frontend
-cd frontend
-npm install
-npm run build
-cd ..
 
 # Iniciar todos os serviços
 cd docker
@@ -133,6 +111,14 @@ curl http://localhost:8100/healthz
 | Grafana | `3002` |
 | Video HLS | `8083` |
 | WhatsApp QR | `3001` |
+
+### Build do frontend
+
+```bash
+# Na raiz do projeto (fora do Docker)
+npm install
+npm run build
+```
 
 ---
 
