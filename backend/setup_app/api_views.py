@@ -3820,36 +3820,50 @@ def restore_backup(request):
 
         if backup_path.suffix.lower() == ".zip":
             try:
-                import pyzipper
-            except ImportError as exc:
-                return JsonResponse(
-                    {
-                        "success": False,
-                        "message": "pyzipper is required to restore encrypted backups.",
-                    },
-                    status=500,
-                )
-
-            try:
                 password = _get_backup_password()
             except ValueError as exc:
                 return JsonResponse({"success": False, "message": str(exc)}, status=400)
-            extracted_path = None
+
             with tempfile.TemporaryDirectory(dir=BACKUP_DIR) as temp_dir:
                 temp_dir_path = Path(temp_dir)
-                with pyzipper.AESZipFile(backup_path) as zipf:
-                    zipf.pwd = password
-                    zipf.extractall(temp_dir_path)
+
+                if password is not None:
+                    try:
+                        import pyzipper
+                    except ImportError:
+                        return JsonResponse(
+                            {"success": False, "message": "pyzipper é necessário para restaurar backups criptografados."},
+                            status=500,
+                        )
+                    with pyzipper.AESZipFile(backup_path) as zipf:
+                        zipf.pwd = password
+                        zipf.extractall(temp_dir_path)
+                else:
+                    import zipfile as _zipfile
+                    try:
+                        with _zipfile.ZipFile(backup_path) as zipf:
+                            zipf.extractall(temp_dir_path)
+                    except _zipfile.BadZipFile:
+                        return JsonResponse(
+                            {"success": False, "message": "Arquivo ZIP inválido ou corrompido."},
+                            status=400,
+                        )
+                    except RuntimeError:
+                        return JsonResponse(
+                            {"success": False, "message": "O backup está criptografado. Configure a senha antes de restaurar."},
+                            status=400,
+                        )
 
                 candidates = list(temp_dir_path.glob("*.dump")) + list(temp_dir_path.glob("*.sql"))
                 if not candidates:
                     return JsonResponse(
-                        {
-                            "success": False,
-                            "message": "Backup zip does not contain a .dump or .sql file.",
-                        },
+                        {"success": False, "message": "O arquivo ZIP não contém um dump válido (.dump ou .sql)."},
                         status=400,
                     )
+
+                # Find config.json for fernet_key restoration
+                config_candidates = list(temp_dir_path.glob("*.config.json"))
+                config_json_arg = str(config_candidates[0]) if config_candidates else ""
 
                 extracted_path = candidates[0]
                 restore_name = f"restore_tmp_{datetime.now().strftime('%Y%m%d_%H%M%S')}{extracted_path.suffix}"
@@ -3857,7 +3871,7 @@ def restore_backup(request):
                 shutil.copy2(extracted_path, restore_path)
 
                 try:
-                    call_command("restore_db", restore_path.name)
+                    call_command("restore_db", restore_path.name, config_json=config_json_arg)
                 finally:
                     restore_path.unlink(missing_ok=True)
         else:
