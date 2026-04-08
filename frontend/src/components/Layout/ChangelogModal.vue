@@ -175,9 +175,27 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
-    version: '1.4.8.1',
+    version: '1.4.8.2',
     date: '08 Abr 2026',
     latest: true,
+    features: [
+      'Modal de cabo flutuante e arrastável: sem overlay que bloqueia o mapa — arraste pelo cabeçalho para reposicionar',
+      'Modal centralizado automaticamente no mapa ao abrir (mobile e desktop)',
+    ],
+    improvements: [
+      'Mapa permanece interativo com o modal aberto — sem backdrop escuro bloqueante',
+      'Grip visual (⠿) no header indica que o modal é arrastável',
+      'Responsivo em mobile: em telas ≤520px o modal ocupa toda a largura com layout de 2 colunas',
+      'Status DEGRADADO adicionado ao modal (além de ONLINE, INOPERANTE, CRÍTICO)',
+    ],
+    fixes: [
+      'Modal não respondia adequadamente a telas pequenas de celular/tablet',
+    ],
+  },
+  {
+    version: '1.4.8.1',
+    date: '08 Abr 2026',
+    latest: false,
     features: [
       'Limites de sinal óptico por categoria de distância: SFP LR (≤10km), ER (≤40km), ZR (≤80km) e DWDM/EZR (>80km)',
       'Cabos coloridos no mapa conforme nível real de sinal: verde (ok), âmbar (atenção), vermelho (crítico)',

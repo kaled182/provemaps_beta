@@ -1,6 +1,6 @@
 {
-  "version": "1.4.8.1",
+  "version": "1.4.8.2",
   "date": "2026-04-08",
   "critical": false,
-  "changelog": "Sinal óptico por distância: cabos coloridos conforme nível real de RX; limites industriais por categoria SFP; sinal nulo/zero = crítico."
+  "changelog": "Modal de cabo flutuante e arrastável: sem overlay bloqueante, centralizado no mapa, responsivo em mobile/tablet."
 }
