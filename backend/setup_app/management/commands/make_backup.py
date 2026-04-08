@@ -2,7 +2,6 @@ import json
 import os
 import subprocess
 import tempfile
-import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -116,32 +115,27 @@ class Command(BaseCommand):
 
             values = env_manager.read_values(["BACKUP_ZIP_PASSWORD", "SECRET_KEY"])
             password = values.get("BACKUP_ZIP_PASSWORD", "").strip()
-            if password and len(password) < 8:
+            if len(password) < 8:
                 raise RuntimeError(
                     "A senha do backup precisa ter pelo menos 8 caracteres."
                 )
 
-            if password:
-                try:
-                    import pyzipper
-                except ImportError as exc:
-                    raise RuntimeError(
-                        "pyzipper is required for encrypted backups. Install it in the backend environment."
-                    ) from exc
+            try:
+                import pyzipper
+            except ImportError as exc:
+                raise RuntimeError(
+                    "pyzipper is required for encrypted backups. Install it in the backend environment."
+                ) from exc
 
-                with pyzipper.AESZipFile(
-                    filepath,
-                    "w",
-                    compression=pyzipper.ZIP_DEFLATED,
-                    encryption=pyzipper.WZ_AES,
-                ) as zipf:
-                    zipf.setpassword(password.encode("utf-8"))
-                    zipf.write(dump_path, dump_path.name)
-                    zipf.write(metadata_path, metadata_path.name)
-            else:
-                with zipfile.ZipFile(filepath, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
-                    zipf.write(dump_path, dump_path.name)
-                    zipf.write(metadata_path, metadata_path.name)
+            with pyzipper.AESZipFile(
+                filepath,
+                "w",
+                compression=pyzipper.ZIP_DEFLATED,
+                encryption=pyzipper.WZ_AES,
+            ) as zipf:
+                zipf.setpassword(password.encode("utf-8"))
+                zipf.write(dump_path, dump_path.name)
+                zipf.write(metadata_path, metadata_path.name)
 
         size_mb = filepath.stat().st_size / (1024 * 1024)
         self.stdout.write(self.style.SUCCESS(f"Backup criado com sucesso: {filename}"))

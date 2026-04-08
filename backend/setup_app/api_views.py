@@ -88,15 +88,9 @@ def _ensure_backup_dir() -> None:
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _get_backup_password() -> bytes | None:
-    """Return the backup password bytes, or None if no password is configured.
-
-    Raises ValueError if a password is set but does not meet the minimum length.
-    """
+def _get_backup_password() -> bytes:
     values = env_manager.read_values(["BACKUP_ZIP_PASSWORD"])
     password = values.get("BACKUP_ZIP_PASSWORD", "").strip()
-    if not password:
-        return None
     if len(password) < _MIN_BACKUP_PASSWORD_LEN:
         raise ValueError(
             "A senha do backup precisa ter pelo menos 8 caracteres para criptografar."
@@ -3761,7 +3755,7 @@ def backups_manager(request):
             )
 
         try:
-            backup_pwd = _get_backup_password()
+            _get_backup_password()
         except ValueError as exc:
             return JsonResponse({"success": False, "message": str(exc)}, status=400)
 
@@ -3789,13 +3783,11 @@ def backups_manager(request):
             success=True,
         )
 
-        encrypted = backup_pwd is not None
         return JsonResponse(
             {
                 "success": True,
-                "message": "Backup criado" if encrypted else "Backup criado (sem criptografia — configure uma senha para proteger o arquivo)",
+                "message": "Backup criado",
                 "filename": filename or "",
-                "encrypted": encrypted,
                 "gdrive_upload": gdrive_upload or {},
                 "ftp_upload": ftp_upload or {},
             },
