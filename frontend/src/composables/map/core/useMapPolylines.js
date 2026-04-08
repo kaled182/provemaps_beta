@@ -204,6 +204,11 @@ export function useMapPolylines() {
     console.log(`[useMapPolylines] ${selectedCables.length} cabos para processar`)
     
     const statusColors = {
+      // API cable.status values
+      up: '#10b981',
+      down: '#ef4444',
+      degraded: '#f59e0b',
+      // Aliases used by legacy/optical status
       online: '#10b981',
       offline: '#ef4444',
       warning: '#f59e0b',

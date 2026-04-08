@@ -175,9 +175,28 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
-    version: '1.4.8',
+    version: '1.4.8.1',
     date: '08 Abr 2026',
     latest: true,
+    features: [
+      'Limites de sinal óptico por categoria de distância: SFP LR (≤10km), ER (≤40km), ZR (≤80km) e DWDM/EZR (>80km)',
+      'Cabos coloridos no mapa conforme nível real de sinal: verde (ok), âmbar (atenção), vermelho (crítico)',
+      'Comprimento do cabo detectado automaticamente pelo traçado no mapa para identificar categoria SFP',
+    ],
+    improvements: [
+      'Configuração de limites ópticos expandida em Servidores de Monitoramento: tabela por distância com atenção e crítico individuais',
+      'Sinal nulo ou zero classificado como crítico automaticamente (sem sinal = fibra rompida ou SFP desconectado)',
+      'Versionamento intra-dia: 1.X.Y.Z para múltiplos ciclos no mesmo dia',
+    ],
+    fixes: [
+      'Cabos ficavam verdes mesmo com sinal degradado (limiar -50 dBm era permissivo demais — corrigido para padrões industriais)',
+      'Todos os cabos no mapa apareciam cinza (status up/down/degraded não mapeados para cores)',
+    ],
+  },
+  {
+    version: '1.4.8',
+    date: '08 Abr 2026',
+    latest: false,
     features: [
       'Backup inclui fernet_key no config.json — restore em qualquer ambiente descriptografa dados automaticamente',
       'Suporte a backup sem senha: ZIP padrão quando nenhuma senha está configurada',

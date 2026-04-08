@@ -1761,6 +1761,7 @@ def get_configuration(request):
             # Network thresholds
             "OPTICAL_RX_WARNING_THRESHOLD",
             "OPTICAL_RX_CRITICAL_THRESHOLD",
+            "OPTICAL_THRESHOLDS_BY_DISTANCE",
             # Backup automation
             "BACKUP_AUTO_ENABLED",
             "BACKUP_FREQUENCY",
@@ -1862,8 +1863,16 @@ def get_configuration(request):
             "SMS_AWS_SECRET_ACCESS_KEY": runtime_config.sms_aws_secret_access_key,
             "SMS_INFOBIP_BASE_URL": runtime_config.sms_infobip_base_url,
             # Defaults for network thresholds if not configured
-            "OPTICAL_RX_WARNING_THRESHOLD": "-24",
-            "OPTICAL_RX_CRITICAL_THRESHOLD": "-27",
+            "OPTICAL_RX_WARNING_THRESHOLD": str(runtime_config.optical_rx_warning_threshold),
+            "OPTICAL_RX_CRITICAL_THRESHOLD": str(runtime_config.optical_rx_critical_threshold),
+            "OPTICAL_THRESHOLDS_BY_DISTANCE": (
+                runtime_config.optical_thresholds_by_distance or {
+                    "10":  {"warning": -20.0, "critical": -28.0},
+                    "40":  {"warning": -23.0, "critical": -30.0},
+                    "80":  {"warning": -26.0, "critical": -30.0},
+                    "100": {"warning": -28.0, "critical": -35.0},
+                }
+            ),
             # Backup automation defaults
             "BACKUP_AUTO_ENABLED": False,
             "BACKUP_FREQUENCY": "weekly",
@@ -2113,6 +2122,37 @@ def update_configuration(request):
             except Exception:
                 return str(default)
 
+        _DEFAULT_DISTANCE_THRESHOLDS = {
+            "10":  {"warning": -20.0, "critical": -28.0},
+            "40":  {"warning": -23.0, "critical": -30.0},
+            "80":  {"warning": -26.0, "critical": -30.0},
+            "100": {"warning": -28.0, "critical": -35.0},
+        }
+
+        def _parse_distance_thresholds(value):
+            """Parse and validate per-distance optical thresholds dict."""
+            defaults = _DEFAULT_DISTANCE_THRESHOLDS
+            if not value:
+                return defaults
+            if isinstance(value, str):
+                try:
+                    import json as _j
+                    value = _j.loads(value)
+                except Exception:
+                    return defaults
+            if not isinstance(value, dict):
+                return defaults
+            result = {}
+            for cat in ("10", "40", "80", "100"):
+                entry = value.get(cat, defaults[cat])
+                try:
+                    w = float(entry.get("warning", defaults[cat]["warning"]))
+                    c = float(entry.get("critical", defaults[cat]["critical"]))
+                    result[cat] = {"warning": w, "critical": c}
+                except Exception:
+                    result[cat] = defaults[cat]
+            return result
+
         payload = {
             "SECRET_KEY": data.get("SECRET_KEY") or runtime_config.secret_key or "",
             "DEBUG": "True" if _to_bool(data.get("DEBUG", False)) else "False",
@@ -2220,6 +2260,9 @@ def update_configuration(request):
             "OPTICAL_RX_CRITICAL_THRESHOLD": _parse_float_str(
                 data.get("OPTICAL_RX_CRITICAL_THRESHOLD", "-27"), -27
             ),
+            "OPTICAL_THRESHOLDS_BY_DISTANCE": _parse_distance_thresholds(
+                data.get("OPTICAL_THRESHOLDS_BY_DISTANCE")
+            ),
         }
 
         smtp_enabled = _to_bool(payload["SMTP_ENABLED"])
@@ -2283,6 +2326,10 @@ def update_configuration(request):
             settings.OPTICAL_RX_CRITICAL_THRESHOLD = float(payload["OPTICAL_RX_CRITICAL_THRESHOLD"])
         except (TypeError, ValueError):
             settings.OPTICAL_RX_CRITICAL_THRESHOLD = -27.0
+        import json as _json
+        dist_thresh = payload.get("OPTICAL_THRESHOLDS_BY_DISTANCE") or {}
+        os.environ["OPTICAL_THRESHOLDS_BY_DISTANCE"] = _json.dumps(dist_thresh)
+        settings.OPTICAL_THRESHOLDS_BY_DISTANCE = dist_thresh
 
         # Step 2: Persist to database
         # Determine auth_type but always save all credentials provided

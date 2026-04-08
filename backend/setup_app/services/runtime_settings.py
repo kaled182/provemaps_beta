@@ -87,12 +87,27 @@ class RuntimeConfig:
     enable_fullscreen: bool
     optical_rx_warning_threshold: float
     optical_rx_critical_threshold: float
+    optical_thresholds_by_distance: dict
 
 
 def _float_setting(name: str, default: float) -> float:
     try:
         return float(getattr(settings, name, default))
     except (TypeError, ValueError):
+        return default
+
+
+def _dict_setting(name: str, default: dict) -> dict:
+    import json as _json
+    raw = getattr(settings, name, None)
+    if raw is None:
+        return default
+    if isinstance(raw, dict):
+        return raw
+    try:
+        parsed = _json.loads(raw)
+        return parsed if isinstance(parsed, dict) else default
+    except Exception:
         return default
 
 
@@ -178,6 +193,7 @@ def _fallback_config() -> RuntimeConfig:
         enable_fullscreen=getattr(settings, "ENABLE_FULLSCREEN", True),
         optical_rx_warning_threshold=_float_setting("OPTICAL_RX_WARNING_THRESHOLD", -24.0),
         optical_rx_critical_threshold=_float_setting("OPTICAL_RX_CRITICAL_THRESHOLD", -27.0),
+        optical_thresholds_by_distance=_dict_setting("OPTICAL_THRESHOLDS_BY_DISTANCE", {}),
     )
 
 
@@ -267,6 +283,7 @@ def get_runtime_config() -> RuntimeConfig:
         enable_fullscreen=record.enable_fullscreen if record.enable_fullscreen is not None else getattr(settings, "ENABLE_FULLSCREEN", True),
         optical_rx_warning_threshold=_float_setting("OPTICAL_RX_WARNING_THRESHOLD", -24.0),
         optical_rx_critical_threshold=_float_setting("OPTICAL_RX_CRITICAL_THRESHOLD", -27.0),
+        optical_thresholds_by_distance=_dict_setting("OPTICAL_THRESHOLDS_BY_DISTANCE", {}),
     )
 
 
