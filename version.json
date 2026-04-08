@@ -1,6 +1,6 @@
 {
-  "version": "1.4.8.4",
+  "version": "1.4.8.5",
   "date": "2026-04-08",
   "critical": false,
-  "changelog": "Painel óptico: botão Ver Detalhes abre modal de detalhes do cabo. Duplo clique removido."
+  "changelog": "Botão Ver Detalhes abre diretamente o modal completo do cabo (com abas de nível óptico, tráfego, alarmes e histórico)."
 }

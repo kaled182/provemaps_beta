@@ -175,9 +175,21 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
-    version: '1.4.8.4',
+    version: '1.4.8.5',
     date: '08 Abr 2026',
     latest: true,
+    features: [
+      'Botão "Ver Detalhes do Cabo" abre diretamente o modal completo com abas (Nível Óptico, Tráfego, Alarmes, Histórico)',
+    ],
+    improvements: [],
+    fixes: [
+      'Modal pequeno intermediário não aparece mais ao clicar em Ver Detalhes',
+    ],
+  },
+  {
+    version: '1.4.8.4',
+    date: '08 Abr 2026',
+    latest: false,
     features: [
       'Painel óptico exibe botão "Ver Detalhes do Cabo" que abre o modal completo — sem precisar de duplo clique',
     ],

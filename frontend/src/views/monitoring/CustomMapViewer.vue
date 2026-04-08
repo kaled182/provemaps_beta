@@ -926,8 +926,9 @@ const handleCableClick = (cable) => {
 }
 
 const openCableDetailsFromTooltip = (cable) => {
+  showCableTooltip.value = false
   selectedCable.value = cable
-  showCableModal.value = true
+  showCableDetailModal.value = true
 }
 
 // Handlers para hover em cabos (tooltip)
