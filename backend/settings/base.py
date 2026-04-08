@@ -18,6 +18,39 @@ BACKEND_DIR = BASE_DIR / 'backend'
 FRONTEND_DIR = BASE_DIR / 'frontend'
 DATABASE_DIR = BASE_DIR / 'database'
 
+
+def _load_runtime_env() -> None:
+    """
+    Load DB credentials from /app/database/runtime.env (or DATABASE_DIR/runtime.env).
+
+    This runs before DATABASES is constructed so that os.getenv("DB_PASSWORD")
+    returns the value written by the setup wizard — even if the bash entrypoint
+    failed to export it correctly due to special characters in the password.
+    """
+    _runtime_env_path = os.environ.get("RUNTIME_ENV_PATH", "")
+    runtime_env = Path(_runtime_env_path) if _runtime_env_path else (DATABASE_DIR / "runtime.env")
+    if not runtime_env.exists():
+        return
+    try:
+        with open(runtime_env, "r", encoding="utf-8") as fh:
+            for raw_line in fh:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip()
+                # Strip surrounding quotes added by env_manager._quote()
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                    value = value[1:-1]
+                if key in {"DB_USER", "DB_PASSWORD", "DB_NAME", "DB_HOST", "DB_PORT"}:
+                    os.environ[key] = value
+    except OSError:
+        pass  # File not readable — fall back to existing env vars
+
+
+_load_runtime_env()
+
 _secret_key = os.getenv("SECRET_KEY")
 
 if not _secret_key:
@@ -35,11 +68,18 @@ if not _secret_key:
 SECRET_KEY = _secret_key or ""
 
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
-ALLOWED_HOSTS = [
-    host.strip()
-    for host in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
-    if host.strip()
-]
+ALLOWED_HOSTS = (
+    [
+        host.strip()
+        for host in os.getenv("ALLOWED_HOSTS", "*").split(",")
+        if host.strip()
+    ]
+    or ["*"]
+)
+print(
+    f"[settings.base] DJANGO_SETTINGS_MODULE={os.getenv('DJANGO_SETTINGS_MODULE')} "
+    f"ALLOWED_HOSTS={ALLOWED_HOSTS} DEBUG={DEBUG}"
+)
 
 # Telemetry — opt-out with TELEMETRY_ENABLED=false in .env
 # Set TELEMETRY_ENDPOINT to the URL where remote installations should send pings
@@ -155,6 +195,7 @@ CSP_CONNECT_SRC = os.getenv(
     "https://events.mapbox.com "
     "https://*.tiles.mapbox.com "
     "https://nominatim.openstreetmap.org "
+    "https://api.github.com "
     "http://localhost:8082 "
     "http://video-hls:8080 "
     "http://localhost:8889",
@@ -282,6 +323,7 @@ MIDDLEWARE = [
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "core.middleware.csrf_api_exempt.CsrfApiExemptMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     # Force authentication on all routes
@@ -680,7 +722,7 @@ REST_FRAMEWORK: dict[str, object] = {
 UNFOLD = {
     "SITE_TITLE": "Maps Prove Fiber",
     "SITE_HEADER": "SIMPLES INTERNET",
-    "SITE_URL": "/maps_view/dashboard/",
+    "SITE_URL": "/",
     "SITE_ICON": {
         "light": lambda request: "admin/img/si-logo.svg",
         "dark": lambda request: "admin/img/si-logo.svg",
@@ -731,7 +773,7 @@ UNFOLD = {
                     {
                         "title": "Ver Dashboard",
                         "icon": "home",
-                        "link": "/maps_view/dashboard/",
+                        "link": "/",
                     },
                 ],
             },

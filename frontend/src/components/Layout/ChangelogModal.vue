@@ -175,9 +175,207 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
+    version: '1.4.8.5',
+    date: '08 Abr 2026',
+    latest: true,
+    features: [
+      'Botão "Ver Detalhes do Cabo" abre diretamente o modal completo com abas (Nível Óptico, Tráfego, Alarmes, Histórico)',
+    ],
+    improvements: [],
+    fixes: [
+      'Modal pequeno intermediário não aparece mais ao clicar em Ver Detalhes',
+    ],
+  },
+  {
+    version: '1.4.8.4',
+    date: '08 Abr 2026',
+    latest: false,
+    features: [
+      'Painel óptico exibe botão "Ver Detalhes do Cabo" que abre o modal completo — sem precisar de duplo clique',
+    ],
+    improvements: [
+      'Interação com cabos simplificada: clique abre o painel óptico, botão dentro do painel abre os detalhes',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.8.3',
+    date: '08 Abr 2026',
+    latest: false,
+    features: [
+      'Clique simples no cabo abre o painel de sinal óptico — funciona em mobile (sem precisar de hover)',
+      'Painel óptico arrastável pelo cabeçalho, com botão Fechar — não fecha automaticamente ao mover o mouse',
+    ],
+    improvements: [
+      'Comportamento de interação com cabos unificado entre desktop (hover + clique) e mobile (apenas clique)',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.8.2',
+    date: '08 Abr 2026',
+    latest: false,
+    features: [
+      'Modal de cabo flutuante e arrastável: sem overlay que bloqueia o mapa — arraste pelo cabeçalho para reposicionar',
+      'Modal centralizado automaticamente no mapa ao abrir (mobile e desktop)',
+    ],
+    improvements: [
+      'Mapa permanece interativo com o modal aberto — sem backdrop escuro bloqueante',
+      'Grip visual (⠿) no header indica que o modal é arrastável',
+      'Responsivo em mobile: em telas ≤520px o modal ocupa toda a largura com layout de 2 colunas',
+      'Status DEGRADADO adicionado ao modal (além de ONLINE, INOPERANTE, CRÍTICO)',
+    ],
+    fixes: [
+      'Modal não respondia adequadamente a telas pequenas de celular/tablet',
+    ],
+  },
+  {
+    version: '1.4.8.1',
+    date: '08 Abr 2026',
+    latest: false,
+    features: [
+      'Limites de sinal óptico por categoria de distância: SFP LR (≤10km), ER (≤40km), ZR (≤80km) e DWDM/EZR (>80km)',
+      'Cabos coloridos no mapa conforme nível real de sinal: verde (ok), âmbar (atenção), vermelho (crítico)',
+      'Comprimento do cabo detectado automaticamente pelo traçado no mapa para identificar categoria SFP',
+    ],
+    improvements: [
+      'Configuração de limites ópticos expandida em Servidores de Monitoramento: tabela por distância com atenção e crítico individuais',
+      'Sinal nulo ou zero classificado como crítico automaticamente (sem sinal = fibra rompida ou SFP desconectado)',
+      'Versionamento intra-dia: 1.X.Y.Z para múltiplos ciclos no mesmo dia',
+    ],
+    fixes: [
+      'Cabos ficavam verdes mesmo com sinal degradado (limiar -50 dBm era permissivo demais — corrigido para padrões industriais)',
+      'Todos os cabos no mapa apareciam cinza (status up/down/degraded não mapeados para cores)',
+    ],
+  },
+  {
+    version: '1.4.8',
+    date: '08 Abr 2026',
+    latest: false,
+    features: [
+      'Backup inclui fernet_key no config.json — restore em qualquer ambiente descriptografa dados automaticamente',
+      'Suporte a backup sem senha: ZIP padrão quando nenhuma senha está configurada',
+      'Restore lê fernet_key do config.json e atualiza database/fernet.key antes de reiniciar',
+    ],
+    improvements: [
+      'pg_restore com --if-exists, --no-owner e --no-privileges — elimina falsos erros em banco limpo',
+      'Restore de ZIP sem criptografia usa zipfile nativo (sem dependência do pyzipper)',
+      'Resposta do backup inclui campo encrypted para indicar se o arquivo está protegido',
+      'Versionamento por dia: uma versão por dia de trabalho, não por alteração',
+    ],
+    fixes: [
+      'Restore retornava 500 mesmo quando pg_restore concluía com sucesso (exit status 1 era warnings, não erros)',
+      'Restore de ZIP falhava quando backup foi criado sem senha (tentava abrir com pyzipper AES)',
+      'Após restore em ambiente local, tokens Mapbox, Zabbix e demais campos criptografados ficavam ilegíveis',
+    ],
+  },
+  {
+    version: '1.4.7',
+    date: '07 Abr 2026',
+    latest: false,
+    features: [],
+    improvements: [],
+    fixes: [
+      'Botão "Atualizar agora" não reportava mais erros falsos: git pull dentro do container é não-crítico (código baked na imagem)',
+      'Avisos de arquivo duplicado do collectstatic tratados como warning, não como erro — progresso conclui com sucesso',
+      'Ícone âmbar (⚠) para etapas com aviso; apenas falhas reais marcam a atualização como erro',
+    ],
+  },
+  {
+    version: '1.4.6',
+    date: '07 Abr 2026',
+    latest: false,
+    features: [
+      'Script update.sh — atualização automática com 4 passos: git pull, npm build, rebuild dos containers e health check',
+    ],
+    improvements: [
+      'update.sh sempre reconstrói web + celery + beat, garantindo que backend Python e frontend estejam sempre sincronizados',
+      'Script segue o mesmo padrão visual do install_ubuntu.sh: spinner, cores, log em /var/log/provemaps_update.log',
+      'Exibe versão antes e depois da atualização',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.5',
+    date: '07 Abr 2026',
+    latest: false,
+    features: [
+      'Botão "Atualizar agora" no Painel do Sistema — com confirmação de comandos, barra de progresso e log em tempo real via SSE',
+    ],
+    improvements: [
+      'Bind mount de staticfiles no container web: builds do frontend refletidos imediatamente sem rebuild da imagem',
+      'Changelog e versão agora sempre atualizados após cada entrega',
+    ],
+    fixes: [
+      'Changelog exibia versão anterior porque o container web servia arquivos baked na imagem, não o build do host',
+    ],
+  },
+  {
+    version: '1.4.4',
+    date: '07 Abr 2026',
+    latest: false,
+    features: [],
+    improvements: [
+      'Menu lateral recolhido automaticamente ao acessar via dispositivo móvel',
+      'Botão hambúrguer fixo (canto superior esquerdo) para abrir o menu no mobile',
+      'Backdrop semitransparente ao abrir o menu no mobile — clique fora para fechar',
+      'Mapa ocupa 100% da tela em mobile (margin-left zerada via CSS e CSS variable)',
+      'Transição desktop ↔ mobile: estado do menu restaurado corretamente ao girar o dispositivo',
+    ],
+    fixes: [
+      'Serviços Celery e Beat em loop de restart — imagem Docker reconstruída com django-celery-beat instalado',
+      'CustomMapViewer aplicava margin-left de 72–280px no mobile mesmo com menu como overlay fixo',
+      'data-nav-menu-open e --nav-menu-width não eram zerados ao montar em mobile, causando deslocamento no mapa',
+    ],
+  },
+  {
+    version: '1.4.3',
+    date: '07 Abr 2026',
+    latest: false,
+    features: [
+      'Gerenciamento de Cron Jobs via UI em Configurações > Sistema > Cron — crie, edite, ative/desative e aplique tarefas agendadas no servidor sem editar arquivos manualmente',
+    ],
+    improvements: [
+      'Novo Cron Job "Limpeza Docker Semanal" pré-configurável para remover cache de build acumulado (docker builder prune)',
+      'Botão "Aplicar no Servidor" gera o arquivo crontab em /app/database/provemaps.crontab com instruções de ativação',
+      'Modal de criação de cron com presets de agendamento (A cada hora, Todo dia 3h, Semanal, Mensal, Seg-Sex)',
+    ],
+    fixes: [
+      'Modal de teste SMTP: ao clicar no ⚡ do gateway, abre modal pedindo destinatário e mensagem antes de enviar — mesmo padrão do teste SMS',
+      'Erro "int object has no attribute strip" nos endpoints de teste SMTP, DB e FTP — porta enviada como número inteiro pelo frontend agora convertida corretamente',
+      'Modal LocationPicker (seleção de ponto no mapa) não respeitava o modo escuro — reescrito com classes Tailwind dark:',
+      'SiteEditModal substituiu mapa inline por botão PIN que abre o LocationPickerModal — interface mais limpa e mapa maior',
+      'Geocode reverso automático ao digitar lat/lng manualmente no formulário de novo site',
+      'Bug crítico em _load_runtime_env(): Path("") é truthy em Python, impedindo leitura da senha real do banco em runtime',
+      'Opções inválidas read_timeout/write_timeout removidas do settings/prod.py — causavam ProgrammingError no psycopg',
+    ],
+  },
+  {
+    version: '1.4.2',
+    date: '06 Abr 2026',
+    latest: false,
+    features: [
+      'Seletor de localização com mapa e PIN arrastável em Setup > Mapas — clique ou arraste o marcador para definir as coordenadas iniciais',
+    ],
+    improvements: [
+      'Botão "Reenquadrar" no mapa do backbone para ajustar a visão a todos os itens visíveis',
+      '"Selecionar todos" no painel lateral reenquadra automaticamente o mapa',
+      'CSP ampliada para permitir verificação de atualizações via api.github.com',
+    ],
+    fixes: [
+      'Coordenadas padrão do mapa (lat/lng em Setup > Mapas) não persistiam após salvar — .env sobrescrevia o valor do banco',
+      'Mapa do Network Design agora respeita a localização inicial configurada em Setup > Mapas',
+      'Modal de localização do site (importação de dispositivos) usa o provider configurado (Mapbox/Google)',
+      'Importação de rotas KML bloqueada incorretamente quando diagnósticos estavam desabilitados',
+      'Network Design inicializa mapa com Mapbox sem aguardar Google Maps API',
+      'Botão "Verificar atualizações" chamava API do GitHub pelo servidor (sem internet no container) — movido para o browser',
+      'Mapa do backbone não reenquadrava automaticamente ao selecionar itens após carga inicial',
+    ],
+  },
+  {
     version: '1.4.1',
     date: '03 Abr 2026',
-    latest: true,
+    latest: false,
     features: [],
     improvements: [
       'Paleta de cores do menu unificada com as páginas — removido tom azul-escuro',

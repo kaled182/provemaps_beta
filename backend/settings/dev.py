@@ -67,21 +67,27 @@ if TYPE_CHECKING:  # pragma: no cover - assists type checkers only
 # -----------------------------------------------------
 DEBUG = True  # type: ignore[assignment]
 
-# Development hosts (includes Docker/Compose)
-ALLOWED_HOSTS = [  # type: ignore[assignment]
-    "localhost",
-    "127.0.0.1",
-    "0.0.0.0",
-    "web",                    # docker-compose service name
-    "host.docker.internal",   # allows the Docker host to reach the app
-]
+# Development hosts — aceita qualquer host/IP para facilitar instalação em qualquer servidor
+# Em desenvolvimento nunca restrinja: o servidor pode ter qualquer IP
+ALLOWED_HOSTS: list = ["*"]  # type: ignore[assignment]
 
-# CSRF in development
-CSRF_TRUSTED_ORIGINS = [  # type: ignore[assignment]
+# CSRF in development — inclui todos os origins com http (IP variável)
+_csrf_extra = []
+_allowed_hosts_env = os.getenv("ALLOWED_HOSTS", "")
+for _h in _allowed_hosts_env.split(","):
+    _h = _h.strip().strip("*").strip()
+    if _h and _h not in {"localhost", "127.0.0.1", "0.0.0.0", "web"}:
+        _csrf_extra.append(f"http://{_h}:8100")
+        _csrf_extra.append(f"http://{_h}:8000")
+
+CSRF_TRUSTED_ORIGINS: list = [  # type: ignore[assignment]
     "http://localhost:8000",
+    "http://localhost:8100",
     "http://127.0.0.1:8000",
+    "http://127.0.0.1:8100",
     "http://0.0.0.0:8000",
     "http://web:8000",
+    *_csrf_extra,
 ]
 
 # Email defaults to console in dev, unless SMTP is configured in env

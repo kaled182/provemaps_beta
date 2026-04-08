@@ -39,10 +39,6 @@ logger = logging.getLogger(__name__)
 @handle_api_errors
 def api_import_fiber_kml(request: HttpRequest) -> JsonResponse:
     """Import a KML file and create a fiber route using extracted points."""
-    guard = diagnostics_guard(request)
-    if guard:
-        return guard
-
     name = (request.POST.get("name") or "").strip()
     origin_device_id = request.POST.get("origin_device_id")
     dest_device_id = request.POST.get("dest_device_id")

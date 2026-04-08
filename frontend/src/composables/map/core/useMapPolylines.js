@@ -107,8 +107,8 @@ export function useMapPolylines() {
     } else if (provider === 'mapbox') {
       if (polyline.layerId) {
         // Mapear eventos para Mapbox
-        const mapboxEvent = event === 'click' ? 'click' : 
-                           event === 'mouseover' ? 'mouseenter' : 
+        const mapboxEvent = event === 'click' ? 'click' :
+                           event === 'mouseover' ? 'mouseenter' :
                            event === 'mouseout' ? 'mouseleave' : event
         
         mapInstance.on(mapboxEvent, polyline.layerId, callback)
@@ -204,6 +204,11 @@ export function useMapPolylines() {
     console.log(`[useMapPolylines] ${selectedCables.length} cabos para processar`)
     
     const statusColors = {
+      // API cable.status values
+      up: '#10b981',
+      down: '#ef4444',
+      degraded: '#f59e0b',
+      // Aliases used by legacy/optical status
       online: '#10b981',
       offline: '#ef4444',
       warning: '#f59e0b',
@@ -255,7 +260,7 @@ export function useMapPolylines() {
           onPolylineClick(cable)
         }, provider, mapInstance)
       }
-      
+
       // Adicionar listeners de hover para tooltip
       if (onPolylineHover) {
         addPolylineListener(polyline, 'mouseover', (event) => {

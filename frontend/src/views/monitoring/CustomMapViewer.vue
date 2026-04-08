@@ -35,6 +35,18 @@
       />
     </div>
 
+    <!-- Botão Reenquadrar -->
+    <button
+      class="map-fit-btn"
+      title="Reenquadrar mapa para mostrar todos os itens"
+      @click="fitAllItemsBounds"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 256 256" fill="currentColor">
+        <path d="M168,48a8,8,0,0,1,8-8h32a8,8,0,0,1,8,8V80a8,8,0,0,1-16,0V64H176A8,8,0,0,1,168,48ZM216,168a8,8,0,0,0-8,8v16H192a8,8,0,0,0,0,16h32a8,8,0,0,0,8-8V176A8,8,0,0,0,216,168ZM88,208H72V192a8,8,0,0,0-16,0v32a8,8,0,0,0,8,8H88a8,8,0,0,0,0-16ZM40,88a8,8,0,0,0,8-8V64H64a8,8,0,0,0,0-16H32a8,8,0,0,0-8,8V80A8,8,0,0,0,40,88Z"/>
+      </svg>
+      Reenquadrar
+    </button>
+
     <!-- Legend -->
     <MapLegend :status-legend="statusLegend" />
 
@@ -129,6 +141,8 @@
       :visible="showCableTooltip"
       :cable-data="hoveredCable"
       :position="tooltipPosition"
+      @close="showCableTooltip = false"
+      @open-details="openCableDetailsFromTooltip"
     />
 
     <!-- Toast notification -->
@@ -686,7 +700,7 @@ const updateMap = (animateItemId = null) => {
 
   const wasInitialLoad = isInitialLoad.value
 
-  // Atualizar markers usando composable (sem auto-fit — faremos depois com todos os itens)
+  // Atualizar markers
   updateMapMarkers({
     mapInstance: googleMap.value,
     provider: currentMapProvider.value,
@@ -708,7 +722,7 @@ const updateMap = (animateItemId = null) => {
     isInitialLoad.value = false
   }
 
-  // Atualizar polylines usando composable
+  // Atualizar polylines
   updateCablePolylines({
     mapInstance: googleMap.value,
     provider: currentMapProvider.value,
@@ -720,9 +734,12 @@ const updateMap = (animateItemId = null) => {
     onPolylineUnhover: handleCableUnhover
   })
 
-  // Na carga inicial, ajustar bounds para mostrar TODOS os itens (markers + cabos)
+  // Carga inicial: ajusta bounds se há itens; sem itens permanece na localização configurada
   if (wasInitialLoad) {
-    fitAllItemsBounds()
+    const hasItems = selectedItems.value.devices.length > 0 || selectedItems.value.cables.length > 0
+    if (hasItems) {
+      setTimeout(() => fitAllItemsBounds(), 300)
+    }
   }
 }
 
@@ -742,6 +759,8 @@ const selectAll = () => {
   const category = activeCategory.value
   selectAllItems(category, availableItems.value[category])
   updateMap()
+  // Reenquadra mapa para mostrar todos os itens selecionados
+  setTimeout(() => fitAllItemsBounds(), 150)
 }
 
 // Função para limpar TODAS as overlays - versão otimizada com Maps
@@ -902,8 +921,14 @@ const handleDeviceClick = (device) => {
 }
 
 const handleCableClick = (cable) => {
+  hoveredCable.value = cable
+  showCableTooltip.value = true
+}
+
+const openCableDetailsFromTooltip = (cable) => {
+  showCableTooltip.value = false
   selectedCable.value = cable
-  showCableModal.value = true
+  showCableDetailModal.value = true
 }
 
 // Handlers para hover em cabos (tooltip)
@@ -933,8 +958,7 @@ const handleCableUnhover = () => {
     clearTimeout(tooltipTimeout)
     tooltipTimeout = null
   }
-  showCableTooltip.value = false
-  hoveredCable.value = null
+  // Tooltip now has a close button — do not auto-close on mouse out
 }
 
 const initMap = async () => {
@@ -1993,6 +2017,13 @@ onBeforeUnmount(() => {
   margin-left: 72px;
 }
 
+/* Mobile: menu é overlay fixo, mapa ocupa tela toda */
+@media (max-width: 768px) {
+  .custom-map-viewer {
+    margin-left: 0 !important;
+  }
+}
+
 .map-content {
   flex: 1;
   position: relative;
@@ -2784,6 +2815,33 @@ html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary:hover {
 }
 
 /* ── Notify sent badge ───────────────────────────────────────────────────── */
+.map-fit-btn {
+  position: absolute;
+  bottom: 80px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background: var(--bg-card, #1e2433);
+  color: var(--text-primary, #e2e8f0);
+  border: 1px solid var(--border-primary, rgba(255,255,255,0.08));
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  transition: background 0.15s, transform 0.1s;
+}
+.map-fit-btn:hover {
+  background: var(--bg-hover, #2a3347);
+  transform: translateY(-1px);
+}
+.map-fit-btn:active {
+  transform: translateY(0);
+}
+
 .notify-sent-badge {
   position: absolute;
   bottom: 80px;

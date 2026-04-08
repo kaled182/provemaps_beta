@@ -1,0 +1,6 @@
+{
+  "version": "1.4.8.5",
+  "date": "2026-04-08",
+  "critical": false,
+  "changelog": "Botão Ver Detalhes abre diretamente o modal completo do cabo (com abas de nível óptico, tráfego, alarmes e histórico)."
+}

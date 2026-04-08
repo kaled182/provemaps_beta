@@ -212,3 +212,24 @@ frontend/coverage/
 # Lock file for production setup (security)
 SETUP_LOCKED
 backend/SETUP_LOCKED
+
+# Backups de arquivos (nunca commitar)
+*.bak
+*.backup
+*.broken_backup
+*.phase*
+
+# Arquivos temporários avulsos
+temp_*.txt
+temp_*.json
+docker/temp_*.json
+
+# Diretórios de backup de apps (gerados localmente)
+backend/setup_app_backup/
+
+# Artefato Windows
+backend/nul
+
+# Documentação de backups (gerada automaticamente)
+backups/*.md
+backups/*.txt

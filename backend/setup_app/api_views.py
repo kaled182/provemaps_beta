@@ -19,6 +19,7 @@ from django.db import connection
 from django.db.models import Q
 from django.http import FileResponse, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.core.management import call_command
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_GET, require_POST
 from django.urls import reverse
 
@@ -28,6 +29,7 @@ from integrations.zabbix.zabbix_client import zabbix_request
 from integrations.zabbix.guards import reload_diagnostics_flag_cache
 from .models import FirstTimeSetup, MonitoringServer, MessagingGateway, CompanyProfile
 from .models_audit import ConfigurationAudit
+from .models_cron import CronJob
 from .services import runtime_settings, video_gateway as video_gateway_service
 from .services.cloud_backups import test_gdrive_connection, upload_backup_to_gdrive
 from .services.config_loader import clear_runtime_config_cache
@@ -572,7 +574,7 @@ def test_database_connection(request):
     try:
         data = json.loads(request.body)
         db_host = data.get("db_host", "").strip()
-        db_port = data.get("db_port", "").strip()
+        db_port = str(data.get("db_port") or "").strip()
         db_name = data.get("db_name", "").strip()
         db_user = data.get("db_user", "").strip()
         db_password = data.get("db_password", "").strip()
@@ -586,29 +588,29 @@ def test_database_connection(request):
                 status=400,
             )
 
-        # Test connection
+        # Test connection using psycopg (v3) directly (avoids Django alias bookkeeping)
         try:
-            import psycopg2
+            import psycopg
 
-            conn = psycopg2.connect(
+            conn = psycopg.connect(
                 host=db_host,
                 port=int(db_port),
+                dbname=db_name,
                 user=db_user,
                 password=db_password,
-                database=db_name,
                 connect_timeout=5,
             )
-
-            cursor = conn.cursor()
-            cursor.execute("SELECT version()")
-            version_full = cursor.fetchone()[0]
-            # Extract PostgreSQL version (e.g., "PostgreSQL 16.1")
-            if ',' in version_full:
-                version = version_full.split(',')[0]
-            else:
-                version = version_full
-            cursor.close()
-            conn.close()
+            try:
+                cursor = conn.cursor()
+                cursor.execute("SELECT version()")
+                version_full = cursor.fetchone()[0]
+                if ',' in version_full:
+                    version = version_full.split(',')[0]
+                else:
+                    version = version_full
+                cursor.close()
+            finally:
+                conn.close()
 
             # Log successful test
             ConfigurationAudit.log_change(
@@ -743,7 +745,7 @@ def test_ftp_connection(request):
     try:
         data = json.loads(request.body or "{}")
         host = data.get("ftp_host", "").strip()
-        port_raw = data.get("ftp_port", "").strip()
+        port_raw = str(data.get("ftp_port") or "").strip()
         username = data.get("ftp_user", "").strip()
         password = data.get("ftp_password", "").strip()
         remote_path = data.get("ftp_path", "").strip()
@@ -829,7 +831,7 @@ def test_smtp_connection(request):
     try:
         data = json.loads(request.body or "{}")
         host = data.get("smtp_host", "").strip()
-        port_raw = data.get("smtp_port", "").strip()
+        port_raw = str(data.get("smtp_port") or "").strip()
         security = data.get("smtp_security", "").strip().lower()
         username = data.get("smtp_user", "").strip()
         password = data.get("smtp_password", "")
@@ -840,6 +842,7 @@ def test_smtp_connection(request):
         from_name = data.get("smtp_from_name", "").strip()
         from_email = data.get("smtp_from_email", "").strip()
         recipient = data.get("smtp_test_recipient", "").strip()
+        test_message = data.get("smtp_test_message", "").strip()
 
         values = env_manager.read_values(
             [
@@ -906,7 +909,8 @@ def test_smtp_connection(request):
         msg["Subject"] = "Teste SMTP - ProveMaps"
         msg["From"] = sender
         msg["To"] = recipient
-        msg.set_content("Este é um email de teste do ProveMaps.")
+        body = test_message or "Este é um email de teste do ProveMaps."
+        msg.set_content(body)
 
         if security == "ssl":
             server = smtplib.SMTP_SSL(
@@ -1757,6 +1761,7 @@ def get_configuration(request):
             # Network thresholds
             "OPTICAL_RX_WARNING_THRESHOLD",
             "OPTICAL_RX_CRITICAL_THRESHOLD",
+            "OPTICAL_THRESHOLDS_BY_DISTANCE",
             # Backup automation
             "BACKUP_AUTO_ENABLED",
             "BACKUP_FREQUENCY",
@@ -1769,6 +1774,10 @@ def get_configuration(request):
         runtime_config = runtime_settings.get_runtime_config()
         allowed_hosts_fallback = ",".join(runtime_config.allowed_hosts)
 
+        # Lê o registro diretamente do banco para campos que podem mudar sem reiniciar
+        # (evita stale lru_cache em workers do Gunicorn que não processaram o POST de save)
+        db_record = FirstTimeSetup.objects.filter(configured=True).order_by("-configured_at").first()
+
         fallback_values = {
             "SECRET_KEY": getattr(settings, "SECRET_KEY", ""),
             "DEBUG": getattr(settings, "DEBUG", False),
@@ -1777,12 +1786,12 @@ def get_configuration(request):
             "ZABBIX_API_PASSWORD": runtime_config.zabbix_api_password,
             "ZABBIX_API_KEY": runtime_config.zabbix_api_key,
             "GOOGLE_MAPS_API_KEY": runtime_config.google_maps_api_key,
-            "MAP_PROVIDER": runtime_config.map_provider or "google",
-            "MAPBOX_TOKEN": runtime_config.mapbox_token,
-            # Map configuration defaults - Google Maps
-            "MAP_DEFAULT_ZOOM": "12",
-            "MAP_DEFAULT_LAT": "-15.7801",
-            "MAP_DEFAULT_LNG": "-47.9292",
+            "MAP_PROVIDER": (db_record.map_provider if db_record else None) or runtime_config.map_provider or "google",
+            "MAPBOX_TOKEN": (db_record.mapbox_token if db_record else None) or runtime_config.mapbox_token or "",
+            # Map configuration — lê direto do banco (não usa lru_cache)
+            "MAP_DEFAULT_ZOOM": str(db_record.map_default_zoom) if db_record and db_record.map_default_zoom is not None else "12",
+            "MAP_DEFAULT_LAT": str(db_record.map_default_lat) if db_record and db_record.map_default_lat is not None else "-15.7801",
+            "MAP_DEFAULT_LNG": str(db_record.map_default_lng) if db_record and db_record.map_default_lng is not None else "-47.9292",
             "MAP_TYPE": "terrain",
             "MAP_STYLES": "",
             "ENABLE_STREET_VIEW": True,
@@ -1854,8 +1863,16 @@ def get_configuration(request):
             "SMS_AWS_SECRET_ACCESS_KEY": runtime_config.sms_aws_secret_access_key,
             "SMS_INFOBIP_BASE_URL": runtime_config.sms_infobip_base_url,
             # Defaults for network thresholds if not configured
-            "OPTICAL_RX_WARNING_THRESHOLD": "-24",
-            "OPTICAL_RX_CRITICAL_THRESHOLD": "-27",
+            "OPTICAL_RX_WARNING_THRESHOLD": str(runtime_config.optical_rx_warning_threshold),
+            "OPTICAL_RX_CRITICAL_THRESHOLD": str(runtime_config.optical_rx_critical_threshold),
+            "OPTICAL_THRESHOLDS_BY_DISTANCE": (
+                runtime_config.optical_thresholds_by_distance or {
+                    "10":  {"warning": -20.0, "critical": -28.0},
+                    "40":  {"warning": -23.0, "critical": -30.0},
+                    "80":  {"warning": -26.0, "critical": -30.0},
+                    "100": {"warning": -28.0, "critical": -35.0},
+                }
+            ),
             # Backup automation defaults
             "BACKUP_AUTO_ENABLED": False,
             "BACKUP_FREQUENCY": "weekly",
@@ -1865,12 +1882,23 @@ def get_configuration(request):
             "BACKUP_CLOUD_PATH": "/backups/provemaps",
         }
 
+        # Fields whose authoritative value lives in FirstTimeSetup (DB), not in .env.
+        # .env may contain stale defaults written by older code — DB must always win.
+        _DB_AUTHORITATIVE_KEYS = {
+            "MAP_DEFAULT_LAT", "MAP_DEFAULT_LNG", "MAP_DEFAULT_ZOOM",
+            "MAP_PROVIDER", "MAPBOX_TOKEN",
+        }
+
         # Convert boolean strings to actual booleans for JSON, fallback to runtime/config defaults
         config_data = {}
         for key in editable_keys:
-            value = current_values.get(key, "")
-            if value == "":
+            if key in _DB_AUTHORITATIVE_KEYS:
+                # Always read from DB (fallback_values already populated from db_record above)
                 value = fallback_values.get(key, "")
+            else:
+                value = current_values.get(key, "")
+                if value == "":
+                    value = fallback_values.get(key, "")
             if key in ["DEBUG", "ENABLE_DIAGNOSTIC_ENDPOINTS", "FTP_ENABLED", "GDRIVE_ENABLED", "SMTP_ENABLED", "SMS_ENABLED", "BACKUP_AUTO_ENABLED", "BACKUP_CLOUD_UPLOAD", "ENABLE_STREET_VIEW", "ENABLE_TRAFFIC", "MAPBOX_ENABLE_3D", "ENABLE_MAP_CLUSTERING", "ENABLE_DRAWING_TOOLS", "ENABLE_FULLSCREEN"]:
                 if isinstance(value, bool):
                     config_data[key] = value
@@ -2023,10 +2051,11 @@ def update_configuration(request):
             }, status=400)
 
         # For backup password, use existing from database if not provided
+        existing_backup_password = getattr(existing_record, 'backup_password', '') if existing_record else ''
         backup_zip_password = data.get("BACKUP_ZIP_PASSWORD", "").strip()
         if not backup_zip_password and existing_record:
             # Read from database if available
-            backup_zip_password = getattr(existing_record, 'backup_password', '')
+            backup_zip_password = existing_backup_password
         
         if backup_zip_password and len(backup_zip_password) < _MIN_BACKUP_PASSWORD_LEN:
             return JsonResponse(
@@ -2092,6 +2121,37 @@ def update_configuration(request):
                 return str(v)
             except Exception:
                 return str(default)
+
+        _DEFAULT_DISTANCE_THRESHOLDS = {
+            "10":  {"warning": -20.0, "critical": -28.0},
+            "40":  {"warning": -23.0, "critical": -30.0},
+            "80":  {"warning": -26.0, "critical": -30.0},
+            "100": {"warning": -28.0, "critical": -35.0},
+        }
+
+        def _parse_distance_thresholds(value):
+            """Parse and validate per-distance optical thresholds dict."""
+            defaults = _DEFAULT_DISTANCE_THRESHOLDS
+            if not value:
+                return defaults
+            if isinstance(value, str):
+                try:
+                    import json as _j
+                    value = _j.loads(value)
+                except Exception:
+                    return defaults
+            if not isinstance(value, dict):
+                return defaults
+            result = {}
+            for cat in ("10", "40", "80", "100"):
+                entry = value.get(cat, defaults[cat])
+                try:
+                    w = float(entry.get("warning", defaults[cat]["warning"]))
+                    c = float(entry.get("critical", defaults[cat]["critical"]))
+                    result[cat] = {"warning": w, "critical": c}
+                except Exception:
+                    result[cat] = defaults[cat]
+            return result
 
         payload = {
             "SECRET_KEY": data.get("SECRET_KEY") or runtime_config.secret_key or "",
@@ -2200,6 +2260,9 @@ def update_configuration(request):
             "OPTICAL_RX_CRITICAL_THRESHOLD": _parse_float_str(
                 data.get("OPTICAL_RX_CRITICAL_THRESHOLD", "-27"), -27
             ),
+            "OPTICAL_THRESHOLDS_BY_DISTANCE": _parse_distance_thresholds(
+                data.get("OPTICAL_THRESHOLDS_BY_DISTANCE")
+            ),
         }
 
         smtp_enabled = _to_bool(payload["SMTP_ENABLED"])
@@ -2233,6 +2296,14 @@ def update_configuration(request):
         
         # DO NOT write to .env - all configuration is stored in database only
         # env_manager.write_values(payload)  # REMOVED: .env is only a template
+
+        # Remove stale DB-authoritative keys from .env (older code may have written defaults there).
+        # These keys are now managed exclusively via the database.
+        _stale_env_keys = {"MAP_DEFAULT_LAT", "MAP_DEFAULT_LNG", "MAP_DEFAULT_ZOOM", "MAP_PROVIDER", "MAPBOX_TOKEN"}
+        env_map = env_manager.read_env()
+        stale_keys_in_env = _stale_env_keys & env_map.keys()
+        if stale_keys_in_env:
+            env_manager.write_values({k: "" for k in stale_keys_in_env})
         
         # Update runtime environment and settings for immediate effect (without restart)
         os.environ["OPTICAL_RX_WARNING_THRESHOLD"] = payload["OPTICAL_RX_WARNING_THRESHOLD"]
@@ -2255,6 +2326,10 @@ def update_configuration(request):
             settings.OPTICAL_RX_CRITICAL_THRESHOLD = float(payload["OPTICAL_RX_CRITICAL_THRESHOLD"])
         except (TypeError, ValueError):
             settings.OPTICAL_RX_CRITICAL_THRESHOLD = -27.0
+        import json as _json
+        dist_thresh = payload.get("OPTICAL_THRESHOLDS_BY_DISTANCE") or {}
+        os.environ["OPTICAL_THRESHOLDS_BY_DISTANCE"] = _json.dumps(dist_thresh)
+        settings.OPTICAL_THRESHOLDS_BY_DISTANCE = dist_thresh
 
         # Step 2: Persist to database
         # Determine auth_type but always save all credentials provided
@@ -3792,36 +3867,50 @@ def restore_backup(request):
 
         if backup_path.suffix.lower() == ".zip":
             try:
-                import pyzipper
-            except ImportError as exc:
-                return JsonResponse(
-                    {
-                        "success": False,
-                        "message": "pyzipper is required to restore encrypted backups.",
-                    },
-                    status=500,
-                )
-
-            try:
                 password = _get_backup_password()
             except ValueError as exc:
                 return JsonResponse({"success": False, "message": str(exc)}, status=400)
-            extracted_path = None
+
             with tempfile.TemporaryDirectory(dir=BACKUP_DIR) as temp_dir:
                 temp_dir_path = Path(temp_dir)
-                with pyzipper.AESZipFile(backup_path) as zipf:
-                    zipf.pwd = password
-                    zipf.extractall(temp_dir_path)
+
+                if password is not None:
+                    try:
+                        import pyzipper
+                    except ImportError:
+                        return JsonResponse(
+                            {"success": False, "message": "pyzipper é necessário para restaurar backups criptografados."},
+                            status=500,
+                        )
+                    with pyzipper.AESZipFile(backup_path) as zipf:
+                        zipf.pwd = password
+                        zipf.extractall(temp_dir_path)
+                else:
+                    import zipfile as _zipfile
+                    try:
+                        with _zipfile.ZipFile(backup_path) as zipf:
+                            zipf.extractall(temp_dir_path)
+                    except _zipfile.BadZipFile:
+                        return JsonResponse(
+                            {"success": False, "message": "Arquivo ZIP inválido ou corrompido."},
+                            status=400,
+                        )
+                    except RuntimeError:
+                        return JsonResponse(
+                            {"success": False, "message": "O backup está criptografado. Configure a senha antes de restaurar."},
+                            status=400,
+                        )
 
                 candidates = list(temp_dir_path.glob("*.dump")) + list(temp_dir_path.glob("*.sql"))
                 if not candidates:
                     return JsonResponse(
-                        {
-                            "success": False,
-                            "message": "Backup zip does not contain a .dump or .sql file.",
-                        },
+                        {"success": False, "message": "O arquivo ZIP não contém um dump válido (.dump ou .sql)."},
                         status=400,
                     )
+
+                # Find config.json for fernet_key restoration
+                config_candidates = list(temp_dir_path.glob("*.config.json"))
+                config_json_arg = str(config_candidates[0]) if config_candidates else ""
 
                 extracted_path = candidates[0]
                 restore_name = f"restore_tmp_{datetime.now().strftime('%Y%m%d_%H%M%S')}{extracted_path.suffix}"
@@ -3829,7 +3918,7 @@ def restore_backup(request):
                 shutil.copy2(extracted_path, restore_path)
 
                 try:
-                    call_command("restore_db", restore_path.name)
+                    call_command("restore_db", restore_path.name, config_json=config_json_arg)
                 finally:
                     restore_path.unlink(missing_ok=True)
         else:
@@ -4482,3 +4571,127 @@ def test_stream(request):
     except Exception as exc:
         logger.exception("Error testing stream connection")
         return JsonResponse({"success": False, "message": str(exc)}, status=500)
+
+
+# ─── Cron Jobs ────────────────────────────────────────────────────────────────
+
+def _cron_to_dict(job: CronJob) -> dict:
+    return {
+        "id":          job.id,
+        "name":        job.name,
+        "description": job.description,
+        "schedule":    job.schedule,
+        "command":     job.command,
+        "enabled":     job.enabled,
+        "created_at":  job.created_at.isoformat(),
+        "updated_at":  job.updated_at.isoformat(),
+    }
+
+
+def _write_crontab_file(jobs):
+    """Write enabled cron jobs to the shared database volume so the host can apply them."""
+    crontab_path = Path(settings.BASE_DIR).parent / "database" / "provemaps.crontab"
+    lines = [
+        "# ProVeMaps Cron Jobs — gerenciado via interface web",
+        "# Aplicar no host: crontab /opt/provemaps/database/provemaps.crontab",
+        "# Ou configurar aplicação automática (ver DOCKER_QUICKREF.md)",
+        "",
+        "SHELL=/bin/bash",
+        "PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin",
+        "",
+    ]
+    for job in jobs:
+        if job.enabled:
+            lines.append(f"# {job.name}")
+            if job.description:
+                lines.append(f"# {job.description}")
+            lines.append(f"{job.schedule} root {job.command}")
+            lines.append("")
+    crontab_path.write_text("\n".join(lines))
+
+
+def _cron_auth(request):
+    """Returns True if user can manage cron jobs (staff or superuser)."""
+    u = request.user
+    return u.is_authenticated and u.is_active and (u.is_staff or u.is_superuser)
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def cron_jobs_list(request):
+    if not _cron_auth(request):
+        return JsonResponse({"error": "Acesso negado"}, status=403)
+
+    if request.method == "GET":
+        jobs = CronJob.objects.all()
+        return JsonResponse({"jobs": [_cron_to_dict(j) for j in jobs]})
+
+    data = json.loads(request.body)
+    job = CronJob.objects.create(
+        name=data.get("name", "").strip(),
+        description=data.get("description", "").strip(),
+        schedule=data.get("schedule", "").strip(),
+        command=data.get("command", "").strip(),
+        enabled=data.get("enabled", True),
+    )
+    _write_crontab_file(CronJob.objects.all())
+    return JsonResponse({"success": True, "job": _cron_to_dict(job)}, status=201)
+
+
+@csrf_exempt
+@require_http_methods(["GET", "PUT", "DELETE"])
+def cron_job_detail(request, job_id):
+    if not _cron_auth(request):
+        return JsonResponse({"error": "Acesso negado"}, status=403)
+    try:
+        job = CronJob.objects.get(id=job_id)
+    except CronJob.DoesNotExist:
+        return JsonResponse({"error": "Não encontrado"}, status=404)
+
+    if request.method == "GET":
+        return JsonResponse(_cron_to_dict(job))
+
+    if request.method == "DELETE":
+        job.delete()
+        _write_crontab_file(CronJob.objects.all())
+        return JsonResponse({"success": True})
+
+    data = json.loads(request.body)
+    job.name        = data.get("name", job.name).strip()
+    job.description = data.get("description", job.description).strip()
+    job.schedule    = data.get("schedule", job.schedule).strip()
+    job.command     = data.get("command", job.command).strip()
+    job.enabled     = data.get("enabled", job.enabled)
+    job.save()
+    _write_crontab_file(CronJob.objects.all())
+    return JsonResponse({"success": True, "job": _cron_to_dict(job)})
+
+
+@csrf_exempt
+@require_POST
+def cron_job_toggle(request, job_id):
+    if not _cron_auth(request):
+        return JsonResponse({"error": "Acesso negado"}, status=403)
+    try:
+        job = CronJob.objects.get(id=job_id)
+    except CronJob.DoesNotExist:
+        return JsonResponse({"error": "Não encontrado"}, status=404)
+    job.enabled = not job.enabled
+    job.save()
+    _write_crontab_file(CronJob.objects.all())
+    return JsonResponse({"success": True, "job": _cron_to_dict(job)})
+
+
+@csrf_exempt
+@require_POST
+def cron_apply(request):
+    if not _cron_auth(request):
+        return JsonResponse({"error": "Acesso negado"}, status=403)
+    jobs = CronJob.objects.all()
+    _write_crontab_file(jobs)
+    enabled_count = jobs.filter(enabled=True).count()
+    return JsonResponse({
+        "success": True,
+        "message": f"Arquivo crontab gerado com {enabled_count} job(s) ativo(s).",
+        "path": "/opt/provemaps/database/provemaps.crontab",
+    })

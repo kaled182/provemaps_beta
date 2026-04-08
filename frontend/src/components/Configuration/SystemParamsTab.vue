@@ -518,6 +518,13 @@
       </div>
     </div>
 
+    <!-- ═══════════════════════════════════════════════════
+         CRON
+    ══════════════════════════════════════════════════════ -->
+    <div v-else-if="activeSubTab === 'cron'" class="space-y-4">
+      <CronTab />
+    </div>
+
   </div>
 </template>
 
@@ -525,6 +532,7 @@
 import { ref, onMounted, watch } from 'vue'
 import { useSystemConfig } from '@/composables/useSystemConfig'
 import { useCompanyProfile } from '@/composables/useCompanyProfile'
+import CronTab from '@/components/Configuration/CronTab.vue'
 
 // ── System config composable ──────────────────────────────
 const {
@@ -567,6 +575,7 @@ const subTabs = [
   { id: 'seguranca', label: 'Segurança' },
   { id: 'empresa',   label: 'Empresa' },
   { id: 'servicos',  label: 'Serviços' },
+  { id: 'cron',      label: 'Cron' },
 ]
 
 // ── Handlers ──────────────────────────────────────────────
