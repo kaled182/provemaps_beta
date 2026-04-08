@@ -1,6 +1,6 @@
 {
-  "version": "1.4.8.2",
+  "version": "1.4.8.3",
   "date": "2026-04-08",
   "critical": false,
-  "changelog": "Modal de cabo flutuante e arrastável: sem overlay bloqueante, centralizado no mapa, responsivo em mobile/tablet."
+  "changelog": "Clique simples no cabo abre painel óptico (mobile/desktop); duplo clique abre detalhes. Tooltip arrastável e fechável."
 }

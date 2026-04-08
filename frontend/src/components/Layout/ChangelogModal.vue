@@ -175,9 +175,23 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
-    version: '1.4.8.2',
+    version: '1.4.8.3',
     date: '08 Abr 2026',
     latest: true,
+    features: [
+      'Clique simples no cabo abre o painel de sinal óptico — funciona em mobile (sem precisar de hover)',
+      'Duplo clique no cabo abre o modal de detalhes completos do cabo',
+      'Painel óptico arrastável pelo cabeçalho, com botão Fechar — não fecha automaticamente ao mover o mouse',
+    ],
+    improvements: [
+      'Comportamento de interação com cabos unificado entre desktop (hover + clique) e mobile (apenas clique)',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.8.2',
+    date: '08 Abr 2026',
+    latest: false,
     features: [
       'Modal de cabo flutuante e arrastável: sem overlay que bloqueia o mapa — arraste pelo cabeçalho para reposicionar',
       'Modal centralizado automaticamente no mapa ao abrir (mobile e desktop)',

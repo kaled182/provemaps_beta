@@ -141,6 +141,7 @@
       :visible="showCableTooltip"
       :cable-data="hoveredCable"
       :position="tooltipPosition"
+      @close="showCableTooltip = false"
     />
 
     <!-- Toast notification -->
@@ -728,6 +729,7 @@ const updateMap = (animateItemId = null) => {
     availableCables: availableItems.value.cables,
     isDarkMode: uiStore.theme === 'dark',
     onPolylineClick: handleCableClick,
+    onPolylineDoubleClick: handleCableDoubleClick,
     onPolylineHover: handleCableHover,
     onPolylineUnhover: handleCableUnhover
   })
@@ -919,6 +921,11 @@ const handleDeviceClick = (device) => {
 }
 
 const handleCableClick = (cable) => {
+  hoveredCable.value = cable
+  showCableTooltip.value = true
+}
+
+const handleCableDoubleClick = (cable) => {
   selectedCable.value = cable
   showCableModal.value = true
 }
@@ -950,8 +957,7 @@ const handleCableUnhover = () => {
     clearTimeout(tooltipTimeout)
     tooltipTimeout = null
   }
-  showCableTooltip.value = false
-  hoveredCable.value = null
+  // Tooltip now has a close button — do not auto-close on mouse out
 }
 
 const initMap = async () => {

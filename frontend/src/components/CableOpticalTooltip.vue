@@ -1,435 +1,518 @@
 <template>
   <Teleport to="body">
-    <div
-      v-if="visible && cableData"
-      ref="tooltipRef"
-      class="cable-optical-tooltip"
-      :style="tooltipStyle"
-    >
-      <div class="tooltip-header">
-        <div class="tooltip-title">{{ cableData.label }}</div>
-        <div class="tooltip-subtitle">
-          {{ cableData.origin }} ↔ {{ cableData.destination }}
-        </div>
-      </div>
-      
-      <div v-if="loading" class="tooltip-loading">
-        <div class="spinner"></div>
-        <span>Carregando níveis ópticos...</span>
-      </div>
-      
-      <div v-else-if="error" class="tooltip-error">
-        {{ error }}
-      </div>
-      
-      <div v-else-if="hasOpticalData" class="tooltip-content">
-        <!-- Interface Origem -->
-        <div class="interface-section">
-          <div class="interface-header">
-            <span class="interface-icon">📡</span>
-            <span class="interface-name">{{ opticalData.origin?.interface || 'Origem não configurada' }}</span>
+    <Transition name="tooltip-float">
+      <div
+        v-if="visible && cableData"
+        ref="panelEl"
+        class="optical-panel"
+        :class="{ dragging: isDragging }"
+        :style="panelStyle"
+        @click.stop
+      >
+        <!-- Header / drag handle -->
+        <div
+          class="panel-header"
+          @mousedown.prevent="startDrag"
+          @touchstart.passive="startDrag"
+        >
+          <div class="drag-grip" aria-hidden="true">
+            <span></span><span></span><span></span>
           </div>
-          <div v-if="opticalData.origin" class="optical-levels">
-            <div class="level-item">
-              <span class="level-label">TX (Transmissão):</span>
-              <span class="level-value" :class="getLevelClass(opticalData.origin.tx)">
-                {{ formatLevel(opticalData.origin.tx) }}
-              </span>
-            </div>
-            <div class="level-item">
-              <span class="level-label">RX (Recepção):</span>
-              <span class="level-value" :class="getLevelClass(opticalData.origin.rx)">
-                {{ formatLevel(opticalData.origin.rx) }}
-              </span>
-            </div>
+          <div class="header-text">
+            <div class="panel-title">{{ cableData.label || cableData.name }}</div>
+            <div class="panel-subtitle">{{ cableData.origin }} ↔ {{ cableData.destination }}</div>
           </div>
-          <div v-else class="interface-placeholder">Dados ópticos indisponíveis para a origem</div>
+          <button class="close-btn" @click.stop="$emit('close')" title="Fechar">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
         </div>
-        
-        <!-- Interface Destino -->
-        <div class="interface-section">
-          <div class="interface-header">
-            <span class="interface-icon">📡</span>
-            <span class="interface-name">{{ opticalData.destination?.interface || 'Destino não configurado' }}</span>
-          </div>
-          <div v-if="opticalData.destination" class="optical-levels">
-            <div class="level-item">
-              <span class="level-label">TX (Transmissão):</span>
-              <span class="level-value" :class="getLevelClass(opticalData.destination.tx)">
-                {{ formatLevel(opticalData.destination.tx) }}
-              </span>
-            </div>
-            <div class="level-item">
-              <span class="level-label">RX (Recepção):</span>
-              <span class="level-value" :class="getLevelClass(opticalData.destination.rx)">
-                {{ formatLevel(opticalData.destination.rx) }}
-              </span>
-            </div>
-          </div>
-          <div v-else class="interface-placeholder">Dados ópticos indisponíveis para o destino</div>
-        </div>
-        
-        <!-- Atenuação -->
-        <div v-if="opticalData.attenuation !== null" class="attenuation-section">
-          <div class="attenuation-label">Atenuação estimada:</div>
-          <div class="attenuation-value">{{ formatValue(opticalData.attenuation, 'dB') }}</div>
-        </div>
-        
-        <!-- Timestamp -->
-        <div v-if="opticalData.timestamp" class="tooltip-footer">
-          <span class="timestamp">{{ formatTimestamp(opticalData.timestamp) }}</span>
-        </div>
-      </div>
 
-      <div v-else class="tooltip-no-data">
-        Nenhum dado óptico disponível para este cabo.
+        <!-- Loading -->
+        <div v-if="loading" class="panel-state">
+          <div class="spinner"></div>
+          <span>Carregando níveis ópticos…</span>
+        </div>
+
+        <!-- Erro -->
+        <div v-else-if="error" class="panel-state error">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          {{ error }}
+        </div>
+
+        <!-- Sem dados -->
+        <div v-else-if="!hasOpticalData" class="panel-state muted">
+          Nenhum dado óptico disponível para este cabo.
+        </div>
+
+        <!-- Conteúdo óptico -->
+        <div v-else class="panel-body">
+          <!-- Origem -->
+          <div class="iface-block">
+            <div class="iface-header">
+              <span class="iface-icon">📡</span>
+              <span class="iface-name">{{ opticalData.origin?.interface || 'Origem não configurada' }}</span>
+            </div>
+            <div v-if="opticalData.origin" class="levels">
+              <div class="level-row">
+                <span class="level-label">TX (Transmissão):</span>
+                <span class="level-value" :class="getLevelClass(opticalData.origin.tx)">
+                  {{ formatLevel(opticalData.origin.tx) }}
+                </span>
+              </div>
+              <div class="level-row">
+                <span class="level-label">RX (Recepção):</span>
+                <span class="level-value" :class="getLevelClass(opticalData.origin.rx)">
+                  {{ formatLevel(opticalData.origin.rx) }}
+                </span>
+              </div>
+            </div>
+            <p v-else class="iface-empty">Dados indisponíveis para a origem</p>
+          </div>
+
+          <!-- Destino -->
+          <div class="iface-block">
+            <div class="iface-header">
+              <span class="iface-icon">📡</span>
+              <span class="iface-name">{{ opticalData.destination?.interface || 'Destino não configurado' }}</span>
+            </div>
+            <div v-if="opticalData.destination" class="levels">
+              <div class="level-row">
+                <span class="level-label">TX (Transmissão):</span>
+                <span class="level-value" :class="getLevelClass(opticalData.destination.tx)">
+                  {{ formatLevel(opticalData.destination.tx) }}
+                </span>
+              </div>
+              <div class="level-row">
+                <span class="level-label">RX (Recepção):</span>
+                <span class="level-value" :class="getLevelClass(opticalData.destination.rx)">
+                  {{ formatLevel(opticalData.destination.rx) }}
+                </span>
+              </div>
+            </div>
+            <p v-else class="iface-empty">Dados indisponíveis para o destino</p>
+          </div>
+
+          <!-- Atenuação -->
+          <div v-if="opticalData.attenuation !== null" class="attenuation-row">
+            <span class="atten-label">Atenuação estimada:</span>
+            <span class="atten-value">{{ formatValue(opticalData.attenuation, 'dB') }}</span>
+          </div>
+
+          <!-- Timestamp -->
+          <div v-if="opticalData.timestamp" class="panel-footer">
+            {{ formatTimestamp(opticalData.timestamp) }}
+          </div>
+        </div>
       </div>
-    </div>
+    </Transition>
   </Teleport>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useApi } from '@/composables/useApi'
 
 const props = defineProps({
-  visible: {
-    type: Boolean,
-    default: false
-  },
-  cableData: {
-    type: Object,
-    default: null
-  },
-  position: {
-    type: Object,
-    default: () => ({ x: 0, y: 0 })
-  }
+  visible: { type: Boolean, default: false },
+  cableData: { type: Object, default: null },
+  // position prop mantido por compatibilidade mas não usado para posicionamento
+  position: { type: Object, default: () => ({ x: 0, y: 0 }) },
 })
+
+const emit = defineEmits(['close'])
 
 const { get } = useApi()
 
-const tooltipRef = ref(null)
+// ── Drag ────────────────────────────────────────────────────────────────────
+const panelEl = ref(null)
+const pos = ref({ x: 0, y: 0 })
+const isDragging = ref(false)
+const dragOrigin = { mx: 0, my: 0, px: 0, py: 0 }
+
+const PANEL_W = 400
+const PANEL_H = 320
+
+const initPosition = () => {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const w = Math.min(PANEL_W, vw - 16)
+  const h = Math.min(PANEL_H, vh - 80)
+  pos.value = {
+    x: Math.max(8, Math.round((vw - w) / 2)),
+    y: Math.max(8, Math.round((vh - h) / 3)),
+  }
+}
+
+const panelStyle = computed(() => ({
+  left: `${pos.value.x}px`,
+  top: `${pos.value.y}px`,
+}))
+
+const clientXY = (e) =>
+  e.touches?.length
+    ? { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    : { x: e.clientX, y: e.clientY }
+
+const startDrag = (e) => {
+  const { x, y } = clientXY(e)
+  dragOrigin.mx = x; dragOrigin.my = y
+  dragOrigin.px = pos.value.x; dragOrigin.py = pos.value.y
+  isDragging.value = true
+  document.addEventListener('mousemove', onDrag)
+  document.addEventListener('mouseup', stopDrag)
+  document.addEventListener('touchmove', onDrag, { passive: false })
+  document.addEventListener('touchend', stopDrag)
+}
+
+const onDrag = (e) => {
+  if (!isDragging.value) return
+  if (e.cancelable) e.preventDefault()
+  const { x, y } = clientXY(e)
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  pos.value = {
+    x: Math.max(0, Math.min(vw - 120, dragOrigin.px + x - dragOrigin.mx)),
+    y: Math.max(0, Math.min(vh - 60, dragOrigin.py + y - dragOrigin.my)),
+  }
+}
+
+const stopDrag = () => {
+  isDragging.value = false
+  document.removeEventListener('mousemove', onDrag)
+  document.removeEventListener('mouseup', stopDrag)
+  document.removeEventListener('touchmove', onDrag)
+  document.removeEventListener('touchend', stopDrag)
+}
+
+onUnmounted(stopDrag)
+
+// ── Dados ópticos ────────────────────────────────────────────────────────────
 const loading = ref(false)
 const error = ref(null)
 const opticalData = ref(null)
 
 const hasOpticalData = computed(() => {
-  const data = opticalData.value
-  if (!data) return false
-  return Boolean(data.origin || data.destination)
+  const d = opticalData.value
+  return Boolean(d?.origin || d?.destination)
 })
 
-const tooltipStyle = computed(() => {
-  const offset = 15
-  return {
-    left: `${props.position.x + offset}px`,
-    top: `${props.position.y + offset}px`
-  }
-})
-
-const normalizeNumber = (value) => {
-  const num = Number(value)
-  return Number.isFinite(num) ? num : null
+const normalizeNumber = (v) => {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
 }
 
 const buildInterfaceData = (data) => {
   if (!data) return null
-  const tx = normalizeNumber(data.tx_dbm)
-  const rx = normalizeNumber(data.rx_dbm)
-  const deviceName = data.device_name || 'Dispositivo não identificado'
-  const portName = data.port_name || 'Porta sem nome'
-  const interfaceLabel = `${deviceName} - ${portName}`
   return {
-    interface: interfaceLabel,
-    tx,
-    rx,
-    timestamp: data.last_check || null
-  }
-}
-
-const loadOpticalData = async () => {
-  if (!props.cableData?.id) return
-  
-  loading.value = true
-  error.value = null
-  opticalData.value = null
-  
-  try {
-    const response = await get(`/api/v1/inventory/fibers/${props.cableData.id}/cached-status/`)
-    
-    if (response.error) {
-      error.value = response.error
-      return
-    }
-
-    const origin = buildInterfaceData(response.origin_optical)
-    const destination = buildInterfaceData(response.destination_optical)
-    const attenuation = calculateAttenuation(origin?.tx, destination?.rx)
-    const timestamp = origin?.timestamp || destination?.timestamp || null
-    
-    opticalData.value = {
-      origin,
-      destination,
-      attenuation,
-      timestamp
-    }
-  } catch (err) {
-    console.error('[CableOpticalTooltip] Erro ao carregar dados ópticos:', err)
-    error.value = 'Não foi possível carregar os níveis ópticos'
-  } finally {
-    loading.value = false
+    interface: `${data.device_name || 'Dispositivo'} - ${data.port_name || 'Porta'}`,
+    tx: normalizeNumber(data.tx_dbm),
+    rx: normalizeNumber(data.rx_dbm),
+    timestamp: data.last_check || null,
   }
 }
 
 const calculateAttenuation = (txOrigin, rxDest) => {
   const tx = normalizeNumber(txOrigin)
   const rx = normalizeNumber(rxDest)
-  if (tx === null || rx === null) {
-    return null
-  }
-  return Math.abs(tx - rx)
+  return tx !== null && rx !== null ? Math.abs(tx - rx) : null
 }
 
-watch(() => props.visible, (newVal) => {
-  if (newVal && props.cableData) {
-    loadOpticalData()
-  } else {
-    opticalData.value = null
-    error.value = null
+const loadOpticalData = async () => {
+  if (!props.cableData?.id) return
+  loading.value = true
+  error.value = null
+  opticalData.value = null
+  try {
+    const response = await get(`/api/v1/inventory/fibers/${props.cableData.id}/cached-status/`)
+    if (response.error) { error.value = response.error; return }
+    const origin = buildInterfaceData(response.origin_optical)
+    const destination = buildInterfaceData(response.destination_optical)
+    opticalData.value = {
+      origin,
+      destination,
+      attenuation: calculateAttenuation(origin?.tx, destination?.rx),
+      timestamp: origin?.timestamp || destination?.timestamp || null,
+    }
+  } catch (err) {
+    console.error('[CableOpticalTooltip] Erro:', err)
+    error.value = 'Não foi possível carregar os níveis ópticos'
+  } finally {
+    loading.value = false
   }
-})
+}
 
+watch(
+  () => [props.visible, props.cableData?.id],
+  ([vis]) => {
+    if (vis && props.cableData) {
+      initPosition()
+      loadOpticalData()
+    } else if (!vis) {
+      opticalData.value = null
+      error.value = null
+    }
+  }
+)
+
+// ── Formatação ───────────────────────────────────────────────────────────────
 const formatValue = (value, unit = 'dBm') => {
-  const num = normalizeNumber(value)
-  if (num === null) return 'N/A'
-  return `${num.toFixed(2)} ${unit}`
+  const n = normalizeNumber(value)
+  return n !== null ? `${n.toFixed(2)} ${unit}` : 'N/A'
 }
-
-const formatLevel = (value) => formatValue(value, 'dBm')
+const formatLevel = (v) => formatValue(v, 'dBm')
 
 const getLevelClass = (value) => {
-  const num = normalizeNumber(value)
-  if (num === null) return 'level-unknown'
-  if (num >= -10) return 'level-excellent'
-  if (num >= -20) return 'level-good'
-  if (num >= -28) return 'level-warning'
+  const n = normalizeNumber(value)
+  if (n === null) return 'level-unknown'
+  if (n >= -10) return 'level-excellent'
+  if (n >= -20) return 'level-good'
+  if (n >= -28) return 'level-warning'
   return 'level-critical'
 }
 
-const formatTimestamp = (timestamp) => {
-  if (!timestamp) return ''
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+const formatTimestamp = (ts) => {
+  if (!ts) return ''
+  const d = new Date(ts)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 </script>
 
 <style scoped>
-.cable-optical-tooltip {
+/* ── Painel flutuante ──────────────────────────────────────────────────────── */
+.optical-panel {
   position: fixed;
   z-index: 10000;
-  background: var(--bg-primary, #1e293b);
-  border: 1px solid var(--border-color, #334155);
-  border-radius: 8px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-  min-width: 320px;
-  max-width: 400px;
-  padding: 0;
-  pointer-events: none;
+  width: min(400px, calc(100vw - 16px));
+  background: #1e293b;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  box-shadow: 0 20px 40px -10px rgba(0,0,0,0.7), 0 0 0 1px rgba(99,102,241,0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   font-size: 13px;
-  animation: fadeIn 0.2s ease-out;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-5px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.optical-panel.dragging {
+  box-shadow: 0 28px 52px -10px rgba(0,0,0,0.85), 0 0 0 2px rgba(99,102,241,0.45);
+  cursor: grabbing;
 }
 
-.tooltip-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color, #334155);
-  background: var(--bg-secondary, #0f172a);
-  border-radius: 8px 8px 0 0;
+/* ── Header ────────────────────────────────────────────────────────────────── */
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  background: #0f172a;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  flex-shrink: 0;
 }
 
-.tooltip-title {
-  font-weight: 600;
-  color: var(--text-primary, #f1f5f9);
-  font-size: 14px;
-  margin-bottom: 4px;
+.panel-header:active { cursor: grabbing; }
+
+.drag-grip {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  opacity: 0.35;
+  flex-shrink: 0;
 }
 
-.tooltip-subtitle {
-  font-size: 12px;
-  color: var(--text-secondary, #94a3b8);
+.drag-grip span {
+  display: block;
+  width: 16px;
+  height: 2px;
+  background: #94a3b8;
+  border-radius: 1px;
 }
 
-.tooltip-loading,
-.tooltip-error {
-  padding: 24px 16px;
-  text-align: center;
-  color: var(--text-secondary, #94a3b8);
+.header-text { flex: 1; min-width: 0; }
+
+.panel-title {
+  font-weight: 700;
+  color: #f1f5f9;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.tooltip-loading {
+.panel-subtitle {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.close-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: #64748b;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  flex-shrink: 0;
+  transition: all 0.15s;
 }
+
+.close-btn:hover {
+  background: rgba(239,68,68,0.18);
+  border-color: rgba(239,68,68,0.3);
+  color: #fca5a5;
+}
+
+.close-btn svg { width: 14px; height: 14px; }
+
+/* ── Estados ───────────────────────────────────────────────────────────────── */
+.panel-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px 16px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.panel-state.error { color: #ef4444; }
+.panel-state.muted { color: #475569; }
+.panel-state svg { width: 18px; height: 18px; flex-shrink: 0; }
 
 .spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid var(--border-color, #334155);
-  border-top-color: var(--primary-color, #3b82f6);
+  border: 2px solid #334155;
+  border-top-color: #3b82f6;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Body ──────────────────────────────────────────────────────────────────── */
+.panel-body {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
-.tooltip-error {
-  color: var(--error-color, #ef4444);
+.iface-block {
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 
-.tooltip-content {
-  padding: 12px 16px;
-}
+.iface-block:last-of-type { border-bottom: none; }
 
-.interface-section {
-  margin-bottom: 16px;
-}
-
-.interface-section:last-of-type {
-  margin-bottom: 0;
-}
-
-.interface-header {
+.iface-header {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border-color, #334155);
 }
 
-.interface-icon {
-  font-size: 16px;
-}
+.iface-icon { font-size: 14px; line-height: 1; }
 
-.interface-name {
+.iface-name {
   font-weight: 600;
-  color: var(--text-primary, #f1f5f9);
-  font-size: 13px;
-}
-
-.optical-levels {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-left: 24px;
-}
-
-.interface-placeholder {
-  padding: 8px 24px;
+  color: #e2e8f0;
   font-size: 12px;
-  color: var(--text-tertiary, #64748b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.level-item {
+.levels { display: flex; flex-direction: column; gap: 5px; padding-left: 22px; }
+
+.level-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
 }
 
-.level-label {
-  color: var(--text-secondary, #94a3b8);
-  font-size: 12px;
-}
+.level-label { color: #64748b; font-size: 12px; }
 
 .level-value {
-  font-weight: 600;
+  font-weight: 700;
   font-size: 13px;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: 5px;
+  white-space: nowrap;
 }
 
-.level-excellent {
-  color: #10b981;
-  background: rgba(16, 185, 129, 0.1);
-}
+.level-excellent { color: #10b981; background: rgba(16,185,129,0.12); }
+.level-good      { color: #3b82f6; background: rgba(59,130,246,0.12); }
+.level-warning   { color: #f59e0b; background: rgba(245,158,11,0.12); }
+.level-critical  { color: #ef4444; background: rgba(239,68,68,0.12); }
+.level-unknown   { color: #64748b; background: rgba(100,116,139,0.12); }
 
-.level-good {
-  color: #3b82f6;
-  background: rgba(59, 130, 246, 0.1);
-}
+.iface-empty { color: #475569; font-size: 11px; padding-left: 22px; margin: 0; }
 
-.level-warning {
-  color: #f59e0b;
-  background: rgba(245, 158, 11, 0.1);
-}
-
-.level-critical {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
-}
-
-.level-unknown {
-  color: var(--text-secondary, #94a3b8);
-  background: rgba(148, 163, 184, 0.1);
-}
-
-.attenuation-section {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-color, #334155);
+/* ── Atenuação e footer ────────────────────────────────────────────────────── */
+.attenuation-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 10px 0 4px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  margin-top: 4px;
 }
 
-.attenuation-label {
-  color: var(--text-secondary, #94a3b8);
-  font-size: 12px;
-}
+.atten-label { color: #64748b; font-size: 12px; }
 
-.attenuation-value {
-  font-weight: 600;
-  color: var(--text-primary, #f1f5f9);
-  font-size: 13px;
-}
+.atten-value { font-weight: 700; color: #f1f5f9; font-size: 13px; }
 
-.tooltip-footer {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-color, #334155);
+.panel-footer {
   text-align: center;
-}
-
-.timestamp {
   font-size: 11px;
-  color: var(--text-tertiary, #64748b);
+  color: #334155;
+  padding-top: 8px;
 }
 
-.tooltip-no-data {
-  padding: 24px 16px;
-  text-align: center;
-  color: var(--text-secondary, #94a3b8);
+/* ── Animação ──────────────────────────────────────────────────────────────── */
+.tooltip-float-enter-active {
+  transition: opacity 0.16s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.tooltip-float-leave-active {
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.tooltip-float-enter-from {
+  opacity: 0;
+  transform: scale(0.93) translateY(8px);
+}
+.tooltip-float-leave-to {
+  opacity: 0;
+  transform: scale(0.97) translateY(4px);
+}
+
+/* ── Mobile ────────────────────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .optical-panel {
+    width: calc(100vw - 16px) !important;
+    left: 8px !important;
+    border-radius: 12px 12px 8px 8px;
+  }
+
+  .level-value { font-size: 12px; }
+  .iface-name  { font-size: 11px; }
 }
 </style>
