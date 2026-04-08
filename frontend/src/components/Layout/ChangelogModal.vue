@@ -175,9 +175,30 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
+    version: '1.4.8',
+    date: '08 Abr 2026',
+    latest: true,
+    features: [
+      'Backup inclui fernet_key no config.json — restore em qualquer ambiente descriptografa dados automaticamente',
+      'Suporte a backup sem senha: ZIP padrão quando nenhuma senha está configurada',
+      'Restore lê fernet_key do config.json e atualiza database/fernet.key antes de reiniciar',
+    ],
+    improvements: [
+      'pg_restore com --if-exists, --no-owner e --no-privileges — elimina falsos erros em banco limpo',
+      'Restore de ZIP sem criptografia usa zipfile nativo (sem dependência do pyzipper)',
+      'Resposta do backup inclui campo encrypted para indicar se o arquivo está protegido',
+      'Versionamento por dia: uma versão por dia de trabalho, não por alteração',
+    ],
+    fixes: [
+      'Restore retornava 500 mesmo quando pg_restore concluía com sucesso (exit status 1 era warnings, não erros)',
+      'Restore de ZIP falhava quando backup foi criado sem senha (tentava abrir com pyzipper AES)',
+      'Após restore em ambiente local, tokens Mapbox, Zabbix e demais campos criptografados ficavam ilegíveis',
+    ],
+  },
+  {
     version: '1.4.7',
     date: '07 Abr 2026',
-    latest: true,
+    latest: false,
     features: [],
     improvements: [],
     fixes: [

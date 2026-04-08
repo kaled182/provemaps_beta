@@ -1,6 +1,6 @@
 {
-  "version": "1.4.7",
-  "date": "2026-04-07",
+  "version": "1.4.8",
+  "date": "2026-04-08",
   "critical": false,
-  "changelog": "Corrige erros falsos no botão Atualizar: git pull não-crítico no container, warnings do collectstatic tratados como aviso."
+  "changelog": "Backup/restore auto-gerencia fernet_key; suporte a ZIP sem senha; pg_restore com --if-exists; versionamento diário."
 }
