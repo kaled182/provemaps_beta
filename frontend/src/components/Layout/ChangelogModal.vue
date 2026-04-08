@@ -175,12 +175,23 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
-    version: '1.4.8.3',
+    version: '1.4.8.4',
     date: '08 Abr 2026',
     latest: true,
     features: [
+      'Painel óptico exibe botão "Ver Detalhes do Cabo" que abre o modal completo — sem precisar de duplo clique',
+    ],
+    improvements: [
+      'Interação com cabos simplificada: clique abre o painel óptico, botão dentro do painel abre os detalhes',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.8.3',
+    date: '08 Abr 2026',
+    latest: false,
+    features: [
       'Clique simples no cabo abre o painel de sinal óptico — funciona em mobile (sem precisar de hover)',
-      'Duplo clique no cabo abre o modal de detalhes completos do cabo',
       'Painel óptico arrastável pelo cabeçalho, com botão Fechar — não fecha automaticamente ao mover o mouse',
     ],
     improvements: [

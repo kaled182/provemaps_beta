@@ -142,6 +142,7 @@
       :cable-data="hoveredCable"
       :position="tooltipPosition"
       @close="showCableTooltip = false"
+      @open-details="openCableDetailsFromTooltip"
     />
 
     <!-- Toast notification -->
@@ -729,7 +730,6 @@ const updateMap = (animateItemId = null) => {
     availableCables: availableItems.value.cables,
     isDarkMode: uiStore.theme === 'dark',
     onPolylineClick: handleCableClick,
-    onPolylineDoubleClick: handleCableDoubleClick,
     onPolylineHover: handleCableHover,
     onPolylineUnhover: handleCableUnhover
   })
@@ -925,7 +925,7 @@ const handleCableClick = (cable) => {
   showCableTooltip.value = true
 }
 
-const handleCableDoubleClick = (cable) => {
+const openCableDetailsFromTooltip = (cable) => {
   selectedCable.value = cable
   showCableModal.value = true
 }

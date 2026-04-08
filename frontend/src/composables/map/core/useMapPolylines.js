@@ -108,7 +108,6 @@ export function useMapPolylines() {
       if (polyline.layerId) {
         // Mapear eventos para Mapbox
         const mapboxEvent = event === 'click' ? 'click' :
-                           event === 'dblclick' ? 'dblclick' :
                            event === 'mouseover' ? 'mouseenter' :
                            event === 'mouseout' ? 'mouseleave' : event
         
@@ -163,7 +162,6 @@ export function useMapPolylines() {
     availableCables,
     isDarkMode,
     onPolylineClick,
-    onPolylineDoubleClick,
     onPolylineHover,
     onPolylineUnhover
   }) => {
@@ -263,14 +261,6 @@ export function useMapPolylines() {
         }, provider, mapInstance)
       }
 
-      // Adicionar listener de duplo clique
-      if (onPolylineDoubleClick) {
-        addPolylineListener(polyline, 'dblclick', (e) => {
-          if (e && typeof e.stopPropagation === 'function') e.stopPropagation()
-          onPolylineDoubleClick(cable)
-        }, provider, mapInstance)
-      }
-      
       // Adicionar listeners de hover para tooltip
       if (onPolylineHover) {
         addPolylineListener(polyline, 'mouseover', (event) => {

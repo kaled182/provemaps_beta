@@ -108,6 +108,17 @@
             {{ formatTimestamp(opticalData.timestamp) }}
           </div>
         </div>
+
+        <!-- Rodapé com botão de detalhes -->
+        <div class="panel-actions">
+          <button class="details-btn" @click.stop="$emit('open-details', cableData)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            Ver Detalhes do Cabo
+          </button>
+        </div>
       </div>
     </Transition>
   </Teleport>
@@ -124,7 +135,7 @@ const props = defineProps({
   position: { type: Object, default: () => ({ x: 0, y: 0 }) },
 })
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'open-details'])
 
 const { get } = useApi()
 
@@ -487,6 +498,37 @@ const formatTimestamp = (ts) => {
   color: #334155;
   padding-top: 8px;
 }
+
+/* ── Botão Ver Detalhes ────────────────────────────────────────────────────── */
+.panel-actions {
+  padding: 10px 14px 12px;
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+
+.details-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 8px 14px;
+  background: rgba(59,130,246,0.15);
+  border: 1px solid rgba(59,130,246,0.3);
+  border-radius: 8px;
+  color: #93c5fd;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  justify-content: center;
+}
+
+.details-btn:hover {
+  background: rgba(59,130,246,0.28);
+  border-color: rgba(59,130,246,0.5);
+  color: #bfdbfe;
+}
+
+.details-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
 
 /* ── Animação ──────────────────────────────────────────────────────────────── */
 .tooltip-float-enter-active {
