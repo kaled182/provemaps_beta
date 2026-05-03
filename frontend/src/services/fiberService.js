@@ -272,6 +272,21 @@ export async function updateCableAlarm(cableId, alarmId, payload) {
 }
 
 /**
+ * Envia mensagem de TESTE real para os destinatários da config.
+ * Útil para validar que o gateway WhatsApp + telefones funcionam.
+ * Retorna { ok, sent, total, results, message }.
+ */
+export async function testCableAlarm(cableId, alarmId) {
+  try {
+    const response = await post(`/api/v1/fiber-cables/${cableId}/alarms/${alarmId}/test/`, {})
+    return response
+  } catch (error) {
+    console.error('[FiberService] Erro ao enviar alarme de teste:', error)
+    throw error
+  }
+}
+
+/**
  * Busca histórico de tráfego de rede (IN/OUT) de ambas as portas do cabo.
  * O backend paraleliza as chamadas ao Zabbix server-side.
  */

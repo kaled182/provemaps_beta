@@ -17,26 +17,10 @@
             </button>
           </div>
 
-          <!-- Body -->
+          <!-- Body — sempre renderizado para que tráfego e óptico sejam
+               independentes (porta offline ainda mostra histórico óptico) -->
           <div class="modal-body">
-            <!-- Loading State -->
-            <div v-if="loading" class="loading-state">
-              <i class="fas fa-spinner fa-spin"></i>
-              <span>Carregando dados de tráfego...</span>
-            </div>
-
-            <!-- Error State -->
-            <div v-else-if="error" class="error-state">
-              <i class="fas fa-exclamation-triangle"></i>
-              <span>{{ error }}</span>
-              <button class="btn-retry" @click="loadTrafficData">
-                <i class="fas fa-redo"></i>
-                Tentar Novamente
-              </button>
-            </div>
-
-            <!-- Content -->
-            <div v-else-if="trafficData">
+            <div>
               <!-- Period Selector -->
               <div class="period-selector">
                 <button
@@ -56,13 +40,41 @@
                   <div class="section-title">
                     <i class="fas fa-chart-line"></i>
                     <span>Tráfego de Rede</span>
+                    <!-- Última atividade — útil para identificar quando aconteceu o incidente -->
+                    <span v-if="lastTrafficActivity" class="last-activity" :class="{ 'last-activity--stale': isStale }">
+                      · Última atividade: {{ lastTrafficActivity }}
+                    </span>
                   </div>
                   <i class="fas" :class="trafficSectionOpen ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
                 </button>
 
                 <Transition name="collapse">
                   <div v-show="trafficSectionOpen" class="section-content">
+                    <!-- Loading interno da seção -->
+                    <div v-if="loading" class="loading-state">
+                      <i class="fas fa-spinner fa-spin"></i>
+                      <span>Carregando dados de tráfego...</span>
+                    </div>
+
+                    <!-- Erro: porta offline / Zabbix lento / sem item configurado -->
+                    <div v-else-if="error" class="error-state">
+                      <i class="fas fa-exclamation-triangle"></i>
+                      <span>{{ error }}</span>
+                      <button class="btn-retry" @click="loadTrafficData">
+                        <i class="fas fa-redo"></i>
+                        Tentar Novamente
+                      </button>
+                    </div>
+
+                    <!-- Sem dados (porta nunca teve histórico ou janela vazia) -->
+                    <div v-else-if="trafficData && (!trafficData.history || trafficData.history.length === 0)" class="empty-state">
+                      <i class="fas fa-chart-line"></i>
+                      <span>Sem dados de tráfego no período selecionado.</span>
+                      <small>Tente um período maior — a porta pode estar offline desde antes.</small>
+                    </div>
+
                     <!-- Statistics Cards -->
+                    <template v-else-if="trafficData">
                     <div class="stats-grid">
                       <div class="stat-card percentile-95">
                         <div class="stat-header">
@@ -120,6 +132,7 @@
                     <div class="chart-container">
                       <canvas ref="chartCanvas"></canvas>
                     </div>
+                    </template>
                   </div>
                 </Transition>
               </div>
@@ -207,11 +220,22 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick, defineAsyncComponent } from 'vue'
 import { useApi } from '@/composables/useApi'
 import { useEscapeKey } from '@/composables/useEscapeKey'
-import Chart from 'chart.js/auto'
-import AlarmConfigModal from './AlarmConfigModal.vue'
+
+// Chart.js (~430 KB) carregado dinamicamente no 1º render — economiza
+// esse peso no bundle inicial do SiteDetailsModal/DeviceDetailsModal.
+let Chart = null
+const _loadChart = async () => {
+  if (Chart) return Chart
+  const module = await import('chart.js/auto')
+  Chart = module.default
+  return Chart
+}
+
+// AlarmConfigModal (~786 linhas) só monta quando o usuário clica "Configurar Alarme"
+const AlarmConfigModal = defineAsyncComponent(() => import('./AlarmConfigModal.vue'))
 
 const props = defineProps({
   isOpen: {
@@ -235,14 +259,84 @@ const trafficData = ref(null)
 const selectedPeriod = ref(24)
 const chartCanvas = ref(null)
 const opticalChartCanvas = ref(null)
-const trafficSectionOpen = ref(true)
-const opticalSectionOpen = ref(true)
+// Seções colapsadas por padrão — o usuário expande conforme precisa.
+// Os dados são pré-carregados em background no isOpen (loadTrafficData /
+// renderOpticalChart), mas o render no canvas só acontece quando a seção
+// é expandida (canvas vira visível, watcher do canvas dispara o render).
+const trafficSectionOpen = ref(false)
+const opticalSectionOpen = ref(false)
 const showAlarmConfig = ref(false)
 const exportMenuOpen = ref(false)
+
+// Última atividade — único computed que itera o histórico UMA vez
+// (antes eram 2 computeds que percorriam separadamente o array inteiro).
+// Resultado em cache reativo: só recalcula quando trafficData muda.
+const _lastActivityInfo = computed(() => {
+  const history = trafficData.value?.history
+  if (!Array.isArray(history) || history.length === 0) {
+    return { label: null, isStale: false }
+  }
+  for (let i = history.length - 1; i >= 0; i--) {
+    const p = history[i]
+    if ((p.traffic_in && p.traffic_in > 0) || (p.traffic_out && p.traffic_out > 0)) {
+      const ts = new Date(p.timestamp).getTime()
+      const ageMs = Date.now() - ts
+      const ageMin = Math.round(ageMs / 60000)
+      let label
+      if (ageMin < 1) label = 'agora'
+      else if (ageMin < 60) label = `há ${ageMin} min`
+      else {
+        const ageHr = Math.floor(ageMin / 60)
+        if (ageHr < 24) label = `há ${ageHr}h ${ageMin % 60}min`
+        else label = `há ${Math.floor(ageHr / 24)}d ${ageHr % 24}h`
+      }
+      return { label, isStale: ageMs > 5 * 60 * 1000 }
+    }
+  }
+  return { label: 'nunca no período', isStale: true }
+})
+const lastTrafficActivity = computed(() => _lastActivityInfo.value.label)
+const isStale = computed(() => _lastActivityInfo.value.isStale)
 let chartInstance = null
 let opticalChartInstance = null
 let opticalChartData = null // Armazenar dados para tooltips
 let opticalChartConfig = null // Armazenar configuração do gráfico
+
+// Cache do último dataset óptico — usado pelo watcher do canvas para
+// re-renderizar quando o ref ficar disponível (Transition + Teleport
+// frequentemente atrasam o ref pra além do primeiro nextTick).
+let _lastOpticalChartData = null
+// Promise do fetch em andamento. Evita duplicar requisição quando
+// watch(props.isOpen) e watch(opticalChartCanvas) disparam quase juntos.
+let _opticalFetchPromise = null
+
+// Espera o canvas aparecer com timeout — robusto contra delays de
+// Transition/Teleport (até ~30 frames ≈ 500ms). Resolve com o elemento
+// se aparecer, ou null se desistir.
+const _waitForCanvas = async (refObj, maxFrames = 30) => {
+  for (let i = 0; i < maxFrames; i++) {
+    if (refObj.value) return refObj.value
+    await new Promise((r) => requestAnimationFrame(r))
+  }
+  return refObj.value
+}
+
+// Decima uma série de pontos para no máximo `maxPoints`, preservando
+// primeiro/último e amostrando uniformemente. Crítico para Chart.js:
+// renderizar 2000+ pontos vs 500 é a diferença entre lento e instantâneo.
+const _decimateSeries = (arr, maxPoints = 800) => {
+  if (!Array.isArray(arr) || arr.length <= maxPoints) return arr
+  const step = arr.length / maxPoints
+  const out = []
+  for (let i = 0; i < maxPoints; i++) {
+    out.push(arr[Math.floor(i * step)])
+  }
+  // Garante o último ponto (pode cair fora do step)
+  if (out[out.length - 1] !== arr[arr.length - 1]) {
+    out.push(arr[arr.length - 1])
+  }
+  return out
+}
 
 const close = () => {
   if (chartInstance) {
@@ -272,24 +366,38 @@ const loadTrafficData = async () => {
   loading.value = true
   error.value = null
 
+  // Timeout de 20s — porta offline pode demorar no Zabbix; evita loading
+  // infinito quando backend está lento ou Zabbix não responde.
+  const TRAFFIC_TIMEOUT_MS = 20000
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('TIMEOUT')), TRAFFIC_TIMEOUT_MS)
+  )
+
   try {
-    const response = await api.get(`/api/v1/ports/${props.port.id}/traffic_history/?hours=${selectedPeriod.value}`)
+    const fetchPromise = api.get(`/api/v1/ports/${props.port.id}/traffic_history/?hours=${selectedPeriod.value}`)
+    const response = await Promise.race([fetchPromise, timeoutPromise])
     trafficData.value = response
     loading.value = false
-    await nextTick()
-    if (chartCanvas.value) {
-      renderChart()
+    const canvas = await _waitForCanvas(chartCanvas)
+    if (canvas) {
+      await renderChart()
     } else {
-      setTimeout(() => { if (chartCanvas.value) renderChart() }, 200)
+      console.warn('[PortTrafficModal] Canvas de tráfego não apareceu')
     }
   } catch (err) {
     console.error('Erro ao carregar dados de tráfego:', err)
-    error.value = err.message || 'Erro ao carregar dados de tráfego'
+    if (err.message === 'TIMEOUT') {
+      error.value = 'Tempo esgotado ao consultar o Zabbix. A porta pode estar offline há muito tempo ou o servidor está sobrecarregado.'
+    } else {
+      error.value = err.message || 'Erro ao carregar dados de tráfego'
+    }
     loading.value = false
   }
 }
 
-const renderChart = () => {
+const renderChart = async () => {
+  // Garante que Chart.js está carregado (lazy: 1ª chamada baixa ~430 KB de chunk)
+  await _loadChart()
   console.log('[PortTrafficModal] renderChart chamado')
   console.log('[PortTrafficModal] chartCanvas.value:', chartCanvas.value)
   console.log('[PortTrafficModal] trafficData.value:', trafficData.value)
@@ -310,17 +418,21 @@ const renderChart = () => {
   }
 
   const ctx = chartCanvas.value.getContext('2d')
-  const history = trafficData.value.history || []
-  
-  console.log('[PortTrafficModal] Renderizando gráfico com', history.length, 'pontos')
+  const rawHistory = trafficData.value.history || []
+  // Decimação: para 24h o backend pode retornar 2000+ pontos. Chart.js
+  // renderiza linearmente — reduzir para ~800 mantém a forma do gráfico
+  // e o tooltip mas torna a abertura instantânea.
+  const history = _decimateSeries(rawHistory, 800)
+
+  console.log(`[PortTrafficModal] Renderizando gráfico com ${history.length} pontos (de ${rawHistory.length} originais)`)
 
   const labels = history.map(d => {
     const date = new Date(d.timestamp)
-    return date.toLocaleString('pt-BR', { 
-      month: '2-digit', 
-      day: '2-digit', 
-      hour: '2-digit', 
-      minute: '2-digit' 
+    return date.toLocaleString('pt-BR', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
     })
   })
 
@@ -421,11 +533,14 @@ const renderChart = () => {
 
 const changePeriod = async (hours) => {
   selectedPeriod.value = hours
+  // Trocar período = nova janela de dados → invalidar cache+flag para
+  // forçar refetch (sem isso, o dedup retornaria os dados do período antigo)
+  _lastOpticalChartData = null
+  _opticalFetchPromise = null
   loadTrafficData()
-  // Também atualizar o gráfico óptico se disponível
   if (opticalSectionOpen.value && (props.port?.optical_rx_power !== null || props.port?.optical_tx_power !== null)) {
-    await nextTick() // Garantir que o DOM está atualizado
-    await renderOpticalChart() // Aguardar o carregamento dos dados
+    await nextTick()
+    await renderOpticalChart()
   }
 }
 
@@ -683,59 +798,78 @@ const drawOpticalTooltip = (mouseX, mouseY) => {
   })
 }
 
+// Busca os dados ópticos uma única vez por (porta, período). Se já houver
+// uma busca em andamento, retorna a mesma promise (dedup). Atualiza
+// _lastOpticalChartData quando termina.
+const _fetchOpticalData = () => {
+  if (_opticalFetchPromise) return _opticalFetchPromise
+  if (!props.port?.id) return Promise.resolve(null)
+
+  const url = `/api/v1/ports/${props.port.id}/optical_history/`
+  const params = { hours: selectedPeriod.value }
+  console.log('[PortTrafficModal] Buscando histórico óptico:', { url, params, portId: props.port.id, period: selectedPeriod.value })
+
+  _opticalFetchPromise = (async () => {
+    try {
+      const response = await api.get(url, params)
+      const history = Array.isArray(response) ? response : (response.history || [])
+      console.log('[PortTrafficModal] Pontos de histórico:', history.length)
+
+      let chartData
+      if (history && history.length > 0) {
+        chartData = history.map(snapshot => ({
+          timestamp: new Date(snapshot.timestamp).getTime(),
+          rx: snapshot.rx_power,
+          tx: snapshot.tx_power,
+        }))
+      } else {
+        const now = Date.now()
+        const points = []
+        const rxBase = props.port?.optical_rx_power ?? -22
+        const txBase = props.port?.optical_tx_power ?? -3
+        const steps = selectedPeriod.value <= 24 ? selectedPeriod.value : 24
+        for (let i = steps; i >= 0; i--) {
+          const timestamp = now - (i * 60 * 60 * 1000)
+          const rxVariation = (Math.random() - 0.5) * 2
+          const txVariation = (Math.random() - 0.5) * 1
+          points.push({ timestamp, rx: rxBase + rxVariation, tx: txBase + txVariation })
+        }
+        chartData = points
+        console.warn('[PortTrafficModal] Optical history vazio; usando', chartData.length, 'pontos simulados')
+      }
+
+      // Decimar antes de cachear (canvas óptico tem mesma dor que tráfego)
+      chartData = _decimateSeries(chartData, 800)
+      _lastOpticalChartData = chartData
+      return chartData
+    } catch (err) {
+      console.error('[PortTrafficModal] Erro ao carregar histórico óptico:', err)
+      return []
+    } finally {
+      _opticalFetchPromise = null
+    }
+  })()
+  return _opticalFetchPromise
+}
+
 const renderOpticalChart = async () => {
   if (!props.port?.id) {
     console.warn('[PortTrafficModal] Porta sem ID, não é possível buscar histórico')
     return
   }
-  
-  // Verificar se o canvas existe antes de continuar
-  if (!opticalChartCanvas.value) {
-    console.warn('[PortTrafficModal] Canvas óptico não disponível, aguardando...')
-    await nextTick()
-    if (!opticalChartCanvas.value) {
-      console.error('[PortTrafficModal] Canvas óptico ainda não disponível após nextTick')
+
+  try {
+    // 1. Buscar dados (com dedup interno).
+    const chartData = await _fetchOpticalData()
+    if (!chartData) return
+
+    // 2. Esperar o canvas ficar disponível (até ~30 frames = ~500ms).
+    const canvas = await _waitForCanvas(opticalChartCanvas)
+    if (!canvas) {
+      console.warn('[PortTrafficModal] Canvas óptico não apareceu — render adiado para watcher')
       return
     }
-  }
-  
-  const url = `/api/v1/ports/${props.port.id}/optical_history/`
-  const params = { hours: selectedPeriod.value }
-  
-  console.log('[PortTrafficModal] Buscando histórico óptico:', { url, params, portId: props.port.id, period: selectedPeriod.value })
-  
-  try {
-    const response = await api.get(url, params)
-    console.log('[PortTrafficModal] Resposta do servidor:', response)
-    
-    const history = Array.isArray(response) ? response : (response.history || [])
-    console.log('[PortTrafficModal] Pontos de histórico:', history.length)
 
-    let chartData
-    if (history && history.length > 0) {
-      chartData = history.map(snapshot => ({
-        timestamp: new Date(snapshot.timestamp).getTime(),
-        rx: snapshot.rx_power,
-        tx: snapshot.tx_power,
-      }))
-      console.log('[PortTrafficModal] Dados reais mapeados:', chartData.length, 'pontos')
-    } else {
-      // Fallback para dados simulados (mesma estratégia do AlarmConfigModal)
-      const now = Date.now()
-      const points = []
-      const rxBase = props.port?.optical_rx_power ?? -22
-      const txBase = props.port?.optical_tx_power ?? -3
-      const steps = selectedPeriod.value <= 24 ? selectedPeriod.value : 24
-      for (let i = steps; i >= 0; i--) {
-        const timestamp = now - (i * 60 * 60 * 1000)
-        const rxVariation = (Math.random() - 0.5) * 2
-        const txVariation = (Math.random() - 0.5) * 1
-        points.push({ timestamp, rx: rxBase + rxVariation, tx: txBase + txVariation })
-      }
-      chartData = points
-      console.warn('[PortTrafficModal] Optical history vazio; usando', chartData.length, 'pontos simulados')
-    }
-    await nextTick()
     renderOpticalCanvasChart(chartData)
     
     // Adicionar event listeners para tooltips
@@ -762,8 +896,7 @@ const renderOpticalChart = async () => {
       opticalChartCanvas.value.style.cursor = 'crosshair'
     }
   } catch (err) {
-    console.error('[PortTrafficModal] Erro ao carregar histórico óptico:', err)
-    console.error('[PortTrafficModal] Detalhes do erro:', { message: err.message, url, params })
+    console.error('[PortTrafficModal] Erro ao renderizar histórico óptico:', err)
     await nextTick()
     renderOpticalCanvasChart([])
   }
@@ -898,9 +1031,14 @@ const handleAlarmSaved = () => {
   emit('alarm-saved')
 }
 
+// `immediate: true` é crítico: como agora o PortTrafficModal é lazy-mounted
+// via defineAsyncComponent + v-if no parent, o componente é montado já com
+// isOpen=true. Sem o flag, o watcher nunca dispararia (não há transição
+// false→true) e nem o tráfego nem o óptico carregariam.
 watch(() => props.isOpen, (newValue) => {
   if (newValue) {
-    // Load traffic and optical in parallel — no sequential waiting
+    _lastOpticalChartData = null
+    _opticalFetchPromise = null
     loadTrafficData()
     if (props.port?.optical_rx_power !== null || props.port?.optical_tx_power !== null) {
       renderOpticalChart()
@@ -908,8 +1046,10 @@ watch(() => props.isOpen, (newValue) => {
   } else {
     if (chartInstance) { chartInstance.destroy(); chartInstance = null }
     if (opticalChartInstance) { opticalChartInstance.destroy(); opticalChartInstance = null }
+    _lastOpticalChartData = null
+    _opticalFetchPromise = null
   }
-})
+}, { immediate: true })
 
 // Watch para renderizar gráfico óptico quando seção abrir
 watch(opticalSectionOpen, async (isOpen) => {
@@ -919,16 +1059,41 @@ watch(opticalSectionOpen, async (isOpen) => {
   }
 })
 
+// Watch para renderizar gráfico de tráfego quando seção abrir.
+// Se trafficData já chegou em background, o canvas fica disponível ao
+// expandir e o renderChart usa os dados em cache (sem nova requisição).
+watch(trafficSectionOpen, async (isOpen) => {
+  if (isOpen && props.isOpen && trafficData.value) {
+    await nextTick()
+    renderChart()
+  }
+})
+
 onUnmounted(() => {
   document.removeEventListener('click', onDocumentClick)
   if (chartInstance) { chartInstance.destroy() }
   if (opticalChartInstance) { opticalChartInstance.destroy() }
 })
 
-// Renderizar assim que o canvas de óptico ficar disponível
+// Renderizar assim que o canvas de óptico ficar disponível.
+// Se já temos dados em cache (busca completou antes do canvas), reusa
+// sem re-buscar do backend. Se não, dispara a busca completa.
 watch(opticalChartCanvas, (canvas) => {
-  if (canvas && props.isOpen && opticalSectionOpen.value) {
+  if (!canvas || !props.isOpen || !opticalSectionOpen.value) return
+  if (_lastOpticalChartData) {
+    renderOpticalCanvasChart(_lastOpticalChartData)
+  } else {
     renderOpticalChart()
+  }
+})
+
+// Mesmo padrão para o canvas de tráfego: ao expandir a seção (com seções
+// colapsadas por default), o canvas vira disponível e renderizamos com os
+// dados que já chegaram em background.
+watch(chartCanvas, (canvas) => {
+  if (!canvas || !props.isOpen || !trafficSectionOpen.value) return
+  if (trafficData.value) {
+    renderChart()
   }
 })
 </script>
@@ -1025,24 +1190,46 @@ watch(opticalChartCanvas, (canvas) => {
 }
 
 .loading-state,
-.error-state {
+.error-state,
+.empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  padding: 60px 20px;
+  gap: 12px;
+  padding: 32px 20px;
   color: #9ca3af;
 }
 
 .loading-state i {
-  font-size: 48px;
+  font-size: 40px;
   color: #3b82f6;
 }
 
 .error-state i {
-  font-size: 48px;
+  font-size: 40px;
   color: #ef4444;
+}
+
+.empty-state i {
+  font-size: 40px;
+  color: #6b7280;
+}
+
+.empty-state small {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+/* Indicador de última atividade no header da seção de tráfego */
+.last-activity {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #10b981; /* verde — porta ativa recente */
+}
+.last-activity--stale {
+  color: #ef4444; /* vermelho — provavelmente offline (>5 min sem tráfego) */
 }
 
 .btn-retry {

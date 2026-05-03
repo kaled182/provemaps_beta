@@ -62,8 +62,8 @@
 
           <!-- Body -->
           <div class="modal-body">
-            <!-- Tab: Informações Gerais -->
-            <div v-show="activeTab === 'info'" class="tab-content">
+            <!-- Tab: Informações Gerais (v-if lazy: monta só quando ativa) -->
+            <div v-if="activeTab === 'info'" class="tab-content">
               <div class="info-grid">
                 <!-- Status e Info Básica -->
                 <div class="info-section">
@@ -199,8 +199,8 @@
               </div>
             </div>
 
-            <!-- Tab: Nível Óptico -->
-            <div v-show="activeTab === 'optical'" class="tab-content">
+            <!-- Tab: Nível Óptico (v-if lazy) -->
+            <div v-if="activeTab === 'optical'" class="tab-content">
               <div class="optical-section">
                 <div class="section-header">
                   <h3>Nível de Sinal Óptico</h3>
@@ -355,8 +355,8 @@
               </div>
             </div>
 
-            <!-- Tab: Tráfego de Rede -->
-            <div v-show="activeTab === 'traffic'" class="tab-content">
+            <!-- Tab: Tráfego de Rede (v-if lazy) -->
+            <div v-if="activeTab === 'traffic'" class="tab-content">
               <div class="optical-section">
                 <div class="section-header">
                   <h3>Tráfego de Rede</h3>
@@ -522,8 +522,8 @@
               </div>
             </div>
 
-            <!-- Tab: Alarmes -->
-            <div v-show="activeTab === 'alarms'" class="tab-content">
+            <!-- Tab: Alarmes (v-if lazy) -->
+            <div v-if="activeTab === 'alarms'" class="tab-content">
               <div class="alarms-section">
                 <div class="section-header">
                   <h3>Alarmes e Eventos</h3>
@@ -562,8 +562,8 @@
               </div>
             </div>
 
-            <!-- Tab: Histórico -->
-            <div v-show="activeTab === 'history'" class="tab-content">
+            <!-- Tab: Histórico (v-if lazy) -->
+            <div v-if="activeTab === 'history'" class="tab-content">
               <div class="history-section">
                 <h3>Histórico de Manutenção</h3>
                 <div class="timeline">
@@ -635,6 +635,20 @@
                       </div>
                       <p v-if="group.description" class="saved-config-notes">{{ group.description }}</p>
                       <div class="saved-config-actions">
+                        <button
+                          class="btn-config-action btn-test"
+                          :disabled="testingAlarmIds.has(group.ids[0])"
+                          @click="sendTestAlarm(group)"
+                          title="Enviar mensagem de teste real para os destinatários"
+                        >
+                          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          {{ testingAlarmIds.has(group.ids[0]) ? 'Enviando…' : 'Enviar Teste' }}
+                        </button>
                         <button class="btn-config-action btn-edit" @click="startEditAlarm(group)" title="Editar">
                           <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -811,7 +825,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useEscapeKey } from '@/composables/useEscapeKey'
 import Chart from 'chart.js/auto'
-import { getCableOpticalHistory, getCableTrafficHistory, getCableAlarms, createCableAlarm, deleteCableAlarm } from '@/services/fiberService'
+import { getCableOpticalHistory, getCableTrafficHistory, getCableAlarms, createCableAlarm, deleteCableAlarm, testCableAlarm } from '@/services/fiberService'
 import { useAlertTemplatesStore } from '@/stores/alertTemplates'
 
 const props = defineProps({
@@ -942,6 +956,8 @@ const isSavingAlarm = ref(false)
 const editingAlarmIds = ref([])
 const savedAlarmConfigs = ref([])
 const isLoadingAlarmConfigs = ref(false)
+// IDs de alarmes com teste em andamento (para desabilitar o botão e mostrar "Enviando…")
+const testingAlarmIds = ref(new Set())
 
 const ALERT_TYPE_TO_CATEGORY = {
   break: 'cable_break',
@@ -1595,6 +1611,55 @@ const deleteAlarm = async (group) => {
   }
 }
 
+/**
+ * Envia mensagem de TESTE real para os destinatários da config.
+ * Usa o primeiro id do grupo (todas as variações de alert_type têm os
+ * mesmos destinatários — um teste cobre todos).
+ */
+const sendTestAlarm = async (group) => {
+  const ids = group.ids || []
+  const firstId = ids[0]
+  if (!firstId) return
+  if (testingAlarmIds.value.has(firstId)) return
+
+  testingAlarmIds.value = new Set([...testingAlarmIds.value, firstId])
+  try {
+    const result = await testCableAlarm(props.cable.id, firstId)
+    const sent = result?.sent || 0
+    const total = result?.total || 0
+
+    if (result?.error && total === 0) {
+      window.alert(`Nenhuma mensagem enviada — ${result.error}`)
+      return
+    }
+
+    if (sent > 0 && sent === total) {
+      window.alert(`✅ Teste enviado com sucesso para ${sent} destinatário(s).`)
+    } else if (sent > 0) {
+      // parcial
+      const failures = (result.results || [])
+        .filter(r => !r.success)
+        .map(r => `• ${r.recipient || '(sem nome)'}: ${r.error || 'falhou'}`)
+        .join('\n')
+      window.alert(
+        `⚠️ Teste parcial: ${sent}/${total} entregues.\n\nFalhas:\n${failures}`
+      )
+    } else {
+      const failures = (result.results || [])
+        .map(r => `• ${r.recipient || '(sem nome)'}: ${r.error || 'falhou'}`)
+        .join('\n') || 'Sem detalhes adicionais.'
+      window.alert(`❌ Nenhuma mensagem entregue.\n\n${failures}`)
+    }
+  } catch (error) {
+    console.error('[FiberCableDetailModal] Erro ao enviar teste:', error)
+    window.alert(error?.response?.data?.error || error?.message || 'Falha ao enviar mensagem de teste.')
+  } finally {
+    const next = new Set(testingAlarmIds.value)
+    next.delete(firstId)
+    testingAlarmIds.value = next
+  }
+}
+
 const resetTargetDetails = () => {
   alarmForm.value.departmentGroup = ''
   alarmForm.value.systemUser = ''
@@ -2144,9 +2209,12 @@ watch(() => props.cable?.id, (cableId) => {
   } else if (!cableId) {
     savedAlarmConfigs.value = []
   }
-})
+}, { immediate: true })
 
-// Watch para carregar dados quando modal abrir ou cabo mudar
+// Watch para carregar dados quando modal abrir ou cabo mudar.
+// `immediate: true` é crítico com lazy v-if no parent: o componente é
+// montado já com show=true — sem o flag, o watcher não dispara e o
+// modal abre vazio (sem dados ópticos/tráfego/alarmes).
 watch(() => [props.show, props.cable], async ([show, cable]) => {
   if (show && cable) {
     showCableDetails.value = true
@@ -2156,7 +2224,7 @@ watch(() => [props.show, props.cable], async ([show, cable]) => {
       loadCableAlarmConfigs(cable.id)
     ])
   }
-})
+}, { immediate: true })
 
 // Watch para criar gráficos quando mudar para tab optical ou traffic
 watch(activeTab, async (newTab) => {
@@ -3188,6 +3256,23 @@ onUnmounted(() => {
 .btn-config-action .icon {
   width: 14px;
   height: 14px;
+}
+
+.btn-test {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #6ee7b7;
+}
+
+.btn-test:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: rgba(16, 185, 129, 0.6);
+  color: #a7f3d0;
+}
+
+.btn-test:disabled {
+  opacity: 0.6;
+  cursor: progress;
 }
 
 .btn-edit {

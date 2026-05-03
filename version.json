@@ -1,6 +1,6 @@
 {
-  "version": "1.4.8.5",
-  "date": "2026-04-08",
+  "version": "1.4.10.3",
+  "date": "2026-05-03",
   "critical": false,
-  "changelog": "Botão Ver Detalhes abre diretamente o modal completo do cabo (com abas de nível óptico, tráfego, alarmes e histórico)."
+  "changelog": "Mensagem do alerta de manutenção agora é opcional — em branco usa 'ENLACE OFF.' como texto padrão. O bloco de Cabos com Origem/Destino continua sendo enviado, então o técnico recebe tudo que precisa sem o operador digitar nada."
 }

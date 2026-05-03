@@ -175,9 +175,208 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
+    version: '1.4.10.3',
+    date: '03 Mai 2026',
+    latest: true,
+    features: [],
+    improvements: [
+      'Mensagem do alerta de manutenção é opcional: em branco, usa "ENLACE OFF." como default. O bloco de Cabos com Origem/Destino é sempre enviado, então o técnico já recebe tudo que precisa sem o operador digitar nada — basta selecionar destinatários e clicar Enviar.',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.10.2',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [
+      'Modal Notificar Responsáveis: nova aba "Contatos da agenda" — permite enviar avisos para contatos cadastrados em Setup > Contatos via WhatsApp/Email, sem precisar transformá-los em usuários do sistema. type_label mostra empresa ou primeiro grupo do contato.',
+    ],
+    improvements: [],
+    fixes: [],
+  },
+  {
+    version: '1.4.10.1',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [
+      'Alerta de Manutenção (WhatsApp + Email): cada cabo afetado agora vem com Origem/Destino completos — Device + Porta + Site. Substitui o "Equipamentos: —" pelo endpoint físico real (ex: "Huawei - Switch Vila Mandi / XGigabitEthernet0/0/1 (SITE - VILA MANDI)"). Técnico identifica onde verificar sem abrir o sistema.',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.10.0',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [
+      'Botão "Enviar Teste" nas configurações de alarme de cabo: dispara WhatsApp real para os destinatários (qualquer target — contato/grupo/usuário/departamento) sem precisar esperar um evento óptico. Mensagem com prefixo [TESTE] e detalhes da config. Resultado inline (sucesso/parcial/falha por destinatário).',
+    ],
+    improvements: [],
+    fixes: [],
+  },
+  {
+    version: '1.4.9.13',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [
+      'PortTrafficModal abre com seções "Tráfego" e "Óptico" colapsadas por padrão — modal aparece instantâneo. Dados pré-carregam em background; ao expandir uma seção, o gráfico renderiza com cache (sem nova requisição).',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.9.12',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [],
+    fixes: [
+      'Gráfico de tráfego não carregava após PortTrafficModal virar lazy-loaded — watcher de props.isOpen agora roda com immediate:true. Mesmo bug que tivemos com SiteDetailsModal (v-if + defineAsyncComponent monta o componente já com isOpen=true).',
+    ],
+  },
+  {
+    version: '1.4.9.11',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [
+      'PortTrafficModal abre instantâneo: Chart.js (430 KB) agora é chunk dinâmico — só baixa quando o gráfico vai renderizar pela primeira vez',
+      'AlarmConfigModal e PortTrafficModal viraram defineAsyncComponent — bundle do SiteDetailsModal caiu de 175 KB para 135 KB',
+      'Computeds duplicados de "última atividade" unificados em um — antes iteravam o histórico 2x a cada acesso reativo',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.9.10',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [
+      'Pin de device offline agora é amarelo (atenção) em vez de cinza — atende o pedido original. Cinza foi removido da paleta porque era pouco visível em mapas claros e não comunicava urgência.',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.9.9',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [],
+    fixes: [
+      'Backend: hosts_status promove availability=2→1 quando uptime via SNMP > 0. Resolve caso onde Zabbix marca o host como offline (ICMP/agent falham) mas o device responde via SNMP. Mapa e modal agora usam a mesma fonte de verdade.',
+    ],
+  },
+  {
+    version: '1.4.9.8',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [],
+    fixes: [
+      'Pin ficava cinza para devices online quando o Zabbix retornava availability inconclusiva (unknown). Agora unknown é presumido online (verde) — só fica cinza quando o Zabbix confirma offline (avail=2). Resolve divergência entre modal (mostrava ONLINE) e mapa (pin cinza).',
+    ],
+  },
+  {
+    version: '1.4.9.7',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [
+      'Pin do mapa reflete agregado do site: device offline com pelo menos um irmão online vira amarelo (atenção). Site totalmente offline mantém cinza.',
+    ],
+    improvements: [],
+    fixes: [],
+  },
+  {
+    version: '1.4.9.6',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [
+      'PortTrafficModal: indicador "Última atividade: há X tempo" no header (verde se recente, vermelho se >5 min) — facilita identificar quando um incidente aconteceu',
+    ],
+    improvements: [
+      'Tráfego e óptico desacoplados: porta offline com timeout no tráfego ainda mostra histórico óptico (RX/TX) para diagnosticar quando a luz caiu',
+      'Timeout de 20s no fetch de tráfego — sai do estado loading com mensagem clara em vez de ficar travado',
+      'Empty state quando o histórico está vazio (sugere tentar período maior)',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.9.5',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [
+      'PortTrafficModal abre instantâneo: decimação client-side limita Chart.js a 800 pontos (era até 2152) preservando forma do gráfico',
+      'Dedup de fetch óptico: watch(props.isOpen) e watch(opticalChartCanvas) compartilham a mesma promise — uma única requisição',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.9.4',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [],
+    fixes: [
+      'Gráfico óptico no PortTrafficModal não renderizava: canvas ficava indisponível na 1ª tentativa por delay de Transition+Teleport. Helper _waitForCanvas espera até 30 frames (≈500ms)',
+      'Cache de dados ópticos: se busca completa antes do canvas montar, o watcher re-renderiza sem nova requisição',
+      'Mesmo padrão aplicado ao gráfico de tráfego (substituiu setTimeout 200ms)',
+    ],
+  },
+  {
+    version: '1.4.9.3',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [],
+    fixes: [
+      'Mapa Mapbox era inicializado 2x em paralelo (watcher do provider + onMounted) — overlays não apareciam por race condition. Watcher agora ignora a primeira inicialização',
+      'renderOverlays usa listeners defensivos (load + idle + styledata) — cobre caso em que o evento load já foi emitido antes do listener ser registrado',
+    ],
+  },
+  {
+    version: '1.4.9.2',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [],
+    fixes: [
+      'Mapa carregava sem markers nem cabos: guard isMapReady evita que o polling do Zabbix dispare addSource/addLayer no Mapbox antes do evento load (exception silenciosa que deixava o mapa em branco)',
+    ],
+  },
+  {
+    version: '1.4.9.1',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [],
+    fixes: [
+      'Modais (Site, Cabo, Tooltip Óptico, Notificação) abriam vazios após o lazy-load — watchers agora rodam com immediate:true',
+      'Mapa carregava em branco e exigia F5 — substituído setTimeout(500ms) pelo evento load do Mapbox (determinístico independente da latência)',
+    ],
+  },
+  {
+    version: '1.4.9.0',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [
+      'Endpoint agregado /maps_view/api/backbone/init/: 6 requests do mapa viraram 1',
+      'Endpoint batch /api/v1/devices/metrics-batch/?ids=...: métricas de N devices em 1 chamada',
+    ],
+    improvements: [
+      'Mapa /monitoring/backbone/map carrega ~3x mais rápido — inventário, system-config e metadados disparados em paralelo',
+      'Bundle inicial reduzido em ~500 kB: SiteDetailsModal, FiberCableDetailModal, MapInventoryPanel viraram chunks lazy',
+      'Modais carregam só ao primeiro abrir; tabs do modal de cabo (Óptico/Tráfego/Alarmes/Histórico) montam só quando ativadas',
+      'WebSocket /ws/dashboard/status/ singleton: 1 conexão compartilhada em vez de uma por modal aberto',
+      'Polling Zabbix (10s) agora redesenha o mapa só quando algum status realmente muda',
+      'SiteDetailsModal filtra devices server-side (?site=ID) em vez de baixar todos',
+    ],
+    fixes: [],
+  },
+  {
     version: '1.4.8.5',
     date: '08 Abr 2026',
-    latest: true,
+    latest: false,
     features: [
       'Botão "Ver Detalhes do Cabo" abre diretamente o modal completo com abas (Nível Óptico, Tráfego, Alarmes, Histórico)',
     ],

@@ -213,6 +213,7 @@ def process_host_status(
 
     # Fetch uptime, CPU and Memory values from Zabbix if item keys are configured
     uptime_value = None
+    uptime_seconds = None  # Raw value for status promotion (avail=2 + uptime>0 → online)
     cpu_value = None
     memory_value = None
     
@@ -244,11 +245,12 @@ def process_host_status(
                 
                 if key == device.uptime_item_key and lastvalue:
                     try:
-                        seconds = int(lastvalue)
+                        seconds = int(float(lastvalue))
+                        uptime_seconds = seconds
                         days = seconds // 86400
                         hours = (seconds % 86400) // 3600
                         minutes = (seconds % 3600) // 60
-                        
+
                         parts = []
                         if days > 0:
                             parts.append(f"{days}d")
@@ -256,7 +258,7 @@ def process_host_status(
                             parts.append(f"{hours}h")
                         if minutes > 0:
                             parts.append(f"{minutes}m")
-                        
+
                         uptime_value = " ".join(parts) if parts else "< 1m"
                     except (ValueError, TypeError):
                         uptime_value = lastvalue
@@ -307,6 +309,19 @@ def process_host_status(
         if not device_type and device_groups:
             device_type = device_groups[0].name
 
+    # Promoção de status: Zabbix marca como Unavailable (avail=2) quando o agent
+    # ou ICMP falha, mas o device pode estar respondendo via SNMP. Se o uptime
+    # via SNMP é > 0, o device está claramente vivo — promove para Available.
+    # Sem isso, o mapa pinta o pin de cinza enquanto o modal mostra "ONLINE"
+    # (que usa uptime/metrics como fonte alternativa).
+    promoted_from_uptime = False
+    if availability == "2" and uptime_seconds and uptime_seconds > 0:
+        availability = "1"
+        promoted_from_uptime = True
+        # Recalcular as classes/cores agora que está available
+        status_class, color = HostStatusProcessor.get_status_class_and_color("1")
+        interface_data["available"] = "1"
+
     return {
         "device_id": device.pk,
         "hostid": host_key,
@@ -319,6 +334,7 @@ def process_host_status(
             availability,
             "Unknown",
         ),
+        "available_promoted": promoted_from_uptime,
         "ip": interface_data["ip"],
         "primary_ip": interface_data["ip"],
         "uptime_value": uptime_value,

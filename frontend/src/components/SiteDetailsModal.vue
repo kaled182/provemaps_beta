@@ -376,7 +376,7 @@ import { useApi } from '@/composables/useApi'
 import { useNotification } from '@/composables/useNotification'
 import { useEscapeKey } from '@/composables/useEscapeKey'
 import { useUiStore } from '@/stores/ui'
-import { useWebSocket } from '@/composables/useWebSocket'
+import { useSharedWebSocket } from '@/composables/useSharedWebSocket'
 import { useWebRTC } from '@/composables/useWebRTC'
 import DeviceDetailsModal from './DeviceDetailsModal.vue'
 import CameraPlayer from '@/components/Video/CameraPlayer.vue'
@@ -920,17 +920,17 @@ const loadDevices = async () => {
       devices.value = []
       return
     }
-    
-    // Buscar todos os devices e filtrar pelo site ID
-    const response = await get('/api/v1/devices/')
-    
+
+    // Filtro server-side (DeviceViewSet aceita ?site=ID) — evita baixar
+    // todos os devices e filtrar no client.
+    const response = await get(`/api/v1/devices/?site=${encodeURIComponent(siteId)}&page_size=200`)
+
     console.log('[SiteDetailsModal] Resposta da API devices:', {
       count: response.count,
       totalResults: response.results?.length
     })
-    
-    // Filtrar devices pelo site ID
-    const devicesData = response.results?.filter(device => device.site === siteId) || []
+
+    const devicesData = response.results || []
     
     console.log('[SiteDetailsModal] Devices encontrados para este site:', devicesData.length)
     console.log('[SiteDetailsModal] Exemplo de device:', devicesData[0])
@@ -951,57 +951,50 @@ const loadDevices = async () => {
     
     console.log('[SiteDetailsModal] Dispositivos mapeados:', devices.value)
 
-    // Fetch metrics for each device in parallel
+    // Métricas em batch: 1 request agrupado em vez de N requests + N viagens ao Zabbix.
+    // Endpoint: GET /api/v1/devices/metrics-batch/?ids=1,2,3
     try {
-      const metricPromises = devices.value.map(async (dev) => {
-        try {
-          const m = await get(`/api/v1/devices/${dev.id}/metrics/`)
-          dev.cpu = typeof m.cpu === 'number' ? Math.round(m.cpu) : (dev.cpu || 0)
-          dev.memory = typeof m.memory === 'number' ? Math.round(m.memory) : (dev.memory || 0)
-          dev.uptime_human = m.uptime_human || null
-          // Map uptime in seconds for textual display
-          if (typeof m.uptime_seconds === 'number' && m.uptime_seconds > 0) {
-            dev.uptime = m.uptime_seconds
-          }
-          // Determinar status com base em uptime e thresholds
-          const hasUptime = typeof m.uptime_seconds === 'number' && m.uptime_seconds > 0
-          // Fallback: se não há uptime mas há métricas de CPU/Memória, considerar dispositivo ativo
-          const hasMetrics = (
-            typeof m.cpu === 'number' && m.cpu > 0
-          ) || (
-            typeof m.memory === 'number' && m.memory > 0
-          )
-          const cpuCritical = dev.cpu >= 90
-          const cpuWarning = dev.cpu >= 70 && dev.cpu < 90
-          const memCritical = dev.memory >= 90
-          const memWarning = dev.memory >= 70 && dev.memory < 90
-          
-          if (!hasUptime && hasMetrics) {
-            // Sem uptime, mas com métricas → status baseado em thresholds
-            if (cpuCritical || memCritical) {
-              dev.status = 'critical'
-            } else if (cpuWarning || memWarning) {
-              dev.status = 'warning'
-            } else {
-              dev.status = 'online'
-            }
-          } else if (!hasUptime) {
-            dev.status = 'offline'
-          } else if (cpuCritical || memCritical) {
-            dev.status = 'critical'
-          } else if (cpuWarning || memWarning) {
-            dev.status = 'warning'
-          } else {
-            dev.status = 'online'
-          }
-          return dev
-        } catch (err) {
-          console.warn('[SiteDetailsModal] Metrics fetch failed for device', dev.id, err)
+      const ids = devices.value.map(d => d.id).filter(Boolean)
+      if (ids.length === 0) return
+
+      const batch = await get(`/api/v1/devices/metrics-batch/?ids=${ids.join(',')}`)
+      const resultsMap = batch?.results || {}
+
+      devices.value.forEach((dev) => {
+        const m = resultsMap[String(dev.id)]
+        if (!m) {
           dev.status = 'offline'
-          return dev
+          return
+        }
+        dev.cpu = typeof m.cpu === 'number' ? Math.round(m.cpu) : (dev.cpu || 0)
+        dev.memory = typeof m.memory === 'number' ? Math.round(m.memory) : (dev.memory || 0)
+        dev.uptime_human = m.uptime_human || null
+        if (typeof m.uptime_seconds === 'number' && m.uptime_seconds > 0) {
+          dev.uptime = m.uptime_seconds
+        }
+
+        const hasUptime = typeof m.uptime_seconds === 'number' && m.uptime_seconds > 0
+        const hasMetrics = (typeof m.cpu === 'number' && m.cpu > 0) ||
+                           (typeof m.memory === 'number' && m.memory > 0)
+        const cpuCritical = dev.cpu >= 90
+        const cpuWarning = dev.cpu >= 70 && dev.cpu < 90
+        const memCritical = dev.memory >= 90
+        const memWarning = dev.memory >= 70 && dev.memory < 90
+
+        if (!hasUptime && hasMetrics) {
+          if (cpuCritical || memCritical) dev.status = 'critical'
+          else if (cpuWarning || memWarning) dev.status = 'warning'
+          else dev.status = 'online'
+        } else if (!hasUptime) {
+          dev.status = 'offline'
+        } else if (cpuCritical || memCritical) {
+          dev.status = 'critical'
+        } else if (cpuWarning || memWarning) {
+          dev.status = 'warning'
+        } else {
+          dev.status = 'online'
         }
       })
-      await Promise.allSettled(metricPromises)
     } catch (err) {
       console.warn('[SiteDetailsModal] Metrics batch failed:', err)
     }
@@ -1457,26 +1450,29 @@ const saveDevice = async () => {
   }
 }
 
+// `immediate: true` é crítico: com lazy v-if no parent, o componente é
+// montado já com isOpen=true — sem o flag o watcher nunca dispararia
+// (não existe transição false→true a observar) e o modal abriria vazio.
 watch(() => props.isOpen, (newVal) => {
   if (newVal && props.site) {
     loadDevices()
     loadCameraCount()
   } else if (!newVal) {
-    // Limpar conexões quando fechar
     closeCameraModal()
     closeMosaicModal()
   }
-})
+}, { immediate: true })
 
-// WebSocket setup for real-time updates
+// WebSocket setup for real-time updates — usa singleton compartilhado por URL.
+// Antes: cada abertura do modal criava uma nova conexão WS (e o watch logo abaixo
+// duplicava ainda outra). Agora 1 conexão é reutilizada entre todos os consumidores.
 const wsUrl = computed(() => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = window.location.host
   return `${protocol}//${host}/ws/dashboard/status/`
 })
 
-const { connected: wsConnected, lastMessage } = useWebSocket(wsUrl.value, {
-  autoConnect: false,
+const { connected: wsConnected, lastMessage } = useSharedWebSocket(wsUrl.value, {
   reconnectDelay: 5000,
   maxReconnectAttempts: 10
 })
@@ -1529,17 +1525,8 @@ watch(lastMessage, (message) => {
   }
 })
 
-// Connect/disconnect WebSocket based on modal visibility
-watch(() => props.isOpen, (isOpen) => {
-  if (isOpen && wsUrl.value) {
-    // Connect when modal opens
-    const ws = useWebSocket(wsUrl.value, {
-      reconnectDelay: 5000,
-      maxReconnectAttempts: 10
-    })
-    // Store reference for cleanup if needed
-  }
-})
+// (Removido) Watcher que criava nova conexão WS a cada abertura do modal —
+// o singleton useSharedWebSocket já gerencia ciclo de vida e refcount.
 
 // CRÍTICO: Aguardar template renderizar antes de conectar câmeras do mosaico
 // WATCHER REMOVIDO: CameraPlayer se gerencia sozinho, não precisa de conexão manual

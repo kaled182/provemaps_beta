@@ -2,10 +2,17 @@ from django.urls import path
 from django.views.generic import RedirectView
 from . import views
 from . import mapbox_proxy
+from . import views_bootstrap
 
 app_name = 'maps_view'
 
 urlpatterns = [
+    # Endpoint agregado: tudo que o /monitoring/backbone/map precisa em 1 chamada
+    path(
+        'api/backbone/init/',
+        views_bootstrap.backbone_init_api,
+        name='backbone_init_api'
+    ),
     path(
         'dashboard/',
         RedirectView.as_view(url='/', permanent=True),

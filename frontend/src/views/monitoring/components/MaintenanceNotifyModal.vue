@@ -46,12 +46,15 @@
         <template v-else>
           <!-- Message -->
           <div class="nm-section">
-            <label class="nm-label">Mensagem</label>
+            <label class="nm-label">
+              Mensagem
+              <span class="nm-label-hint">(opcional — em branco envia "ENLACE OFF.")</span>
+            </label>
             <textarea
               v-model="message"
               class="nm-textarea"
               rows="3"
-              placeholder="Descreva o motivo da manutenção…"
+              placeholder='Deixe em branco para usar "ENLACE OFF." ou descreva o motivo…'
             ></textarea>
           </div>
 
@@ -209,6 +212,7 @@ const sending = ref(false)
 const smtpEnabled = ref(false)
 const users = ref([])
 const responsibles = ref([])
+const contacts = ref([])
 const message = ref('')
 const activeTab = ref('users')
 
@@ -236,18 +240,26 @@ const primaryResponsibleIds = computed(() => {
 const tabs = computed(() => [
   { key: 'users', label: 'Usuários do sistema', count: users.value.length },
   { key: 'responsibles', label: 'Responsáveis', count: responsibles.value.length },
+  { key: 'contacts', label: 'Contatos da agenda', count: contacts.value.length },
 ])
 
-const currentList = computed(() =>
-  activeTab.value === 'users' ? users.value : responsibles.value
-)
+const currentList = computed(() => {
+  if (activeTab.value === 'users') return users.value
+  if (activeTab.value === 'responsibles') return responsibles.value
+  return contacts.value
+})
 
-// Responsibles auto-detected from cables, shown first in each tab
+// Responsibles auto-detected from cables, shown first in cada aba.
+// Contatos da agenda não têm vínculo direto com o cabo, então a lista
+// "primary" fica vazia na aba contacts (todos aparecem como "secundários").
 const primaryInCurrentTab = computed(() => {
   if (activeTab.value === 'users') {
     return users.value.filter(u => primaryUserIds.value.has(u.id))
   }
-  return responsibles.value.filter(r => primaryResponsibleIds.value.has(r.id))
+  if (activeTab.value === 'responsibles') {
+    return responsibles.value.filter(r => primaryResponsibleIds.value.has(r.id))
+  }
+  return [] // contacts
 })
 
 // All other recipients (not primary) for the current tab
@@ -287,9 +299,9 @@ const totalSelectedCount = computed(() => {
   return count
 })
 
-const canSend = computed(() =>
-  message.value.trim().length > 0 && totalSelectedCount.value > 0
-)
+// Mensagem é opcional — se vazia, o backend usa o default "ENLACE OFF."
+// e ainda inclui Cabos afetados com Origem/Destino. Só exige destinatário.
+const canSend = computed(() => totalSelectedCount.value > 0)
 
 function channelLabel(ch) {
   return { email: 'E-mail', whatsapp: 'WhatsApp', telegram: 'Telegram' }[ch] || ch
@@ -308,6 +320,7 @@ async function loadRecipients() {
     smtpEnabled.value = data.smtp_enabled
     users.value = data.users || []
     responsibles.value = data.responsibles || []
+    contacts.value = data.contacts || []
 
     // Build initial selections
     const next = new Map()
@@ -381,6 +394,8 @@ async function send() {
 }
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────
+// `immediate: true` cobre o caso em que o componente é montado já com
+// visible=true (parent usa lazy v-if → não há transição false→true).
 watch(() => props.visible, (val) => {
   if (val) {
     message.value = ''
@@ -388,7 +403,7 @@ watch(() => props.visible, (val) => {
     selections.value = new Map()
     loadRecipients()
   }
-})
+}, { immediate: true })
 </script>
 
 <style scoped>
@@ -496,6 +511,14 @@ watch(() => props.visible, (val) => {
   letter-spacing: 0.05em;
   color: rgba(255, 255, 255, 0.4);
   margin-bottom: 6px;
+}
+.nm-label-hint {
+  font-size: 0.68rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: rgba(255, 255, 255, 0.35);
+  margin-left: 6px;
 }
 .nm-textarea {
   width: 100%;

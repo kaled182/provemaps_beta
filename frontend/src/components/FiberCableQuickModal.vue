@@ -241,7 +241,9 @@ const stopDrag = () => {
   document.removeEventListener('touchend', stopDrag)
 }
 
-watch(() => props.show, (val) => { if (val) initPosition() })
+// `immediate: true` cobre o caso em que o componente é montado já com show=true
+// (parent usa lazy v-if → não há transição false→true para observar)
+watch(() => props.show, (val) => { if (val) initPosition() }, { immediate: true })
 onUnmounted(stopDrag)
 
 // ── Cable data ───────────────────────────────────────────────────────────────

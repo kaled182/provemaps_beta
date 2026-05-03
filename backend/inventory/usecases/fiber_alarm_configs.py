@@ -421,3 +421,162 @@ def create_alarm_config(
 
     config.save()
     return alarm_config_to_payload(config)
+
+
+# ── Envio de teste manual ──────────────────────────────────────────────────
+
+def _resolve_recipients(config: FiberCableAlarmConfig) -> list[dict[str, str]]:
+    """Resolve a lista de destinatários ({name, phone, email}) para uma config.
+
+    Encapsula a regra por target_type — DEPARTMENT_GROUP itera contatos do
+    grupo, SYSTEM_USER usa UserProfile, DEPARTMENT itera UserProfiles do
+    departamento, CONTACT é um único.
+    """
+    out: list[dict[str, str]] = []
+    target_type = config.target_type
+
+    if target_type == FiberCableAlarmConfig.TARGET_DEPARTMENT_GROUP and config.contact_group_id:
+        group = config.contact_group
+        if group is None:
+            return out
+        for c in group.contacts.filter(is_active=True):
+            phone = c.formatted_phone if c.phone else ""
+            out.append({"name": c.name or c.phone or "Contato", "phone": phone, "email": c.email or ""})
+        return out
+
+    if target_type == FiberCableAlarmConfig.TARGET_CONTACT and config.contact_id:
+        c = config.contact
+        if c is None:
+            return out
+        phone = c.formatted_phone if c.phone else ""
+        return [{"name": c.name or c.phone or "Contato", "phone": phone, "email": c.email or ""}]
+
+    if target_type == FiberCableAlarmConfig.TARGET_SYSTEM_USER and config.system_user_id:
+        u = config.system_user
+        if u is None:
+            return out
+        profile = getattr(u, "profile", None)
+        phone = (getattr(profile, "phone_number", "") or "").strip()
+        return [{
+            "name": u.get_full_name() or u.username or u.email or f"User {u.pk}",
+            "phone": phone,
+            "email": (u.email or "").strip(),
+        }]
+
+    if target_type == FiberCableAlarmConfig.TARGET_DEPARTMENT and config.department_id:
+        dept = config.department
+        if dept is None or not hasattr(dept, "user_profiles"):
+            return out
+        for p in dept.user_profiles.select_related("user").all():
+            phone = (p.phone_number or "").strip()
+            user = p.user
+            out.append({
+                "name": (user.get_full_name() if user else "") or (user.username if user else "") or "Usuário",
+                "phone": phone,
+                "email": (user.email if user else "").strip(),
+            })
+        return out
+
+    return out
+
+
+def _format_test_message(config: FiberCableAlarmConfig) -> str:
+    """Compõe a mensagem de teste — texto pronto para WhatsApp/SMS."""
+    cable_name = config.fiber_cable.name or f"Cabo #{config.fiber_cable_id}"
+    alert_label = {
+        FiberCableAlarmConfig.ALERT_BREAK: "Rompimento",
+        FiberCableAlarmConfig.ALERT_ATTENUATION: "Atenuação",
+        FiberCableAlarmConfig.ALERT_NORMALIZATION: "Normalização",
+    }.get(config.alert_type, config.alert_type or "—")
+
+    trigger_label = {
+        FiberCableAlarmConfig.TRIGGER_WARNING: "Atenção",
+        FiberCableAlarmConfig.TRIGGER_CRITICAL: "Crítico",
+    }.get(config.trigger_level, config.trigger_level or "—")
+
+    return (
+        f"🧪 *[TESTE] ProveMaps — Configuração de Alarme*\n\n"
+        f"Cabo: *{cable_name}*\n"
+        f"Tipo de evento: *{alert_label}*\n"
+        f"Nível de disparo: *{trigger_label}*\n"
+        f"Persistência mínima: *{config.persist_minutes} min*\n\n"
+        f"Esta é uma mensagem de _teste manual_ para validar a configuração "
+        f"de alarme. *Nenhum incidente real ocorreu.*"
+    )
+
+
+def send_test_alarm(config: FiberCableAlarmConfig) -> dict[str, object]:
+    """Envia uma mensagem de TESTE para os destinatários da config.
+
+    Retorna um dict resumindo o envio:
+        {
+          "ok": bool,
+          "sent": int,
+          "total": int,
+          "results": [{channel, recipient, phone, success, error?}],
+          "message": str (texto enviado, útil pra confirmar pro usuário)
+        }
+    """
+    # Imports locais — evita dependência circular durante app loading
+    from inventory.api.maintenance_alert import (
+        _get_whatsapp_gateway,
+        _send_whatsapp,
+    )
+
+    channels = list(config.channels or [])
+    recipients = _resolve_recipients(config)
+    message = _format_test_message(config)
+
+    if not recipients:
+        return {
+            "ok": False,
+            "sent": 0,
+            "total": 0,
+            "results": [],
+            "message": message,
+            "error": "Nenhum destinatário com dados de contato encontrado",
+        }
+
+    results: list[dict[str, object]] = []
+
+    if "whatsapp" in channels:
+        gw, service_url = _get_whatsapp_gateway()
+        if not gw:
+            results.append({
+                "channel": "whatsapp",
+                "recipient": "—",
+                "success": False,
+                "error": "Gateway WhatsApp não configurado/habilitado",
+            })
+        else:
+            for r in recipients:
+                phone = r.get("phone", "")
+                if not phone:
+                    results.append({
+                        "channel": "whatsapp",
+                        "recipient": r.get("name") or "—",
+                        "phone": "",
+                        "success": False,
+                        "error": "Sem telefone cadastrado",
+                    })
+                    continue
+                ok = _send_whatsapp(service_url, gw.id, phone, message)
+                results.append({
+                    "channel": "whatsapp",
+                    "recipient": r.get("name") or phone,
+                    "phone": phone,
+                    "success": bool(ok),
+                    **({} if ok else {"error": "Falha no envio (ver logs)"}),
+                })
+
+    # Outros canais (email/sms/telegram) podem ser adicionados aqui em
+    # iterações futuras — Fase A focará no fluxo automático.
+
+    sent_ok = sum(1 for r in results if r.get("success"))
+    return {
+        "ok": sent_ok > 0,
+        "sent": sent_ok,
+        "total": len(results),
+        "results": results,
+        "message": message,
+    }

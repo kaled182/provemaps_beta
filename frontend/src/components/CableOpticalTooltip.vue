@@ -257,6 +257,8 @@ const loadOpticalData = async () => {
   }
 }
 
+// `immediate: true` cobre o caso em que o componente é montado já com
+// visible=true (parent usa lazy v-if → não há transição false→true).
 watch(
   () => [props.visible, props.cableData?.id],
   ([vis]) => {
@@ -267,7 +269,8 @@ watch(
       opticalData.value = null
       error.value = null
     }
-  }
+  },
+  { immediate: true }
 )
 
 // ── Formatação ───────────────────────────────────────────────────────────────
