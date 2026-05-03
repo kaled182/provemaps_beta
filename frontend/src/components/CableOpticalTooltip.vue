@@ -60,13 +60,13 @@
             <div v-if="opticalData.origin" class="levels">
               <div class="level-row">
                 <span class="level-label">TX (Transmissão):</span>
-                <span class="level-value" :class="getLevelClass(opticalData.origin.tx)">
+                <span class="level-value" :class="getLevelClass(opticalData.origin.tx, 'origin')">
                   {{ formatLevel(opticalData.origin.tx) }}
                 </span>
               </div>
               <div class="level-row">
                 <span class="level-label">RX (Recepção):</span>
-                <span class="level-value" :class="getLevelClass(opticalData.origin.rx)">
+                <span class="level-value" :class="getLevelClass(opticalData.origin.rx, 'origin')">
                   {{ formatLevel(opticalData.origin.rx) }}
                 </span>
               </div>
@@ -83,13 +83,13 @@
             <div v-if="opticalData.destination" class="levels">
               <div class="level-row">
                 <span class="level-label">TX (Transmissão):</span>
-                <span class="level-value" :class="getLevelClass(opticalData.destination.tx)">
+                <span class="level-value" :class="getLevelClass(opticalData.destination.tx, 'destination')">
                   {{ formatLevel(opticalData.destination.tx) }}
                 </span>
               </div>
               <div class="level-row">
                 <span class="level-label">RX (Recepção):</span>
-                <span class="level-value" :class="getLevelClass(opticalData.destination.rx)">
+                <span class="level-value" :class="getLevelClass(opticalData.destination.rx, 'destination')">
                   {{ formatLevel(opticalData.destination.rx) }}
                 </span>
               </div>
@@ -282,6 +282,11 @@ const buildInterfaceData = (data) => {
     tx: normalizeNumber(data.tx_dbm),
     rx: normalizeNumber(data.rx_dbm),
     timestamp: data.last_check || null,
+    // Thresholds vindos do backend — usados pelo getLevelClass para classificar
+    // a cor (warning/critical) de forma consistente com o status persistido.
+    warning_threshold: normalizeNumber(data.warning_threshold),
+    critical_threshold: normalizeNumber(data.critical_threshold),
+    status: data.status || null,
   }
 }
 
@@ -341,13 +346,31 @@ const formatValue = (value, unit = 'dBm') => {
 }
 const formatLevel = (v) => formatValue(v, 'dBm')
 
-const getLevelClass = (value) => {
+// Defaults usados quando o backend não forneceu thresholds para a porta
+// (compatibilidade com cabos antigos sem optical_summary completo).
+const DEFAULT_WARN_TH = -24
+const DEFAULT_CRIT_TH = -27
+
+const getLevelClass = (value, side = 'origin') => {
   const n = normalizeNumber(value)
   if (n === null) return 'level-unknown'
+
+  // Thresholds vindos do backend (calculados por distância ou config global).
+  // Ficam em opticalData.{origin|destination}.warning_threshold/critical_threshold.
+  const block = opticalData.value?.[side]
+  const warnTh = Number.isFinite(Number(block?.warning_threshold))
+    ? Number(block.warning_threshold)
+    : DEFAULT_WARN_TH
+  const critTh = Number.isFinite(Number(block?.critical_threshold))
+    ? Number(block.critical_threshold)
+    : DEFAULT_CRIT_TH
+
+  if (n <= critTh) return 'level-critical'
+  if (n <= warnTh) return 'level-warning'
+  // Bonus visual: ≥ -10 dBm é "excellent" (verde mais forte). Não vem do
+  // backend porque não afeta o status — só o destaque de UI.
   if (n >= -10) return 'level-excellent'
-  if (n >= -20) return 'level-good'
-  if (n >= -28) return 'level-warning'
-  return 'level-critical'
+  return 'level-good'
 }
 
 const formatTimestamp = (ts) => {

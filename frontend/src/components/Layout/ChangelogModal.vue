@@ -175,9 +175,19 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
-    version: '1.4.13.2',
+    version: '1.4.13.3',
     date: '03 Mai 2026',
     latest: true,
+    features: [],
+    improvements: [
+      'Cores de RX/TX no popup óptico agora usam os MESMOS thresholds do backend (warning_threshold/critical_threshold vindos do payload). Antes o popup hardcodeava -20/-28 e o cabo usava -24/-27, causando inconsistências (popup amarelo + cabo verde). Tudo unificado.',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.13.2',
+    date: '03 Mai 2026',
+    latest: false,
     features: [],
     improvements: [],
     fixes: [

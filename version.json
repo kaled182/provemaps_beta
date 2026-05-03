@@ -1,6 +1,6 @@
 {
-  "version": "1.4.13.2",
+  "version": "1.4.13.3",
   "date": "2026-05-03",
   "critical": false,
-  "changelog": "Fix: botão 'Atualizar agora' do popup óptico retornava HTTP 405. Causa: o handler refresh_optical chamava a view cached_optical_status (que tem @require_GET), bloqueando o POST original. Extraído _build_cached_optical_payload (puro) e ambos os endpoints agora reusam ele."
+  "changelog": "Cor do nível óptico no popup agora usa os MESMOS thresholds que o backend (warning_threshold/critical_threshold do payload, vindos de OPTICAL_RX_*_THRESHOLD em /setup/config). Antes o popup hardcodeava -20/-28 e o cabo usava -24/-27 — gerando inconsistências (popup amarelo + cabo verde). Para alterar a sensibilidade, ajustar OPTICAL_RX_WARNING_THRESHOLD em Setup > Config."
 }
