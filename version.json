@@ -1,6 +1,6 @@
 {
-  "version": "1.4.12.0",
+  "version": "1.4.13.0",
   "date": "2026-05-03",
   "critical": false,
-  "changelog": "Histórico de Avisos no modal de alarmes (Fase C): nova seção colapsável mostra os últimos 50 envios — automáticos do dispatcher (FiberEvent → notificação) e manuais (botão Enviar Teste). Cada item mostra timestamp, tipo, canal, destinatário, sucesso ou erro. Refresh automático após enviar teste."
+  "changelog": "Sistema de alarmes evoluído: (1) email automático no dispatcher com HTML formatado; (2) snooze por config (botão Silenciar 1h/4h/24h/7d); (3) métricas Prometheus provemaps_alarm_notifications_total{channel,status,alert_type}; (4) retry com backoff exponencial (1,2,4,8,16 min) e limite de 5 tentativas — gateway temporariamente offline gera retry automático sem inundar logs."
 }

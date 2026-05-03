@@ -1705,6 +1705,30 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
 
         return Response({"results": results, "count": len(results), "limit": limit})
 
+    @action(detail=True, methods=["post"], url_path="alarms/(?P<alarm_id>[0-9]+)/snooze")
+    def alarm_snooze(self, request, pk=None, alarm_id=None):
+        """Silencia ou retoma notificações automáticas de uma config.
+
+        Body: { "hours": <float> } — N horas a silenciar.
+              { "hours": 0 } ou { "hours": null } — remove o snooze.
+        """
+        from inventory.models import FiberCableAlarmConfig
+
+        cable = self.get_object()
+        try:
+            config = FiberCableAlarmConfig.objects.get(pk=alarm_id, fiber_cable=cable)
+        except FiberCableAlarmConfig.DoesNotExist:
+            return Response({"error": "Configuração não encontrada"}, status=status.HTTP_404_NOT_FOUND)
+
+        hours_raw = request.data.get("hours") if isinstance(request.data, dict) else None
+        try:
+            hours = float(hours_raw) if hours_raw is not None else None
+        except (TypeError, ValueError):
+            return Response({"error": "hours deve ser numérico"}, status=status.HTTP_400_BAD_REQUEST)
+
+        result = fiber_alarm_configs.set_snooze(config, hours)
+        return Response(result)
+
     @action(detail=True, methods=["post"], url_path="alarms/(?P<alarm_id>[0-9]+)/test")
     def alarm_test(self, request, pk=None, alarm_id=None):
         """Envia uma mensagem de TESTE real para os destinatários da config.

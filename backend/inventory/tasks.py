@@ -606,11 +606,12 @@ def refresh_radius_search_cache(
 # ── Dispatcher de alarmes de fibra (Fase A) ─────────────────────────────────
 
 @shared_task(name="inventory.tasks.dispatch_fiber_alarms_task")
-def dispatch_fiber_alarms_task(window_minutes: int = 10) -> dict[str, Any]:
+def dispatch_fiber_alarms_task(window_minutes: int = 30) -> dict[str, Any]:
     """Lê FiberEvents recentes, faz match com FiberCableAlarmConfig e envia.
 
-    Agendado no Celery beat a cada 1 min — janela de 10 min cobre falhas
-    pontuais e aplica dedupe via FiberAlarmNotificationLog.
+    Agendado no Celery beat a cada 1 min — janela de 30 min cobre o pior
+    caso de retry com backoff exponencial (1+2+4+8+16 = 31 min).
+    Aplica dedupe + retry policy + snooze via FiberAlarmNotificationLog.
     """
     try:
         from inventory.usecases.fiber_alarm_configs import dispatch_pending_alarms

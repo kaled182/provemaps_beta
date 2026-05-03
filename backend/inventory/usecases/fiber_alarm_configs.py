@@ -322,6 +322,15 @@ def alarm_config_to_payload(config: FiberCableAlarmConfig) -> dict[str, object]:
 
     metadata = config.metadata or {}
 
+    snooze_until_iso = ""
+    snooze_active = False
+    if config.snooze_until:
+        try:
+            snooze_until_iso = timezone.localtime(config.snooze_until).isoformat()
+        except Exception:
+            snooze_until_iso = config.snooze_until.isoformat()
+        snooze_active = config.snooze_until > timezone.now()
+
     payload: dict[str, object] = {
         "id": config.pk,
         "fiber_cable_id": config.fiber_cable_id,
@@ -335,6 +344,8 @@ def alarm_config_to_payload(config: FiberCableAlarmConfig) -> dict[str, object]:
         "description": config.description or "",
         "target_snapshot": config.target_snapshot or {},
         "metadata": metadata,
+        "snooze_until": snooze_until_iso,
+        "snooze_active": snooze_active,
         "created_at": timezone.localtime(config.created_at).isoformat(),
         "updated_at": timezone.localtime(config.updated_at).isoformat(),
     }
@@ -519,6 +530,73 @@ def _format_event_endpoints_block(cable) -> str:
     return "\n".join(lines)
 
 
+def _format_event_email_subject(alert_type: str, cable_name: str) -> str:
+    prefix = {
+        FiberCableAlarmConfig.ALERT_BREAK: "[CABO OFFLINE]",
+        FiberCableAlarmConfig.ALERT_ATTENUATION: "[SINAL DEGRADADO]",
+        FiberCableAlarmConfig.ALERT_NORMALIZATION: "[NORMALIZADO]",
+    }.get(alert_type, "[ALERTA]")
+    return f"{prefix} {cable_name} — ProveMaps"
+
+
+def _format_event_email_body(config: FiberCableAlarmConfig, alert_type: str, event=None) -> str:
+    """HTML email body para notificação automática de evento de fibra."""
+    from inventory.api.maintenance_alert import _format_endpoint
+    cable = config.fiber_cable
+    cable_name = cable.name or f"Cabo #{cable.pk}"
+
+    headline_map = {
+        FiberCableAlarmConfig.ALERT_BREAK: ("⚠️ Cabo OFFLINE", "#ef4444",
+                                            "ENLACE OFF — possível rompimento ou queda de equipamento."),
+        FiberCableAlarmConfig.ALERT_ATTENUATION: ("⚠️ Sinal Degradado", "#f59e0b",
+                                                  "Atenuação detectada no sinal óptico."),
+        FiberCableAlarmConfig.ALERT_NORMALIZATION: ("✅ Cabo NORMALIZADO", "#10b981",
+                                                    "Serviço restabelecido — operação normal."),
+    }
+    headline, color, description = headline_map.get(
+        alert_type, ("⚠️ Alerta — ProveMaps", "#f59e0b", "Mudança de estado detectada.")
+    )
+
+    origin = _format_endpoint(cable.origin_port, getattr(cable, "site_a", None))
+    dest = _format_endpoint(cable.destination_port, getattr(cable, "site_b", None))
+    reason = (event.detected_reason if event and event.detected_reason else "")
+    timestamp = ""
+    if event:
+        try:
+            timestamp = timezone.localtime(event.timestamp).strftime("%d/%m/%Y %H:%M:%S")
+        except Exception:
+            pass
+
+    return f"""
+    <div style='font-family:Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:24px;max-width:600px'>
+      <div style='background:#1e2139;border:1px solid {color}55;border-radius:12px;padding:20px;margin-bottom:20px'>
+        <h2 style='color:{color};margin:0 0 12px'>{headline}</h2>
+        <p style='margin:0;color:#cbd5e1;line-height:1.6'>{description}</p>
+      </div>
+      <h3 style='color:{color};margin:16px 0 8px'>Cabo afetado</h3>
+      <table style='width:100%;border-collapse:collapse;background:#1e2139;border-radius:6px;overflow:hidden'>
+        <tr>
+          <td style='padding:8px 12px;color:#94a3b8;font-size:12px;width:90px'>Nome</td>
+          <td style='padding:8px 12px;color:#e2e8f0;font-weight:600'>{cable_name}</td>
+        </tr>
+        <tr>
+          <td style='padding:8px 12px;color:#94a3b8;font-size:12px;border-top:1px solid #2d3748'>Origem</td>
+          <td style='padding:8px 12px;color:#e2e8f0;border-top:1px solid #2d3748'>{origin}</td>
+        </tr>
+        <tr>
+          <td style='padding:8px 12px;color:#94a3b8;font-size:12px;border-top:1px solid #2d3748'>Destino</td>
+          <td style='padding:8px 12px;color:#e2e8f0;border-top:1px solid #2d3748'>{dest}</td>
+        </tr>
+        {f"<tr><td style='padding:8px 12px;color:#94a3b8;font-size:12px;border-top:1px solid #2d3748'>Detectado em</td><td style='padding:8px 12px;color:#e2e8f0;border-top:1px solid #2d3748'>{timestamp}</td></tr>" if timestamp else ""}
+        {f"<tr><td style='padding:8px 12px;color:#94a3b8;font-size:12px;border-top:1px solid #2d3748'>Motivo</td><td style='padding:8px 12px;color:#e2e8f0;border-top:1px solid #2d3748'>{reason}</td></tr>" if reason else ""}
+      </table>
+      <p style='margin-top:20px;font-size:12px;color:#475569'>
+        Notificação automática enviada pelo sistema ProveMaps.<br>
+        Não responda a este e-mail.
+      </p>
+    </div>"""
+
+
 def _format_event_message(config: FiberCableAlarmConfig, alert_type: str, event=None) -> str:
     """Mensagem REAL (sem prefixo TESTE) para um evento detectado pelo dispatcher.
 
@@ -561,18 +639,26 @@ def _dispatch_message(
     config: FiberCableAlarmConfig,
     message: str,
     *,
+    email_subject: str = "",
+    email_html: str = "",
     event=None,
     alert_type: str = "",
     is_test: bool = False,
     log: bool = True,
 ) -> list[dict[str, object]]:
-    """Despacha `message` para todos os destinatários da config nos canais habilitados.
+    """Despacha mensagem para todos os destinatários da config nos canais habilitados.
 
-    Núcleo compartilhado entre `send_test_alarm` (manual) e `dispatch_pending_alarms`
-    (automático). Quando `log=True`, persiste cada tentativa em FiberAlarmNotificationLog
-    para auditoria e dedupe.
+    `message` é o texto plano (WhatsApp). Para email, `email_subject` e
+    `email_html` são opcionais — se vazios, o email é skipado mesmo que o
+    canal esteja habilitado.
+
+    Quando `log=True`, persiste cada tentativa em FiberAlarmNotificationLog
+    para auditoria, dedupe e métricas.
     """
-    from inventory.api.maintenance_alert import _get_whatsapp_gateway, _send_whatsapp
+    from inventory.api.maintenance_alert import (
+        _get_whatsapp_gateway, _send_whatsapp,
+        _get_smtp_config, _send_email,
+    )
     from inventory.models import FiberAlarmNotificationLog
 
     channels = list(config.channels or [])
@@ -601,6 +687,8 @@ def _dispatch_message(
         except Exception as exc:  # pragma: no cover - logging falha não deve quebrar envio
             import logging as _logging
             _logging.getLogger(__name__).warning("Failed to log notification: %s", exc)
+        # Métricas Prometheus (best-effort) — registrado independente de log no DB
+        _record_notification_metric(channel, success, alert_type or config.alert_type or "")
 
     if "whatsapp" in channels:
         gw, service_url = _get_whatsapp_gateway()
@@ -628,11 +716,85 @@ def _dispatch_message(
                 })
                 _log("whatsapp", r, bool(ok), err)
 
+    if "email" in channels and email_subject and email_html:
+        smtp = _get_smtp_config()
+        if not smtp:
+            err = "SMTP não configurado/habilitado"
+            results.append({"channel": "email", "recipient": "—", "success": False, "error": err})
+            _log("email", {"name": "—"}, False, err)
+        else:
+            for r in recipients:
+                email_addr = r.get("email", "")
+                if not email_addr:
+                    err = "Sem e-mail cadastrado"
+                    results.append({"channel": "email", "recipient": r.get("name") or "—",
+                                    "email": "", "success": False, "error": err})
+                    _log("email", r, False, err)
+                    continue
+                ok = _send_email(smtp, email_addr, email_subject, email_html)
+                err = "" if ok else "Falha no envio (ver logs SMTP)"
+                results.append({
+                    "channel": "email",
+                    "recipient": r.get("name") or email_addr,
+                    "email": email_addr,
+                    "success": bool(ok),
+                    **({"error": err} if err else {}),
+                })
+                _log("email", r, bool(ok), err)
+
     return results
 
 
+# ── Métricas Prometheus (Evolução 3) ───────────────────────────────────────
+
+# Counter exportado pelo /metrics endpoint do Django.
+# Labels: channel (whatsapp/email/sms/telegram), status (success/failed),
+# alert_type (break/attenuation/normalization).
+_alarm_notifications_counter = None
+
+
+def _record_notification_metric(channel: str, success: bool, alert_type: str) -> None:
+    """Incrementa o contador Prometheus de notificações de alarme.
+
+    Lazy-init: o objeto Counter só é criado na primeira chamada para evitar
+    custo no app loading. Falha silenciosamente se prometheus_client não
+    estiver instalado (ambiente de desenvolvimento sem métricas).
+    """
+    global _alarm_notifications_counter
+    try:
+        if _alarm_notifications_counter is None:
+            from prometheus_client import Counter
+            _alarm_notifications_counter = Counter(
+                "provemaps_alarm_notifications_total",
+                "Total de notificações de alarme de fibra enviadas (por canal/status/tipo)",
+                ["channel", "status", "alert_type"],
+            )
+        _alarm_notifications_counter.labels(
+            channel=channel or "unknown",
+            status="success" if success else "failed",
+            alert_type=alert_type or "unknown",
+        ).inc()
+    except Exception:
+        pass  # métricas não devem quebrar o fluxo de notificação
+
+
+def set_snooze(config: FiberCableAlarmConfig, hours: float | None) -> dict[str, object]:
+    """Pausa ou retoma notificações automáticas para uma config.
+
+    `hours=None` ou `hours<=0` → remove o snooze (retoma imediatamente).
+    `hours>0` → silencia por N horas a partir de agora.
+    """
+    if hours is None or hours <= 0:
+        config.snooze_until = None
+    else:
+        from datetime import timedelta
+        config.snooze_until = timezone.now() + timedelta(hours=float(hours))
+    config.save(update_fields=["snooze_until", "updated_at"])
+    return alarm_config_to_payload(config)
+
+
 def send_test_alarm(config: FiberCableAlarmConfig) -> dict[str, object]:
-    """Envia uma mensagem de TESTE para os destinatários da config.
+    """Envia uma mensagem de TESTE para os destinatários da config (todos os canais).
 
     Retorna { ok, sent, total, results, message } — usado pelo botão
     "Enviar Teste" no UI.
@@ -645,7 +807,24 @@ def send_test_alarm(config: FiberCableAlarmConfig) -> dict[str, object]:
             "error": "Nenhum destinatário com dados de contato encontrado",
         }
 
-    results = _dispatch_message(config, message, is_test=True)
+    # Email opcional — gera HTML simples com prefixo [TESTE]
+    email_subject = ""
+    email_html = ""
+    if "email" in (config.channels or []):
+        cable_name = config.fiber_cable.name or f"Cabo #{config.fiber_cable_id}"
+        email_subject = f"[TESTE] {cable_name} — ProveMaps"
+        email_html = (
+            f"<div style='font-family:Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:24px'>"
+            f"<h2 style='color:#6366f1'>🧪 [TESTE] Configuração de Alarme</h2>"
+            f"<pre style='white-space:pre-wrap;font-family:inherit;line-height:1.6'>{message}</pre>"
+            f"</div>"
+        )
+
+    results = _dispatch_message(
+        config, message,
+        email_subject=email_subject, email_html=email_html,
+        is_test=True,
+    )
     sent_ok = sum(1 for r in results if r.get("success"))
     return {
         "ok": sent_ok > 0,
@@ -680,25 +859,61 @@ def _classify_transition(previous_status: str, new_status: str) -> str | None:
     return None
 
 
-def dispatch_pending_alarms(window_minutes: int = 10) -> dict[str, object]:
+# Política de retry para eventos com falhas anteriores (gateway offline, etc).
+# Backoff exponencial entre tentativas: 1, 2, 4, 8, 16 min (cap em ~16 min).
+# Após MAX_RETRY tentativas todas-falhas, desiste permanentemente.
+MAX_RETRY_ATTEMPTS = 5
+
+
+def _should_skip_for_retry_policy(config, event, now) -> tuple[bool, str]:
+    """Avalia política de retry/dedupe para um par (config, event).
+
+    Retorna (should_skip, reason):
+      - dedupe: já houve qualquer sucesso → skipa (não duplica notificação)
+      - exhausted: atingiu MAX_RETRY tentativas sem sucesso → desiste
+      - backoff: última tentativa muito recente para o nível atual → adia
+      - "" → pode tentar agora
+    """
+    from inventory.models import FiberAlarmNotificationLog
+    from datetime import timedelta
+
+    qs = FiberAlarmNotificationLog.objects.filter(
+        config=config, event=event, is_test=False,
+    )
+    if qs.filter(success=True).exists():
+        return True, "dedupe"
+
+    failed_count = qs.count()  # todos são failed nesse ponto
+    if failed_count >= MAX_RETRY_ATTEMPTS:
+        return True, "exhausted"
+
+    if failed_count > 0:
+        last = qs.order_by("-sent_at").first()
+        backoff_min = 2 ** min(failed_count, 4)  # 1, 2, 4, 8, 16
+        elapsed = (now - last.sent_at).total_seconds() / 60.0
+        if elapsed < backoff_min:
+            return True, "backoff"
+
+    return False, ""
+
+
+def dispatch_pending_alarms(window_minutes: int = 30) -> dict[str, object]:
     """Lê `FiberEvent` recentes, faz match com configs e envia notificações.
 
-    - `window_minutes`: olha eventos das últimas N minutes (default 10).
-      Janela maior que o intervalo da Celery beat (1 min) = tolerância caso
-      uma execução perca a janela; o dedupe via FiberAlarmNotificationLog
-      garante que ninguém recebe a mesma notificação 2x.
-    - Aplica `persist_minutes` da config: só dispara se o evento já dura ≥ N min
-      (skipa eventos muito recentes que podem reverter sozinhos).
+    - `window_minutes`: olha eventos das últimas N min. Default 30 cobre
+      retries com backoff até ~16 min depois do evento.
+    - Política de retry: até 5 tentativas com backoff exponencial (1, 2, 4,
+      8, 16 min). Após qualquer sucesso, dedupe permanente.
+    - Persist_minutes: skipa eventos mais novos que o threshold da config
+      (eventos curtos podem se auto-reverter).
+    - Snooze: skipa configs com snooze_until > now (Evolução 2).
     """
     import logging as _logging
-    from inventory.models import FiberEvent, FiberAlarmNotificationLog
+    from inventory.models import FiberEvent
     log = _logging.getLogger(__name__)
 
-    cutoff = timezone.now() - timezone.timedelta(minutes=window_minutes) \
-        if hasattr(timezone, "timedelta") else None
-    if cutoff is None:
-        from datetime import timedelta
-        cutoff = timezone.now() - timedelta(minutes=window_minutes)
+    from datetime import timedelta
+    cutoff = timezone.now() - timedelta(minutes=window_minutes)
 
     events_qs = (
         FiberEvent.objects
@@ -707,8 +922,12 @@ def dispatch_pending_alarms(window_minutes: int = 10) -> dict[str, object]:
         .order_by("timestamp")
     )
 
-    summary = {"events_scanned": 0, "events_matched": 0, "configs_evaluated": 0,
-               "sent": 0, "failed": 0, "skipped_persist": 0, "skipped_dedupe": 0}
+    summary = {
+        "events_scanned": 0, "events_matched": 0, "configs_evaluated": 0,
+        "sent": 0, "failed": 0,
+        "skipped_persist": 0, "skipped_dedupe": 0,
+        "skipped_exhausted": 0, "skipped_backoff": 0, "skipped_snooze": 0,
+    }
 
     now = timezone.now()
     for event in events_qs:
@@ -727,25 +946,37 @@ def dispatch_pending_alarms(window_minutes: int = 10) -> dict[str, object]:
         for config in configs:
             summary["configs_evaluated"] += 1
 
-            # Persistência mínima: o evento precisa ter pelo menos N min de idade
+            # Snooze (Evolução 2): config silenciada até X
+            snooze_until = getattr(config, "snooze_until", None)
+            if snooze_until and snooze_until > now:
+                summary["skipped_snooze"] += 1
+                continue
+
+            # Persistência mínima
             if config.persist_minutes and config.persist_minutes > 0:
                 age_min = (now - event.timestamp).total_seconds() / 60.0
                 if age_min < config.persist_minutes:
                     summary["skipped_persist"] += 1
                     continue
 
-            # Dedupe: não notificar 2x o mesmo (config, event, sucesso)
-            already = FiberAlarmNotificationLog.objects.filter(
-                config=config, event=event, success=True,
-            ).exists()
-            if already:
-                summary["skipped_dedupe"] += 1
+            # Dedupe + retry policy + backoff (Evolução 4)
+            should_skip, reason = _should_skip_for_retry_policy(config, event, now)
+            if should_skip:
+                summary[f"skipped_{reason}"] = summary.get(f"skipped_{reason}", 0) + 1
                 continue
 
             message = _format_event_message(config, alert_type, event=event)
+            email_subject = ""
+            email_html = ""
+            if "email" in (config.channels or []):
+                cable_name = config.fiber_cable.name or f"Cabo #{config.fiber_cable_id}"
+                email_subject = _format_event_email_subject(alert_type, cable_name)
+                email_html = _format_event_email_body(config, alert_type, event=event)
+
             try:
                 results = _dispatch_message(
                     config, message,
+                    email_subject=email_subject, email_html=email_html,
                     event=event, alert_type=alert_type, is_test=False,
                 )
                 summary["sent"] += sum(1 for r in results if r.get("success"))

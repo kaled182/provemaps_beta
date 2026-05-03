@@ -175,9 +175,24 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
-    version: '1.4.12.0',
+    version: '1.4.13.0',
     date: '03 Mai 2026',
     latest: true,
+    features: [
+      'Email automático no dispatcher: notificações de cabo agora vão também por e-mail (HTML formatado com tabela de Origem/Destino) quando o canal está habilitado na config.',
+      'Snooze por config: botão "Silenciar" 🔕 em cada card de alarme (1h/4h/24h/7d/personalizado). Badge "🔕 Silenciado até HH:MM" aparece no header e botão "Retomar" cancela. Útil para manutenção planejada — não inunda WhatsApp dos responsáveis.',
+      'Métricas Prometheus: novo counter provemaps_alarm_notifications_total{channel,status,alert_type} permite gráficos no Grafana de notificações enviadas/falhas por canal e tipo de evento.',
+    ],
+    improvements: [
+      'Retry inteligente: se o gateway WhatsApp/SMTP estiver offline temporariamente, o dispatcher tenta de novo automaticamente com backoff exponencial (1, 2, 4, 8, 16 min — máx 5 tentativas). Após sucesso de 1 destinatário, considera processado. Evita inundar logs e dá tempo ao gateway recuperar.',
+      'Janela de scan ampliada de 10 para 30 min para cobrir o pior caso de retry.',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.12.0',
+    date: '03 Mai 2026',
+    latest: false,
     features: [
       'Histórico de Avisos no modal de alarmes (Fase C): nova seção colapsável mostra os últimos 50 envios para o cabo — automáticos do dispatcher e manuais (Enviar Teste). Cada item traz: ícone do tipo (🚨 rompimento / ⚠️ atenuação / ✅ normalização), timestamp, canal, destinatário, status (✓ enviado / ✗ falhou + mensagem de erro), tag TESTE quando manual. Atualização automática após enviar teste.',
     ],

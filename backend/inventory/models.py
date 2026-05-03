@@ -956,6 +956,11 @@ class FiberCableAlarmConfig(models.Model):
         default=0,
         help_text="Minutos de persistência antes do disparo (0 para imediato).",
     )
+    snooze_until = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Quando preenchido, suprime notificações automáticas até esse momento.",
+    )
     description = models.TextField(
         blank=True,
         help_text="Descrição opcional ou observações do alarme.",

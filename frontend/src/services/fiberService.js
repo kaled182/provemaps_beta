@@ -301,6 +301,21 @@ export async function testCableAlarm(cableId, alarmId) {
 }
 
 /**
+ * Silencia (snooze) ou retoma notificações automáticas de uma config.
+ * - hours > 0  → silencia por N horas a partir de agora
+ * - hours = 0 ou null → remove o snooze
+ */
+export async function snoozeCableAlarm(cableId, alarmId, hours) {
+  try {
+    const response = await post(`/api/v1/fiber-cables/${cableId}/alarms/${alarmId}/snooze/`, { hours })
+    return response
+  } catch (error) {
+    console.error('[FiberService] Erro ao alterar snooze do alarme:', error)
+    throw error
+  }
+}
+
+/**
  * Busca histórico de tráfego de rede (IN/OUT) de ambas as portas do cabo.
  * O backend paraleliza as chamadas ao Zabbix server-side.
  */

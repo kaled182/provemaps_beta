@@ -615,6 +615,9 @@
                       <div class="saved-config-header">
                         <span class="saved-config-target">{{ group.targetDisplay }}</span>
                         <div class="saved-config-badges">
+                          <span v-if="group.snoozeActive" class="saved-config-snooze" :title="`Silenciado até ${formatSnoozeUntil(group.snoozeUntil)}`">
+                            🔕 Silenciado até {{ formatSnoozeUntil(group.snoozeUntil) }}
+                          </span>
                           <span
                             v-for="(atype, i) in group.alertTypes"
                             :key="atype"
@@ -635,6 +638,30 @@
                       </div>
                       <p v-if="group.description" class="saved-config-notes">{{ group.description }}</p>
                       <div class="saved-config-actions">
+                        <button
+                          v-if="group.snoozeActive"
+                          class="btn-config-action btn-snooze-off"
+                          @click="snoozeAlarm(group, 0)"
+                          title="Retomar avisos automáticos imediatamente"
+                        >
+                          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                          </svg>
+                          Retomar
+                        </button>
+                        <button
+                          v-else
+                          class="btn-config-action btn-snooze"
+                          @click="askSnoozeDuration(group)"
+                          title="Pausar temporariamente avisos automáticos (manutenção planejada)"
+                        >
+                          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M9 17H4l1.405-1.405A2.032 2.032 0 006 14.158V11a6.002 6.002 0 014-5.659V5a2 2 0 114 0v.341C16.33 6.165 18 8.388 18 11v3.159c0 .538.214 1.055.595 1.436L20 17h-5M4 4l16 16" />
+                          </svg>
+                          Silenciar
+                        </button>
                         <button
                           class="btn-config-action btn-test"
                           :disabled="testingAlarmIds.has(group.ids[0])"
@@ -889,7 +916,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useEscapeKey } from '@/composables/useEscapeKey'
 import Chart from 'chart.js/auto'
-import { getCableOpticalHistory, getCableTrafficHistory, getCableAlarms, createCableAlarm, deleteCableAlarm, testCableAlarm, getCableAlarmNotifications } from '@/services/fiberService'
+import { getCableOpticalHistory, getCableTrafficHistory, getCableAlarms, createCableAlarm, deleteCableAlarm, testCableAlarm, getCableAlarmNotifications, snoozeCableAlarm } from '@/services/fiberService'
 import { useAlertTemplatesStore } from '@/stores/alertTemplates'
 
 const props = defineProps({
@@ -1551,6 +1578,8 @@ const normalizeAlarmConfig = (config) => {
     alertType,
     alertTypeLabel: ALERT_TYPE_LABELS[alertType] || null,
     persistMinutes,
+    snoozeUntil: config.snooze_until || '',
+    snoozeActive: !!config.snooze_active,
     createdAt: config.created_at || config.updated_at || config.timestamp || null,
     description: config.description || config.notes || '',
     templates: templatesMeta,
@@ -1731,6 +1760,61 @@ const deleteAlarm = async (group) => {
   } catch (error) {
     console.error('[FiberCableDetailModal] Erro ao excluir alarme:', error)
     window.alert(error?.message || 'Não foi possível excluir a configuração.')
+  }
+}
+
+/**
+ * Silencia (snooze) ou retoma todas as configs do grupo.
+ * Aplica o snooze a TODOS os ids do grupo (representa a mesma config
+ * de destinatário com vários alert_types) — assim um clique pausa o
+ * cabo inteiro para aquele responsável.
+ */
+const snoozeAlarm = async (group, hours) => {
+  const ids = group.ids || []
+  if (!ids.length) return
+  try {
+    await Promise.all(ids.map(id => snoozeCableAlarm(props.cable.id, id, hours)))
+    await loadCableAlarmConfigs(props.cable.id)
+    if (hours && hours > 0) {
+      const label = hours >= 24 ? `${(hours / 24).toFixed(0)} dia(s)` : `${hours} hora(s)`
+      window.alert(`🔕 Avisos silenciados por ${label} para "${group.targetDisplay}".`)
+    } else {
+      window.alert(`🔔 Snooze removido — avisos retomados para "${group.targetDisplay}".`)
+    }
+  } catch (error) {
+    console.error('[FiberCableDetailModal] Erro ao alterar snooze:', error)
+    window.alert(error?.response?.data?.error || error?.message || 'Falha ao alterar snooze.')
+  }
+}
+
+const askSnoozeDuration = (group) => {
+  const choice = window.prompt(
+    `Silenciar avisos automáticos para "${group.targetDisplay}".\n\n` +
+    `Digite um número:\n` +
+    `  1 = 1 hora\n` +
+    `  4 = 4 horas\n` +
+    `  24 = 24 horas\n` +
+    `  168 = 7 dias\n` +
+    `  0 = remover snooze (retomar avisos)\n` +
+    `\nValores em horas. Cancelar não altera.`,
+    '4'
+  )
+  if (choice === null || choice === '') return
+  const hours = parseFloat(choice)
+  if (!Number.isFinite(hours) || hours < 0) {
+    window.alert('Valor inválido.')
+    return
+  }
+  snoozeAlarm(group, hours)
+}
+
+const formatSnoozeUntil = (iso) => {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return iso
   }
 }
 
@@ -3581,6 +3665,42 @@ onUnmounted(() => {
 .btn-test:disabled {
   opacity: 0.6;
   cursor: progress;
+}
+
+.btn-snooze {
+  background: rgba(245, 158, 11, 0.10);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #fcd34d;
+}
+.btn-snooze:hover {
+  background: rgba(245, 158, 11, 0.22);
+  border-color: rgba(245, 158, 11, 0.6);
+  color: #fde68a;
+}
+.btn-snooze-off {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #86efac;
+}
+.btn-snooze-off:hover {
+  background: rgba(34, 197, 94, 0.22);
+  border-color: rgba(34, 197, 94, 0.65);
+  color: #bbf7d0;
+}
+
+/* Badge "🔕 Silenciado até HH:MM" no header do card */
+.saved-config-snooze {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  border-radius: 999px;
+  color: #fde68a;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .btn-edit {
