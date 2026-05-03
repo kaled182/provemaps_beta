@@ -168,7 +168,11 @@ app.conf.update(
         },
         "update-all-port-optical-levels": {
             "task": "inventory.tasks.update_all_port_optical_levels",
-            "schedule": 300.0,  # Every 5 minutes (RX/TX power refresh)
+            # 60s — após refator para batch (1 chamada Zabbix por device em
+            # vez de 1 por porta), o intervalo curto é viável e elimina o
+            # delay perceptível de até 5 min para o painel óptico refletir
+            # mudanças de estado (ex.: cabo voltando ao normal).
+            "schedule": 60.0,
             "options": {"queue": "zabbix"},
         },
         # Dispatch de alarmes de fibra (Fase A): a cada 1 min lê FiberEvent novos

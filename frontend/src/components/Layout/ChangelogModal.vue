@@ -175,9 +175,24 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
-    version: '1.4.13.0',
+    version: '1.4.13.1',
     date: '03 Mai 2026',
     latest: true,
+    features: [
+      'Botão "Atualizar agora" no popup óptico do mapa: força leitura em tempo real do Zabbix (POST /api/v1/inventory/fibers/{id}/refresh-optical/) e atualiza o cache em uma única chamada batch — útil quando você quer ver IMEDIATAMENTE se um enlace voltou.',
+    ],
+    improvements: [
+      'Coleta de níveis ópticos refatorada para batch: agora é 1 chamada Zabbix por device em vez de 1 por porta. Intervalo da task reduzido de 5 min → 1 min sem aumentar carga no Zabbix.',
+      'Popup óptico mostra "Atualizado há Xs/min" para transparência da freshness dos dados.',
+    ],
+    fixes: [
+      'Delay perceptível na detecção de normalização: tráfego subia rápido mas níveis RX/TX demoravam até 5 min para refletir. Agora atualiza em até ~60s.',
+    ],
+  },
+  {
+    version: '1.4.13.0',
+    date: '03 Mai 2026',
+    latest: false,
     features: [
       'Email automático no dispatcher: notificações de cabo agora vão também por e-mail (HTML formatado com tabela de Origem/Destino) quando o canal está habilitado na config.',
       'Snooze por config: botão "Silenciar" 🔕 em cada card de alarme (1h/4h/24h/7d/personalizado). Badge "🔕 Silenciado até HH:MM" aparece no header e botão "Retomar" cancela. Útil para manutenção planejada — não inunda WhatsApp dos responsáveis.',

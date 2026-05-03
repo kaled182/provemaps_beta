@@ -257,6 +257,11 @@ urlpatterns = [
         name="fiber-cached-optical-status",
     ),
     path(
+        "fibers/<int:cable_id>/refresh-optical/",
+        fiber_api.api_fiber_refresh_optical,
+        name="fiber-refresh-optical",
+    ),
+    path(
         "fibers/<int:cable_id>/cached-live-status/",
         fiber_api.api_fiber_cached_live_status,
         name="fiber-cached-live-status",

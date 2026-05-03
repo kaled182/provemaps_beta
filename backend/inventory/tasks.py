@@ -198,10 +198,18 @@ def update_all_port_optical_levels() -> dict[str, Any]:
     Coleta níveis ópticos (RX/TX) para todas as portas com item keys configuradas
     e persiste nos campos "last_*" do modelo Port.
 
+    Estratégia: usa `fetch_ports_optical_snapshots` (versão batch) que agrupa
+    portas por host e faz UMA chamada ao Zabbix por device em vez de uma
+    por porta. Permite rodar a task em intervalos curtos (60s) sem pesar
+    no Zabbix — essencial para o painel óptico refletir mudanças de estado
+    (ex.: cabo voltou ao normal) sem esperar 5+ minutos.
+
     Objetivo: Eliminar chamadas síncronas ao Zabbix em endpoints REST.
     As APIs passam a ler diretamente do banco (Port.last_rx_power / last_tx_power).
     """
-    logger.info("[Optical Levels Task] Iniciando atualização de níveis ópticos")
+    from inventory.domain.optical import fetch_ports_optical_snapshots
+
+    logger.info("[Optical Levels Task] Iniciando atualização de níveis ópticos (batch)")
 
     # Seleciona apenas portas que possuem ao menos uma key de RX ou TX
     ports_qs = (
@@ -225,18 +233,26 @@ def update_all_port_optical_levels() -> dict[str, Any]:
         )
     )
 
-    total = ports_qs.count()
+    ports = list(ports_qs)
+    total = len(ports)
     updated = 0
     errors: list[str] = []
     now = timezone.now()
 
-    for port in ports_qs.iterator():
+    try:
+        # Batch: 1 chamada Zabbix por device, não por porta
+        snapshots_map = fetch_ports_optical_snapshots(ports, persist_keys=False)
+    except Exception as exc:
+        logger.error("[Optical Levels Task] Batch fetch falhou: %s", exc, exc_info=True)
+        return {"success": False, "total": total, "updated": 0, "errors": 1, "error": str(exc)}
+
+    # Persiste resultados em bulk-style (um save por porta com update_fields)
+    for port in ports:
         try:
-            snapshot = fetch_port_optical_snapshot(port, persist_keys=False)
+            snapshot = snapshots_map.get(port.pk) or {}
             rx_dbm = snapshot.get("rx_dbm")
             tx_dbm = snapshot.get("tx_dbm")
 
-            # Apenas atualiza campos de cache na porta (não persiste snapshots)
             update_fields: list[str] = []
             if rx_dbm is not None:
                 port.last_rx_power = rx_dbm
@@ -262,9 +278,7 @@ def update_all_port_optical_levels() -> dict[str, Any]:
     }
     logger.info(
         "[Optical Levels Task] Concluído: %d/%d portas atualizadas (%d erros)",
-        updated,
-        total,
-        len(errors),
+        updated, total, len(errors),
     )
     return result
 

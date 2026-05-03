@@ -103,9 +103,21 @@
             <span class="atten-value">{{ formatValue(opticalData.attenuation, 'dB') }}</span>
           </div>
 
-          <!-- Timestamp -->
-          <div v-if="opticalData.timestamp" class="panel-footer">
-            {{ formatTimestamp(opticalData.timestamp) }}
+          <!-- Timestamp + Refresh -->
+          <div class="panel-footer">
+            <span v-if="lastCheckLabel" class="last-check">{{ lastCheckLabel }}</span>
+            <button
+              class="refresh-btn"
+              :disabled="refreshing"
+              @click.stop="refreshOpticalData"
+              :title="refreshing ? 'Atualizando…' : 'Forçar leitura agora (consulta Zabbix em tempo real)'"
+            >
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" :class="{ spinning: refreshing }">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+              <span>{{ refreshing ? 'Atualizando…' : 'Atualizar' }}</span>
+            </button>
           </div>
         </div>
 
@@ -206,6 +218,52 @@ onUnmounted(stopDrag)
 const loading = ref(false)
 const error = ref(null)
 const opticalData = ref(null)
+const refreshing = ref(false)
+// Timestamp da última coleta (vem do campo last_check do backend)
+const lastCheckIso = ref('')
+
+const lastCheckLabel = computed(() => {
+  if (!lastCheckIso.value) return ''
+  try {
+    const d = new Date(lastCheckIso.value)
+    const ageSec = Math.round((Date.now() - d.getTime()) / 1000)
+    if (ageSec < 5) return 'Atualizado agora'
+    if (ageSec < 60) return `Atualizado há ${ageSec}s`
+    if (ageSec < 3600) return `Atualizado há ${Math.round(ageSec / 60)} min`
+    return `Atualizado há ${Math.round(ageSec / 3600)}h`
+  } catch {
+    return ''
+  }
+})
+
+const { post } = useApi()
+
+async function refreshOpticalData() {
+  if (!props.cableData?.id || refreshing.value) return
+  refreshing.value = true
+  try {
+    const response = await post(`/api/v1/inventory/fibers/${props.cableData.id}/refresh-optical/`, {})
+    if (response.error) {
+      error.value = response.error
+      return
+    }
+    const origin = buildInterfaceData(response.origin_optical)
+    const destination = buildInterfaceData(response.destination_optical)
+    opticalData.value = {
+      origin, destination,
+      attenuation: calculateAttenuation(origin?.tx, destination?.rx),
+      timestamp: origin?.timestamp || destination?.timestamp || null,
+    }
+    lastCheckIso.value = response.origin_optical?.last_check
+                       || response.destination_optical?.last_check
+                       || new Date().toISOString()
+  } catch (err) {
+    console.error('[CableOpticalTooltip] Refresh falhou:', err)
+    error.value = 'Falha ao consultar Zabbix em tempo real.'
+  } finally {
+    refreshing.value = false
+  }
+}
 
 const hasOpticalData = computed(() => {
   const d = opticalData.value
@@ -249,6 +307,9 @@ const loadOpticalData = async () => {
       attenuation: calculateAttenuation(origin?.tx, destination?.rx),
       timestamp: origin?.timestamp || destination?.timestamp || null,
     }
+    lastCheckIso.value = response.origin_optical?.last_check
+                       || response.destination_optical?.last_check
+                       || ''
   } catch (err) {
     console.error('[CableOpticalTooltip] Erro:', err)
     error.value = 'Não foi possível carregar os níveis ópticos'
@@ -496,10 +557,47 @@ const formatTimestamp = (ts) => {
 .atten-value { font-weight: 700; color: #f1f5f9; font-size: 13px; }
 
 .panel-footer {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   font-size: 11px;
-  color: #334155;
+  color: #94a3b8;
   padding-top: 8px;
+}
+.last-check {
+  color: #94a3b8;
+}
+.refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: 6px;
+  color: #c7d2fe;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.refresh-btn:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.22);
+}
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.refresh-btn svg {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.3s;
+}
+.refresh-btn svg.spinning {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 /* ── Botão Ver Detalhes ────────────────────────────────────────────────────── */

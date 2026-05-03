@@ -290,6 +290,59 @@ def api_fiber_cached_optical_status(request: HttpRequest, cable_id: int) -> Json
     return JsonResponse(payload)
 
 
+@require_POST
+@api_login_required
+@handle_api_errors
+def api_fiber_refresh_optical(request: HttpRequest, cable_id: int) -> JsonResponse:
+    """Força fetch fresh dos níveis ópticos (origem + destino) deste cabo.
+
+    Usado pelo botão "Atualizar agora" no popup óptico — quando o user
+    quer ver IMEDIATAMENTE o estado atual sem esperar o próximo ciclo da
+    task `update_all_port_optical_levels` (60s).
+
+    Faz UMA chamada batch ao Zabbix (1 por device) e atualiza os campos
+    last_rx_power / last_tx_power / last_optical_check no banco. Retorna
+    o mesmo formato do GET /cached-status/.
+    """
+    from inventory.domain.optical import fetch_ports_optical_snapshots
+    from django.utils import timezone
+
+    try:
+        cable = FiberCable.objects.select_related(
+            "origin_port__device", "destination_port__device"
+        ).get(id=cable_id)
+    except FiberCable.DoesNotExist:
+        return JsonResponse({"error": "FiberCable not found"}, status=404)
+
+    ports = [p for p in (cable.origin_port, cable.destination_port) if p is not None]
+    if not ports:
+        return JsonResponse({"error": "Cable has no ports configured"}, status=400)
+
+    try:
+        snapshots = fetch_ports_optical_snapshots(ports, persist_keys=False)
+    except Exception as exc:
+        logger.exception("refresh-optical: fetch failed for cable %s", cable_id)
+        return JsonResponse({"error": f"Falha ao consultar Zabbix: {exc}"}, status=502)
+
+    now = timezone.now()
+    for port in ports:
+        snap = snapshots.get(port.pk) or {}
+        update_fields: list[str] = []
+        if snap.get("rx_dbm") is not None:
+            port.last_rx_power = snap["rx_dbm"]
+            update_fields.append("last_rx_power")
+        if snap.get("tx_dbm") is not None:
+            port.last_tx_power = snap["tx_dbm"]
+            update_fields.append("last_tx_power")
+        if update_fields:
+            port.last_optical_check = now
+            update_fields.append("last_optical_check")
+            port.save(update_fields=update_fields)
+
+    # Reusa o handler GET para construir a resposta no mesmo formato
+    return api_fiber_cached_optical_status(request, cable_id)
+
+
 @require_GET
 @api_login_required
 @handle_api_errors
