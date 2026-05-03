@@ -1650,6 +1650,61 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
 
         return Response(result, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["get"], url_path="alarm-notifications")
+    def alarm_notifications(self, request, pk=None):
+        """Histórico de notificações de alarme deste cabo (Fase C).
+
+        Mostra os últimos N envios — automáticos (Celery dispatcher) e manuais
+        (botão Enviar Teste). Útil para o usuário confirmar que os avisos
+        estão sendo entregues e para auditar quem foi notificado e quando.
+        """
+        from inventory.models import FiberAlarmNotificationLog
+        cable = self.get_object()
+
+        try:
+            limit = max(1, min(int(request.query_params.get("limit", 50)), 200))
+        except (TypeError, ValueError):
+            limit = 50
+
+        ALERT_LABELS = {
+            "break": "Rompimento",
+            "attenuation": "Atenuação",
+            "normalization": "Normalização",
+        }
+
+        qs = (
+            FiberAlarmNotificationLog.objects
+            .select_related("config", "config__contact", "config__contact_group",
+                            "config__system_user", "config__department", "event")
+            .filter(config__fiber_cable=cable)
+            .order_by("-sent_at")[:limit]
+        )
+
+        results = []
+        for log_entry in qs:
+            cfg = log_entry.config
+            evt = log_entry.event
+            results.append({
+                "id": log_entry.pk,
+                "sent_at": log_entry.sent_at.isoformat(),
+                "alert_type": log_entry.alert_type,
+                "alert_type_label": ALERT_LABELS.get(log_entry.alert_type, log_entry.alert_type or "—"),
+                "channel": log_entry.channel,
+                "recipient_label": log_entry.recipient_label,
+                "recipient_phone": log_entry.recipient_phone,
+                "recipient_email": log_entry.recipient_email,
+                "success": log_entry.success,
+                "error": log_entry.error or "",
+                "is_test": log_entry.is_test,
+                "config_id": cfg.pk if cfg else None,
+                "config_target": cfg.target_display if cfg else "",
+                "event_id": evt.pk if evt else None,
+                "event_previous_status": evt.previous_status if evt else "",
+                "event_new_status": evt.new_status if evt else "",
+            })
+
+        return Response({"results": results, "count": len(results), "limit": limit})
+
     @action(detail=True, methods=["post"], url_path="alarms/(?P<alarm_id>[0-9]+)/test")
     def alarm_test(self, request, pk=None, alarm_id=None):
         """Envia uma mensagem de TESTE real para os destinatários da config.

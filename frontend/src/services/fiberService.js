@@ -272,6 +272,20 @@ export async function updateCableAlarm(cableId, alarmId, payload) {
 }
 
 /**
+ * Histórico de notificações de alarme do cabo (últimos N envios).
+ * Inclui automáticos (Celery dispatcher) e manuais (botão Enviar Teste).
+ */
+export async function getCableAlarmNotifications(cableId, limit = 50) {
+  try {
+    const response = await get(`/api/v1/fiber-cables/${cableId}/alarm-notifications/?limit=${limit}`)
+    return response
+  } catch (error) {
+    console.error('[FiberService] Erro ao carregar histórico de notificações:', error)
+    throw error
+  }
+}
+
+/**
  * Envia mensagem de TESTE real para os destinatários da config.
  * Útil para validar que o gateway WhatsApp + telefones funcionam.
  * Retorna { ok, sent, total, results, message }.

@@ -671,6 +671,70 @@
                   </div>
                 </section>
 
+                <!-- ── Histórico de Avisos (Fase C) ────────────────────── -->
+                <section class="alarm-history-section">
+                  <button
+                    type="button"
+                    class="alarm-history-toggle"
+                    :aria-expanded="showAlarmHistory"
+                    @click="showAlarmHistory = !showAlarmHistory"
+                  >
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Histórico de Avisos</span>
+                    <span v-if="alarmNotifications.length" class="alarm-history-badge">{{ alarmNotifications.length }}</span>
+                    <span class="alarm-history-chevron">{{ showAlarmHistory ? '▴' : '▾' }}</span>
+                  </button>
+
+                  <div v-if="showAlarmHistory" class="alarm-history-body">
+                    <div v-if="isLoadingAlarmNotifications" class="alarm-history-loading">
+                      <span class="spinner small"></span>
+                      <span>Carregando histórico…</span>
+                    </div>
+
+                    <div v-else-if="alarmNotifications.length === 0" class="alarm-history-empty">
+                      Nenhum aviso enviado ainda. Quando o cabo cair (ou voltar), os
+                      destinatários cadastrados receberão notificação automática.
+                    </div>
+
+                    <ul v-else class="alarm-history-list">
+                      <li
+                        v-for="n in alarmNotifications"
+                        :key="n.id"
+                        class="alarm-history-item"
+                        :class="{ 'is-failed': !n.success, 'is-test': n.is_test }"
+                      >
+                        <span class="ah-icon">{{ ALERT_TYPE_ICONS[n.alert_type] || '🔔' }}</span>
+                        <div class="ah-content">
+                          <div class="ah-line-1">
+                            <span class="ah-type">{{ n.alert_type_label }}</span>
+                            <span v-if="n.is_test" class="ah-tag-test">TESTE</span>
+                            <span class="ah-time">{{ formatNotificationTime(n.sent_at) }}</span>
+                          </div>
+                          <div class="ah-line-2">
+                            <span class="ah-channel">{{ CHANNEL_LABELS[n.channel] || n.channel }}</span>
+                            <span class="ah-recipient">→ {{ n.recipient_label || n.recipient_phone || n.recipient_email || '—' }}</span>
+                            <span v-if="n.success" class="ah-status ah-status--ok">✓ Enviado</span>
+                            <span v-else class="ah-status ah-status--fail">✗ Falhou</span>
+                          </div>
+                          <div v-if="!n.success && n.error" class="ah-error">{{ n.error }}</div>
+                        </div>
+                      </li>
+                    </ul>
+
+                    <button
+                      v-if="alarmNotifications.length > 0"
+                      class="alarm-history-refresh"
+                      @click="loadAlarmNotifications(props.cable.id)"
+                      :disabled="isLoadingAlarmNotifications"
+                    >
+                      Atualizar
+                    </button>
+                  </div>
+                </section>
+
                 <!-- ── Alert type ───────────────────────────────────────── -->
                 <section>
                   <h4>Tipo de Aviso</h4>
@@ -825,7 +889,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useEscapeKey } from '@/composables/useEscapeKey'
 import Chart from 'chart.js/auto'
-import { getCableOpticalHistory, getCableTrafficHistory, getCableAlarms, createCableAlarm, deleteCableAlarm, testCableAlarm } from '@/services/fiberService'
+import { getCableOpticalHistory, getCableTrafficHistory, getCableAlarms, createCableAlarm, deleteCableAlarm, testCableAlarm, getCableAlarmNotifications } from '@/services/fiberService'
 import { useAlertTemplatesStore } from '@/stores/alertTemplates'
 
 const props = defineProps({
@@ -958,6 +1022,10 @@ const savedAlarmConfigs = ref([])
 const isLoadingAlarmConfigs = ref(false)
 // IDs de alarmes com teste em andamento (para desabilitar o botão e mostrar "Enviando…")
 const testingAlarmIds = ref(new Set())
+// Histórico de notificações enviadas (Fase C)
+const alarmNotifications = ref([])
+const isLoadingAlarmNotifications = ref(false)
+const showAlarmHistory = ref(false)
 
 const ALERT_TYPE_TO_CATEGORY = {
   break: 'cable_break',
@@ -1538,6 +1606,61 @@ const loadCableAlarmConfigs = async (cableId = props.cable?.id) => {
   }
 }
 
+/**
+ * Carrega histórico de notificações de alarme do cabo (Fase C).
+ * Mostra automáticos (Celery dispatcher) + manuais (botão Enviar Teste).
+ */
+const loadAlarmNotifications = async (cableId = props.cable?.id) => {
+  if (!cableId) {
+    alarmNotifications.value = []
+    return
+  }
+  isLoadingAlarmNotifications.value = true
+  try {
+    const response = await getCableAlarmNotifications(cableId, 50)
+    alarmNotifications.value = Array.isArray(response?.results) ? response.results : []
+  } catch (error) {
+    console.error('[FiberCableDetailModal] Erro ao carregar histórico de notificações:', error)
+    alarmNotifications.value = []
+  } finally {
+    isLoadingAlarmNotifications.value = false
+  }
+}
+
+const formatNotificationTime = (iso) => {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    return d.toLocaleString('pt-BR', {
+      day: '2-digit', month: '2-digit', year: '2-digit',
+      hour: '2-digit', minute: '2-digit',
+    })
+  } catch {
+    return iso
+  }
+}
+
+const ALERT_TYPE_ICONS = {
+  break: '🚨',
+  attenuation: '⚠️',
+  normalization: '✅',
+}
+
+const CHANNEL_LABELS = {
+  whatsapp: 'WhatsApp',
+  email: 'E-mail',
+  sms: 'SMS',
+  telegram: 'Telegram',
+}
+
+// Quando o usuário expande a seção de histórico pela primeira vez, carrega
+// (lazy: evita request se ele nunca clicar)
+watch(showAlarmHistory, (open) => {
+  if (open && alarmNotifications.value.length === 0 && props.cable?.id) {
+    loadAlarmNotifications(props.cable.id)
+  }
+})
+
 const setDefaultTargetSelection = () => {
   const target = alarmForm.value.target
   if (target === 'department_group' && !alarmForm.value.departmentGroup && departmentGroups.value.length) {
@@ -1657,6 +1780,11 @@ const sendTestAlarm = async (group) => {
     const next = new Set(testingAlarmIds.value)
     next.delete(firstId)
     testingAlarmIds.value = next
+    // Atualizar histórico se a seção estiver aberta — usuário vê o teste
+    // aparecer logo na lista (com tag TESTE) sem precisar atualizar manualmente.
+    if (showAlarmHistory.value) {
+      loadAlarmNotifications(props.cable.id)
+    }
   }
 }
 
@@ -3165,6 +3293,186 @@ onUnmounted(() => {
   color: #94a3b8;
   font-size: 13px;
   background: rgba(15, 23, 42, 0.45);
+}
+
+/* ── Histórico de Avisos (Fase C) ──────────────────────────────── */
+.alarm-history-section {
+  margin-top: 16px;
+}
+
+.alarm-history-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 10px;
+  color: #c7d2fe;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.alarm-history-toggle:hover {
+  background: rgba(99, 102, 241, 0.14);
+  border-color: rgba(99, 102, 241, 0.45);
+}
+.alarm-history-toggle .icon {
+  width: 16px;
+  height: 16px;
+}
+.alarm-history-badge {
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: rgba(99, 102, 241, 0.25);
+  border-radius: 999px;
+  font-size: 11px;
+  color: #e0e7ff;
+}
+.alarm-history-chevron {
+  margin-left: auto;
+  font-size: 12px;
+  color: #a5b4fc;
+}
+
+.alarm-history-body {
+  margin-top: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.55);
+  padding: 10px;
+}
+
+.alarm-history-loading,
+.alarm-history-empty {
+  padding: 20px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.alarm-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.alarm-history-item {
+  display: flex;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(30, 41, 59, 0.5);
+  border-left: 3px solid #10b981;
+}
+.alarm-history-item.is-failed {
+  border-left-color: #ef4444;
+  background: rgba(127, 29, 29, 0.18);
+}
+.alarm-history-item.is-test {
+  border-left-color: #6366f1;
+}
+
+.ah-icon {
+  font-size: 18px;
+  line-height: 1.1;
+  flex-shrink: 0;
+}
+
+.ah-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.ah-line-1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #e2e8f0;
+  margin-bottom: 2px;
+}
+.ah-type {
+  font-weight: 600;
+}
+.ah-tag-test {
+  padding: 1px 6px;
+  background: rgba(99, 102, 241, 0.28);
+  color: #c7d2fe;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.ah-time {
+  margin-left: auto;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.ah-line-2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+.ah-channel {
+  padding: 1px 7px;
+  background: rgba(148, 163, 184, 0.15);
+  border-radius: 4px;
+  font-size: 11px;
+}
+.ah-recipient {
+  color: #cbd5e1;
+}
+.ah-status {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+}
+.ah-status--ok { color: #6ee7b7; }
+.ah-status--fail { color: #fca5a5; }
+
+.ah-error {
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: rgba(239, 68, 68, 0.12);
+  border-radius: 4px;
+  font-size: 11px;
+  color: #fca5a5;
+  font-family: monospace;
+}
+
+.alarm-history-refresh {
+  margin-top: 10px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 6px;
+  color: #cbd5e1;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.alarm-history-refresh:hover:not(:disabled) {
+  background: rgba(148, 163, 184, 0.1);
+}
+.alarm-history-refresh:disabled {
+  opacity: 0.5;
+  cursor: progress;
 }
 
 .saved-configs-list {

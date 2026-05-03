@@ -175,9 +175,19 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
-    version: '1.4.11.0',
+    version: '1.4.12.0',
     date: '03 Mai 2026',
     latest: true,
+    features: [
+      'Histórico de Avisos no modal de alarmes (Fase C): nova seção colapsável mostra os últimos 50 envios para o cabo — automáticos do dispatcher e manuais (Enviar Teste). Cada item traz: ícone do tipo (🚨 rompimento / ⚠️ atenuação / ✅ normalização), timestamp, canal, destinatário, status (✓ enviado / ✗ falhou + mensagem de erro), tag TESTE quando manual. Atualização automática após enviar teste.',
+    ],
+    improvements: [],
+    fixes: [],
+  },
+  {
+    version: '1.4.11.0',
+    date: '03 Mai 2026',
+    latest: false,
     features: [
       'Avisos automáticos de cabo (Fase A): Celery beat a cada 1 min lê FiberEvents novos, classifica a transição (up→down=rompimento, up→degraded=atenuação, down/degraded→up=normalização) e dispara WhatsApp para todos os FiberCableAlarmConfig que correspondem ao tipo de evento. Inclui dedupe via FiberAlarmNotificationLog (mesmo evento nunca é notificado 2x) e respeita persist_minutes (eventos curtos demais são ignorados). Agora quando o técnico restabelece o serviço, os responsáveis recebem aviso de normalização sem ação manual.',
     ],

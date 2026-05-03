@@ -1,6 +1,6 @@
 {
-  "version": "1.4.11.0",
+  "version": "1.4.12.0",
   "date": "2026-05-03",
   "critical": false,
-  "changelog": "Avisos automáticos de cabo: Celery beat a cada 1 min lê FiberEvents recentes, classifica em rompimento/atenuação/normalização e envia WhatsApp para os FiberCableAlarmConfig aplicáveis. Inclui dedupe (mesmo evento não é notificado 2x) e persist_minutes (eventos curtos demais são ignorados)."
+  "changelog": "Histórico de Avisos no modal de alarmes (Fase C): nova seção colapsável mostra os últimos 50 envios — automáticos do dispatcher (FiberEvent → notificação) e manuais (botão Enviar Teste). Cada item mostra timestamp, tipo, canal, destinatário, sucesso ou erro. Refresh automático após enviar teste."
 }
