@@ -105,8 +105,6 @@ _db_default["CONN_MAX_AGE"] = int(os.getenv("DB_CONN_MAX_AGE", "300"))
 _db_default["OPTIONS"].update(
     {
         "connect_timeout": 10,
-        "read_timeout": 30,
-        "write_timeout": 30,
     }
 )
 

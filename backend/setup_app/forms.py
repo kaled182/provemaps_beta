@@ -1,9 +1,30 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 from django import forms
+from django.core.exceptions import ValidationError
+
+
+def validate_db_password(value: str) -> None:
+    """Exige senha de banco de dados com complexidade mínima."""
+    errors = []
+    if len(value) < 12:
+        errors.append("mínimo 12 caracteres")
+    if not re.search(r"[A-Z]", value):
+        errors.append("pelo menos 1 letra maiúscula")
+    if not re.search(r"[a-z]", value):
+        errors.append("pelo menos 1 letra minúscula")
+    if not re.search(r"[0-9]", value):
+        errors.append("pelo menos 1 número")
+    if not re.search(r"[^A-Za-z0-9]", value):
+        errors.append("pelo menos 1 caractere especial (!@#$%...)")
+    if errors:
+        raise ValidationError(
+            f"Senha fraca. Necessário: {', '.join(errors)}."
+        )
 
 
 def _env_default(*keys: str, fallback: str = "") -> str:
@@ -17,7 +38,7 @@ def _env_default(*keys: str, fallback: str = "") -> str:
 
 class FirstTimeSetupForm(forms.Form):
     company_name = forms.CharField(label="Company name", max_length=255)
-    logo = forms.ImageField(label="Company logo (PNG)", required=True)
+    logo = forms.ImageField(label="Company logo (PNG)", required=False)
     zabbix_url = forms.CharField(label="Zabbix URL", max_length=255)
     auth_type = forms.ChoiceField(
         label="Authentication method",
@@ -32,8 +53,29 @@ class FirstTimeSetupForm(forms.Form):
         required=False,
         widget=forms.PasswordInput,
     )
-    maps_api_key = forms.CharField(label="Google Maps API key", max_length=255)
-    unique_licence = forms.CharField(label="License key", max_length=255)
+    map_provider = forms.ChoiceField(
+        label="Provedor de mapa",
+        choices=[
+            ("google", "Google Maps"),
+            ("mapbox", "Mapbox"),
+            ("osm", "OpenStreetMap (gratuito, sem chave)"),
+        ],
+        initial="osm",
+        widget=forms.RadioSelect,
+    )
+    maps_api_key = forms.CharField(
+        label="Google Maps API key",
+        max_length=255,
+        required=False,
+        help_text="Necessário apenas se usar Google Maps",
+    )
+    mapbox_token = forms.CharField(
+        label="Mapbox Token",
+        max_length=512,
+        required=False,
+        help_text="Necessário apenas se usar Mapbox",
+    )
+    unique_licence = forms.CharField(label="License key", max_length=255, required=False)
     db_host = forms.CharField(
         label="Database host",
         max_length=255,
@@ -44,26 +86,37 @@ class FirstTimeSetupForm(forms.Form):
         max_length=16,
         initial=_env_default("DB_PORT", "DATABASE_PORT", fallback="5432"),
     )
-    db_name = forms.CharField(
-        label="Database name",
-        max_length=255,
-        initial=_env_default("DB_NAME", "DATABASE_NAME", fallback="mapsprovefiber"),
-    )
     db_user = forms.CharField(
         label="Database user",
         max_length=255,
-        initial=_env_default("DB_USER", "DATABASE_USER", fallback="provemaps"),
+        initial=_env_default("DB_USER", "DATABASE_USER", fallback="app"),
     )
     db_password = forms.CharField(
         label="Database password",
         max_length=255,
-        widget=forms.PasswordInput,
+        widget=forms.PasswordInput(render_value=True),
+        validators=[validate_db_password],
+        help_text=(
+            "Mínimo 12 caracteres · maiúscula · minúscula"
+            " · número · caractere especial"
+        ),
     )
     redis_url = forms.CharField(
         label="Redis URL",
         max_length=255,
         initial="redis://redis:6379/1",
         help_text="Example: redis://redis:6379/1",
+    )
+    domain_name = forms.CharField(
+        label="Domain name",
+        max_length=255,
+        required=False,
+        help_text="Optional. Ex: maps.suaempresa.com.br",
+    )
+    certbot_email = forms.EmailField(
+        label="E-mail for SSL notifications",
+        required=False,
+        help_text="Optional. Used by Let's Encrypt for certificate expiry alerts.",
     )
 
 

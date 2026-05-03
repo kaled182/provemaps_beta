@@ -22,7 +22,7 @@ class FirstTimeSetupRedirectMiddlewareTests(TestCase):
         FirstTimeSetup.objects.all().delete()
         response = self.client.get(reverse("setup_app:first_time_setup"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Company name", status_code=200)
+        self.assertContains(response, "Configuração Inicial", status_code=200)
 
     def test_does_not_redirect_after_configuration(self):
         FirstTimeSetup.objects.create(

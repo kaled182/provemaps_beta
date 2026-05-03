@@ -17,7 +17,8 @@ def test_health():
     assert "checks" in data
 
 
-def test_dashboard_route_exists():
+def test_dashboard_route_redirects_to_spa():
     c = Client()
     r = c.get("/maps_view/dashboard/")
-    assert r.status_code in (200, 302)  # 302 if authentication is required
+    assert r.status_code == 301
+    assert r["Location"] == "/"

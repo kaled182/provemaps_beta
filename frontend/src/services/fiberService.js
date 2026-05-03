@@ -272,6 +272,50 @@ export async function updateCableAlarm(cableId, alarmId, payload) {
 }
 
 /**
+ * Histórico de notificações de alarme do cabo (últimos N envios).
+ * Inclui automáticos (Celery dispatcher) e manuais (botão Enviar Teste).
+ */
+export async function getCableAlarmNotifications(cableId, limit = 50) {
+  try {
+    const response = await get(`/api/v1/fiber-cables/${cableId}/alarm-notifications/?limit=${limit}`)
+    return response
+  } catch (error) {
+    console.error('[FiberService] Erro ao carregar histórico de notificações:', error)
+    throw error
+  }
+}
+
+/**
+ * Envia mensagem de TESTE real para os destinatários da config.
+ * Útil para validar que o gateway WhatsApp + telefones funcionam.
+ * Retorna { ok, sent, total, results, message }.
+ */
+export async function testCableAlarm(cableId, alarmId) {
+  try {
+    const response = await post(`/api/v1/fiber-cables/${cableId}/alarms/${alarmId}/test/`, {})
+    return response
+  } catch (error) {
+    console.error('[FiberService] Erro ao enviar alarme de teste:', error)
+    throw error
+  }
+}
+
+/**
+ * Silencia (snooze) ou retoma notificações automáticas de uma config.
+ * - hours > 0  → silencia por N horas a partir de agora
+ * - hours = 0 ou null → remove o snooze
+ */
+export async function snoozeCableAlarm(cableId, alarmId, hours) {
+  try {
+    const response = await post(`/api/v1/fiber-cables/${cableId}/alarms/${alarmId}/snooze/`, { hours })
+    return response
+  } catch (error) {
+    console.error('[FiberService] Erro ao alterar snooze do alarme:', error)
+    throw error
+  }
+}
+
+/**
  * Busca histórico de tráfego de rede (IN/OUT) de ambas as portas do cabo.
  * O backend paraleliza as chamadas ao Zabbix server-side.
  */

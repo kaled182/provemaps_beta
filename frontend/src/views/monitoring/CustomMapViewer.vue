@@ -5,8 +5,9 @@
       <!-- Mapa Google Maps -->
       <div ref="mapContainer" class="map-container"></div>
 
-      <!-- Painel Lateral: Gerenciar Itens -->
+      <!-- Painel Lateral: Gerenciar Itens (lazy: só monta após 1ª abertura, depois mantém estado) -->
       <MapInventoryPanel
+        v-if="inventoryPanelMounted"
         :is-visible="showInventoryPanel"
         :active-category="activeCategory"
         :search-query="searchQuery"
@@ -35,6 +36,18 @@
       />
     </div>
 
+    <!-- Botão Reenquadrar -->
+    <button
+      class="map-fit-btn"
+      title="Reenquadrar mapa para mostrar todos os itens"
+      @click="fitAllItemsBounds"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 256 256" fill="currentColor">
+        <path d="M168,48a8,8,0,0,1,8-8h32a8,8,0,0,1,8,8V80a8,8,0,0,1-16,0V64H176A8,8,0,0,1,168,48ZM216,168a8,8,0,0,0-8,8v16H192a8,8,0,0,0,0,16h32a8,8,0,0,0,8-8V176A8,8,0,0,0,216,168ZM88,208H72V192a8,8,0,0,0-16,0v32a8,8,0,0,0,8,8H88a8,8,0,0,0,0-16ZM40,88a8,8,0,0,0,8-8V64H64a8,8,0,0,0,0-16H32a8,8,0,0,0-8,8V80A8,8,0,0,0,40,88Z"/>
+      </svg>
+      Reenquadrar
+    </button>
+
     <!-- Legend -->
     <MapLegend :status-legend="statusLegend" />
 
@@ -53,6 +66,7 @@
 
     <!-- Painel de resultado da Área de Manutenção (Fase 5.2) -->
     <MaintenanceAreaPanel
+      v-if="maintenanceMode"
       :visible="maintenanceMode"
       :vertex-count="maintenanceVertices.length"
       :affected-cables="affectedCables"
@@ -65,6 +79,7 @@
 
     <!-- Modal de notificação de área de manutenção -->
     <MaintenanceNotifyModal
+      v-if="showNotifyModal"
       :visible="showNotifyModal"
       :cables="affectedCables"
       :devices="affectedDevices"
@@ -100,23 +115,26 @@
       <span v-else class="spb-time">· aguardando…</span>
     </div>
 
-    <!-- Site Details Modal -->
-    <SiteDetailsModal 
-      :is-open="showSiteModal" 
+    <!-- Site Details Modal (lazy: monta na 1ª abertura) -->
+    <SiteDetailsModal
+      v-if="showSiteModal"
+      :is-open="showSiteModal"
       :site="selectedSite"
       @close="showSiteModal = false"
     />
 
-    <!-- Fiber Cable Quick Modal -->
+    <!-- Fiber Cable Quick Modal (lazy) -->
     <FiberCableQuickModal
+      v-if="showCableModal"
       :show="showCableModal"
       :cable="selectedCable"
       @close="showCableModal = false"
       @openFullDetails="openCableFullDetails"
     />
 
-    <!-- Fiber Cable Detail Modal -->
+    <!-- Fiber Cable Detail Modal (lazy: chunk de ~3.8k linhas) -->
     <FiberCableDetailModal
+      v-if="showCableDetailModal"
       :show="showCableDetailModal"
       :cable="selectedCable"
       :can-edit="true"
@@ -124,11 +142,14 @@
       @save="handleCableSave"
     />
 
-    <!-- Cable Optical Tooltip -->
+    <!-- Cable Optical Tooltip (lazy) -->
     <CableOpticalTooltip
+      v-if="showCableTooltip"
       :visible="showCableTooltip"
       :cable-data="hoveredCable"
       :position="tooltipPosition"
+      @close="showCableTooltip = false"
+      @open-details="openCableDetailsFromTooltip"
     />
 
     <!-- Toast notification -->
@@ -152,7 +173,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, defineAsyncComponent } from 'vue'
 import { useRoute } from 'vue-router'
 import { useApi } from '@/composables/useApi'
 import { useSystemConfig } from '@/composables/useSystemConfig'
@@ -169,15 +190,22 @@ import { useMapPolylines } from '@/composables/map/core/useMapPolylines'
 import { useMapSelection } from '@/composables/map/core/useMapSelection'
 import { useMapData } from '@/composables/map/core/useMapData'
 import { runMapboxStyleDiagnostics, MAPBOX_STYLE_DIAGNOSTICS_DEFAULTS } from '@/utils/mapboxDiagnostics'
-import SiteDetailsModal from '@/components/SiteDetailsModal.vue'
-import FiberCableQuickModal from '@/components/FiberCableQuickModal.vue'
-import FiberCableDetailModal from '@/components/FiberCableDetailModal.vue'
-import CableOpticalTooltip from '@/components/CableOpticalTooltip.vue'
+
+// Componentes leves: import estático (ficam no bundle inicial)
 import MapLegend from './components/MapLegend.vue'
-import MapInventoryPanel from './components/MapInventoryPanel.vue'
-import MaintenanceAreaPanel from './components/MaintenanceAreaPanel.vue'
 import MapContextMenu from './components/MapContextMenu.vue'
-import MaintenanceNotifyModal from './components/MaintenanceNotifyModal.vue'
+
+// Componentes pesados: lazy via defineAsyncComponent — só baixam o JS quando renderizados.
+// Modais (SiteDetails, FiberCable*, CableOpticalTooltip, MaintenanceNotify) são montados
+// só quando v-if=true. MapInventoryPanel e MaintenanceAreaPanel podem ficar lazy também:
+// só montam quando o usuário abre o painel/área. Evita ~10k linhas de Vue no bundle inicial.
+const SiteDetailsModal = defineAsyncComponent(() => import('@/components/SiteDetailsModal.vue'))
+const FiberCableQuickModal = defineAsyncComponent(() => import('@/components/FiberCableQuickModal.vue'))
+const FiberCableDetailModal = defineAsyncComponent(() => import('@/components/FiberCableDetailModal.vue'))
+const CableOpticalTooltip = defineAsyncComponent(() => import('@/components/CableOpticalTooltip.vue'))
+const MapInventoryPanel = defineAsyncComponent(() => import('./components/MapInventoryPanel.vue'))
+const MaintenanceAreaPanel = defineAsyncComponent(() => import('./components/MaintenanceAreaPanel.vue'))
+const MaintenanceNotifyModal = defineAsyncComponent(() => import('./components/MaintenanceNotifyModal.vue'))
 
 // Variáveis para bibliotecas lazy loaded
 let mapboxgl = null
@@ -188,6 +216,17 @@ const route = useRoute()
 const { get, post } = useApi()
 const { configForm, loadSystemConfig } = useSystemConfig()
 const uiStore = useUiStore()
+
+// Promise cacheada do system-config — permite disparar o GET em paralelo
+// com o carregamento do inventário/mapData no onMounted, e initMap espera
+// nela em vez de re-disparar o request.
+let systemConfigPromise = null
+function ensureSystemConfig() {
+  if (!systemConfigPromise) {
+    systemConfigPromise = loadSystemConfig()
+  }
+  return systemConfigPromise
+}
 
 const mapContainer = ref(null)
 
@@ -222,6 +261,11 @@ function onNotifySent(result) {
   }
 }
 const googleMap = ref(null)
+// Flag de "mapa pronto para receber overlays". Mapbox lança exception em
+// addSource/addLayer antes do evento 'load'. Sem essa guard, o primeiro
+// polling do Zabbix (que chama updateMap logo após init) corre antes do
+// load → exceção silenciosa → mapa fica em branco até dar F5.
+const isMapReady = ref(false)
 const currentMapProvider = ref('google') // Armazena o provedor ativo
 const markerClusterer = ref(null) // Clusterer para agrupar markers próximos
 
@@ -252,8 +296,15 @@ const {
   isItemSelected,
   getSelectionCount
 } = useMapSelection()
-const { availableItems, sitesMap, foldersTree, loadInventoryItems: loadInventory } = useMapData()
+const { availableItems, sitesMap, foldersTree, loadInventoryItems: loadInventory, applyDisplayStatus } = useMapData()
 const showInventoryPanel = ref(false)
+// Flag de "já foi montado pelo menos uma vez" — usada para manter o painel
+// no DOM (preservando estado interno) após a primeira abertura, sem pagar
+// o custo do bundle no carregamento inicial da página.
+const inventoryPanelMounted = ref(false)
+watch(showInventoryPanel, (v) => {
+  if (v) inventoryPanelMounted.value = true
+})
 const activeCategory = ref('devices')
 const searchQuery = ref('')
 const isFullscreen = ref(false)
@@ -460,20 +511,37 @@ async function fetchAndApplyDeviceStatuses() {
     deviceStatusMap.value = newMap
     lastStatusUpdate.value = new Date()
 
-    // Atualizar status dos devices
+    // Detecta se houve QUALQUER mudança de status — assim o updateMap()
+    // só roda quando realmente precisa redesenhar (evita iterar 200+ markers
+    // a cada 10s sem motivo).
+    let changed = false
+
     availableItems.value.devices.forEach(device => {
       const live = newMap.get(String(device.id))
-      if (live) device.status = live
-    })
-
-    // Atualizar status dos cabos derivado dos devices
-    availableItems.value.cables.forEach(cable => {
-      if (cable.origin_device_id || cable.destination_device_id) {
-        cable.status = _deriveCableStatus(cable)
+      if (live && live !== device.status) {
+        device.status = live
+        changed = true
       }
     })
 
-    updateMap()
+    // Recomputar displayStatus do site agregado (offline + irmão online → warning).
+    // Precisa rodar mesmo se nenhum device individual mudou, porque a mudança
+    // de UM device do site afeta a cor dos OUTROS devices offline do mesmo site.
+    if (changed) {
+      applyDisplayStatus(availableItems.value.devices)
+    }
+
+    availableItems.value.cables.forEach(cable => {
+      if (cable.origin_device_id || cable.destination_device_id) {
+        const next = _deriveCableStatus(cable)
+        if (next !== cable.status) {
+          cable.status = next
+          changed = true
+        }
+      }
+    })
+
+    if (changed) updateMap()
   } catch (err) {
     console.warn('[CustomMapViewer] Erro no status poll:', err)
   }
@@ -683,10 +751,17 @@ const fitAllItemsBounds = () => {
 // Função unificada para atualizar todo o mapa (markers + polylines)
 const updateMap = (animateItemId = null) => {
   if (!googleMap.value) return
+  // Adia overlays até o style do Mapbox terminar de carregar.
+  // Quando isMapReady virar true, renderOverlays() (no on('load')) re-chama
+  // updateMap com o estado atualizado.
+  if (!isMapReady.value) {
+    console.log('[CustomMapViewer] updateMap adiado: aguardando map.load')
+    return
+  }
 
   const wasInitialLoad = isInitialLoad.value
 
-  // Atualizar markers usando composable (sem auto-fit — faremos depois com todos os itens)
+  // Atualizar markers
   updateMapMarkers({
     mapInstance: googleMap.value,
     provider: currentMapProvider.value,
@@ -708,7 +783,7 @@ const updateMap = (animateItemId = null) => {
     isInitialLoad.value = false
   }
 
-  // Atualizar polylines usando composable
+  // Atualizar polylines
   updateCablePolylines({
     mapInstance: googleMap.value,
     provider: currentMapProvider.value,
@@ -720,9 +795,12 @@ const updateMap = (animateItemId = null) => {
     onPolylineUnhover: handleCableUnhover
   })
 
-  // Na carga inicial, ajustar bounds para mostrar TODOS os itens (markers + cabos)
+  // Carga inicial: ajusta bounds se há itens; sem itens permanece na localização configurada
   if (wasInitialLoad) {
-    fitAllItemsBounds()
+    const hasItems = selectedItems.value.devices.length > 0 || selectedItems.value.cables.length > 0
+    if (hasItems) {
+      setTimeout(() => fitAllItemsBounds(), 300)
+    }
   }
 }
 
@@ -742,6 +820,8 @@ const selectAll = () => {
   const category = activeCategory.value
   selectAllItems(category, availableItems.value[category])
   updateMap()
+  // Reenquadra mapa para mostrar todos os itens selecionados
+  setTimeout(() => fitAllItemsBounds(), 150)
 }
 
 // Função para limpar TODAS as overlays - versão otimizada com Maps
@@ -879,14 +959,17 @@ const destroyCurrentMap = () => {
   resetZoomListener()
   clearAllMarkers(currentMapProvider.value, googleMap.value)
   clearAllPolylines(currentMapProvider.value, googleMap.value)
-  
+
   if (googleMap.value) {
     if (currentMapProvider.value === 'mapbox' || currentMapProvider.value === 'osm') {
       googleMap.value.remove()
     }
     googleMap.value = null
   }
-  
+
+  // Reset do flag — próximo init precisa esperar o load do novo provider
+  isMapReady.value = false
+
   if (mapContainer.value) {
     mapContainer.value.innerHTML = ''
   }
@@ -902,8 +985,14 @@ const handleDeviceClick = (device) => {
 }
 
 const handleCableClick = (cable) => {
+  hoveredCable.value = cable
+  showCableTooltip.value = true
+}
+
+const openCableDetailsFromTooltip = (cable) => {
+  showCableTooltip.value = false
   selectedCable.value = cable
-  showCableModal.value = true
+  showCableDetailModal.value = true
 }
 
 // Handlers para hover em cabos (tooltip)
@@ -933,18 +1022,17 @@ const handleCableUnhover = () => {
     clearTimeout(tooltipTimeout)
     tooltipTimeout = null
   }
-  showCableTooltip.value = false
-  hoveredCable.value = null
+  // Tooltip now has a close button — do not auto-close on mouse out
 }
 
 const initMap = async () => {
   if (!mapContainer.value) return
   
   try {
-    // Carregar configurações do sistema primeiro
-    console.log('[CustomMapViewer] Carregando configurações do sistema...')
-    await loadSystemConfig()
-    
+    // Aguardar configurações do sistema (Promise compartilhada com onMounted)
+    console.log('[CustomMapViewer] Aguardando configurações do sistema...')
+    await ensureSystemConfig()
+
     // Verificar qual provedor de mapa está configurado
     const mapProvider = configForm.value.MAP_PROVIDER || 'google'
     console.log(`[CustomMapViewer] 🔄 Provedor de mapa selecionado: ${mapProvider}`)
@@ -1072,6 +1160,7 @@ const initGoogleMap = async () => {
     
     // ✅ ATUALIZAR MAPA após inicialização completa do Google Maps
     console.log('[CustomMapViewer] Google Maps pronto - aplicando seleção inicial')
+    isMapReady.value = true
     updateMap()
 }
 
@@ -1416,11 +1505,33 @@ const initMapboxMap = async () => {
     console.log('[CustomMapViewer] Devices selecionados:', selectedItems.value.devices.length)
     console.log('[CustomMapViewer] Cabos selecionados:', selectedItems.value.cables.length)
     
-    // Aguardar 500ms para garantir que o mapa está completamente renderizado
-    setTimeout(() => {
-      console.log('[CustomMapViewer] 🚀 Renderizando overlays após delay...')
+    // Antes: setTimeout(500) — corrida que falhava em rede lenta. Agora
+    // aguarda o style/tiles do Mapbox de forma determinística.
+    // isMapReady=true habilita updateMap — sem isso o polling do Zabbix
+    // dispararia addSource antes do load (exception = mapa vazio).
+    //
+    // Por que listener defensivo: createMapboxInstanceForStyle pode resolver
+    // DEPOIS do `load` ter sido emitido (event lost). Por isso checamos
+    // estado atual e registramos listeners em load + idle como cinto+suspensório.
+    let _overlaysRendered = false
+    const renderOverlays = () => {
+      if (_overlaysRendered) return
+      _overlaysRendered = true
+      console.log('[CustomMapViewer] 🚀 Mapa pronto, habilitando overlays')
+      isMapReady.value = true
       updateMap()
-    }, 500)
+    }
+    const styleReady = (typeof googleMap.value.isStyleLoaded === 'function' && googleMap.value.isStyleLoaded())
+                    || (typeof googleMap.value.loaded === 'function' && googleMap.value.loaded())
+    if (styleReady) {
+      renderOverlays()
+    } else {
+      googleMap.value.once('load', renderOverlays)
+      googleMap.value.once('idle', renderOverlays) // garantia se 'load' foi perdido
+      googleMap.value.once('styledata', () => {
+        if (googleMap.value && googleMap.value.isStyleLoaded()) renderOverlays()
+      })
+    }
   } catch (error) {
     console.error('[CustomMapViewer] Erro detalhado ao inicializar Mapbox:')
     console.error('  - Message:', error.message)
@@ -1466,9 +1577,10 @@ const initOpenStreetMap = async () => {
   }).addTo(googleMap.value)
   
   console.log('[CustomMapViewer] OpenStreetMap inicializado com sucesso')
-  
+
   // ✅ ATUALIZAR MAPA após inicialização completa do OSM
   console.log('[CustomMapViewer] OSM pronto - aplicando seleção inicial')
+  isMapReady.value = true
   updateMap()
 }
 
@@ -1527,17 +1639,20 @@ watch(
   () => configForm.value.MAP_PROVIDER,
   async (newProvider, oldProvider) => {
     if (!mapContainer.value || !oldProvider) return // Ignora primeira inicialização
-    
+    // Ignorar quando o mapa ainda não foi criado pela 1ª vez (initMap do
+    // onMounted está em andamento). Sem isso, o populate inicial do
+    // configForm (ex.: default 'google' → 'mapbox' do banco) dispara um
+    // 2º initMap concorrente que cria mapas duplicados em paralelo.
+    if (!googleMap.value) return
+    // Ignorar se já estamos no provider correto (provider já matched em
+    // outro caminho, sem mudança real)
+    if (currentMapProvider.value === newProvider) return
+
     console.log(`[CustomMapViewer] 🔄 Provider mudou: ${oldProvider} → ${newProvider}`)
     console.log('[CustomMapViewer] 🗑️ Destruindo mapa anterior...')
-    
-    // Destruir mapa anterior
-    if (googleMap.value) {
-      destroyCurrentMap()
-    }
-    
+    destroyCurrentMap()
+
     console.log(`[CustomMapViewer] 🆕 Inicializando ${newProvider}...`)
-    // Inicializar novo mapa
     await initMap()
     _initResizeObserver()
   }
@@ -1822,15 +1937,22 @@ const handleCableSave = async (cable) => {
 
 onMounted(async () => {
   console.log('[CustomMapViewer] Componente montado, iniciando carregamento...')
+  const tMount = performance.now()
   document.addEventListener('click', _hideCtxMenu)
   document.addEventListener('keydown', _globalKeydown)
-  
-  // 1. Carregar inventário primeiro
-  await loadInventoryItems()
-  
-  // 2. Carregar dados do mapa
-  await loadMapData()
-  
+
+  // ── Paralelização ────────────────────────────────────────────────────────
+  // Disparar inventário, metadados do mapa e system-config simultaneamente.
+  // initMap() esperará na Promise compartilhada do system-config (ensureSystemConfig).
+  // Tempo total = max(3 chamadas) em vez do somatório.
+  const inventoryPromise = loadInventoryItems()
+  const mapDataPromise = loadMapData()
+  ensureSystemConfig() // dispara em background; initMap aguarda mais tarde
+
+  // Esperar inventário+mapData para poder configurar selectedItems antes de initMap
+  await Promise.all([inventoryPromise, mapDataPromise])
+  console.log(`[CustomMapViewer] Inventário+MapData carregados em ${Math.round(performance.now() - tMount)}ms`)
+
   // 3. Se for mapa default, selecionar todos os items automaticamente
   const mapId = route.params.mapId
   if (mapId === 'default') {
@@ -1991,6 +2113,13 @@ onBeforeUnmount(() => {
 /* Quando o menu está colapsado */
 :root[data-nav-menu-open="false"] .custom-map-viewer {
   margin-left: 72px;
+}
+
+/* Mobile: menu é overlay fixo, mapa ocupa tela toda */
+@media (max-width: 768px) {
+  .custom-map-viewer {
+    margin-left: 0 !important;
+  }
 }
 
 .map-content {
@@ -2784,6 +2913,33 @@ html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary:hover {
 }
 
 /* ── Notify sent badge ───────────────────────────────────────────────────── */
+.map-fit-btn {
+  position: absolute;
+  bottom: 80px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background: var(--bg-card, #1e2433);
+  color: var(--text-primary, #e2e8f0);
+  border: 1px solid var(--border-primary, rgba(255,255,255,0.08));
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  transition: background 0.15s, transform 0.1s;
+}
+.map-fit-btn:hover {
+  background: var(--bg-hover, #2a3347);
+  transform: translateY(-1px);
+}
+.map-fit-btn:active {
+  transform: translateY(0);
+}
+
 .notify-sent-badge {
   position: absolute;
   bottom: 80px;

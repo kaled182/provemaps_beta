@@ -142,19 +142,30 @@ export function useMapMarkers() {
   }
   
   /**
-   * Obtém ícone do marcador baseado no status
+   * Obtém ícone do marcador baseado no status.
+   *
+   * Paleta:
+   *  - online        → verde
+   *  - unknown       → verde (Zabbix inconclusivo = presumido online)
+   *  - warning       → amarelo (atenção)
+   *  - offline       → amarelo (atenção: requer ação) — cor pedida pelo usuário
+   *                    para indicar que algo precisa de intervenção, em vez do
+   *                    cinza neutro anterior. Cinza ficaria invisível em mapas
+   *                    base claros e não comunica urgência.
+   *  - critical      → vermelho
    */
   const getMarkerIcon = (status) => {
     const colors = {
       online: '#10b981',
+      unknown: '#10b981',
       warning: '#f59e0b',
-      critical: '#ef4444',
-      offline: '#6b7280'
+      offline: '#f59e0b', // mesmo tom de atenção — atrai o olhar para resolver
+      critical: '#ef4444'
     }
     const circlePath = typeof window !== 'undefined' && window.google?.maps?.SymbolPath?.CIRCLE !== undefined
       ? window.google.maps.SymbolPath.CIRCLE
       : 0
-    const fillColor = colors[status] || colors.offline
+    const fillColor = colors[status] || colors.online
     
     return {
       path: circlePath,
@@ -210,10 +221,15 @@ export function useMapMarkers() {
     console.log(`[useMapMarkers] ${selectedDevices.length} devices para processar`)
     
     selectedDevices.forEach((device) => {
+      // displayStatus é derivado do agregado do site: device offline com
+      // irmão online vira 'warning' (amarelo) em vez de 'offline' (cinza).
+      // Fallback para status puro se displayStatus não foi computado.
+      const markerStatus = device.displayStatus || device.status
+
       // Se já existe, atualizar apenas o ícone se o status mudou
       if (activeMarkers.has(device.id)) {
         const existingMarker = activeMarkers.get(device.id)
-        existingMarker.setIcon(getMarkerIcon(device.status))
+        existingMarker.setIcon(getMarkerIcon(markerStatus))
         return
       }
       
@@ -235,12 +251,12 @@ export function useMapMarkers() {
       
       const shouldAnimate = isInitialLoad || (animateItemId && device.id === animateItemId)
       
-      // Criar marker
+      // Criar marker (usa displayStatus para refletir agregado do site)
       const marker = createMarker({
         lat,
         lng,
         title: device.name,
-        icon: getMarkerIcon(device.status),
+        icon: getMarkerIcon(markerStatus),
         animation: shouldAnimate && provider === 'google' ? google.maps.Animation.DROP : null,
         mapInstance,
         provider,

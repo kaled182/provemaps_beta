@@ -119,6 +119,7 @@ RUN pip install --no-index --find-links=/wheels -r requirements.txt && \
 # Código da aplicação
 COPY backend/ /app/backend/
 COPY scripts/ /app/scripts/
+COPY VERSION /app/VERSION
 
 # Assets do frontend (compilados no Stage 2)
 COPY --from=frontend-builder /app/backend/staticfiles/vue-spa/ /app/backend/staticfiles/vue-spa/

@@ -163,6 +163,13 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
     serializer_class = DeviceSerializer
     permission_classes = [IsAuthenticated]  # 🔒 Sprint 1, Week 1: Fixed security vulnerability (was AllowAny)
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        site_id = self.request.query_params.get("site")
+        if site_id:
+            queryset = queryset.filter(site_id=site_id)
+        return queryset
+
     @track_viewset_action("DeviceViewSet")
     def list(self, request, *args, **kwargs):
         """List all devices."""
@@ -376,6 +383,147 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                 {"error": f"Unexpected error during sync: {exc}"},
                 status=500,
             )
+
+    @action(detail=False, methods=["get"], url_path="metrics-batch")
+    def metrics_batch(self, request):
+        """
+        Batch métrica de devices: GET /api/v1/devices/metrics-batch/?ids=1,2,3
+
+        Em vez de N requests ao endpoint /metrics/ (que individualmente fazem 1-3
+        viagens ao Zabbix), faz UMA chamada `item.get` agrupando todos os hostids
+        e devolve um dict { id: { cpu, memory, uptime_seconds, uptime_human } }.
+        """
+        ids_param = request.query_params.get("ids", "").strip()
+        if not ids_param:
+            return Response({"results": {}})
+
+        try:
+            device_ids = [int(x) for x in ids_param.split(",") if x.strip()]
+        except (ValueError, TypeError):
+            return Response({"error": "ids inválido (esperado: ids=1,2,3)"}, status=400)
+
+        if not device_ids:
+            return Response({"results": {}})
+
+        # Limite de segurança para não estourar a query Zabbix
+        if len(device_ids) > 500:
+            return Response(
+                {"error": "máximo 500 ids por chamada"}, status=400
+            )
+
+        # Carrega devices com manual overrides + Zabbix host info
+        devices = list(
+            Device.objects.filter(pk__in=device_ids).only(
+                "id",
+                "zabbix_hostid",
+                "uptime_item_key",
+                "cpu_usage_item_key",
+                "memory_usage_item_key",
+                "cpu_usage_manual_percent",
+                "memory_usage_manual_percent",
+            )
+        )
+
+        # Agrupa hostids → device_id e coleta todas as keys que vamos pedir
+        hostid_to_device = {}
+        all_keys = set()
+        for d in devices:
+            if d.zabbix_hostid:
+                hostid_to_device[str(d.zabbix_hostid)] = d
+            for key in (
+                d.uptime_item_key,
+                d.cpu_usage_item_key,
+                getattr(d, "memory_usage_item_key", None),
+            ):
+                if key:
+                    all_keys.add(key)
+
+        # Inicializa resultado com manual overrides como fallback
+        results = {}
+        for d in devices:
+            results[str(d.id)] = {
+                "cpu": float(d.cpu_usage_manual_percent)
+                if d.cpu_usage_manual_percent is not None
+                else None,
+                "memory": float(d.memory_usage_manual_percent)
+                if d.memory_usage_manual_percent is not None
+                else None,
+                "uptime_seconds": None,
+                "uptime_human": None,
+            }
+
+        # Uma única consulta ao Zabbix para todos os hostids+keys
+        if hostid_to_device and all_keys:
+            try:
+                from integrations.zabbix.zabbix_service import zabbix_request
+
+                raw = zabbix_request(
+                    "item.get",
+                    {
+                        "output": ["key_", "lastvalue", "hostid"],
+                        "hostids": list(hostid_to_device.keys()),
+                        "filter": {"key_": list(all_keys)},
+                    },
+                )
+
+                if raw:
+                    for it in raw:
+                        hostid = str(it.get("hostid", ""))
+                        device = hostid_to_device.get(hostid)
+                        if not device:
+                            continue
+                        key = it.get("key_", "")
+                        last = it.get("lastvalue", "")
+                        if not last:
+                            continue
+
+                        bucket = results.get(str(device.id))
+                        if bucket is None:
+                            continue
+
+                        if key == device.uptime_item_key:
+                            try:
+                                uptime_sec = int(float(last))
+                                bucket["uptime_seconds"] = uptime_sec
+                                days = uptime_sec // 86400
+                                hours = (uptime_sec % 86400) // 3600
+                                minutes = (uptime_sec % 3600) // 60
+                                parts = []
+                                if days > 0:
+                                    parts.append(f"{days}d")
+                                if hours > 0:
+                                    parts.append(f"{hours}h")
+                                if minutes > 0:
+                                    parts.append(f"{minutes}m")
+                                bucket["uptime_human"] = (
+                                    " ".join(parts) if parts else "< 1m"
+                                )
+                            except (ValueError, TypeError):
+                                bucket["uptime_human"] = str(last)
+                        elif key == device.cpu_usage_item_key:
+                            try:
+                                bucket["cpu"] = float(last)
+                            except (ValueError, TypeError):
+                                try:
+                                    bucket["cpu"] = float(
+                                        str(last).replace("%", "")
+                                    )
+                                except (ValueError, TypeError):
+                                    pass
+                        elif key == getattr(device, "memory_usage_item_key", None):
+                            try:
+                                bucket["memory"] = float(last)
+                            except (ValueError, TypeError):
+                                try:
+                                    bucket["memory"] = float(
+                                        str(last).replace("%", "")
+                                    )
+                                except (ValueError, TypeError):
+                                    pass
+            except Exception as exc:
+                logger.warning("Zabbix batch metrics failed: %s", exc, exc_info=True)
+
+        return Response({"results": results})
 
     @action(detail=True, methods=["get"], url_path="metrics")
     def metrics(self, request, pk=None):
@@ -1501,6 +1649,112 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             logger.debug("Unable to invalidate dashboard cache after alarm creation", exc_info=True)
 
         return Response(result, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get"], url_path="alarm-notifications")
+    def alarm_notifications(self, request, pk=None):
+        """Histórico de notificações de alarme deste cabo (Fase C).
+
+        Mostra os últimos N envios — automáticos (Celery dispatcher) e manuais
+        (botão Enviar Teste). Útil para o usuário confirmar que os avisos
+        estão sendo entregues e para auditar quem foi notificado e quando.
+        """
+        from inventory.models import FiberAlarmNotificationLog
+        cable = self.get_object()
+
+        try:
+            limit = max(1, min(int(request.query_params.get("limit", 50)), 200))
+        except (TypeError, ValueError):
+            limit = 50
+
+        ALERT_LABELS = {
+            "break": "Rompimento",
+            "attenuation": "Atenuação",
+            "normalization": "Normalização",
+        }
+
+        qs = (
+            FiberAlarmNotificationLog.objects
+            .select_related("config", "config__contact", "config__contact_group",
+                            "config__system_user", "config__department", "event")
+            .filter(config__fiber_cable=cable)
+            .order_by("-sent_at")[:limit]
+        )
+
+        results = []
+        for log_entry in qs:
+            cfg = log_entry.config
+            evt = log_entry.event
+            results.append({
+                "id": log_entry.pk,
+                "sent_at": log_entry.sent_at.isoformat(),
+                "alert_type": log_entry.alert_type,
+                "alert_type_label": ALERT_LABELS.get(log_entry.alert_type, log_entry.alert_type or "—"),
+                "channel": log_entry.channel,
+                "recipient_label": log_entry.recipient_label,
+                "recipient_phone": log_entry.recipient_phone,
+                "recipient_email": log_entry.recipient_email,
+                "success": log_entry.success,
+                "error": log_entry.error or "",
+                "is_test": log_entry.is_test,
+                "config_id": cfg.pk if cfg else None,
+                "config_target": cfg.target_display if cfg else "",
+                "event_id": evt.pk if evt else None,
+                "event_previous_status": evt.previous_status if evt else "",
+                "event_new_status": evt.new_status if evt else "",
+            })
+
+        return Response({"results": results, "count": len(results), "limit": limit})
+
+    @action(detail=True, methods=["post"], url_path="alarms/(?P<alarm_id>[0-9]+)/snooze")
+    def alarm_snooze(self, request, pk=None, alarm_id=None):
+        """Silencia ou retoma notificações automáticas de uma config.
+
+        Body: { "hours": <float> } — N horas a silenciar.
+              { "hours": 0 } ou { "hours": null } — remove o snooze.
+        """
+        from inventory.models import FiberCableAlarmConfig
+
+        cable = self.get_object()
+        try:
+            config = FiberCableAlarmConfig.objects.get(pk=alarm_id, fiber_cable=cable)
+        except FiberCableAlarmConfig.DoesNotExist:
+            return Response({"error": "Configuração não encontrada"}, status=status.HTTP_404_NOT_FOUND)
+
+        hours_raw = request.data.get("hours") if isinstance(request.data, dict) else None
+        try:
+            hours = float(hours_raw) if hours_raw is not None else None
+        except (TypeError, ValueError):
+            return Response({"error": "hours deve ser numérico"}, status=status.HTTP_400_BAD_REQUEST)
+
+        result = fiber_alarm_configs.set_snooze(config, hours)
+        return Response(result)
+
+    @action(detail=True, methods=["post"], url_path="alarms/(?P<alarm_id>[0-9]+)/test")
+    def alarm_test(self, request, pk=None, alarm_id=None):
+        """Envia uma mensagem de TESTE real para os destinatários da config.
+
+        Útil para validar que o gateway WhatsApp + telefones cadastrados
+        funcionam, sem precisar esperar um evento óptico real.
+        """
+        from inventory.models import FiberCableAlarmConfig
+
+        cable = self.get_object()
+        try:
+            config = FiberCableAlarmConfig.objects.select_related(
+                "fiber_cable", "contact_group", "contact", "system_user", "department"
+            ).get(pk=alarm_id, fiber_cable=cable)
+        except FiberCableAlarmConfig.DoesNotExist:
+            return Response({"error": "Configuração não encontrada"}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            result = fiber_alarm_configs.send_test_alarm(config)
+        except Exception as exc:
+            logger.exception("Failed to send test alarm")
+            return Response(
+                {"error": "Falha ao enviar teste", "detail": str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        return Response(result)
 
     @action(detail=True, methods=["delete", "patch"], url_path="alarms/(?P<alarm_id>[0-9]+)")
     def alarm_detail(self, request, pk=None, alarm_id=None):

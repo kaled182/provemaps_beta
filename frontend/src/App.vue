@@ -23,6 +23,7 @@ import SiteDeviceModal from '@/components/Map/SiteDeviceModal.vue';
 import ToastContainer from '@/components/Notifications/ToastContainer.vue';
 import { useUiStore } from '@/stores/ui';
 import { loadGoogleMaps } from '@/utils/googleMapsLoader';
+import { getMapConfig, loadConfiguredMapProvider } from '@/utils/mapLoader';
 
 const uiStore = useUiStore();
 const router = useRouter();
@@ -55,17 +56,19 @@ router.beforeEach(async (to, from, next) => {
   console.log(`[App] Route needs maps: ${needsMaps}`);
   
   if (needsMaps) {
-    console.log('[App] Loading Google Maps for this route...');
-    
-    // IMPORTANTE: Aguarda o próximo tick para garantir que a meta tag foi renderizada
     await nextTick();
-    
     try {
-      await loadGoogleMaps();
-      console.log('[App] ✅ Google Maps loaded successfully');
+      const config = await getMapConfig();
+      const provider = config.mapProvider || 'google';
+      if (provider === 'google') {
+        await loadGoogleMaps();
+        console.log('[App] ✅ Google Maps loaded successfully');
+      } else {
+        await loadConfiguredMapProvider();
+        console.log(`[App] ✅ Map provider '${provider}' loaded successfully`);
+      }
     } catch (err) {
-      console.error('[App] ❌ Failed to load Google Maps:', err.message);
-      // Continua navegação mesmo com erro - componente tentará novamente
+      console.error('[App] ❌ Failed to load map provider:', err.message);
     }
   } else {
     console.log('[App] Skipping Google Maps load (not needed for this route)');

@@ -64,14 +64,76 @@
                     </span>
                   </div>
 
-                  <button class="sp-btn sp-btn-check" :disabled="updateState === 'checking'" @click="checkForUpdates">
-                    <PhArrowsClockwise :size="15" weight="regular" :class="{ spin: updateState === 'checking' }" />
-                    Verificar atualizações
-                  </button>
+                  <div class="sp-btn-row">
+                    <button class="sp-btn sp-btn-check" :disabled="updateState === 'checking' || updatePhase === 'updating'" @click="checkForUpdates">
+                      <PhArrowsClockwise :size="15" weight="regular" :class="{ spin: updateState === 'checking' }" />
+                      Verificar atualizações
+                    </button>
+                    <button
+                      v-if="updateState === 'available' && updatePhase === 'idle'"
+                      class="sp-btn sp-btn-update"
+                      @click="updatePhase = 'confirm'"
+                    >
+                      <PhArrowCircleUp :size="15" weight="regular" />
+                      Atualizar agora
+                    </button>
+                  </div>
 
-                  <div v-if="updateState === 'available'" class="sp-update-notice">
+                  <div v-if="updateState === 'available' && updatePhase === 'idle'" class="sp-update-notice">
                     <PhWarning :size="14" weight="fill" />
-                    Nova versão disponível. Contate o administrador para realizar o update.
+                    Nova versão <strong>v{{ latestVersion }}</strong> disponível.
+                  </div>
+
+                  <!-- Confirmação -->
+                  <div v-if="updatePhase === 'confirm'" class="sp-update-confirm">
+                    <div class="sp-confirm-title">
+                      <PhInfo :size="15" weight="fill" />
+                      Confirmar atualização para v{{ latestVersion }}
+                    </div>
+                    <div class="sp-confirm-steps">
+                      <div class="sp-confirm-step"><PhGitBranch :size="13" /> git pull origin main</div>
+                      <div class="sp-confirm-step"><PhDatabase :size="13" /> python manage.py migrate</div>
+                      <div class="sp-confirm-step"><PhFolderOpen :size="13" /> python manage.py collectstatic</div>
+                    </div>
+                    <div class="sp-confirm-note">
+                      Alterações de frontend requerem rebuild do npm no host.
+                    </div>
+                    <div class="sp-confirm-actions">
+                      <button class="sp-btn sp-btn-cancel" @click="updatePhase = 'idle'">Cancelar</button>
+                      <button class="sp-btn sp-btn-update" @click="performUpdate">
+                        <PhRocketLaunch :size="14" /> Confirmar e atualizar
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Progresso -->
+                  <div v-if="updatePhase === 'updating' || updatePhase === 'done' || updatePhase === 'failed'" class="sp-update-progress">
+                    <div
+                      v-for="s in updateSteps"
+                      :key="s.id"
+                      class="sp-progress-step"
+                      :class="s.state"
+                    >
+                      <PhCircleNotch v-if="s.state === 'running'" :size="14" class="spin" />
+                      <PhCheckCircle v-else-if="s.state === 'ok'" :size="14" />
+                      <PhWarning v-else-if="s.state === 'warning'" :size="14" />
+                      <PhWarningCircle v-else-if="s.state === 'error'" :size="14" />
+                      <PhCircle v-else :size="14" />
+                      <span class="sp-progress-label">{{ s.label }}</span>
+                    </div>
+                    <div v-if="updateLog" class="sp-update-log">{{ updateLog }}</div>
+                    <div v-if="updatePhase === 'done'" class="sp-update-done">
+                      <PhCheckCircle :size="15" weight="fill" />
+                      Concluído! <button class="sp-reload-btn" @click="reloadPage">Recarregar página</button>
+                    </div>
+                    <div v-if="updatePhase === 'failed'" class="sp-update-notice sp-update-error">
+                      <PhWarningCircle :size="14" /> Atualização finalizada com erros. Verifique o log acima.
+                    </div>
+                  </div>
+
+                  <div v-if="updateState === 'error'" class="sp-update-notice sp-update-error">
+                    <PhWarning :size="14" weight="fill" />
+                    {{ updateError }}
                   </div>
                 </div>
 
@@ -166,28 +228,75 @@
               </div>
 
               <!-- ── Tab: Servidores ── -->
-              <div v-if="activeTab === 'servers'" class="sp-coming-soon">
-                <div class="sp-coming-icon">
-                  <PhHardDrives :size="40" weight="duotone" />
+              <div v-if="activeTab === 'servers'" class="sp-section-list">
+
+                <!-- Loading -->
+                <div v-if="statsLoading" class="sp-loading-row">
+                  <PhCircleNotch :size="18" class="spin" /> Carregando recursos…
                 </div>
-                <h3>Painel de Servidores</h3>
-                <p>
-                  Em breve — gerencie múltiplos servidores, visualize recursos,
-                  status de serviços e execute ações remotas diretamente por aqui.
-                </p>
-                <div class="sp-coming-features">
-                  <div class="sp-coming-feature">
-                    <PhCheckSquare :size="14" weight="fill" /> Monitoramento de CPU / RAM / Disco
+
+                <template v-else-if="serverStats">
+                  <!-- CPU -->
+                  <div class="sp-card">
+                    <div class="sp-card-header"><PhCpu :size="16" weight="regular" /> CPU</div>
+                    <div class="sp-gauge-row">
+                      <span class="sp-gauge-label">{{ serverStats.cpu.percent }}%</span>
+                      <div class="sp-gauge-track">
+                        <div class="sp-gauge-fill" :class="gaugeClass(serverStats.cpu.percent)"
+                          :style="{ width: serverStats.cpu.percent + '%' }" />
+                      </div>
+                      <span class="sp-gauge-sub">{{ serverStats.cpu.count }} cores</span>
+                    </div>
                   </div>
-                  <div class="sp-coming-feature">
-                    <PhCheckSquare :size="14" weight="fill" /> Status de serviços (Docker, Nginx, Celery…)
+
+                  <!-- Memória -->
+                  <div class="sp-card">
+                    <div class="sp-card-header"><PhMemory :size="16" weight="regular" /> Memória RAM</div>
+                    <div class="sp-gauge-row">
+                      <span class="sp-gauge-label">{{ serverStats.memory.percent }}%</span>
+                      <div class="sp-gauge-track">
+                        <div class="sp-gauge-fill" :class="gaugeClass(serverStats.memory.percent)"
+                          :style="{ width: serverStats.memory.percent + '%' }" />
+                      </div>
+                      <span class="sp-gauge-sub">{{ serverStats.memory.used_gb }} / {{ serverStats.memory.total_gb }} GB</span>
+                    </div>
                   </div>
-                  <div class="sp-coming-feature">
-                    <PhCheckSquare :size="14" weight="fill" /> Deploy e rollback com um clique
+
+                  <!-- Disco -->
+                  <div class="sp-card">
+                    <div class="sp-card-header"><PhHardDrive :size="16" weight="regular" /> Disco</div>
+                    <div class="sp-gauge-row">
+                      <span class="sp-gauge-label">{{ serverStats.disk.percent }}%</span>
+                      <div class="sp-gauge-track">
+                        <div class="sp-gauge-fill" :class="gaugeClass(serverStats.disk.percent)"
+                          :style="{ width: serverStats.disk.percent + '%' }" />
+                      </div>
+                      <span class="sp-gauge-sub">{{ serverStats.disk.used_gb }} / {{ serverStats.disk.total_gb }} GB</span>
+                    </div>
                   </div>
-                  <div class="sp-coming-feature">
-                    <PhCheckSquare :size="14" weight="fill" /> Logs em tempo real
+
+                  <!-- Serviços -->
+                  <div class="sp-card">
+                    <div class="sp-card-header"><PhActivity :size="16" weight="regular" /> Serviços</div>
+                    <div class="sp-services-grid">
+                      <div v-for="svc in serverStats.services" :key="svc.name" class="sp-svc-item">
+                        <span class="sp-svc-dot" :class="svc.online ? 'online' : 'offline'" />
+                        <span class="sp-svc-name">{{ svc.name }}</span>
+                        <span class="sp-svc-status" :class="svc.online ? 'online' : 'offline'">
+                          {{ svc.online ? 'Online' : 'Offline' }}
+                        </span>
+                      </div>
+                    </div>
                   </div>
+
+                  <!-- Atualizar -->
+                  <button class="sp-btn sp-btn-check" @click="fetchServerStats">
+                    <PhArrowsClockwise :size="15" /> Atualizar
+                  </button>
+                </template>
+
+                <div v-else class="sp-error-row">
+                  <PhWarningCircle :size="16" /> Não foi possível carregar recursos do servidor.
                 </div>
               </div>
 
@@ -204,39 +313,129 @@ import { ref, computed, watch } from 'vue';
 import {
   PhHardDrives, PhX, PhTag, PhInfo, PhArrowsClockwise,
   PhCheckCircle, PhArrowCircleUp, PhCircleNotch, PhMinus,
-  PhWarning, PhWarningCircle, PhCheckSquare, PhGlobeHemisphereWest,
+  PhWarning, PhWarningCircle, PhGlobeHemisphereWest,
+  PhCpu, PhMemory, PhHardDrive, PhActivity,
+  PhGitBranch, PhDatabase, PhFolderOpen, PhRocketLaunch, PhCircle,
 } from '@phosphor-icons/vue';
 import { useApi } from '@/composables/useApi';
 
 const props = defineProps({ show: { type: Boolean, default: false } });
 defineEmits(['close']);
 
-const { api } = useApi();
+const api = useApi();
 
 const activeTab = ref('system');
 const loading = ref(false);
 const sysInfo = ref(null);
-const updateState = ref('idle'); // idle | checking | latest | available
+const updateState = ref('idle'); // idle | checking | latest | available | error
+const latestVersion = ref('');
+const updateError = ref('');
 const stats = ref(null);
 const statsLoading = ref(false);
+const serverStats = ref(null);
+const serverStatsLoading = ref(false);
+
+// Update flow
+const updatePhase = ref('idle'); // idle | confirm | updating | done | failed
+const updateLog = ref('');
+const UPDATE_STEP_DEFS = [
+  { id: 'git',     label: 'git pull origin main' },
+  { id: 'migrate', label: 'python manage.py migrate' },
+  { id: 'static',  label: 'python manage.py collectstatic' },
+];
+const updateSteps = ref(UPDATE_STEP_DEFS.map(s => ({ ...s, state: 'pending' })));
+
+function reloadPage() { window.location.reload(); }
+
+function resetSteps() {
+  updateSteps.value = UPDATE_STEP_DEFS.map(s => ({ ...s, state: 'pending' }));
+  updateLog.value = '';
+}
+
+async function performUpdate() {
+  updatePhase.value = 'updating';
+  resetSteps();
+
+  const csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] ?? '';
+  const response = await fetch('/api/v1/inventory/system/perform-update/', {
+    method: 'POST',
+    headers: { 'X-CSRFToken': csrfToken },
+  });
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let hasError = false;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      try {
+        const evt = JSON.parse(line.slice(6));
+        if (evt.step === 'start') continue;
+        if (evt.step === 'done') {
+          updatePhase.value = hasError ? 'failed' : 'done';
+          continue;
+        }
+        const step = updateSteps.value.find(s => s.id === evt.step);
+        if (step) {
+          if (evt.running) {
+            step.state = 'running';
+          } else {
+            if (evt.ok === false) {
+              step.state = 'error';
+              hasError = true;
+            } else if (evt.warning) {
+              step.state = 'warning';   // ok mas com aviso — não bloqueia
+            } else {
+              step.state = 'ok';
+            }
+            if (evt.msg) updateLog.value = evt.msg;
+          }
+        }
+      } catch { /* ignore malformed */ }
+    }
+  }
+
+  if (updatePhase.value === 'updating') {
+    updatePhase.value = hasError ? 'failed' : 'done';
+  }
+}
 
 const tabs = [
   { id: 'system',  label: 'Sistema',    icon: PhInfo },
-  { id: 'servers', label: 'Servidores', icon: PhHardDrives, badge: 'Em breve' },
+  { id: 'servers', label: 'Servidores', icon: PhHardDrives },
 ];
+
+function gaugeClass(percent) {
+  if (percent >= 90) return 'danger';
+  if (percent >= 70) return 'warning';
+  return 'ok';
+}
 
 const updateLabel = computed(() => ({
   idle:      'Não verificado',
   checking:  'Verificando…',
   latest:    'Versão mais recente',
   available: 'Atualização disponível',
+  error:     'Falha ao verificar',
 }[updateState.value] ?? 'Não verificado'));
 
 async function fetchSystemInfo() {
   loading.value = true;
+  console.log('[SystemPanel] fetchSystemInfo iniciado');
   try {
-    sysInfo.value = await api.get('/api/v1/inventory/system/info/');
-  } catch {
+    const data = await api.get('/api/v1/inventory/system/info/');
+    console.log('[SystemPanel] system/info resposta:', data);
+    sysInfo.value = data;
+  } catch (err) {
+    console.error('[SystemPanel] system/info erro:', err);
     sysInfo.value = null;
   } finally {
     loading.value = false;
@@ -254,14 +453,36 @@ async function fetchStats() {
   }
 }
 
+function _parseVersion(v) {
+  return (v || '').replace(/^v/, '').split('.').map(Number);
+}
+
 async function checkForUpdates() {
   updateState.value = 'checking';
+  updateError.value = '';
   try {
-    sysInfo.value = await api.get('/api/v1/inventory/system/info/');
-    // Future: compare against a remote latest-version endpoint.
-    updateState.value = 'latest';
+    const data = await api.get('/api/v1/inventory/system/check-update/');
+    if (data.error) {
+      updateError.value = data.error;
+      updateState.value = 'error';
+      return;
+    }
+    latestVersion.value = data.latest_version || '';
+    updateState.value = data.update_available ? 'available' : 'latest';
+  } catch (err) {
+    updateError.value = 'Não foi possível verificar atualizações.';
+    updateState.value = 'error';
+  }
+}
+
+async function fetchServerStats() {
+  serverStatsLoading.value = true;
+  try {
+    serverStats.value = await api.get('/api/v1/inventory/system/stats/');
   } catch {
-    updateState.value = 'idle';
+    serverStats.value = null;
+  } finally {
+    serverStatsLoading.value = false;
   }
 }
 
@@ -270,6 +491,7 @@ watch(() => props.show, (val) => {
     activeTab.value = 'system';
     if (!sysInfo.value) fetchSystemInfo();
     if (!stats.value) fetchStats();
+    if (!serverStats.value) fetchServerStats();
   }
 });
 </script>
@@ -538,6 +760,158 @@ watch(() => props.show, (val) => {
   padding: 0.5rem 0.75rem;
 }
 
+.sp-update-error {
+  color: var(--status-danger, #ef4444);
+  background: color-mix(in srgb, var(--status-danger, #ef4444) 10%, transparent);
+  border-color: color-mix(in srgb, var(--status-danger, #ef4444) 20%, transparent);
+}
+
+/* ── Update button row ── */
+.sp-btn-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sp-btn-update {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent-success, #22c55e) 40%, transparent);
+  background: color-mix(in srgb, var(--accent-success, #22c55e) 12%, transparent);
+  color: var(--accent-success, #22c55e);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.sp-btn-update:hover {
+  background: color-mix(in srgb, var(--accent-success, #22c55e) 22%, transparent);
+}
+
+.sp-btn-cancel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.8rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+/* ── Confirmation box ── */
+.sp-update-confirm {
+  margin-top: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent-info, #3b82f6) 30%, transparent);
+  background: color-mix(in srgb, var(--accent-info, #3b82f6) 6%, transparent);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sp-confirm-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.sp-confirm-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sp-confirm-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-family: monospace;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary, rgba(0,0,0,0.15));
+  padding: 3px 8px;
+  border-radius: 5px;
+}
+.sp-confirm-note {
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+.sp-confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* ── Progress ── */
+.sp-update-progress {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sp-progress-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+  font-family: monospace;
+}
+.sp-progress-step.running  { color: var(--accent-info, #3b82f6); }
+.sp-progress-step.ok       { color: var(--accent-success, #22c55e); }
+.sp-progress-step.warning  { color: var(--status-warning, #f59e0b); }
+.sp-progress-step.error    { color: var(--status-danger, #ef4444); }
+
+.sp-update-log {
+  font-size: 0.72rem;
+  font-family: monospace;
+  background: var(--bg-tertiary, rgba(0,0,0,0.2));
+  color: var(--text-secondary);
+  padding: 8px 10px;
+  border-radius: 7px;
+  max-height: 100px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.sp-update-done {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--accent-success, #22c55e);
+  font-weight: 500;
+}
+.sp-reload-btn {
+  background: none;
+  border: 1px solid var(--accent-success, #22c55e);
+  color: var(--accent-success, #22c55e);
+  padding: 2px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.78rem;
+}
+
+.sp-update-link {
+  margin-left: auto;
+  color: var(--accent-primary);
+  text-decoration: underline;
+  font-size: 0.75rem;
+}
+
+.sp-version-status.error {
+  color: var(--status-danger, #ef4444);
+  background: color-mix(in srgb, var(--status-danger, #ef4444) 12%, transparent);
+}
+
 /* ── Info grid ── */
 .sp-info-grid {
   display: grid;
@@ -648,6 +1022,84 @@ watch(() => props.show, (val) => {
   color: var(--accent-info);
   flex-shrink: 0;
 }
+
+/* ── Gauge ── */
+.sp-gauge-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.sp-gauge-label {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  width: 42px;
+  flex-shrink: 0;
+}
+
+.sp-gauge-track {
+  flex: 1;
+  height: 8px;
+  background: var(--border-secondary);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.sp-gauge-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.sp-gauge-fill.ok      { background: var(--status-online); }
+.sp-gauge-fill.warning { background: var(--status-warning); }
+.sp-gauge-fill.danger  { background: var(--status-offline); }
+
+.sp-gauge-sub {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  width: 90px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* ── Services ── */
+.sp-services-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sp-svc-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sp-svc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sp-svc-dot.online  { background: var(--status-online); }
+.sp-svc-dot.offline { background: var(--status-offline); }
+
+.sp-svc-name {
+  flex: 1;
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+}
+
+.sp-svc-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.sp-svc-status.online  { color: var(--status-online); }
+.sp-svc-status.offline { color: var(--status-offline); }
 
 /* ── Spinner ── */
 .spin {

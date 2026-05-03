@@ -18,6 +18,48 @@ __all__ = [
 UP_VALUES = {"1", 1}
 DOWN_VALUES = {"2", 2, "0", 0}
 
+# Industry-standard defaults by SFP distance category (dBm).
+# Keys are max km of the category; "100" covers everything above 80km.
+DEFAULT_DISTANCE_THRESHOLDS: Dict[str, Dict[str, float]] = {
+    "10":  {"warning": -20.0, "critical": -28.0},   # SFP LR ≤10km
+    "40":  {"warning": -23.0, "critical": -30.0},   # SFP ER ≤40km
+    "80":  {"warning": -26.0, "critical": -30.0},   # SFP ZR ≤80km
+    "100": {"warning": -28.0, "critical": -35.0},   # DWDM/EZR >80km
+}
+
+
+def _get_thresholds_for_length(length_km: Any) -> Dict[str, float]:
+    """Return warning/critical thresholds for the given cable length in km."""
+    try:
+        from setup_app.services.runtime_settings import get_runtime_config
+        config = get_runtime_config()
+        overrides = getattr(config, "optical_thresholds_by_distance", None) or {}
+    except Exception:
+        overrides = {}
+
+    # Merge defaults with any saved overrides
+    thresholds: Dict[str, Dict[str, float]] = {
+        k: dict(v) for k, v in DEFAULT_DISTANCE_THRESHOLDS.items()
+    }
+    for key, vals in overrides.items():
+        if key in thresholds and isinstance(vals, dict):
+            thresholds[key].update(vals)
+
+    if length_km is None:
+        return thresholds["100"]
+    try:
+        km = float(length_km)
+    except (TypeError, ValueError):
+        return thresholds["100"]
+
+    if km <= 10:
+        return thresholds["10"]
+    if km <= 40:
+        return thresholds["40"]
+    if km <= 80:
+        return thresholds["80"]
+    return thresholds["100"]
+
 
 def _request_list(method: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
     return cast(List[Dict[str, Any]], zabbix_request(method, params) or [])
@@ -37,6 +79,7 @@ def fetch_interface_status_advanced(
     interfaceid: str | int | None = None,
     rx_key: str | None = None,
     tx_key: str | None = None,
+    length_km: Any = None,
 ) -> Tuple[str, Dict[str, Any]]:
     if not hostid:
         return "unknown", {"error": "missing_hostid"}
@@ -185,23 +228,56 @@ def fetch_interface_status_advanced(
     rx_val = _parse_float(rx_item.get("lastvalue")) if rx_item else None
     tx_val = _parse_float(tx_item.get("lastvalue")) if tx_item else None
 
-    threshold_down = -50
     if rx_val is not None or tx_val is not None:
+        dist_thresholds = _get_thresholds_for_length(length_km)
+        warning_threshold = dist_thresholds.get("warning", -20.0)
+        critical_threshold = dist_thresholds.get("critical", -28.0)
         values = [v for v in (rx_val, tx_val) if v is not None]
-        if values and all(v < threshold_down for v in values):
+
+        # Zero signal = no optical power (SFP not connected or fiber cut)
+        if any(v == 0.0 for v in values):
             meta = {
                 "method": "optical_power",
                 "rx": rx_val,
                 "tx": tx_val,
-                "threshold": threshold_down,
+                "reason": "zero_signal",
+                "thresholds": dist_thresholds,
             }
             meta.update(discovered)
-            return "down", meta
+            return "critical", meta
+
+        min_val = min(values)
+        # Below the critical threshold → critical (link at minimum sensitivity)
+        if min_val <= critical_threshold:
+            meta = {
+                "method": "optical_power",
+                "rx": rx_val,
+                "tx": tx_val,
+                "min_val": min_val,
+                "critical_threshold": critical_threshold,
+                "thresholds": dist_thresholds,
+            }
+            meta.update(discovered)
+            return "critical", meta
+
+        # Below the warning threshold → degraded signal
+        if min_val <= warning_threshold:
+            meta = {
+                "method": "optical_power",
+                "rx": rx_val,
+                "tx": tx_val,
+                "min_val": min_val,
+                "warning_threshold": warning_threshold,
+                "thresholds": dist_thresholds,
+            }
+            meta.update(discovered)
+            return "warning", meta
+
         meta = {
             "method": "optical_power",
             "rx": rx_val,
             "tx": tx_val,
-            "threshold": threshold_down,
+            "thresholds": dist_thresholds,
         }
         meta.update(discovered)
         return "up", meta
@@ -212,15 +288,22 @@ def fetch_interface_status_advanced(
 
 
 def combine_cable_status(origin_status: str, dest_status: str) -> str:
+    # Both healthy → up
     if origin_status == "up" and dest_status == "up":
         return "up"
+    # Both fully down (segment-break path) → down
     if origin_status == "down" and dest_status == "down":
         return "down"
-    if (
-        origin_status == "up" and dest_status == "down"
-    ) or (
+    # Legacy asymmetric down → degraded
+    if (origin_status == "up" and dest_status == "down") or (
         origin_status == "down" and dest_status == "up"
     ):
+        return "degraded"
+    # Optical critical on both ends → down
+    if origin_status == "critical" and dest_status == "critical":
+        return "down"
+    # Any critical or warning endpoint → degraded signal
+    if "critical" in (origin_status, dest_status) or "warning" in (origin_status, dest_status):
         return "degraded"
     return "unknown"
 
@@ -264,12 +347,14 @@ def evaluate_cable_status_for_cable(cable: Any) -> Dict[str, Any]:
 
     origin_device = cable.origin_port.device
     dest_device = cable.destination_port.device
+    cable_length = getattr(cable, "length_km", None)
     origin_status, origin_reason = fetch_interface_status_advanced(
         origin_device.zabbix_hostid,
         primary_item_key=cable.origin_port.zabbix_item_key,
         interfaceid=cable.origin_port.zabbix_interfaceid,
         rx_key=cable.origin_port.rx_power_item_key,
         tx_key=cable.origin_port.tx_power_item_key,
+        length_km=cable_length,
     )
     dest_status, dest_reason = fetch_interface_status_advanced(
         dest_device.zabbix_hostid,
@@ -277,6 +362,7 @@ def evaluate_cable_status_for_cable(cable: Any) -> Dict[str, Any]:
         interfaceid=cable.destination_port.zabbix_interfaceid,
         rx_key=cable.destination_port.rx_power_item_key,
         tx_key=cable.destination_port.tx_power_item_key,
+        length_km=cable_length,
     )
     combined = combine_cable_status(origin_status, dest_status)
 

@@ -131,7 +131,7 @@ def _sanitize_params(value: Optional[Dict[str, Any]]) -> Dict[str, Any]:
 
 def _is_api_key(token: Optional[str]) -> bool:
     """Check if token is a Zabbix API Key (64 hex chars) vs session token.
-    
+
     Zabbix 7.x+ API Keys are 64-character hex strings that must be sent
     via Authorization: Bearer header, not in the 'auth' field.
     """
@@ -139,6 +139,50 @@ def _is_api_key(token: Optional[str]) -> bool:
         return False
     # Zabbix API Keys are exactly 64 hex characters
     return len(token) == 64 and all(c in '0123456789abcdef' for c in token.lower())
+
+
+# Cache em memória da versão do Zabbix server. Detecta uma vez e reusa.
+# Resetada quando o app reinicia (apiinfo.version não muda em runtime).
+_zabbix_version_cache: Optional[tuple[int, int]] = None
+
+
+def _detect_zabbix_version(url: str) -> Optional[tuple[int, int]]:
+    """Consulta apiinfo.version (sem autenticação) e devolve (major, minor).
+
+    Zabbix 7.0+ rejeita o parâmetro `auth` no payload com erro
+    `unexpected parameter "auth"`. Detectar a versão permite ao client
+    enviar Authorization: Bearer header em vez do auth no payload — mesmo
+    quando o token é uma session token (não uma API key 64-hex).
+    """
+    global _zabbix_version_cache
+    if _zabbix_version_cache is not None:
+        return _zabbix_version_cache
+    try:
+        resp = requests.post(
+            url,
+            json={"jsonrpc": "2.0", "method": "apiinfo.version", "params": [], "id": 1},
+            headers={"Content-Type": "application/json"},
+            timeout=5,
+        )
+        resp.raise_for_status()
+        version_str = resp.json().get("result") or ""
+        parts = version_str.split(".")
+        if len(parts) >= 2:
+            major, minor = int(parts[0]), int(parts[1])
+            _zabbix_version_cache = (major, minor)
+            return _zabbix_version_cache
+    except Exception:
+        pass
+    return None
+
+
+def _server_requires_bearer(url: str) -> bool:
+    """True quando o servidor Zabbix é 7.0+ (rejeita `auth` no payload)."""
+    version = _detect_zabbix_version(url)
+    if version is None:
+        return False  # Conservador: assume comportamento legado se não detectar
+    major, _ = version
+    return major >= 7
 
 
 # ==============================================================================
@@ -556,14 +600,21 @@ class ResilientZabbixClient:
         if params is not None:
             payload["params"] = cast(Any, params)
         
-        # Detectar se é API Key (Zabbix 7.x) ou session token (Zabbix 6.x)
+        # Decidir como enviar o token:
+        #   - API Key (64 hex chars) → SEMPRE Bearer header
+        #   - Servidor Zabbix 7.0+ → SEMPRE Bearer header (mesmo session token);
+        #     Zabbix 7 removeu o suporte ao parâmetro `auth` no payload e
+        #     responde -32600 "unexpected parameter auth" se enviado.
+        #   - Senão (Zabbix 6.x com session token) → `auth` no payload
         use_bearer_header = False
         if include_auth and token:
-            if _is_api_key(token) or retry_without_auth:
-                # API Keys (Zabbix 7.x+) DEVEM usar Authorization Bearer
+            if (
+                _is_api_key(token)
+                or retry_without_auth
+                or _server_requires_bearer(config.url)
+            ):
                 use_bearer_header = True
             else:
-                # Session tokens (login tradicional) usam campo 'auth'
                 payload["auth"] = token
 
         headers = {"Content-Type": "application/json"}
@@ -801,6 +852,13 @@ class ResilientZabbixClient:
     # Build individual payloads
         # Note: Batch API no Zabbix ainda usa 'auth' field mesmo com API Keys
         # pois o header Authorization não é suportado em requests batch
+        # Mesma lógica do single request: Zabbix 7+ rejeita `auth` no payload.
+        # Para batch, enviamos via Bearer header (compartilhado entre as N
+        # operações) quando o servidor é 7+ ou quando o token é API Key.
+        use_bearer_header = bool(token) and (
+            _is_api_key(token) or _server_requires_bearer(config.url)
+        )
+
         payloads: List[Dict[str, Any]] = []
         for idx, (method, params) in enumerate(calls):
             payload: Dict[str, Any] = {
@@ -810,10 +868,14 @@ class ResilientZabbixClient:
             }
             if params is not None:
                 payload["params"] = cast(Any, params)
-            if method not in UNAUTHENTICATED_METHODS and token:
-                # Batch ainda usa auth field (limitação do Zabbix batch API)
+            if method not in UNAUTHENTICATED_METHODS and token and not use_bearer_header:
+                # Zabbix 6.x ainda aceita auth no payload (legado)
                 payload["auth"] = token
             payloads.append(payload)
+
+        batch_headers = {"Content-Type": "application/json"}
+        if use_bearer_header:
+            batch_headers["Authorization"] = f"Bearer {token}"
 
         start_time = time.perf_counter()
 
@@ -824,7 +886,7 @@ class ResilientZabbixClient:
             response = requests.post(
                 config.url,
                 json=payloads,
-                headers={"Content-Type": "application/json"},
+                headers=batch_headers,
                 timeout=batch_timeout,
             )
             response.raise_for_status()

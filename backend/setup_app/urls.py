@@ -5,6 +5,7 @@ from . import views_docs  # Import docs_index and docs_view endpoints
 from . import api_views  # Import API endpoints for testing and management
 from .viewsets_contacts import ContactViewSet, ContactGroupViewSet, ImportHistoryViewSet
 from .viewsets_alert_templates import AlertTemplateViewSet
+from .views_cron import CronJobsView, CronJobDetailView, CronJobToggleView, CronApplyView
 
 app_name = 'setup_app'
 
@@ -18,6 +19,7 @@ router.register(r'alert-templates', AlertTemplateViewSet, basename='alert-templa
 urlpatterns = [
     path('dashboard/', views.setup_dashboard, name='setup_dashboard'),
     path('first_time/', views.first_time_setup, name='first_time_setup'),
+    path('first_time/restarting/', views.first_time_restarting, name='first_time_restarting'),
     path('config/', views.manage_environment, name='manage_environment'),
 
     # API endpoints for configuration management
@@ -67,6 +69,12 @@ urlpatterns = [
     # Video mosaics endpoints
     path('video/api/mosaics/', api_views.video_mosaics_list, name='video_mosaics_list'),
     path('video/api/mosaics/<int:mosaic_id>/', api_views.video_mosaic_detail, name='video_mosaic_detail'),
+
+    # Cron Jobs (DRF — CsrfExemptSessionAuthentication)
+    path('api/cron/', CronJobsView.as_view(), name='cron_jobs_list'),
+    path('api/cron/<int:job_id>/', CronJobDetailView.as_view(), name='cron_job_detail'),
+    path('api/cron/<int:job_id>/toggle/', CronJobToggleView.as_view(), name='cron_job_toggle'),
+    path('api/cron/apply/', CronApplyView.as_view(), name='cron_apply'),
 
     # Documentation endpoints
     path("docs/", views_docs.docs_index, name="docs_index"),
