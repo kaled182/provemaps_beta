@@ -216,6 +216,7 @@ def process_host_status(
     uptime_seconds = None  # Raw value for status promotion (avail=2 + uptime>0 → online)
     cpu_value = None
     memory_value = None
+    icmp_alive = False  # True quando icmpping retorna 1 (host responde ao ping)
     
     if device.uptime_item_key or device.cpu_usage_item_key or getattr(device, "memory_usage_item_key", ""):
         try:
@@ -310,15 +311,49 @@ def process_host_status(
             device_type = device_groups[0].name
 
     # Promoção de status: Zabbix marca como Unavailable (avail=2) quando o agent
-    # ou ICMP falha, mas o device pode estar respondendo via SNMP. Se o uptime
-    # via SNMP é > 0, o device está claramente vivo — promove para Available.
-    # Sem isso, o mapa pinta o pin de cinza enquanto o modal mostra "ONLINE"
-    # (que usa uptime/metrics como fonte alternativa).
+    # ou ICMP falha por algum coletor. Mas o device pode estar perfeitamente
+    # vivo via OUTRA fonte:
+    #   1) SNMP retornando uptime > 0
+    #   2) ICMP ping (item key `icmpping`) retornando 1
+    # Se qualquer uma confirma vida, promove avail=2 → 1.
     promoted_from_uptime = False
-    if availability == "2" and uptime_seconds and uptime_seconds > 0:
-        availability = "1"
-        promoted_from_uptime = True
-        # Recalcular as classes/cores agora que está available
+    promoted_from_icmp = False
+
+    # Promoção quando o Zabbix NÃO confirma online ('2'=Unavailable ou
+    # '0'=Unknown). Em ambos os casos, se SNMP/uptime ou ICMP confirmam vida,
+    # promove para Available. Se avail já é '1' não mexemos.
+    if availability in ("2", "0"):
+        # 1ª tentativa: uptime via SNMP (já buscado acima)
+        if uptime_seconds and uptime_seconds > 0:
+            availability = "1"
+            promoted_from_uptime = True
+        else:
+            # 2ª tentativa: icmpping — check se o host responde ao ping
+            # (mesmo sem SNMP funcionando, o equipamento pode estar online).
+            try:
+                from integrations.zabbix.zabbix_service import zabbix_request
+                ping_items = zabbix_request(
+                    "item.get",
+                    {
+                        "hostids": [device.zabbix_hostid],
+                        "filter": {"key_": "icmpping"},
+                        "output": ["key_", "lastvalue"],
+                    },
+                )
+                if isinstance(ping_items, list):
+                    for it in ping_items:
+                        if it.get("key_") == "icmpping" and str(it.get("lastvalue")) == "1":
+                            icmp_alive = True
+                            availability = "1"
+                            promoted_from_icmp = True
+                            break
+            except Exception as exc:
+                logger.debug(
+                    "ICMP fallback failed for device %s: %s", device.pk, exc
+                )
+
+    if promoted_from_uptime or promoted_from_icmp:
+        # Recalcular classes/cores agora que está available
         status_class, color = HostStatusProcessor.get_status_class_and_color("1")
         interface_data["available"] = "1"
 
@@ -334,7 +369,13 @@ def process_host_status(
             availability,
             "Unknown",
         ),
-        "available_promoted": promoted_from_uptime,
+        "available_promoted": promoted_from_uptime or promoted_from_icmp,
+        "available_promoted_via": (
+            "uptime" if promoted_from_uptime
+            else "icmp" if promoted_from_icmp
+            else ""
+        ),
+        "icmp_alive": icmp_alive,
         "ip": interface_data["ip"],
         "primary_ip": interface_data["ip"],
         "uptime_value": uptime_value,

@@ -1,6 +1,6 @@
 {
-  "version": "1.4.13.3",
+  "version": "1.4.14.0",
   "date": "2026-05-03",
-  "critical": false,
-  "changelog": "Cor do nível óptico no popup agora usa os MESMOS thresholds que o backend (warning_threshold/critical_threshold do payload, vindos de OPTICAL_RX_*_THRESHOLD em /setup/config). Antes o popup hardcodeava -20/-28 e o cabo usava -24/-27 — gerando inconsistências (popup amarelo + cabo verde). Para alterar a sensibilidade, ajustar OPTICAL_RX_WARNING_THRESHOLD em Setup > Config."
+  "critical": true,
+  "changelog": "Fix crítico: integração Zabbix 7+ falhava silenciosamente em item.get/history.get com erro 'unexpected parameter auth'. Cliente agora detecta a versão do servidor (apiinfo.version) e usa Authorization: Bearer header em vez do parâmetro auth no payload quando >=7.0. Adicionado fallback ICMP ping na promoção de status: equipamentos com SNMP fora mas que respondem ao ping aparecem ONLINE."
 }

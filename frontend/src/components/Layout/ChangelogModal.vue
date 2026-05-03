@@ -175,9 +175,23 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
-    version: '1.4.13.3',
+    version: '1.4.14.0',
     date: '03 Mai 2026',
     latest: true,
+    features: [
+      'Fallback ICMP ping na detecção de status: se Zabbix marca um equipamento como Unavailable/Unknown mas o item icmpping responde com 1, promove para Available. Útil para equipamentos com SNMP fora mas alcançáveis na rede.',
+    ],
+    improvements: [
+      'Cliente Zabbix agora detecta a versão do servidor (apiinfo.version) automaticamente e usa Authorization: Bearer header quando >=7.0. Antes a versão 7+ rejeitava todas as chamadas autenticadas com erro "unexpected parameter auth", quebrando histórico de tráfego, óptico, métricas e alarmes silenciosamente.',
+    ],
+    fixes: [
+      'CRÍTICO: integração Zabbix 7+ destravada — item.get/history.get/trigger.get/etc voltam a funcionar em servidores que removeram o suporte ao campo auth no payload.',
+    ],
+  },
+  {
+    version: '1.4.13.3',
+    date: '03 Mai 2026',
+    latest: false,
     features: [],
     improvements: [
       'Cores de RX/TX no popup óptico agora usam os MESMOS thresholds do backend (warning_threshold/critical_threshold vindos do payload). Antes o popup hardcodeava -20/-28 e o cabo usava -24/-27, causando inconsistências (popup amarelo + cabo verde). Tudo unificado.',
