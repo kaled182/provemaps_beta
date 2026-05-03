@@ -171,6 +171,13 @@ app.conf.update(
             "schedule": 300.0,  # Every 5 minutes (RX/TX power refresh)
             "options": {"queue": "zabbix"},
         },
+        # Dispatch de alarmes de fibra (Fase A): a cada 1 min lê FiberEvent novos
+        # e envia notificação WhatsApp/Email para configs aplicáveis.
+        "dispatch-fiber-alarms": {
+            "task": "inventory.tasks.dispatch_fiber_alarms_task",
+            "schedule": 60.0,
+            "options": {"queue": "default"},
+        },
         "sync-zabbix-inventory": {
             "task": "inventory.tasks.sync_zabbix_inventory_task",
             "schedule": _inventory_sync_interval,

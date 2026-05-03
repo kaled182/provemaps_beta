@@ -1,6 +1,6 @@
 {
-  "version": "1.4.10.3",
+  "version": "1.4.11.0",
   "date": "2026-05-03",
   "critical": false,
-  "changelog": "Mensagem do alerta de manutenção agora é opcional — em branco usa 'ENLACE OFF.' como texto padrão. O bloco de Cabos com Origem/Destino continua sendo enviado, então o técnico recebe tudo que precisa sem o operador digitar nada."
+  "changelog": "Avisos automáticos de cabo: Celery beat a cada 1 min lê FiberEvents recentes, classifica em rompimento/atenuação/normalização e envia WhatsApp para os FiberCableAlarmConfig aplicáveis. Inclui dedupe (mesmo evento não é notificado 2x) e persist_minutes (eventos curtos demais são ignorados)."
 }

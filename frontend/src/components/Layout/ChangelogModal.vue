@@ -175,9 +175,19 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
-    version: '1.4.10.3',
+    version: '1.4.11.0',
     date: '03 Mai 2026',
     latest: true,
+    features: [
+      'Avisos automáticos de cabo (Fase A): Celery beat a cada 1 min lê FiberEvents novos, classifica a transição (up→down=rompimento, up→degraded=atenuação, down/degraded→up=normalização) e dispara WhatsApp para todos os FiberCableAlarmConfig que correspondem ao tipo de evento. Inclui dedupe via FiberAlarmNotificationLog (mesmo evento nunca é notificado 2x) e respeita persist_minutes (eventos curtos demais são ignorados). Agora quando o técnico restabelece o serviço, os responsáveis recebem aviso de normalização sem ação manual.',
+    ],
+    improvements: [],
+    fixes: [],
+  },
+  {
+    version: '1.4.10.3',
+    date: '03 Mai 2026',
+    latest: false,
     features: [],
     improvements: [
       'Mensagem do alerta de manutenção é opcional: em branco, usa "ENLACE OFF." como default. O bloco de Cabos com Origem/Destino é sempre enviado, então o técnico já recebe tudo que precisa sem o operador digitar nada — basta selecionar destinatários e clicar Enviar.',

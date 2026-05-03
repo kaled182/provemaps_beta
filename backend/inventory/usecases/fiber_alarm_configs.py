@@ -505,73 +505,147 @@ def _format_test_message(config: FiberCableAlarmConfig) -> str:
     )
 
 
-def send_test_alarm(config: FiberCableAlarmConfig) -> dict[str, object]:
-    """Envia uma mensagem de TESTE para os destinatários da config.
+def _format_event_endpoints_block(cable) -> str:
+    """Linha multi-line com Origem/Destino do cabo (Device + Porta + Site).
+    Vazio se ambos endpoints não tiverem porta cadastrada."""
+    from inventory.api.maintenance_alert import _format_endpoint
+    lines = []
+    origin = _format_endpoint(cable.origin_port, getattr(cable, "site_a", None))
+    dest = _format_endpoint(cable.destination_port, getattr(cable, "site_b", None))
+    if origin and origin != "—":
+        lines.append(f"   ◦ Origem: {origin}")
+    if dest and dest != "—":
+        lines.append(f"   ◦ Destino: {dest}")
+    return "\n".join(lines)
 
-    Retorna um dict resumindo o envio:
-        {
-          "ok": bool,
-          "sent": int,
-          "total": int,
-          "results": [{channel, recipient, phone, success, error?}],
-          "message": str (texto enviado, útil pra confirmar pro usuário)
-        }
+
+def _format_event_message(config: FiberCableAlarmConfig, alert_type: str, event=None) -> str:
+    """Mensagem REAL (sem prefixo TESTE) para um evento detectado pelo dispatcher.
+
+    Formato segue o mesmo padrão de manutenção (familiar pro técnico):
+      ⚠️ *Alerta — ProveMaps*
+      <descrição do evento>
+      *Cabos afetados (1):*
+      • *NOME*
+         ◦ Origem: ...
+         ◦ Destino: ...
     """
-    # Imports locais — evita dependência circular durante app loading
-    from inventory.api.maintenance_alert import (
-        _get_whatsapp_gateway,
-        _send_whatsapp,
-    )
+    cable = config.fiber_cable
+    cable_name = cable.name or f"Cabo #{cable.pk}"
+
+    headline = {
+        FiberCableAlarmConfig.ALERT_BREAK: "⚠️ *Alerta — Cabo OFFLINE*",
+        FiberCableAlarmConfig.ALERT_ATTENUATION: "⚠️ *Alerta — Sinal Degradado*",
+        FiberCableAlarmConfig.ALERT_NORMALIZATION: "✅ *Cabo NORMALIZADO*",
+    }.get(alert_type, "⚠️ *Alerta — ProveMaps*")
+
+    description = {
+        FiberCableAlarmConfig.ALERT_BREAK: "ENLACE OFF — possível rompimento ou queda de equipamento.",
+        FiberCableAlarmConfig.ALERT_ATTENUATION: "Atenuação detectada no sinal óptico.",
+        FiberCableAlarmConfig.ALERT_NORMALIZATION: "Serviço restabelecido — operação normal.",
+    }.get(alert_type, "Mudança de estado detectada.")
+
+    lines = [headline, "", description, "", f"*Cabos afetados (1):*", f"• *{cable_name}*"]
+    endpoints = _format_event_endpoints_block(cable)
+    if endpoints:
+        lines.append(endpoints)
+
+    if event is not None and getattr(event, "detected_reason", ""):
+        lines.append("")
+        lines.append(f"_Motivo: {event.detected_reason}_")
+
+    return "\n".join(lines)
+
+
+def _dispatch_message(
+    config: FiberCableAlarmConfig,
+    message: str,
+    *,
+    event=None,
+    alert_type: str = "",
+    is_test: bool = False,
+    log: bool = True,
+) -> list[dict[str, object]]:
+    """Despacha `message` para todos os destinatários da config nos canais habilitados.
+
+    Núcleo compartilhado entre `send_test_alarm` (manual) e `dispatch_pending_alarms`
+    (automático). Quando `log=True`, persiste cada tentativa em FiberAlarmNotificationLog
+    para auditoria e dedupe.
+    """
+    from inventory.api.maintenance_alert import _get_whatsapp_gateway, _send_whatsapp
+    from inventory.models import FiberAlarmNotificationLog
 
     channels = list(config.channels or [])
     recipients = _resolve_recipients(config)
-    message = _format_test_message(config)
+    results: list[dict[str, object]] = []
 
     if not recipients:
-        return {
-            "ok": False,
-            "sent": 0,
-            "total": 0,
-            "results": [],
-            "message": message,
-            "error": "Nenhum destinatário com dados de contato encontrado",
-        }
+        return results
 
-    results: list[dict[str, object]] = []
+    def _log(channel: str, recipient: dict, success: bool, error: str = ""):
+        if not log:
+            return
+        try:
+            FiberAlarmNotificationLog.objects.create(
+                config=config,
+                event=event,
+                alert_type=alert_type or config.alert_type or "",
+                channel=channel,
+                recipient_label=str(recipient.get("name") or "")[:200],
+                recipient_phone=str(recipient.get("phone") or "")[:32],
+                recipient_email=str(recipient.get("email") or "")[:200],
+                success=success,
+                error=error[:1000] if error else "",
+                is_test=is_test,
+            )
+        except Exception as exc:  # pragma: no cover - logging falha não deve quebrar envio
+            import logging as _logging
+            _logging.getLogger(__name__).warning("Failed to log notification: %s", exc)
 
     if "whatsapp" in channels:
         gw, service_url = _get_whatsapp_gateway()
         if not gw:
-            results.append({
-                "channel": "whatsapp",
-                "recipient": "—",
-                "success": False,
-                "error": "Gateway WhatsApp não configurado/habilitado",
-            })
+            err = "Gateway WhatsApp não configurado/habilitado"
+            results.append({"channel": "whatsapp", "recipient": "—", "success": False, "error": err})
+            _log("whatsapp", {"name": "—"}, False, err)
         else:
             for r in recipients:
                 phone = r.get("phone", "")
                 if not phone:
-                    results.append({
-                        "channel": "whatsapp",
-                        "recipient": r.get("name") or "—",
-                        "phone": "",
-                        "success": False,
-                        "error": "Sem telefone cadastrado",
-                    })
+                    err = "Sem telefone cadastrado"
+                    results.append({"channel": "whatsapp", "recipient": r.get("name") or "—",
+                                    "phone": "", "success": False, "error": err})
+                    _log("whatsapp", r, False, err)
                     continue
                 ok = _send_whatsapp(service_url, gw.id, phone, message)
+                err = "" if ok else "Falha no envio (ver logs)"
                 results.append({
                     "channel": "whatsapp",
                     "recipient": r.get("name") or phone,
                     "phone": phone,
                     "success": bool(ok),
-                    **({} if ok else {"error": "Falha no envio (ver logs)"}),
+                    **({"error": err} if err else {}),
                 })
+                _log("whatsapp", r, bool(ok), err)
 
-    # Outros canais (email/sms/telegram) podem ser adicionados aqui em
-    # iterações futuras — Fase A focará no fluxo automático.
+    return results
 
+
+def send_test_alarm(config: FiberCableAlarmConfig) -> dict[str, object]:
+    """Envia uma mensagem de TESTE para os destinatários da config.
+
+    Retorna { ok, sent, total, results, message } — usado pelo botão
+    "Enviar Teste" no UI.
+    """
+    message = _format_test_message(config)
+    recipients = _resolve_recipients(config)
+    if not recipients:
+        return {
+            "ok": False, "sent": 0, "total": 0, "results": [], "message": message,
+            "error": "Nenhum destinatário com dados de contato encontrado",
+        }
+
+    results = _dispatch_message(config, message, is_test=True)
     sent_ok = sum(1 for r in results if r.get("success"))
     return {
         "ok": sent_ok > 0,
@@ -580,3 +654,104 @@ def send_test_alarm(config: FiberCableAlarmConfig) -> dict[str, object]:
         "results": results,
         "message": message,
     }
+
+
+# ── Dispatcher automático (Fase A) ─────────────────────────────────────────
+
+# Mapa transição (previous_status, new_status) → alert_type da config
+def _classify_transition(previous_status: str, new_status: str) -> str | None:
+    """Decide qual alert_type da config se aplica a uma transição de status.
+
+    Regras (status no banco usa: up, down, degraded, unknown):
+      → down       : ALERT_BREAK (rompimento confirmado)
+      → degraded   : ALERT_ATTENUATION (sinal degradado)
+      → up         : ALERT_NORMALIZATION (volta ao normal)
+                     desde que viesse de um estado adverso
+      qualquer outra: None (não dispara — transições para/de unknown são ruidosas)
+    """
+    prev = (previous_status or "").lower().strip()
+    new = (new_status or "").lower().strip()
+    if new == "down":
+        return FiberCableAlarmConfig.ALERT_BREAK
+    if new == "degraded":
+        return FiberCableAlarmConfig.ALERT_ATTENUATION
+    if new == "up" and prev in ("down", "degraded"):
+        return FiberCableAlarmConfig.ALERT_NORMALIZATION
+    return None
+
+
+def dispatch_pending_alarms(window_minutes: int = 10) -> dict[str, object]:
+    """Lê `FiberEvent` recentes, faz match com configs e envia notificações.
+
+    - `window_minutes`: olha eventos das últimas N minutes (default 10).
+      Janela maior que o intervalo da Celery beat (1 min) = tolerância caso
+      uma execução perca a janela; o dedupe via FiberAlarmNotificationLog
+      garante que ninguém recebe a mesma notificação 2x.
+    - Aplica `persist_minutes` da config: só dispara se o evento já dura ≥ N min
+      (skipa eventos muito recentes que podem reverter sozinhos).
+    """
+    import logging as _logging
+    from inventory.models import FiberEvent, FiberAlarmNotificationLog
+    log = _logging.getLogger(__name__)
+
+    cutoff = timezone.now() - timezone.timedelta(minutes=window_minutes) \
+        if hasattr(timezone, "timedelta") else None
+    if cutoff is None:
+        from datetime import timedelta
+        cutoff = timezone.now() - timedelta(minutes=window_minutes)
+
+    events_qs = (
+        FiberEvent.objects
+        .select_related("fiber")
+        .filter(timestamp__gte=cutoff)
+        .order_by("timestamp")
+    )
+
+    summary = {"events_scanned": 0, "events_matched": 0, "configs_evaluated": 0,
+               "sent": 0, "failed": 0, "skipped_persist": 0, "skipped_dedupe": 0}
+
+    now = timezone.now()
+    for event in events_qs:
+        summary["events_scanned"] += 1
+        alert_type = _classify_transition(event.previous_status, event.new_status)
+        if not alert_type:
+            continue
+        summary["events_matched"] += 1
+
+        configs = (
+            FiberCableAlarmConfig.objects
+            .filter(fiber_cable=event.fiber, alert_type=alert_type)
+            .select_related("contact_group", "contact", "system_user", "department")
+        )
+
+        for config in configs:
+            summary["configs_evaluated"] += 1
+
+            # Persistência mínima: o evento precisa ter pelo menos N min de idade
+            if config.persist_minutes and config.persist_minutes > 0:
+                age_min = (now - event.timestamp).total_seconds() / 60.0
+                if age_min < config.persist_minutes:
+                    summary["skipped_persist"] += 1
+                    continue
+
+            # Dedupe: não notificar 2x o mesmo (config, event, sucesso)
+            already = FiberAlarmNotificationLog.objects.filter(
+                config=config, event=event, success=True,
+            ).exists()
+            if already:
+                summary["skipped_dedupe"] += 1
+                continue
+
+            message = _format_event_message(config, alert_type, event=event)
+            try:
+                results = _dispatch_message(
+                    config, message,
+                    event=event, alert_type=alert_type, is_test=False,
+                )
+                summary["sent"] += sum(1 for r in results if r.get("success"))
+                summary["failed"] += sum(1 for r in results if not r.get("success"))
+            except Exception as exc:  # pragma: no cover - safety
+                log.exception("dispatch_pending_alarms: failed for config=%s event=%s", config.pk, event.pk)
+                summary["failed"] += 1
+
+    return summary

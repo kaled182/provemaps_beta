@@ -1003,6 +1003,60 @@ class FiberCableAlarmConfig(models.Model):
         if self.target_type == self.TARGET_SYSTEM_USER and not self.system_user_id:
             raise ValidationError("system_user é obrigatório para target_type=system_user")
 
+
+class FiberAlarmNotificationLog(models.Model):
+    """Registro de uma tentativa de notificação automática de alarme.
+
+    Usado pelo dispatcher (Celery task `dispatch_fiber_alarms_task`) para:
+      1. Evitar enviar a mesma notificação 2x para o par (config, event)
+      2. Auditoria — quem foi notificado, quando, por qual canal, sucesso ou erro
+      3. Base para a aba "Histórico de Avisos" (Fase C)
+    """
+
+    config = models.ForeignKey(
+        FiberCableAlarmConfig,
+        related_name="notifications",
+        on_delete=models.CASCADE,
+    )
+    event = models.ForeignKey(
+        "inventory.FiberEvent",  # string ref: FiberEvent é declarado mais abaixo no arquivo
+        related_name="notifications",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Evento que disparou esta notificação (pode ser null em testes manuais).",
+    )
+    alert_type = models.CharField(
+        max_length=16,
+        help_text="break / attenuation / normalization (snapshot do alert_type da config)",
+    )
+    channel = models.CharField(max_length=16, help_text="whatsapp, email, sms, telegram")
+    recipient_label = models.CharField(max_length=200, blank=True)
+    recipient_phone = models.CharField(max_length=32, blank=True)
+    recipient_email = models.CharField(max_length=200, blank=True)
+    success = models.BooleanField(default=False)
+    error = models.TextField(blank=True)
+    is_test = models.BooleanField(
+        default=False,
+        help_text="True quando a notificação veio do botão 'Enviar Teste' (sem evento real).",
+    )
+    sent_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "inventory_fiber_alarm_notification_log"
+        ordering = ["-sent_at"]
+        indexes = [
+            models.Index(fields=["config", "event"]),
+            models.Index(fields=["-sent_at"]),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - debug helper
+        return (
+            f"[{self.alert_type}] {self.channel} -> {self.recipient_label or self.recipient_phone or self.recipient_email}"
+            f" {'OK' if self.success else 'FAIL'} @ {self.sent_at:%Y-%m-%d %H:%M:%S}"
+        )
+
+
 class BufferTube(models.Model):
     """
     Tubo Loose (unidade de proteção que agrupa fibras).
