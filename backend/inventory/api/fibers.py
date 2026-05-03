@@ -221,15 +221,12 @@ def api_fibers_oper_status(request: HttpRequest) -> JsonResponse:
     return JsonResponse(payload)
 
 
-@require_GET
-@api_login_required
-@handle_api_errors
-def api_fiber_cached_optical_status(request: HttpRequest, cable_id: int) -> JsonResponse:
-    """Return cached optical status for a single cable without Zabbix calls.
+def _build_cached_optical_payload(cable_id: int) -> JsonResponse:
+    """Constrói o payload de cached optical status — função pura (sem decorators).
 
-    Leitura direta dos campos persistidos (last_rx_power / last_tx_power) das
-    portas de origem e destino. Evita chamadas síncronas ao Zabbix durante a
-    requisição web.
+    Reusada por:
+      - GET  /cached-status/        (api_fiber_cached_optical_status)
+      - POST /refresh-optical/      (api_fiber_refresh_optical)
     """
     try:
         cable = FiberCable.objects.select_related(
@@ -241,7 +238,6 @@ def api_fiber_cached_optical_status(request: HttpRequest, cable_id: int) -> Json
     origin = cable.origin_port
     dest = cable.destination_port
 
-    # Verificar se portas existem
     if not origin or not dest:
         return JsonResponse({
             "cable_id": cable.id,
@@ -288,6 +284,19 @@ def api_fiber_cached_optical_status(request: HttpRequest, cable_id: int) -> Json
         },
     }
     return JsonResponse(payload)
+
+
+@require_GET
+@api_login_required
+@handle_api_errors
+def api_fiber_cached_optical_status(request: HttpRequest, cable_id: int) -> JsonResponse:
+    """Return cached optical status for a single cable without Zabbix calls.
+
+    Leitura direta dos campos persistidos (last_rx_power / last_tx_power) das
+    portas de origem e destino. Evita chamadas síncronas ao Zabbix durante a
+    requisição web.
+    """
+    return _build_cached_optical_payload(cable_id)
 
 
 @require_POST
@@ -339,8 +348,8 @@ def api_fiber_refresh_optical(request: HttpRequest, cable_id: int) -> JsonRespon
             update_fields.append("last_optical_check")
             port.save(update_fields=update_fields)
 
-    # Reusa o handler GET para construir a resposta no mesmo formato
-    return api_fiber_cached_optical_status(request, cable_id)
+    # Reusa o builder do payload (sem decorators que rejeitariam o POST)
+    return _build_cached_optical_payload(cable_id)
 
 
 @require_GET

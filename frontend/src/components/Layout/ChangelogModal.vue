@@ -175,9 +175,19 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
-    version: '1.4.13.1',
+    version: '1.4.13.2',
     date: '03 Mai 2026',
     latest: true,
+    features: [],
+    improvements: [],
+    fixes: [
+      'Botão "Atualizar agora" do popup óptico retornava HTTP 405. O handler de refresh chamava internamente a view de cached-status (que tem @require_GET), e esse decorator bloqueava o POST original. Refatorado extraindo o builder de payload em uma função pura que ambos endpoints reusam.',
+    ],
+  },
+  {
+    version: '1.4.13.1',
+    date: '03 Mai 2026',
+    latest: false,
     features: [
       'Botão "Atualizar agora" no popup óptico do mapa: força leitura em tempo real do Zabbix (POST /api/v1/inventory/fibers/{id}/refresh-optical/) e atualiza o cache em uma única chamada batch — útil quando você quer ver IMEDIATAMENTE se um enlace voltou.',
     ],

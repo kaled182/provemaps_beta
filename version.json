@@ -1,6 +1,6 @@
 {
-  "version": "1.4.13.1",
+  "version": "1.4.13.2",
   "date": "2026-05-03",
   "critical": false,
-  "changelog": "Níveis ópticos atualizam quase em tempo real: task de coleta refatorada para batch (1 chamada Zabbix por device em vez de 1 por porta) + intervalo reduzido de 5min para 1min. Botão 'Atualizar agora' no popup óptico do mapa força leitura imediata. Indicador 'Atualizado há Xs' mostra a freshness. Resolve delay perceptível ao detectar normalização de enlace."
+  "changelog": "Fix: botão 'Atualizar agora' do popup óptico retornava HTTP 405. Causa: o handler refresh_optical chamava a view cached_optical_status (que tem @require_GET), bloqueando o POST original. Extraído _build_cached_optical_payload (puro) e ambos os endpoints agora reusam ele."
 }
