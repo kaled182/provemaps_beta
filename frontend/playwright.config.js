@@ -3,8 +3,9 @@
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
-  // Adjusted testDir to include all tests under ./tests
-  testDir: './tests',
+  // EV-0009: só os specs E2E. Com './tests' o Playwright engolia os specs do
+  // Vitest e listava 0 testes ("Vitest failed to access its internal state").
+  testDir: './tests/e2e',
   timeout: 30000,
   expect: {
     timeout: 5000,

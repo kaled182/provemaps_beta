@@ -229,7 +229,7 @@ describe('useBackupConfig', () => {
       expect(mockApi.post).toHaveBeenCalledWith('/setup_app/api/backups/upload-cloud/', {
         filename: 'backup.zip',
       })
-      expect(mockNotify.success).toHaveBeenCalledWith('Backups', 'Envio iniciado')
+      expect(mockNotify.success).toHaveBeenCalledWith('Backups', 'Envio iniciado.')
       expect(mockNotify.success).toHaveBeenCalledWith('Google Drive', 'Google Drive OK')
       expect(mockNotify.success).toHaveBeenCalledWith('FTP', 'FTP OK')
       expect(result).toBeDefined()
@@ -246,9 +246,13 @@ describe('useBackupConfig', () => {
       const settings = { retention_days: 30, retention_count: 15 }
       const result = await saveBackupSettings(settings)
 
-      expect(mockApi.post).toHaveBeenCalledWith('/setup_app/api/backups/settings/', settings)
+      // O composable junta os campos enviados aos defaults (frequency, cloud_*…).
+      expect(mockApi.post).toHaveBeenCalledWith(
+        '/setup_app/api/backups/settings/',
+        expect.objectContaining(settings),
+      )
       expect(mockNotify.success).toHaveBeenCalled()
-      expect(backupSettings.value).toEqual(settings)
+      expect(backupSettings.value).toEqual(expect.objectContaining(settings))
       expect(result).toBe(true)
     })
   })

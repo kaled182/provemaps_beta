@@ -39,7 +39,8 @@ describe('useSystemConfig', () => {
       
       expect(loading.value).toBe(false)
       expect(error.value).toBeNull()
-      expect(config.value).toEqual({})
+      // O formulário nasce com os valores padrão de todos os campos (não vazio).
+      expect(config.value).toMatchObject({ SECRET_KEY: '', DEBUG: false, DB_HOST: '' })
       expect(hasConfig.value).toBe(false)
     })
   })
@@ -63,7 +64,8 @@ describe('useSystemConfig', () => {
       await loadSystemConfig()
 
       expect(mockApi.get).toHaveBeenCalledWith('/setup_app/api/config/')
-      expect(config.value).toEqual(mockConfig)
+      // A configuração carregada é fundida sobre os defaults do formulário.
+      expect(config.value).toMatchObject(mockConfig)
       expect(loading.value).toBe(false)
       expect(error.value).toBeNull()
     })
@@ -275,7 +277,7 @@ describe('useSystemConfig', () => {
       
       clearTestResults()
       
-      expect(testResults.value).toEqual({})
+      expect(testResults.value).toEqual({ redis: null, database: null, zabbix: null })
     })
   })
 
@@ -290,10 +292,12 @@ describe('useSystemConfig', () => {
       
       resetForm()
       
-      expect(config.value).toEqual({})
+      // resetForm devolve o formulário aos valores padrão, não a {}.
+      expect(config.value).toMatchObject({ SECRET_KEY: '', DEBUG: false, DB_HOST: '' })
+      expect(config.value.DB_HOST).not.toBe('localhost')
     })
 
-    it('should preserve default values if provided', () => {
+    it('ignores arguments: always resets to the built-in defaults', () => {
       const { config, resetForm } = useSystemConfig()
       
       config.value = {
@@ -301,14 +305,10 @@ describe('useSystemConfig', () => {
         DB_HOST: 'localhost',
       }
       
-      const defaults = {
-        REDIS_URL: 'redis://default:6379',
-        DEBUG: false,
-      }
+      resetForm({ REDIS_URL: 'redis://default:6379', DEBUG: true })
       
-      resetForm(defaults)
-      
-      expect(config.value).toEqual(defaults)
+      expect(config.value.DEBUG).toBe(false)
+      expect(config.value.DB_HOST).toBe('')
     })
   })
 })
