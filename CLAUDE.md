@@ -102,13 +102,16 @@ log em inglês, como já está.
 
 - `EV-0012` **Quatro pilhas de mapa paralelas; só `CustomMapViewer` honra os três provedores; `NetworkDesign` quebra com `osm`** · P2 · `frontend/src/components/MapView.vue`, `providers/maps/MapProviderFactory.js`, `composables/useMapService.js` · **⚠️ não cabe numa sessão** (MapView 1.943, CustomMapViewer 2.874, NetworkDesign 3.566 linhas): leitura levada ao Paulo em 2026-10-04 — proposta de fatiar em 0012a Leaflet/OSM na factory + apagar pilha 4 morta; 0012b MapView; 0012c CustomMapViewer; 0012d NetworkDesign. Decisão dele; o assistente passou ao item seguinte
 - `EV-0017` **`setup_app/api_views.py` com 4.484 linhas sem usecases; `usecases/devices.py` com 2.501** · P2 · **⚠️ não cabe numa sessão** (66 views em `api_views.py` ligadas a 42 rotas, 7 domínios misturados — config/env, backups+nuvem, testes de ligação, perfil da empresa, servidores de monitorização, gateways de mensagens/WhatsApp QR, vídeo/câmeras — com `setup_app` a 45 % de cobertura; `devices.py` tem 25 funções com descoberta Zabbix e scoring de portas no mesmo ficheiro): leitura levada ao Paulo em 2026-10-04 — proposta de fatiar por domínio, um módulo `setup_app/api/<dominio>.py` + `setup_app/usecases/<dominio>.py` por item (0017a backups, 0017b env/config, 0017c gateways+WhatsApp, 0017d vídeo, 0017e testes de ligação/perfil/monitorização) e 0017f `usecases/devices.py` → `devices_discovery.py` + `devices_ports.py`. Decisão dele; o assistente passou ao item seguinte
-- `EV-0019` **Build do SPA sem minify, 518 `console.log`, Tailwind/FontAwesome via CDN forçando CSP com `unsafe-eval`** · P2 · `frontend/vite.config.js`, `backend/templates/base_spa.html`
 - `EV-0020` **Lixo versionado: `setup_app_backup/`, `staticfiles/`, `playwright-report`, `.vue.broken_backup`, HTMLs de teste, `dtemp_fibers.json`** · P3
 - `EV-0021` **Docs obsoletas: 42 citam `zabbix_api`, 20 citam MariaDB; versões 1.4.1 / 2.0.0 / 0.1.3 inconsistentes** · P3 · `doc/`, `CHANGELOG.md`, `VERSION`, `frontend/package.json`
 - `EV-0022` **CI sem lint Python nem ESLint; ESLint falha com 18 erros; pre-commit não aplicado** · P3 · `.github/workflows/tests.yml`, `frontend/.eslintrc.cjs`
 - `EV-0023` **`service_accounts` gera e roda tokens que nenhuma classe de autenticação consome** · P3 · `backend/service_accounts/`
 - `EV-0024` **Regra dos 100 m e «cabos próximos» em Python O(n²) em vez de `ST_DWithin`; lat/lng não sincroniza com `location`** · P3 · `backend/inventory/api/devices.py:795-845`, `signals_spatial.py`
 - `EV-0025` **Config default incoerente: `DB_ENGINE=mysql` sem driver, `.env.example` com `DATABASE_*` que ninguém lê, `asgi.py` aponta `core.settings`** · P3 · `backend/settings/base.py`, `.env.example`, `backend/core/asgi.py:17`
+
+**Entrada, por triar — 🐛 Problemas** (abertos pelo assistente com prova; a triagem é do Paulo)
+
+- `EV-0031` **15 templates Django legados carregam Tailwind Play CDN (compilador em runtime) e obrigam o CSP a manter `'unsafe-eval'` e os hosts `cdn.tailwindcss.com`/`cdnjs.cloudflare.com`** · prioridade por triar · `backend/templates/{base,base_with_sidebar}.html`, `templates/registration/*.html` (8), `maps_view/templates/{dashboard,base_dashboard}.html`, `setup_app/templates/{base_setup_dashboard,base_first_time_setup,setup/manage_environment}.html`; `backend/settings/base.py:112-130` · prova: `grep -rl cdn.tailwindcss.com backend/templates backend/maps_view/templates backend/setup_app/templates` → 15. Caminho: ligar o CSS do build do Vite (manifest já disponível no context processor) e incluir esses templates no `content` do Tailwind; confirmar `darkMode` (o Play CDN usa `media` por omissão onde não há `tailwind.config`); só depois apertar o CSP
 
 **A fazer — 💡 Ideias** (aceitas; EV-0027 e EV-0028 ligadas aos ADRs 0006 e 0007, agora Aceitos)
 
@@ -135,6 +138,7 @@ log em inglês, como já está.
 - `EV-0015` **KML: só `LineString` 2.2, Placemarks concatenados num único traçado, sem KMZ/MultiGeometry** · P2 · fechado em `feat(kml)` 2026-10-04 — `inventory/domain/kml.py`: qualquer namespace, KMZ, `MultiGeometry`, `gx:Track`, um traçado por Placemark (o mais longo vira o cabo), dedupe. **Fica:** mover `features/networkDesign/partials/import_kml.js` (DOM legado, `window.*`) para componente Vue — é parte da pilha NetworkDesign (EV-0012d)
 - `EV-0016` **Segredo TOTP em texto puro, TOTP caseiro, lockout por sessão** · P2 · fechado em `fix(auth)` 2026-10-04 — `UserProfile.totp_secret` passa a `EncryptedCharField` (Fernet, migração `core 0006` cifra os segredos existentes e é reversível); TOTP pelo `pyotp` (RFC 6238) em vez da implementação caseira; lockout por utilizador na cache (3 falhas → 5 min), não na sessão — limpar o cookie já não zera as tentativas
 - `EV-0018` **Dev-tools e pins sem versão na imagem de produção; `django-stubs 5.1` vs Django 5.2; três ficheiros de requirements** · P2 · fechado em `build(deps)` 2026-10-04 — `requirements.txt` só runtime, tudo pinado (`psycopg`, `setuptools`, `uvicorn`+`h11` que o Dockerfile instalava solto); `requirements-dev.txt` novo com pytest/coverage/lint/stubs (django-stubs 5.2.9, drf-stubs 3.16.9) que o CI e o `make requirements-dev` instalam; `requirements_full.txt` (freeze UTF-16 de Windows com MySQL e Playwright) apagado. **Fica:** `uvicorn.workers.UvicornWorker` está depreciado a favor do pacote `uvicorn-worker` — trocar nos compose quando se mexer na infra
+- `EV-0019` **Build do SPA sem minify, 518 `console.log`, Tailwind/FontAwesome via CDN forçando CSP com `unsafe-eval`** · P2 · fechado em `build(frontend)` 2026-10-04 — Tailwind 3.4 **compilado no build** (`tailwind.config.js` mínimo: dark por classe, `primary` = esmeralda atual, safelist do grid do mosaico; o CDN nunca processou o `@apply` nem as 163 classes `primary-*`) e FontAwesome 6.5.1 auto-hospedado via npm; `base_spa.html` sem CDN; build minificado (esbuild) com `console.log/debug/info/trace` e `debugger` removidos só em produção (583 → 0; `warn`/`error` ficam). **Fica (EV-0031):** 15 templates Django legados ainda carregam o Play CDN, por isso `'unsafe-eval'` e os hosts de CDN continuam no CSP
 
 <!-- EVOLUCAO:FIM -->
 
@@ -187,7 +191,7 @@ log em inglês, como já está.
 | Backend | Python 3.12, Django 5.2, DRF 3.15, Channels 4 (WebSocket `/ws/dashboard/status/`), Celery 5.4 + beat, structlog, django-prometheus, Sentry opcional |
 | Banco | PostgreSQL 16 + PostGIS (dev) / 15 (prod) — GDAL/GEOS obrigatórios; sem eles os campos espaciais degradam para JSON e os testes espaciais falham na coleta |
 | Cache/broker | Redis (degradação graciosa sem Redis) |
-| Frontend | Vue 3.5 + Vite 7 + Pinia 3 + vue-router 4, Chart.js 4, `@phosphor-icons/vue`, `vue3-google-map`, `mapbox-gl`, `leaflet`, `hls.js`, Vitest, Playwright |
+| Frontend | Vue 3.5 + Vite 7 + Pinia 3 + vue-router 4, Tailwind 3.4 compilado no build (PostCSS), FontAwesome 6.5 auto-hospedado, Chart.js 4, `@phosphor-icons/vue`, `vue3-google-map`, `mapbox-gl`, `leaflet`, `hls.js`, Vitest, Playwright |
 | Infra | Docker multi-stage (`docker/dockerfile`), compose dev (`docker/docker-compose.yml`, porta 8100) e prod (`docker-compose.prod.yml` com nginx+certbot e profiles), GHCR via `release.yml` |
 | Serviços | `services/video-transmuxer` (FastAPI), `services/whatsapp-qr` (Node/Baileys), mediamtx |
 
@@ -320,7 +324,7 @@ make lint          # ruff + black --check + isort --check  (não `make fmt` em p
 
 # frontend
 cd frontend && npm install && npm run test:unit             # 306 testes, ~10 s
-cd frontend && npm run build                                # sai em backend/staticfiles/vue-spa
+cd frontend && npm run build                                # sai em backend/staticfiles/vue-spa (minificado; console.log sai só em produção)
 cd frontend && npm run lint                                 # hoje falha com 18 erros (EV-0022)
 
 # saúde

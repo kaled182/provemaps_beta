@@ -106,6 +106,14 @@ primitivos; componente novo nasce neles. Prioridade: os modais gigantes que
 o levantamento já manda partir (`FiberCableDetailModal`, `SiteDetailsModal`,
 `PortTrafficModal`), que ganham o `TimeSeriesChart` único.
 
+> **Nota de execução (2026-10-04, EV-0019).** O Tailwind 3.4 local entrou
+> antes da Fase 1, pela razão de CSP do levantamento: o Play CDN é um
+> compilador em runtime e obrigava a `'unsafe-eval'`. O `tailwind.config.js`
+> é mínimo (dark por classe, `primary` = esmeralda atual, safelist para o
+> grid do mosaico); o FontAwesome ficou auto-hospedado via npm. A Fase 1
+> continua a ser tokens e fontes; a Fase 3 passa a ser alinhar esse config
+> com o do CRM e portar os primitivos.
+
 **Fase 4 — Pacote compartilhado.**
 Extrair `tailwind.config`, `tokens.css`, fontes e primitivos para um pacote
 `@simplesinternet/design-system` consumido pelos dois produtos (repositório

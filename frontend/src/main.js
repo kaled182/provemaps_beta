@@ -3,6 +3,9 @@ import { createPinia } from 'pinia';
 import App from './App.vue';
 import router from './router';
 import { setupGlobalErrorHandler } from './composables/useErrorHandler';
+// Tailwind e FontAwesome compilados/auto-hospedados — sem CDN (EV-0019, CLAUDE.md §2.8).
+import './assets/tailwind.css';
+import '@fortawesome/fontawesome-free/css/all.min.css';
 import './assets/site-details-modal.css';
 
 const app = createApp(App);
