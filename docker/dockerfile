@@ -131,6 +131,12 @@ RUN mkdir -p /app/backend/logs /app/backend/media /app/backend/staticfiles /app/
     chown -R ${APP_USER}:${APP_USER} /app && \
     chmod -R 755 /app
 
+# EV-0027b / ADR 0006: o commit implantado, cozido na imagem. O `scripts/deploy.sh` passa-o;
+# um build à mão sem ele deixa o `/healthz` sem `git_sha` e a Central não fecha nada (fail-closed).
+ARG GIT_SHA=
+ENV GIT_SHA=${GIT_SHA}
+LABEL org.opencontainers.image.revision="${GIT_SHA}"
+
 USER ${APP_USER}
 
 EXPOSE 8000

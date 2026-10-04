@@ -457,6 +457,11 @@ FILE_UPLOAD_DIRECTORY_PERMISSIONS = None
 # Cache-busting version (overridden via STATIC_ASSET_VERSION in env)
 STATIC_ASSET_VERSION = os.getenv("STATIC_ASSET_VERSION", "20251113.2309")
 
+# EV-0027b / ADR 0006 §4.4: o commit cozido na imagem pelo build (`docker build --build-arg
+# GIT_SHA=…`, que o `scripts/deploy.sh` passa). Sai no `/healthz` para o fecho observado da
+# Central de Evolução saber o que está no ar. Vazio = imagem construída sem SHA.
+GIT_SHA = os.getenv("GIT_SHA", "")
+
 # -----------------------------------------------------
 # Templates (cache enabled in production)
 # -----------------------------------------------------

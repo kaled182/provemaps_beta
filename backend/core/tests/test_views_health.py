@@ -1,10 +1,10 @@
 """Tests for core.views_health — healthz, healthz_ready, healthz_live, celery_status."""
+
 from __future__ import annotations
 
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
 from django.test import RequestFactory, TestCase, override_settings
 
 
@@ -17,6 +17,7 @@ class HealthzViewTests(TestCase):
 
     def test_healthy_returns_200(self):
         from core.views_health import healthz
+
         response = healthz(self._get())
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
@@ -26,11 +27,13 @@ class HealthzViewTests(TestCase):
 
     def test_response_has_no_cache_header(self):
         from core.views_health import healthz
+
         response = healthz(self._get())
         self.assertIn("no-cache", response["Cache-Control"])
 
     def test_response_includes_metadata(self):
         from core.views_health import healthz
+
         response = healthz(self._get())
         data = json.loads(response.content)
         self.assertIn("version", data)
@@ -38,8 +41,21 @@ class HealthzViewTests(TestCase):
         self.assertIn("python", data)
         self.assertIn("latency_ms", data)
 
+    def test_response_includes_git_sha_and_started_at(self):
+        """EV-0027b: a Central de Evolução lê daqui o que está no ar e desde quando."""
+        from core.views_health import INICIADO_EM, healthz
+
+        with override_settings(GIT_SHA="abc1234def"):
+            data = json.loads(healthz(self._get()).content)
+        self.assertEqual(data["git_sha"], "abc1234def")
+        self.assertEqual(data["iniciado_em"], INICIADO_EM)
+        self.assertRegex(INICIADO_EM, r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00$")
+        with override_settings(GIT_SHA=""), patch.dict("os.environ", {"GIT_SHA": ""}):
+            self.assertEqual(json.loads(healthz(self._get()).content)["git_sha"], "")
+
     def test_ignore_cache_env_flag(self):
         from core.views_health import healthz
+
         with patch.dict("os.environ", {"HEALTHCHECK_IGNORE_CACHE": "true"}):
             response = healthz(self._get())
         data = json.loads(response.content)
@@ -48,6 +64,7 @@ class HealthzViewTests(TestCase):
 
     def test_strict_mode_false_uses_db_only(self):
         from core.views_health import healthz
+
         with patch.dict("os.environ", {"HEALTHCHECK_STRICT": "false"}):
             response = healthz(self._get())
         # Should not 503 just because of cache
@@ -55,12 +72,14 @@ class HealthzViewTests(TestCase):
 
     def test_storage_check_included_by_default(self):
         from core.views_health import healthz
+
         response = healthz(self._get())
         data = json.loads(response.content)
         self.assertIn("storage", data["checks"])
 
     def test_storage_check_disabled_by_env(self):
         from core.views_health import healthz
+
         with patch.dict("os.environ", {"HEALTHCHECK_STORAGE": "false"}):
             response = healthz(self._get())
         data = json.loads(response.content)
@@ -68,6 +87,7 @@ class HealthzViewTests(TestCase):
 
     def test_system_metrics_enabled_by_env(self):
         from core.views_health import healthz
+
         with patch.dict("os.environ", {"HEALTHCHECK_SYSTEM_METRICS": "true"}):
             response = healthz(self._get())
         data = json.loads(response.content)
@@ -75,6 +95,7 @@ class HealthzViewTests(TestCase):
 
     def test_db_failure_returns_503(self):
         from core.views_health import healthz
+
         with patch(
             "core.views_health.connection.cursor",
             side_effect=Exception("DB down"),
@@ -86,11 +107,14 @@ class HealthzViewTests(TestCase):
 
     def test_cache_failure_returns_503_in_strict_mode(self):
         from core.views_health import healthz
-        with patch.dict("os.environ", {"HEALTHCHECK_STRICT": "true"}), \
-             patch(
-                 "core.views_health.caches",
-                 side_effect=Exception("cache boom"),
-             ):
+
+        with (
+            patch.dict("os.environ", {"HEALTHCHECK_STRICT": "true"}),
+            patch(
+                "core.views_health.caches",
+                side_effect=Exception("cache boom"),
+            ),
+        ):
             response = healthz(self._get())
         self.assertIn(response.status_code, [200, 503])
 
@@ -101,6 +125,7 @@ class HealthzReadyViewTests(TestCase):
 
     def test_ready_returns_200_when_db_up(self):
         from core.views_health import healthz_ready
+
         response = healthz_ready(self.factory.get("/ready"))
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
@@ -109,6 +134,7 @@ class HealthzReadyViewTests(TestCase):
 
     def test_ready_returns_503_when_db_down(self):
         from core.views_health import healthz_ready
+
         with patch(
             "core.views_health.connection.cursor",
             side_effect=Exception("no db"),
@@ -120,20 +146,21 @@ class HealthzReadyViewTests(TestCase):
 
     def test_ready_no_cache_header(self):
         from core.views_health import healthz_ready
+
         response = healthz_ready(self.factory.get("/ready"))
         self.assertIn("no-cache", response["Cache-Control"])
 
     def test_ready_includes_latency(self):
         from core.views_health import healthz_ready
+
         response = healthz_ready(self.factory.get("/ready"))
         data = json.loads(response.content)
         self.assertIn("latency_ms", data)
 
     def test_force_no_timeout_env(self):
         from core.views_health import healthz_ready
-        with patch.dict(
-            "os.environ", {"HEALTHCHECK_FORCE_NO_TIMEOUT": "true"}
-        ):
+
+        with patch.dict("os.environ", {"HEALTHCHECK_FORCE_NO_TIMEOUT": "true"}):
             response = healthz_ready(self.factory.get("/ready"))
         self.assertEqual(response.status_code, 200)
 
@@ -144,6 +171,7 @@ class HealthzLiveViewTests(TestCase):
 
     def test_live_always_200(self):
         from core.views_health import healthz_live
+
         response = healthz_live(self.factory.get("/live"))
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
@@ -151,33 +179,39 @@ class HealthzLiveViewTests(TestCase):
 
     def test_live_no_cache_header(self):
         from core.views_health import healthz_live
+
         response = healthz_live(self.factory.get("/live"))
         self.assertIn("no-cache", response["Cache-Control"])
 
 
 class TimeoutContextManagerTests(TestCase):
     def test_timeout_noop_on_windows(self):
-        from core.views_health import timeout
         import platform
+
+        from core.views_health import timeout
+
         with patch.object(platform, "system", return_value="Windows"):
             with timeout(1):
                 pass  # Should not raise
 
     def test_timeout_noop_when_zero(self):
         from core.views_health import timeout
+
         with timeout(0):
             pass  # Should be noop
 
     def test_storage_check_adds_ok_key(self):
         from core.views_health import _storage_check
+
         checks = {}
         _storage_check(checks)
         self.assertIn("storage", checks)
         self.assertIn("ok", checks["storage"])
 
     def test_add_system_metrics_without_psutil(self):
+
         from core.views_health import _add_system_metrics
-        import sys
+
         with patch.dict("sys.modules", {"psutil": None}):
             checks = {}
             _add_system_metrics(checks)
@@ -185,6 +219,7 @@ class TimeoutContextManagerTests(TestCase):
 
     def test_add_system_metrics_with_psutil(self):
         from core.views_health import _add_system_metrics
+
         mock_psutil = MagicMock()
         mock_psutil.cpu_percent.return_value = 10.0
         mock_psutil.virtual_memory.return_value = MagicMock(percent=50.0)
@@ -227,8 +262,10 @@ class CeleryStatusViewTests(TestCase):
         }
         mock_stats.delay.return_value = stats_result
 
-        with patch("core.celery.ping", mock_ping, create=True), \
-             patch("core.celery.get_queue_stats", mock_stats, create=True):
+        with (
+            patch("core.celery.ping", mock_ping, create=True),
+            patch("core.celery.get_queue_stats", mock_stats, create=True),
+        ):
             response = celery_status(self.factory.get("/celery/status"))
 
         self.assertIn(response.status_code, [200, 503])
@@ -243,8 +280,10 @@ class CeleryStatusViewTests(TestCase):
 
         # Patch at the source so the in-function `from core.celery import`
         # picks up the mock.
-        with patch("core.celery.ping", mock_ping, create=True), \
-             patch("core.celery.get_queue_stats", mock_stats, create=True):
+        with (
+            patch("core.celery.ping", mock_ping, create=True),
+            patch("core.celery.get_queue_stats", mock_stats, create=True),
+        ):
             response = celery_status(self.factory.get("/celery/status"))
 
         data = json.loads(response.content)
