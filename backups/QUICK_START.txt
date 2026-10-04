@@ -37,7 +37,7 @@ Linux/Mac:
    ESCOLHER UM PROVIDER:
    ─────────────────────────────────────────────────────────────────────
    Opção A - Mapbox (RECOMENDADO):
-     MAPBOX_TOKEN=pk.eyJ1Ijoia2FsZWQxODIi...
+     MAPBOX_TOKEN=pk.<seu-token-publico-do-mapbox>
      
      Obter token grátis em: https://account.mapbox.com/
      Limite: 200.000 requisições/mês

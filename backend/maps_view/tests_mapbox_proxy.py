@@ -24,7 +24,7 @@ def authenticated_client(db):
 def mapbox_config(db):
     """Configuração com token Mapbox."""
     config, _ = FirstTimeSetup.objects.get_or_create(pk=1)
-    config.mapbox_token = 'pk.eyJ1Ijoia2FsZWQxODIiLCJhIjoiY21jNjd1M3p2MGozMTJvcDloa3kzeXZ0cCJ9.azs0yBSvCd8WlGXB-pptog'
+    config.mapbox_token = 'pk.test-token-not-real'
     config.save()
     return config
 
