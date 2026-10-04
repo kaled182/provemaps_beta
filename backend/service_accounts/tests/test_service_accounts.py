@@ -8,8 +8,8 @@ from django.urls import reverse
 from django.utils import timezone
 from pytest import MonkeyPatch
 
-from . import services as rotation_services
-from .models import ServiceAccount, ServiceAccountAuditLog, ServiceAccountToken
+from service_accounts import services as rotation_services
+from service_accounts.models import ServiceAccount, ServiceAccountAuditLog, ServiceAccountToken
 
 
 @pytest.mark.django_db

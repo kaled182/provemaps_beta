@@ -209,3 +209,12 @@ class LogRequestTests(TestCase):
         req = factory.get("/proxy/style/")
         req.user = MagicMock(is_authenticated=True, username="u1")
         _log_request(req, "style")
+
+
+class MapboxProxyAuthTests(TestCase):
+    """Portado do antigo tests_mapbox_proxy.py (nunca coletado): o proxy exige sessão."""
+
+    def test_anonymous_is_redirected_to_login(self):
+        response = self.client.get("/maps_view/api/mapbox-proxy/styles/mapbox/streets-v12")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/accounts/login", response["Location"])

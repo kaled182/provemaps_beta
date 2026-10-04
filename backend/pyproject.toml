@@ -146,20 +146,5 @@ exclude_lines = [
     "class .*:\\.\\.\\.",
 ]
 
-[tool.pytest.ini_options]
-addopts = "-ra -q --strict-markers --strict-config"
-testpaths = ["tests", "core/tests", "maps_view/tests", "setup_app/tests"]
-python_files = ["test_*.py", "*_test.py"]
-python_classes = ["Test*", "*Test"]
-python_functions = ["test_*"]
-markers = [
-    "slow: marks tests as slow",
-    "integration: integration tests",
-    "unit: unit tests",
-    "db: tests requiring database",
-]
-DJANGO_SETTINGS_MODULE = "settings.test"
-filterwarnings = [
-    "ignore::DeprecationWarning",
-    "ignore::UserWarning",
-]
+# A configuração do pytest vive em backend/pytest.ini (espelhada em ../pytest.ini).
+# A secção [tool.pytest.ini_options] que existia aqui era ignorada: pytest.ini prevalece.
