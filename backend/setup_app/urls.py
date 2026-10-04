@@ -2,7 +2,12 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from . import api_views, views, views_docs
-from .api import backups as api_backups, config as api_config, gateways as api_gateways
+from .api import (
+    backups as api_backups,
+    config as api_config,
+    gateways as api_gateways,
+    video as api_video,
+)
 from .viewsets_alert_templates import AlertTemplateViewSet
 from .viewsets_contacts import ContactGroupViewSet, ContactViewSet, ImportHistoryViewSet
 
@@ -58,23 +63,23 @@ urlpatterns = [
     ),
     path(
         "api/gateways/<int:gateway_id>/video/preview/start/",
-        api_views.start_video_gateway_preview,
+        api_video.start_video_gateway_preview,
         name="start_video_gateway_preview",
     ),
     path(
         "api/gateways/<int:gateway_id>/video/preview/stop/",
-        api_views.stop_video_gateway_preview,
+        api_video.stop_video_gateway_preview,
         name="stop_video_gateway_preview",
     ),
     path(
         "video/hls/gateways/<int:gateway_id>/",
-        api_views.proxy_video_gateway_hls,
+        api_video.proxy_video_gateway_hls,
         {"resource": "index.m3u8"},
         name="video_hls_proxy_root",
     ),
     path(
         "video/hls/gateways/<int:gateway_id>/<path:resource>",
-        api_views.proxy_video_gateway_hls,
+        api_video.proxy_video_gateway_hls,
         name="video_hls_proxy",
     ),
     path(
@@ -116,13 +121,13 @@ urlpatterns = [
         "api/backups/download/<path:filename>/", api_backups.download_backup, name="download_backup"
     ),
     # Camera settings
-    path("api/camera-settings/", api_views.camera_settings, name="camera_settings"),
-    path("api/test-stream/", api_views.test_stream, name="test_stream"),
+    path("api/camera-settings/", api_video.camera_settings, name="camera_settings"),
+    path("api/test-stream/", api_video.test_stream, name="test_stream"),
     # Video mosaics endpoints
-    path("video/api/mosaics/", api_views.video_mosaics_list, name="video_mosaics_list"),
+    path("video/api/mosaics/", api_video.video_mosaics_list, name="video_mosaics_list"),
     path(
         "video/api/mosaics/<int:mosaic_id>/",
-        api_views.video_mosaic_detail,
+        api_video.video_mosaic_detail,
         name="video_mosaic_detail",
     ),
     # Documentation endpoints

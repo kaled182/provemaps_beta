@@ -207,7 +207,7 @@ class GetWhatsappQrServiceUrlTests(TestCase):
 
 class StreamUpstreamResponseTests(TestCase):
     def test_yields_chunks(self):
-        from setup_app.api_views import _stream_upstream_response
+        from setup_app.api.video import _stream_upstream_response
 
         mock_response = MagicMock()
         mock_response.iter_content.return_value = [b"chunk1", b"", b"chunk2"]
@@ -215,7 +215,7 @@ class StreamUpstreamResponseTests(TestCase):
         self.assertEqual(chunks, [b"chunk1", b"chunk2"])  # empty filtered out
 
     def test_closes_response_after_iteration(self):
-        from setup_app.api_views import _stream_upstream_response
+        from setup_app.api.video import _stream_upstream_response
 
         mock_response = MagicMock()
         mock_response.iter_content.return_value = [b"data"]
@@ -223,7 +223,7 @@ class StreamUpstreamResponseTests(TestCase):
         mock_response.close.assert_called_once()
 
     def test_closes_response_on_exception(self):
-        from setup_app.api_views import _stream_upstream_response
+        from setup_app.api.video import _stream_upstream_response
 
         mock_response = MagicMock()
         mock_response.iter_content.side_effect = RuntimeError("broken")

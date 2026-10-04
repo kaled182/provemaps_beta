@@ -26,7 +26,7 @@ from core import (
 
 # SPA views
 from core.views_spa import SPAView
-from setup_app import api_views as setup_api_views
+from setup_app.api import video as setup_api_video
 
 # Customize Django Admin
 admin.site.site_header = "SIMPLES INTERNET - Administração"
@@ -104,7 +104,7 @@ urlpatterns: list[Any] = [
     path("api/v1/", include("inventory.urls_rest")),
     path("api/v1/monitoring/", include("monitoring.urls_api")),
     path("", include("inventory.urls")),  # Custom maps and legacy HTML views
-    path("api/v1/cameras/", setup_api_views.video_cameras_list, name="api_video_cameras"),
+    path("api/v1/cameras/", setup_api_video.video_cameras_list, name="api_video_cameras"),
     path("api/config/", api_views.frontend_config, name="frontend_config"),
     path("setup_app/", include("setup_app.urls")),
     path("maps_view/", include("maps_view.urls")),
