@@ -2,38 +2,33 @@
 
 from __future__ import annotations
 
-import io
-import logging
 import json
+import logging
 import os
 import shutil
-import subprocess
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
-
-from django.conf import settings
-from django.contrib.auth.decorators import login_required, user_passes_test
-from django.db import connection
-from django.db.models import Q
-from django.http import FileResponse, HttpResponse, JsonResponse, StreamingHttpResponse
-from django.core.management import call_command
-from django.views.decorators.http import require_http_methods, require_GET, require_POST
-from django.urls import reverse
+from typing import Any
 
 import requests
+from django.conf import settings
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.core.management import call_command
+from django.db.models import Q
+from django.http import FileResponse, HttpResponse, JsonResponse, StreamingHttpResponse
+from django.urls import reverse
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from integrations.zabbix.zabbix_client import zabbix_request
 from integrations.zabbix.guards import reload_diagnostics_flag_cache
-from .models import FirstTimeSetup, MonitoringServer, MessagingGateway, CompanyProfile
+
+from .models import CompanyProfile, FirstTimeSetup, MessagingGateway, MonitoringServer
 from .models_audit import ConfigurationAudit
 from .services import runtime_settings, video_gateway as video_gateway_service
 from .services.cloud_backups import test_gdrive_connection, upload_backup_to_gdrive
 from .services.config_loader import clear_runtime_config_cache
 from .services.service_reloader import trigger_restart
 from .utils import env_manager
-
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +59,7 @@ _ALLOWED_BACKUP_EXTENSIONS = {".zip"}
 _MIN_BACKUP_PASSWORD_LEN = 8
 
 
-def _get_db_settings() -> Dict[str, str]:
+def _get_db_settings() -> dict[str, str]:
     keys = ["DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD"]
     values = env_manager.read_values(keys)
     missing = [key for key in keys if key != "DB_PASSWORD" and not values.get(key)]
@@ -90,9 +85,7 @@ def _get_backup_password() -> bytes:
     values = env_manager.read_values(["BACKUP_ZIP_PASSWORD"])
     password = values.get("BACKUP_ZIP_PASSWORD", "").strip()
     if len(password) < _MIN_BACKUP_PASSWORD_LEN:
-        raise ValueError(
-            "A senha do backup precisa ter pelo menos 8 caracteres para criptografar."
-        )
+        raise ValueError("A senha do backup precisa ter pelo menos 8 caracteres para criptografar.")
     return password.encode("utf-8")
 
 
@@ -128,7 +121,7 @@ def _file_info(field, request):
     return {"name": field.name, "url": url}
 
 
-def _serialize_company_profile(profile: CompanyProfile, request=None) -> Dict[str, Any]:
+def _serialize_company_profile(profile: CompanyProfile, request=None) -> dict[str, Any]:
     return {
         "company_legal_name": profile.company_legal_name,
         "company_trade_name": profile.company_trade_name,
@@ -160,7 +153,7 @@ def _serialize_company_profile(profile: CompanyProfile, request=None) -> Dict[st
     }
 
 
-def _get_gdrive_settings() -> Dict[str, str]:
+def _get_gdrive_settings() -> dict[str, str]:
     values = env_manager.read_values(
         [
             "GDRIVE_ENABLED",
@@ -187,7 +180,7 @@ def _get_gdrive_settings() -> Dict[str, str]:
     }
 
 
-def _get_ftp_settings() -> Dict[str, str]:
+def _get_ftp_settings() -> dict[str, str]:
     values = env_manager.read_values(
         ["FTP_ENABLED", "FTP_HOST", "FTP_PORT", "FTP_USER", "FTP_PASSWORD", "FTP_PATH"]
     )
@@ -221,7 +214,9 @@ def _ensure_ftp_dir(ftp, remote_path: str) -> None:
             ftp.cwd(part)
 
 
-def _upload_backup_via_ftp(filename: str, settings_payload: Dict[str, str] | None = None) -> Dict[str, object]:
+def _upload_backup_via_ftp(
+    filename: str, settings_payload: dict[str, str] | None = None
+) -> dict[str, object]:
     if not filename:
         return {"success": False, "message": "Backup filename not available."}
     settings_payload = settings_payload or _get_ftp_settings()
@@ -248,7 +243,9 @@ def _upload_backup_via_ftp(filename: str, settings_payload: Dict[str, str] | Non
         ftp = ftplib.FTP()
         ftp.connect(host=host, port=port, timeout=10)
         if settings_payload.get("user") or settings_payload.get("password"):
-            ftp.login(user=settings_payload.get("user", ""), passwd=settings_payload.get("password", ""))
+            ftp.login(
+                user=settings_payload.get("user", ""), passwd=settings_payload.get("password", "")
+            )
         else:
             ftp.login()
         _ensure_ftp_dir(ftp, settings_payload.get("path", ""))
@@ -271,7 +268,7 @@ def _upload_backup_if_enabled(
     oauth_client_id: str | None = None,
     oauth_client_secret: str | None = None,
     oauth_refresh_token: str | None = None,
-) -> Dict[str, object]:
+) -> dict[str, object]:
     if not filename:
         return {"success": False, "message": "Backup filename not available."}
 
@@ -321,8 +318,12 @@ def _detect_backup_type(filename: str) -> str:
 
 
 def _apply_backup_retention() -> None:
-    retention_days = env_manager.read_values(["BACKUP_RETENTION_DAYS"]).get("BACKUP_RETENTION_DAYS", "")
-    retention_count = env_manager.read_values(["BACKUP_RETENTION_COUNT"]).get("BACKUP_RETENTION_COUNT", "")
+    retention_days = env_manager.read_values(["BACKUP_RETENTION_DAYS"]).get(
+        "BACKUP_RETENTION_DAYS", ""
+    )
+    retention_count = env_manager.read_values(["BACKUP_RETENTION_COUNT"]).get(
+        "BACKUP_RETENTION_COUNT", ""
+    )
 
     try:
         days = int(retention_days) if retention_days else None
@@ -380,9 +381,7 @@ def test_zabbix_connection(request):
         password = data.get("zabbix_api_password", "").strip()
 
         if not zabbix_url:
-            return JsonResponse(
-                {"success": False, "message": "Zabbix URL is required"}, status=400
-            )
+            return JsonResponse({"success": False, "message": "Zabbix URL is required"}, status=400)
 
         # Test connection using direct requests (to test custom credentials)
         try:
@@ -411,9 +410,7 @@ def test_zabbix_connection(request):
             if "error" in result:
                 error_payload = result.get("error", {})
                 error_details = (
-                    error_payload.get("data")
-                    or error_payload.get("message")
-                    or "API error"
+                    error_payload.get("data") or error_payload.get("message") or "API error"
                 )
                 ConfigurationAudit.log_change(
                     user=request.user,
@@ -555,13 +552,9 @@ def test_zabbix_connection(request):
             )
 
     except json.JSONDecodeError:
-        return JsonResponse(
-            {"success": False, "message": "Invalid JSON data"}, status=400
-        )
+        return JsonResponse({"success": False, "message": "Invalid JSON data"}, status=400)
     except Exception as e:
-        return JsonResponse(
-            {"success": False, "message": f"Server error: {str(e)}"}, status=500
-        )
+        return JsonResponse({"success": False, "message": f"Server error: {e!s}"}, status=500)
 
 
 @require_POST
@@ -603,8 +596,8 @@ def test_database_connection(request):
             cursor.execute("SELECT version()")
             version_full = cursor.fetchone()[0]
             # Extract PostgreSQL version (e.g., "PostgreSQL 16.1")
-            if ',' in version_full:
-                version = version_full.split(',')[0]
+            if "," in version_full:
+                version = version_full.split(",")[0]
             else:
                 version = version_full
             cursor.close()
@@ -643,13 +636,9 @@ def test_database_connection(request):
             )
 
     except json.JSONDecodeError:
-        return JsonResponse(
-            {"success": False, "message": "Invalid JSON data"}, status=400
-        )
+        return JsonResponse({"success": False, "message": "Invalid JSON data"}, status=400)
     except Exception as e:
-        return JsonResponse(
-            {"success": False, "message": f"Server error: {str(e)}"}, status=500
-        )
+        return JsonResponse({"success": False, "message": f"Server error: {e!s}"}, status=500)
 
 
 @require_POST
@@ -669,15 +658,16 @@ def test_redis_connection(request):
 
         # Test connection
         try:
-            import redis
             from urllib.parse import urlparse
+
+            import redis
 
             # Parse Redis URL
             parsed = urlparse(redis_url)
-            
+
             # Create Redis client
             r = redis.Redis(
-                host=parsed.hostname or 'localhost',
+                host=parsed.hostname or "localhost",
                 port=parsed.port or 6379,
                 db=int(parsed.path[1:]) if parsed.path and len(parsed.path) > 1 else 0,
                 password=parsed.password,
@@ -686,11 +676,11 @@ def test_redis_connection(request):
 
             # Test connection with PING
             r.ping()
-            
+
             # Get Redis info
             info = r.info()
-            redis_version = info.get('redis_version', 'Unknown')
-            
+            redis_version = info.get("redis_version", "Unknown")
+
             r.close()
 
             # Log successful test
@@ -726,13 +716,9 @@ def test_redis_connection(request):
             )
 
     except json.JSONDecodeError:
-        return JsonResponse(
-            {"success": False, "message": "Invalid JSON data"}, status=400
-        )
+        return JsonResponse({"success": False, "message": "Invalid JSON data"}, status=400)
     except Exception as e:
-        return JsonResponse(
-            {"success": False, "message": f"Server error: {str(e)}"}, status=500
-        )
+        return JsonResponse({"success": False, "message": f"Server error: {e!s}"}, status=500)
 
 
 @require_POST
@@ -813,13 +799,10 @@ def test_ftp_connection(request):
             )
 
     except json.JSONDecodeError:
-        return JsonResponse(
-            {"success": False, "message": "Invalid JSON data"}, status=400
-        )
+        return JsonResponse({"success": False, "message": "Invalid JSON data"}, status=400)
     except Exception as e:
-        return JsonResponse(
-            {"success": False, "message": f"Server error: {str(e)}"}, status=500
-        )
+        return JsonResponse({"success": False, "message": f"Server error: {e!s}"}, status=500)
+
 
 @require_POST
 @login_required
@@ -990,6 +973,7 @@ def test_smtp_connection(request):
             status=400,
         )
 
+
 @require_POST
 @login_required
 @user_passes_test(_staff_check)
@@ -1005,7 +989,11 @@ def test_gdrive(request):
         oauth_client_secret = data.get("gdrive_oauth_client_secret", "").strip()
 
         values = {}
-        if not auth_mode or (auth_mode == "service_account" and not credentials_json) or auth_mode == "oauth":
+        if (
+            not auth_mode
+            or (auth_mode == "service_account" and not credentials_json)
+            or auth_mode == "oauth"
+        ):
             values = env_manager.read_values(
                 [
                     "GDRIVE_AUTH_MODE",
@@ -1022,7 +1010,9 @@ def test_gdrive(request):
             folder_id = folder_id or values.get("GDRIVE_FOLDER_ID", "")
             shared_drive_id = shared_drive_id or values.get("GDRIVE_SHARED_DRIVE_ID", "")
             oauth_client_id = oauth_client_id or values.get("GDRIVE_OAUTH_CLIENT_ID", "")
-            oauth_client_secret = oauth_client_secret or values.get("GDRIVE_OAUTH_CLIENT_SECRET", "")
+            oauth_client_secret = oauth_client_secret or values.get(
+                "GDRIVE_OAUTH_CLIENT_SECRET", ""
+            )
             oauth_refresh_token = values.get("GDRIVE_OAUTH_REFRESH_TOKEN", "")
         else:
             oauth_refresh_token = ""
@@ -1049,9 +1039,7 @@ def test_gdrive(request):
         status = 200 if result.get("success") else 400
         return JsonResponse(result, status=status)
     except json.JSONDecodeError:
-        return JsonResponse(
-            {"success": False, "message": "Invalid JSON data"}, status=400
-        )
+        return JsonResponse({"success": False, "message": "Invalid JSON data"}, status=400)
     except Exception as exc:
         return JsonResponse(
             {"success": False, "message": f"Server error: {exc}"},
@@ -1153,9 +1141,7 @@ def gdrive_oauth_callback(request):
     if not code:
         return HttpResponse("Código OAuth ausente.", status=400)
 
-    values = env_manager.read_values(
-        ["GDRIVE_OAUTH_CLIENT_ID", "GDRIVE_OAUTH_CLIENT_SECRET"]
-    )
+    values = env_manager.read_values(["GDRIVE_OAUTH_CLIENT_ID", "GDRIVE_OAUTH_CLIENT_SECRET"])
     client_id = values.get("GDRIVE_OAUTH_CLIENT_ID", "")
     client_secret = values.get("GDRIVE_OAUTH_CLIENT_SECRET", "")
     if not client_id or not client_secret:
@@ -1220,6 +1206,7 @@ def gdrive_oauth_callback(request):
         "Conectado ao Google Drive. Pode fechar esta janela.",
         content_type="text/plain",
     )
+
 
 @require_http_methods(["GET"])
 @login_required
@@ -1334,7 +1321,7 @@ def export_configuration(request):
             "SMS_AWS_SECRET_ACCESS_KEY",
         ]
         for key in sensitive_keys:
-            if key in config_data and config_data[key]:
+            if config_data.get(key):
                 config_data[key] = "***EXPORTED_BUT_REDACTED***"
 
         export_data = {
@@ -1353,16 +1340,12 @@ def export_configuration(request):
             success=True,
         )
 
-        response = HttpResponse(
-            json.dumps(export_data, indent=2), content_type="application/json"
-        )
+        response = HttpResponse(json.dumps(export_data, indent=2), content_type="application/json")
         response["Content-Disposition"] = 'attachment; filename="mapsprove_config.json"'
         return response
 
     except Exception as e:
-        return JsonResponse(
-            {"success": False, "message": f"Export failed: {str(e)}"}, status=500
-        )
+        return JsonResponse({"success": False, "message": f"Export failed: {e!s}"}, status=500)
 
 
 @require_POST
@@ -1372,9 +1355,7 @@ def import_configuration(request):
     """Import configuration from uploaded JSON file."""
     try:
         if "config_file" not in request.FILES:
-            return JsonResponse(
-                {"success": False, "message": "No file uploaded"}, status=400
-            )
+            return JsonResponse({"success": False, "message": "No file uploaded"}, status=400)
 
         config_file = request.FILES["config_file"]
         content = config_file.read().decode("utf-8")
@@ -1390,9 +1371,7 @@ def import_configuration(request):
 
         # Filter out redacted values
         filtered_config = {
-            k: v
-            for k, v in config.items()
-            if v and v != "***EXPORTED_BUT_REDACTED***"
+            k: v for k, v in config.items() if v and v != "***EXPORTED_BUT_REDACTED***"
         }
 
         # Write to env file
@@ -1417,9 +1396,7 @@ def import_configuration(request):
         )
 
     except json.JSONDecodeError:
-        return JsonResponse(
-            {"success": False, "message": "Invalid JSON file"}, status=400
-        )
+        return JsonResponse({"success": False, "message": "Invalid JSON file"}, status=400)
     except Exception as e:
         ConfigurationAudit.log_change(
             user=request.user,
@@ -1429,9 +1406,7 @@ def import_configuration(request):
             success=False,
             error_message=str(e),
         )
-        return JsonResponse(
-            {"success": False, "message": f"Import failed: {str(e)}"}, status=500
-        )
+        return JsonResponse({"success": False, "message": f"Import failed: {e!s}"}, status=500)
 
 
 @require_http_methods(["GET"])
@@ -1470,9 +1445,7 @@ def get_audit_history(request):
         return JsonResponse({"success": True, "audits": audit_data})
 
     except Exception as e:
-        return JsonResponse(
-            {"success": False, "message": f"Server error: {str(e)}"}, status=500
-        )
+        return JsonResponse({"success": False, "message": f"Server error: {e!s}"}, status=500)
 
 
 @require_POST
@@ -1605,11 +1578,15 @@ def test_sms_connection(request):
             )
 
         if provider == "aws_sns":
-            missing = [name for name, value in {
-                "região": aws_region,
-                "access key": aws_access_key,
-                "secret key": aws_secret,
-            }.items() if not value]
+            missing = [
+                name
+                for name, value in {
+                    "região": aws_region,
+                    "access key": aws_access_key,
+                    "secret key": aws_secret,
+                }.items()
+                if not value
+            ]
             if missing:
                 return JsonResponse(
                     {
@@ -1626,10 +1603,14 @@ def test_sms_connection(request):
             )
 
         if provider == "infobip":
-            missing = [name for name, value in {
-                "base URL": infobip_base_url,
-                "API token": api_token,
-            }.items() if not value]
+            missing = [
+                name
+                for name, value in {
+                    "base URL": infobip_base_url,
+                    "API token": api_token,
+                }.items()
+                if not value
+            ]
             if missing:
                 return JsonResponse(
                     {
@@ -1651,13 +1632,9 @@ def test_sms_connection(request):
         )
 
     except json.JSONDecodeError:
-        return JsonResponse(
-            {"success": False, "message": "Invalid JSON data"}, status=400
-        )
+        return JsonResponse({"success": False, "message": "Invalid JSON data"}, status=400)
     except Exception as e:
-        return JsonResponse(
-            {"success": False, "message": f"Server error: {str(e)}"}, status=500
-        )
+        return JsonResponse({"success": False, "message": f"Server error: {e!s}"}, status=500)
 
 
 @require_http_methods(["GET"])
@@ -1871,7 +1848,22 @@ def get_configuration(request):
             value = current_values.get(key, "")
             if value == "":
                 value = fallback_values.get(key, "")
-            if key in ["DEBUG", "ENABLE_DIAGNOSTIC_ENDPOINTS", "FTP_ENABLED", "GDRIVE_ENABLED", "SMTP_ENABLED", "SMS_ENABLED", "BACKUP_AUTO_ENABLED", "BACKUP_CLOUD_UPLOAD", "ENABLE_STREET_VIEW", "ENABLE_TRAFFIC", "MAPBOX_ENABLE_3D", "ENABLE_MAP_CLUSTERING", "ENABLE_DRAWING_TOOLS", "ENABLE_FULLSCREEN"]:
+            if key in [
+                "DEBUG",
+                "ENABLE_DIAGNOSTIC_ENDPOINTS",
+                "FTP_ENABLED",
+                "GDRIVE_ENABLED",
+                "SMTP_ENABLED",
+                "SMS_ENABLED",
+                "BACKUP_AUTO_ENABLED",
+                "BACKUP_CLOUD_UPLOAD",
+                "ENABLE_STREET_VIEW",
+                "ENABLE_TRAFFIC",
+                "MAPBOX_ENABLE_3D",
+                "ENABLE_MAP_CLUSTERING",
+                "ENABLE_DRAWING_TOOLS",
+                "ENABLE_FULLSCREEN",
+            ]:
                 if isinstance(value, bool):
                     config_data[key] = value
                 else:
@@ -1883,17 +1875,11 @@ def get_configuration(request):
             "GDRIVE_OAUTH_REFRESH_TOKEN", ""
         )
         config_data["GDRIVE_OAUTH_CONNECTED"] = bool(oauth_token)
-        
-        return JsonResponse({
-            "success": True,
-            "configuration": config_data
-        })
+
+        return JsonResponse({"success": True, "configuration": config_data})
 
     except Exception as e:
-        return JsonResponse(
-            {"success": False, "message": f"Server error: {str(e)}"}, 
-            status=500
-        )
+        return JsonResponse({"success": False, "message": f"Server error: {e!s}"}, status=500)
 
 
 @require_GET
@@ -1999,8 +1985,14 @@ def update_configuration(request):
 
         # Read existing values from database (not .env) to allow partial updates
         runtime_config = runtime_settings.get_runtime_config()
-        existing_record = FirstTimeSetup.objects.filter(configured=True).order_by("-configured_at").first()
-        
+        existing_record = (
+            FirstTimeSetup.objects.filter(configured=True).order_by("-configured_at").first()
+        )
+        # Senha de backup atual: o passo 5 compara-a com a nova para decidir se gera um backup
+        existing_backup_password = (
+            (getattr(existing_record, "backup_password", "") or "") if existing_record else ""
+        )
+
         # Validate required fields - check if provided in request OR exists in database
         required_fields = {
             "ZABBIX_API_URL": runtime_config.zabbix_api_url,
@@ -2009,25 +2001,28 @@ def update_configuration(request):
             "DB_NAME": runtime_config.db_name,
             "DB_USER": runtime_config.db_user,
         }
-        
+
         missing_fields = []
         for field, existing_value in required_fields.items():
             value_from_request = data.get(field, "").strip()
             if not value_from_request and not existing_value:
                 missing_fields.append(field)
-        
+
         if missing_fields:
-            return JsonResponse({
-                "success": False,
-                "message": f"Missing required fields: {', '.join(missing_fields)}"
-            }, status=400)
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": f"Missing required fields: {', '.join(missing_fields)}",
+                },
+                status=400,
+            )
 
         # For backup password, use existing from database if not provided
         backup_zip_password = data.get("BACKUP_ZIP_PASSWORD", "").strip()
         if not backup_zip_password and existing_record:
             # Read from database if available
-            backup_zip_password = getattr(existing_record, 'backup_password', '')
-        
+            backup_zip_password = getattr(existing_record, "backup_password", "")
+
         if backup_zip_password and len(backup_zip_password) < _MIN_BACKUP_PASSWORD_LEN:
             return JsonResponse(
                 {
@@ -2044,17 +2039,17 @@ def update_configuration(request):
         existing_oauth_email = runtime_config.gdrive_oauth_user_email or ""
         existing_oauth_client_id = runtime_config.gdrive_oauth_client_id or ""
         existing_oauth_client_secret = runtime_config.gdrive_oauth_client_secret or ""
-        
+
         existing_smtp_password = runtime_config.smtp_password or ""
         existing_smtp_auth_mode = runtime_config.smtp_auth_mode or "password"
         existing_smtp_oauth_client_id = runtime_config.smtp_oauth_client_id or ""
         existing_smtp_oauth_client_secret = runtime_config.smtp_oauth_client_secret or ""
         existing_smtp_oauth_refresh = runtime_config.smtp_oauth_refresh_token or ""
-        
+
         existing_sms_password = runtime_config.sms_password or ""
         existing_sms_token = runtime_config.sms_api_token or ""
         existing_sms_aws_secret = runtime_config.sms_aws_secret_access_key or ""
-        
+
         ftp_port_raw = data.get("FTP_PORT", "").strip()
         try:
             ftp_port_value = int(ftp_port_raw) if ftp_port_raw else 21
@@ -2064,17 +2059,15 @@ def update_configuration(request):
         smtp_password = data.get("SMTP_PASSWORD", "")
         if smtp_password == "":
             smtp_password = existing_smtp_password
-            
+
         sms_provider_rank = data.get("SMS_PROVIDER_RANK", "").strip()
         try:
             sms_provider_rank_value = int(sms_provider_rank) if sms_provider_rank else 1
         except ValueError:
             sms_provider_rank_value = 1
-        if sms_provider_rank_value < 1:
-            sms_provider_rank_value = 1
-        if sms_provider_rank_value > 5:
-            sms_provider_rank_value = 5
-            
+        sms_provider_rank_value = max(sms_provider_rank_value, 1)
+        sms_provider_rank_value = min(sms_provider_rank_value, 5)
+
         sms_password = data.get("SMS_PASSWORD", "")
         if sms_password == "":
             sms_password = existing_sms_password
@@ -2098,7 +2091,9 @@ def update_configuration(request):
             "DEBUG": "True" if _to_bool(data.get("DEBUG", False)) else "False",
             "ZABBIX_API_URL": data.get("ZABBIX_API_URL") or runtime_config.zabbix_api_url or "",
             "ZABBIX_API_USER": data.get("ZABBIX_API_USER") or runtime_config.zabbix_api_user or "",
-            "ZABBIX_API_PASSWORD": data.get("ZABBIX_API_PASSWORD") or runtime_config.zabbix_api_password or "",
+            "ZABBIX_API_PASSWORD": data.get("ZABBIX_API_PASSWORD")
+            or runtime_config.zabbix_api_password
+            or "",
             "ZABBIX_API_KEY": data.get("ZABBIX_API_KEY", "").strip(),
             "GOOGLE_MAPS_API_KEY": data.get("GOOGLE_MAPS_API_KEY", "").strip(),
             "MAP_PROVIDER": data.get("MAP_PROVIDER", "google").strip() or "google",
@@ -2109,26 +2104,36 @@ def update_configuration(request):
             "MAP_DEFAULT_LNG": data.get("MAP_DEFAULT_LNG", "-47.9292").strip() or "-47.9292",
             "MAP_TYPE": data.get("MAP_TYPE", "terrain").strip() or "terrain",
             "MAP_STYLES": data.get("MAP_STYLES", "").strip(),
-            "ENABLE_STREET_VIEW": "True" if _to_bool(data.get("ENABLE_STREET_VIEW", True)) else "False",
+            "ENABLE_STREET_VIEW": (
+                "True" if _to_bool(data.get("ENABLE_STREET_VIEW", True)) else "False"
+            ),
             "ENABLE_TRAFFIC": "True" if _to_bool(data.get("ENABLE_TRAFFIC", False)) else "False",
             # Map configuration - Mapbox
-            "MAPBOX_STYLE": data.get("MAPBOX_STYLE", "mapbox://styles/mapbox/streets-v12").strip() or "mapbox://styles/mapbox/streets-v12",
+            "MAPBOX_STYLE": data.get("MAPBOX_STYLE", "mapbox://styles/mapbox/streets-v12").strip()
+            or "mapbox://styles/mapbox/streets-v12",
             "MAPBOX_CUSTOM_STYLE": data.get("MAPBOX_CUSTOM_STYLE", "").strip(),
-            "MAPBOX_ENABLE_3D": "True" if _to_bool(data.get("MAPBOX_ENABLE_3D", False)) else "False",
+            "MAPBOX_ENABLE_3D": (
+                "True" if _to_bool(data.get("MAPBOX_ENABLE_3D", False)) else "False"
+            ),
             # Map configuration - Esri
             "ESRI_API_KEY": data.get("ESRI_API_KEY", "").strip(),
             "ESRI_BASEMAP": data.get("ESRI_BASEMAP", "streets").strip() or "streets",
             # Map configuration - Common
             "MAP_LANGUAGE": data.get("MAP_LANGUAGE", "pt-BR").strip() or "pt-BR",
             "MAP_THEME": data.get("MAP_THEME", "light").strip() or "light",
-            "ENABLE_MAP_CLUSTERING": "True" if _to_bool(data.get("ENABLE_MAP_CLUSTERING", True)) else "False",
-            "ENABLE_DRAWING_TOOLS": "True" if _to_bool(data.get("ENABLE_DRAWING_TOOLS", True)) else "False",
-            "ENABLE_FULLSCREEN": "True" if _to_bool(data.get("ENABLE_FULLSCREEN", True)) else "False",
+            "ENABLE_MAP_CLUSTERING": (
+                "True" if _to_bool(data.get("ENABLE_MAP_CLUSTERING", True)) else "False"
+            ),
+            "ENABLE_DRAWING_TOOLS": (
+                "True" if _to_bool(data.get("ENABLE_DRAWING_TOOLS", True)) else "False"
+            ),
+            "ENABLE_FULLSCREEN": (
+                "True" if _to_bool(data.get("ENABLE_FULLSCREEN", True)) else "False"
+            ),
             "ALLOWED_HOSTS": data.get("ALLOWED_HOSTS") or runtime_config.allowed_hosts or "",
             "CSRF_TRUSTED_ORIGINS": data.get("CSRF_TRUSTED_ORIGINS", "").strip(),
             "ENABLE_DIAGNOSTIC_ENDPOINTS": (
-                "True" if _to_bool(data.get("ENABLE_DIAGNOSTIC_ENDPOINTS", False)) 
-                else "False"
+                "True" if _to_bool(data.get("ENABLE_DIAGNOSTIC_ENDPOINTS", False)) else "False"
             ),
             "DB_HOST": data.get("DB_HOST") or runtime_config.db_host or "",
             "DB_PORT": data.get("DB_PORT") or runtime_config.db_port or "",
@@ -2140,9 +2145,7 @@ def update_configuration(request):
             "DOMAIN_NAME": data.get("DOMAIN_NAME", "").strip(),
             "CERTBOT_EMAIL": data.get("CERTBOT_EMAIL", "").strip(),
             "SENTRY_DSN": data.get("SENTRY_DSN", "").strip(),
-            "SERVICE_RESTART_COMMANDS": data.get(
-                "SERVICE_RESTART_COMMANDS", ""
-            ).strip(),
+            "SERVICE_RESTART_COMMANDS": data.get("SERVICE_RESTART_COMMANDS", "").strip(),
             "BACKUP_ZIP_PASSWORD": backup_zip_password,
             "FTP_ENABLED": "True" if _to_bool(data.get("FTP_ENABLED", False)) else "False",
             "FTP_HOST": data.get("FTP_HOST", "").strip(),
@@ -2167,8 +2170,7 @@ def update_configuration(request):
             "SMTP_SECURITY": data.get("SMTP_SECURITY", "").strip(),
             "SMTP_USER": data.get("SMTP_USER", "").strip(),
             "SMTP_PASSWORD": smtp_password,
-            "SMTP_AUTH_MODE": data.get("SMTP_AUTH_MODE", "").strip()
-            or existing_smtp_auth_mode,
+            "SMTP_AUTH_MODE": data.get("SMTP_AUTH_MODE", "").strip() or existing_smtp_auth_mode,
             "SMTP_OAUTH_CLIENT_ID": data.get("SMTP_OAUTH_CLIENT_ID", "").strip()
             or existing_smtp_oauth_client_id,
             "SMTP_OAUTH_CLIENT_SECRET": data.get("SMTP_OAUTH_CLIENT_SECRET", "").strip()
@@ -2230,18 +2232,22 @@ def update_configuration(request):
                     "EMAIL_USE_SSL": "False",
                 }
             )
-        
+
         # DO NOT write to .env - all configuration is stored in database only
         # env_manager.write_values(payload)  # REMOVED: .env is only a template
-        
+
         # Update runtime environment and settings for immediate effect (without restart)
         os.environ["OPTICAL_RX_WARNING_THRESHOLD"] = payload["OPTICAL_RX_WARNING_THRESHOLD"]
         os.environ["OPTICAL_RX_CRITICAL_THRESHOLD"] = payload["OPTICAL_RX_CRITICAL_THRESHOLD"]
         settings.EMAIL_BACKEND = payload.get("EMAIL_BACKEND", settings.EMAIL_BACKEND)
         settings.EMAIL_HOST = payload.get("EMAIL_HOST", settings.EMAIL_HOST)
-        settings.EMAIL_PORT = int(payload["EMAIL_PORT"]) if payload.get("EMAIL_PORT") else settings.EMAIL_PORT
+        settings.EMAIL_PORT = (
+            int(payload["EMAIL_PORT"]) if payload.get("EMAIL_PORT") else settings.EMAIL_PORT
+        )
         settings.EMAIL_HOST_USER = payload.get("EMAIL_HOST_USER", settings.EMAIL_HOST_USER)
-        settings.EMAIL_HOST_PASSWORD = payload.get("EMAIL_HOST_PASSWORD", settings.EMAIL_HOST_PASSWORD)
+        settings.EMAIL_HOST_PASSWORD = payload.get(
+            "EMAIL_HOST_PASSWORD", settings.EMAIL_HOST_PASSWORD
+        )
         settings.EMAIL_USE_TLS = payload.get("EMAIL_USE_TLS", "False").lower() == "true"
         settings.EMAIL_USE_SSL = payload.get("EMAIL_USE_SSL", "False").lower() == "true"
         settings.DEFAULT_FROM_EMAIL = payload.get("DEFAULT_FROM_EMAIL", settings.DEFAULT_FROM_EMAIL)
@@ -2259,7 +2265,7 @@ def update_configuration(request):
         # Step 2: Persist to database
         # Determine auth_type but always save all credentials provided
         auth_type = "token" if payload["ZABBIX_API_KEY"] else "login"
-        
+
         FirstTimeSetup.objects.update_or_create(
             configured=True,
             defaults={
@@ -2343,14 +2349,15 @@ def update_configuration(request):
                 "sms_aws_access_key_id": payload["SMS_AWS_ACCESS_KEY_ID"],
                 "sms_aws_secret_access_key": payload["SMS_AWS_SECRET_ACCESS_KEY"],
                 "sms_infobip_base_url": payload["SMS_INFOBIP_BASE_URL"],
-            }
+            },
         )
 
         # Step 3: Clear caches
         clear_runtime_config_cache()
         runtime_settings.reload_config()
-        
+
         from integrations.zabbix.zabbix_service import clear_token_cache
+
         clear_token_cache()
         reload_diagnostics_flag_cache()
 
@@ -2418,23 +2425,22 @@ def update_configuration(request):
         if backup_warning:
             message = f"{message}. {backup_warning}"
 
-        return JsonResponse({
-            "success": True,
-            "message": message,
-            "backup_warning": bool(backup_warning),
-            "backup_message": backup_warning,
-            "backup_created": backup_created,
-            "backup_filename": backup_filename,
-            "gdrive_upload": gdrive_upload or {},
-            "ftp_upload": ftp_upload or {},
-            "restart_triggered": restart_triggered,
-        })
+        return JsonResponse(
+            {
+                "success": True,
+                "message": message,
+                "backup_warning": bool(backup_warning),
+                "backup_message": backup_warning,
+                "backup_created": backup_created,
+                "backup_filename": backup_filename,
+                "gdrive_upload": gdrive_upload or {},
+                "ftp_upload": ftp_upload or {},
+                "restart_triggered": restart_triggered,
+            }
+        )
 
     except json.JSONDecodeError:
-        return JsonResponse(
-            {"success": False, "message": "Invalid JSON data"}, 
-            status=400
-        )
+        return JsonResponse({"success": False, "message": "Invalid JSON data"}, status=400)
     except Exception as e:
         # Log failure
         ConfigurationAudit.log_change(
@@ -2445,14 +2451,11 @@ def update_configuration(request):
             success=False,
             error_message=str(e),
         )
-        
-        return JsonResponse(
-            {"success": False, "message": f"Server error: {str(e)}"}, 
-            status=500
-        )
+
+        return JsonResponse({"success": False, "message": f"Server error: {e!s}"}, status=500)
 
 
-def _serialize_monitoring_server(server: MonitoringServer) -> Dict[str, Any]:
+def _serialize_monitoring_server(server: MonitoringServer) -> dict[str, Any]:
     return {
         "id": server.id,
         "name": server.name,
@@ -2472,23 +2475,25 @@ def _serialize_monitoring_server(server: MonitoringServer) -> Dict[str, Any]:
 def monitoring_servers(request):
     if request.method == "GET":
         servers = MonitoringServer.objects.all().order_by("-is_active", "name")
-        return JsonResponse({
-            "success": True,
-            "servers": [_serialize_monitoring_server(server) for server in servers],
-        })
+        return JsonResponse(
+            {
+                "success": True,
+                "servers": [_serialize_monitoring_server(server) for server in servers],
+            }
+        )
 
     try:
         data = json.loads(request.body or "{}")
     except json.JSONDecodeError:
-        return JsonResponse(
-            {"success": False, "message": "Invalid JSON data"}, status=400
-        )
+        return JsonResponse({"success": False, "message": "Invalid JSON data"}, status=400)
 
     name = data.get("name", "").strip()
     url = data.get("url", "").strip()
     server_type = data.get("server_type", "zabbix").strip() or "zabbix"
     auth_token = data.get("auth_token", "").strip()
-    extra_config = data.get("extra_config", {}) if isinstance(data.get("extra_config"), dict) else {}
+    extra_config = (
+        data.get("extra_config", {}) if isinstance(data.get("extra_config"), dict) else {}
+    )
     is_active = bool(data.get("is_active", True))
 
     if not name or not url:
@@ -2506,10 +2511,12 @@ def monitoring_servers(request):
         extra_config=extra_config,
     )
 
-    return JsonResponse({
-        "success": True,
-        "server": _serialize_monitoring_server(server),
-    })
+    return JsonResponse(
+        {
+            "success": True,
+            "server": _serialize_monitoring_server(server),
+        }
+    )
 
 
 @require_http_methods(["GET", "PATCH", "PUT", "DELETE"])
@@ -2531,9 +2538,7 @@ def monitoring_server_detail(request, server_id: int):
     try:
         data = json.loads(request.body or "{}")
     except json.JSONDecodeError:
-        return JsonResponse(
-            {"success": False, "message": "Invalid JSON data"}, status=400
-        )
+        return JsonResponse({"success": False, "message": "Invalid JSON data"}, status=400)
 
     if "name" in data:
         server.name = data.get("name", "").strip() or server.name
@@ -2558,7 +2563,7 @@ def monitoring_server_detail(request, server_id: int):
     return JsonResponse({"success": True, "server": _serialize_monitoring_server(server)})
 
 
-def _serialize_gateway(gateway: MessagingGateway) -> Dict[str, Any]:
+def _serialize_gateway(gateway: MessagingGateway) -> dict[str, Any]:
     serialized = {
         "id": gateway.id,
         "name": gateway.name,
@@ -2572,7 +2577,7 @@ def _serialize_gateway(gateway: MessagingGateway) -> Dict[str, Any]:
         "created_at": gateway.created_at.isoformat(),
         "updated_at": gateway.updated_at.isoformat(),
     }
-    
+
     # Para gateways de vídeo, adicionar playback_url automaticamente
     if gateway.gateway_type == "video":
         try:
@@ -2581,7 +2586,7 @@ def _serialize_gateway(gateway: MessagingGateway) -> Dict[str, Any]:
                 serialized["playback_url"] = playback_url
         except Exception:
             pass  # Se falhar, apenas não adiciona o campo
-    
+
     return serialized
 
 
@@ -2735,7 +2740,7 @@ def _sync_gateway_env(gateway_type: str) -> None:
 def messaging_gateways(request):
     if request.method == "GET":
         _ensure_default_gateways()
-        
+
         # Filtrar por departamentos do usuário (apenas para câmeras de vídeo)
         if request.user.is_superuser:
             # Superuser vê todos os gateways
@@ -2745,13 +2750,21 @@ def messaging_gateways(request):
             # - Todos os gateways que NÃO são de vídeo (sms, whatsapp, telegram, smtp)
             # - Câmeras de vídeo dos seus departamentos OU públicas (sem departamento)
             user_depts = request.user.profile.departments.all()
-            
-            gateways = MessagingGateway.objects.filter(
-                Q(gateway_type__in=['sms', 'whatsapp', 'telegram', 'smtp']) |  # Não-vídeo: sempre visível
-                Q(gateway_type='video', departments__in=user_depts) |  # Vídeo: departamentos do usuário
-                Q(gateway_type='video', departments__isnull=True)  # Vídeo: público
-            ).distinct().order_by("gateway_type", "priority", "name")
-        
+
+            gateways = (
+                MessagingGateway.objects.filter(
+                    Q(
+                        gateway_type__in=["sms", "whatsapp", "telegram", "smtp"]
+                    )  # Não-vídeo: sempre visível
+                    | Q(
+                        gateway_type="video", departments__in=user_depts
+                    )  # Vídeo: departamentos do usuário
+                    | Q(gateway_type="video", departments__isnull=True)  # Vídeo: público
+                )
+                .distinct()
+                .order_by("gateway_type", "priority", "name")
+            )
+
         return JsonResponse(
             {"success": True, "gateways": [_serialize_gateway(gw) for gw in gateways]}
         )
@@ -2759,15 +2772,11 @@ def messaging_gateways(request):
     try:
         data = json.loads(request.body or "{}")
     except json.JSONDecodeError:
-        return JsonResponse(
-            {"success": False, "message": "Invalid JSON data"}, status=400
-        )
+        return JsonResponse({"success": False, "message": "Invalid JSON data"}, status=400)
 
     gateway_type = data.get("gateway_type", "").strip()
     if gateway_type not in {"sms", "whatsapp", "telegram", "smtp", "video"}:
-        return JsonResponse(
-            {"success": False, "message": "Tipo de gateway inválido."}, status=400
-        )
+        return JsonResponse({"success": False, "message": "Tipo de gateway inválido."}, status=400)
 
     name = data.get("name", "").strip()
     if not name:
@@ -2779,8 +2788,7 @@ def messaging_gateways(request):
         priority = int(data.get("priority", 1))
     except (TypeError, ValueError):
         priority = 1
-    if priority < 1:
-        priority = 1
+    priority = max(priority, 1)
 
     config = data.get("config", {}) if isinstance(data.get("config"), dict) else {}
     gateway = MessagingGateway.objects.create(
@@ -3184,27 +3192,25 @@ def messaging_gateway_detail(request, gateway_id: int):
     try:
         gateway = MessagingGateway.objects.get(id=gateway_id)
     except MessagingGateway.DoesNotExist:
-        return JsonResponse(
-            {"success": False, "message": "Gateway não encontrado."}, status=404
-        )
-    
+        return JsonResponse({"success": False, "message": "Gateway não encontrado."}, status=404)
+
     # Validar permissões RBAC para câmeras de vídeo
     if gateway.gateway_type == "video" and not request.user.is_superuser:
         user_depts = request.user.profile.departments.all()
-        
+
         # Verificar se a câmera pertence aos departamentos do usuário OU é pública
         has_access = (
-            gateway.departments.exists() == False or  # Pública (sem departamentos)
-            gateway.departments.filter(id__in=[d.id for d in user_depts]).exists()  # Ou pertence aos departamentos do usuário
+            not gateway.departments.exists()  # Pública (sem departamentos)
+            or gateway.departments.filter(
+                id__in=[d.id for d in user_depts]
+            ).exists()  # Ou pertence aos departamentos do usuário
         )
-        
+
         if not has_access:
             return JsonResponse(
-                {"success": False, "message": "Sem permissão para acessar esta câmera."},
-                status=403
+                {"success": False, "message": "Sem permissão para acessar esta câmera."}, status=403
             )
 
-    original_config = dict(gateway.config or {})
     original_enabled = gateway.enabled
 
     if request.method == "GET":
@@ -3221,9 +3227,7 @@ def messaging_gateway_detail(request, gateway_id: int):
     try:
         data = json.loads(request.body or "{}")
     except json.JSONDecodeError:
-        return JsonResponse(
-            {"success": False, "message": "Invalid JSON data"}, status=400
-        )
+        return JsonResponse({"success": False, "message": "Invalid JSON data"}, status=400)
 
     if "name" in data:
         gateway.name = data.get("name", "").strip() or gateway.name
@@ -3236,8 +3240,7 @@ def messaging_gateway_detail(request, gateway_id: int):
             priority = int(data.get("priority", gateway.priority))
         except (TypeError, ValueError):
             priority = gateway.priority
-        if priority < 1:
-            priority = 1
+        priority = max(priority, 1)
         gateway.priority = priority
 
     stop_before_save = False
@@ -3352,7 +3355,11 @@ def proxy_video_gateway_hls(request, gateway_id: int, resource: str = "index.m3u
 
     content_type = upstream.headers.get(
         "Content-Type",
-        "application/vnd.apple.mpegurl" if sanitized.endswith(".m3u8") else "application/octet-stream",
+        (
+            "application/vnd.apple.mpegurl"
+            if sanitized.endswith(".m3u8")
+            else "application/octet-stream"
+        ),
     )
 
     response = StreamingHttpResponse(
@@ -3407,9 +3414,7 @@ def start_video_gateway_preview(request, gateway_id: int):
             startup_timeout=30.0,
         )
     except video_gateway_service.PreviewStartTimeout as exc:
-        logger.warning(
-            "Pré-visualização do gateway %s não ficou pronta: %s", gateway.id, exc
-        )
+        logger.warning("Pré-visualização do gateway %s não ficou pronta: %s", gateway.id, exc)
         return JsonResponse(
             {
                 "success": False,
@@ -3418,9 +3423,7 @@ def start_video_gateway_preview(request, gateway_id: int):
             status=504,
         )
     except video_gateway_service.VideoGatewayError as exc:
-        logger.warning(
-            "Falha ao acionar transmuxer para gateway %s: %s", gateway.id, exc
-        )
+        logger.warning("Falha ao acionar transmuxer para gateway %s: %s", gateway.id, exc)
         return JsonResponse(
             {
                 "success": False,
@@ -3473,9 +3476,7 @@ def stop_video_gateway_preview(request, gateway_id: int):
     try:
         video_gateway_service.stop_stream_for_gateway(gateway)
     except Exception as exc:  # pragma: no cover - defensive logging
-        logger.warning(
-            "Falha ao encerrar pré-visualização do gateway %s: %s", gateway.id, exc
-        )
+        logger.warning("Falha ao encerrar pré-visualização do gateway %s: %s", gateway.id, exc)
         return JsonResponse(
             {
                 "success": False,
@@ -3647,13 +3648,13 @@ def backups_manager(request):
                 stat = file_path.stat()
             except FileNotFoundError:
                 continue
-            
+
             # Check if backup was uploaded to cloud (heuristic: check if mentioned in recent env values)
             cloud_uploaded = False
             upload_marker = BACKUP_DIR / f".{file_path.name}.uploaded"
             if upload_marker.exists():
                 cloud_uploaded = True
-            
+
             backups.append(
                 {
                     "id": file_path.name,
@@ -3734,7 +3735,8 @@ def backups_manager(request):
         filename = call_command("make_backup")
         if not filename:
             backups = [
-                path for path in BACKUP_DIR.iterdir()
+                path
+                for path in BACKUP_DIR.iterdir()
                 if path.is_file() and path.suffix.lower() == ".zip"
             ]
             if backups:
@@ -3793,7 +3795,7 @@ def restore_backup(request):
         if backup_path.suffix.lower() == ".zip":
             try:
                 import pyzipper
-            except ImportError as exc:
+            except ImportError:
                 return JsonResponse(
                     {
                         "success": False,
@@ -3824,7 +3826,9 @@ def restore_backup(request):
                     )
 
                 extracted_path = candidates[0]
-                restore_name = f"restore_tmp_{datetime.now().strftime('%Y%m%d_%H%M%S')}{extracted_path.suffix}"
+                restore_name = (
+                    f"restore_tmp_{datetime.now().strftime('%Y%m%d_%H%M%S')}{extracted_path.suffix}"
+                )
                 restore_path = BACKUP_DIR / restore_name
                 shutil.copy2(extracted_path, restore_path)
 
@@ -3904,7 +3908,9 @@ def upload_backup_to_cloud(request):
         ftp_upload = _upload_backup_via_ftp(filename)
 
         # Mark as uploaded if at least one provider succeeded
-        if (gdrive_upload and gdrive_upload.get("success")) or (ftp_upload and ftp_upload.get("success")):
+        if (gdrive_upload and gdrive_upload.get("success")) or (
+            ftp_upload and ftp_upload.get("success")
+        ):
             upload_marker = BACKUP_DIR / f".{filename}.uploaded"
             upload_marker.touch()
 
@@ -3945,7 +3951,7 @@ def update_backup_settings(request):
     try:
         data = json.loads(request.body or "{}")
         logger.info(f"[update_backup_settings] Received data: {data}")
-        
+
         retention_days = data.get("retention_days")
         retention_count = data.get("retention_count")
         auto_backup = data.get("auto_backup")
@@ -3958,7 +3964,7 @@ def update_backup_settings(request):
             "BACKUP_RETENTION_DAYS": str(retention_days or ""),
             "BACKUP_RETENTION_COUNT": str(retention_count or ""),
         }
-        
+
         if auto_backup is not None:
             payload["BACKUP_AUTO_ENABLED"] = "true" if auto_backup else "false"
         if frequency:
@@ -4036,11 +4042,14 @@ def video_cameras_list(request):
         igual ao `display_name` do Site.
     """
     import os
+
     from django.conf import settings
-    from django.http import JsonResponse
     from django.db.models import Q
-    from setup_app.models import MessagingGateway
+    from django.http import JsonResponse
+
     from inventory.models import Site
+    from setup_app.models import MessagingGateway
+
     from .services import video_gateway as video_gateway_service
 
     try:
@@ -4068,33 +4077,40 @@ def video_cameras_list(request):
             cfg = gw.config or {}
             webrtc_base = (cfg.get("webrtc_public_base_url") or "").strip()
             if not webrtc_base:
-                webrtc_base = getattr(settings, "VIDEO_WEBRTC_PUBLIC_BASE_URL", None) or os.environ.get("VIDEO_WEBRTC_PUBLIC_BASE_URL")
+                webrtc_base = getattr(
+                    settings, "VIDEO_WEBRTC_PUBLIC_BASE_URL", None
+                ) or os.environ.get("VIDEO_WEBRTC_PUBLIC_BASE_URL")
             if not webrtc_base:
                 return None
-            restream_key = (cfg.get("restream_key") or f"gateway_{gw.id}")
-            base = str(webrtc_base).rstrip('/')
+            restream_key = cfg.get("restream_key") or f"gateway_{gw.id}"
+            base = str(webrtc_base).rstrip("/")
             return f"{base}/whep/{restream_key}"
 
         results = []
         for gw in gateways:
             playback_url = video_gateway_service.build_playback_url(gw)
-            results.append({
-                "id": gw.id,
-                "name": gw.name,
-                "enabled": gw.enabled,
-                "site_name": gw.site_name,
-                "playback_url": playback_url,
-                "whep_url": _whep_url(gw),
-            })
+            results.append(
+                {
+                    "id": gw.id,
+                    "name": gw.name,
+                    "enabled": gw.enabled,
+                    "site_name": gw.site_name,
+                    "playback_url": playback_url,
+                    "whep_url": _whep_url(gw),
+                }
+            )
 
-        return JsonResponse({
-            "success": True,
-            "count": len(results),
-            "results": results,
-        })
+        return JsonResponse(
+            {
+                "success": True,
+                "count": len(results),
+                "results": results,
+            }
+        )
     except Exception as exc:
         logger.exception("Error listing video cameras")
         return JsonResponse({"success": False, "message": str(exc)}, status=500)
+
 
 @require_http_methods(["GET", "POST"])
 @login_required
@@ -4102,31 +4118,34 @@ def video_cameras_list(request):
 def video_mosaics_list(request):
     """List all video mosaics or create a new one."""
     from .models import VideoMosaic
-    
+
     if request.method == "GET":
         try:
             # Filtro opcional por site_id
-            site_id_param = request.GET.get('site_id') or request.GET.get('site')
+            site_id_param = request.GET.get("site_id") or request.GET.get("site")
 
             # Filtrar por departamentos do usuário
             if request.user.is_superuser:
                 # Superuser vê todos os mosaicos
-                mosaics = VideoMosaic.objects.all().order_by('name')
+                mosaics = VideoMosaic.objects.all().order_by("name")
             else:
                 # Usuários normais veem apenas mosaicos de seus departamentos
                 user_depts = request.user.profile.departments.all()
-                
+
                 # Mosaicos sem departamento (públicos) OU mosaicos dos departamentos do usuário
-                mosaics = VideoMosaic.objects.filter(
-                    Q(departments__in=user_depts) | 
-                    Q(departments__isnull=True)
-                ).distinct().order_by('name')
+                mosaics = (
+                    VideoMosaic.objects.filter(
+                        Q(departments__in=user_depts) | Q(departments__isnull=True)
+                    )
+                    .distinct()
+                    .order_by("name")
+                )
             if site_id_param:
                 try:
                     mosaics = mosaics.filter(site_id=int(site_id_param))
                 except ValueError:
                     pass
-            
+
             mosaic_list = [
                 {
                     "id": m.id,
@@ -4147,7 +4166,7 @@ def video_mosaics_list(request):
                 {"success": False, "message": f"Failed to list mosaics: {exc}"},
                 status=500,
             )
-    
+
     elif request.method == "POST":
         try:
             data = json.loads(request.body)
@@ -4156,50 +4175,58 @@ def video_mosaics_list(request):
             cameras = data.get("cameras", [])
             department_ids = data.get("department_ids", [])
             site_id = data.get("site_id")
-            
+
             if not name:
                 return JsonResponse(
                     {"success": False, "message": "Nome do mosaico é obrigatório"},
                     status=400,
                 )
-            
+
             # Validar permissões: usuários normais só podem criar mosaicos em seus departamentos
             if not request.user.is_superuser and department_ids:
-                user_dept_ids = set(request.user.profile.departments.values_list('id', flat=True))
+                user_dept_ids = set(request.user.profile.departments.values_list("id", flat=True))
                 requested_dept_ids = set(department_ids)
-                
+
                 if not requested_dept_ids.issubset(user_dept_ids):
                     return JsonResponse(
-                        {"success": False, "message": "Você só pode criar mosaicos em departamentos aos quais pertence."},
+                        {
+                            "success": False,
+                            "message": "Você só pode criar mosaicos em departamentos aos quais pertence.",
+                        },
                         status=403,
                     )
-            
+
             mosaic = VideoMosaic.objects.create(
                 name=name,
                 layout=layout,
                 cameras=cameras,
                 site_id=site_id if isinstance(site_id, int) else None,
             )
-            
+
             # Adicionar departamentos se fornecidos
             if department_ids:
                 from core.models import Department
+
                 mosaic.departments.set(Department.objects.filter(id__in=department_ids))
-            
-            return JsonResponse({
-                "success": True,
-                "message": "Mosaico criado com sucesso",
-                "mosaic": {
-                    "id": mosaic.id,
-                    "name": mosaic.name,
-                    "layout": mosaic.layout,
-                    "cameras": mosaic.cameras,
-                    "site_id": mosaic.site_id,
-                    "departments": [{"id": d.id, "name": d.name} for d in mosaic.departments.all()],
-                    "created_at": mosaic.created_at.isoformat(),
-                    "updated_at": mosaic.updated_at.isoformat(),
-                },
-            })
+
+            return JsonResponse(
+                {
+                    "success": True,
+                    "message": "Mosaico criado com sucesso",
+                    "mosaic": {
+                        "id": mosaic.id,
+                        "name": mosaic.name,
+                        "layout": mosaic.layout,
+                        "cameras": mosaic.cameras,
+                        "site_id": mosaic.site_id,
+                        "departments": [
+                            {"id": d.id, "name": d.name} for d in mosaic.departments.all()
+                        ],
+                        "created_at": mosaic.created_at.isoformat(),
+                        "updated_at": mosaic.updated_at.isoformat(),
+                    },
+                }
+            )
         except json.JSONDecodeError:
             return JsonResponse(
                 {"success": False, "message": "Invalid JSON data"},
@@ -4219,7 +4246,7 @@ def video_mosaics_list(request):
 def video_mosaic_detail(request, mosaic_id: int):
     """Get, update or delete a specific video mosaic."""
     from .models import VideoMosaic
-    
+
     try:
         mosaic = VideoMosaic.objects.get(pk=mosaic_id)
     except VideoMosaic.DoesNotExist:
@@ -4227,42 +4254,46 @@ def video_mosaic_detail(request, mosaic_id: int):
             {"success": False, "message": "Mosaico não encontrado"},
             status=404,
         )
-    
+
     # Validar permissões RBAC
     if not request.user.is_superuser:
         user_depts = request.user.profile.departments.all()
-        
+
         # Verificar se o mosaico pertence aos departamentos do usuário OU é público
         has_access = (
-            mosaic.departments.exists() == False or  # Público (sem departamentos)
-            mosaic.departments.filter(id__in=[d.id for d in user_depts]).exists()  # Ou pertence aos departamentos do usuário
+            not mosaic.departments.exists()  # Público (sem departamentos)
+            or mosaic.departments.filter(
+                id__in=[d.id for d in user_depts]
+            ).exists()  # Ou pertence aos departamentos do usuário
         )
-        
+
         if not has_access:
             return JsonResponse(
                 {"success": False, "message": "Sem permissão para acessar este mosaico."},
-                status=403
+                status=403,
             )
-    
+
     if request.method == "GET":
-        return JsonResponse({
-            "success": True,
-            "mosaic": {
-                "id": mosaic.id,
-                "name": mosaic.name,
-                "layout": mosaic.layout,
-                "cameras": mosaic.cameras,
-                "site_id": mosaic.site_id,
-                "departments": [{"id": d.id, "name": d.name} for d in mosaic.departments.all()],
-                "created_at": mosaic.created_at.isoformat() if mosaic.created_at else None,
-                "updated_at": mosaic.updated_at.isoformat() if mosaic.updated_at else None,
-            },
-        })
-    
+        return JsonResponse(
+            {
+                "success": True,
+                "mosaic": {
+                    "id": mosaic.id,
+                    "name": mosaic.name,
+                    "layout": mosaic.layout,
+                    "cameras": mosaic.cameras,
+                    "site_id": mosaic.site_id,
+                    "departments": [{"id": d.id, "name": d.name} for d in mosaic.departments.all()],
+                    "created_at": mosaic.created_at.isoformat() if mosaic.created_at else None,
+                    "updated_at": mosaic.updated_at.isoformat() if mosaic.updated_at else None,
+                },
+            }
+        )
+
     elif request.method == "PATCH":
         try:
             data = json.loads(request.body)
-            
+
             if "name" in data:
                 name = data["name"].strip()
                 if not name:
@@ -4271,50 +4302,60 @@ def video_mosaic_detail(request, mosaic_id: int):
                         status=400,
                     )
                 mosaic.name = name
-            
+
             if "layout" in data:
                 mosaic.layout = data["layout"]
-            
+
             if "cameras" in data:
                 mosaic.cameras = data["cameras"]
 
             if "site_id" in data:
                 raw_site_id = data["site_id"]
                 mosaic.site_id = raw_site_id if isinstance(raw_site_id, int) else None
-            
+
             # Atualizar departamentos se fornecidos
             if "department_ids" in data:
                 department_ids = data["department_ids"]
-                
+
                 # Validar permissões: usuários normais só podem atribuir seus próprios departamentos
                 if not request.user.is_superuser and department_ids:
-                    user_dept_ids = set(request.user.profile.departments.values_list('id', flat=True))
+                    user_dept_ids = set(
+                        request.user.profile.departments.values_list("id", flat=True)
+                    )
                     requested_dept_ids = set(department_ids)
-                    
+
                     if not requested_dept_ids.issubset(user_dept_ids):
                         return JsonResponse(
-                            {"success": False, "message": "Você só pode atribuir departamentos aos quais pertence."},
+                            {
+                                "success": False,
+                                "message": "Você só pode atribuir departamentos aos quais pertence.",
+                            },
                             status=403,
                         )
-                
+
                 from core.models import Department
+
                 mosaic.departments.set(Department.objects.filter(id__in=department_ids))
-            
+
             mosaic.save()
-            
-            return JsonResponse({
-                "success": True,
-                "message": "Mosaico atualizado com sucesso",
-                "mosaic": {
-                    "id": mosaic.id,
-                    "name": mosaic.name,
-                    "layout": mosaic.layout,
-                    "cameras": mosaic.cameras,
-                    "site_id": mosaic.site_id,
-                    "departments": [{"id": d.id, "name": d.name} for d in mosaic.departments.all()],
-                    "updated_at": mosaic.updated_at.isoformat(),
-                },
-            })
+
+            return JsonResponse(
+                {
+                    "success": True,
+                    "message": "Mosaico atualizado com sucesso",
+                    "mosaic": {
+                        "id": mosaic.id,
+                        "name": mosaic.name,
+                        "layout": mosaic.layout,
+                        "cameras": mosaic.cameras,
+                        "site_id": mosaic.site_id,
+                        "departments": [
+                            {"id": d.id, "name": d.name} for d in mosaic.departments.all()
+                        ],
+                        "updated_at": mosaic.updated_at.isoformat(),
+                    },
+                }
+            )
         except json.JSONDecodeError:
             return JsonResponse(
                 {"success": False, "message": "Invalid JSON data"},
@@ -4326,15 +4367,17 @@ def video_mosaic_detail(request, mosaic_id: int):
                 {"success": False, "message": f"Failed to update mosaic: {exc}"},
                 status=500,
             )
-    
+
     elif request.method == "DELETE":
         try:
             mosaic_name = mosaic.name
             mosaic.delete()
-            return JsonResponse({
-                "success": True,
-                "message": f"Mosaico '{mosaic_name}' removido com sucesso",
-            })
+            return JsonResponse(
+                {
+                    "success": True,
+                    "message": f"Mosaico '{mosaic_name}' removido com sucesso",
+                }
+            )
         except Exception as exc:
             logger.exception("Error deleting video mosaic")
             return JsonResponse(
@@ -4410,14 +4453,14 @@ def camera_settings(request):
             logger.exception("Error loading camera settings")
             return JsonResponse({"success": False, "message": str(exc)}, status=500)
 
-    # POST – save settings
+    # POST - save settings
     try:
         body = json.loads(request.body)
     except (json.JSONDecodeError, ValueError) as exc:
         return JsonResponse({"success": False, "message": f"Invalid JSON: {exc}"}, status=400)
 
     try:
-        to_write: Dict[str, Any] = {}
+        to_write: dict[str, Any] = {}
         for env_key, setting_key in _CAMERA_KEY_MAP.items():
             if setting_key in body:
                 val = body[setting_key]
@@ -4437,6 +4480,7 @@ def camera_settings(request):
 # ─────────────────────────────────────────────────────────────
 # Test Stream
 # ─────────────────────────────────────────────────────────────
+
 
 @login_required
 @require_POST
@@ -4462,7 +4506,9 @@ def test_stream(request):
         port = parsed.port
 
         if not host:
-            return JsonResponse({"success": False, "message": "URL inválida: host não encontrado."}, status=400)
+            return JsonResponse(
+                {"success": False, "message": "URL inválida: host não encontrado."}, status=400
+            )
 
         if not port:
             port = {"rtsp": 554, "rtmp": 1935, "rtmps": 443, "http": 80, "https": 443}.get(
@@ -4471,12 +4517,16 @@ def test_stream(request):
 
         sock = socket.create_connection((host, port), timeout=timeout)
         sock.close()
-        return JsonResponse({
-            "success": True,
-            "message": f"Conexão bem-sucedida com {host}:{port}.",
-        })
-    except socket.timeout:
-        return JsonResponse({"success": False, "message": "Timeout ao conectar com o servidor de stream."})
+        return JsonResponse(
+            {
+                "success": True,
+                "message": f"Conexão bem-sucedida com {host}:{port}.",
+            }
+        )
+    except TimeoutError:
+        return JsonResponse(
+            {"success": False, "message": "Timeout ao conectar com o servidor de stream."}
+        )
     except OSError as exc:
         return JsonResponse({"success": False, "message": f"Falha na conexão: {exc}"})
     except Exception as exc:
