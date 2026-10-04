@@ -16,6 +16,11 @@ describe('formatOpticalSeries (EV-0010)', () => {
     expect(out.rxData).toEqual([-21, null, -21.5])
     expect(out.txData).toEqual([-3, -3.1, null])
     expect(out.labels).toHaveLength(3)
+    expect(out.timestamps).toEqual([
+      Date.parse('2026-10-04T10:00:00Z'),
+      Date.parse('2026-10-04T10:01:00Z'),
+      Date.parse('2026-10-04T10:02:00Z'),
+    ])
   })
 
   it('ordena por tempo e desenha linhas de limiar quando existem', () => {

@@ -24,7 +24,7 @@ export function formatTimestampLabel(timestamp) {
 /**
  * @param {Array<{timestamp: string|number, rx_power?: number|null, tx_power?: number|null}>} historyArray
  * @param {{warning?: number|null, critical?: number|null}} [thresholds]
- * @returns {null | {labels: string[], rxData: (number|null)[], txData: (number|null)[], thresholds: object, warningLine: number[]|null, criticalLine: number[]|null}}
+ * @returns {null | {timestamps: number[], labels: string[], rxData: (number|null)[], txData: (number|null)[], thresholds: object, warningLine: number[]|null, criticalLine: number[]|null}}
  */
 export function formatOpticalSeries(historyArray, thresholds = {}) {
   if (!Array.isArray(historyArray) || historyArray.length === 0) return null
@@ -33,6 +33,7 @@ export function formatOpticalSeries(historyArray, thresholds = {}) {
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
   )
 
+  const timestamps = sorted.map((point) => new Date(point.timestamp).getTime())
   const labels = sorted.map((point) => formatTimestampLabel(point.timestamp))
   const rxData = sorted.map((point) => toNumberOrNull(point.rx_power))
   const txData = sorted.map((point) => toNumberOrNull(point.tx_power))
@@ -41,6 +42,7 @@ export function formatOpticalSeries(historyArray, thresholds = {}) {
   const criticalValue = thresholds?.critical ?? null
 
   return {
+    timestamps,
     labels,
     rxData,
     txData,

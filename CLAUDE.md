@@ -100,7 +100,6 @@ log em inglês, como já está.
 <!-- EVOLUCAO:INICIO — quadro manual; quando a Central existir, passa a ser gerado. -->
 **A fazer — 🐛 Problemas** (triagem do Paulo, 2026-10-04: todos aceitos com a prioridade proposta)
 
-- `EV-0011` **Instâncias Chart.js nunca destruídas; render por `setTimeout`; fetch duplicado sem `AbortController`** · P2 · `frontend/src/components/FiberCableDetailModal.vue`, `PortTrafficModal.vue`
 - `EV-0012` **Quatro pilhas de mapa paralelas; só `CustomMapViewer` honra os três provedores; `NetworkDesign` quebra com `osm`** · P2 · `frontend/src/components/MapView.vue`, `providers/maps/MapProviderFactory.js`, `composables/useMapService.js`
 - `EV-0013` **`list_fiber_cables` devolve geometria duplicada de todos os cabos, sem bbox; N+1 em `cable_type`** · P2 · `backend/inventory/usecases/fibers.py:513-600`, `serializers.py:407,615`
 - `EV-0014` **`CustomMapViewer` faz polling de 30 s em vez do WebSocket; `SiteDetailsModal` cria um socket por abertura sem cleanup** · P2 · `frontend/src/views/monitoring/CustomMapViewer.vue:410`, `components/SiteDetailsModal.vue:1536`
@@ -118,7 +117,6 @@ log em inglês, como já está.
 
 **A fazer — 💡 Ideias** (aceitas; EV-0027 e EV-0028 ligadas aos ADRs 0006 e 0007, agora Aceitos)
 
-- `EV-0026` **Componente único `TimeSeriesChart.vue` (eixo temporal, tema por tokens, `destroy` garantido) a substituir os 4 builders e 3 exports**
 - `EV-0027` **Portar a Central de Evolução (ADR 0006) e trocar este quadro manual pela vista gerada**
 - `EV-0028` **Alinhamento visual com o CRM — Fase 1: tokens e fontes auto-hospedadas (ADR 0007)**
 - `EV-0029` **Backend bucketiza séries (60 s) e devolve `{t, in, out}` alinhados, com limite de pontos proporcional ao período**
@@ -135,6 +133,8 @@ log em inglês, como já está.
 - `EV-0008` **~61 testes backend nunca coletados; três configs pytest divergentes** · P2 · fechado em `test(pytest)` 2026-10-04 — 1.050 coletados (eram 996); `backend/pytest.ini` canónico, raiz espelha; destapou bug real: colunas `json` das rotas rebentavam no psycopg3 → migração 0069 para `jsonb`
 - `EV-0009` **121 testes frontend fora do `include` do Vitest; Playwright lista 0 testes** · P2 · fechado em `test(frontend)` 2026-10-04 — 426 testes em 35 ficheiros (eram 311/29); Playwright lista os specs E2E; `fiberService.test.js` (importava funções inexistentes) removido
 - `EV-0010` **Merge RX/TX e IN/OUT por `clock` exato gera buracos ou forward-fill que esconde quedas** · P2 · fechado em `fix(charts)` 2026-10-04 — backend alinha por bucket (60 s a 1 h conforme o período, ≤1.500 pontos) com `null` real; frontend sem forward-fill, zero preservado, `spanGaps` desligado
+- `EV-0011` **Instâncias Chart.js nunca destruídas; render por `setTimeout`; fetch duplicado sem `AbortController`** · P2 · fechado em `refactor(charts)` 2026-10-04 — todo gráfico é um `TimeSeriesChart.vue` (destroy em `onBeforeUnmount`, nasce quando o canvas existe, resposta mais recente ganha)
+- `EV-0026` **Componente único `TimeSeriesChart.vue`** · Ideia · fechado no mesmo commit — substitui os 4 builders de `FiberCableDetailModal` (3.859 → 3.385 linhas), o Chart.js e o canvas manual de `PortTrafficModal`, e o canvas de `AlarmConfigModal`; eixo temporal proporcional, cores por tokens
 
 <!-- EVOLUCAO:FIM -->
 
