@@ -25,6 +25,19 @@ class PortTrafficHistoryAPITests(TestCase):
             device=self.device,
             name="Gi1/0/1",
         )
+        self.user = get_user_model().objects.create_user("noc", password="pass")
+        self.client.force_login(self.user)
+
+    def test_anonymous_is_redirected_to_login(self):
+        """EV-0004: o histórico de tráfego não é legível sem sessão."""
+        self.client.logout()
+        url = reverse(
+            "inventory-api:port-traffic-history",
+            args=[self.port.pk],
+        )
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/accounts/login/", response["Location"])
 
     def test_returns_400_when_port_missing_traffic_items(self):
         url = reverse(

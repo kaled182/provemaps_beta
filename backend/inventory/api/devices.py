@@ -261,6 +261,7 @@ def api_sites(request: HttpRequest) -> HttpResponse:
 
 
 @require_GET
+@login_required
 @handle_api_errors
 def api_port_traffic_history(
     request: HttpRequest,
