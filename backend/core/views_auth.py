@@ -1,18 +1,22 @@
 from __future__ import annotations
 
+import logging
+
 from django import forms
 from django.conf import settings
 from django.contrib.auth import login
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView, PasswordResetView
+from django.core.cache import cache
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.generic.edit import FormView
 
 from core.api_users import _verify_totp
-
 from setup_app.utils.env_manager import read_values
+
+logger = logging.getLogger(__name__)
 
 
 def _apply_runtime_email_settings() -> None:
@@ -102,6 +106,49 @@ class TwoStepLoginView(LoginView):
         return super().form_valid(form)
 
 
+OTP_FAIL_WINDOW_SECONDS = 300  # janela em que as falhas contam
+OTP_LOCKOUT_SECONDS = 300  # bloqueio após max_attempts falhas
+
+
+def _otp_fail_key(user_id) -> str:
+    return f"otp:fail:{user_id}"
+
+
+def _otp_lock_key(user_id) -> str:
+    return f"otp:lock:{user_id}"
+
+
+def otp_is_locked(user_id) -> bool:
+    return bool(cache.get(_otp_lock_key(user_id)))
+
+
+def otp_register_failure(user_id, max_attempts: int) -> int:
+    """Conta a falha no servidor (não na sessão) e bloqueia ao atingir o máximo.
+
+    EV-0016: o contador vivia em ``request.session`` — bastava limpar o cookie
+    para zerar as tentativas. Agora é por utilizador, na cache, com TTL.
+    """
+    key = _otp_fail_key(user_id)
+    if cache.add(key, 1, OTP_FAIL_WINDOW_SECONDS):
+        attempts = 1
+    else:
+        try:
+            attempts = cache.incr(key)
+        except ValueError:  # chave expirou entre o add e o incr
+            cache.set(key, 1, OTP_FAIL_WINDOW_SECONDS)
+            attempts = 1
+    if attempts >= max_attempts:
+        cache.set(_otp_lock_key(user_id), True, OTP_LOCKOUT_SECONDS)
+        cache.delete(key)
+        logger.warning("otp.locked", extra={"user_id": user_id, "attempts": attempts})
+    return attempts
+
+
+def otp_clear_failures(user_id) -> None:
+    cache.delete(_otp_fail_key(user_id))
+    cache.delete(_otp_lock_key(user_id))
+
+
 class RuntimeOtpView(FormView):
     form_class = TotpCodeForm
     template_name = "registration/otp.html"
@@ -110,34 +157,41 @@ class RuntimeOtpView(FormView):
     def dispatch(self, request, *args, **kwargs):
         if not request.session.get("pending_2fa_user_id"):
             return redirect(settings.LOGIN_URL)
-        request.session.setdefault("otp_attempts", 0)
         return super().dispatch(request, *args, **kwargs)
 
-    def form_valid(self, form):
-        user_id = self.request.session.get("pending_2fa_user_id")
+    @staticmethod
+    def _pending_user(user_id):
+        """Return the user awaiting 2FA, or None when the session is stale."""
         if not user_id:
-            return redirect(settings.LOGIN_URL)
-
-        try:
-            user = User.objects.get(id=user_id)
-        except User.DoesNotExist:
-            return redirect(settings.LOGIN_URL)
-
-        profile = getattr(user, "profile", None)
+            return None
+        user = User.objects.filter(id=user_id).first()
+        profile = getattr(user, "profile", None) if user else None
         if not profile or not profile.totp_enabled or not profile.totp_secret:
+            return None
+        return user
+
+    def form_valid(self, form):
+        user = self._pending_user(self.request.session.get("pending_2fa_user_id"))
+        if user is None:
             return redirect(settings.LOGIN_URL)
+        profile = user.profile
+
+        if otp_is_locked(user.id):
+            self.request.session.pop("pending_2fa_user_id", None)
+            self.request.session.pop("pending_2fa_next", None)
+            return redirect(f"{settings.LOGIN_URL}?otp=locked")
 
         otp = form.cleaned_data.get("otp", "").strip()
         if not _verify_totp(profile.totp_secret, otp):
-            attempts = self.request.session.get("otp_attempts", 0) + 1
-            self.request.session["otp_attempts"] = attempts
+            attempts = otp_register_failure(user.id, self.max_attempts)
             if attempts >= self.max_attempts:
                 self.request.session.pop("pending_2fa_user_id", None)
                 self.request.session.pop("pending_2fa_next", None)
-                self.request.session.pop("otp_attempts", None)
                 return redirect(f"{settings.LOGIN_URL}?otp=locked")
             form.add_error("otp", "Codigo de verificacao invalido.")
             return self.form_invalid(form)
+
+        otp_clear_failures(user.id)
 
         backend = settings.AUTHENTICATION_BACKENDS[0]
         user.backend = backend
@@ -147,5 +201,4 @@ class RuntimeOtpView(FormView):
             settings.LOGIN_REDIRECT_URL
         )
         self.request.session.pop("pending_2fa_user_id", None)
-        self.request.session.pop("otp_attempts", None)
         return redirect(next_url)

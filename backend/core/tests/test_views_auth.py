@@ -144,8 +144,9 @@ class TwoStepLoginViewTests(TestCase):
 
 class RuntimeOtpViewTests(TestCase):
     def test_dispatch_redirects_without_session(self):
-        from core.views_auth import RuntimeOtpView
         from django.test import RequestFactory
+
+        from core.views_auth import RuntimeOtpView
         factory = RequestFactory()
         request = factory.get("/otp/")
         request.session = {}
@@ -191,6 +192,7 @@ class RuntimeOtpViewTests(TestCase):
     def test_form_valid_wrong_code_increments_attempts(self):
         """Wrong code increments otp_attempts counter."""
         from unittest.mock import patch
+
         from django.contrib.auth.models import User
         user = User.objects.create_user(username="otp_wrong", password="pass")
         user.profile.totp_secret = "JBSWY3DPEHPK3PXP"
@@ -208,23 +210,52 @@ class RuntimeOtpViewTests(TestCase):
     def test_form_valid_max_attempts_locks_out(self):
         """After max_attempts wrong codes, redirects to login?otp=locked."""
         from unittest.mock import patch
+
         from django.contrib.auth.models import User
         user = User.objects.create_user(username="otp_locked", password="pass")
         user.profile.totp_secret = "JBSWY3DPEHPK3PXP"
         user.profile.totp_enabled = True
         user.profile.save()
+        from django.core.cache import cache
         session = self.client.session
         session["pending_2fa_user_id"] = user.id
-        session["otp_attempts"] = 2  # already at max - 1
         session.save()
+        cache.set(f"otp:fail:{user.id}", 2, 300)  # já em max - 1, no SERVIDOR
         with patch("core.views_auth._verify_totp", return_value=False):
             resp = self.client.post("/accounts/otp/", {"otp": "000000"})
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("otp=locked", resp["Location"])
+
+    def test_lockout_survives_a_new_session_and_blocks_correct_code(self):
+        """EV-0016: limpar o cookie já não zera as tentativas; bloqueado é bloqueado."""
+        from unittest.mock import patch
+
+        from django.contrib.auth.models import User
+        from django.core.cache import cache
+        user = User.objects.create_user(username="otp_persist", password="pass")
+        user.profile.totp_secret = "JBSWY3DPEHPK3PXP"
+        user.profile.totp_enabled = True
+        user.profile.save()
+        for _ in range(3):
+            session = self.client.session
+            session["pending_2fa_user_id"] = user.id
+            session.save()
+            with patch("core.views_auth._verify_totp", return_value=False):
+                self.client.post("/accounts/otp/", {"otp": "000000"})
+            self.client.cookies.clear()  # «nova» sessão a cada tentativa
+        self.assertTrue(cache.get(f"otp:lock:{user.id}"))
+        session = self.client.session
+        session["pending_2fa_user_id"] = user.id
+        session.save()
+        with patch("core.views_auth._verify_totp", return_value=True):
+            resp = self.client.post("/accounts/otp/", {"otp": "123456"})
         self.assertEqual(resp.status_code, 302)
         self.assertIn("otp=locked", resp["Location"])
 
     def test_form_valid_correct_code_logs_in(self):
         """Correct OTP code logs user in and redirects."""
         from unittest.mock import patch
+
         from django.contrib.auth.models import User
         user = User.objects.create_user(username="otp_ok", password="pass")
         user.profile.totp_secret = "JBSWY3DPEHPK3PXP"
@@ -273,6 +304,7 @@ class ApplyRuntimeEmailSettingsBranchTests(TestCase):
     def test_default_from_and_server_email_applied(self):
         """Lines 71-74: both DEFAULT_FROM_EMAIL and SERVER_EMAIL get set when present."""
         from django.conf import settings as django_settings
+
         from core.views_auth import _apply_runtime_email_settings
         with patch("core.views_auth.read_values", return_value={
             "SMTP_ENABLED": "",

@@ -11,12 +11,9 @@ from django.db.models import Q
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 import base64
-import hashlib
-import hmac
+
+import pyotp
 import json
-import secrets
-import struct
-import time
 import urllib.parse
 
 from core.models import UserProfile, Department
@@ -149,7 +146,8 @@ def _extract_profile_data(raw_data):
 
 
 def _generate_totp_secret() -> str:
-    return base64.b32encode(secrets.token_bytes(20)).decode("utf-8").rstrip("=")
+    """Segredo base32 de 160 bits (RFC 4226 §4) via pyotp (EV-0016)."""
+    return pyotp.random_base32()
 
 
 def _base32_decode(secret: str) -> bytes:
@@ -158,22 +156,23 @@ def _base32_decode(secret: str) -> bytes:
 
 
 def _totp_at(secret: str, counter: int, digits: int = 6) -> int:
-    msg = struct.pack(">Q", counter)
-    digest = hmac.new(_base32_decode(secret), msg, hashlib.sha1).digest()
-    offset = digest[-1] & 0x0F
-    truncated = struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7FFFFFFF
-    return truncated % (10 ** digits)
+    """Código TOTP para um contador de 30 s (compatibilidade com testes/fluxos antigos)."""
+    return int(pyotp.TOTP(secret, digits=digits).generate_otp(int(counter)))
 
 
 def _verify_totp(secret: str, code: str, step: int = 30, window: int = 1) -> bool:
-    if not code or not code.isdigit():
+    """Verifica o código com tolerância de ``window`` passos para cada lado.
+
+    EV-0016: implementação própria (HMAC à mão) substituída pela biblioteca
+    auditada ``pyotp``; comparação em tempo constante é dela.
+    """
+    code = (code or "").strip()
+    if not code.isdigit() or not secret:
         return False
-    counter = int(time.time() / step)
-    expected = int(code)
-    for offset in range(-window, window + 1):
-        if _totp_at(secret, counter + offset) == expected:
-            return True
-    return False
+    try:
+        return pyotp.TOTP(secret, interval=step).verify(code, valid_window=window)
+    except (TypeError, ValueError):
+        return False
 
 
 def _build_otpauth_url(secret: str, username: str, issuer: str) -> str:
