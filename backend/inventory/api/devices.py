@@ -763,22 +763,10 @@ def api_import_batch(request: HttpRequest) -> JsonResponse:
                             site_instance = default_site
                     elif is_new_site:
                         # Criar novo Site com coordenadas
-                        import math
-
-                        from django.contrib.gis.geos import Point
-
-                        PROXIMITY_RADIUS_KM = 0.1  # 100 metros
-
-                        def _haversine_km(lat1, lon1, lat2, lon2):
-                            R = 6371.0088
-                            phi1, phi2 = math.radians(lat1), math.radians(lat2)
-                            dphi = math.radians(lat2 - lat1)
-                            dlambda = math.radians(lon2 - lon1)
-                            a = (
-                                math.sin(dphi / 2) ** 2
-                                + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
-                            )
-                            return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+                        from inventory.usecases.spatial import (
+                            SITE_PROXIMITY_RADIUS_M,
+                            find_site_within,
+                        )
 
                         new_site_name = site_id_or_name
                         site_defaults = {"city": "A definir"}
@@ -793,38 +781,30 @@ def api_import_batch(request: HttpRequest) -> JsonResponse:
                             lat = float(site_coordinates["lat"])
                             lng = float(site_coordinates["lng"])
 
-                            # Regra 100 m: se já existe um site próximo, reutilizá-lo
-                            nearest_site = None
-                            nearest_dist = None
-                            for candidate in Site.objects.exclude(latitude=None).exclude(
-                                longitude=None
-                            ):
-                                dist = _haversine_km(
-                                    lat, lng, float(candidate.latitude), float(candidate.longitude)
-                                )
-                                if dist <= PROXIMITY_RADIUS_KM:
-                                    if nearest_dist is None or dist < nearest_dist:
-                                        nearest_site = candidate
-                                        nearest_dist = dist
+                            # Regra 100 m: se já existe um site próximo, reutilizá-lo.
+                            # EV-0024: ST_DWithin sobre Site.location (GiST), não haversine
+                            # em Python sobre todos os sites.
+                            match = find_site_within(lat, lng, SITE_PROXIMITY_RADIUS_M)
+                            nearest_site, nearest_dist_m = match if match else (None, None)
 
                             if nearest_site:
                                 site_instance = nearest_site
                                 logger.info(
                                     f"Site '{nearest_site.display_name}' encontrado a "
-                                    f"{nearest_dist * 1000:.0f}m das coordenadas fornecidas — "
+                                    f"{nearest_dist_m:.0f}m das coordenadas fornecidas — "
                                     f"reutilizado em vez de criar '{new_site_name}'"
                                 )
                                 proximity_warnings.append(
                                     {
                                         "new_site_name": new_site_name,
                                         "reused_site": nearest_site.display_name,
-                                        "distance_m": round(nearest_dist * 1000),
+                                        "distance_m": round(nearest_dist_m),
                                     }
                                 )
                             else:
                                 site_defaults["latitude"] = lat
                                 site_defaults["longitude"] = lng
-                                site_defaults["location"] = Point(lng, lat)
+                                # `location` vem do sinal pre_save (EV-0024)
                                 site_instance, created = Site.objects.get_or_create(
                                     display_name=new_site_name,
                                     defaults=site_defaults,

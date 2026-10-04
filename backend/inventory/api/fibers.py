@@ -747,67 +747,19 @@ def api_validate_nearby_cables(request: HttpRequest) -> JsonResponse:
             {"has_nearby": False, "nearby_cables": [], "message": "Path too short to analyze"}
         )
 
-    # Get all cables except current one
-    all_cables = FiberCable.objects.exclude(id=cable_id) if cable_id else FiberCable.objects.all()
+    # EV-0024: ST_DWithin + distância geodésica no PostGIS, em vez do produto
+    # cartesiano ponto-a-ponto em Python sobre todos os cabos.
+    from inventory.usecases.spatial import CABLE_PROXIMITY_THRESHOLD_M, find_cables_near_path
 
-    nearby_cables = []
-    PROXIMITY_THRESHOLD_METERS = 50
-
-    # Helper function to calculate distance between two points (Haversine)
-    from math import atan2, cos, radians, sin, sqrt
-
-    def haversine_distance(lat1, lng1, lat2, lng2):
-        R = 6371000  # Earth radius in meters
-
-        lat1_rad = radians(lat1)
-        lat2_rad = radians(lat2)
-        delta_lat = radians(lat2 - lat1)
-        delta_lng = radians(lng2 - lng1)
-
-        a = sin(delta_lat / 2) ** 2 + cos(lat1_rad) * cos(lat2_rad) * sin(delta_lng / 2) ** 2
-        c = 2 * atan2(sqrt(a), sqrt(1 - a))
-
-        return R * c
-
-    # Check each cable against the new path
-    for cable in all_cables:
-        if not hasattr(cable, "path_data") or not cable.path_data:
-            continue
-
-        cable_path = cable.path_data if isinstance(cable.path_data, list) else []
-        if len(cable_path) < 2:
-            continue
-
-        # Find minimum distance between any two points
-        min_distance = float("inf")
-
-        for new_point in path:
-            if "lat" not in new_point or "lng" not in new_point:
-                continue
-
-            for cable_point in cable_path:
-                if "lat" not in cable_point or "lng" not in cable_point:
-                    continue
-
-                distance = haversine_distance(
-                    new_point["lat"], new_point["lng"], cable_point["lat"], cable_point["lng"]
-                )
-
-                min_distance = min(distance, min_distance)
-
-        # If minimum distance is below threshold, consider it nearby
-        if min_distance < PROXIMITY_THRESHOLD_METERS:
-            nearby_cables.append(
-                {"id": cable.id, "name": cable.name, "distance_meters": round(min_distance, 1)}
-            )
-
-    # Sort by distance (closest first)
-    nearby_cables.sort(key=lambda x: x["distance_meters"])
+    PROXIMITY_THRESHOLD_METERS = CABLE_PROXIMITY_THRESHOLD_M
+    nearby_cables = find_cables_near_path(
+        path, threshold_m=PROXIMITY_THRESHOLD_METERS, exclude_id=cable_id, limit=5
+    )
 
     return JsonResponse(
         {
             "has_nearby": len(nearby_cables) > 0,
-            "nearby_cables": nearby_cables[:5],  # Return top 5 closest
+            "nearby_cables": nearby_cables,  # já ordenados, no máximo 5
             "threshold_meters": PROXIMITY_THRESHOLD_METERS,
         }
     )
