@@ -2,8 +2,8 @@
 
 **MapsProveFiber** — Complete documentation of data flows, caching strategies, and real-time communication patterns.
 
-**Last Updated**: 2025-11-07  
-**Architecture Version**: v2.0.0
+**Last Updated**: 2026-10-04  
+**Versão do produto**: ver [VERSION](../../VERSION)
 
 ---
 
@@ -346,13 +346,13 @@ User clicks "Build Route"
 │                                                                      │
 │  1. Validate request payload (requires `route_id`)                 │
 │  2. Enqueue Celery task                                            │
-│     └─ task_id = routes_builder.tasks.build_route.delay(route_id) │
+│     └─ task_id = inventory.routes.tasks.build_route.delay(route_id)│
 │  3. Return 202 Accepted + task_id                                  │
 └──────────────────────────────────────────────────────────────────────┘
        │
        ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│  Celery Worker: routes_builder.tasks.build_route                    │
+│  Celery Worker: inventory.routes.build_route                        │
 │                                                                      │
 │  1. Fetch inventory data (sites, devices, fibers)                  │
 │     └─ Query Django ORM for topology graph                         │
@@ -462,12 +462,12 @@ def safe_cache_set(key: str, value: Any, timeout: int = 300) -> bool:
 #### Zabbix Client Metrics
 ```prometheus
 # Request counters
-zabbix_api_requests_total{method="host.get",status="success"} 342
-zabbix_api_requests_total{method="host.get",status="error"} 5
+zabbix_requests_total{method="host.get",status="success"} 342
+zabbix_requests_total{method="host.get",status="error"} 5
 
 # Latency histogram
-zabbix_api_duration_seconds_bucket{le="0.5",method="host.get"} 320
-zabbix_api_duration_seconds_bucket{le="1.0",method="host.get"} 340
+zabbix_request_duration_seconds_bucket{le="0.5",method="host.get"} 320
+zabbix_request_duration_seconds_bucket{le="1.0",method="host.get"} 340
 
 # Circuit breaker state (0=CLOSED, 1=OPEN, 2=HALF_OPEN)
 zabbix_circuit_breaker_state 0
@@ -537,7 +537,7 @@ django_db_query_duration_seconds{query="SELECT FROM inventory_device"} 0.02
 
 **Metrics**:
 - `zabbix_circuit_breaker_state` = 1 (OPEN)
-- `zabbix_api_requests_total{status="circuit_open"}` increments
+- `zabbix_requests_total{status="circuit_open"}` increments
 
 ---
 
@@ -574,10 +574,10 @@ django_db_query_duration_seconds{query="SELECT FROM inventory_device"} 0.02
 
 - [MODULES.md](./MODULES.md) — App structure and responsibilities
 - [ENDPOINTS.md](../api/ENDPOINTS.md) — Complete API reference
-- [DEPLOYMENT.md](../operations/DEPLOYMENT.md) — Production deployment guide
+- [DEPLOY.md](../../DEPLOY.md) and [docker-compose.prod.yml](../../docker/docker-compose.prod.yml) — Production deployment guide
 - [OVERVIEW.md](./OVERVIEW.md) — Architecture overview
 
 ---
 
 **MapsProveFiber** — Data Flow Documentation  
-**Version**: v2.0.0 | **Last Updated**: 2025-11-07
+**Versão do produto**: ver [VERSION](../../VERSION) | **Last Updated**: 2026-10-04

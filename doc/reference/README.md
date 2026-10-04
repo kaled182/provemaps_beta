@@ -5,21 +5,19 @@
 This directory gathers deep-dive documentation covering architecture, advanced operations, and historical context. Use it as a reference after reading the introductory guides in [`doc/getting-started/`](../getting-started/) and [`doc/developer/`](../developer/).
 
 ## Quick navigation
-- **Architecture and ADRs**: [`adr_fiber_route_builder.md`](./adr_fiber_route_builder.md), [`TECHNICAL_REVIEW.md`](./TECHNICAL_REVIEW.md)
-- **Infrastructure and observability**: [`REDIS_HIGH_AVAILABILITY.md`](./REDIS_HIGH_AVAILABILITY.md), [`prometheus_static_version.md`](./prometheus_static_version.md), [`operations_checklist.md`](./operations_checklist.md)
-- **Performance and scalability**: series from [`performance_phase1.md`](./performance_phase1.md) to [`performance_phase6.md`](./performance_phase6.md)
-- **Testing and quality**: [`TESTING_QUICK_REFERENCE.md`](./TESTING_QUICK_REFERENCE.md), [`TEST_ERRORS_DETAILED_REPORT.md`](./TEST_ERRORS_DETAILED_REPORT.md), [`TESTING_WITH_MARIADB.md`](./TESTING_WITH_MARIADB.md)
-- **Historical reports**: [`PROJECT_STATUS_REPORT.md`](./PROJECT_STATUS_REPORT.md), [`FINAL_CONSOLIDATED_REPORT.md`](./FINAL_CONSOLIDATED_REPORT.md), [`FASE4_SUCCESS_REPORT.md`](./FASE4_SUCCESS_REPORT.md)
-- **App-specific guides**:
-  - [`maps_view/`](./maps_view/) - dashboard and map integration guides
-  - [`monitoring_dashboard_flow.md`](./monitoring_dashboard_flow.md) - SWR sequence and API ownership
-  - [`modules/`](./modules/) - legacy documentation for fiber builder JS modules
+- **Architecture and ADRs**: [`adr_fiber_route_builder.md`](./adr_fiber_route_builder.md), [`API_FIBER_ROUTES_SPEC.md`](./API_FIBER_ROUTES_SPEC.md); current architectural decisions live in [`doc/adr/`](../adr/README.md)
+- **Infrastructure and observability**: [`../operations/REDIS_HA.md`](./../operations/REDIS_HA.md), [`REDIS_GRACEFUL_DEGRADATION.md`](./REDIS_GRACEFUL_DEGRADATION.md), [`SETUP_REDIS_WINDOWS.md`](./SETUP_REDIS_WINDOWS.md), [`PROMETHEUS_ALERTS.md`](./PROMETHEUS_ALERTS.md), [`CELERY_STATUS_ENDPOINT.md`](./CELERY_STATUS_ENDPOINT.md), [`CELERY_MONITORING_CHECKLIST.md`](./CELERY_MONITORING_CHECKLIST.md)
+- **Frontend and integrations**: [`GOOGLE_MAPS_API_SETUP.md`](./GOOGLE_MAPS_API_SETUP.md), [`cache_busting.md`](./cache_busting.md), [`i18n_and_pr_guidelines.md`](./i18n_and_pr_guidelines.md)
+- **App-specific guides**: [`monitoring_dashboard_flow.md`](./monitoring_dashboard_flow.md) - SWR sequence and API ownership
+- **Testing and quality**: [`doc/guides/TESTING.md`](../guides/TESTING.md), [`doc/testing/`](../testing/README.md) and [`CLAUDE.md`](../../CLAUDE.md) section 9
+- **Production deployment**: [`DEPLOY.md`](../../DEPLOY.md) (root) and [`doc/operations/`](../operations/README.md)
+- **Historical reports** (archived, do not describe the current system): [`TECHNICAL_REVIEW.md`](../archive/2025-historico/TECHNICAL_REVIEW.md), [`TESTING_QUICK_REFERENCE.md`](../archive/2025-historico/TESTING_QUICK_REFERENCE.md), [`TESTING_WITH_MARIADB.md`](../archive/2025-historico/TESTING_WITH_MARIADB.md), [`operations_checklist.md`](../archive/2025-historico/operations_checklist.md), [`prometheus_static_version.md`](../archive/2025-historico/prometheus_static_version.md), [`translation_report.md`](../archive/2025-historico/translation_report.md), [`FRONTEND_TESTING_MANUAL_PLAN.md`](../archive/2025-historico/FRONTEND_TESTING_MANUAL_PLAN.md) (histórico; index in [`doc/archive/README.md`](../archive/README.md))
 
 ## How to use
-1. **Planning and architecture**: start with the ADRs and technical reviews to understand historical decisions.
-2. **Production operations**: review the Redis HA guide, operational checklist, and Prometheus alert catalog before shipping new releases.
-3. **Performance and troubleshooting**: rely on the performance phase reports and error analysis documents for diagnostics.
-4. **Testing**: follow the test plans and checklists to secure QA coverage for critical releases.
+1. **Planning and architecture**: start with the ADRs in [`doc/adr/`](../adr/README.md) and the notes above to understand historical decisions.
+2. **Production operations**: review [`DEPLOY.md`](../../DEPLOY.md), the Redis HA guide, and the Prometheus alert catalog before shipping new releases.
+3. **Troubleshooting**: consult the case notes in [`doc/troubleshooting/`](../troubleshooting/) and the Celery/Prometheus references above for diagnostics.
+4. **Testing**: follow [`doc/guides/TESTING.md`](../guides/TESTING.md) and the checklists in [`doc/guides/testing/`](../guides/testing/) to secure QA coverage for critical releases.
 
 ## Conventions
 - File names and headings use snake_case.

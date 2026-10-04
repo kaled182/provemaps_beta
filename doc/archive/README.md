@@ -51,6 +51,7 @@ As tabelas `zabbix_api_site`, `zabbix_api_device`… continuam a existir no banc
 | [`SMOKE_TEST_REPORT_PHASE1.md`](2025-historico/SMOKE_TEST_REPORT_PHASE1.md) | `doc/operations/SMOKE_TEST_REPORT_PHASE1.md` | Smoke Test Execution Report - Sprint 3 Deploy |
 | [`ROLLOUT_MONITORING.md`](2025-historico/ROLLOUT_MONITORING.md) | `doc/operations/ROLLOUT_MONITORING.md` | 📊 Guia de Monitoramento - Rollout Vue Dashboard |
 | [`MONITORING_SETUP.md`](2025-historico/MONITORING_SETUP.md) | `doc/operations/MONITORING_SETUP.md` | Phase 7 - Monitoring Setup Guide |
+| [`INSTRUCTIONS_CREATE_PR.md`](2025-historico/INSTRUCTIONS_CREATE_PR.md) | `doc/contributing/INSTRUCTIONS_CREATE_PR.md` | 🚀 Como Criar o Pull Request |
 
 Dois ficheiros em `doc/architecture/ADR/` (`000-technical-review.md`,
 `004-refactoring-plan.md`) eram cópias byte a byte de `TECHNICAL_REVIEW.md` e

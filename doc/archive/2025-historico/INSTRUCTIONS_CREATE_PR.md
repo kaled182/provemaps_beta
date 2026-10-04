@@ -1,3 +1,9 @@
+> **📜 Histórico — arquivado em 2026-10-04 (EV-0021).** Este documento descreve um
+> estado do projeto que já não existe (app `zabbix_api`, banco MariaDB/MySQL,
+> sprints e fases de 2025, caminhos Windows). Fica pelo valor histórico; **não o
+> uses como guia**. A fonte atual é [`CLAUDE.md`](../../../CLAUDE.md) (§3–4, §9),
+> [`DEPLOY.md`](../../../DEPLOY.md) e [`doc/architecture/DATA_FLOW.md`](../../architecture/DATA_FLOW.md).
+
 # 🚀 Como Criar o Pull Request
 
 ## Opção 1: Via GitHub Web Interface (Recomendado)
@@ -33,12 +39,12 @@
 ## Opção 2: Via GitHub CLI (Se instalar)
 
 ### Instalar GitHub CLI:
-```powershell
-winget install --id GitHub.cli
+```bash
+# https://cli.github.com (apt / dnf / brew / winget)
 ```
 
 ### Criar PR:
-```powershell
+```bash
 gh pr create --base inicial --head refactor/modularization --title "🚀 Phase 5 Complete: Django Modularization & Technical Hygiene [v2.0]" --body-file doc/reports/pr/PR_PHASE5_COMPLETE.md
 ```
 
@@ -93,7 +99,7 @@ Depois de criar o PR, certifique-se de:
 ## 🔗 Documentação Relacionada
 
 - `README.md` - Guia principal (reescrito)
-- `doc/developer/REFATORAR.md` - Estado atual (Fases 0-5)
+- `doc/archive/2025-historico/REFATORAR.md` - Estado atual (Fases 0-5) (histórico)
 - `doc/developer/FUTURE_APPS.md` - Roadmap futuro (Fases 6-15)
 - `doc/reports/pr/PR_PHASE5_COMPLETE.md` - Corpo completo do PR pronto para uso
 - `scripts/smoke_phase5.ps1` - Smoke tests automatizados

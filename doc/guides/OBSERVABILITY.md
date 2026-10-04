@@ -1,7 +1,7 @@
 # Observability Guide - MapsProveFiber
 
-**Version**: v2.0.0  
-**Last Updated**: 2025-11-10  
+**Versão do produto**: ver [VERSION](../../VERSION)  
+**Last Updated**: 2026-10-04  
 **Target Audience**: DevOps, SRE, Developers
 
 ---
@@ -16,6 +16,8 @@ MapsProveFiber provides comprehensive observability through health checks, Prome
 
 ### Available Endpoints
 
+> Examples use port 8000 (`make run`). The Docker dev stack (`docker/docker-compose.yml`) publishes the web service on port **8100**.
+
 | Endpoint | Purpose | Use Case |
 |----------|---------|----------|
 | `/healthz` | Overall health status | General monitoring |
@@ -28,34 +30,41 @@ MapsProveFiber provides comprehensive observability through health checks, Prome
 Comprehensive health check covering all system components.
 
 **Request:**
-```powershell
-Invoke-WebRequest http://localhost:8000/healthz
+```bash
+curl http://localhost:8000/healthz
 ```
 
 **Response (Healthy):**
 ```json
 {
-  "status": "healthy",
-  "timestamp": "2025-11-10T10:30:00Z",
-  "version": "2.0.0",
+  "status": "ok",
+  "timestamp": 1762770600.0,
+  "settings": "settings.dev",
+  "version": "dev",
+  "django": "5.2.7",
+  "python": "3.12.x",
   "checks": {
-    "database": "ok",
-    "cache": "ok",
-    "storage": "ok",
-    "celery": "ok"
-  }
+    "db": {"ok": true},
+    "cache": {"ok": true, "backend": "RedisCache", "ignored": false},
+    "storage": {"ok": true}
+  },
+  "latency_ms": 12.3,
+  "strict_mode": true,
+  "ignore_cache": false
 }
 ```
 
+`version` comes from the `APP_VERSION` environment variable (default `dev`); the product version lives in the [VERSION](../../VERSION) file.
+
 **Response (Unhealthy):**
+HTTP `503` with `"status": "degraded"` and the failing check marked `"ok": false`:
 ```json
 {
-  "status": "unhealthy",
-  "timestamp": "2025-11-10T10:30:00Z",
+  "status": "degraded",
   "checks": {
-    "database": "error: connection refused",
-    "cache": "degraded",
-    "storage": "ok"
+    "db": {"ok": false, "error": "connection refused"},
+    "cache": {"ok": true},
+    "storage": {"ok": true}
   }
 }
 ```
@@ -65,7 +74,7 @@ Invoke-WebRequest http://localhost:8000/healthz
 Indicates if the application is ready to accept traffic.
 
 **Request:**
-```powershell
+```bash
 curl http://localhost:8000/ready
 ```
 
@@ -78,7 +87,7 @@ curl http://localhost:8000/ready
 Indicates if the application process is alive.
 
 **Request:**
-```powershell
+```bash
 curl http://localhost:8000/live
 ```
 
@@ -91,17 +100,21 @@ curl http://localhost:8000/live
 Reports Celery worker health and queue status.
 
 **Request:**
-```powershell
+```bash
 curl http://localhost:8000/celery/status
 ```
 
-**Response:**
+**Response** (`200` when `status` is `ok`, `503` when `degraded`):
 ```json
 {
-  "workers": 2,
-  "active_tasks": 5,
-  "queued_tasks": 12,
-  "status": "healthy"
+  "timestamp": 1762770600.0,
+  "latency_ms": 85.2,
+  "status": "ok",
+  "worker": {
+    "available": true,
+    "error": null,
+    "stats": {}
+  }
 }
 ```
 
@@ -115,8 +128,8 @@ curl http://localhost:8000/celery/status
 **Format**: Prometheus exposition format
 
 **Request:**
-```powershell
-Invoke-WebRequest http://localhost:8000/metrics/metrics
+```bash
+curl http://localhost:8000/metrics/metrics
 ```
 
 ### Standard Django Metrics
@@ -147,64 +160,55 @@ django_cache_misses_total{backend="redis"} 134
 
 #### Static Asset Version
 ```prometheus
-# Current static asset version
-mapsprovefiber_static_asset_version_info{version="20251110_103000"} 1
+# Current static asset version (Info metric, `core/metrics_static_version.py`)
+static_asset_version_info{version="20251110_103000"} 1
 ```
 
-#### Celery Task Metrics
+#### Celery Metrics
 ```prometheus
-# Task execution count
-celery_task_total{task="refresh_dashboard_cache_task",state="SUCCESS"} 123
-celery_task_total{task="refresh_dashboard_cache_task",state="FAILURE"} 2
+# Worker status (`core/metrics_celery.py`, updated by /celery/status)
+celery_worker_available 1
+celery_worker_count 2
+celery_active_tasks 5
 
-# Task duration
-celery_task_duration_seconds{task="refresh_dashboard_cache_task",quantile="0.95"} 2.5
+# Queue depth and task duration (`core/metrics_custom.py`)
+celery_queue_depth{queue="default"} 12
+celery_task_duration_seconds_bucket{task_name="refresh_dashboard_cache_task",status="success",le="2.5"} 120
 ```
 
 #### Zabbix Integration Metrics
 ```prometheus
-# API call metrics
-zabbix_api_calls_total{method="host.get",status="success"} 456
-zabbix_api_calls_total{method="host.get",status="failure"} 3
+# Gateway/client metrics (`integrations/zabbix/client.py`)
+zabbix_requests_total{...}
+zabbix_request_duration_seconds_bucket{...}
+zabbix_circuit_breaker_state{...}
+zabbix_retry_attempts_total{...}
 
-# Circuit breaker state
-zabbix_circuit_breaker_state{state="closed"} 1
-zabbix_circuit_breaker_state{state="open"} 0
-
-# Cache performance
-zabbix_cache_hits_total 890
-zabbix_cache_misses_total 110
+# Higher-level call metrics (`core/metrics_custom.py`)
+integrations_zabbix_calls_total{endpoint="host.get",status="success",error_type=""} 456
+integrations_zabbix_latency_seconds_bucket{...}
 ```
+
+Inventory API metrics (`inventory_api_requests_total`, `inventory_api_duration_seconds`, `inventory_cache_operations_total`, ...) are defined in `backend/inventory/metrics.py`. Label sets above are indicative; check the metric definitions in code for the authoritative names and labels.
 
 ---
 
 ## 📝 Structured Logging
 
-### Log Files
+### Log Destinations
 
-```
-backend/logs/
-├── application.log       # General application logs
-├── django.log           # Django framework logs
-├── celery.log           # Celery worker logs
-└── access.log           # HTTP access logs
+By default logs go to the console (stdout), which Docker collects (`docker compose -f docker/docker-compose.yml logs -f web`). An optional rotating file handler is available in non-debug settings:
+
+```env
+ENABLE_FILE_LOGGING=true
+LOG_FILE=/var/log/django/app.log   # default
+LOG_MAX_BYTES=10485760
+LOG_BACKUP_COUNT=5
 ```
 
 ### Log Format
 
-```json
-{
-  "timestamp": "2025-11-10T10:30:00.123Z",
-  "level": "INFO",
-  "logger": "inventory.services",
-  "message": "Site created successfully",
-  "context": {
-    "site_id": 123,
-    "user_id": 45,
-    "request_id": "abc-123-def"
-  }
-}
-```
+`LOG_FORMAT` selects `verbose` (default) or `simple`; `LOG_LEVEL` sets the level. The request ID (see below) is added to the structlog context when structlog is available.
 
 ### Log Levels
 
@@ -222,18 +226,16 @@ logger.critical("Critical system failures")
 
 ### Viewing Logs
 
-```powershell
-# Tail application logs
-tail -f backend/logs/application.log
-
-# View Django logs
-tail -f backend/logs/django.log
+```bash
+# Docker logs (dev stack)
+docker compose -f docker/docker-compose.yml logs -f web
+docker compose -f docker/docker-compose.yml logs -f celery
 
 # Filter by level
-grep ERROR backend/logs/application.log
+docker compose -f docker/docker-compose.yml logs web | grep ERROR
 
-# Docker logs
-docker compose logs -f web
+# If ENABLE_FILE_LOGGING=true
+tail -f /var/log/django/app.log
 ```
 
 ---
@@ -242,42 +244,24 @@ docker compose logs -f web
 
 ### Setup Grafana
 
-```yaml
-# docker-compose.monitoring.yml
-services:
-  prometheus:
-    image: prom/prometheus:latest
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus
-  
-  grafana:
-    image: grafana/grafana:latest
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+Prometheus and Grafana are services of the dev stack (`docker/docker-compose.yml`): Prometheus on http://localhost:9090, Grafana on http://localhost:3002 (credentials set in the compose file). In production they belong to the `monitoring` / `full` profiles of `docker/docker-compose.prod.yml` (see [`DEPLOY.md`](../../DEPLOY.md)).
 
-volumes:
-  prometheus_data:
-  grafana_data:
+```bash
+docker compose -f docker/docker-compose.yml up -d prometheus grafana
 ```
+
+Provisioned configuration lives in `docker/prometheus/` (config + `alerts/`) and `docker/grafana/` (datasources + dashboards); details in `docker/prometheus/README.md`.
 
 ### Prometheus Configuration
 
 ```yaml
-# monitoring/prometheus.yml
+# docker/prometheus/prometheus.yml (excerpt)
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: 'mapsprovefiber'
+  - job_name: 'django'
     static_configs:
       - targets: ['web:8000']
     metrics_path: '/metrics/metrics'
@@ -312,7 +296,7 @@ scrape_configs:
 ### Alert Rules
 
 ```yaml
-# monitoring/alerts.yml
+# docker/prometheus/alerts/<name>.yml (example; the repo ships radius_search.yml)
 groups:
   - name: application_alerts
     rules:
@@ -333,7 +317,7 @@ groups:
           summary: "Database connection pool near capacity"
       
       - alert: CeleryWorkerDown
-        expr: celery_workers_count == 0
+        expr: celery_worker_available == 0
         for: 2m
         labels:
           severity: critical
@@ -356,19 +340,7 @@ Configure in Grafana or Prometheus Alertmanager:
 
 ### Request ID Tracking
 
-Every request gets a unique ID for tracing:
-
-```python
-# middleware/request_id.py
-import uuid
-
-class RequestIDMiddleware:
-    def __call__(self, request):
-        request.request_id = str(uuid.uuid4())
-        response = self.get_response(request)
-        response['X-Request-ID'] = request.request_id
-        return response
-```
+Every request gets a unique ID for tracing, added by `core.middleware.request_id.RequestIDMiddleware` (it honours an incoming `X-Request-ID` header, stores it in `request.META['HTTP_X_REQUEST_ID']`, binds it to the structlog context and returns it in the `X-Request-ID` response header).
 
 ### Usage in Logs
 
@@ -381,8 +353,8 @@ logger.info(
 
 ### Query Logs by Request ID
 
-```powershell
-grep "request_id=abc-123-def" backend/logs/application.log
+```bash
+docker compose -f docker/docker-compose.yml logs web | grep "abc-123-def"
 ```
 
 ---
@@ -488,10 +460,11 @@ For production, consider:
 - [Prometheus Documentation](https://prometheus.io/docs/)
 - [Grafana Documentation](https://grafana.com/docs/)
 - [Django Prometheus](https://github.com/korfuri/django-prometheus)
-- [Deployment Guide](../operations/DEPLOYMENT.md)
-- [Troubleshooting Guide](../operations/TROUBLESHOOTING.md)
+- [Deployment Guide](../../DEPLOY.md)
+- [Monitoring Guide](../operations/MONITORING.md)
+- [Troubleshooting notes](../troubleshooting/)
 
 ---
 
-**Last Updated**: 2025-11-10  
+**Last Updated**: 2026-10-04  
 **Maintainers**: SRE Team, DevOps

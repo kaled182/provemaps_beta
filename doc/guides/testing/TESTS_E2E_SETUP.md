@@ -1,150 +1,118 @@
 # Testes E2E - Configuração e Execução
 
-## 📦 Dependências Instaladas
+**Última atualização**: 2026-10-04
 
-### Backend (requirements.txt)
-- `playwright==1.49.1` - Automação de browser para testes E2E
-- `pytest-playwright==0.6.2` - Integração Playwright + pytest
+> Os testes de frontend vivem em `frontend/`: **Vitest** (unitários e de componente) e
+> **Playwright** (E2E, `@playwright/test`). As páginas HTML soltas
+> (`frontend/test-mosaic-dom.html`, `test-mosaic-refs.html`, `test-modal.html`) foram
+> removidas do repositório em 2026-10-04 (EV-0020). Para comandos de teste do backend e
+> cobertura, ver [TESTING.md](../TESTING.md) e `CLAUDE.md` §9.
 
-### Dockerfile
-- Bibliotecas do sistema para Chromium (libnss3, libnspr4, etc.)
-- Chromium browser instalado via `playwright install chromium`
+## 📦 Dependências
+
+### Frontend (`frontend/package.json`)
+- `vitest` + `@vue/test-utils` + `jsdom` - testes unitários e de componente
+- `@playwright/test` (^1.49) - testes E2E no navegador
+
+```bash
+cd frontend
+npm install
+npx playwright install chromium   # só na primeira vez (navegador do Playwright)
+```
+
+### Backend / Docker
+- O Playwright **Python** (`playwright`, `pytest-playwright`) e o Chromium **não** fazem parte de
+  `backend/requirements.txt` nem da imagem de produção (`docker/dockerfile`).
+- `backend/tests/test_mosaic_rendering.py` (Playwright Python) continua no repositório como teste
+  legado: sem `pip install playwright` ele apenas avisa e sai. O serviço `test-e2e` do
+  `docker/docker-compose.yml` (profile `testing`) depende dele e hoje não funciona: a imagem não traz
+  Playwright e o volume aponta para `../test_mosaic_rendering.py`, que não existe na raiz.
 
 ---
 
 ## 🧪 Testes Disponíveis
 
-### 1. **Teste HTML Standalone** (Sem instalação)
-**Arquivo:** [frontend/test-mosaic-dom.html](frontend/test-mosaic-dom.html)
+### 1. **Vitest** (unitários e de componente)
+**Pastas:** `frontend/tests/unit`, `frontend/tests/components`, `frontend/src/**/__tests__`
 
-**Como usar:**
-```powershell
-# Abrir diretamente no navegador
-start frontend/test-mosaic-dom.html
+```bash
+cd frontend
+npm run test:unit                                  # toda a suite (vitest run)
+npm run test:unit:watch                            # modo watch
+npx vitest run tests/unit/SiteCamerasTab.spec.js   # um ficheiro
 ```
 
-**O que testa:**
-- ✓ Conexão com backend Django
-- ✓ Estrutura do modal renderizada
-- ✓ Elementos `<video>` presentes no DOM
-- ✓ Endpoints WHEP respondendo
+**O que cobre (exemplos):**
+- ✓ Abas do modal de site: `SiteCamerasTab`, `SiteDevicesTab`, `SiteFibersTab`
+- ✓ Composables: `useSiteCameras`, `useWebSocket`, `useRealtimeStatus`, `useMapService`
+- ✓ Stores Pinia, gráficos (`TimeSeriesChart`), utilitários
 
 **Vantagens:**
-- Não requer instalação de dependências
-- Execução instantânea
-- Interface visual para diagnóstico
+- Não precisa de backend nem de navegador
+- Execução em segundos
+- É o que corre no CI
 
 ---
 
-### 2. **Teste E2E Automatizado** (Playwright)
-**Arquivo:** [test_mosaic_rendering.py](test_mosaic_rendering.py)
+### 2. **Playwright** (E2E automatizado)
+**Pasta:** `frontend/tests/e2e` (`testDir` em `frontend/playwright.config.js`)
+
+| Spec | O que verifica |
+|------|----------------|
+| `dashboard.spec.js` | Fluxo do dashboard: carga, hosts, WebSocket, mapa |
+| `map-loading.spec.js` | Carga do mapa em `/monitoring/backbone` |
+| `mapView.spec.js` | Smoke test do `MapView` (com e sem API mock) |
+| `nav_menu.spec.ts` | Menu de navegação visível nas rotas principais |
+| `radius-search.spec.js` | Ferramenta de busca por raio |
+
+`fixtures/auth.js` faz login com o utilizador `playwright_test` em `/accounts/login/`; esse
+utilizador tem de existir na base usada pelo teste.
 
 **Como executar localmente:**
-```powershell
-# 1. Instalar Playwright (só na primeira vez)
-cd d:\provemaps_beta
-pip install playwright pytest-playwright
-playwright install chromium
+```bash
+# 1. Servidor a correr (a porta padrão do Playwright é 8000)
+make run                       # backend local; ou: make up (compose dev, porta 8100)
 
-# 2. Garantir que o servidor está rodando
-cd docker
-docker compose up -d web
-
-# 3. Executar teste
-cd ..
-python test_mosaic_rendering.py
+# 2. Executar
+cd frontend
+npm run test:e2e                                  # toda a suite E2E
+npx playwright test tests/e2e/mapView.spec.js     # um spec
 ```
 
-**Como executar no Docker:**
-```powershell
-cd docker
-
-# Rebuild da imagem (só necessário após mudanças no Dockerfile)
-docker compose build web
-
-# Executar teste (profile 'testing')
-docker compose --profile testing run --rm test-e2e
-
-# Ou executar manualmente dentro do container web
-docker compose exec web bash
-cd /app
-pytest test_mosaic_rendering.py -v
-```
-
-**O que testa:**
-- ✓ Navegação para o mapa
-- ✓ Clique no site "TESTE - Furacão"
-- ✓ Abertura do modal de câmeras
-- ✓ **Validação de elementos `<video>` no DOM**
-- ✓ Captura de logs do console
-- ✓ Screenshots automáticos (sucesso/falha)
+> O `baseURL` vem de `E2E_BASE_URL` (padrão `http://localhost:8000`). O compose de desenvolvimento
+> publica a porta **8100**; nesse caso use `E2E_BASE_URL=http://localhost:8100`. A fixture
+> `auth.js` usa `http://localhost:8000` fixo no login.
 
 **Saídas geradas:**
-- `test-screenshot-success.png` - Screenshot quando teste passa
-- `test-screenshot-fail.png` - Screenshot quando teste falha
-- `test-screenshot-error.png` - Screenshot quando ocorre erro
+- `frontend/playwright-report/` - relatório HTML (reporter `html`, ignorado pelo Git)
+- Screenshot em caso de falha (`screenshot: 'only-on-failure'`)
+- Trace na primeira repetição (`trace: 'on-first-retry'`)
 
 ---
 
 ## 🔍 Interpretação dos Resultados
 
-### ✓ PASS - Elementos `<video>` encontrados
+```bash
+cd frontend
+npx playwright show-report            # abre o relatório HTML
+npx playwright show-trace <trace.zip> # inspeciona um trace
 ```
-=== RESULTADOS ===
-Total de <video> no DOM: 4
-Vídeos de mosaico: 4
 
-✓ PASS: Elementos <video> encontrados no DOM
-```
-**Significado:** Modal renderizou corretamente os elementos de vídeo. Problema pode estar em:
-- Conexão WebRTC não estabelecida
-- `srcObject` não atribuído
-- Streams não disponíveis no MediaMTX
-
-### ✗ FAIL - Nenhum elemento encontrado
-```
-✗ FAIL: Nenhum elemento <video> encontrado no DOM!
-
-Possíveis causas:
-  1. Modal de mosaico não está visível (v-if/v-show)
-  2. Vue não renderizou os componentes
-  3. mosaicCameras.value está vazio
-```
-**Significado:** Problema na renderização Vue. Verificar:
-- `mosaicCameras` computed está retornando dados?
-- `v-if` ou `v-show` está bloqueando renderização?
-- Vue refs (`mosaicVideoRefs`) estão sendo criadas?
+- **0 testes listados**: confira que está a correr em `frontend/` e que o `testDir` é `./tests/e2e`
+  (os specs do Vitest não são do Playwright).
+- **Falha em `authenticate`**: o utilizador `playwright_test` não existe ou a senha não confere.
+- **Timeout ao abrir o mapa**: backend parado ou chave de mapas não configurada.
 
 ---
 
 ## 🐛 Debug Avançado
 
-### Ver logs completos do container de teste
-```powershell
-docker compose --profile testing run --rm test-e2e
-```
-
-### Executar teste com browser visível (modo headed)
-```powershell
-# Editar docker-compose.yml:
-# command: pytest /app/test_mosaic_rendering.py -v --headed
-
-# Ou executar manualmente:
-docker compose exec web bash
-cd /app
-PLAYWRIGHT_HEADED=1 pytest test_mosaic_rendering.py -v
-```
-
-### Inspecionar container durante execução
-```powershell
-# Terminal 1: Executar teste
-docker compose --profile testing run --rm test-e2e
-
-# Terminal 2: Inspecionar logs
-docker compose logs -f web
-
-# Terminal 3: Entrar no container
-docker compose exec web bash
+```bash
+cd frontend
+npx playwright test --headed          # navegador visível
+npx playwright test --debug           # Playwright Inspector, passo a passo
+npx playwright test --ui              # modo UI
+npx playwright test --list            # lista os specs descobertos
 ```
 
 ---
@@ -154,90 +122,53 @@ docker compose exec web bash
 Se o teste falhar, verificar em ordem:
 
 1. **Backend está rodando?**
-   ```powershell
-   docker compose ps
-   curl http://localhost:8000/api/v1/sites/
+   ```bash
+   docker compose -f docker/docker-compose.yml ps
+   curl http://localhost:8000/ready
    ```
 
-2. **Câmeras cadastradas?**
-   ```powershell
-   curl http://localhost:8000/api/v1/cameras/
+2. **Câmeras cadastradas?** (a API exige sessão autenticada)
+   ```bash
+   curl -i http://localhost:8000/api/v1/cameras/
    ```
 
 3. **Frontend compilado?**
-   ```powershell
+   ```bash
    ls backend/staticfiles/vue-spa/assets/
    ```
 
 4. **Modal de mosaico existe no código?**
-   ```powershell
-   grep -r "mosaic-video" frontend/src/components/
+   ```bash
+   grep -r "mosaicVideoRefs" frontend/src/components/
    ```
 
 5. **Vue refs sendo criadas?**
-   - Abrir DevTools no navegador
+   - Abrir DevTools no navegador (build de desenvolvimento)
    - Console → procurar logs `[SiteDetailsModal]`
-   - Verificar "mosaicVideoRefs.value keys: [...]"
-
----
-
-## 🚀 Comandos Rápidos
-
-```powershell
-# Rebuild completo após mudanças
-cd docker
-docker compose down
-docker compose build --no-cache web test-e2e
-docker compose up -d
-
-# Executar apenas teste E2E
-docker compose --profile testing run --rm test-e2e
-
-# Ver screenshot de falha
-start ..\test-screenshot-fail.png
-
-# Limpar imagens antigas
-docker compose down --rmi all
-docker system prune -f
-```
-
----
-
-## 📊 Métricas de Sucesso
-
-| Métrica | Valor Esperado |
-|---------|---------------|
-| Elementos `<video>` no DOM | ≥ 4 (número de câmeras) |
-| Console logs `[SiteDetailsModal]` | ≥ 10 (mostra atividade) |
-| Tempo de abertura do modal | < 2s |
-| Conexões WebRTC estabelecidas | 100% das câmeras |
-| Screenshots geradas | 1 (sucesso) ou 2 (falha + erro) |
+   - Verificar "Keys disponíveis: [...]"
 
 ---
 
 ## 🔧 Manutenção
 
 ### Atualizar Playwright
-```powershell
-pip install --upgrade playwright pytest-playwright
-playwright install chromium
+```bash
+cd frontend
+npm install -D @playwright/test@latest
+npx playwright install chromium
 ```
 
 ### Adicionar novo teste
-1. Criar arquivo `test_*.py` na raiz
-2. Adicionar volume no `docker-compose.yml`:
-   ```yaml
-   volumes:
-     - ../test_novo.py:/app/test_novo.py
-   ```
-3. Executar: `docker compose --profile testing run --rm test-e2e pytest /app/test_novo.py`
+1. E2E: criar `frontend/tests/e2e/<nome>.spec.js` (importar `authenticate` de `./fixtures/auth.js` se precisar de sessão)
+2. Unitário/componente: criar `frontend/tests/unit/<nome>.spec.js` ou `frontend/tests/components/<Area>/<nome>.test.js`
+3. Executar: `npm run test:unit` ou `npx playwright test tests/e2e/<nome>.spec.js`
 
 ---
 
 ## 📞 Suporte
 
 Se os testes continuarem falhando após verificar o checklist:
-1. Gerar screenshot: executar teste com `--screenshot=on`
-2. Coletar logs: `docker compose logs web > logs.txt`
+1. Gerar trace: `npx playwright test --trace on`
+2. Coletar logs: `docker compose -f docker/docker-compose.yml logs web > logs.txt`
 3. Verificar console do navegador (DevTools)
-4. Comparar com implementação funcional em [MosaicViewerView.vue](frontend/src/views/video/MosaicViewerView.vue)
+4. Comparar com implementação funcional em [MosaicViewerView.vue](../../../frontend/src/views/video/MosaicViewerView.vue)

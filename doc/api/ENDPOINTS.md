@@ -1,8 +1,9 @@
-# API Documentation · MapsProveFiber v2.0.0
+# API Documentation · MapsProveFiber
 
 **MapsProveFiber** — Reference for every HTTP endpoint exposed by the platform, including inventory, monitoring, dashboard, setup, and observability surfaces.
 
-**Last Updated**: 2025-11-08  
+**Versão do produto**: ver [VERSION](../../VERSION)  
+**Last Updated**: 2026-10-04  
 **API Version**: v1  
 **Base URL**: `http://localhost:8000`
 
@@ -90,7 +91,7 @@ Single source of truth for the network topology and route orchestration. Respons
 
 ### Routes & Task Orchestration
 
-As of v2.0.0 all optical route build operations are consolidated here; the standalone `routes_builder` app is archived. Base path: `/api/v1/inventory/routes/tasks/`.
+Since the 2025-01 modular refactoring all optical route build operations are consolidated here; the standalone `routes_builder` app is archived. Base path: `/api/v1/inventory/routes/tasks/`.
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
@@ -134,7 +135,8 @@ Combines inventory data with Zabbix telemetry for dashboards and reporting.
 |----------|--------|------|-------------|
 | `/dashboard/` | GET | Yes | Primary HTML dashboard |
 | `/metrics/` | GET | Yes | Metrics overview page |
-| `/api/hosts-status/` | GET | Yes | JSON feed consumed by the dashboard |
+| `/api/dashboard/data/` | GET | Yes | JSON feed consumed by the dashboard (hosts status + summary) |
+| `/api/dashboard/sites/` | GET | Yes | JSON feed with sites and grouped devices |
 | `ws/dashboard/status/` | WS | Yes | Channels WebSocket endpoint for live updates |
 
 ---
@@ -164,7 +166,7 @@ Legacy documentation is retained under `doc/archive/` for historical reference b
 
 - `doc/architecture/MODULES.md` — Application responsibilities and status.
 - `doc/architecture/DATA_FLOW.md` — Data flow diagrams and integration points.
-- `doc/releases/BREAKING_CHANGES_v2.0.0.md` — Migration guide for the v2.0.0 consolidation.
-- `doc/operations/DEPLOYMENT.md` — Deployment checklist and operational considerations.
+- `doc/releases/v2.0.0/BREAKING_CHANGES.md` — Migration guide for the 2025-01 consolidation.
+- `DEPLOY.md` (repository root) and `docker/docker-compose.prod.yml` — Deployment and operational considerations.
 
 **MapsProveFiber** — API reference maintained by the Engineering team.

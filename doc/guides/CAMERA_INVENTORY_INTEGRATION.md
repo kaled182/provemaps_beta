@@ -237,7 +237,7 @@ onMounted(async () => {
 
 ## 📖 Referências
 
-- [Playbook AI - Architecture](../.github/copilot-instructions.md)
+- [Playbook AI - Architecture](../../.github/copilot-instructions.md)
 - [Guia WebRTC/WHEP](./VIDEO_STREAMING_WHEP.md)
 - [Modelo Department](../../backend/core/models.py#L50-L56)
 - [Modelo VideoMosaic](../../backend/setup_app/models.py#L188-L223)

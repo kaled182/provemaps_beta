@@ -14,7 +14,7 @@
 ### 3. Executar Script de Validação
 1. Pressione `F12` para abrir DevTools
 2. Vá para a aba **Console**
-3. Cole o conteúdo do arquivo [frontend/validate-videos.js](frontend/validate-videos.js)
+3. Cole o conteúdo do arquivo [frontend/validate-videos.js](../../../frontend/validate-videos.js)
 4. Pressione `Enter`
 5. Aguarde 2 segundos para os resultados
 
@@ -87,4 +87,4 @@ Após executar o script, tire um screenshot do console mostrando:
 
 ---
 
-**Arquivo do script:** [frontend/validate-videos.js](frontend/validate-videos.js)
+**Arquivo do script:** [frontend/validate-videos.js](../../../frontend/validate-videos.js)

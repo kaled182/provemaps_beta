@@ -69,11 +69,11 @@
 
 | Task | Status Uso | Última Referência | Ação Planejada |
 |------|-----------|-------------------|----------------|
-| `routes_builder.build_route` | ⚠️ **LEGACY SHIM** | [routes/tasks.py#L209](backend/inventory/routes/tasks.py#L209) | Deprecar Sprint 4 |
-| `routes_builder.build_routes_batch` | ⚠️ **LEGACY SHIM** | [routes/tasks.py#L220](backend/inventory/routes/tasks.py#L220) | Deprecar Sprint 4 |
-| `routes_builder.invalidate_route_cache` | ⚠️ **LEGACY SHIM** | [routes/tasks.py#L231](backend/inventory/routes/tasks.py#L231) | Deprecar Sprint 4 |
-| `routes_builder.import_route_from_payload` | ⚠️ **LEGACY SHIM** | [routes/tasks.py#L240](backend/inventory/routes/tasks.py#L240) | Deprecar Sprint 4 |
-| `routes_builder.health_check` | ⚠️ **LEGACY SHIM** | [routes/tasks.py#L256](backend/inventory/routes/tasks.py#L256) | Deprecar Sprint 4 |
+| `routes_builder.build_route` | ⚠️ **LEGACY SHIM** | [routes/tasks.py#L209](../../backend/inventory/routes/tasks.py#L209) | Deprecar Sprint 4 |
+| `routes_builder.build_routes_batch` | ⚠️ **LEGACY SHIM** | [routes/tasks.py#L220](../../backend/inventory/routes/tasks.py#L220) | Deprecar Sprint 4 |
+| `routes_builder.invalidate_route_cache` | ⚠️ **LEGACY SHIM** | [routes/tasks.py#L231](../../backend/inventory/routes/tasks.py#L231) | Deprecar Sprint 4 |
+| `routes_builder.import_route_from_payload` | ⚠️ **LEGACY SHIM** | [routes/tasks.py#L240](../../backend/inventory/routes/tasks.py#L240) | Deprecar Sprint 4 |
+| `routes_builder.health_check` | ⚠️ **LEGACY SHIM** | [routes/tasks.py#L256](../../backend/inventory/routes/tasks.py#L256) | Deprecar Sprint 4 |
 
 **Observação:** Todos os 5 tasks legacy são proxies para `inventory.routes.tasks.*`. Frontend deveria usar namespace novo.
 
@@ -100,7 +100,7 @@
 ## 4. Padrões Legacy Identificados
 
 ### 🟡 Padrão 1: Legacy Task Namespace (`routes_builder.*`)
-**Localização:** [backend/inventory/routes/tasks.py](backend/inventory/routes/tasks.py)  
+**Localização:** [backend/inventory/routes/tasks.py](../../backend/inventory/routes/tasks.py)  
 **Impacto:** Frontend pode estar chamando namespace antigo  
 **Ação Sprint 4:** Adicionar `DeprecationWarning` + atualizar chamadas frontend
 
@@ -109,7 +109,7 @@
 **Status:** ✅ Todos documentados como "Future enhancement"
 
 ### 🟢 Padrão 3: Serializer Retrocompatibilidade (Sprint 2 Week 2 — RESOLVIDO)
-**Localização:** [backend/inventory/serializers.py](backend/inventory/serializers.py)  
+**Localização:** [backend/inventory/serializers.py](../../backend/inventory/serializers.py)  
 **Solução:** `SerializerMethodField` para `path_coordinates`  
 **Status:** ✅ Funcional, testes passando
 

@@ -1,36 +1,50 @@
-# 🧪 Testes Implementados: Modal de Mosaico de Câmeras
+# 🧪 Testes: Modal de Mosaico de Câmeras
+
+**Última atualização**: 2026-10-04
+
+> A página HTML solta `test-mosaic-refs.html` foi removida do repositório em 2026-10-04
+> (EV-0020). Os testes reais são o **Vitest** (`frontend/tests/unit`,
+> `frontend/tests/components`; `cd frontend && npm run test:unit`) e o **Playwright**
+> (`frontend/tests/e2e`; `cd frontend && npm run test:e2e`). Ver [TESTS_E2E_SETUP.md](TESTS_E2E_SETUP.md).
 
 ## ✅ Teste 1: Validação de Pattern Vue 3 Refs
-**Arquivo**: `test_mosaic_refs.py`
-**Status**: PASS ✓
+**Arquivo**: `backend/tests/test_mosaic_refs.py`
 
 Valida que o código segue o padrão correto:
 - **Template**: `mosaicVideoRefs[key] = el` (sem .value)
 - **Código**: `mosaicVideoRefs.value[key]` (com .value)
 
 ```bash
-python test_mosaic_refs.py
-# Resultado: === RESULTADO: PASS ===
+python backend/tests/test_mosaic_refs.py
+# Resultado esperado: === RESULTADO: PASS ===
 ```
+
+> O script lê o componente por um caminho absoluto de Windows
+> (`d:/provemaps_beta/frontend/src/components/SiteDetailsModal.vue`). Em Linux é preciso apontá-lo para
+> `frontend/src/components/SiteDetailsModal.vue` antes de o executar.
 
 ---
 
 ## ✅ Teste 2: Garantia de Renderização Completa
-**Implementação**: SiteDetailsModal.vue (linhas após mosaicCameras.value)
+**Implementação**: `frontend/src/components/SiteDetailsModal.vue` (`connectMosaicCamera` e `attemptWhepConnectionViaComposable`)
 
 ### Estratégia Multi-Camada:
-1. **Duplo `nextTick()`**: Garante que v-for dinâmico terminou
-2. **Retry com Polling**: Valida que refs foram populadas
-3. **Logs Diagnósticos**: Rastreia cada etapa
+1. **`nextTick()`** após a conexão WebRTC: garante que o `v-for` dinâmico terminou
+2. **Polling**: até 10 tentativas (100 ms) à espera do `<video>` e do stream
+3. **Validação pre-flight**: aborta a conexão se o elemento `<video>` não existe
+4. **Logs diagnósticos**: rastreiam cada etapa
 
 ```js
+await rtc.connect(whepUrl)
 await nextTick()
-await nextTick() // Segundo tick para v-for completo
 
-// Retry até todas as refs estarem prontas
-for (let i = 0; i < 5; i++) {
-  const refCount = Object.keys(mosaicVideoRefs.value).length
-  if (refCount >= mosaicCameras.value.length) break
+const maxAttempts = 10
+for (let i = 0; i < maxAttempts; i++) {
+  const videoEl = refsMap.value[connectionKey]
+  if (videoEl && rtc.stream.value) {
+    videoEl.srcObject = rtc.stream.value
+    break
+  }
   await delay(100)
 }
 ```
@@ -41,46 +55,47 @@ Antes de cada conexão, valida que o elemento `<video>` existe:
 ```js
 const videoEl = mosaicVideoRefs.value[key]
 if (!videoEl) {
-  console.error('ERRO: Elemento não encontrado')
+  console.error('ERRO: Elemento <video> não encontrado')
   return // Aborta conexão
 }
 ```
 
 ---
 
-## ✅ Teste 3: HTML de Teste Standalone
-**Arquivo**: `test-mosaic-refs.html`
+## ✅ Teste 3: Vitest do mosaico (substitui o HTML standalone)
+**Arquivos**: `frontend/tests/unit/SiteCamerasTab.spec.js`, `frontend/tests/unit/useSiteCameras.spec.js`
 
-Teste isolado Vue 3 para validar comportamento de refs dinâmicas.
+Cobrem a aba de câmeras do site: estados de loading/erro/vazio, lista de mosaicos, carga de um mosaico,
+uso de `CameraPlayer`, classe da grelha conforme o número de câmeras e `stopStreams` ao desmontar.
 
-**Como usar**:
 ```bash
 cd frontend
-python -m http.server 8080
-# Abrir http://localhost:8080/test-mosaic-refs.html
-# Verificar console do navegador
+npx vitest run tests/unit/SiteCamerasTab.spec.js tests/unit/useSiteCameras.spec.js
+# ou toda a suite: npm run test:unit
 ```
+
+Ainda não existe um spec Playwright específico do mosaico em `frontend/tests/e2e`; um novo teste E2E
+entra ali (ver "Adicionar novo teste" em [TESTS_E2E_SETUP.md](TESTS_E2E_SETUP.md)).
 
 ---
 
 ## 📊 Logs Esperados no Console
 
+> Só aparecem em build de desenvolvimento: o build de produção remove `console.log` (EV-0019);
+> `console.warn` e `console.error` ficam.
+
 ### ✅ Sucesso:
 ```
-[SiteDetailsModal] Câmeras enriquecidas: 4
-[SiteDetailsModal] Vue renderizou, elementos video disponíveis
-[SiteDetailsModal] mosaicVideoRefs.value keys: ['mosaic-1-0', 'mosaic-1-1', 'mosaic-1-2', 'mosaic-1-3']
-[SiteDetailsModal] mosaicCameras connectionKeys: ['mosaic-1-0', 'mosaic-1-1', 'mosaic-1-2', 'mosaic-1-3']
-[SiteDetailsModal] ✓ Todas as 4 refs prontas
-[SiteDetailsModal] ✓ Elemento <video> encontrado para 12314
-[SiteDetailsModal] ✓ Stream vinculado ao vídeo para mosaico:12314
+[SiteDetailsModal] 🎥 Conectando câmera: {name: ..., connectionKey: 'mosaic-1-0', ...}
+[SiteDetailsModal] ✓ Elemento <video> encontrado para <câmera>, key: mosaic-1-0
+[SiteDetailsModal] Tentativa 1/10 - videoEl: true stream: true
+[SiteDetailsModal] ✓ Stream vinculado ao vídeo para mosaico:<câmera>
 ```
 
 ### ❌ Falha (refs vazias):
 ```
-[SiteDetailsModal] mosaicVideoRefs.value keys: []
-[SiteDetailsModal] Aguardando refs... (0/4) tentativa 1/5
-[SiteDetailsModal] ERRO: Elemento <video> não encontrado para 12314
+[SiteDetailsModal] ERRO: Elemento <video> não encontrado para <câmera>, key: mosaic-1-0
+[SiteDetailsModal] Keys disponíveis: []
 ```
 
 ---
@@ -91,7 +106,7 @@ python -m http.server 8080
 2. **Abrir DevTools**: F12 → Console
 3. **Abrir modal do site**: Clicar em "TESTE - Furacão"
 4. **Abrir mosaico**: Clicar no card "Câmeras"
-5. **Verificar logs**: Devem aparecer "✓ Todas as X refs prontas"
+5. **Verificar logs**: Devem aparecer "✓ Elemento <video> encontrado" e "✓ Stream vinculado ao vídeo"
 6. **Verificar vídeos**: Devem aparecer as imagens das câmeras
 
 ---
@@ -100,14 +115,14 @@ python -m http.server 8080
 
 Os logs vão mostrar exatamente onde está o problema:
 
-1. **Se `mosaicVideoRefs.value keys: []`**: Vue não renderizou os elementos
+1. **Se `Keys disponíveis: []`**: Vue não renderizou os elementos
    - Possível causa: Modal não está visível (`showMosaicModal = false`)
    - Solução: Verificar que modal está realmente aberto
 
-2. **Se keys estão erradas**: Mismatch entre connectionKey no template e código
-   - Logs mostram ambas as listas para comparação
+2. **Se as keys estão erradas**: Mismatch entre `connectionKey` no template e código
+   - O log de erro mostra as keys disponíveis para comparação
    - Solução: Ajustar `assignConnectionKey`
 
 3. **Se stream não vincula**: Elementos existem mas WebRTC falha
-   - Ver logs do useWebRTC composable
+   - Ver logs do `useWebRTC` composable
    - Validar URLs WHEP retornadas pelo backend

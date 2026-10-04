@@ -162,7 +162,8 @@ docker compose -f docker/docker-compose.yml exec web python backend/tests/script
 
 - **[doc/README.md](../README.md)** — Índice geral de documentação
 - **[doc/guides/DEVELOPMENT.md](../guides/DEVELOPMENT.md)** — Guia de desenvolvimento
-- **[doc/operations/DEPLOYMENT.md](../operations/DEPLOYMENT.md)** — Deploy e CI/CD
+- **[DEPLOY.md](../../DEPLOY.md)** — Deploy em produção
+- **[doc/guides/TESTING.md](../guides/TESTING.md)** e [CLAUDE.md](../../CLAUDE.md) §9 — Comandos de teste e cobertura atuais
 
 ### Roadmap e Planejamento
 
@@ -176,5 +177,5 @@ docker compose -f docker/docker-compose.yml exec web python backend/tests/script
 
 ---
 
-**Última Atualização**: 7 de Fevereiro de 2026  
-**Versão**: 1.0.0
+**Última Atualização**: 4 de Outubro de 2026  
+**Versão do produto**: ver [VERSION](../../VERSION)

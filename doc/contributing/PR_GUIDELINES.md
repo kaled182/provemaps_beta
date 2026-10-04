@@ -1,7 +1,7 @@
 # Pull Request Guidelines - MapsProveFiber
 
-**Version**: v2.0.0  
-**Last Updated**: 2025-11-10
+**Versão do produto**: ver [VERSION](../../VERSION)  
+**Last Updated**: 2026-10-04
 
 ---
 
@@ -21,7 +21,7 @@ This guide outlines the pull request (PR) process for MapsProveFiber contributio
 
 ### 2. Branch from `inicial`
 
-```powershell
+```bash
 git checkout inicial
 git pull origin inicial
 git checkout -b feat/your-feature-name
@@ -41,10 +41,10 @@ git checkout -b feat/your-feature-name
 
 Before submitting, ensure:
 
-- [ ] **Tests pass**: `pytest -q` (199/199 passing)
+- [ ] **Tests pass**: `pytest -q` (backend, from the repo root) and `cd frontend && npm run test:unit`
 - [ ] **Code formatted**: `make fmt`
 - [ ] **Linting clean**: `make lint`
-- [ ] **Type checks pass**: `make type-check` (if applicable)
+- [ ] **Type checks pass**: pyright on the strictly-typed packages, see `backend/pyrightconfig.json` (if applicable)
 - [ ] **Django check**: `python manage.py check`
 - [ ] **Migrations created**: If models changed
 - [ ] **Documentation updated**: For API/behavior changes
@@ -90,11 +90,11 @@ If UI changes, include before/after screenshots.
 
 ### 1. Automated Checks
 
-CI/CD runs automatically:
-- Tests (pytest)
-- Linting (ruff, black)
-- Type checking
-- Security scanning
+CI/CD runs automatically (`.github/workflows/tests.yml`):
+- Backend tests (pytest + coverage on PostGIS, with a minimum-coverage gate)
+- Frontend unit tests (Vitest)
+
+Linting (`make lint`) is not yet enforced in CI (EV-0022); run it locally before pushing.
 
 ### 2. Code Review
 
@@ -134,7 +134,7 @@ Reviewers check:
 
 ### Update PR
 
-```powershell
+```bash
 # Make changes
 git add .
 git commit -m "fix: address review comments"
@@ -148,7 +148,7 @@ git push --force-with-lease origin feat/your-feature
 
 ### Resolve Conflicts
 
-```powershell
+```bash
 git checkout inicial
 git pull origin inicial
 git checkout feat/your-feature
@@ -257,4 +257,4 @@ Convert to ready when:
 
 ---
 
-**Last Updated**: 2025-11-10
+**Last Updated**: 2026-10-04

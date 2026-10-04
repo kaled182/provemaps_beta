@@ -163,7 +163,7 @@ See [OBSERVABILITY.md](OBSERVABILITY.md) for monitoring setup.
 | Docker build fails | Check Dockerfile, cache | [DOCKER.md](DOCKER.md#troubleshooting) |
 | Metrics not appearing | Check Prometheus config | [OBSERVABILITY.md](OBSERVABILITY.md#troubleshooting) |
 
-See also: [../operations/TROUBLESHOOTING.md](../operations/TROUBLESHOOTING.md)
+See also: [../troubleshooting/](../troubleshooting/)
 
 ---
 

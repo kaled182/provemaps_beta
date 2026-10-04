@@ -1,6 +1,6 @@
 # 🧪 Testing Documentation - MapsProveFiber
 
-**Última Atualização**: 7 de Fevereiro de 2026
+**Última Atualização**: 4 de Outubro de 2026
 
 Documentação completa sobre testes do projeto MapsProveFiber, incluindo organização, execução e boas práticas.
 
@@ -171,7 +171,7 @@ docker compose -f docker/docker-compose.yml exec web pytest -m "celery and integ
 
 ## 🔧 Configuração de Testes
 
-### pytest.ini (raiz do projeto)
+### pytest.ini (excerto; o canónico é `backend/pytest.ini`, o da raiz espelha)
 
 ```ini
 [pytest]
@@ -205,8 +205,8 @@ CELERY_TASK_EAGER_PROPAGATES = True
 # Banco de dados de teste
 DATABASES = {
     'default': {
-        'ENGINE': 'django.contrib.gis.db.backends.postgis',  # SQLite para testes rápidos
-        'NAME': ':memory:',
+        'ENGINE': 'django.contrib.gis.db.backends.postgis',  # PostgreSQL + PostGIS (TEST_DB_ENGINE=postgis), como no CI
+        'NAME': os.getenv('DB_NAME', 'app'),
     }
 }
 
@@ -237,18 +237,20 @@ docker compose -f docker/docker-compose.yml exec web pytest --cov --cov-report=t
 
 ### Metas de Cobertura
 
+Valores "Atual" medidos em 2026-10-04 (branch coverage, ver [CLAUDE.md](../../CLAUDE.md) §9).
+
 | Módulo | Meta | Atual |
 |--------|------|-------|
-| `inventory/` | 85% | ~80% |
-| `maps_view/` | 80% | ~75% |
-| `monitoring/` | 75% | ~70% |
-| `integrations/` | 70% | ~65% |
+| `inventory/` | 85% | 48% |
+| `maps_view/` | 80% | 90% |
+| `monitoring/` | 75% | 37% |
+| `integrations/` | 70% | 52% |
 
 ---
 
 ## 🚀 CI/CD Pipeline
 
-### GitHub Actions (em desenvolvimento)
+### GitHub Actions (ver `.github/workflows/tests.yml`)
 
 ```yaml
 # .github/workflows/tests.yml
@@ -260,13 +262,15 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgis/postgis:13-3.1
-      redis:
-        image: redis:6-alpine
+        image: postgis/postgis:16-3.4
+    env:
+      DJANGO_SETTINGS_MODULE: settings.test
+      DB_ENGINE: postgis
+      TEST_DB_ENGINE: postgis
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Run tests
-        run: docker compose -f docker/docker-compose.yml exec web pytest backend/tests/ -v
+        run: coverage run -m pytest -q && coverage report
 ```
 
 ---
@@ -276,7 +280,8 @@ jobs:
 - **[TESTING_GUIDE.md](TESTING_GUIDE.md)** — Guia completo de testes
 - **[backend/tests/README.md](../../backend/tests/README.md)** — Organização de testes
 - **[../guides/DEVELOPMENT.md](../guides/DEVELOPMENT.md)** — Guia de desenvolvimento
-- **[../operations/DEPLOYMENT.md](../operations/DEPLOYMENT.md)** — Deploy e CI/CD
+- **[../../DEPLOY.md](../../DEPLOY.md)** — Deploy em produção
+- **[../guides/TESTING.md](../guides/TESTING.md)** e [CLAUDE.md](../../CLAUDE.md) §9 — Comandos de teste e cobertura atuais
 
 ---
 
@@ -288,5 +293,5 @@ jobs:
 
 ---
 
-**Última Revisão**: 7 de Fevereiro de 2026  
+**Última Revisão**: 4 de Outubro de 2026  
 **Mantenedor**: Time de Desenvolvimento MapsProveFiber

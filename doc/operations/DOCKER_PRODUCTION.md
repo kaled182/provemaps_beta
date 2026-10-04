@@ -1,7 +1,10 @@
-# 🐳 Docker Production Deployment - MapsProveFiber v2.1.0
+# 🐳 Docker Production Deployment - MapsProveFiber
 
-**Data**: 7 de Fevereiro de 2026  
+**Versão do produto**: ver [VERSION](../../VERSION)  
+**Última atualização**: 4 de Outubro de 2026  
 **Status**: ✅ Production Ready
+
+> O guia de deploy atual é [`DEPLOY.md`](../../DEPLOY.md) (`docker/docker-compose.prod.yml` + `scripts/deploy.sh`). Este documento descreve o script alternativo `scripts/deploy-docker.sh`.
 
 ---
 
@@ -415,7 +418,7 @@ sudo ./scripts/deploy-docker.sh stop
 
 # 2. Checkout versão anterior
 cd /opt/mapsprovefiber
-git checkout v2.0.0  # ou commit anterior
+git checkout <tag-ou-commit-anterior>
 
 # 3. Rebuild
 sudo docker compose -f docker/docker-compose.prod.yml build
@@ -429,9 +432,9 @@ sudo ./scripts/deploy-docker.sh restore /path/to/backup.sql.gz
 
 ## 📚 Recursos Adicionais
 
-- **Documentação Docker**: [doc/operations/DOCKER.md](../doc/operations/DOCKER.md)
-- **Instalação Manual**: [doc/getting-started/INSTALLATION_GUIDE.md](../doc/getting-started/INSTALLATION_GUIDE.md)
-- **Troubleshooting**: [doc/troubleshooting/](../doc/troubleshooting/)
+- **Documentação Docker**: [doc/guides/DOCKER.md](../guides/DOCKER.md)
+- **Instalação Manual**: [doc/getting-started/INSTALLATION_GUIDE.md](../getting-started/INSTALLATION_GUIDE.md)
+- **Troubleshooting**: [doc/troubleshooting/](../troubleshooting/)
 
 ---
 
