@@ -143,6 +143,11 @@ import { useApi } from '@/composables/useApi'
 import { useNotification } from '@/composables/useNotification'
 import { useEscapeKey } from '@/composables/useEscapeKey'
 import { useUiStore } from '@/stores/ui'
+import {
+  normalizeOpticalHistory,
+  OPTICAL_HISTORY_EMPTY_MESSAGE,
+  OPTICAL_HISTORY_ERROR_MESSAGE,
+} from '@/utils/opticalHistory'
 
 const props = defineProps({
   isOpen: {
@@ -216,57 +221,23 @@ const getSignalClass = (value) => {
 
 const loadHistoricalData = async () => {
   if (!props.port?.id) return
-  
+
+  // EV-0001: histórico vazio ou erro mostram mensagem explícita — nunca dados inventados.
+  let chartData = []
+  let emptyMessage = OPTICAL_HISTORY_EMPTY_MESSAGE
   try {
-    // Tentar buscar dados reais do endpoint com período de 24h
     const response = await get(`/api/v1/ports/${props.port.id}/optical_history/`, { hours: 24 })
-    
-    if (response && Array.isArray(response) && response.length > 0) {
-      // Converter formato do backend para formato do gráfico
-      const chartData = response.map(snapshot => ({
-        timestamp: new Date(snapshot.timestamp).getTime(),
-        rx: snapshot.rx_power,
-        tx: snapshot.tx_power
-      }))
-      
-      await nextTick()
-      renderChart(chartData)
-      return
-    }
+    chartData = normalizeOpticalHistory(response).points
   } catch (error) {
-    console.warn('Falha ao carregar histórico real, usando dados mockados:', error)
+    console.error('[AlarmConfigModal] Falha ao carregar histórico óptico:', error)
+    emptyMessage = OPTICAL_HISTORY_ERROR_MESSAGE
   }
-  
-  // Fallback para mock data se API falhar ou não retornar dados
-  const mockData = generateMockData()
+
   await nextTick()
-  renderChart(mockData)
+  renderChart(chartData, emptyMessage)
 }
 
-const generateMockData = () => {
-  const now = Date.now()
-  const points = []
-  
-  for (let i = 24; i >= 0; i--) {
-    const timestamp = now - (i * 60 * 60 * 1000) // hourly points
-    const rx = props.port?.optical_rx_power || -22
-    const tx = props.port?.optical_tx_power || -3
-    
-    // Add some variation
-    const rxVariation = (Math.random() - 0.5) * 2
-    const txVariation = (Math.random() - 0.5) * 1
-    
-    points.push({
-      timestamp,
-      rx: rx + rxVariation,
-      tx: tx + txVariation
-    })
-  }
-  
-  return points
-}
-
-const renderChart = (data) => {
+const renderChart = (data, emptyMessage = OPTICAL_HISTORY_EMPTY_MESSAGE) => {
   if (!chartCanvas.value) return
   
   const ctx = chartCanvas.value.getContext('2d')
@@ -275,16 +246,22 @@ const renderChart = (data) => {
   
   // Clear canvas
   ctx.clearRect(0, 0, width, height)
+
+  // Find min/max for scaling — sem valores, desenha-se só a mensagem.
+  const rxValues = Array.isArray(data) ? data.map(d => d.rx).filter(v => v !== null && v !== undefined) : []
+  const txValues = Array.isArray(data) ? data.map(d => d.tx).filter(v => v !== null && v !== undefined) : []
+  const allValues = [...rxValues, ...txValues]
+  if (allValues.length === 0) {
+    ctx.fillStyle = isDark.value ? '#94a3b8' : '#64748b'
+    ctx.font = '12px sans-serif'
+    ctx.fillText(emptyMessage, 16, 24)
+    return
+  }
   
   // Setup
   const padding = 40
   const graphWidth = width - padding * 2
   const graphHeight = height - padding * 2
-  
-  // Find min/max for scaling
-  const rxValues = data.map(d => d.rx)
-  const txValues = data.map(d => d.tx)
-  const allValues = [...rxValues, ...txValues]
   const minValue = Math.min(...allValues) - 2
   const maxValue = Math.max(...allValues) + 2
   

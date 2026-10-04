@@ -100,7 +100,6 @@ log em inglês, como já está.
 <!-- EVOLUCAO:INICIO — quadro manual; quando a Central existir, passa a ser gerado. -->
 **A fazer — 🐛 Problemas** (triagem do Paulo, 2026-10-04: todos aceitos com a prioridade proposta)
 
-- `EV-0001` **Gráfico óptico desenha dados aleatórios quando o Zabbix não devolve histórico** · P1 · `frontend/src/components/PortTrafficModal.vue:711-735`, `AlarmConfigModal.vue:217-258`
 - `EV-0002` **`/api/config/` entrega chaves Google/Mapbox/Esri a qualquer visitante, sem login** · P1 · `backend/core/views_api.py`, `core/middleware/auth_required.py`
 - `EV-0003` **Endpoints de tráfego pedem `history: 3` fixo; itens float devolvem gráfico vazio** · P1 · `backend/inventory/viewsets.py:733,754,1385`
 - `EV-0004` **`api_port_traffic_history` sem `@login_required`** · P1 · `backend/inventory/api/devices.py:263`
@@ -133,6 +132,10 @@ log em inglês, como já está.
 - `EV-0028` **Alinhamento visual com o CRM — Fase 1: tokens e fontes auto-hospedadas (ADR 0007)**
 - `EV-0029` **Backend bucketiza séries (60 s) e devolve `{t, in, out}` alinhados, com limite de pontos proporcional ao período**
 - `EV-0030` **OpenAPI (drf-spectacular) e um só esquema de versionamento para `/api/v1/`**
+**Feito — aguarda deploy** (sai daqui quando o commit `fecha` chegar a produção)
+
+- `EV-0001` **Gráfico óptico desenha dados aleatórios quando o Zabbix não devolve histórico** · P1 · fechado em `fix(charts)` 2026-10-04 — `frontend/src/utils/opticalHistory.js` é a única fonte das mensagens «sem dados»/«erro»
+
 <!-- EVOLUCAO:FIM -->
 
 ---

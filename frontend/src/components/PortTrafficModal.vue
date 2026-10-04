@@ -211,6 +211,11 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useApi } from '@/composables/useApi'
 import { useEscapeKey } from '@/composables/useEscapeKey'
 import Chart from 'chart.js/auto'
+import {
+  normalizeOpticalHistory,
+  OPTICAL_HISTORY_EMPTY_MESSAGE,
+  OPTICAL_HISTORY_ERROR_MESSAGE,
+} from '@/utils/opticalHistory'
 import AlarmConfigModal from './AlarmConfigModal.vue'
 
 const props = defineProps({
@@ -430,7 +435,7 @@ const changePeriod = async (hours) => {
 }
 
 // Versão canvas (mesma lógica usada no AlarmConfigModal) para garantir renderização
-const renderOpticalCanvasChart = (data) => {
+const renderOpticalCanvasChart = (data, emptyMessage = OPTICAL_HISTORY_EMPTY_MESSAGE) => {
   if (!opticalChartCanvas.value) return
   const canvas = opticalChartCanvas.value
   const ctx = canvas.getContext('2d')
@@ -446,11 +451,15 @@ const renderOpticalCanvasChart = (data) => {
   // Limpar
   ctx.clearRect(0, 0, width, height)
 
-  // Guardas
-  if (!Array.isArray(data) || data.length === 0) {
+  // Guardas: sem pontos, ou só pontos sem valor, desenha-se a mensagem e nada mais.
+  const rxValues = Array.isArray(data) ? data.map(d => d.rx).filter(v => v !== null && v !== undefined) : []
+  const txValues = Array.isArray(data) ? data.map(d => d.tx).filter(v => v !== null && v !== undefined) : []
+  const allValues = [...rxValues, ...txValues]
+  if (allValues.length === 0) {
+    opticalChartData = null
     ctx.fillStyle = '#9ca3af'
     ctx.font = '12px sans-serif'
-    ctx.fillText('Sem dados de histórico para o período selecionado', 16, 24)
+    ctx.fillText(emptyMessage, 16, 24)
     return
   }
 
@@ -458,10 +467,6 @@ const renderOpticalCanvasChart = (data) => {
   const padding = { top: 40, right: 20, bottom: 50, left: 70 }
   const graphWidth = width - padding.left - padding.right
   const graphHeight = height - padding.top - padding.bottom
-
-  const rxValues = data.map(d => d.rx).filter(v => v !== null)
-  const txValues = data.map(d => d.tx).filter(v => v !== null)
-  const allValues = [...rxValues, ...txValues]
   const minValue = Math.min(...allValues) - 3
   const maxValue = Math.max(...allValues) + 3
 
@@ -708,35 +713,13 @@ const renderOpticalChart = async () => {
     const response = await api.get(url, params)
     console.log('[PortTrafficModal] Resposta do servidor:', response)
     
-    const history = Array.isArray(response) ? response : (response.history || [])
-    console.log('[PortTrafficModal] Pontos de histórico:', history.length)
-
-    let chartData
-    if (history && history.length > 0) {
-      chartData = history.map(snapshot => ({
-        timestamp: new Date(snapshot.timestamp).getTime(),
-        rx: snapshot.rx_power,
-        tx: snapshot.tx_power,
-      }))
-      console.log('[PortTrafficModal] Dados reais mapeados:', chartData.length, 'pontos')
-    } else {
-      // Fallback para dados simulados (mesma estratégia do AlarmConfigModal)
-      const now = Date.now()
-      const points = []
-      const rxBase = props.port?.optical_rx_power ?? -22
-      const txBase = props.port?.optical_tx_power ?? -3
-      const steps = selectedPeriod.value <= 24 ? selectedPeriod.value : 24
-      for (let i = steps; i >= 0; i--) {
-        const timestamp = now - (i * 60 * 60 * 1000)
-        const rxVariation = (Math.random() - 0.5) * 2
-        const txVariation = (Math.random() - 0.5) * 1
-        points.push({ timestamp, rx: rxBase + rxVariation, tx: txBase + txVariation })
-      }
-      chartData = points
-      console.warn('[PortTrafficModal] Optical history vazio; usando', chartData.length, 'pontos simulados')
+    // EV-0001: sem histórico mostra-se «sem dados» — nunca uma série inventada.
+    const { points: chartData, isEmpty } = normalizeOpticalHistory(response)
+    if (isEmpty) {
+      console.info('[PortTrafficModal] Histórico óptico vazio para o período', selectedPeriod.value)
     }
     await nextTick()
-    renderOpticalCanvasChart(chartData)
+    renderOpticalCanvasChart(chartData, OPTICAL_HISTORY_EMPTY_MESSAGE)
     
     // Adicionar event listeners para tooltips
     if (opticalChartCanvas.value) {
@@ -765,7 +748,7 @@ const renderOpticalChart = async () => {
     console.error('[PortTrafficModal] Erro ao carregar histórico óptico:', err)
     console.error('[PortTrafficModal] Detalhes do erro:', { message: err.message, url, params })
     await nextTick()
-    renderOpticalCanvasChart([])
+    renderOpticalCanvasChart([], OPTICAL_HISTORY_ERROR_MESSAGE)
   }
 }
 
