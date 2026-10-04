@@ -102,7 +102,6 @@ log em inglês, como já está.
 
 - `EV-0012` **Quatro pilhas de mapa paralelas; só `CustomMapViewer` honra os três provedores; `NetworkDesign` quebra com `osm`** · P2 · `frontend/src/components/MapView.vue`, `providers/maps/MapProviderFactory.js`, `composables/useMapService.js` · **⚠️ não cabe numa sessão** (MapView 1.943, CustomMapViewer 2.874, NetworkDesign 3.566 linhas): leitura levada ao Paulo em 2026-10-04 — proposta de fatiar em 0012a Leaflet/OSM na factory + apagar pilha 4 morta; 0012b MapView; 0012c CustomMapViewer; 0012d NetworkDesign. Decisão dele; o assistente passou ao item seguinte
 - `EV-0017` **`setup_app/api_views.py` com 4.484 linhas sem usecases; `usecases/devices.py` com 2.501** · P2 · **⚠️ não cabe numa sessão** (66 views em `api_views.py` ligadas a 42 rotas, 7 domínios misturados — config/env, backups+nuvem, testes de ligação, perfil da empresa, servidores de monitorização, gateways de mensagens/WhatsApp QR, vídeo/câmeras — com `setup_app` a 45 % de cobertura; `devices.py` tem 25 funções com descoberta Zabbix e scoring de portas no mesmo ficheiro): leitura levada ao Paulo em 2026-10-04 — proposta de fatiar por domínio, um módulo `setup_app/api/<dominio>.py` + `setup_app/usecases/<dominio>.py` por item (0017a backups, 0017b env/config, 0017c gateways+WhatsApp, 0017d vídeo, 0017e testes de ligação/perfil/monitorização) e 0017f `usecases/devices.py` → `devices_discovery.py` + `devices_ports.py`. Decisão dele; o assistente passou ao item seguinte
-- `EV-0020` **Lixo versionado: `setup_app_backup/`, `staticfiles/`, `playwright-report`, `.vue.broken_backup`, HTMLs de teste, `dtemp_fibers.json`** · P3
 - `EV-0021` **Docs obsoletas: 42 citam `zabbix_api`, 20 citam MariaDB; versões 1.4.1 / 2.0.0 / 0.1.3 inconsistentes** · P3 · `doc/`, `CHANGELOG.md`, `VERSION`, `frontend/package.json`
 - `EV-0022` **CI sem lint Python nem ESLint; ESLint falha com 18 erros; pre-commit não aplicado** · P3 · `.github/workflows/tests.yml`, `frontend/.eslintrc.cjs`
 - `EV-0023` **`service_accounts` gera e roda tokens que nenhuma classe de autenticação consome** · P3 · `backend/service_accounts/`
@@ -139,6 +138,7 @@ log em inglês, como já está.
 - `EV-0016` **Segredo TOTP em texto puro, TOTP caseiro, lockout por sessão** · P2 · fechado em `fix(auth)` 2026-10-04 — `UserProfile.totp_secret` passa a `EncryptedCharField` (Fernet, migração `core 0006` cifra os segredos existentes e é reversível); TOTP pelo `pyotp` (RFC 6238) em vez da implementação caseira; lockout por utilizador na cache (3 falhas → 5 min), não na sessão — limpar o cookie já não zera as tentativas
 - `EV-0018` **Dev-tools e pins sem versão na imagem de produção; `django-stubs 5.1` vs Django 5.2; três ficheiros de requirements** · P2 · fechado em `build(deps)` 2026-10-04 — `requirements.txt` só runtime, tudo pinado (`psycopg`, `setuptools`, `uvicorn`+`h11` que o Dockerfile instalava solto); `requirements-dev.txt` novo com pytest/coverage/lint/stubs (django-stubs 5.2.9, drf-stubs 3.16.9) que o CI e o `make requirements-dev` instalam; `requirements_full.txt` (freeze UTF-16 de Windows com MySQL e Playwright) apagado. **Fica:** `uvicorn.workers.UvicornWorker` está depreciado a favor do pacote `uvicorn-worker` — trocar nos compose quando se mexer na infra
 - `EV-0019` **Build do SPA sem minify, 518 `console.log`, Tailwind/FontAwesome via CDN forçando CSP com `unsafe-eval`** · P2 · fechado em `build(frontend)` 2026-10-04 — Tailwind 3.4 **compilado no build** (`tailwind.config.js` mínimo: dark por classe, `primary` = esmeralda atual, safelist do grid do mosaico; o CDN nunca processou o `@apply` nem as 163 classes `primary-*`) e FontAwesome 6.5.1 auto-hospedado via npm; `base_spa.html` sem CDN; build minificado (esbuild) com `console.log/debug/info/trace` e `debugger` removidos só em produção (583 → 0; `warn`/`error` ficam). **Fica (EV-0031):** 15 templates Django legados ainda carregam o Play CDN, por isso `'unsafe-eval'` e os hosts de CDN continuam no CSP
+- `EV-0020` **Lixo versionado: `setup_app_backup/`, `staticfiles/`, `playwright-report`, `.vue.broken_backup`, HTMLs de teste, `dtemp_fibers.json`** · P3 · fechado em `chore(repo)` 2026-10-04 — 277 ficheiros fora do Git (76 de `setup_app_backup/`, 153 da `staticfiles/` da raiz que o Django nunca serviu — `findstatic` confirma que as fontes vivas são `backend/static` e `maps_view/static` —, relatório do Playwright, 3 HTMLs de teste, 3 backups `.vue`, `.md.old`, `doc/archive/{backup-files,broken-components,scripts-deprecated}`, dois JSON soltos em `docker/`, `backend/data/postgis_inventory.json` e o `d:\temp_fibers.json` com nome mangled); `.gitignore` passa a recusar `*.backup|*.bak|*.old|*.broken*|*_REFACTORED.vue|*.phase*_step*` e `/test_media/`. **Fica (EV-0021):** `doc/guides/testing/TESTS_E2E_SETUP.md` e `TESTS_MOSAIC_MODAL.md` ainda citam os HTMLs de teste; `templates/partials/{header,add_device}.html` carregam `js/partials/{header,add_device}.js` que já não existiam em lado nenhum
 
 <!-- EVOLUCAO:FIM -->
 
@@ -207,7 +207,6 @@ backend/
   maps_view/      dashboard, cache_swr.py, realtime/ (consumers, publisher, events), mapbox_proxy.py
   setup_app/      configuração runtime, credenciais Fernet, api_views.py (god-module — EV-0017), docs viewer
   service_accounts/, telemetry/, gpon/, dwdm/   (os dois últimos são scaffolds)
-  setup_app_backup/   ⛔ cópia morta — não editar, apagar em EV-0020
 frontend/src/
   components/     Map/, Dashboard/, Inventory/, Fusion/, TraceRoute/, DeviceImport/, Video/, Configuration/, Layout/
   views/          páginas roteadas (monitoring/, video/, ...)
@@ -376,7 +375,6 @@ make skills        # repõe .claude/skills/ a partir de skills-lock.json
 - **Não deixar instâncias Chart.js, sockets ou listeners sem cleanup.**
 - **Não commitar `staticfiles/`, `playwright-report/`, dumps, `.env`,
   tokens, backups `.vue`.**
-- **Não editar `backend/setup_app_backup/`** — está morto.
 - **Não escrever no `.env` por API** sem revisão de segurança (a cadeia
   staff → `.env` → `shell=True` em `service_reloader.py` é sensível).
 - **Não criar ficheiros `.md` de planeamento ad-hoc** no repositório. Notas

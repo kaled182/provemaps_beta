@@ -231,3 +231,18 @@ skill-observations/
 .obsidian/graph.json
 .obsidian/hotkeys.json
 .obsidian/plugins/
+
+# ----------------------------------------------------
+# EV-0020 — ficheiros de backup nunca entram (CLAUDE.md §2.9: o Git é o backup)
+# ----------------------------------------------------
+*.backup
+*.bak
+*.old
+*.orig
+*.broken
+*.broken_backup
+*.working
+*_REFACTORED.vue
+*.phase*_step*
+# artefacto do pytest quando corre a partir da raiz (MEDIA_ROOT de settings.test)
+/test_media/
