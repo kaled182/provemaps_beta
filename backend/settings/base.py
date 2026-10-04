@@ -241,6 +241,7 @@ INSTALLED_APPS = [
     "dwdm",
     # Telemetry — anonymous usage stats (opt-out via TELEMETRY_ENABLED=false)
     "telemetry",
+    "evolucao.apps.EvolucaoConfig",  # Central de Evolução (ADR 0006, EV-0027)
 ]
 
 try:  # Allow tests to run without native spatial libs (GDAL/GEOS)
