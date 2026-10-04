@@ -105,7 +105,21 @@ ignore_missing_imports = true
 
 [tool.coverage.run]
 branch = true
-source = ["core", "maps_view", "setup_app"]
+# EV-0006: medir TODAS as apps de primeira parte. Até 2026-10-04 só core,
+# maps_view e setup_app contavam — inventory (a maior app), integrations,
+# monitoring e service_accounts ficavam fora do «60 %» que o CI exigia.
+source = [
+    "core",
+    "maps_view",
+    "setup_app",
+    "inventory",
+    "integrations",
+    "monitoring",
+    "service_accounts",
+    "telemetry",
+    "gpon",
+    "dwdm",
+]
 omit = [
     "*/tests/*",
     "*/migrations/*",

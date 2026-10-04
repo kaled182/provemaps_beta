@@ -100,7 +100,6 @@ log em inglês, como já está.
 <!-- EVOLUCAO:INICIO — quadro manual; quando a Central existir, passa a ser gerado. -->
 **A fazer — 🐛 Problemas** (triagem do Paulo, 2026-10-04: todos aceitos com a prioridade proposta)
 
-- `EV-0006` **Cobertura «60 %» do CI mede só `core`, `maps_view`, `setup_app`; `inventory` fica fora** · P1 · `backend/pyproject.toml [tool.coverage.run]`
 - `EV-0008` **~61 testes backend nunca coletados; três configs pytest divergentes** · P2 · `pytest.ini`, `backend/pytest.ini`, `backend/pyproject.toml`, `backend/inventory/routes/tests/`
 - `EV-0009` **121 testes frontend fora do `include` do Vitest; Playwright lista 0 testes** · P2 · `frontend/vitest.config.js`, `frontend/playwright.config.js`
 - `EV-0010` **Merge RX/TX e IN/OUT por `clock` exato gera buracos ou forward-fill que esconde quedas** · P2 · `backend/inventory/viewsets.py:632-685`, `frontend/src/services/fiberService.js:85-120`
@@ -135,6 +134,7 @@ log em inglês, como já está.
 - `EV-0004` **`api_port_traffic_history` sem `@login_required`** · P1 · fechado em `fix(auth)` 2026-10-04
 - `EV-0005` **Tokens Mapbox literais e dump com `auth.user` versionados** · P1 · ficheiros removidos/placeholder em `chore(security)` 2026-10-04 — **a rotação do token no Mapbox é manual, pelo Paulo**; o token continua no histórico do Git até lá
 - `EV-0007` **`package-lock.json` ignorado + `npm ci` no Dockerfile e no CI → build não reprodutível** · P1 · fechado em `build(frontend)` 2026-10-04 — lockfile versionado; workflow diário instala em `frontend/`
+- `EV-0006` **Cobertura «60 %» do CI mede só `core`, `maps_view`, `setup_app`** · P1 · fechado em `ci(coverage)` 2026-10-04 — todas as apps medidas; cobertura real 51 % (inventory 48 %, setup_app 45 %); limiar do CI passa a 50 % com ratchet
 
 <!-- EVOLUCAO:FIM -->
 
@@ -332,8 +332,13 @@ make skills        # repõe .claude/skills/ a partir de skills-lock.json
   do código.
 - Runs em background: `PYTHONUNBUFFERED=1 pytest -v ... > saida.log 2>&1`;
   **nunca** canalizar a saída do portão por `| tail`. Filtra-se na leitura.
-- Cobertura: o alvo do CI é 60 % mas mede só três apps (EV-0006). Não
-  confiar no número até isso ser corrigido.
+- Cobertura: desde EV-0006 o CI mede **todas** as apps. Medido em
+  2026-10-04: **51 %** no total (branch coverage) — `core` 83 %, `maps_view`
+  90 %, `integrations` 52 %, `inventory` 48 %, `setup_app` 45 %,
+  `service_accounts` 45 %, `monitoring` 37 %, `telemetry` 28 %. O limiar do CI
+  é 50 % e sobe (ratchet) quando um item acrescenta testes: ao fechar um item
+  com testes novos, correr a suite completa e subir `--fail-under` em
+  `.github/workflows/tests.yml` para o valor medido arredondado para baixo.
 
 ### Checklist antes do commit
 
