@@ -77,8 +77,8 @@ Remover código legado após consolidação da modularização em `inventory`, `
 4. ⏳ Validação de health checks (`/healthz`, `/ready`, `/live`, `/metrics/`)
 
 ### 📚 Guias de Migração
-- [MIGRATION_PRODUCTION_GUIDE.md](../operations/MIGRATION_PRODUCTION_GUIDE.md) - Procedimento de implantação
-- [REFATORAR.md](../developer/REFATORAR.md) - Status completo da refatoração
+- [MIGRATION_PRODUCTION_GUIDE.md](../../archive/2025-historico/MIGRATION_PRODUCTION_GUIDE.md) - Procedimento de implantação
+- [REFATORAR.md](../../archive/2025-historico/REFATORAR.md) - Status completo da refatoração
 
 ### ⚠️ Notas de Compatibilidade
 - **Frontend**: 100% migrado para `/api/v1/inventory/*` (9 arquivos JS validados)

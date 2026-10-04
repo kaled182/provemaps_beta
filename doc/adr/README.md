@@ -56,7 +56,7 @@ NNNN-titulo-em-kebab-case.md
 
 - **NNNN**: sequencial com zero-padding a 4 dígitos. Nunca reciclado.
 - A numeração continua a dos ADRs legados em
-  [`doc/architecture/ADR/`](../architecture/ADR/) (`000`, `001`, `004`),
+  [`doc/architecture/ADR/`](../architecture/ADR/) (`001`; os antigos `000` e `004` eram cópias de documentos de referência e estão em [`doc/archive/2025-historico/`](../archive/2025-historico/)),
   que ficam onde estão por valor histórico. O próximo ADR é **`0008`**.
 - Template: [`doc/templates/adr.md`](../templates/adr.md).
 
@@ -66,9 +66,9 @@ NNNN-titulo-em-kebab-case.md
 
 | #    | Título | Estado | Tags |
 |------|--------|--------|------|
-| [000](../architecture/ADR/000-technical-review.md) | Revisão técnica inicial (legado) | Aceito | `legado` |
+| [000](../archive/2025-historico/TECHNICAL_REVIEW.md) | Revisão técnica inicial (legado, **arquivado** 2026-10-04) | Histórico | `legado` |
 | [001](../architecture/ADR/001-fiber-route-builder.md) | Fiber Route Builder (legado) | Aceito | `legado`, `rotas` |
-| [004](../architecture/ADR/004-refactoring-plan.md) | Plano de refatoração 2.0 (legado) | Aceito | `legado`, `refatoração` |
+| [004](../archive/2025-historico/REFATORAR.md) | Plano de refatoração 2.0 (legado, **arquivado** 2026-10-04) | Histórico | `legado`, `refatoração` |
 | [0005](0005-manual-operacional-e-ecossistema-de-agente.md) | `CLAUDE.md` como manual operacional canônico + ecossistema de agente versionado (skills-lock, MCP, ADRs, memória) | Aceito | `processo`, `agente-ia`, `tooling` |
 | [0006](0006-central-de-evolucao-provemaps.md) | Central de Evolução no ProVeMaps — fila de trabalho observada, não escrita | Aceito | `processo`, `evolucao`, `agente-ia` |
 | [0007](0007-alinhamento-visual-com-o-crm.md) | Alinhamento visual com o CRM — tokens compartilhados, shell e migração incremental | Aceito | `frontend`, `design-system`, `tailwind`, `branding` |
