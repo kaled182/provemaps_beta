@@ -2,7 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from . import api_views, views, views_docs
-from .api import backups as api_backups  # EV-0017a: backups e nuvem
+from .api import backups as api_backups, config as api_config  # EV-0017a/b
 from .viewsets_alert_templates import AlertTemplateViewSet
 from .viewsets_contacts import ContactGroupViewSet, ContactViewSet, ImportHistoryViewSet
 
@@ -33,11 +33,11 @@ urlpatterns = [
         api_backups.gdrive_oauth_callback,
         name="gdrive_oauth_callback",
     ),
-    path("api/export/", api_views.export_configuration, name="export_config"),
-    path("api/import/", api_views.import_configuration, name="import_config"),
-    path("api/audit-history/", api_views.get_audit_history, name="audit_history"),
-    path("api/config/", api_views.get_configuration, name="get_config"),
-    path("api/config/update/", api_views.update_configuration, name="update_config"),
+    path("api/export/", api_config.export_configuration, name="export_config"),
+    path("api/import/", api_config.import_configuration, name="import_config"),
+    path("api/audit-history/", api_config.get_audit_history, name="audit_history"),
+    path("api/config/", api_config.get_configuration, name="get_config"),
+    path("api/config/update/", api_config.update_configuration, name="update_config"),
     path("api/company-profile/", api_views.get_company_profile, name="get_company_profile"),
     path(
         "api/company-profile/update/",
@@ -102,9 +102,9 @@ urlpatterns = [
         api_views.whatsapp_qr_test_message,
         name="whatsapp_qr_test_message",
     ),
-    path("api/env/", api_views.get_env_file, name="get_env"),
-    path("api/env/update/", api_views.update_env_file, name="update_env"),
-    path("api/env/import/", api_views.import_env_backup, name="import_env"),
+    path("api/env/", api_config.get_env_file, name="get_env"),
+    path("api/env/update/", api_config.update_env_file, name="update_env"),
+    path("api/env/import/", api_config.import_env_backup, name="import_env"),
     path("api/backups/", api_backups.backups_manager, name="backups_manager"),
     path("api/backups/restore/", api_backups.restore_backup, name="restore_backup"),
     path("api/backups/delete/", api_backups.delete_backup, name="delete_backup"),

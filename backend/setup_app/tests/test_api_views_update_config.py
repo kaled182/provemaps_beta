@@ -49,16 +49,21 @@ class UpdateConfigurationRegressionTests(TestCase):
             setattr(runtime_config, attr, "")
 
         with (
-            patch("setup_app.api_views.env_manager") as mock_em,
-            patch("setup_app.api_views.runtime_settings") as mock_rs,
-            patch("setup_app.api_views.FirstTimeSetup") as mock_fts,
-            patch("setup_app.api_views.clear_runtime_config_cache"),
-            patch("setup_app.api_views.reload_diagnostics_flag_cache"),
-            patch("setup_app.api_views.trigger_restart", return_value=False),
-            patch("setup_app.api_views.call_command", return_value="backup.zip") as mock_cmd,
-            patch("setup_app.api_views._upload_backup_if_enabled", return_value={"success": False}),
-            patch("setup_app.api_views._upload_backup_via_ftp", return_value={"success": False}),
-            patch("setup_app.api_views.ConfigurationAudit"),
+            patch("setup_app.usecases.config.env_manager") as mock_em,
+            patch("setup_app.usecases.config.runtime_settings") as mock_rs,
+            patch("setup_app.usecases.config.FirstTimeSetup") as mock_fts,
+            patch("setup_app.usecases.config.clear_runtime_config_cache"),
+            patch("setup_app.usecases.config.reload_diagnostics_flag_cache"),
+            patch("setup_app.usecases.config.trigger_restart", return_value=False),
+            patch("setup_app.usecases.config.call_command", return_value="backup.zip") as mock_cmd,
+            patch(
+                "setup_app.usecases.config.upload_backup_if_enabled",
+                return_value={"success": False},
+            ),
+            patch(
+                "setup_app.usecases.config.upload_backup_via_ftp", return_value={"success": False}
+            ),
+            patch("setup_app.api.config.ConfigurationAudit"),
             patch("integrations.zabbix.zabbix_service.clear_token_cache"),
         ):
             mock_em.read_values.return_value = {}

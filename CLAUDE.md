@@ -100,7 +100,7 @@ log em inglês, como já está.
 <!-- EVOLUCAO:INICIO — quadro manual; quando a Central existir, passa a ser gerado. -->
 **A fazer — 🐛 Problemas** (triagem do Paulo, 2026-10-04: todos aceitos com a prioridade proposta)
 
-- `EV-0017` **`setup_app/api_views.py` com 4.484 linhas sem usecases; `usecases/devices.py` com 2.501** · P2 · **⚠️ não cabe numa sessão** (66 views em `api_views.py` ligadas a 42 rotas, 7 domínios misturados — config/env, backups+nuvem, testes de ligação, perfil da empresa, servidores de monitorização, gateways de mensagens/WhatsApp QR, vídeo/câmeras — com `setup_app` a 45 % de cobertura; `devices.py` tem 25 funções com descoberta Zabbix e scoring de portas no mesmo ficheiro): leitura levada ao Paulo em 2026-10-04 — proposta de fatiar por domínio, um módulo `setup_app/api/<dominio>.py` + `setup_app/usecases/<dominio>.py` por item (0017a backups, 0017b env/config, 0017c gateways+WhatsApp, 0017d vídeo, 0017e testes de ligação/perfil/monitorização) e 0017f `usecases/devices.py` → `devices_discovery.py` + `devices_ports.py`. Decisão dele; o assistente passou ao item seguinte
+- `EV-0017` **`setup_app/api_views.py` com 4.484 linhas sem usecases; `usecases/devices.py` com 2.501** · P2 · **em curso por fatias** (aprovadas pelo Paulo em 2026-10-04, «Podemos seguir»): um módulo `setup_app/api/<dominio>.py` (views finas: `staff_required`, JSON, códigos HTTP, `ConfigurationAudit`) + `setup_app/usecases/<dominio>.py` (lógica em dicts, exceções de domínio) por fatia. **0017a feita** (`115706c`): backups e nuvem → `usecases/backups.py` + `api/backups.py` (+ `api/_auth.py`, `usecases/common.py`); 26 testes. **0017b feita**: `.env` e configuração (`get/update_env_file`, `import_env_backup`, `get/update_configuration`, `export/import_configuration`, `get_audit_history`) → `usecases/config.py` + `api/config.py`; `update_configuration` partido em `build_configuration_payload` → `_apply_runtime_overrides` → `_persist_configuration`, com `MissingRequiredFields`/`ConfigError` em vez de `JsonResponse` no meio da lógica; 48 testes. `api_views.py` 4.531 → 2.525 linhas. **Seguem:** 0017c gateways de mensagens + WhatsApp QR, 0017d vídeo/câmeras, 0017e testes de ligação + perfil da empresa + servidores de monitorização, 0017f `usecases/devices.py` → `devices_discovery.py` + `devices_ports.py`
 
 **Entrada, por triar — 🐛 Problemas** (abertos pelo assistente com prova; a triagem é do Paulo)
 
@@ -211,7 +211,7 @@ backend/
   monitoring/     inventário + estado Zabbix
   integrations/zabbix/  client.py (resiliente), zabbix_service.py (gateway), guards, decorators
   maps_view/      dashboard, cache_swr.py, realtime/ (consumers, publisher, events), mapbox_proxy.py
-  setup_app/      configuração runtime, credenciais Fernet, api_views.py (god-module — EV-0017), docs viewer
+  setup_app/      configuração runtime, credenciais Fernet, api/<dominio>.py + usecases/<dominio>.py (backups, config — EV-0017 em curso), api_views.py (resto, a encolher), docs viewer
   service_accounts/, telemetry/, gpon/, dwdm/   (os dois últimos são scaffolds)
 frontend/src/
   components/     Map/, Dashboard/, Inventory/, Fusion/, TraceRoute/, DeviceImport/, Video/, Configuration/, Layout/

@@ -18,10 +18,10 @@ class GetEnvFileTests(TestCase):
         return request
 
     def test_returns_empty_content_when_file_missing(self):
-        from setup_app.api_views import get_env_file
+        from setup_app.api.config import get_env_file
 
         request = self._make_request()
-        with patch("setup_app.api_views.env_manager") as mock_em:
+        with patch("setup_app.usecases.config.env_manager") as mock_em:
             mock_em.ENV_PATH = MagicMock()
             mock_em.ENV_PATH.exists.return_value = False
             response = get_env_file(request)
@@ -30,10 +30,10 @@ class GetEnvFileTests(TestCase):
         self.assertEqual(data["content"], "")
 
     def test_returns_file_content(self):
-        from setup_app.api_views import get_env_file
+        from setup_app.api.config import get_env_file
 
         request = self._make_request()
-        with patch("setup_app.api_views.env_manager") as mock_em:
+        with patch("setup_app.usecases.config.env_manager") as mock_em:
             mock_em.ENV_PATH = MagicMock()
             mock_em.ENV_PATH.exists.return_value = True
             mock_em.ENV_PATH.read_text.return_value = "KEY=value\n"
@@ -43,10 +43,10 @@ class GetEnvFileTests(TestCase):
         self.assertEqual(data["content"], "KEY=value\n")
 
     def test_returns_400_when_file_too_large(self):
-        from setup_app.api_views import get_env_file
+        from setup_app.api.config import get_env_file
 
         request = self._make_request()
-        with patch("setup_app.api_views.env_manager") as mock_em:
+        with patch("setup_app.usecases.config.env_manager") as mock_em:
             mock_em.ENV_PATH = MagicMock()
             mock_em.ENV_PATH.exists.return_value = True
             mock_em.ENV_PATH.read_text.return_value = "x" * 600_000
@@ -54,10 +54,10 @@ class GetEnvFileTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_returns_500_on_exception(self):
-        from setup_app.api_views import get_env_file
+        from setup_app.api.config import get_env_file
 
         request = self._make_request()
-        with patch("setup_app.api_views.env_manager") as mock_em:
+        with patch("setup_app.usecases.config.env_manager") as mock_em:
             mock_em.ENV_PATH = MagicMock()
             mock_em.ENV_PATH.exists.side_effect = OSError("permission denied")
             response = get_env_file(request)
