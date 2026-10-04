@@ -6,6 +6,7 @@
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { IMapProvider, IMap, IPolyline, IMarker } from './IMapProvider.js';
+import { getMarkerConfig } from './markerStyles.js';
 
 let mapboxLoaded = false;
 let layerIdCounter = 0;
@@ -303,40 +304,12 @@ class MapboxMarker extends IMarker {
   }
 
   /**
-   * Get marker configuration based on type
+   * Estilo do marcador por tipo — tabela partilhada em `markerStyles.js`.
    * @param {string} type - 'origin', 'destination', 'intermediate', 'default', 'preview'
    * @returns {{color: string, size: number, label: string}}
    */
   _getMarkerConfig(type) {
-    const configs = {
-      origin: {
-        color: '#22c55e', // green-500
-        size: 32,
-        label: 'A'
-      },
-      destination: {
-        color: '#ef4444', // red-500
-        size: 32,
-        label: 'B'
-      },
-      intermediate: {
-        color: '#3b82f6', // blue-500
-        size: 20,
-        label: ''
-      },
-      preview: {
-        color: '#f59e0b', // amber-500
-        size: 20,
-        label: ''
-      },
-      default: {
-        color: '#dc2626', // red-600 (original)
-        size: 24,
-        label: ''
-      }
-    };
-
-    return configs[type] || configs.default;
+    return getMarkerConfig(type);
   }
 }
 

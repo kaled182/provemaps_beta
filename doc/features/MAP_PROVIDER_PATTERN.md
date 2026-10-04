@@ -55,6 +55,8 @@ frontend/src/
 ├── providers/maps/
 │   ├── IMapProvider.js              # Interface abstrata (270 linhas)
 │   ├── MapboxProvider.js            # Implementação Mapbox GL JS (425 linhas)
+│   ├── LeafletProvider.js           # Leaflet/OSM, provider `osm` (EV-0012a)
+│   ├── markerStyles.js              # tabela de marcadores partilhada pelos três providers
 │   ├── GoogleMapsProvider.js        # Implementação Google Maps API (340 linhas)
 │   └── MapProviderFactory.js        # Factory singleton (130 linhas)
 │
@@ -315,7 +317,8 @@ export const createMap = factory.createMap.bind(factory);
 const providers = {
   google: GoogleMapsProvider,
   mapbox: MapboxProvider,
-  // Extensível: osm, esri, leaflet, etc.
+  osm: LeafletProvider, // Leaflet + tiles do OpenStreetMap (EV-0012a)
+  // Extensível: esri, etc. — os nomes são os de `setup_app.FirstTimeSetup.map_provider`.
 };
 ```
 
@@ -363,7 +366,7 @@ export function calculatePathDistance(path) {
 
 ### 6. mapCore-refactored.js - Core Provider-Agnostic
 
-Substituiu o antigo `mapCore.js` com código refatorado:
+Substituiu o antigo `mapCore.js` (apagado em EV-0012a, não tinha importadores) com código refatorado:
 
 ```javascript
 import { createMap, getCurrentProviderName } from '@/providers/maps/MapProviderFactory.js';
@@ -674,10 +677,10 @@ describe('MapboxPolyline', () => {
 ### Curto Prazo (1-2 semanas)
 - [ ] Implementar **melhorias visuais** (marcadores origem/destino diferenciados)
 - [ ] Adicionar **validação em tempo real** (portas em uso, nomes duplicados)
-- [ ] **Testes unitários** para providers
+- [x] **Testes unitários** para providers — `tests/unit/providers/` cobre `LeafletProvider` e a factory (EV-0012a); Google e Mapbox ainda sem testes
 
 ### Médio Prazo (1 mês)
-- [ ] Suporte a **OpenStreetMap/Leaflet**
+- [x] Suporte a **OpenStreetMap/Leaflet** — `LeafletProvider.js`, provider `osm` (EV-0012a, 2026-10-04)
 - [ ] Suporte a **Esri ArcGIS**
 - [ ] **Edição interativa** de vértices (Mapbox GL Draw)
 - [ ] **Documentação** completa da API

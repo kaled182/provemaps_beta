@@ -29,7 +29,6 @@
 |---------|----------|
 | `Map/README.md` | Documentação completa com exemplos |
 | `Map/ARCHITECTURE.md` | Diagramas e decisões arquiteturais |
-| `Map/USAGE_EXAMPLES.vue` | Exemplos de código funcionais |
 
 ### 4. Testes
 | Arquivo | Tipo | Cobertura |
@@ -294,7 +293,7 @@ function onPluginLoaded(name) {
 ## 📚 Próximos Passos
 
 1. **Ler Documentação Completa:** `Map/README.md`
-2. **Ver Exemplos:** `Map/USAGE_EXAMPLES.vue`
+2. **Ver Exemplos:** os blocos de código deste guia
 3. **Entender Arquitetura:** `Map/ARCHITECTURE.md`
 4. **Criar Plugin Customizado:** Seguir template em README
 5. **Executar Testes:** `npm run test:unit` e `npm run test:e2e`
@@ -323,7 +322,6 @@ A: Sim! UnifiedMapView é standalone, funciona em qualquer contexto Vue 3.
 ## 📞 Suporte
 
 - **Documentação:** `frontend/src/components/Map/README.md`
-- **Exemplos:** `frontend/src/components/Map/USAGE_EXAMPLES.vue`
 - **Testes:** `frontend/tests/unit/useMapService.spec.js`
 - **Issues:** Reportar no repositório do projeto
 

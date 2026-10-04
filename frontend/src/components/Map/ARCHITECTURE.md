@@ -279,7 +279,7 @@ frontend/src/
 │       ├── UnifiedMapView.vue     # Main wrapper
 │       ├── MapControls.vue        # Optional controls
 │       ├── README.md              # Documentation
-│       └── USAGE_EXAMPLES.vue     # Usage examples
+│       └── (exemplos de uso: ver README.md e QUICKSTART.md)
 │
 ├── stores/
 │   ├── map.js                     # Map state

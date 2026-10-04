@@ -518,7 +518,7 @@ frontend/src/
 └── components/
     └── Map/
         ├── UnifiedMapView.vue    # Componente wrapper
-        └── USAGE_EXAMPLES.vue    # Exemplos de uso
+        └── QUICKSTART.md         # Exemplos de uso
 ```
 
 ---
@@ -627,7 +627,7 @@ Para adicionar um novo plugin:
 3. Registre em `mapPlugins/index.js`
 4. Adicione testes em `tests/mapPlugins/`
 5. Documente no README
-6. Adicione exemplo de uso em `USAGE_EXAMPLES.vue`
+6. Adicione exemplo de uso em `QUICKSTART.md`
 
 ---
 

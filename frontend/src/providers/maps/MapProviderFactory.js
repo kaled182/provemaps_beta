@@ -7,6 +7,7 @@
 
 import { GoogleMapsProvider } from './GoogleMapsProvider.js';
 import { MapboxProvider } from './MapboxProvider.js';
+import { LeafletProvider } from './LeafletProvider.js';
 
 /**
  * Registry global de providers
@@ -14,7 +15,8 @@ import { MapboxProvider } from './MapboxProvider.js';
 const providers = {
   google: GoogleMapsProvider,
   mapbox: MapboxProvider,
-  // Expansível: osm, esri, etc.
+  osm: LeafletProvider, // Leaflet + tiles do OpenStreetMap (EV-0012a)
+  // Expansível: esri, etc. — os nomes são os de `setup_app.FirstTimeSetup.map_provider`.
 };
 
 /**
@@ -152,4 +154,4 @@ export function reloadProvider() {
 }
 
 // Export para acesso direto quando necessário
-export { GoogleMapsProvider, MapboxProvider };
+export { GoogleMapsProvider, MapboxProvider, LeafletProvider };

@@ -4,6 +4,7 @@
  */
 
 import { IMapProvider, IMap, IPolyline, IMarker } from './IMapProvider.js';
+import { getMarkerConfig } from './markerStyles.js';
 
 let googleMapsLoaded = false;
 let loadingPromise = null;
@@ -166,40 +167,12 @@ class GoogleMarkerClass extends IMarker {
   }
 
   /**
-   * Get marker configuration based on type
+   * Estilo do marcador por tipo — tabela partilhada em `markerStyles.js`.
    * @param {string} type - 'origin', 'destination', 'intermediate', 'default', 'preview'
    * @returns {{color: string, size: number, label: string}}
    */
   _getMarkerConfig(type) {
-    const configs = {
-      origin: {
-        color: '#22c55e',
-        size: 32,
-        label: 'A'
-      },
-      destination: {
-        color: '#ef4444',
-        size: 32,
-        label: 'B'
-      },
-      intermediate: {
-        color: '#3b82f6',
-        size: 20,
-        label: ''
-      },
-      preview: {
-        color: '#f59e0b',
-        size: 20,
-        label: ''
-      },
-      default: {
-        color: '#dc2626',
-        size: 24,
-        label: ''
-      }
-    };
-
-    return configs[type] || configs.default;
+    return getMarkerConfig(type);
   }
 
   /**
