@@ -15,18 +15,16 @@ test.describe('Unified Map System - /monitoring/backbone', () => {
     await expect(appContainer).toBeVisible({ timeout: 10000 });
   });
 
-  test('should render Google Maps container', async ({ page }) => {
-    // Wait for Google Maps API to load and map to render
-    // vue3-google-map creates a div with class 'vue3-google-map'
-    const mapContainer = page.locator('.vue3-google-map, [id*="map"], .gm-style, .unified-map-container, .map-canvas');
+  test('should render the map container (provider configurado)', async ({ page }) => {
+    // EV-0012: o mapa vem do provider configurado (google | mapbox | osm); o container é nosso
+    const mapContainer = page.locator('.map-container, .map-canvas, #builderMap');
     await expect(mapContainer.first()).toBeVisible({ timeout: 15000 });
   });
 
-  test('should load Google Maps tiles', async ({ page }) => {
-    // Wait for actual map tiles to load (indicates Maps API is working)
-    // Google Maps creates img elements with src containing 'maps.googleapis.com'
-    const mapTiles = page.locator('img[src*="maps.googleapis.com"]');
-    await expect(mapTiles.first()).toBeVisible({ timeout: 20000 });
+  test('should load map tiles from whichever provider is configured', async ({ page }) => {
+    // Google e OSM pintam <img> de tiles; o Mapbox pinta num <canvas>
+    const tiles = page.locator('img[src*="maps.googleapis.com"], img[src*="tile.openstreetmap.org"], canvas.mapboxgl-canvas');
+    await expect(tiles.first()).toBeVisible({ timeout: 20000 });
   });
 
   test('should render sidebar with menu', async ({ page }) => {
@@ -100,15 +98,9 @@ test.describe('Unified Map System - /monitoring/backbone', () => {
     expect(criticalErrors).toHaveLength(0);
   });
 
-  test('should load Google Maps API key from meta tag', async ({ page }) => {
-    // Check if API key meta tag exists
-    const apiKeyMeta = page.locator('meta[name="google-maps-api-key"]');
-    await expect(apiKeyMeta).toHaveCount(1);
-    
-    // Get API key value
-    const apiKey = await apiKeyMeta.getAttribute('content');
-    expect(apiKey).toBeTruthy();
-    expect(apiKey.length).toBeGreaterThan(20);
+  test('should not expose a map API key in the HTML', async ({ page }) => {
+    // EV-0012d: a chave deixou de ir no HTML; o SPA pede-a a /api/config/ autenticado
+    await expect(page.locator('meta[name="google-maps-api-key"]')).toHaveCount(0);
   });
 
   test('should have correct map initialization', async ({ page }) => {
@@ -141,9 +133,9 @@ test.describe('Map Loading - /NetworkDesign/', () => {
     await expect(mapContainer.first()).toBeVisible({ timeout: 15000 });
   });
 
-  test('should load Google Maps tiles in Network Design', async ({ page }) => {
-    const mapTiles = page.locator('img[src*="maps.googleapis.com"]');
-    await expect(mapTiles.first()).toBeVisible({ timeout: 20000 });
+  test('should load map tiles in Network Design', async ({ page }) => {
+    const tiles = page.locator('img[src*="maps.googleapis.com"], img[src*="tile.openstreetmap.org"], canvas.mapboxgl-canvas');
+    await expect(tiles.first()).toBeVisible({ timeout: 20000 });
   });
 
   test('should show fiber builder UI elements', async ({ page }) => {
@@ -185,7 +177,7 @@ test.describe('Map Loading - Error Handling', () => {
   // Análise:
   // 1. Google Maps API tem 99.9%+ uptime
   // 2. Falha catastrófica (API down) afeta TODA a aplicação
-  // 3. useMapService.js já tem error handling (console.error)
+  // 3. MapCanvas.vue já tem error-state (mensagem + «Tentar novamente»)
   // 4. Dashboard tem error-state para falhas de dados (não de Maps)
   // 5. Teste seria complexo (mock script blocking) com valor limitado
   //

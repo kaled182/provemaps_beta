@@ -424,6 +424,11 @@ export class IMarker {
   }
 
   /**
+   * Eventos comuns: `click`, `rightclick` (MapEvent), `drag`, `dragend` (sem payload;
+   * ler `getPosition()`).
+   */
+
+  /**
    * Retorna a posição
    * @returns {LatLng}
    */

@@ -438,3 +438,16 @@ describe('LeafletMap — cursor, resize, fitBounds, polígono, setStyle (EV-0012
     expect(next.iconSize).toEqual([20, 20]);
   });
 });
+
+describe('LeafletMarker — rightclick (EV-0012d)', () => {
+  it('contextmenu no marcador vira rightclick com lat/lng', async () => {
+    const { map } = await makeMap();
+    const marker = map.createMarker({ position: { lat: 1, lng: 2 } });
+    const cb = vi.fn();
+    marker.on('rightclick', cb);
+    const original = { preventDefault: vi.fn(), clientX: 3, clientY: 4 };
+    fake.markers[0].fire('contextmenu', { latlng: { lat: 1, lng: 2 }, originalEvent: original });
+    expect(cb).toHaveBeenCalledWith(expect.objectContaining({ lat: 1, lng: 2, clientX: 3 }));
+    expect(original.preventDefault).toHaveBeenCalled();
+  });
+});

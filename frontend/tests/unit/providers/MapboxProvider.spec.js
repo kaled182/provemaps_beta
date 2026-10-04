@@ -254,3 +254,17 @@ describe('MapboxMap — cursor, resize, fitBounds, polígono (EV-0012c)', () => 
     expect(el.textContent).toBe('!');
   });
 });
+
+describe('MapboxMarker — rightclick (EV-0012d)', () => {
+  it('contextmenu no elemento vira rightclick com a posição do marcador', async () => {
+    const map = await makeMap();
+    const marker = map.createMarker({ position: { lat: 1, lng: 2 } });
+    const cb = vi.fn();
+    marker.on('rightclick', cb);
+    const el = created.markers[0].opts.element;
+    const ev = new MouseEvent('contextmenu', { clientX: 5, clientY: 6, cancelable: true });
+    el.dispatchEvent(ev);
+    expect(cb).toHaveBeenCalledWith(expect.objectContaining({ lat: 1, lng: 2, clientX: 5, clientY: 6 }));
+    expect(ev.defaultPrevented).toBe(true);
+  });
+});

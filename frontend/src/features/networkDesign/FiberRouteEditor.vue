@@ -4,14 +4,18 @@
     <!-- Área do Mapa -->
     <div class="flex-1 relative bg-gray-100 dark:bg-gray-800 z-0">
       
-      <UnifiedMapView
-        ref="mapRef"
-        :plugins="['drawing']"
-        :plugin-options="pluginOptions"
-        class="w-full h-full"
-        @map-ready="onMapReady"
-        @plugin-loaded="onPluginLoaded"
-      />
+      <MapCanvas class="w-full h-full" :controls="{ streetView: false }" @ready="onMapReady">
+        <MapPopup v-if="map && popup" :map="map" :position="popup.position">
+          <div class="p-2 text-sm">
+            <p class="font-bold">{{ popup.title }}</p>
+            <p v-if="popup.text" class="text-xs opacity-80">{{ popup.text }}</p>
+          </div>
+        </MapPopup>
+      </MapCanvas>
+
+      <div v-if="mode === 'edit'" class="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 text-xs bg-white/90 dark:bg-gray-800/90 text-gray-700 dark:text-gray-200 rounded-full px-3 py-1 shadow">
+        {{ drawnPointCount }} vértices · {{ drawnDistanceKm.toFixed(2) }} km — clique para adicionar, arraste para mover, botão direito remove
+      </div>
       
       <!-- Toolbar Flutuante -->
       <div class="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-white dark:bg-gray-800 rounded-full shadow-lg p-1.5 flex items-center gap-1 border border-gray-200 dark:border-gray-600">
@@ -95,10 +99,18 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue';
+/**
+ * FiberRouteEditor — ver e editar o traçado de um cabo.
+ * EV-0012d: `MapCanvas` + `useRouteDrawing` + `MapPopup` em vez da
+ * `UnifiedMapView`/`google.maps`. Em modo «Editar Traçado» os vértices são
+ * arrastáveis e o salvar envia o caminho novo (antes mantinha sempre o antigo).
+ */
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute } from 'vue-router';
 import { useApi } from '@/composables/useApi';
-import UnifiedMapView from '@/components/Map/UnifiedMapView.vue';
+import MapCanvas from '@/components/Map/MapCanvas.vue';
+import MapPopup from '@/components/Map/MapPopup.vue';
+import { createRouteDrawing, normalizePoint } from '@/composables/useRouteDrawing';
 import EditorSidebar from './components/EditorSidebar.vue';
 
 const route = useRoute();
@@ -110,8 +122,10 @@ const cableId = computed(() => route.params.id);
 const cable = ref(null);
 const mode = ref('read');
 const isSaving = ref(false);
-const mapRef = ref(null);
-const drawingPlugin = ref(null);
+const map = ref(null);          // IMap (shallow por natureza: só se atribui)
+const popup = ref(null);        // { position, title, text }
+const drawnPointCount = ref(0);
+const drawnDistanceKm = ref(0);
 
 const notification = reactive({
   show: false,
@@ -121,36 +135,30 @@ const notification = reactive({
   confirmAction: null
 });
 
-const pluginOptions = {
-  drawing: {
-    drawingMode: null,
-    drawingControl: false
-  }
-};
-
-// ==================== Google Maps Objects ====================
-let mapInstance = null;
-let originalPolyline = null;
+// ==================== Objetos do mapa (IMap) ====================
+let routePolyline = null;
 let startMarker = null;
 let endMarker = null;
+let drawing = null;
 
 // ==================== Lifecycle ====================
 onMounted(async () => {
-  console.log('[FiberRouteEditor] Mounted — Simple Version (No CEOs/Fusion/Split)');
   await loadCable();
 });
 
+onBeforeUnmount(() => {
+  stopEditing();
+  clearMapObjects();
+});
+
 // ==================== Data Loading ====================
+const cablePath = () => (cable.value?.path || []).map(normalizePoint).filter(Boolean);
+
 const loadCable = async () => {
   try {
-    console.log(`[FiberRouteEditor] Loading cable ${cableId.value}`);
     const response = await api.get(`/api/v1/inventory/fiber-cables/${cableId.value}/`);
     cable.value = response;
-    
-    console.log('[FiberRouteEditor] Cable loaded:', cable.value);
-    
-    if (mapInstance) {
-      await nextTick();
+    if (map.value) {
       renderCableOnMap();
     }
   } catch (err) {
@@ -164,162 +172,115 @@ const loadCable = async () => {
 };
 
 // ==================== Map Events ====================
-const onMapReady = (map) => {
-  console.log('[FiberRouteEditor] Map ready');
-  mapInstance = map;
-  
+const onMapReady = (created) => {
+  map.value = created;
   if (cable.value) {
     renderCableOnMap();
   }
 };
 
-const onPluginLoaded = ({ pluginName, plugin }) => {
-  if (pluginName === 'drawing') {
-    console.log('[FiberRouteEditor] Drawing plugin loaded');
-    drawingPlugin.value = plugin;
-  }
-};
-
 // ==================== Rendering ====================
 const renderCableOnMap = () => {
-  if (!mapInstance || !cable.value?.path) {
-    console.warn('[FiberRouteEditor] Cannot render: missing map or cable path');
-    return;
-  }
+  const coords = cablePath();
+  if (!map.value || !coords.length) return;
 
   clearMapObjects();
 
-  const coords = cable.value.path.map(p => ({ lat: p[1], lng: p[0] }));
-  
-  // Draw polyline
-  originalPolyline = new google.maps.Polyline({
+  routePolyline = map.value.createPolyline({
     path: coords,
-    geodesic: true,
     strokeColor: '#2563EB',
     strokeOpacity: 0.8,
     strokeWeight: 3,
-    map: mapInstance
+    clickable: false,
   });
 
-  // Start marker
-  if (coords.length > 0) {
-    startMarker = new google.maps.Marker({
-      position: coords[0],
-      map: mapInstance,
-      title: cable.value.name || 'Início',
-      icon: {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 8,
-        fillColor: '#10B981',
-        fillOpacity: 1,
-        strokeColor: '#FFFFFF',
-        strokeWeight: 2
-      }
-    });
+  startMarker = map.value.createMarker({
+    position: coords[0],
+    markerType: 'origin',
+    title: cable.value.name || 'Início',
+  });
+  startMarker.on('click', () => {
+    popup.value = { position: coords[0], title: cable.value.name || 'Cabo', text: 'Início do traçado' };
+  });
 
-    const startInfo = new google.maps.InfoWindow({
-      content: `<div class="p-2">
-        <p class="font-bold text-sm">${cable.value.name || 'Cabo'}</p>
-        <p class="text-xs text-gray-600">Início do traçado</p>
-      </div>`
-    });
-
-    startMarker.addListener('click', () => {
-      startInfo.open(mapInstance, startMarker);
-    });
-  }
-
-  // End marker
   if (coords.length > 1) {
-    const lastCoord = coords[coords.length - 1];
-    endMarker = new google.maps.Marker({
-      position: lastCoord,
-      map: mapInstance,
-      title: 'Fim',
-      icon: {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 8,
-        fillColor: '#EF4444',
-        fillOpacity: 1,
-        strokeColor: '#FFFFFF',
-        strokeWeight: 2
-      }
-    });
-
-    const endInfo = new google.maps.InfoWindow({
-      content: `<div class="p-2">
-        <p class="font-bold text-sm">Fim do Traçado</p>
-        <p class="text-xs text-gray-600">${cable.value.calculated_length_km?.toFixed(2)} km</p>
-      </div>`
-    });
-
-    endMarker.addListener('click', () => {
-      endInfo.open(mapInstance, endMarker);
+    const last = coords[coords.length - 1];
+    endMarker = map.value.createMarker({ position: last, markerType: 'destination', title: 'Fim' });
+    endMarker.on('click', () => {
+      const km = cable.value.calculated_length_km;
+      popup.value = { position: last, title: 'Fim do Traçado', text: Number.isFinite(km) ? `${km.toFixed(2)} km` : '' };
     });
   }
 
-  // Fit bounds
-  if (coords.length > 0) {
-    const bounds = new google.maps.LatLngBounds();
-    coords.forEach(coord => bounds.extend(coord));
-    mapInstance.fitBounds(bounds);
-  }
-
-  console.log('[FiberRouteEditor] Cable rendered on map');
+  map.value.fitBounds(coords, { padding: 50, maxZoom: 16 });
 };
 
 const clearMapObjects = () => {
-  if (originalPolyline) {
-    originalPolyline.setMap(null);
-    originalPolyline = null;
-  }
-  if (startMarker) {
-    startMarker.setMap(null);
-    startMarker = null;
-  }
-  if (endMarker) {
-    endMarker.setMap(null);
-    endMarker = null;
-  }
+  routePolyline?.remove();
+  routePolyline = null;
+  startMarker?.remove();
+  startMarker = null;
+  endMarker?.remove();
+  endMarker = null;
+  popup.value = null;
 };
 
 // ==================== Mode Control ====================
+const startEditing = () => {
+  if (!map.value) return;
+  clearMapObjects();
+  drawing = createRouteDrawing(map.value, {
+    onPathChange: (path, meters) => {
+      drawnPointCount.value = path.length;
+      drawnDistanceKm.value = meters / 1000;
+    },
+  });
+  drawing.setPath(cablePath());
+  drawing.start();
+};
+
+const stopEditing = () => {
+  drawing?.destroy();
+  drawing = null;
+  drawnPointCount.value = 0;
+  drawnDistanceKm.value = 0;
+};
+
 const setMode = (newMode) => {
+  if (newMode === mode.value) return;
   mode.value = newMode;
-  console.log('[FiberRouteEditor] Mode changed:', newMode);
-  
-  if (newMode === 'edit' && drawingPlugin.value) {
-    drawingPlugin.value.setDrawingMode(google.maps.drawing.OverlayType.POLYLINE);
-  } else if (drawingPlugin.value) {
-    drawingPlugin.value.setDrawingMode(null);
+  if (newMode === 'edit') {
+    startEditing();
+  } else {
+    stopEditing();
+    renderCableOnMap();
   }
 };
 
 // ==================== Save/Cancel ====================
-const saveCable = async (updatedData) => {
+const saveCable = async (updatedData = {}) => {
   isSaving.value = true;
-  
+
   try {
-    const payload = {
-      ...updatedData,
-      path: cable.value.path // Mantém path existente por enquanto
-    };
-    
-    console.log('[FiberRouteEditor] Saving cable:', payload);
-    
+    // Em edição, o traçado desenhado substitui o antigo (GeoJSON [lng, lat])
+    const path = drawing
+      ? drawing.getPath().map(({ lat, lng }) => [lng, lat])
+      : cable.value.path;
+    const payload = { ...updatedData, path };
+
     const response = await api.patch(
       `/api/v1/inventory/fiber-cables/${cableId.value}/`,
       payload
     );
-    
+
     cable.value = response;
-    
+
     showNotification(
       'Cabo Salvo!',
       'Alterações salvas com sucesso.',
       'success'
     );
-    
+
     setMode('read');
   } catch (err) {
     console.error('[FiberRouteEditor] Error saving cable:', err);
@@ -351,7 +312,6 @@ const onKmlSelected = async (event) => {
   formData.append('kml_file', file);
 
   try {
-    console.log('[FiberRouteEditor] Uploading KML...');
     const response = await api.post(
       `/api/v1/inventory/fiber-cables/${cableId.value}/import-kml/`,
       formData,
@@ -366,6 +326,7 @@ const onKmlSelected = async (event) => {
       'success'
     );
 
+    setMode('read');
     await loadCable();
   } catch (err) {
     console.error('[FiberRouteEditor] Error importing KML:', err);
@@ -404,6 +365,7 @@ const confirmNotification = () => {
   closeNotification();
 };
 </script>
+
 
 <style scoped>
 .slide-up-enter-active,

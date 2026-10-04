@@ -355,11 +355,18 @@ class MapboxMarker extends IMarker {
       });
     }
 
-    // Handle click
+    // Handle click / right-click
     el.addEventListener('click', (e) => {
       if (this.listeners.click) {
         this.listeners.click.forEach(cb => cb({ originalEvent: e }));
       }
+    });
+    el.addEventListener('contextmenu', (e) => {
+      if (!this.listeners.rightclick?.length) return;
+      e.preventDefault();
+      this.listeners.rightclick.forEach(cb => cb({
+        lat: this.position.lat, lng: this.position.lng, originalEvent: e, clientX: e.clientX, clientY: e.clientY,
+      }));
     });
   }
 

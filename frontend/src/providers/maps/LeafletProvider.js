@@ -236,6 +236,10 @@ class LeafletMarker extends IMarker {
       this._emit('dragend');
     });
     this.marker.on('click', (e) => this._emit('click', { originalEvent: e.originalEvent }));
+    this.marker.on('contextmenu', (e) => {
+      e.originalEvent?.preventDefault?.();
+      this._emit('rightclick', toMapEvent(e));
+    });
   }
 
   _buildIcon() {
