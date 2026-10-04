@@ -1,9 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from . import api_views  # Import API endpoints for testing and management
-from . import views_docs  # Import docs_index and docs_view endpoints
-from . import views
+from . import api_views, views, views_docs
 from .api import backups as api_backups  # EV-0017a: backups e nuvem
 from .viewsets_alert_templates import AlertTemplateViewSet
 from .viewsets_contacts import ContactGroupViewSet, ContactViewSet, ImportHistoryViewSet
