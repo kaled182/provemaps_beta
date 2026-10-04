@@ -53,7 +53,7 @@ def test_backfill_migration_fills_legacy_sites():
     site = _site("POP-LEGADO", -16.1, -49.1)
     Site.objects.filter(pk=site.pk).update(location=None)  # como ficou antes do sinal
     assert Site.objects.get(pk=site.pk).location is None
-    mig = importlib.import_module("inventory.migrations.0070_backfill_site_location")
+    mig = importlib.import_module("inventory.migrations.0072_backfill_site_location")
     from django.apps import apps
 
     mig.backfill_site_location(apps, connection.schema_editor())

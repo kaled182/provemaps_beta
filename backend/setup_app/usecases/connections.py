@@ -155,22 +155,26 @@ def test_database(data: dict[str, Any]) -> dict[str, Any]:
     if not all([db_host, db_port, db_name, db_user]):
         raise ConnectionTestError("All database fields are required except password")
     try:
-        import psycopg2
+        # psycopg (v3) direto: é o driver instalado (requirements) e evita a
+        # contabilidade de aliases do Django.
+        import psycopg
 
-        conn = psycopg2.connect(
+        conn = psycopg.connect(
             host=db_host,
             port=int(db_port),
+            dbname=db_name,
             user=db_user,
             password=db_password,
-            database=db_name,
             connect_timeout=DB_CONNECT_TIMEOUT,
         )
-        cursor = conn.cursor()
-        cursor.execute("SELECT version()")
-        version_full = cursor.fetchone()[0]
-        version = version_full.split(",")[0] if "," in version_full else version_full
-        cursor.close()
-        conn.close()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT version()")
+            version_full = cursor.fetchone()[0]
+            version = version_full.split(",")[0] if "," in version_full else version_full
+            cursor.close()
+        finally:
+            conn.close()
     except Exception as exc:
         raise ConnectionTestError(f"Connection failed: {exc}", audit=str(exc)) from exc
     return {"message": f"Connection successful! {version}", "version": version}
@@ -278,6 +282,7 @@ def _smtp_params(data: dict[str, Any]) -> dict[str, str]:
         "from_name": _s(data, "smtp_from_name"),
         "from_email": _s(data, "smtp_from_email"),
         "recipient": _s(data, "smtp_test_recipient"),
+        "test_message": _s(data, "smtp_test_message"),
     }
     values = env_manager.read_values(list(_SMTP_ENV.values()))
     for key, env_key in _SMTP_ENV.items():
@@ -334,7 +339,7 @@ def test_smtp(data: dict[str, Any]) -> dict[str, Any]:
     msg["Subject"] = "Teste SMTP - ProveMaps"
     msg["From"] = f"{p['from_name']} <{p['from_email']}>" if p["from_name"] else p["from_email"]
     msg["To"] = p["recipient"]
-    msg.set_content("Este é um email de teste do ProveMaps.")
+    msg.set_content(p["test_message"] or "Este é um email de teste do ProveMaps.")
 
     try:
         if p["security"] == "ssl":

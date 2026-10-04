@@ -64,9 +64,13 @@ def get_db_settings() -> dict[str, str]:
     return values
 
 
-def get_backup_password() -> bytes:
+def get_backup_password(*, required: bool = True) -> bytes | None:
+    """Senha do zip de backup. Sem senha configurada: `ValueError` se `required`, senão
+    `None` (backup sem cifra). Senha curta é sempre erro."""
     values = env_manager.read_values(["BACKUP_ZIP_PASSWORD"])
     password = values.get("BACKUP_ZIP_PASSWORD", "").strip()
+    if not password and not required:
+        return None
     if len(password) < MIN_BACKUP_PASSWORD_LEN:
         raise ValueError("A senha do backup precisa ter pelo menos 8 caracteres para criptografar.")
     return password.encode("utf-8")
@@ -278,30 +282,54 @@ def restore_backup(filename: str) -> None:
         call_command("restore_db", backup_path.name)
         return
 
-    try:
-        import pyzipper
-    except ImportError as exc:
-        raise BackupToolMissing("pyzipper is required to restore encrypted backups.") from exc
-
-    password = get_backup_password()
+    password = get_backup_password(required=False)  # ValueError se curta
     with tempfile.TemporaryDirectory(dir=BACKUP_DIR) as temp_dir:
         temp_dir_path = Path(temp_dir)
-        with pyzipper.AESZipFile(backup_path) as zipf:
-            zipf.pwd = password
-            zipf.extractall(temp_dir_path)
+        _extract_backup_zip(backup_path, temp_dir_path, password)
 
         candidates = list(temp_dir_path.glob("*.dump")) + list(temp_dir_path.glob("*.sql"))
         if not candidates:
-            raise InvalidBackupFile("Backup zip does not contain a .dump or .sql file.")
+            raise InvalidBackupFile("O arquivo ZIP não contém um dump válido (.dump ou .sql).")
+
+        # `*.config.json` ao lado do dump: o restore_db repõe a chave Fernet a partir dele.
+        config_candidates = list(temp_dir_path.glob("*.config.json"))
+        config_json = str(config_candidates[0]) if config_candidates else ""
 
         extracted = candidates[0]
         restore_name = f"restore_tmp_{datetime.now().strftime('%Y%m%d_%H%M%S')}{extracted.suffix}"
         restore_path = BACKUP_DIR / restore_name
         shutil.copy2(extracted, restore_path)
         try:
-            call_command("restore_db", restore_path.name)
+            call_command("restore_db", restore_path.name, config_json=config_json)
         finally:
             restore_path.unlink(missing_ok=True)
+
+
+def _extract_backup_zip(backup_path: Path, dest: Path, password: bytes | None) -> None:
+    """Zip cifrado (AES, `pyzipper`) quando há senha; zip simples quando não há."""
+    if password is not None:
+        try:
+            import pyzipper
+        except ImportError as exc:
+            raise BackupToolMissing(
+                "pyzipper é necessário para restaurar backups criptografados."
+            ) from exc
+        with pyzipper.AESZipFile(backup_path) as zipf:
+            zipf.pwd = password
+            zipf.extractall(dest)
+        return
+
+    import zipfile
+
+    try:
+        with zipfile.ZipFile(backup_path) as zipf:
+            zipf.extractall(dest)
+    except zipfile.BadZipFile as exc:
+        raise InvalidBackupFile("Arquivo ZIP inválido ou corrompido.") from exc
+    except RuntimeError as exc:  # zip cifrado sem senha configurada
+        raise InvalidBackupFile(
+            "O backup está criptografado. Configure a senha antes de restaurar."
+        ) from exc
 
 
 def delete_backup(filename: str) -> None:

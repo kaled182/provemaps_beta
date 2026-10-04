@@ -17,26 +17,10 @@
             </button>
           </div>
 
-          <!-- Body -->
+          <!-- Body — sempre renderizado para que tráfego e óptico sejam
+               independentes (porta offline ainda mostra histórico óptico) -->
           <div class="modal-body">
-            <!-- Loading State -->
-            <div v-if="loading" class="loading-state">
-              <i class="fas fa-spinner fa-spin"></i>
-              <span>Carregando dados de tráfego...</span>
-            </div>
-
-            <!-- Error State -->
-            <div v-else-if="error" class="error-state">
-              <i class="fas fa-exclamation-triangle"></i>
-              <span>{{ error }}</span>
-              <button class="btn-retry" @click="loadTrafficData">
-                <i class="fas fa-redo"></i>
-                Tentar Novamente
-              </button>
-            </div>
-
-            <!-- Content -->
-            <div v-else-if="trafficData">
+            <div>
               <!-- Period Selector -->
               <div class="period-selector">
                 <button
@@ -56,13 +40,41 @@
                   <div class="section-title">
                     <i class="fas fa-chart-line"></i>
                     <span>Tráfego de Rede</span>
+                    <!-- Última atividade — útil para identificar quando aconteceu o incidente -->
+                    <span v-if="lastTrafficActivity" class="last-activity" :class="{ 'last-activity--stale': isStale }">
+                      · Última atividade: {{ lastTrafficActivity }}
+                    </span>
                   </div>
                   <i class="fas" :class="trafficSectionOpen ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
                 </button>
 
                 <Transition name="collapse">
                   <div v-show="trafficSectionOpen" class="section-content">
+                    <!-- Loading interno da seção -->
+                    <div v-if="loading" class="loading-state">
+                      <i class="fas fa-spinner fa-spin"></i>
+                      <span>Carregando dados de tráfego...</span>
+                    </div>
+
+                    <!-- Erro: porta offline / Zabbix lento / sem item configurado -->
+                    <div v-else-if="error" class="error-state">
+                      <i class="fas fa-exclamation-triangle"></i>
+                      <span>{{ error }}</span>
+                      <button class="btn-retry" @click="loadTrafficData">
+                        <i class="fas fa-redo"></i>
+                        Tentar Novamente
+                      </button>
+                    </div>
+
+                    <!-- Sem dados (porta nunca teve histórico ou janela vazia) -->
+                    <div v-else-if="trafficData && (!trafficData.history || trafficData.history.length === 0)" class="empty-state">
+                      <i class="fas fa-chart-line"></i>
+                      <span>Sem dados de tráfego no período selecionado.</span>
+                      <small>Tente um período maior — a porta pode estar offline desde antes.</small>
+                    </div>
+
                     <!-- Statistics Cards -->
+                    <template v-else-if="trafficData">
                     <div class="stats-grid">
                       <div class="stat-card percentile-95">
                         <div class="stat-header">
@@ -120,6 +132,7 @@
                     <div class="chart-container">
                       <TimeSeriesChart ref="trafficChartRef" :series="trafficSeries" unit="Mbps" :begin-at-zero="true" :height="260" empty-message="Sem dados de tráfego para o período selecionado" />
                     </div>
+                    </template>
                   </div>
                 </Transition>
               </div>
@@ -207,7 +220,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick, defineAsyncComponent } from 'vue'
 import { useApi } from '@/composables/useApi'
 import { useEscapeKey } from '@/composables/useEscapeKey'
 import TimeSeriesChart from './charts/TimeSeriesChart.vue'
@@ -217,7 +230,9 @@ import {
   OPTICAL_HISTORY_ERROR_MESSAGE,
 } from '@/utils/opticalHistory'
 import { bpsToMbps } from '@/utils/opticalSeries'
-import AlarmConfigModal from './AlarmConfigModal.vue'
+
+// AlarmConfigModal (~786 linhas) só monta quando o usuário clica "Configurar Alarme"
+const AlarmConfigModal = defineAsyncComponent(() => import('./AlarmConfigModal.vue'))
 
 const props = defineProps({
   isOpen: {
@@ -250,6 +265,35 @@ const trafficSectionOpen = ref(true)
 const opticalSectionOpen = ref(true)
 const showAlarmConfig = ref(false)
 const exportMenuOpen = ref(false)
+
+// Última atividade — único computed que itera o histórico UMA vez.
+// Resultado em cache reativo: só recalcula quando trafficData muda.
+const _lastActivityInfo = computed(() => {
+  const history = trafficData.value?.history
+  if (!Array.isArray(history) || history.length === 0) {
+    return { label: null, isStale: false }
+  }
+  for (let i = history.length - 1; i >= 0; i--) {
+    const p = history[i]
+    if ((p.traffic_in && p.traffic_in > 0) || (p.traffic_out && p.traffic_out > 0)) {
+      const ts = new Date(p.timestamp).getTime()
+      const ageMs = Date.now() - ts
+      const ageMin = Math.round(ageMs / 60000)
+      let label
+      if (ageMin < 1) label = 'agora'
+      else if (ageMin < 60) label = `há ${ageMin} min`
+      else {
+        const ageHr = Math.floor(ageMin / 60)
+        if (ageHr < 24) label = `há ${ageHr}h ${ageMin % 60}min`
+        else label = `há ${Math.floor(ageHr / 24)}d ${ageHr % 24}h`
+      }
+      return { label, isStale: ageMs > 5 * 60 * 1000 }
+    }
+  }
+  return { label: 'nunca no período', isStale: true }
+})
+const lastTrafficActivity = computed(() => _lastActivityInfo.value.label)
+const isStale = computed(() => _lastActivityInfo.value.isStale)
 const close = () => {
   emit('close')
 }
@@ -270,13 +314,25 @@ const loadTrafficData = async () => {
   loading.value = true
   error.value = null
 
+  // Timeout de 20s — porta offline pode demorar no Zabbix; evita loading
+  // infinito quando backend está lento ou Zabbix não responde.
+  const TRAFFIC_TIMEOUT_MS = 20000
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('TIMEOUT')), TRAFFIC_TIMEOUT_MS)
+  )
+
   try {
-    const response = await api.get(`/api/v1/ports/${props.port.id}/traffic_history/?hours=${selectedPeriod.value}`)
+    const fetchPromise = api.get(`/api/v1/ports/${props.port.id}/traffic_history/?hours=${selectedPeriod.value}`)
+    const response = await Promise.race([fetchPromise, timeoutPromise])
     trafficData.value = response
     loading.value = false
   } catch (err) {
     console.error('Erro ao carregar dados de tráfego:', err)
-    error.value = err.message || 'Erro ao carregar dados de tráfego'
+    if (err.message === 'TIMEOUT') {
+      error.value = 'Tempo esgotado ao consultar o Zabbix. A porta pode estar offline há muito tempo ou o servidor está sobrecarregado.'
+    } else {
+      error.value = err.message || 'Erro ao carregar dados de tráfego'
+    }
     loading.value = false
   }
 }
@@ -295,6 +351,10 @@ const hasOpticalPort = () => props.port?.optical_rx_power !== null || props.port
 
 const changePeriod = async (hours) => {
   selectedPeriod.value = hours
+  // Trocar período = nova janela de dados → invalidar cache+flag para
+  // forçar refetch (sem isso, o dedup retornaria os dados do período antigo)
+  _lastOpticalChartData = null
+  _opticalFetchPromise = null
   loadTrafficData()
   if (hasOpticalPort()) {
     await loadOpticalHistory()
@@ -487,6 +547,10 @@ const handleAlarmSaved = () => {
   emit('alarm-saved')
 }
 
+// `immediate: true` é crítico: como agora o PortTrafficModal é lazy-mounted
+// via defineAsyncComponent + v-if no parent, o componente é montado já com
+// isOpen=true. Sem o flag, o watcher nunca dispararia (não há transição
+// false→true) e nem o tráfego nem o óptico carregariam.
 watch(() => props.isOpen, (newValue) => {
   if (newValue) {
     loadGlobalThresholds()
@@ -498,7 +562,7 @@ watch(() => props.isOpen, (newValue) => {
     opticalPoints.value = []
     trafficData.value = null
   }
-})
+}, { immediate: true })
 
 // Abrir a seção óptica sem histórico carregado dispara o carregamento.
 watch(opticalSectionOpen, (isOpen) => {
@@ -507,8 +571,28 @@ watch(opticalSectionOpen, (isOpen) => {
   }
 })
 
+// Watch para renderizar gráfico de tráfego quando seção abrir.
+// Se trafficData já chegou em background, o canvas fica disponível ao
+// expandir e o renderChart usa os dados em cache (sem nova requisição).
+watch(trafficSectionOpen, async (isOpen) => {
+  if (isOpen && props.isOpen && trafficData.value) {
+    await nextTick()
+    renderChart()
+  }
+})
+
 onUnmounted(() => {
   document.removeEventListener('click', onDocumentClick)
+})
+
+// Mesmo padrão para o canvas de tráfego: ao expandir a seção (com seções
+// colapsadas por default), o canvas vira disponível e renderizamos com os
+// dados que já chegaram em background.
+watch(chartCanvas, (canvas) => {
+  if (!canvas || !props.isOpen || !trafficSectionOpen.value) return
+  if (trafficData.value) {
+    renderChart()
+  }
 })
 </script>
 
@@ -604,24 +688,46 @@ onUnmounted(() => {
 }
 
 .loading-state,
-.error-state {
+.error-state,
+.empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  padding: 60px 20px;
+  gap: 12px;
+  padding: 32px 20px;
   color: #9ca3af;
 }
 
 .loading-state i {
-  font-size: 48px;
+  font-size: 40px;
   color: #3b82f6;
 }
 
 .error-state i {
-  font-size: 48px;
+  font-size: 40px;
   color: #ef4444;
+}
+
+.empty-state i {
+  font-size: 40px;
+  color: #6b7280;
+}
+
+.empty-state small {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+/* Indicador de última atividade no header da seção de tráfego */
+.last-activity {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #10b981; /* verde — porta ativa recente */
+}
+.last-activity--stale {
+  color: #ef4444; /* vermelho — provavelmente offline (>5 min sem tráfego) */
 }
 
 .btn-retry {

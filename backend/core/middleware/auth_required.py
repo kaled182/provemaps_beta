@@ -43,7 +43,6 @@ class AuthRequiredMiddleware:
         "/live",
         "/favicon.ico",
         "/celery/status",
-        "/setup_app/first_time/",
         # EV-0002: '/api/config/' saiu daqui. Entregava as chaves Google/Mapbox/Esri
         # a qualquer visitante. Pedidos a /api/* sem sessão recebem 401 JSON abaixo.
     ]
@@ -51,19 +50,20 @@ class AuthRequiredMiddleware:
     WHITELIST_PREFIXES = [
         "/api/v1/",  # API endpoints have their own auth (DRF)
         "/setup_app/docs/",
+        "/setup_app/first_time/",  # wizard de setup + página "restarting" (sem auth)
     ]
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]):
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        # Allow dashboard to be processed by FirstTimeSetup middleware when forced
+        # When system is not yet configured, let FirstTimeSetupRedirectMiddleware
+        # handle the redirect — don't intercept with auth check first.
         try:
             from setup_app.models import FirstTimeSetup
 
             force_flow = getattr(settings, "FORCE_FIRST_TIME_FLOW", False)
-            not_configured = not FirstTimeSetup.objects.filter(configured=True).exists()
-            if force_flow and not_configured and request.path.startswith("/maps_view/dashboard"):
+            if force_flow and not FirstTimeSetup.objects.filter(configured=True).exists():
                 return self.get_response(request)
         except Exception:
             pass

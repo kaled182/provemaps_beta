@@ -1,0 +1,6 @@
+{
+  "version": "1.4.14.0",
+  "date": "2026-05-03",
+  "critical": true,
+  "changelog": "Fix crítico: integração Zabbix 7+ falhava silenciosamente em item.get/history.get com erro 'unexpected parameter auth'. Cliente agora detecta a versão do servidor (apiinfo.version) e usa Authorization: Bearer header em vez do parâmetro auth no payload quando >=7.0. Adicionado fallback ICMP ping na promoção de status: equipamentos com SNMP fora mas que respondem ao ping aparecem ONLINE."
+}

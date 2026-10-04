@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
-import { ref } from 'vue';
+import { ref, h } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 
 const fakeFactory = { config: {}, maps: [] };
@@ -88,16 +88,42 @@ vi.mock('@/composables/map/useMapData', () => ({
     sitesMap: dataFake.sitesMap,
     foldersTree: ref([]),
     loadInventoryItems: vi.fn(async () => {}),
+    applyDisplayStatus: vi.fn(),
   }),
 }));
 
+// Os componentes pesados são `defineAsyncComponent` (lazy, EV-0035): um stub por nome em
+// `global.stubs` não os apanha, por isso substitui-se o módulo por um stub com nome e props.
+// `__esModule: true` é obrigatório: sem ele o defineAsyncComponent não desembrulha o `default`
+// e o proxy do mock do vitest rebenta ao ser inspecionado pelo VTU.
+const lazyStub = (name, props = []) => ({
+  __esModule: true,
+  default: { name, props, emits: ['close'], render: () => h('div', { 'data-stub': name }) },
+});
+vi.mock('@/components/SiteDetailsModal.vue', () => lazyStub('SiteDetailsModal', ['show', 'site']));
+vi.mock('@/components/FiberCableQuickModal.vue', () => lazyStub('FiberCableQuickModal', ['show', 'cable']));
+vi.mock('@/components/FiberCableDetailModal.vue', () => lazyStub('FiberCableDetailModal', ['show', 'cable']));
+vi.mock('@/components/CableOpticalTooltip.vue', () => lazyStub('CableOpticalTooltip', ['visible', 'position', 'cableData']));
+vi.mock('@/views/monitoring/components/MapInventoryPanel.vue', () => lazyStub('MapInventoryPanel'));
+vi.mock('@/views/monitoring/components/MaintenanceAreaPanel.vue', () => lazyStub('MaintenanceAreaPanel', ['affectedDevices', 'affectedCables', 'visible']));
+vi.mock('@/views/monitoring/components/MaintenanceNotifyModal.vue', () => lazyStub('MaintenanceNotifyModal', ['show']));
+
 import CustomMapViewer from '@/views/monitoring/CustomMapViewer.vue';
+
+// Pré-carrega os módulos lazy: com os timers falsos o I/O do `import()` dinâmico não
+// resolve dentro de um `flushPromises`; em cache, o defineAsyncComponent resolve em microtasks.
+await Promise.all([
+  import('@/components/SiteDetailsModal.vue'),
+  import('@/components/FiberCableQuickModal.vue'),
+  import('@/components/FiberCableDetailModal.vue'),
+  import('@/components/CableOpticalTooltip.vue'),
+  import('@/views/monitoring/components/MapInventoryPanel.vue'),
+  import('@/views/monitoring/components/MaintenanceAreaPanel.vue'),
+  import('@/views/monitoring/components/MaintenanceNotifyModal.vue'),
+]);
 import { useUiStore } from '@/stores/ui';
 
-const STUBS = {
-  SiteDetailsModal: true, FiberCableQuickModal: true, FiberCableDetailModal: true, CableOpticalTooltip: true,
-  MapLegend: true, MapInventoryPanel: true, MaintenanceAreaPanel: true, MapContextMenu: true, MaintenanceNotifyModal: true,
-};
+const STUBS = { MapLegend: true, MapContextMenu: true };
 
 function mountViewer() {
   return mount(CustomMapViewer, { global: { stubs: STUBS }, attachTo: document.body });
@@ -156,7 +182,8 @@ describe('CustomMapViewer (EV-0012c)', () => {
     const map = fakeFactory.maps[0];
 
     expect(map.createMarker).toHaveBeenCalledTimes(2);
-    expect(map.createMarker.mock.calls.map(([o]) => o.color)).toEqual(['#10b981', '#6b7280']);
+    // offline é âmbar (mesmo tom de «atenção» — paleta do main, EV-0035)
+    expect(map.createMarker.mock.calls.map(([o]) => o.color)).toEqual(['#10b981', '#f59e0b']);
     expect(map.createMarker.mock.calls[0][0]).toEqual(expect.objectContaining({ title: 'OLT-01', size: 14 }));
 
     expect(map.createPolyline).toHaveBeenCalledTimes(1);
@@ -178,14 +205,14 @@ describe('CustomMapViewer (EV-0012c)', () => {
     await flushPromises();
 
     expect(map.createMarker).toHaveBeenCalledTimes(2);
-    expect(map.markers[0].setStyle).toHaveBeenCalledWith({ color: '#6b7280' });
+    expect(map.markers[0].setStyle).toHaveBeenCalledWith({ color: '#f59e0b' });
     expect(map.markers[1].setStyle).toHaveBeenCalledWith({ color: '#10b981' });
     // o cabo herda o pior estado das pontas: um offline → vermelho
     expect(map.polylines[0].setStyle).toHaveBeenCalledWith(expect.objectContaining({ strokeColor: '#ef4444' }));
     wrapper.unmount();
   });
 
-  it('hover no cabo mostra o tooltip na posição do rato após 300 ms; mouseout esconde', async () => {
+  it('hover no cabo mostra o tooltip na posição do rato após 300 ms; fecha pelo botão, não pelo mouseout', async () => {
     const wrapper = mountViewer();
     await flushPromises();
     const line = fakeFactory.maps[0].polylines[0];
@@ -198,9 +225,15 @@ describe('CustomMapViewer (EV-0012c)', () => {
     expect(tooltip.props('position')).toEqual({ x: 120, y: 80 });
     expect(tooltip.props('cableData')).toEqual(expect.objectContaining({ id: 'c1' }));
 
+    // O tooltip tem botão de fechar (main): sair do cabo com o rato não o esconde,
+    // senão nunca se chegava ao botão «Atualizar agora» dentro dele.
     line.fire('mouseout');
     await flushPromises();
-    expect(tooltip.props('visible')).toBe(false);
+    expect(wrapper.findComponent({ name: 'CableOpticalTooltip' }).exists()).toBe(true);
+
+    tooltip.vm.$emit('close');
+    await flushPromises();
+    expect(wrapper.findComponent({ name: 'CableOpticalTooltip' }).exists()).toBe(false);
     wrapper.unmount();
   });
 

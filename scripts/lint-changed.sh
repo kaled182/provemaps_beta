@@ -6,14 +6,14 @@
 # projeto é «lint limpo nos ficheiros tocados» (CLAUDE.md §9); este script é a
 # versão mecânica dela: black, isort e ruff correm sobre os .py que mudaram.
 #
-# Uso: scripts/lint-changed.sh [BASE_REF]   (default: origin/inicial)
+# Uso: scripts/lint-changed.sh [BASE_REF]   (default: origin/main — a base do PR desde EV-0035)
 #      No CI, BASE_REF vem do evento (base do PR ou commit anterior do push).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-BASE="${1:-origin/inicial}"
+BASE="${1:-origin/main}"
 
 if ! git rev-parse --verify --quiet "$BASE" >/dev/null; then
-  echo "lint-changed: base '$BASE' não existe localmente (git fetch origin inicial)" >&2
+  echo "lint-changed: base '$BASE' não existe localmente (git fetch origin main)" >&2
   exit 2
 fi
 

@@ -5,8 +5,9 @@
       <!-- Mapa: criado pelo provider configurado (providers/maps) -->
       <div ref="mapContainer" class="map-container"></div>
 
-      <!-- Painel Lateral: Gerenciar Itens -->
+      <!-- Painel Lateral: Gerenciar Itens (lazy: só monta após 1ª abertura, depois mantém estado) -->
       <MapInventoryPanel
+        v-if="inventoryPanelMounted"
         :is-visible="showInventoryPanel"
         :active-category="activeCategory"
         :search-query="searchQuery"
@@ -35,6 +36,18 @@
       />
     </div>
 
+    <!-- Botão Reenquadrar -->
+    <button
+      class="map-fit-btn"
+      title="Reenquadrar mapa para mostrar todos os itens"
+      @click="fitAllItemsBounds"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 256 256" fill="currentColor">
+        <path d="M168,48a8,8,0,0,1,8-8h32a8,8,0,0,1,8,8V80a8,8,0,0,1-16,0V64H176A8,8,0,0,1,168,48ZM216,168a8,8,0,0,0-8,8v16H192a8,8,0,0,0,0,16h32a8,8,0,0,0,8-8V176A8,8,0,0,0,216,168ZM88,208H72V192a8,8,0,0,0-16,0v32a8,8,0,0,0,8,8H88a8,8,0,0,0,0-16ZM40,88a8,8,0,0,0,8-8V64H64a8,8,0,0,0,0-16H32a8,8,0,0,0-8,8V80A8,8,0,0,0,40,88Z"/>
+      </svg>
+      Reenquadrar
+    </button>
+
     <!-- Legend -->
     <MapLegend :status-legend="statusLegend" />
 
@@ -53,6 +66,7 @@
 
     <!-- Painel de resultado da Área de Manutenção (Fase 5.2) -->
     <MaintenanceAreaPanel
+      v-if="maintenanceMode"
       :visible="maintenanceMode"
       :vertex-count="maintenanceVertices.length"
       :affected-cables="affectedCables"
@@ -65,6 +79,7 @@
 
     <!-- Modal de notificação de área de manutenção -->
     <MaintenanceNotifyModal
+      v-if="showNotifyModal"
       :visible="showNotifyModal"
       :cables="affectedCables"
       :devices="affectedDevices"
@@ -100,23 +115,26 @@
       <span v-else class="spb-time">· aguardando…</span>
     </div>
 
-    <!-- Site Details Modal -->
-    <SiteDetailsModal 
-      :is-open="showSiteModal" 
+    <!-- Site Details Modal (lazy: monta na 1ª abertura) -->
+    <SiteDetailsModal
+      v-if="showSiteModal"
+      :is-open="showSiteModal"
       :site="selectedSite"
       @close="showSiteModal = false"
     />
 
-    <!-- Fiber Cable Quick Modal -->
+    <!-- Fiber Cable Quick Modal (lazy) -->
     <FiberCableQuickModal
+      v-if="showCableModal"
       :show="showCableModal"
       :cable="selectedCable"
       @close="showCableModal = false"
       @openFullDetails="openCableFullDetails"
     />
 
-    <!-- Fiber Cable Detail Modal -->
+    <!-- Fiber Cable Detail Modal (lazy: chunk de ~3.8k linhas) -->
     <FiberCableDetailModal
+      v-if="showCableDetailModal"
       :show="showCableDetailModal"
       :cable="selectedCable"
       :can-edit="true"
@@ -124,11 +142,14 @@
       @save="handleCableSave"
     />
 
-    <!-- Cable Optical Tooltip -->
+    <!-- Cable Optical Tooltip (lazy) -->
     <CableOpticalTooltip
+      v-if="showCableTooltip"
       :visible="showCableTooltip"
       :cable-data="hoveredCable"
       :position="tooltipPosition"
+      @close="showCableTooltip = false"
+      @open-details="openCableDetailsFromTooltip"
     />
 
     <!-- Toast notification -->
@@ -160,22 +181,27 @@
  * marcadores, cabos, área de manutenção, cursor e redimensionamento falam só
  * a interface `IMap`. Estado em tempo real: `useRealtimeStatus` (EV-0014).
  */
-import { ref, shallowRef, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, shallowRef, computed, onMounted, onBeforeUnmount, watch, defineAsyncComponent } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUiStore } from '@/stores/ui'
 import { useRealtimeStatus, availabilityToStatus } from '@/composables/useRealtimeStatus'
 import { createMap, getMapConfig } from '@/providers/maps/MapProviderFactory.js'
 import { useMapSelection } from '@/composables/map/useMapSelection'
 import { useMapData } from '@/composables/map/useMapData'
-import SiteDetailsModal from '@/components/SiteDetailsModal.vue'
-import FiberCableQuickModal from '@/components/FiberCableQuickModal.vue'
-import FiberCableDetailModal from '@/components/FiberCableDetailModal.vue'
-import CableOpticalTooltip from '@/components/CableOpticalTooltip.vue'
 import MapLegend from './components/MapLegend.vue'
-import MapInventoryPanel from './components/MapInventoryPanel.vue'
-import MaintenanceAreaPanel from './components/MaintenanceAreaPanel.vue'
 import MapContextMenu from './components/MapContextMenu.vue'
-import MaintenanceNotifyModal from './components/MaintenanceNotifyModal.vue'
+
+// Componentes pesados: lazy via defineAsyncComponent — só baixam o JS quando renderizados.
+// Modais (SiteDetails, FiberCable*, CableOpticalTooltip, MaintenanceNotify) são montados
+// só quando v-if=true. MapInventoryPanel e MaintenanceAreaPanel podem ficar lazy também:
+// só montam quando o usuário abre o painel/área. Evita ~10k linhas de Vue no bundle inicial.
+const SiteDetailsModal = defineAsyncComponent(() => import('@/components/SiteDetailsModal.vue'))
+const FiberCableQuickModal = defineAsyncComponent(() => import('@/components/FiberCableQuickModal.vue'))
+const FiberCableDetailModal = defineAsyncComponent(() => import('@/components/FiberCableDetailModal.vue'))
+const CableOpticalTooltip = defineAsyncComponent(() => import('@/components/CableOpticalTooltip.vue'))
+const MapInventoryPanel = defineAsyncComponent(() => import('./components/MapInventoryPanel.vue'))
+const MaintenanceAreaPanel = defineAsyncComponent(() => import('./components/MaintenanceAreaPanel.vue'))
+const MaintenanceNotifyModal = defineAsyncComponent(() => import('./components/MaintenanceNotifyModal.vue'))
 
 const route = useRoute()
 const uiStore = useUiStore()
@@ -187,11 +213,15 @@ const providerName = ref('')
 // ── Cores por estado (eram de useMapMarkers / useMapPolylines) ─────────────
 const DEVICE_STATUS_COLORS = {
   online: '#10b981',
+  unknown: '#10b981', // presumido online até o Zabbix dizer o contrário
   warning: '#f59e0b',
+  offline: '#f59e0b', // mesmo tom de atenção — atrai o olhar para resolver
   critical: '#ef4444',
-  offline: '#6b7280',
 }
 const CABLE_STATUS_COLORS = {
+  up: '#10b981',
+  down: '#ef4444',
+  degraded: '#f59e0b',
   online: '#10b981',
   offline: '#ef4444',
   warning: '#f59e0b',
@@ -253,8 +283,15 @@ const {
   toggleItem: toggleItemSelection,
   selectAll: selectAllItems,
 } = useMapSelection()
-const { availableItems, sitesMap, foldersTree, loadInventoryItems: loadInventory } = useMapData()
+const { availableItems, sitesMap, foldersTree, loadInventoryItems: loadInventory, applyDisplayStatus } = useMapData()
 const showInventoryPanel = ref(false)
+// Flag de "já foi montado pelo menos uma vez" — usada para manter o painel
+// no DOM (preservando estado interno) após a primeira abertura, sem pagar
+// o custo do bundle no carregamento inicial da página.
+const inventoryPanelMounted = ref(false)
+watch(showInventoryPanel, (v) => {
+  if (v) inventoryPanelMounted.value = true
+})
 const activeCategory = ref('devices')
 const searchQuery = ref('')
 const isFullscreen = ref(false)
@@ -350,16 +387,30 @@ function applyDeviceStatuses(newMap) {
   deviceStatusMap.value = newMap
   lastStatusUpdate.value = new Date()
 
+  // Só redesenha quando algum estado mudou de facto (evita iterar 200+
+  // marcadores a cada mensagem sem motivo).
+  let changed = false
   availableItems.value.devices.forEach(device => {
     const live = newMap.get(String(device.id))
-    if (live) device.status = live
-  })
-  availableItems.value.cables.forEach(cable => {
-    if (cable.origin_device_id || cable.destination_device_id) {
-      cable.status = _deriveCableStatus(cable)
+    if (live && live !== device.status) {
+      device.status = live
+      changed = true
     }
   })
-  updateMap()
+  // Recomputar o displayStatus agregado do site: a mudança de UM device
+  // afeta a cor dos OUTROS devices offline do mesmo site.
+  if (changed) applyDisplayStatus(availableItems.value.devices)
+
+  availableItems.value.cables.forEach(cable => {
+    if (cable.origin_device_id || cable.destination_device_id) {
+      const next = _deriveCableStatus(cable)
+      if (next !== cable.status) {
+        cable.status = next
+        changed = true
+      }
+    }
+  })
+  if (changed) updateMap()
 }
 
 function applyCableStatuses(cableMap) {
@@ -529,9 +580,12 @@ function updateMarkers() {
   availableItems.value.devices
     .filter(device => wanted.has(device.id) && device.lat && device.lng)
     .forEach(device => {
+      // displayStatus é derivado do agregado do site (offline com irmão online →
+      // warning); fallback ao status puro se ainda não foi computado.
+      const markerStatus = device.displayStatus || device.status
       const existing = activeMarkers.get(device.id)
       if (existing) {
-        existing.setStyle({ color: deviceColor(device.status) })
+        existing.setStyle({ color: deviceColor(markerStatus) })
         return
       }
 
@@ -543,7 +597,7 @@ function updateMarkers() {
       const marker = map.value.createMarker({
         position: { lat, lng },
         title: device.name,
-        color: deviceColor(device.status),
+        color: deviceColor(markerStatus),
         size: DEVICE_MARKER_SIZE,
       })
       marker.on('click', () => handleDeviceClick(device))
@@ -652,9 +706,11 @@ const updateMap = () => {
   updatePolylines()
   isInitialLoad.value = false
 
-  // Na carga inicial, ajustar bounds para mostrar TODOS os itens (markers + cabos)
+  // Carga inicial: ajusta bounds se há itens; sem itens permanece na localização configurada.
+  // Sem setTimeout: a factory só devolve o mapa quando o provider está pronto.
   if (wasInitialLoad) {
-    fitAllItemsBounds()
+    const hasItems = selectedItems.value.devices.length > 0 || selectedItems.value.cables.length > 0
+    if (hasItems) fitAllItemsBounds()
   }
 }
 
@@ -667,6 +723,8 @@ const selectAll = () => {
   const category = activeCategory.value
   selectAllItems(category, availableItems.value[category])
   updateMap()
+  // Reenquadra mapa para mostrar todos os itens selecionados
+  setTimeout(() => fitAllItemsBounds(), 150)
 }
 
 const clearAllOverlays = () => {
@@ -772,8 +830,14 @@ const handleDeviceClick = (device) => {
 }
 
 const handleCableClick = (cable) => {
+  hoveredCable.value = cable
+  showCableTooltip.value = true
+}
+
+const openCableDetailsFromTooltip = (cable) => {
+  showCableTooltip.value = false
   selectedCable.value = cable
-  showCableModal.value = true
+  showCableDetailModal.value = true
 }
 
 // Handlers para hover em cabos (tooltip) — `event` é o MapEvent comum (clientX/clientY)
@@ -798,8 +862,7 @@ const handleCableUnhover = () => {
     clearTimeout(tooltipTimeout)
     tooltipTimeout = null
   }
-  showCableTooltip.value = false
-  hoveredCable.value = null
+  // Tooltip now has a close button — do not auto-close on mouse out
 }
 
 // ── Mapa: criação pelo provider configurado ──────────────────────────────────
@@ -1048,11 +1111,8 @@ onMounted(async () => {
   document.addEventListener('click', _hideCtxMenu)
   document.addEventListener('keydown', _globalKeydown)
 
-  // 1. Carregar inventário primeiro
-  await loadInventoryItems()
-
-  // 2. Carregar dados do mapa
-  await loadMapData()
+  // 1–2. Inventário e dados do mapa em paralelo (tempo = max, não a soma)
+  await Promise.all([loadInventoryItems(), loadMapData()])
 
   // 3. Se for mapa default, selecionar todos os items automaticamente
   if (route.params.mapId === 'default') {
@@ -1115,6 +1175,13 @@ onBeforeUnmount(() => {
 /* Quando o menu está colapsado */
 :root[data-nav-menu-open="false"] .custom-map-viewer {
   margin-left: 72px;
+}
+
+/* Mobile: menu é overlay fixo, mapa ocupa tela toda */
+@media (max-width: 768px) {
+  .custom-map-viewer {
+    margin-left: 0 !important;
+  }
 }
 
 .map-content {
@@ -1908,6 +1975,33 @@ html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary:hover {
 }
 
 /* ── Notify sent badge ───────────────────────────────────────────────────── */
+.map-fit-btn {
+  position: absolute;
+  bottom: 80px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background: var(--bg-card, #1e2433);
+  color: var(--text-primary, #e2e8f0);
+  border: 1px solid var(--border-primary, rgba(255,255,255,0.08));
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  transition: background 0.15s, transform 0.1s;
+}
+.map-fit-btn:hover {
+  background: var(--bg-hover, #2a3347);
+  transform: translateY(-1px);
+}
+.map-fit-btn:active {
+  transform: translateY(0);
+}
+
 .notify-sent-badge {
   position: absolute;
   bottom: 80px;

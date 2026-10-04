@@ -39,66 +39,94 @@
           <transition name="fade-scale">
             <div
               v-if="showConfigMenu"
-              class="absolute right-0 mt-2 w-[420px] max-w-[calc(100vw-32px)] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl z-50"
+              class="absolute right-0 mt-2 w-[600px] max-w-[calc(100vw-32px)] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl z-50"
             >
-              <div class="p-5 space-y-5">
-                <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                  <div>
-                    <h4 class="text-base font-semibold text-gray-900 dark:text-white">
-                      Limites de Sinal Óptico
-                    </h4>
-                    <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                      Valores controlam alertas, cores do mapa e linhas de referência.
-                    </p>
-                    <p class="mt-2 text-xs text-gray-500 dark:text-gray-500">
-                      Utilize números negativos em dBm. O limite de atenção deve ser maior ou igual ao crítico.
-                    </p>
-                  </div>
-                  <div class="flex flex-col gap-2 text-xs font-medium">
-                    <span class="px-3 py-1 rounded-md bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                      Atenção: {{ opticalWarningInput }} dBm
-                    </span>
-                    <span class="px-3 py-1 rounded-md bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300">
-                      Crítico: {{ opticalCriticalInput }} dBm
-                    </span>
-                  </div>
+              <div class="p-5 space-y-4">
+                <div>
+                  <h4 class="text-base font-semibold text-gray-900 dark:text-white">
+                    Limites de Sinal Óptico por Distância
+                  </h4>
+                  <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    O sistema detecta a categoria do enlace pelo comprimento do cabo no mapa e aplica os limites correspondentes. Valores em dBm (negativos).
+                  </p>
                 </div>
 
-                <form class="grid gap-4" @submit.prevent="saveOpticalThresholds">
-                  <div class="grid sm:grid-cols-2 gap-4">
-                    <div>
-                      <label class="label-custom">Nível de Atenção (dBm)</label>
-                      <div class="relative">
-                        <input
-                          v-model="opticalWarningInput"
-                          type="number"
-                          step="0.1"
-                          class="input-custom pr-12"
-                          placeholder="Ex: -24"
-                          autocomplete="off"
-                        />
-                        <span class="absolute inset-y-0 right-3 flex items-center text-xs text-gray-400 dark:text-gray-500">dBm</span>
-                      </div>
-                    </div>
-                    <div>
-                      <label class="label-custom">Nível Crítico (dBm)</label>
-                      <div class="relative">
-                        <input
-                          v-model="opticalCriticalInput"
-                          type="number"
-                          step="0.1"
-                          class="input-custom pr-12"
-                          placeholder="Ex: -27"
-                          autocomplete="off"
-                        />
-                        <span class="absolute inset-y-0 right-3 flex items-center text-xs text-gray-400 dark:text-gray-500">dBm</span>
-                      </div>
-                    </div>
+                <form @submit.prevent="saveOpticalThresholds">
+                  <!-- Per-distance table -->
+                  <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                    <table class="w-full text-sm">
+                      <thead>
+                        <tr class="bg-gray-50 dark:bg-gray-700/50">
+                          <th class="text-left px-3 py-2 text-xs font-semibold text-gray-600 dark:text-gray-400 w-36">
+                            Categoria SFP
+                          </th>
+                          <th class="text-center px-3 py-2 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                            Atenção (dBm)
+                          </th>
+                          <th class="text-center px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400">
+                            Crítico (dBm)
+                          </th>
+                          <th class="text-left px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-500">
+                            Cor no mapa
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                        <tr v-for="cat in distanceCategories" :key="cat.key" class="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                          <td class="px-3 py-2">
+                            <div class="font-medium text-gray-900 dark:text-white text-xs">{{ cat.label }}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-500">{{ cat.description }}</div>
+                          </td>
+                          <td class="px-3 py-2">
+                            <div class="relative">
+                              <input
+                                v-model="distanceThresholds[cat.key].warning"
+                                type="number"
+                                step="0.1"
+                                class="input-custom pr-10 text-center text-sm py-1.5"
+                                autocomplete="off"
+                              />
+                              <span class="absolute inset-y-0 right-2 flex items-center text-xs text-gray-400">dBm</span>
+                            </div>
+                          </td>
+                          <td class="px-3 py-2">
+                            <div class="relative">
+                              <input
+                                v-model="distanceThresholds[cat.key].critical"
+                                type="number"
+                                step="0.1"
+                                class="input-custom pr-10 text-center text-sm py-1.5"
+                                autocomplete="off"
+                              />
+                              <span class="absolute inset-y-0 right-2 flex items-center text-xs text-gray-400">dBm</span>
+                            </div>
+                          </td>
+                          <td class="px-3 py-2">
+                            <div class="flex items-center gap-1.5 text-xs">
+                              <span class="inline-block w-3 h-3 rounded-full bg-green-500 flex-shrink-0"></span>
+                              <span class="text-gray-500 dark:text-gray-400">&gt; {{ distanceThresholds[cat.key].warning }} verde</span>
+                            </div>
+                            <div class="flex items-center gap-1.5 text-xs mt-0.5">
+                              <span class="inline-block w-3 h-3 rounded-full bg-amber-400 flex-shrink-0"></span>
+                              <span class="text-gray-500 dark:text-gray-400">{{ distanceThresholds[cat.key].critical }} … {{ distanceThresholds[cat.key].warning }} âmbar</span>
+                            </div>
+                            <div class="flex items-center gap-1.5 text-xs mt-0.5">
+                              <span class="inline-block w-3 h-3 rounded-full bg-red-500 flex-shrink-0"></span>
+                              <span class="text-gray-500 dark:text-gray-400">&lt; {{ distanceThresholds[cat.key].critical }} vermelho</span>
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
 
-                  <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <button type="button" class="btn-secondary" @click="restoreOpticalDefaults">
-                      Restaurar padrões (-24 / -27)
+                  <p class="text-xs text-gray-500 dark:text-gray-500 mt-2">
+                    Sinal nulo ou zero é sempre classificado como crítico (vermelho), independente da distância.
+                  </p>
+
+                  <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-3">
+                    <button type="button" class="btn-secondary text-xs" @click="restoreOpticalDefaults">
+                      Restaurar padrões industriais
                     </button>
                     <div class="flex gap-3">
                       <button
@@ -107,7 +135,7 @@
                         :disabled="savingThresholds"
                         @click="reloadOpticalThresholds"
                       >
-                        Recarregar valores
+                        Recarregar
                       </button>
                       <button type="submit" class="btn-primary" :disabled="savingThresholds">
                         <svg
@@ -548,57 +576,46 @@ const showConfigMenu = ref(false)
 const configMenuRef = ref(null)
 const zabbixTestResult = computed(() => systemTestResults.value?.zabbix || null)
 
-const normalizeThresholdInput = (value) => {
-  if (value === null || value === undefined) {
-    return ''
-  }
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value.toString()
-  }
-  const str = String(value).trim()
-  if (!str) {
-    return ''
-  }
-  return str.replace(',', '.')
+// Per-distance-category threshold definitions
+const distanceCategories = [
+  { key: '10',  label: '≤ 10 km',  description: 'SFP LR / curta distância' },
+  { key: '40',  label: '≤ 40 km',  description: 'SFP ER / média distância' },
+  { key: '80',  label: '≤ 80 km',  description: 'SFP ZR / longa distância' },
+  { key: '100', label: '> 80 km',  description: 'DWDM / EZR / ultra-longo' },
+]
+
+const DEFAULT_DISTANCE_THRESHOLDS = {
+  '10':  { warning: -20.0, critical: -28.0 },
+  '40':  { warning: -23.0, critical: -30.0 },
+  '80':  { warning: -26.0, critical: -30.0 },
+  '100': { warning: -28.0, critical: -35.0 },
 }
 
-const getThresholdValue = (value, fallback) => {
-  const normalized = normalizeThresholdInput(value)
-  return normalized === '' ? fallback : normalized
-}
-
-const opticalWarningInput = computed({
-  get: () => getThresholdValue(systemConfig.value?.OPTICAL_RX_WARNING_THRESHOLD, '-24'),
-  set: (value) => {
-    if (!systemConfig.value) {
-      return
-    }
-    systemConfig.value.OPTICAL_RX_WARNING_THRESHOLD = normalizeThresholdInput(value)
-  }
+const distanceThresholds = ref({
+  '10':  { warning: -20.0, critical: -28.0 },
+  '40':  { warning: -23.0, critical: -30.0 },
+  '80':  { warning: -26.0, critical: -30.0 },
+  '100': { warning: -28.0, critical: -35.0 },
 })
 
-const opticalCriticalInput = computed({
-  get: () => getThresholdValue(systemConfig.value?.OPTICAL_RX_CRITICAL_THRESHOLD, '-27'),
-  set: (value) => {
-    if (!systemConfig.value) {
-      return
+const syncDistanceThresholdsFromConfig = () => {
+  const saved = systemConfig.value?.OPTICAL_THRESHOLDS_BY_DISTANCE
+  if (saved && typeof saved === 'object') {
+    for (const cat of ['10', '40', '80', '100']) {
+      if (saved[cat]) {
+        distanceThresholds.value[cat] = {
+          warning: Number(saved[cat].warning ?? DEFAULT_DISTANCE_THRESHOLDS[cat].warning),
+          critical: Number(saved[cat].critical ?? DEFAULT_DISTANCE_THRESHOLDS[cat].critical),
+        }
+      }
     }
-    systemConfig.value.OPTICAL_RX_CRITICAL_THRESHOLD = normalizeThresholdInput(value)
   }
-})
-
-const parseThresholdValue = (value) => {
-  const normalized = normalizeThresholdInput(value)
-  if (normalized === '') {
-    return null
-  }
-  const numeric = Number(normalized)
-  return Number.isFinite(numeric) ? numeric : null
 }
 
 const restoreOpticalDefaults = () => {
-  opticalWarningInput.value = '-24'
-  opticalCriticalInput.value = '-27'
+  for (const cat of ['10', '40', '80', '100']) {
+    distanceThresholds.value[cat] = { ...DEFAULT_DISTANCE_THRESHOLDS[cat] }
+  }
 }
 
 const reloadOpticalThresholds = async () => {
@@ -606,26 +623,35 @@ const reloadOpticalThresholds = async () => {
     return
   }
   await loadSystemConfig()
+  syncDistanceThresholdsFromConfig()
 }
 
 const saveOpticalThresholds = async () => {
-  const warningValue = parseThresholdValue(opticalWarningInput.value)
-  const criticalValue = parseThresholdValue(opticalCriticalInput.value)
-
-  if (warningValue === null || criticalValue === null) {
-    notifyError('Monitoramento', 'Informe valores numéricos válidos para os níveis ópticos.')
-    return
-  }
-
-  if (warningValue < criticalValue) {
-    notifyError('Monitoramento', 'O nível de atenção deve ser maior ou igual ao nível crítico.')
-    return
+  // Validate: warning must be > critical for each category
+  for (const cat of distanceCategories) {
+    const entry = distanceThresholds.value[cat.key]
+    const w = Number(entry.warning)
+    const c = Number(entry.critical)
+    if (!Number.isFinite(w) || !Number.isFinite(c)) {
+      notifyError('Monitoramento', `Informe valores numéricos válidos para ${cat.label}.`)
+      return
+    }
+    if (w < c) {
+      notifyError('Monitoramento', `Em ${cat.label}: o nível de atenção (${w}) deve ser maior que o crítico (${c}).`)
+      return
+    }
   }
 
   savingThresholds.value = true
   try {
-    systemConfig.value.OPTICAL_RX_WARNING_THRESHOLD = warningValue.toString()
-    systemConfig.value.OPTICAL_RX_CRITICAL_THRESHOLD = criticalValue.toString()
+    const thresholdsPayload = {}
+    for (const cat of ['10', '40', '80', '100']) {
+      thresholdsPayload[cat] = {
+        warning: Number(distanceThresholds.value[cat].warning),
+        critical: Number(distanceThresholds.value[cat].critical),
+      }
+    }
+    systemConfig.value.OPTICAL_THRESHOLDS_BY_DISTANCE = thresholdsPayload
     const saved = await saveSystemConfig()
     if (!saved) {
       notifyError('Monitoramento', 'Não foi possível salvar os limites ópticos.')
@@ -699,6 +725,7 @@ onMounted(async () => {
   zabbixForm.value.description = systemConfig.value?.ZABBIX_DESCRIPTION || 'Servidor principal de monitoramento Zabbix'
   zabbixForm.value.config_json = systemConfig.value?.ZABBIX_CONFIG_JSON || '{}'
   zabbixForm.value.is_active = systemConfig.value?.ZABBIX_ACTIVE !== false
+  syncDistanceThresholdsFromConfig()
 })
 
 onMounted(() => {

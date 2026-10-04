@@ -117,7 +117,7 @@ fmt:  ## Format code (ruff --fix / black / isort)
 	isort .
 
 .PHONY: lint-changed
-lint-changed:  ## Lint only the Python files changed vs BASE (default origin/inicial) — what CI enforces (EV-0022)
+lint-changed:  ## Lint only the Python files changed vs BASE (default origin/main) — what CI enforces (EV-0022)
 	scripts/lint-changed.sh $(BASE)
 
 .PHONY: precommit

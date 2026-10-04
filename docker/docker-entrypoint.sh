@@ -129,6 +129,12 @@ maybe_migrate() {
 maybe_collectstatic() {
   if [[ "${INIT_COLLECTSTATIC}" == "true" ]]; then
     log "Running collectstatic (timeout ${COLLECTSTATIC_TIMEOUT}s)"
+    # Ensure staticfiles is writable — bind mount ../backend:/app/backend means
+    # files created on a previous run may be owned by a different UID on the host.
+    local static_root="${DJANGO_STATIC_ROOT:-/app/backend/staticfiles}"
+    if [[ -d "$static_root" ]]; then
+      chmod -R a+w "$static_root" 2>/dev/null || warn "chmod on staticfiles failed (continuing)"
+    fi
     if command -v timeout >/dev/null 2>&1; then
       timeout "${COLLECTSTATIC_TIMEOUT}" env PYTHONUNBUFFERED=1 DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-settings.dev}" \
         python manage.py collectstatic --noinput
@@ -143,6 +149,58 @@ maybe_ensure_superuser() {
   if [[ "${INIT_ENSURE_SUPERUSER:-false}" == "true" ]]; then
     log "Ensuring default superuser..."
     run_manage ensure_superuser
+  fi
+}
+
+maybe_load_runtime_env() {
+  # Se runtime.env existir, exporta variáveis DB_* para sobrescrever os
+  # valores hardcoded do docker-compose. Isso garante que credenciais
+  # alteradas via First-Time Setup persistam entre restarts do container.
+  local runtime_env="/app/database/runtime.env"
+  [[ -f "$runtime_env" ]] || return 0
+
+  local line key value
+  while IFS= read -r line; do
+    # ignora comentários e linhas vazias
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" != *=* ]] && continue
+    # divide apenas no PRIMEIRO '=' para preservar '=' em senhas
+    key="${line%%=*}"
+    value="${line#*=}"
+    key="${key// /}"  # remove espaços do key
+    # remove aspas duplas ou simples ao redor do valor
+    value="${value%\"}"  ; value="${value#\"}"
+    value="${value%\'}"  ; value="${value#\'}"
+    case "$key" in
+      DB_USER|DB_PASSWORD|DB_NAME|DB_HOST|DB_PORT)
+        export "$key=$value"
+        log "runtime.env: $key carregado"
+        ;;
+    esac
+  done < "$runtime_env"
+}
+
+maybe_generate_fernet_key() {
+  # Se FERNET_KEY não está definida, gera e tenta persistir em database/fernet.key
+  # O valor é exportado para que gunicorn/celery herdem via exec
+  if [[ -z "${FERNET_KEY:-}" ]]; then
+    local key_file="/app/database/fernet.key"
+    if [[ -f "$key_file" ]]; then
+      export FERNET_KEY
+      FERNET_KEY="$(cat "$key_file")"
+      log "FERNET_KEY carregada de $key_file"
+    else
+      export FERNET_KEY
+      FERNET_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+      # Tenta persistir — falha silenciosa se sem permissão (não trava o boot)
+      mkdir -p "$(dirname "$key_file")" 2>/dev/null || true
+      if echo "$FERNET_KEY" > "$key_file" 2>/dev/null; then
+        ok "FERNET_KEY gerada e salva em $key_file"
+        warn "Para produção, defina FERNET_KEY no .env para garantir persistência"
+      else
+        warn "FERNET_KEY gerada (sessão apenas) — defina FERNET_KEY no .env para persistir entre reinicializações"
+      fi
+    fi
   fi
 }
 
@@ -201,7 +259,13 @@ main() {
     fi
   fi
 
+  # Ensure writable directories exist (bind-mounted from host may be missing)
+  mkdir -p /app/backend/media /app/backend/logs /app/backend/staticfiles /app/database 2>/dev/null || true
+  chmod -R 777 /app/backend/media /app/backend/logs /app/backend/staticfiles /app/database 2>/dev/null || warn "Could not set permissions on data dirs"
+
   # Optional initialization steps
+  maybe_load_runtime_env
+  maybe_generate_fernet_key
   maybe_migrate
   maybe_collectstatic
   maybe_ensure_superuser

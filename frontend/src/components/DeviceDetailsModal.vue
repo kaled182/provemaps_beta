@@ -228,8 +228,10 @@
     </Transition>
   </Teleport>
 
-  <!-- PortTrafficModal fora do DeviceDetailsModal para evitar conflitos de z-index -->
+  <!-- PortTrafficModal fora do DeviceDetailsModal para evitar conflitos de z-index.
+       v-if + defineAsyncComponent: chunk só baixa quando usuário abre tráfego pela 1ª vez. -->
   <PortTrafficModal
+    v-if="showTrafficModal"
     :is-open="showTrafficModal"
     :port="selectedPort"
     @close="closeTrafficModal"
@@ -237,7 +239,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, defineAsyncComponent } from 'vue'
 import { useApi } from '@/composables/useApi'
 import { useNotification } from '@/composables/useNotification'
 import { useEscapeKey } from '@/composables/useEscapeKey'
@@ -245,7 +247,11 @@ import { useUiStore } from '@/stores/ui'
 import PortActionsModal from './PortActionsModal.vue'
 import AlarmConfigModal from './AlarmConfigModal.vue'
 import ConnectivityMapModal from './ConnectivityMapModal.vue'
-import PortTrafficModal from './PortTrafficModal.vue'
+
+// Lazy: PortTrafficModal carrega ~430 KB de Chart.js + 1500 linhas de UI.
+// Sem isso, o peso ia no bundle do SiteDetailsModal mesmo para usuários
+// que só abrem o site para ver dispositivos sem tocar em tráfego de porta.
+const PortTrafficModal = defineAsyncComponent(() => import('./PortTrafficModal.vue'))
 
 const props = defineProps({
   isOpen: {

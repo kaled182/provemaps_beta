@@ -68,6 +68,9 @@ def _runtime_config(**overrides) -> MagicMock:
     for key in [*uc.EDITABLE_KEYS, "GDRIVE_OAUTH_REFRESH_TOKEN"]:
         setattr(rc, key.lower(), "")
     rc.allowed_hosts = ["a.test", "b.test"]
+    rc.optical_rx_warning_threshold = -24.0
+    rc.optical_rx_critical_threshold = -27.0
+    rc.optical_thresholds_by_distance = {}
     rc.diagnostics_enabled = False
     rc.ftp_enabled = False
     rc.gdrive_enabled = False
@@ -79,10 +82,11 @@ def _runtime_config(**overrides) -> MagicMock:
 
 
 class GetConfigurationUsecaseTests(TestCase):
-    def _get(self, env_values: dict, **rc_overrides):
+    def _get(self, env_values: dict, record=None, **rc_overrides):
         with (
             patch.object(uc.env_manager, "read_values") as read_values,
             patch.object(uc.runtime_settings, "get_runtime_config") as get_rc,
+            patch.object(uc, "_db_record", return_value=record),
         ):
             read_values.side_effect = lambda keys: {
                 k: env_values[k] for k in keys if k in env_values
@@ -115,6 +119,43 @@ class GetConfigurationUsecaseTests(TestCase):
         self.assertIs(data["FTP_ENABLED"], False)
         for key in uc.BOOL_KEYS:
             self.assertIsInstance(data[key], bool, key)
+
+    def test_db_authoritative_keys_ignore_env(self):
+        # Código antigo deixou defaults no .env; o que o utilizador gravou está na base.
+        record = MagicMock(
+            map_provider="mapbox",
+            mapbox_token="pk.db",
+            map_default_zoom=9,
+            map_default_lat=-16.5,
+            map_default_lng=-49.25,
+        )
+        data = self._get(
+            {"MAP_PROVIDER": "google", "MAP_DEFAULT_LAT": "-15.7801", "MAP_DEFAULT_ZOOM": "12"},
+            record=record,
+        )
+        self.assertEqual(data["MAP_PROVIDER"], "mapbox")
+        self.assertEqual(data["MAPBOX_TOKEN"], "pk.db")
+        self.assertEqual(data["MAP_DEFAULT_ZOOM"], "9")
+        self.assertEqual(data["MAP_DEFAULT_LAT"], "-16.5")
+        self.assertEqual(data["MAP_DEFAULT_LNG"], "-49.25")
+
+    def test_db_authoritative_keys_fall_back_without_record(self):
+        data = self._get({"MAP_DEFAULT_LAT": "-1"}, record=None, map_provider="osm")
+        self.assertEqual(data["MAP_PROVIDER"], "osm")
+        self.assertEqual(data["MAP_DEFAULT_LAT"], "-15.7801")  # o .env não conta
+
+    def test_optical_thresholds_come_from_runtime_config(self):
+        data = self._get(
+            {},
+            optical_rx_warning_threshold=-22.5,
+            optical_rx_critical_threshold=-26.0,
+            optical_thresholds_by_distance={"10": {"warning": -19, "critical": -27}},
+        )
+        self.assertEqual(data["OPTICAL_RX_WARNING_THRESHOLD"], "-22.5")
+        self.assertEqual(data["OPTICAL_RX_CRITICAL_THRESHOLD"], "-26.0")
+        by_distance = data["OPTICAL_THRESHOLDS_BY_DISTANCE"]
+        self.assertEqual(by_distance["10"], {"warning": -19.0, "critical": -27.0})
+        self.assertEqual(by_distance["40"], uc.DEFAULT_DISTANCE_THRESHOLDS["40"])
 
     def test_oauth_connected_when_refresh_token_present(self):
         data = self._get({"GDRIVE_OAUTH_REFRESH_TOKEN": "tok"})
@@ -210,6 +251,8 @@ class AuditHistoryUsecaseTests(TestCase):
 
 
 class UpdateConfigurationUsecaseTests(TestCase):
+    env_contents: dict = {}
+
     def _run(self, data, *, existing_password="", backup_cmd=None, backup_raises=None):
         rc = _runtime_config(
             zabbix_api_url="http://zabbix.test",
@@ -221,6 +264,8 @@ class UpdateConfigurationUsecaseTests(TestCase):
         record = MagicMock(backup_password=existing_password) if existing_password else None
         with (
             patch.object(uc.env_manager, "read_values", return_value={}),
+            patch.object(uc.env_manager, "read_env", return_value=self.env_contents),
+            patch.object(uc.env_manager, "write_values") as self.write_values,
             patch.object(uc.runtime_settings, "get_runtime_config", return_value=rc),
             patch.object(uc.runtime_settings, "reload_config"),
             patch.object(uc, "FirstTimeSetup") as fts,
@@ -285,6 +330,25 @@ class UpdateConfigurationUsecaseTests(TestCase):
             },
         )
 
+    def test_stale_db_authoritative_keys_are_purged_from_env(self):
+        self.env_contents = {"MAP_PROVIDER": "google", "MAP_DEFAULT_LAT": "-15.78", "DEBUG": "1"}
+        self._run({"MAP_THEME": "dark"})
+        self.write_values.assert_called_once_with({"MAP_PROVIDER": "", "MAP_DEFAULT_LAT": ""})
+
+    def test_env_without_stale_keys_is_not_touched(self):
+        self.env_contents = {"DEBUG": "1"}
+        self._run({"MAP_THEME": "dark"})
+        self.write_values.assert_not_called()
+
+    def test_distance_thresholds_in_payload(self):
+        _, persist, _, _ = self._run(
+            {"OPTICAL_THRESHOLDS_BY_DISTANCE": {"80": {"warning": "-25", "critical": -31}}}
+        )
+        payload = persist.call_args.args[0]
+        parsed = json.loads(payload["OPTICAL_THRESHOLDS_BY_DISTANCE"])
+        self.assertEqual(parsed["80"], {"warning": -25.0, "critical": -31.0})
+        self.assertEqual(parsed["10"], uc.DEFAULT_DISTANCE_THRESHOLDS["10"])
+
     def test_new_password_triggers_backup(self):
         result, _, call_command, _ = self._run(
             {"BACKUP_ZIP_PASSWORD": "senha-nova-8"}, backup_cmd="bk.zip"
@@ -312,3 +376,19 @@ class UpdateConfigurationUsecaseTests(TestCase):
         result, _, _, restart = self._run({"SERVICE_RESTART_COMMANDS": "systemctl restart x"})
         restart.assert_called_once()
         self.assertTrue(result["restart_triggered"])
+
+
+class ParseDistanceThresholdsTests(TestCase):
+    def test_defaults_for_empty_or_garbage(self):
+        self.assertEqual(uc.parse_distance_thresholds(None), uc.DEFAULT_DISTANCE_THRESHOLDS)
+        self.assertEqual(uc.parse_distance_thresholds("{nope"), uc.DEFAULT_DISTANCE_THRESHOLDS)
+        self.assertEqual(uc.parse_distance_thresholds([1, 2]), uc.DEFAULT_DISTANCE_THRESHOLDS)
+
+    def test_json_string_and_bad_entries(self):
+        parsed = uc.parse_distance_thresholds(
+            json.dumps({"10": {"warning": "-21"}, "40": "x", "100": {"critical": None}})
+        )
+        self.assertEqual(parsed["10"], {"warning": -21.0, "critical": -28.0})
+        self.assertEqual(parsed["40"], uc.DEFAULT_DISTANCE_THRESHOLDS["40"])
+        self.assertEqual(parsed["100"], uc.DEFAULT_DISTANCE_THRESHOLDS["100"])
+        self.assertEqual(set(parsed), {"10", "40", "80", "100"})

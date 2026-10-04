@@ -11,6 +11,7 @@ from .api import (
     monitoring as api_monitoring,
     video as api_video,
 )
+from .views_cron import CronApplyView, CronJobDetailView, CronJobsView, CronJobToggleView
 from .viewsets_alert_templates import AlertTemplateViewSet
 from .viewsets_contacts import ContactGroupViewSet, ContactViewSet, ImportHistoryViewSet
 
@@ -26,6 +27,7 @@ router.register(r"alert-templates", AlertTemplateViewSet, basename="alert-templa
 urlpatterns = [
     path("dashboard/", views.setup_dashboard, name="setup_dashboard"),
     path("first_time/", views.first_time_setup, name="first_time_setup"),
+    path("first_time/restarting/", views.first_time_restarting, name="first_time_restarting"),
     path("config/", views.manage_environment, name="manage_environment"),
     # API endpoints for configuration management
     path("api/test-zabbix/", api_connections.test_zabbix_connection, name="test_zabbix"),
@@ -133,6 +135,11 @@ urlpatterns = [
         api_video.video_mosaic_detail,
         name="video_mosaic_detail",
     ),
+    # Cron Jobs (DRF — CsrfExemptSessionAuthentication)
+    path("api/cron/", CronJobsView.as_view(), name="cron_jobs_list"),
+    path("api/cron/<int:job_id>/", CronJobDetailView.as_view(), name="cron_job_detail"),
+    path("api/cron/<int:job_id>/toggle/", CronJobToggleView.as_view(), name="cron_job_toggle"),
+    path("api/cron/apply/", CronApplyView.as_view(), name="cron_apply"),
     # Documentation endpoints
     path("docs/", views_docs.docs_index, name="docs_index"),
     path("docs/<path:filename>/", views_docs.docs_view, name="docs_view"),

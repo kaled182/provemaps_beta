@@ -269,6 +269,7 @@ export function useGatewayConfig() {
             smtp_auth_mode: config.auth_mode,
             smtp_from_email: config.from_email,
             smtp_test_recipient: config.test_recipient,
+            smtp_test_message: config.test_message,
           }
           break
         default:

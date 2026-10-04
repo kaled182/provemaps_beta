@@ -121,6 +121,7 @@ EDITABLE_KEYS = [
     # Network thresholds
     "OPTICAL_RX_WARNING_THRESHOLD",
     "OPTICAL_RX_CRITICAL_THRESHOLD",
+    "OPTICAL_THRESHOLDS_BY_DISTANCE",
     # Backup automation
     "BACKUP_AUTO_ENABLED",
     "BACKUP_FREQUENCY",
@@ -141,6 +142,7 @@ _EXPORT_EXCLUDED = {
     "SENTRY_DSN",
     "OPTICAL_RX_WARNING_THRESHOLD",
     "OPTICAL_RX_CRITICAL_THRESHOLD",
+    "OPTICAL_THRESHOLDS_BY_DISTANCE",
     "BACKUP_AUTO_ENABLED",
     "BACKUP_FREQUENCY",
     "BACKUP_RETENTION_DAYS",
@@ -148,6 +150,47 @@ _EXPORT_EXCLUDED = {
     "BACKUP_CLOUD_PROVIDER",
     "BACKUP_CLOUD_PATH",
 }
+
+# Chaves cujo valor autoritativo vive na base (`FirstTimeSetup`), não no .env: código
+# antigo escrevia defaults no .env e eles ganhavam ao que o utilizador gravou no ecrã.
+DB_AUTHORITATIVE_KEYS = frozenset(
+    {"MAP_DEFAULT_LAT", "MAP_DEFAULT_LNG", "MAP_DEFAULT_ZOOM", "MAP_PROVIDER", "MAPBOX_TOKEN"}
+)
+
+# Limiares ópticos por categoria de distância (km) — tooltip/alarmes dos cabos.
+DEFAULT_DISTANCE_THRESHOLDS: dict[str, dict[str, float]] = {
+    "10": {"warning": -20.0, "critical": -28.0},
+    "40": {"warning": -23.0, "critical": -30.0},
+    "80": {"warning": -26.0, "critical": -30.0},
+    "100": {"warning": -28.0, "critical": -35.0},
+}
+
+
+def parse_distance_thresholds(value: Any) -> dict[str, dict[str, float]]:
+    """Normaliza o dict de limiares por distância; qualquer entrada inválida cai no default."""
+    defaults = DEFAULT_DISTANCE_THRESHOLDS
+    if not value:
+        return dict(defaults)
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return dict(defaults)
+    if not isinstance(value, dict):
+        return dict(defaults)
+    result: dict[str, dict[str, float]] = {}
+    for cat, default in defaults.items():
+        entry = value.get(cat, default)
+        try:
+            result[cat] = {
+                "warning": float(entry.get("warning", default["warning"])),
+                "critical": float(entry.get("critical", default["critical"])),
+            }
+        except (AttributeError, TypeError, ValueError):
+            result[cat] = dict(default)
+    return result
+
+
 EXPORT_KEYS = [k for k in EDITABLE_KEYS if k not in _EXPORT_EXCLUDED] + [
     "GDRIVE_OAUTH_REFRESH_TOKEN"
 ]
@@ -238,8 +281,20 @@ def _reload_runtime() -> None:
 # ── Configuração ─────────────────────────────────────────────────────────────
 
 
+def _db_record() -> FirstTimeSetup | None:
+    """Registo vivo da configuração, lido direto da base: campos que mudam sem reiniciar não
+    podem vir do `lru_cache` de um worker que não processou o POST de gravação."""
+    return FirstTimeSetup.objects.filter(configured=True).order_by("-configured_at").first()
+
+
+def _db_str(record: Any, field: str, default: str) -> str:
+    value = getattr(record, field, None) if record is not None else None
+    return str(value) if value is not None and value != "" else default
+
+
 def _fallback_values(current_values: dict[str, str]) -> dict[str, Any]:
     runtime_config = runtime_settings.get_runtime_config()
+    record = _db_record()
     return {
         "SECRET_KEY": getattr(settings, "SECRET_KEY", ""),
         "DEBUG": getattr(settings, "DEBUG", False),
@@ -248,11 +303,11 @@ def _fallback_values(current_values: dict[str, str]) -> dict[str, Any]:
         "ZABBIX_API_PASSWORD": runtime_config.zabbix_api_password,
         "ZABBIX_API_KEY": runtime_config.zabbix_api_key,
         "GOOGLE_MAPS_API_KEY": runtime_config.google_maps_api_key,
-        "MAP_PROVIDER": runtime_config.map_provider or "google",
-        "MAPBOX_TOKEN": runtime_config.mapbox_token,
-        "MAP_DEFAULT_ZOOM": "12",
-        "MAP_DEFAULT_LAT": "-15.7801",
-        "MAP_DEFAULT_LNG": "-47.9292",
+        "MAP_PROVIDER": _db_str(record, "map_provider", runtime_config.map_provider or "google"),
+        "MAPBOX_TOKEN": _db_str(record, "mapbox_token", runtime_config.mapbox_token or ""),
+        "MAP_DEFAULT_ZOOM": _db_str(record, "map_default_zoom", "12"),
+        "MAP_DEFAULT_LAT": _db_str(record, "map_default_lat", "-15.7801"),
+        "MAP_DEFAULT_LNG": _db_str(record, "map_default_lng", "-47.9292"),
         "MAP_TYPE": "terrain",
         "MAP_STYLES": "",
         "ENABLE_STREET_VIEW": True,
@@ -320,8 +375,11 @@ def _fallback_values(current_values: dict[str, str]) -> dict[str, Any]:
         "SMS_AWS_ACCESS_KEY_ID": runtime_config.sms_aws_access_key_id,
         "SMS_AWS_SECRET_ACCESS_KEY": runtime_config.sms_aws_secret_access_key,
         "SMS_INFOBIP_BASE_URL": runtime_config.sms_infobip_base_url,
-        "OPTICAL_RX_WARNING_THRESHOLD": "-24",
-        "OPTICAL_RX_CRITICAL_THRESHOLD": "-27",
+        "OPTICAL_RX_WARNING_THRESHOLD": str(runtime_config.optical_rx_warning_threshold),
+        "OPTICAL_RX_CRITICAL_THRESHOLD": str(runtime_config.optical_rx_critical_threshold),
+        "OPTICAL_THRESHOLDS_BY_DISTANCE": parse_distance_thresholds(
+            runtime_config.optical_thresholds_by_distance
+        ),
         "BACKUP_AUTO_ENABLED": False,
         "BACKUP_FREQUENCY": "weekly",
         "BACKUP_RETENTION_DAYS": "30",
@@ -338,9 +396,12 @@ def get_configuration() -> dict[str, Any]:
 
     config_data: dict[str, Any] = {}
     for key in EDITABLE_KEYS:
-        value = current_values.get(key, "")
-        if value == "":
-            value = fallback.get(key, "")
+        if key in DB_AUTHORITATIVE_KEYS:
+            value = fallback.get(key, "")  # a base ganha sempre ao .env
+        else:
+            value = current_values.get(key, "")
+            if value == "":
+                value = fallback.get(key, "")
         if key in BOOL_KEYS:
             if isinstance(value, bool):
                 config_data[key] = value
@@ -547,6 +608,9 @@ def build_configuration_payload(
         "OPTICAL_RX_CRITICAL_THRESHOLD": _parse_float_str(
             data.get("OPTICAL_RX_CRITICAL_THRESHOLD", "-27"), -27
         ),
+        "OPTICAL_THRESHOLDS_BY_DISTANCE": json.dumps(
+            parse_distance_thresholds(data.get("OPTICAL_THRESHOLDS_BY_DISTANCE"))
+        ),
     }
 
     # E-mail: o backend SMTP do Django segue a secção SMTP
@@ -605,6 +669,17 @@ def _apply_runtime_overrides(payload: dict[str, str]) -> None:
             setattr(settings, key, float(payload[key]))
         except (TypeError, ValueError):
             setattr(settings, key, default)
+    distance = parse_distance_thresholds(payload.get("OPTICAL_THRESHOLDS_BY_DISTANCE"))
+    os.environ["OPTICAL_THRESHOLDS_BY_DISTANCE"] = json.dumps(distance)
+    settings.OPTICAL_THRESHOLDS_BY_DISTANCE = distance
+
+
+def _purge_stale_env_keys() -> None:
+    """Código antigo escrevia no .env defaults das chaves que hoje só a base governa; se lá
+    continuarem, um arranque limpo lê-os antes da base. Esvazia-os (uma vez, se existirem)."""
+    stale = DB_AUTHORITATIVE_KEYS & env_manager.read_env().keys()
+    if stale:
+        env_manager.write_values({key: "" for key in stale})
 
 
 def _persist_configuration(payload: dict[str, str]) -> None:
@@ -721,6 +796,7 @@ def update_configuration(data: dict[str, Any]) -> dict[str, Any]:
 
     _apply_runtime_overrides(payload)
     _persist_configuration(payload)
+    _purge_stale_env_keys()
 
     clear_runtime_config_cache()
     runtime_settings.reload_config()

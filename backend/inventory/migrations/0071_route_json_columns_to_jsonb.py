@@ -52,7 +52,7 @@ def backwards(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("inventory", "0068_add_department_to_alarmconfig"),
+        ("inventory", "0070_fibercablealarmconfig_snooze_until"),
     ]
 
     operations = [

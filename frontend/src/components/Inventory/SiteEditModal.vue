@@ -79,13 +79,14 @@
           </div>
         </div>
 
+        <!-- Coordenadas + botão de mapa -->
         <div class="grid grid-cols-2 gap-4">
           <div>
             <label class="block text-xs text-gray-500 uppercase font-bold mb-1">Latitude</label>
             <input
               v-model="form.lat"
               type="text"
-              class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-sm"
+              class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
               placeholder="-23.5505"
             />
           </div>
@@ -94,22 +95,24 @@
             <input
               v-model="form.lng"
               type="text"
-              class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-sm"
+              class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
               placeholder="-46.6333"
             />
           </div>
         </div>
 
-        <div class="space-y-2 pt-1">
-          <div
-            class="w-full rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden"
-            style="height: 200px;"
-            ref="mapContainer"
-          ></div>
-          <p v-if="mapError" class="text-xs text-red-500 dark:text-red-300">
-            {{ mapError }}
-          </p>
-        </div>
+        <button
+          type="button"
+          @click="showPicker = true"
+          class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-blue-400 hover:text-blue-500 dark:hover:border-blue-500 dark:hover:text-blue-400 transition-colors text-sm"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          Selecionar localização no mapa
+        </button>
       </div>
 
       <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-3">
@@ -129,18 +132,27 @@
       </div>
     </div>
   </div>
+
+  <LocationPickerModal
+    :is-open="showPicker"
+    :lat="pickerLat"
+    :lng="pickerLng"
+    :zoom="pickerLat !== -15.7801 ? 15 : 6"
+    @confirm="onLocationPicked"
+    @close="showPicker = false"
+  />
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, shallowRef, watch } from 'vue';
-import { createMap } from '@/providers/maps/MapProviderFactory.js';
+import { computed, ref, watch, onUnmounted } from 'vue'
+import LocationPickerModal from '@/components/Configuration/LocationPickerModal.vue'
 
 const props = defineProps({
   show: Boolean,
   site: Object,
-});
+})
 
-const emit = defineEmits(['close', 'saved']);
+const emit = defineEmits(['close', 'saved'])
 
 // ─── State ───────────────────────────────────────────────────
 const form = ref({
@@ -150,193 +162,113 @@ const form = ref({
   address: '',
   lat: '',
   lng: '',
-});
-const mapContainer = ref(null);
-const mapInstance = shallowRef(null); // IMap (providers/maps)
-const marker = shallowRef(null);      // IMarker
-const addressQuery = ref('');
-const addressSuggestions = ref([]);
-const mapError = ref('');
+})
+const addressQuery = ref('')
+const addressSuggestions = ref([])
+const showPicker = ref(false)
 
-const isEditing = computed(() => !!props.site);
+const isEditing = computed(() => !!props.site)
+
+const pickerLat = computed(() => Number(form.value.lat) || -15.7801)
+const pickerLng = computed(() => Number(form.value.lng) || -47.9292)
 
 // ─── Form sync ───────────────────────────────────────────────
 watch(
   () => props.site,
   (newSite) => {
     if (newSite) {
-      form.value = { ...newSite, address: '' };
+      form.value = { ...newSite, address: newSite.address || '' }
     } else {
-      form.value = { name: '', type: 'pop', status: 'active', address: '', lat: '', lng: '' };
+      form.value = { name: '', type: 'pop', status: 'active', address: '', lat: '', lng: '' }
     }
-    addressQuery.value = '';
+    addressQuery.value = form.value.address || ''
   },
   { immediate: true },
-);
+)
 
 // ─── Save ────────────────────────────────────────────────────
 const save = () => {
   if (!form.value.name) {
-    alert('Nome é obrigatório');
-    return;
+    alert('Nome é obrigatório')
+    return
   }
   const toFixed6 = (value) => {
-    if (value === null || value === undefined || value === '') return null;
-    const num = Number(value);
-    if (Number.isNaN(num)) return null;
-    return Number(num.toFixed(6));
-  };
+    if (value === null || value === undefined || value === '') return null
+    const num = Number(value)
+    if (Number.isNaN(num)) return null
+    return Number(num.toFixed(6))
+  }
   emit('saved', {
     ...form.value,
     lat: toFixed6(form.value.lat),
     lng: toFixed6(form.value.lng),
-  });
-};
+  })
+}
 
-// ─── Map lifecycle (EV-0012c: provider configurado, via factory) ─────────
+// ─── Location picker ─────────────────────────────────────────
+const onLocationPicked = ({ lat, lng }) => {
+  form.value.lat = lat
+  form.value.lng = lng
+  showPicker.value = false
+  reverseGeocodeNominatim(lat, lng)
+}
 
-const destroyMap = () => {
-  try { marker.value?.remove(); } catch (_) { /* best-effort */ }
-  marker.value = null;
-  try { mapInstance.value?.destroy(); } catch (_) { /* best-effort */ }
-  mapInstance.value = null;
-};
-
-const initMap = async () => {
-  if (!mapContainer.value || mapInstance.value) return;
-  mapError.value = '';
-
-  try {
-    const hasCoords = !!Number(form.value.lat) && !!Number(form.value.lng);
-    const lat = Number(form.value.lat) || -15.793889;
-    const lng = Number(form.value.lng) || -47.882778;
-    const zoom = hasCoords ? 15 : 6;
-
-    const map = await createMap(mapContainer.value, {
-      center: { lat, lng },
-      zoom,
-      controls: { mapType: false, streetView: false, fullscreen: false },
-    });
-    mapInstance.value = map;
-
-    map.on('click', (event) => {
-      if (!Number.isFinite(event?.lat) || !Number.isFinite(event?.lng)) return;
-      form.value.lat = event.lat;
-      form.value.lng = event.lng;
-      placeMarker({ lat: event.lat, lng: event.lng });
-      reverseGeocode(event.lat, event.lng);
-    });
-
-    if (hasCoords) {
-      placeMarker({ lat, lng });
-      map.setZoom(16);
-      reverseGeocode(lat, lng);
-    }
-  } catch (err) {
-    console.error('[SiteEditModal] Erro ao carregar mapa:', err);
-    mapError.value = 'Não foi possível carregar o mapa. Verifique a configuração.';
-  }
-};
-
-// ─── Marcador arrastável (IMarker) ───────────────────────────
-
-const placeMarker = ({ lat, lng }) => {
-  if (!mapInstance.value) return;
-  if (!marker.value) {
-    marker.value = mapInstance.value.createMarker({
-      position: { lat, lng },
-      draggable: true,
-      title: 'Posição do site',
-    });
-    marker.value.on('dragend', () => {
-      const pos = marker.value.getPosition();
-      form.value.lat = pos.lat;
-      form.value.lng = pos.lng;
-      reverseGeocode(pos.lat, pos.lng);
-    });
-  } else {
-    marker.value.setPosition({ lat, lng });
-  }
-  mapInstance.value.panTo({ lat, lng });
-};
-
-const panToCoords = (lat, lng, zoom) => {
-  if (!mapInstance.value) return;
-  mapInstance.value.panTo({ lat, lng });
-  if (zoom) mapInstance.value.setZoom(zoom);
-};
+// ─── Watcher: geocode reverso ao digitar lat/lng manualmente ──
+let geocodeTimer = null
+watch([() => form.value.lat, () => form.value.lng], ([lat, lng]) => {
+  const latN = Number(lat)
+  const lngN = Number(lng)
+  if (!lat || !lng || isNaN(latN) || isNaN(lngN)) return
+  if (latN < -90 || latN > 90 || lngN < -180 || lngN > 180) return
+  clearTimeout(geocodeTimer)
+  geocodeTimer = setTimeout(() => reverseGeocodeNominatim(latN, lngN), 800)
+})
+onUnmounted(() => clearTimeout(geocodeTimer))
 
 // ─── Address search (Nominatim) ───────────────────────────────
-
 const onAddressInput = () => {
   if (addressQuery.value.length < 4) {
-    addressSuggestions.value = [];
-    return;
+    addressSuggestions.value = []
+    return
   }
   fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addressQuery.value)}&format=json&addressdetails=1&limit=5`, {
     headers: { 'User-Agent': 'provemaps-frontend' },
   })
     .then((res) => res.json())
-    .then((data) => { addressSuggestions.value = data || []; })
-    .catch(() => { addressSuggestions.value = []; });
-};
+    .then((data) => { addressSuggestions.value = data || [] })
+    .catch(() => { addressSuggestions.value = [] })
+}
 
 const applySuggestion = (s) => {
-  const lat = parseFloat(s.lat);
-  const lng = parseFloat(s.lon);
-  form.value.address = s.display_name || '';
-  form.value.lat = lat;
-  form.value.lng = lng;
-  addressQuery.value = s.display_name || '';
-  addressSuggestions.value = [];
-  if (mapInstance.value) {
-    placeMarker({ lat, lng });
-    panToCoords(lat, lng, 14);
-  }
-};
+  const lat = parseFloat(s.lat)
+  const lng = parseFloat(s.lon)
+  form.value.address = s.display_name || ''
+  form.value.lat = lat
+  form.value.lng = lng
+  addressQuery.value = s.display_name || ''
+  addressSuggestions.value = []
+}
 
-// ─── Reverse geocode ─────────────────────────────────────────
-// Sempre Nominatim: igual para os três provedores e sem depender de um SDK.
-
-const reverseGeocode = (lat, lng) => reverseGeocodeNominatim(lat, lng);
-
+// ─── Reverse geocode (Nominatim) ──────────────────────────────
 const reverseGeocodeNominatim = (lat, lng) => {
   fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`, {
     headers: { 'User-Agent': 'provemaps-frontend' },
   })
     .then((res) => res.json())
     .then((data) => {
-      if (!data?.display_name) return;
-      const addr = data.address || {};
+      if (!data?.display_name) return
+      const addr = data.address || {}
       const streetParts = [
         addr.road || addr.pedestrian || addr.cycleway || addr.footway || '',
         addr.house_number || '',
         addr.suburb || addr.neighbourhood || '',
-      ].filter(Boolean);
-      form.value.address = streetParts.join(', ') || data.display_name;
-      addressQuery.value = form.value.address;
-      form.value.city = addr.city || addr.town || addr.village || addr.county || form.value.city || '';
-      form.value.state = addr.state || form.value.state || '';
-      form.value.zip_code = addr.postcode || form.value.zip_code || '';
+      ].filter(Boolean)
+      form.value.address = streetParts.join(', ') || data.display_name
+      addressQuery.value = form.value.address
+      form.value.city = addr.city || addr.town || addr.village || addr.county || form.value.city || ''
+      form.value.state = addr.state || form.value.state || ''
+      form.value.zip_code = addr.postcode || form.value.zip_code || ''
     })
-    .catch(() => {});
-};
-
-// ─── Watchers ────────────────────────────────────────────────
-
-watch(
-  () => props.show,
-  (val) => {
-    if (!val) {
-      // Destroy runs before DOM update (flush: 'pre' is default)
-      destroyMap();
-    } else {
-      nextTick(() => initMap());
-    }
-  },
-);
-
-onMounted(() => {
-  if (props.show) initMap();
-});
+    .catch(() => {})
+}
 </script>

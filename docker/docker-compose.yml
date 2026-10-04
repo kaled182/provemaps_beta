@@ -14,7 +14,8 @@
     ports:
       - "8100:8000"
     env_file:
-      - ../.env
+      - path: ../.env
+        required: false   # .env é opcional — todas as config essenciais já estão aqui
     working_dir: /app/backend
     environment:
       DB_ENGINE: postgis
@@ -25,6 +26,8 @@
       DB_PASSWORD: app
       DJANGO_SETTINGS_MODULE: settings.dev
       SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
+      # Aceita qualquer host/IP — configuração via web, sem precisar editar .env
+      ALLOWED_HOSTS: "*"
       PYTHONPATH: "/app/backend:/app"
       PYTHONUNBUFFERED: 1
       GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
@@ -83,15 +86,9 @@
     restart: unless-stopped
     volumes:
       - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
-      - ../backend:/app/backend
-      # Bind vue-spa assets so fresh builds are picked up without rebuilding the image
-      - ../backend/staticfiles/vue-spa:/app/backend/staticfiles/vue-spa
-      - ../frontend:/app/frontend
       - ../database:/app/database
-      - ../doc:/app/doc
-      - ../scripts:/app/scripts
-      - ../.env:/app/.env:ro
       - ../logs:/app/backend/logs
+      - ../backend/staticfiles:/app/backend/staticfiles  # serve static files directly from host build output
 
   whatsapp-qr:
     build:
@@ -113,7 +110,8 @@
     command: celery -A core.celery_app worker -Q default,zabbix,maps -l info -c 4
     entrypoint: ["/docker-entrypoint.sh"]
     env_file:
-      - ../.env
+      - path: ../.env
+        required: false
     working_dir: /app/backend
     environment:
       DB_ENGINE: postgis
@@ -124,6 +122,7 @@
       DB_PASSWORD: app
       DJANGO_SETTINGS_MODULE: settings.dev
       SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
+      ALLOWED_HOSTS: "*"
       PYTHONPATH: "/app/backend:/app"
       PYTHONUNBUFFERED: 1
       GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
@@ -152,12 +151,7 @@
     restart: unless-stopped
     volumes:
       - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
-      - ../backend:/app/backend
-      - ../frontend:/app/frontend
       - ../database:/app/database
-      - ../doc:/app/doc
-      - ../scripts:/app/scripts
-      - ../.env:/app/.env:ro
       - ../logs:/app/backend/logs
 
   beat:
@@ -167,7 +161,8 @@
     command: celery -A core.celery_app beat -l info --pidfile=/tmp/celerybeat.pid
     entrypoint: ["/docker-entrypoint.sh"]
     env_file:
-      - ../.env
+      - path: ../.env
+        required: false
     working_dir: /app/backend
     environment:
       DB_ENGINE: postgis
@@ -178,6 +173,7 @@
       DB_PASSWORD: app
       DJANGO_SETTINGS_MODULE: settings.dev
       SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
+      ALLOWED_HOSTS: "*"
       PYTHONPATH: "/app/backend:/app"
       PYTHONUNBUFFERED: 1
       GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
@@ -205,12 +201,7 @@
     restart: unless-stopped
     volumes:
       - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
-      - ../backend:/app/backend
-      - ../frontend:/app/frontend
       - ../database:/app/database
-      - ../doc:/app/doc
-      - ../scripts:/app/scripts
-      - ../.env:/app/.env:ro
       - ../logs:/app/backend/logs
 
   redis:
@@ -393,7 +384,34 @@
       - ../backend:/app/backend
       - ../test_mosaic_rendering.py:/app/test_mosaic_rendering.py
       - ../frontend:/app/frontend
-      - ../.env:/app/.env:ro
+
+  # ── nginx + Let's Encrypt ─────────────────────────────────────────────────
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: docker-nginx-1
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN_NAME: "${DOMAIN_NAME:-}"
+      CERTBOT_EMAIL: "${CERTBOT_EMAIL:-}"
+    volumes:
+      - ./nginx:/etc/nginx/setup:ro          # configs e templates
+      - certbot_www:/var/www/certbot         # desafio ACME
+      - certbot_certs:/etc/letsencrypt       # certificados
+      - ../backend/staticfiles:/app/staticfiles:ro  # static files
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t 2>/dev/null && wget -qO- http://localhost/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
 volumes:
   redis_data:
@@ -401,6 +419,8 @@ volumes:
   prometheus_data:
   grafana_data:
   whatsapp_qr_data:
+  certbot_www:
+  certbot_certs:
   hls_cache:
     driver: local
     driver_opts:

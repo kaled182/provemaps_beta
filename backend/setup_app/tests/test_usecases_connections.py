@@ -104,7 +104,7 @@ class DatabaseRedisFtpTests(SimpleTestCase):
             "PostgreSQL 16.1 on x86, compiled by gcc",
         )
         fake.connect = MagicMock(return_value=conn)
-        with patch.dict(sys.modules, {"psycopg2": fake}):
+        with patch.dict(sys.modules, {"psycopg": fake}):
             result = uc.test_database(
                 {
                     "db_host": "h",
@@ -122,8 +122,10 @@ class DatabaseRedisFtpTests(SimpleTestCase):
             },
         )
         self.assertEqual(fake.connect.call_args.kwargs["connect_timeout"], uc.DB_CONNECT_TIMEOUT)
+        self.assertEqual(fake.connect.call_args.kwargs["dbname"], "n")  # psycopg v3: dbname
+        conn.close.assert_called_once()
         fake.connect.side_effect = RuntimeError("auth")
-        with patch.dict(sys.modules, {"psycopg2": fake}):
+        with patch.dict(sys.modules, {"psycopg": fake}):
             with self.assertRaises(uc.ConnectionTestError) as ctx:
                 uc.test_database({"db_host": "h", "db_port": "1", "db_name": "n", "db_user": "u"})
         self.assertEqual(str(ctx.exception), "Connection failed: auth")

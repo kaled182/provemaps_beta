@@ -246,3 +246,19 @@ skill-observations/
 *.phase*_step*
 # artefacto do pytest quando corre a partir da raiz (MEDIA_ROOT de settings.test)
 /test_media/
+
+# Arquivos temporários avulsos (main)
+temp_*.txt
+temp_*.json
+docker/temp_*.json
+*.phase*
+
+# Diretórios de backup de apps (gerados localmente)
+backend/setup_app_backup/
+
+# Artefato Windows
+backend/nul
+
+# Documentação de backups (gerada automaticamente)
+backups/*.md
+backups/*.txt

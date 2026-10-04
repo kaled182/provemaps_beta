@@ -31,7 +31,7 @@ def backfill_site_location(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("inventory", "0069_route_json_columns_to_jsonb"),
+        ("inventory", "0071_route_json_columns_to_jsonb"),
     ]
 
     operations = [

@@ -165,6 +165,96 @@ class CreateAndRestoreTests(_TmpBackupDir):
         cmd.assert_called_once_with("restore_db", "db.dump")
 
 
+class RestoreZipTests(_TmpBackupDir):
+    def _zip(self, name: str, members: dict[str, bytes]) -> Path:
+        import zipfile
+
+        path = self.dir / name
+        with zipfile.ZipFile(path, "w") as zipf:
+            for member, content in members.items():
+                zipf.writestr(member, content)
+        return path
+
+    def test_plain_zip_without_password_restores_with_config_json(self):
+        self._zip("db.zip", {"db.dump": b"PGDMP", "db.config.json": b"{}"})
+        with (
+            patch.object(uc.shutil, "which", return_value="/usr/bin/psql"),
+            patch.object(uc, "get_backup_password", return_value=None),
+            patch.object(uc, "call_command") as cmd,
+        ):
+            uc.restore_backup("db.zip")
+        args, kwargs = cmd.call_args
+        self.assertEqual(args[0], "restore_db")
+        self.assertTrue(args[1].startswith("restore_tmp_") and args[1].endswith(".dump"))
+        self.assertTrue(kwargs["config_json"].endswith("db.config.json"))
+        self.assertEqual(list(self.dir.glob("restore_tmp_*")), [])  # temporário apagado
+
+    def test_plain_zip_without_dump_raises(self):
+        self._zip("db.zip", {"leia-me.txt": b"x"})
+        with (
+            patch.object(uc.shutil, "which", return_value="/usr/bin/psql"),
+            patch.object(uc, "get_backup_password", return_value=None),
+            patch.object(uc, "call_command") as cmd,
+        ):
+            with self.assertRaises(uc.InvalidBackupFile):
+                uc.restore_backup("db.zip")
+        cmd.assert_not_called()
+
+    def test_corrupted_zip_raises_invalid(self):
+        self._touch("db.zip")  # bytes que não são um zip
+        with (
+            patch.object(uc.shutil, "which", return_value="/usr/bin/psql"),
+            patch.object(uc, "get_backup_password", return_value=None),
+        ):
+            with self.assertRaises(uc.InvalidBackupFile):
+                uc.restore_backup("db.zip")
+
+    def test_encrypted_zip_uses_pyzipper_with_password(self):
+        import sys
+        import types
+
+        self._zip("db.zip", {"db.dump": b"PGDMP"})
+        fake = types.SimpleNamespace()
+        zipf = MagicMock()
+        zipf.__enter__ = MagicMock(return_value=zipf)
+        zipf.__exit__ = MagicMock(return_value=False)
+
+        def _extract(dest):
+            (Path(dest) / "db.dump").write_bytes(b"PGDMP")
+
+        zipf.extractall.side_effect = _extract
+        fake.AESZipFile = MagicMock(return_value=zipf)
+        with (
+            patch.object(uc.shutil, "which", return_value="/usr/bin/psql"),
+            patch.object(uc, "get_backup_password", return_value=b"senha-forte"),
+            patch.dict(sys.modules, {"pyzipper": fake}),
+            patch.object(uc, "call_command") as cmd,
+        ):
+            uc.restore_backup("db.zip")
+        self.assertEqual(zipf.pwd, b"senha-forte")
+        self.assertEqual(cmd.call_args.kwargs["config_json"], "")
+
+
+class BackupPasswordTests(SimpleTestCase):
+    def _with(self, value: str):
+        return patch.object(
+            uc.env_manager, "read_values", return_value={"BACKUP_ZIP_PASSWORD": value}
+        )
+
+    def test_required_raises_when_missing_or_short(self):
+        for value in ("", "curta"):
+            with self._with(value), self.assertRaises(ValueError):
+                uc.get_backup_password()
+
+    def test_optional_returns_none_only_when_empty(self):
+        with self._with(""):
+            self.assertIsNone(uc.get_backup_password(required=False))
+        with self._with("curta"), self.assertRaises(ValueError):
+            uc.get_backup_password(required=False)
+        with self._with("senha-forte"):
+            self.assertEqual(uc.get_backup_password(required=False), b"senha-forte")
+
+
 class CloudTests(_TmpBackupDir):
     def test_upload_existing_backup_marks_when_any_provider_succeeds(self):
         self._touch("x.zip")
