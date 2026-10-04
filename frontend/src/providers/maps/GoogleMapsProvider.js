@@ -32,6 +32,17 @@ class GooglePolyline extends IPolyline {
       clickable: options.clickable !== false,
       geodesic: true,
     });
+
+    if (options.clickable !== false) {
+      const baseWeight = options.strokeWeight || 4;
+      const baseOpacity = options.strokeOpacity || 0.9;
+      this.polyline.addListener('mouseover', () => {
+        this.polyline.setOptions({ strokeWeight: baseWeight + 2, strokeOpacity: 1 });
+      });
+      this.polyline.addListener('mouseout', () => {
+        this.polyline.setOptions({ strokeWeight: baseWeight, strokeOpacity: baseOpacity });
+      });
+    }
   }
 
   setPath(path) {
@@ -100,7 +111,9 @@ class GooglePolyline extends IPolyline {
   }
 
   remove() {
+    google.maps.event.clearInstanceListeners(this.polyline);
     this.polyline.setMap(null);
+    this.listeners = {};
   }
 }
 
@@ -118,8 +131,10 @@ class GoogleMarkerClass extends IMarker {
     const markerType = options.markerType || 'default';
     const config = this._getMarkerConfig(markerType);
 
-    // Create SVG icon with label
-    const icon = this._createCustomIcon(config);
+    // Ícone por URL (ex.: ícone do dispositivo) ou o círculo SVG do tipo
+    const icon = options.iconUrl
+      ? this._createUrlIcon(options.iconUrl, options.iconSize || 24)
+      : this._createCustomIcon({ ...config, label: options.label ?? config.label });
 
     this.marker = new google.maps.Marker({
       position: options.position,
@@ -128,6 +143,14 @@ class GoogleMarkerClass extends IMarker {
       title: options.title || '',
       icon: icon,
     });
+  }
+
+  _createUrlIcon(url, size) {
+    return {
+      url,
+      scaledSize: new google.maps.Size(size, size),
+      anchor: new google.maps.Point(size / 2, size / 2),
+    };
   }
 
   setPosition(position) {
@@ -163,7 +186,9 @@ class GoogleMarkerClass extends IMarker {
   }
 
   remove() {
+    google.maps.event.clearInstanceListeners(this.marker);
     this.marker.setMap(null);
+    this.listeners = {};
   }
 
   /**
@@ -264,28 +289,41 @@ class GoogleMapClass extends IMap {
     if (!this.listeners[event]) {
       this.listeners[event] = [];
     }
-    this.listeners[event].push(callback);
-
-    this.googleMap.addListener(event, (e) => {
-      const eventData = {
-        lat: e.latLng?.lat(),
-        lng: e.latLng?.lng(),
-        originalEvent: e.domEvent,
-        clientX: e.domEvent?.clientX,
-        clientY: e.domEvent?.clientY,
-      };
-      callback(eventData);
+    // `move` é contínuo (bounds_changed); `idle` e `click` existem com o mesmo nome.
+    // Eventos de viewport chegam sem argumento, daí os `?.`.
+    const nativeEvent = event === 'move' ? 'bounds_changed' : event;
+    const handle = this.googleMap.addListener(nativeEvent, (e) => {
+      callback({
+        lat: e?.latLng?.lat(),
+        lng: e?.latLng?.lng(),
+        originalEvent: e?.domEvent,
+        clientX: e?.domEvent?.clientX,
+        clientY: e?.domEvent?.clientY,
+      });
     });
+    this.listeners[event].push({ callback, handle });
   }
 
   off(event, callback) {
-    if (this.listeners[event]) {
-      const index = this.listeners[event].indexOf(callback);
-      if (index > -1) {
-        this.listeners[event].splice(index, 1);
-      }
+    const list = this.listeners[event];
+    if (!list) return;
+    const index = list.findIndex((entry) => entry.callback === callback);
+    if (index > -1) {
+      google.maps.event.removeListener(list[index].handle);
+      list.splice(index, 1);
     }
-    // Google Maps doesn't easily support removing specific listeners
+  }
+
+  getBounds() {
+    const b = this.googleMap.getBounds();
+    if (!b) return null;
+    const ne = b.getNorthEast();
+    const sw = b.getSouthWest();
+    return { lat_min: sw.lat(), lng_min: sw.lng(), lat_max: ne.lat(), lng_max: ne.lng() };
+  }
+
+  getContainer() {
+    return this.container;
   }
 
   createPolyline(options) {
@@ -302,16 +340,19 @@ class GoogleMapClass extends IMap {
   }
 
   latLngToPixel(latLng) {
+    // Pixel relativo ao container: ponto-mundo do alvo menos o do canto
+    // noroeste visível, à escala do zoom (mapa sem rotação/inclinação).
     const projection = this.googleMap.getProjection();
-    if (!projection) return { x: 0, y: 0 };
+    const bounds = this.googleMap.getBounds();
+    if (!projection || !bounds) return null;
 
-    const worldPoint = projection.fromLatLngToPoint(
-      new google.maps.LatLng(latLng.lat, latLng.lng)
-    );
     const scale = Math.pow(2, this.googleMap.getZoom());
-    return { 
-      x: worldPoint.x * scale, 
-      y: worldPoint.y * scale 
+    const northWest = new google.maps.LatLng(bounds.getNorthEast().lat(), bounds.getSouthWest().lng());
+    const nwPoint = projection.fromLatLngToPoint(northWest);
+    const point = projection.fromLatLngToPoint(new google.maps.LatLng(latLng.lat, latLng.lng));
+    return {
+      x: (point.x - nwPoint.x) * scale,
+      y: (point.y - nwPoint.y) * scale,
     };
   }
 

@@ -27,10 +27,10 @@ let leafletLoaded = false;
  * (`{lat, lng, originalEvent, clientX, clientY}`).
  */
 function toMapEvent(e) {
-  const original = e.originalEvent;
+  const original = e?.originalEvent;
   return {
-    lat: e.latlng?.lat,
-    lng: e.latlng?.lng,
+    lat: e?.latlng?.lat,
+    lng: e?.latlng?.lng,
     originalEvent: original,
     clientX: original?.clientX,
     clientY: original?.clientY,
@@ -75,8 +75,15 @@ class LeafletPolyline extends IPolyline {
         e.originalEvent?.preventDefault?.();
         this._emit('rightclick', toMapEvent(e));
       });
-      this.polyline.on('mouseover', () => this._setHovered(true));
-      this.polyline.on('mouseout', () => this._setHovered(false));
+      this.polyline.on('mouseover', (e) => {
+        this._setHovered(true);
+        this._emit('mouseover', toMapEvent(e));
+      });
+      this.polyline.on('mouseout', (e) => {
+        this._setHovered(false);
+        this._emit('mouseout', toMapEvent(e));
+      });
+      this.polyline.on('mousemove', (e) => this._emit('mousemove', toMapEvent(e)));
     }
   }
 
@@ -154,10 +161,14 @@ class LeafletMarker extends IMarker {
     const markerType = options.markerType || 'default';
     const config = getMarkerConfig(markerType);
 
+    const icon = options.iconUrl
+      ? this._createImageIcon(markerType, options.iconUrl, options.iconSize || 24)
+      : this._createIcon(markerType, { ...config, label: options.label ?? config.label }, options.draggable);
+
     this.marker = L.marker([this.position.lat, this.position.lng], {
       draggable: options.draggable || false,
       title: options.title || '',
-      icon: this._createIcon(markerType, config, options.draggable),
+      icon,
     }).addTo(this.leafletMap);
 
     this.marker.on('drag', () => {
@@ -169,6 +180,15 @@ class LeafletMarker extends IMarker {
       this._emit('dragend');
     });
     this.marker.on('click', (e) => this._emit('click', { originalEvent: e.originalEvent }));
+  }
+
+  _createImageIcon(markerType, url, size) {
+    return L.icon({
+      className: `map-marker map-marker-${markerType} map-marker-image`,
+      iconUrl: url,
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
+    });
   }
 
   _createIcon(markerType, config, draggable) {
@@ -317,6 +337,20 @@ class LeafletMap extends IMap {
       this.listeners[event] = [];
     }
     this.listeners[event].push(callback);
+    this._bindViewportEvent(event);
+  }
+
+  /**
+   * `move` → `move` do Leaflet; `idle` → `moveend` (também dispara após zoom).
+   * Ligam-se ao mapa nativo só quando alguém os pede.
+   */
+  _bindViewportEvent(event) {
+    const nativeEvent = { move: 'move', idle: 'moveend' }[event];
+    if (!nativeEvent) return;
+    this._boundViewportEvents ||= new Set();
+    if (this._boundViewportEvents.has(event)) return;
+    this._boundViewportEvents.add(event);
+    this.leafletMap.on(nativeEvent, () => this._emit(event, {}));
   }
 
   off(event, callback) {
@@ -326,6 +360,16 @@ class LeafletMap extends IMap {
     if (index > -1) {
       list.splice(index, 1);
     }
+  }
+
+  getBounds() {
+    const b = this.leafletMap.getBounds();
+    if (!b) return null;
+    return { lat_min: b.getSouth(), lng_min: b.getWest(), lat_max: b.getNorth(), lng_max: b.getEast() };
+  }
+
+  getContainer() {
+    return this.leafletMap.getContainer();
   }
 
   createPolyline(options) {

@@ -41,6 +41,8 @@ vi.mock('leaflet', () => {
         fitBounds: vi.fn(),
         remove: vi.fn(),
         latLngToContainerPoint: vi.fn(() => ({ x: 10, y: 20 })),
+        getBounds: vi.fn(() => ({ getSouth: () => -2, getWest: () => -3, getNorth: () => 2, getEast: () => 3 })),
+        getContainer: vi.fn(() => container),
       };
       fake.maps.push(m);
       return m;
@@ -79,6 +81,7 @@ vi.mock('leaflet', () => {
       return m;
     }),
     divIcon: vi.fn((opts) => ({ divIcon: true, ...opts })),
+    icon: vi.fn((opts) => ({ imageIcon: true, ...opts })),
     latLngBounds: vi.fn((latlngs) => ({ bounds: latlngs })),
   };
   return { default: L };
@@ -312,5 +315,72 @@ describe('LeafletMarker', () => {
     expect(fake.markers[0].dragging.disable).toHaveBeenCalled();
     marker.remove();
     expect(fake.markers[0].remove).toHaveBeenCalled();
+  });
+});
+
+describe('LeafletMap — viewport (EV-0012b)', () => {
+  it('getBounds devolve a bbox no formato da API e getContainer o elemento', async () => {
+    const { map } = await makeMap();
+    expect(map.getBounds()).toEqual({ lat_min: -2, lng_min: -3, lat_max: 2, lng_max: 3 });
+    expect(map.getContainer()).toEqual({ id: 'map' });
+  });
+
+  it('idle liga-se ao moveend e move ao move, uma só vez por evento', async () => {
+    const { map } = await makeMap();
+    const onIdle = vi.fn();
+    const onMove = vi.fn();
+    map.on('idle', onIdle);
+    map.on('idle', () => {});
+    map.on('move', onMove);
+
+    expect(fake.maps[0].handlers.moveend).toHaveLength(1);
+    expect(fake.maps[0].handlers.move).toHaveLength(1);
+
+    fake.maps[0].fire('moveend');
+    fake.maps[0].fire('move');
+    expect(onIdle).toHaveBeenCalledTimes(1);
+    expect(onMove).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('LeafletMarker — ícone por URL (EV-0012b)', () => {
+  it('iconUrl usa L.icon com o tamanho pedido em vez do círculo', async () => {
+    const { map } = await makeMap();
+    map.createMarker({ position: { lat: 1, lng: 2 }, iconUrl: '/static/olt.png', iconSize: 32, title: 'OLT' });
+    expect(L.icon).toHaveBeenCalledWith(expect.objectContaining({
+      iconUrl: '/static/olt.png',
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+    }));
+    expect(L.divIcon).not.toHaveBeenCalled();
+    expect(fake.markers[0].opts.title).toBe('OLT');
+  });
+
+  it('label explícito entra no divIcon quando não há iconUrl', async () => {
+    const { map } = await makeMap();
+    map.createMarker({ position: { lat: 1, lng: 2 }, label: '7' });
+    expect(fake.markers[0].opts.icon.html).toContain('>7<');
+  });
+});
+
+describe('LeafletPolyline — eventos de hover (EV-0012b)', () => {
+  it('mouseover/mouseout/mousemove chegam aos listeners com lat/lng e posição do rato', async () => {
+    const { map } = await makeMap();
+    const line = map.createPolyline({ path: [{ lat: 1, lng: 2 }] });
+    const over = vi.fn();
+    const out = vi.fn();
+    const move = vi.fn();
+    line.on('mouseover', over);
+    line.on('mouseout', out);
+    line.on('mousemove', move);
+
+    const ev = { latlng: { lat: 5, lng: 6 }, originalEvent: { clientX: 11, clientY: 22 } };
+    fake.polylines[0].fire('mouseover', ev);
+    fake.polylines[0].fire('mousemove', ev);
+    fake.polylines[0].fire('mouseout', ev);
+
+    expect(over).toHaveBeenCalledWith(expect.objectContaining({ lat: 5, lng: 6, clientX: 11, clientY: 22 }));
+    expect(move).toHaveBeenCalledWith(expect.objectContaining({ clientX: 11 }));
+    expect(out).toHaveBeenCalledTimes(1);
   });
 });

@@ -73,8 +73,8 @@ class MapboxPolyline extends IPolyline {
       this.mapboxMap.on('click', this.hitLayerId, this._handleClick.bind(this));
       this.mapboxMap.on('contextmenu', this.hitLayerId, this._handleRightClick.bind(this));
 
-      // Hover: cursor + highlight
-      this._onMouseEnter = () => {
+      // Hover: cursor + highlight + eventos para quem ouve (tooltips)
+      this._onMouseEnter = (e) => {
         this.mapboxMap.getCanvas().style.cursor = 'pointer';
         if (!this._hovered) {
           this._hovered = true;
@@ -82,18 +82,36 @@ class MapboxPolyline extends IPolyline {
           this.mapboxMap.setPaintProperty(this.layerId, 'line-width', baseWidth + 2);
           this.mapboxMap.setPaintProperty(this.layerId, 'line-opacity', 1);
         }
+        this._emit('mouseover', this._toEvent(e));
       };
-      this._onMouseLeave = () => {
+      this._onMouseLeave = (e) => {
         this.mapboxMap.getCanvas().style.cursor = '';
         if (this._hovered) {
           this._hovered = false;
           this.mapboxMap.setPaintProperty(this.layerId, 'line-width', this.options.strokeWeight || 4);
           this.mapboxMap.setPaintProperty(this.layerId, 'line-opacity', this.options.strokeOpacity || 0.9);
         }
+        this._emit('mouseout', this._toEvent(e));
       };
+      this._onMouseMove = (e) => this._emit('mousemove', this._toEvent(e));
       this.mapboxMap.on('mouseenter', this.hitLayerId, this._onMouseEnter);
       this.mapboxMap.on('mouseleave', this.hitLayerId, this._onMouseLeave);
+      this.mapboxMap.on('mousemove', this.hitLayerId, this._onMouseMove);
     }
+  }
+
+  _toEvent(e) {
+    return {
+      lat: e?.lngLat?.lat,
+      lng: e?.lngLat?.lng,
+      originalEvent: e?.originalEvent,
+      clientX: e?.originalEvent?.clientX,
+      clientY: e?.originalEvent?.clientY,
+    };
+  }
+
+  _emit(event, payload) {
+    (this.listeners[event] || []).forEach((cb) => cb(payload));
   }
 
   _handleClick(e) {
@@ -181,6 +199,7 @@ class MapboxPolyline extends IPolyline {
       this.mapboxMap.off('contextmenu', this.hitLayerId, this._handleRightClick);
       if (this._onMouseEnter) this.mapboxMap.off('mouseenter', this.hitLayerId, this._onMouseEnter);
       if (this._onMouseLeave) this.mapboxMap.off('mouseleave', this.hitLayerId, this._onMouseLeave);
+      if (this._onMouseMove) this.mapboxMap.off('mousemove', this.hitLayerId, this._onMouseMove);
       this.mapboxMap.removeLayer(this.hitLayerId);
     }
     if (this.mapboxMap.getLayer(this.layerId)) {
@@ -217,27 +236,11 @@ class MapboxMarker extends IMarker {
     const markerType = this.options.markerType || 'default';
     const config = this._getMarkerConfig(markerType);
 
-    // Create custom marker element
-    const el = document.createElement('div');
-    el.className = `map-marker map-marker-${markerType}`;
-    el.style.width = `${config.size}px`;
-    el.style.height = `${config.size}px`;
-    el.style.borderRadius = '50%';
-    el.style.backgroundColor = config.color;
-    el.style.border = '3px solid white';
-    el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
-    el.style.cursor = this.options.draggable ? 'move' : 'pointer';
-    el.style.display = 'flex';
-    el.style.alignItems = 'center';
-    el.style.justifyContent = 'center';
-    el.style.fontWeight = 'bold';
-    el.style.color = 'white';
-    el.style.fontSize = `${config.size * 0.6}px`;
-    el.style.userSelect = 'none';
-
-    // Add label if configured
-    if (config.label) {
-      el.textContent = config.label;
+    const el = this.options.iconUrl
+      ? this._createImageElement(markerType, this.options.iconUrl, this.options.iconSize || 24)
+      : this._createCircleElement(markerType, { ...config, label: this.options.label ?? config.label });
+    if (this.options.title) {
+      el.title = this.options.title;
     }
 
     this.marker = new mapboxgl.Marker({
@@ -272,6 +275,44 @@ class MapboxMarker extends IMarker {
         this.listeners.click.forEach(cb => cb({ originalEvent: e }));
       }
     });
+  }
+
+  _createImageElement(markerType, url, size) {
+    const el = document.createElement('img');
+    el.className = `map-marker map-marker-${markerType} map-marker-image`;
+    el.src = url;
+    el.alt = '';
+    el.style.width = `${size}px`;
+    el.style.height = `${size}px`;
+    el.style.cursor = this.options.draggable ? 'move' : 'pointer';
+    el.style.userSelect = 'none';
+    return el;
+  }
+
+  _createCircleElement(markerType, config) {
+    // Create custom marker element
+    const el = document.createElement('div');
+    el.className = `map-marker map-marker-${markerType}`;
+    el.style.width = `${config.size}px`;
+    el.style.height = `${config.size}px`;
+    el.style.borderRadius = '50%';
+    el.style.backgroundColor = config.color;
+    el.style.border = '3px solid white';
+    el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+    el.style.cursor = this.options.draggable ? 'move' : 'pointer';
+    el.style.display = 'flex';
+    el.style.alignItems = 'center';
+    el.style.justifyContent = 'center';
+    el.style.fontWeight = 'bold';
+    el.style.color = 'white';
+    el.style.fontSize = `${config.size * 0.6}px`;
+    el.style.userSelect = 'none';
+
+    // Add label if configured
+    if (config.label) {
+      el.textContent = config.label;
+    }
+    return el;
   }
 
   setPosition(position) {
@@ -423,6 +464,21 @@ class MapboxMap extends IMap {
       this.listeners[event] = [];
     }
     this.listeners[event].push(callback);
+    this._bindViewportEvent(event);
+  }
+
+  /**
+   * `move`/`idle` só se ligam ao mapa nativo quando alguém os pede.
+   */
+  _bindViewportEvent(event) {
+    const nativeEvent = { move: 'move', idle: 'idle' }[event];
+    if (!nativeEvent) return;
+    this._boundViewportEvents ||= new Set();
+    if (this._boundViewportEvents.has(event)) return;
+    this._boundViewportEvents.add(event);
+    this.mapboxMap.on(nativeEvent, () => {
+      (this.listeners[event] || []).forEach((cb) => cb({}));
+    });
   }
 
   off(event, callback) {
@@ -432,6 +488,18 @@ class MapboxMap extends IMap {
         this.listeners[event].splice(index, 1);
       }
     }
+  }
+
+  getBounds() {
+    const b = this.mapboxMap.getBounds();
+    if (!b) return null;
+    const ne = b.getNorthEast();
+    const sw = b.getSouthWest();
+    return { lat_min: sw.lat, lng_min: sw.lng, lat_max: ne.lat, lng_max: ne.lng };
+  }
+
+  getContainer() {
+    return this.mapboxMap.getContainer();
   }
 
   createPolyline(options) {
@@ -450,6 +518,10 @@ class MapboxMap extends IMap {
   latLngToPixel(latLng) {
     const point = this.mapboxMap.project([latLng.lng, latLng.lat]);
     return { x: point.x, y: point.y };
+  }
+
+  getNativeMap() {
+    return this.mapboxMap;
   }
 }
 

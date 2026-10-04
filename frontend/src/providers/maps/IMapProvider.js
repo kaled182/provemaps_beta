@@ -33,7 +33,28 @@
  * @typedef {Object} MarkerOptions
  * @property {LatLng} position
  * @property {boolean} [draggable]
- * @property {string} [title]
+ * @property {string} [title]       - tooltip nativo
+ * @property {string} [label]       - texto curto dentro do marcador (quando não há `iconUrl`)
+ * @property {string} [markerType]  - 'origin' | 'destination' | 'intermediate' | 'preview' | 'default' (ver markerStyles.js)
+ * @property {string} [iconUrl]     - imagem do marcador (ícone do dispositivo); substitui o círculo
+ * @property {number} [iconSize]    - lado em px do ícone (default 24)
+ */
+
+/**
+ * @typedef {Object} BBox - caixa envolvente no formato que a API `?bbox=` consome
+ * @property {number} lat_min
+ * @property {number} lng_min
+ * @property {number} lat_max
+ * @property {number} lng_max
+ */
+
+/**
+ * @typedef {Object} MapEvent - payload comum dos eventos (campos ausentes quando não se aplicam)
+ * @property {number} [lat]
+ * @property {number} [lng]
+ * @property {Event}  [originalEvent]
+ * @property {number} [clientX]
+ * @property {number} [clientY]
  */
 
 /**
@@ -122,6 +143,22 @@ export class IMap {
   }
 
   /**
+   * Caixa envolvente visível, ou `null` enquanto o mapa não renderizou.
+   * @returns {BBox|null}
+   */
+  getBounds() {
+    throw new Error('Method getBounds() must be implemented');
+  }
+
+  /**
+   * Elemento DOM que contém o mapa (para posicionar overlays).
+   * @returns {HTMLElement}
+   */
+  getContainer() {
+    throw new Error('Method getContainer() must be implemented');
+  }
+
+  /**
    * Pan suave para uma coordenada
    * @param {LatLng} latLng
    */
@@ -140,9 +177,13 @@ export class IMap {
   }
 
   /**
-   * Adiciona listener de eventos
-   * @param {string} event - Nome do evento (click, rightclick, etc.)
-   * @param {Function} callback
+   * Adiciona listener de eventos.
+   * Eventos comuns aos três providers:
+   *  - `click`, `rightclick` → MapEvent com lat/lng e posição do rato
+   *  - `move`  → dispara continuamente enquanto o viewport muda (pan/zoom)
+   *  - `idle`  → dispara uma vez quando o viewport assenta (ler `getBounds()` aqui)
+   * @param {string} event
+   * @param {(e: MapEvent) => void} callback
    */
   on(event, callback) {
     throw new Error('Method on() must be implemented');
@@ -183,9 +224,10 @@ export class IMap {
   }
 
   /**
-   * Conversão de coordenadas geográficas para pixels
+   * Conversão de coordenadas geográficas para pixels **relativos ao container
+   * do mapa** (o que um overlay posicionado com `position:absolute` precisa).
    * @param {LatLng} latLng
-   * @returns {{x: number, y: number}}
+   * @returns {{x: number, y: number}|null} - `null` enquanto o mapa não tem projeção
    */
   latLngToPixel(latLng) {
     throw new Error('Method latLngToPixel() must be implemented');
@@ -229,9 +271,11 @@ export class IPolyline {
   }
 
   /**
-   * Adiciona listener
+   * Adiciona listener. Eventos comuns: `click`, `rightclick`, `mouseover`,
+   * `mouseout`, `mousemove` — todos com MapEvent (lat/lng/clientX/clientY).
+   * O realce ao passar o rato é feito pelo próprio provider.
    * @param {string} event
-   * @param {Function} callback
+   * @param {(e: MapEvent) => void} callback
    */
   on(event, callback) {
     throw new Error('Method on() must be implemented');

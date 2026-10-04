@@ -100,7 +100,7 @@ log em inglês, como já está.
 <!-- EVOLUCAO:INICIO — quadro manual; quando a Central existir, passa a ser gerado. -->
 **A fazer — 🐛 Problemas** (triagem do Paulo, 2026-10-04: todos aceitos com a prioridade proposta)
 
-- `EV-0012` **Quatro pilhas de mapa paralelas; só `CustomMapViewer` honra os três provedores; `NetworkDesign` quebra com `osm`** · P2 · `frontend/src/components/MapView.vue`, `providers/maps/MapProviderFactory.js`, `composables/useMapService.js` · **em curso por fatias** (não cabia numa sessão; fatias aprovadas pelo Paulo em 2026-10-04, «podemos seguir»). **0012a feita** em `feat(mapa)` 2026-10-04 — `providers/maps/LeafletProvider.js` registado como `osm` na factory (tiles públicos do OSM, marcadores `divIcon`, sem chave); com `osm` o NetworkDesign deixa de cair no `alert()` «not supported»; `markerStyles.js` passa a ser a tabela de marcadores dos três providers; apagados `utils/mapProviderAdapter.js`, `Map/USAGE_EXAMPLES.vue` e `modules/mapCore.js` (zero importadores); 18 testes. **Correção à leitura do levantamento:** a «pilha 4» não está morta — `Map/UnifiedMapView.vue` (`useMapService` + `mapPlugins`, Google-only) é usada por `Inventory/Fibers/CableMapModal.vue` e pela rota `/network/design/fiber/:id` (`FiberRouteEditor.vue`); e `utils/mapLoader.js` é importado pelo `googleMapsLoader.js` vivo. **Seguem:** 0012b MapView; 0012c CustomMapViewer (+ loaders); 0012d NetworkDesign (8 `google.maps` diretos, `import_kml.js`) e migração da `UnifiedMapView` para a factory
+- `EV-0012` **Quatro pilhas de mapa paralelas; só `CustomMapViewer` honra os três provedores; `NetworkDesign` quebra com `osm`** · P2 · `frontend/src/components/MapView.vue`, `providers/maps/MapProviderFactory.js`, `composables/useMapService.js` · **em curso por fatias** (não cabia numa sessão; fatias aprovadas pelo Paulo em 2026-10-04, «podemos seguir»). **0012a feita** em `feat(mapa)` 2026-10-04 — `providers/maps/LeafletProvider.js` registado como `osm` na factory (tiles públicos do OSM, marcadores `divIcon`, sem chave); com `osm` o NetworkDesign deixa de cair no `alert()` «not supported»; `markerStyles.js` passa a ser a tabela de marcadores dos três providers; apagados `utils/mapProviderAdapter.js`, `Map/USAGE_EXAMPLES.vue` e `modules/mapCore.js` (zero importadores); 18 testes. **Correção à leitura do levantamento:** a «pilha 4» não está morta — `Map/UnifiedMapView.vue` (`useMapService` + `mapPlugins`, Google-only) é usada por `Inventory/Fibers/CableMapModal.vue` e pela rota `/network/design/fiber/:id` (`FiberRouteEditor.vue`); e `utils/mapLoader.js` é importado pelo `googleMapsLoader.js` vivo. **0012b feita** em `refactor(mapa)` 2026-10-04 — `MapView.vue` (rota `/map` + Dashboard) deixa o `vue3-google-map` (dependência removida) e cria o mapa pela factory: `IMap` ganha `getBounds()`/`getContainer()`, eventos `idle`/`move`, `latLngToPixel` relativo ao container (o do Google devolvia pixel-mundo), `IMarker` aceita `iconUrl`/`iconSize`/`label`, `IPolyline` emite `mouseover`/`mouseout`/`mousemove` e realça no hover nos três providers; `Map/MapPopup.vue` substitui o `InfoWindow` (conteúdo Vue ancorado por coordenada, reprojetado no `move`); enquadramento automático só no primeiro lote (refazer a cada fetch por bbox devolvia o mapa ao sítio de onde saiu) e poda depois da resposta em vez de `setTimeout(500)`; `RadiusSearchTool.examples.vue` apagado; 27 testes novos (Google e Mapbox passam a ter testes). **Fica:** `Map/RadiusSearchTool.vue` (861 linhas) ainda desenha com `google.maps` e só aparece com o provider Google (desligado por omissão); o botão «Gráfico» da janela do cabo continua em `alert()` (ligar ao `TimeSeriesChart`). **Seguem:** 0012c CustomMapViewer (+ loaders `mapLoader.js`/`googleMapsLoader.js`/`composables/map/providers/*`); 0012d NetworkDesign (8 `google.maps` diretos, `import_kml.js`) e migração da `UnifiedMapView` para a factory
 - `EV-0017` **`setup_app/api_views.py` com 4.484 linhas sem usecases; `usecases/devices.py` com 2.501** · P2 · **⚠️ não cabe numa sessão** (66 views em `api_views.py` ligadas a 42 rotas, 7 domínios misturados — config/env, backups+nuvem, testes de ligação, perfil da empresa, servidores de monitorização, gateways de mensagens/WhatsApp QR, vídeo/câmeras — com `setup_app` a 45 % de cobertura; `devices.py` tem 25 funções com descoberta Zabbix e scoring de portas no mesmo ficheiro): leitura levada ao Paulo em 2026-10-04 — proposta de fatiar por domínio, um módulo `setup_app/api/<dominio>.py` + `setup_app/usecases/<dominio>.py` por item (0017a backups, 0017b env/config, 0017c gateways+WhatsApp, 0017d vídeo, 0017e testes de ligação/perfil/monitorização) e 0017f `usecases/devices.py` → `devices_discovery.py` + `devices_ports.py`. Decisão dele; o assistente passou ao item seguinte
 
 **Entrada, por triar — 🐛 Problemas** (abertos pelo assistente com prova; a triagem é do Paulo)
@@ -196,7 +196,7 @@ log em inglês, como já está.
 | Backend | Python 3.12, Django 5.2, DRF 3.15, Channels 4 (WebSocket `/ws/dashboard/status/`), Celery 5.4 + beat, structlog, django-prometheus, Sentry opcional |
 | Banco | PostgreSQL 16 + PostGIS (dev) / 15 (prod) — **único** backend (`DB_ENGINE=postgis` por omissão; outro valor falha no arranque, EV-0025); GDAL/GEOS obrigatórios; sem eles os campos espaciais degradam para JSON e os testes espaciais falham na coleta |
 | Cache/broker | Redis (degradação graciosa sem Redis) |
-| Frontend | Vue 3.5 + Vite 7 + Pinia 3 + vue-router 4, Tailwind 3.4 compilado no build (PostCSS), FontAwesome 6.5 auto-hospedado, Chart.js 4, `@phosphor-icons/vue`, `vue3-google-map`, `mapbox-gl`, `leaflet`, `hls.js`, Vitest, Playwright |
+| Frontend | Vue 3.5 + Vite 7 + Pinia 3 + vue-router 4, Tailwind 3.4 compilado no build (PostCSS), FontAwesome 6.5 auto-hospedado, Chart.js 4, `@phosphor-icons/vue`, `mapbox-gl`, `leaflet` (+ SDK Google carregado pelo provider), `hls.js`, Vitest, Playwright |
 | Infra | Docker multi-stage (`docker/dockerfile`), compose dev (`docker/docker-compose.yml`, porta 8100) e prod (`docker-compose.prod.yml` com nginx+certbot e profiles), GHCR via `release.yml` |
 | Serviços | `services/video-transmuxer` (FastAPI), `services/whatsapp-qr` (Node/Baileys), mediamtx |
 
@@ -215,7 +215,8 @@ backend/
 frontend/src/
   components/     Map/, Dashboard/, Inventory/, Fusion/, TraceRoute/, DeviceImport/, Video/, Configuration/, Layout/
   views/          páginas roteadas (monitoring/, video/, ...)
-  providers/maps/ IMapProvider + MapProviderFactory  ← abstração oficial
+  providers/maps/ IMapProvider + MapProviderFactory (google | mapbox | osm)  ← abstração oficial
+  components/Map/ MapPopup.vue (janela ancorada por coordenada), MapControls, RadiusSearchTool (ainda Google-only)
   composables/    useApi (CSRF), useWebSocket, useMapService + mapPlugins (pilha Google-only por trás de Map/UnifiedMapView.vue — migra na 0012d)
   stores/         Pinia (filters.js é o vivo; filters.ts é morto)
   services/       fiberService.js
@@ -301,9 +302,16 @@ Regras desde já:
 
 ## 8. Mapas — regras críticas
 
-- A única abstração é `providers/maps/`. `MapView.vue`, `CustomMapViewer.vue`
-  e `NetworkDesignView.vue` **convergem** para ela (EV-0012); não se adiciona
-  lógica `if provider === 'google'` fora dela.
+- A única abstração é `providers/maps/`. `MapView.vue` já só fala `IMap`
+  (EV-0012b); `CustomMapViewer.vue`, `NetworkDesignView.vue` e `UnifiedMapView.vue`
+  **convergem** para ela (EV-0012c/d); não se adiciona lógica
+  `if provider === 'google'` fora dela.
+- Janelas e tooltips sobre o mapa são Vue: `Map/MapPopup.vue` ancora o conteúdo
+  por coordenada via `IMap.latLngToPixel` (pixel relativo ao container) e segue o
+  evento `move`. Nada de `InfoWindow`/`L.popup`/`mapboxgl.Popup` nos componentes.
+- Viewport: ouvir `idle` e ler `getBounds()` (bbox no formato da API). Enquadrar
+  (`fitBounds`) só no primeiro lote de dados ou a pedido do utilizador — nunca a
+  cada fetch por bbox.
 - Estado em tempo real vem do WebSocket, não de polling. O backend publica
   `{event: 'dashboard.status', data: {hosts}}` e `{type: 'cable_status_update',
   cables}`; o **único** intérprete no frontend é

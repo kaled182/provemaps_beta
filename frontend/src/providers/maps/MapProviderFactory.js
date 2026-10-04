@@ -49,6 +49,15 @@ async function fetchMapConfig() {
 }
 
 /**
+ * Configuração de mapas tal como `/api/config/` a devolve (provedor, chaves,
+ * centro/zoom por omissão). Em cache até `clearConfigCache()`.
+ * @returns {Promise<Object>}
+ */
+export async function getMapConfig() {
+  return fetchMapConfig();
+}
+
+/**
  * Limpa o cache de configuração
  */
 export function clearConfigCache() {
