@@ -81,73 +81,22 @@
           </div>
         </div>
 
-        <!-- Tab: Sugestões -->
+        <!-- Tab: Sugestões & Bugs — vai para a Central de Evolução (EV-0036).
+             O formulário antigo só fingia enviar (setTimeout); nada chegava a ninguém. -->
         <div v-if="activeTab === 'suggestions'" class="cl-body">
-          <div v-if="submitted" class="cl-success">
-            <PhCheckCircle :size="48" weight="duotone" class="cl-success-icon" />
-            <h3>Obrigado pelo feedback!</h3>
-            <p>Sua sugestão foi registrada e será analisada pela equipe.</p>
-            <button class="cl-btn-primary" @click="resetForm">Enviar outra</button>
-          </div>
-
-          <form v-else class="cl-form" @submit.prevent="submitSuggestion">
-            <p class="cl-form-intro">
-              Encontrou um bug ou tem uma ideia para melhorar o sistema? Nos conte!
+          <div class="cl-central" data-testid="cl-central">
+            <PhMegaphone :size="44" weight="duotone" class="cl-central-icon" />
+            <h3>Relatos vão para a Central de Evolução</h3>
+            <p>
+              Encontrou um bug ou tem uma ideia? O relato entra na fila da Central com o seu
+              utilizador, a rota onde estava e o navegador — e você acompanha a triagem em
+              <RouterLink to="/system/evolucao" class="cl-link" @click="$emit('close')">System → Evolução</RouterLink>.
             </p>
-
-            <div class="cl-field">
-              <label class="cl-label">Tipo</label>
-              <div class="cl-type-group">
-                <button
-                  v-for="t in types"
-                  :key="t.id"
-                  type="button"
-                  class="cl-type-btn"
-                  :class="{ active: form.type === t.id }"
-                  @click="form.type = t.id"
-                >
-                  <component :is="t.icon" :size="15" weight="fill" />
-                  {{ t.label }}
-                </button>
-              </div>
-            </div>
-
-            <div class="cl-field">
-              <label class="cl-label">Título <span class="cl-required">*</span></label>
-              <input
-                v-model="form.title"
-                class="cl-input"
-                placeholder="Resumo em uma linha..."
-                maxlength="120"
-                required
-              />
-            </div>
-
-            <div class="cl-field">
-              <label class="cl-label">Descrição <span class="cl-required">*</span></label>
-              <textarea
-                v-model="form.description"
-                class="cl-textarea"
-                placeholder="Descreva com detalhes o que aconteceu ou o que gostaria de ver..."
-                rows="5"
-                required
-              ></textarea>
-              <span class="cl-char-count">{{ form.description.length }} / 1000</span>
-            </div>
-
-            <div class="cl-field">
-              <label class="cl-label">Seu nome (opcional)</label>
-              <input v-model="form.author" class="cl-input" placeholder="Ex: João Silva" maxlength="80" />
-            </div>
-
-            <div class="cl-form-footer">
-              <button type="submit" class="cl-btn-primary" :disabled="submitting">
-                <PhPaperPlaneTilt v-if="!submitting" :size="16" weight="fill" />
-                <span v-if="submitting" class="cl-spinner"></span>
-                {{ submitting ? 'Enviando…' : 'Enviar Feedback' }}
-              </button>
-            </div>
-          </form>
+            <button type="button" class="cl-btn-primary" data-testid="cl-reportar" @click="$emit('reportar')">
+              <PhMegaphone :size="16" weight="fill" />
+              Reportar problema ou ideia
+            </button>
+          </div>
         </div>
 
       </div>
@@ -157,13 +106,14 @@
 
 <script setup>
 import { ref, computed } from 'vue';
+import { RouterLink } from 'vue-router';
 import {
-  PhX, PhStar, PhBug, PhArrowsClockwise, PhCheckCircle,
-  PhPaperPlaneTilt, PhListBullets, PhChatText, PhWarning, PhLightbulb,
+  PhX, PhStar, PhBug, PhArrowsClockwise, PhListBullets, PhChatText, PhMegaphone,
 } from '@phosphor-icons/vue';
 
 defineProps({ show: Boolean });
-defineEmits(['close']);
+// `reportar`: quem nos monta abre o ReportarModal da Central (EV-0036).
+defineEmits(['close', 'reportar']);
 
 const activeTab = ref('changelog');
 
@@ -175,9 +125,35 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
+    version: '1.5.0',
+    date: '04 Out 2026',
+    latest: true,
+    features: [
+      'Central de Evolução (System → Evolução e botão 📣 Reportar na barra lateral): relatos de problemas e ideias com anexos, rota e navegador capturados; triagem pela equipe com prioridade, motivo de recusa e aviso automático do que está parado há 14 dias. A aba «Sugestões & Bugs» deste modal passa a abrir a Central — o formulário antigo não enviava nada.',
+      'Mapa com um só motor para os três provedores (Google, Mapbox, OpenStreetMap): NetworkDesign, editor de traçados, mini-mapas de site/dispositivo e o visualizador do backbone funcionam com qualquer um; janelas e tooltips passam a ser Vue.',
+      'Autenticação por token para integrações (Authorization: Bearer) com contas de serviço e registro do último uso; documentação OpenAPI/Swagger auto-hospedada em /api/schema/swagger/.',
+      'Importação KML completa: KMZ, MultiGeometry, gx:Track, qualquer namespace e um cabo por Placemark.',
+      'Proximidade geográfica no banco (PostGIS): regra dos 100 m e «cabos próximos» por ST_DWithin em vez de laços em Python.',
+    ],
+    improvements: [
+      'Gráficos unificados num componente único com eixo temporal real: RX/TX e IN/OUT alinhados por intervalo, buracos como buracos (sem preencher), séries longas sem cortar os pontos mais recentes.',
+      'Estado em tempo real do mapa só por WebSocket, com um único intérprete das mensagens; fim do polling de 30 s e dos sockets sem fecho.',
+      'Payload de cabos filtrado por área visível (bbox) e sem N+1; setup_app e inventário reorganizados em casos de uso finos com 190 testes novos.',
+      'Design system alinhado com o CRM: tokens de cor, Inter/JetBrains Mono/Outfit auto-hospedadas, tema teal/Slate; Tailwind e FontAwesome compilados no build (sem CDN); console.log removido do bundle de produção.',
+      'Build reprodutível (package-lock versionado), lint Python/ESLint no CI, cobertura medida em todas as apps (61 %), 1.300+ testes backend e 530 frontend.',
+    ],
+    fixes: [
+      'Gráfico óptico desenhava dados aleatórios quando o Zabbix não devolvia histórico — agora mostra «sem dados» ou «erro».',
+      'Histórico de tráfego pedia history=3 fixo e itens float vinham vazios; unidades (bps/Bps) lidas do item.',
+      '/api/config/ entregava as chaves Google/Mapbox/Esri a qualquer visitante; endpoints de tráfego sem login; segredo TOTP em texto puro e lockout por sessão (agora Fernet, pyotp, lockout por utilizador).',
+      'Colunas json das rotas rebentavam no psycopg 3 (migração para jsonb); ~61 testes nunca eram coletados; três configs de pytest divergentes.',
+      'Config default incoerente (DB_ENGINE=mysql sem driver, asgi.py apontando a módulo inexistente); ficheiros de backup, dumps e tokens versionados removidos.',
+    ],
+  },
+  {
     version: '1.4.14.0',
     date: '03 Mai 2026',
-    latest: true,
+    latest: false,
     features: [
       'Fallback ICMP ping na detecção de status: se Zabbix marca um equipamento como Unavailable/Unknown mas o item icmpping responde com 1, promove para Available. Útil para equipamentos com SNMP fora mas alcançáveis na rede.',
     ],
@@ -728,30 +704,6 @@ const changelog = [
 
 const latestVersion = computed(() => changelog[0].version);
 
-// ── Formulário de sugestões ─────────────────────────────────────────────────
-const types = [
-  { id: 'bug',         label: 'Bug',        icon: PhBug },
-  { id: 'feature',     label: 'Funcionalidade', icon: PhLightbulb },
-  { id: 'improvement', label: 'Melhoria',   icon: PhArrowsClockwise },
-  { id: 'other',       label: 'Outro',      icon: PhWarning },
-];
-
-const form = ref({ type: 'bug', title: '', description: '', author: '' });
-const submitting = ref(false);
-const submitted = ref(false);
-
-const submitSuggestion = async () => {
-  submitting.value = true;
-  // Simula envio (pode integrar com API real futuramente)
-  await new Promise(r => setTimeout(r, 800));
-  submitting.value = false;
-  submitted.value = true;
-};
-
-const resetForm = () => {
-  form.value = { type: 'bug', title: '', description: '', author: '' };
-  submitted.value = false;
-};
 </script>
 
 <style scoped>
@@ -928,93 +880,31 @@ const resetForm = () => {
 .cl-dot.fix        { background: #f87171; }
 
 /* Form */
-.cl-form-intro {
-  font-size: 13px;
-  color: var(--text-secondary, #cbd5e1);
-  margin: 0 0 16px;
-}
-.cl-form { display: flex; flex-direction: column; gap: 16px; }
-.cl-field { display: flex; flex-direction: column; gap: 6px; }
-.cl-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary, #cbd5e1);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.cl-required { color: #f87171; }
-
-.cl-type-group { display: flex; gap: 8px; flex-wrap: wrap; }
-.cl-type-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  border-radius: 20px;
-  border: 1px solid var(--border-primary, #2d3748);
-  background: transparent;
-  color: var(--text-secondary, #cbd5e1);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.cl-type-btn:hover { border-color: #6366f1; color: #818cf8; }
-.cl-type-btn.active { background: rgba(99,102,241,0.15); border-color: #6366f1; color: #818cf8; }
-
-.cl-input, .cl-textarea {
-  background: var(--surface-secondary, #161b27);
-  border: 1px solid var(--border-primary, #2d3748);
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 13px;
-  color: var(--text-primary, #f1f5f9);
-  outline: none;
-  transition: border-color 0.15s;
-  font-family: inherit;
-  resize: vertical;
-}
-.cl-input:focus, .cl-textarea:focus { border-color: #6366f1; }
-.cl-textarea { min-height: 100px; }
-.cl-char-count { font-size: 11px; color: var(--text-tertiary, #94a3b8); text-align: right; }
-
-.cl-form-footer { display: flex; justify-content: flex-end; }
-.cl-btn-primary {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 10px 20px;
-  background: #6366f1;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.cl-btn-primary:hover:not(:disabled) { background: #4f46e5; }
-.cl-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-
-.cl-spinner {
-  width: 14px; height: 14px;
-  border: 2px solid rgba(255,255,255,0.3);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* Success */
-.cl-success {
+.cl-central {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   gap: 12px;
-  padding: 32px 0;
+  padding: 28px 12px;
 }
-.cl-success-icon { color: #34d399; }
-.cl-success h3 { font-size: 18px; font-weight: 700; color: var(--text-primary, #f1f5f9); margin: 0; }
-.cl-success p  { font-size: 13px; color: var(--text-secondary, #cbd5e1); margin: 0; }
+.cl-central-icon { color: rgb(var(--primary-500, 66 180 184)); }
+.cl-central h3 { font-size: 18px; font-weight: 700; color: var(--text-primary, #f1f5f9); margin: 0; }
+.cl-central p  { font-size: 13px; line-height: 1.6; color: var(--text-secondary, #cbd5e1); margin: 0; max-width: 420px; }
+.cl-link { color: rgb(var(--primary-500, 66 180 184)); text-decoration: underline; }
+.cl-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 10px;
+  background: rgb(var(--primary-500, 66 180 184));
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.cl-btn-primary:hover { background: rgb(var(--primary-600, 56 152 156)); }
 </style>

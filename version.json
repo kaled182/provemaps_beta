@@ -1,6 +1,6 @@
 {
-  "version": "1.4.14.0",
-  "date": "2026-05-03",
-  "critical": true,
-  "changelog": "Fix crítico: integração Zabbix 7+ falhava silenciosamente em item.get/history.get com erro 'unexpected parameter auth'. Cliente agora detecta a versão do servidor (apiinfo.version) e usa Authorization: Bearer header em vez do parâmetro auth no payload quando >=7.0. Adicionado fallback ICMP ping na promoção de status: equipamentos com SNMP fora mas que respondem ao ping aparecem ONLINE."
+  "version": "1.5.0",
+  "date": "2026-10-04",
+  "critical": false,
+  "changelog": "Central de Evolução (System → Evolução e botão Reportar) substitui a aba falsa de sugestões; uma só pilha de mapa para Google/Mapbox/OSM; gráficos unificados sem dados inventados; chaves de mapa e endpoints de tráfego só com login; TOTP cifrado; tokens Bearer para integrações; OpenAPI em /api/schema/swagger/; KML completo (KMZ, MultiGeometry); proximidade em PostGIS; design system alinhado com o CRM; build reprodutível com lint e cobertura no CI. Migrações novas: core 0006, service_accounts 0005, inventory 0071–0072, evolucao 0001."
 }

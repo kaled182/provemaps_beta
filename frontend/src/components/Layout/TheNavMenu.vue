@@ -288,7 +288,7 @@
         <button
           @click="showChangelog = true"
           class="icon-btn"
-          title="Changelog & Sugestões"
+          title="Changelog"
         >
           <PhInfo :size="20" weight="regular" />
         </button>
@@ -310,7 +310,11 @@
         </form>
       </div>
 
-      <ChangelogModal :show="showChangelog" @close="showChangelog = false" />
+      <ChangelogModal
+        :show="showChangelog"
+        @close="showChangelog = false"
+        @reportar="showChangelog = false; showReportar = true"
+      />
       <ReportarModal :show="showReportar" @close="showReportar = false" />
       <SystemPanel :show="showSystemPanel" @close="showSystemPanel = false" />
     </div>
