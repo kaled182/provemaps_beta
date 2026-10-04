@@ -1,4 +1,4 @@
-"""Tests for additional utility functions in setup_app.api_views."""
+"""Tests for additional utility functions that lived in setup_app.api_views (now usecases/*)."""
 
 from __future__ import annotations
 
@@ -47,7 +47,9 @@ class SerializeCompanyProfileTests(TestCase):
         return p
 
     def test_serializes_all_expected_keys(self):
-        from setup_app.api_views import _serialize_company_profile
+        from setup_app.usecases.company import (
+            serialize_company_profile as _serialize_company_profile,
+        )
 
         profile = self._make_profile(company_legal_name="Test Corp")
         result = _serialize_company_profile(profile)
@@ -57,21 +59,27 @@ class SerializeCompanyProfileTests(TestCase):
         self.assertIn("updated_at", result)
 
     def test_company_name_field(self):
-        from setup_app.api_views import _serialize_company_profile
+        from setup_app.usecases.company import (
+            serialize_company_profile as _serialize_company_profile,
+        )
 
         profile = self._make_profile(company_legal_name="Acme Ltd")
         result = _serialize_company_profile(profile)
         self.assertEqual(result["company_legal_name"], "Acme Ltd")
 
     def test_updated_at_is_isoformat(self):
-        from setup_app.api_views import _serialize_company_profile
+        from setup_app.usecases.company import (
+            serialize_company_profile as _serialize_company_profile,
+        )
 
         profile = self._make_profile()
         result = _serialize_company_profile(profile)
         self.assertIn("2024-06-01", result["updated_at"])
 
     def test_updated_at_none_returns_empty(self):
-        from setup_app.api_views import _serialize_company_profile
+        from setup_app.usecases.company import (
+            serialize_company_profile as _serialize_company_profile,
+        )
 
         profile = self._make_profile()
         profile.updated_at = None

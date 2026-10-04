@@ -70,7 +70,7 @@ ignore = [
     "DJ008",  # jQuery is not available in Django
     # EV-0022 (2026-10-04): o lint passa a correr no CI sobre os ficheiros alterados.
     # Estas regras tinham 119 achados pré-existentes concentrados nos god-modules
-    # (setup_app/api_views.py, usecases/devices.py, viewsets.py — EV-0017) e
+    # (usecases/devices.py, viewsets.py — EV-0017; api_views.py já foi partido) e
     # exigem refatoração, não formatação. Voltam a entrar quando o EV-0017 fatiar
     # esses ficheiros (ratchet: medir, reativar uma regra, corrigir o resto).
     "PLR0911", # too-many-return-statements

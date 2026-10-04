@@ -1,4 +1,4 @@
-"""Integration tests for GET-style views in setup_app.api_views.
+"""Integration tests for GET-style views of setup_app (ex-api_views, now setup_app/api/*).
 
 Covers: get_configuration, get_company_profile, get_audit_history,
         monitoring_servers GET, messaging_gateways GET.

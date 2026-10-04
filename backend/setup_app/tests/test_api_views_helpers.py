@@ -1,4 +1,4 @@
-"""Tests for pure utility functions in setup_app.api_views."""
+"""Tests for pure utility functions that lived in setup_app.api_views (now usecases/*)."""
 
 from __future__ import annotations
 
@@ -9,19 +9,19 @@ from django.test import TestCase
 
 class StaffCheckTests(TestCase):
     def test_active_staff_returns_true(self):
-        from setup_app.api_views import _staff_check
+        from setup_app.api._auth import staff_check as _staff_check
 
         user = MagicMock(is_active=True, is_staff=True)
         self.assertTrue(_staff_check(user))
 
     def test_inactive_user_returns_false(self):
-        from setup_app.api_views import _staff_check
+        from setup_app.api._auth import staff_check as _staff_check
 
         user = MagicMock(is_active=False, is_staff=True)
         self.assertFalse(_staff_check(user))
 
     def test_non_staff_returns_false(self):
-        from setup_app.api_views import _staff_check
+        from setup_app.api._auth import staff_check as _staff_check
 
         user = MagicMock(is_active=True, is_staff=False)
         self.assertFalse(_staff_check(user))
@@ -171,13 +171,13 @@ class UserCanAccessVideoGatewayTests(TestCase):
 
 class FileInfoTests(TestCase):
     def test_none_field_returns_empty(self):
-        from setup_app.api_views import _file_info
+        from setup_app.usecases.company import file_info as _file_info
 
         result = _file_info(None, None)
         self.assertEqual(result, {"name": "", "url": ""})
 
     def test_field_without_name_returns_empty(self):
-        from setup_app.api_views import _file_info
+        from setup_app.usecases.company import file_info as _file_info
 
         field = MagicMock()
         field.name = ""
@@ -185,7 +185,7 @@ class FileInfoTests(TestCase):
         self.assertEqual(result, {"name": "", "url": ""})
 
     def test_field_with_name_returns_info(self):
-        from setup_app.api_views import _file_info
+        from setup_app.usecases.company import file_info as _file_info
 
         field = MagicMock()
         field.name = "logos/logo.png"
@@ -195,7 +195,7 @@ class FileInfoTests(TestCase):
         self.assertEqual(result["url"], "/media/logos/logo.png")
 
     def test_field_url_exception_returns_empty_url(self):
-        from setup_app.api_views import _file_info
+        from setup_app.usecases.company import file_info as _file_info
 
         field = MagicMock()
         field.name = "logo.png"
@@ -221,7 +221,9 @@ class SerializeMonitoringServerTests(TestCase):
         return server
 
     def test_serializes_fields(self):
-        from setup_app.api_views import _serialize_monitoring_server
+        from setup_app.usecases.monitoring import (
+            serialize_monitoring_server as _serialize_monitoring_server,
+        )
 
         server = self._make_server()
         result = _serialize_monitoring_server(server)
@@ -231,7 +233,9 @@ class SerializeMonitoringServerTests(TestCase):
         self.assertTrue(result["is_active"])
 
     def test_auth_token_not_exposed(self):
-        from setup_app.api_views import _serialize_monitoring_server
+        from setup_app.usecases.monitoring import (
+            serialize_monitoring_server as _serialize_monitoring_server,
+        )
 
         server = self._make_server(auth_token="my-secret")
         result = _serialize_monitoring_server(server)
@@ -239,7 +243,9 @@ class SerializeMonitoringServerTests(TestCase):
         self.assertEqual(result["auth_token"], "")
 
     def test_no_auth_token_has_auth_false(self):
-        from setup_app.api_views import _serialize_monitoring_server
+        from setup_app.usecases.monitoring import (
+            serialize_monitoring_server as _serialize_monitoring_server,
+        )
 
         server = self._make_server(auth_token=None)
         result = _serialize_monitoring_server(server)

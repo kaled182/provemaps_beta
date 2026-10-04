@@ -1,11 +1,14 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from . import api_views, views, views_docs
+from . import views, views_docs
 from .api import (
     backups as api_backups,
+    company as api_company,
     config as api_config,
+    connections as api_connections,
     gateways as api_gateways,
+    monitoring as api_monitoring,
     video as api_video,
 )
 from .viewsets_alert_templates import AlertTemplateViewSet
@@ -25,13 +28,13 @@ urlpatterns = [
     path("first_time/", views.first_time_setup, name="first_time_setup"),
     path("config/", views.manage_environment, name="manage_environment"),
     # API endpoints for configuration management
-    path("api/test-zabbix/", api_views.test_zabbix_connection, name="test_zabbix"),
-    path("api/test-database/", api_views.test_database_connection, name="test_database"),
-    path("api/test-redis/", api_views.test_redis_connection, name="test_redis"),
+    path("api/test-zabbix/", api_connections.test_zabbix_connection, name="test_zabbix"),
+    path("api/test-database/", api_connections.test_database_connection, name="test_database"),
+    path("api/test-redis/", api_connections.test_redis_connection, name="test_redis"),
     path("api/test-gdrive/", api_backups.test_gdrive, name="test_gdrive"),
-    path("api/test-ftp/", api_views.test_ftp_connection, name="test_ftp"),
-    path("api/test-smtp/", api_views.test_smtp_connection, name="test_smtp"),
-    path("api/test-sms/", api_views.test_sms_connection, name="test_sms"),
+    path("api/test-ftp/", api_connections.test_ftp_connection, name="test_ftp"),
+    path("api/test-smtp/", api_connections.test_smtp_connection, name="test_smtp"),
+    path("api/test-sms/", api_connections.test_sms_connection, name="test_sms"),
     path("api/gdrive/oauth/start/", api_backups.start_gdrive_oauth, name="gdrive_oauth_start"),
     path(
         "api/gdrive/oauth/callback/",
@@ -43,16 +46,16 @@ urlpatterns = [
     path("api/audit-history/", api_config.get_audit_history, name="audit_history"),
     path("api/config/", api_config.get_configuration, name="get_config"),
     path("api/config/update/", api_config.update_configuration, name="update_config"),
-    path("api/company-profile/", api_views.get_company_profile, name="get_company_profile"),
+    path("api/company-profile/", api_company.get_company_profile, name="get_company_profile"),
     path(
         "api/company-profile/update/",
-        api_views.update_company_profile,
+        api_company.update_company_profile,
         name="update_company_profile",
     ),
-    path("api/monitoring-servers/", api_views.monitoring_servers, name="monitoring_servers"),
+    path("api/monitoring-servers/", api_monitoring.monitoring_servers, name="monitoring_servers"),
     path(
         "api/monitoring-servers/<int:server_id>/",
-        api_views.monitoring_server_detail,
+        api_monitoring.monitoring_server_detail,
         name="monitoring_server_detail",
     ),
     path("api/gateways/", api_gateways.messaging_gateways, name="messaging_gateways"),

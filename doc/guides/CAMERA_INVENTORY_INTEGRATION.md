@@ -37,7 +37,7 @@ class VideoMosaic(models.Model):
 
 #### 2. API Filtrada por Departamento
 
-**Arquivo**: [`backend/setup_app/api_views.py`](../../backend/setup_app/api_views.py#L3664-L3698)
+**Arquivo**: [`backend/setup_app/usecases/video.py`](../../backend/setup_app/usecases/video.py) (`list_cameras_for`) e [`backend/setup_app/api/video.py`](../../backend/setup_app/api/video.py) (`video_cameras_list`)
 
 ```python
 def video_mosaics_list(request):

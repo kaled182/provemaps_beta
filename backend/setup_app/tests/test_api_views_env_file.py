@@ -1,4 +1,4 @@
-"""Tests for get_env_file (setup_app.api_views) and backup helpers (setup_app.usecases.backups)."""
+"""Tests for get_env_file (setup_app.api.config) and backup helpers (setup_app.usecases.backups)."""
 
 from __future__ import annotations
 
