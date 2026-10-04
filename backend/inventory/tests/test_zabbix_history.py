@@ -258,6 +258,61 @@ class CableOpticalHistoryEndpointTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class AlignedSeriesServiceTests(TestCase):
+    """EV-0029: `fetch_aligned_series` é a fachada única das rotas de histórico."""
+
+    def test_aligned_series_resolves_types_units_and_bucket(self):
+        meta = {"1": ("0", "bps"), "2": ("3", "Bps")}
+        histories = {
+            # 1690000020..1690000079 é um só bucket de 60 s (1690000020 = :00 do minuto)
+            "1": [{"clock": "1690000025", "value": "100"}, {"clock": "1690000055", "value": "300"}],
+            "2": [{"clock": "1690000040", "value": "7"}],
+        }
+        fake, calls = _fake_zabbix(meta, histories)
+        with patch("integrations.zabbix.zabbix_service.zabbix_request", side_effect=fake):
+            series = zabbix_history.fetch_aligned_series(
+                {"in": "1", "out": "2", "vazio": None}, 1690000000, 1690000000 + 3600
+            )
+        self.assertEqual(calls, {"1": 0, "2": 3})
+        self.assertEqual(series["bucket_seconds"], 60)
+        self.assertEqual(series["units"], {"in": "bps", "out": "Bps"})
+        self.assertEqual(series["samples"]["vazio"], [])
+        self.assertEqual(len(series["rows"]), 1)
+        row = series["rows"][0]
+        self.assertEqual(row["in"], 200.0)  # média dos dois pontos no bucket
+        self.assertEqual(row["out"], 7.0)
+        self.assertIsNone(row["vazio"])
+
+    def test_long_period_is_bucketed_not_truncated(self):
+        """7 dias: o bucket cresce (600 s) e o Zabbix não recebe `limit`."""
+        seen = {}
+
+        def fake(method, params=None, **kwargs):
+            if method == "item.get":
+                return [{"itemid": "9", "value_type": "3", "units": "bps"}]
+            seen.update(params)
+            return [{"clock": str(1690000000 + 7 * 86400 - 5), "value": "1"}]
+
+        with patch("integrations.zabbix.zabbix_service.zabbix_request", side_effect=fake):
+            series = zabbix_history.fetch_aligned_series(
+                {"in": "9"}, 1690000000, 1690000000 + 7 * 86400
+            )
+        self.assertNotIn("limit", seen)
+        self.assertEqual(series["bucket_seconds"], 600)
+        self.assertEqual(len(series["rows"]), 1)  # o ponto mais recente sobrevive
+
+    def test_get_item_by_key_resolves_itemid_and_type(self):
+        def fake(method, params=None, **kwargs):
+            assert method == "item.get"
+            assert params["filter"] == {"key_": "rx.power"}
+            return [{"itemid": "77", "value_type": "0", "units": "dBm"}]
+
+        with patch("integrations.zabbix.zabbix_service.zabbix_request", side_effect=fake):
+            item = zabbix_history.get_item_by_key("10101", "rx.power")
+        self.assertEqual(item, {"itemid": "77", "value_type": 0, "units": "dBm"})
+        self.assertIsNone(zabbix_history.get_item_by_key("10101", None))
+
+
 class MergeSeriesTests(TestCase):
     """EV-0010 — alinhamento por bucket com `None` real nos buracos."""
 

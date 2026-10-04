@@ -112,7 +112,6 @@ log em inglês, como já está.
 **A fazer — 💡 Ideias** (aceitas; EV-0027 e EV-0028 ligadas aos ADRs 0006 e 0007, agora Aceitos)
 
 - `EV-0027` **Portar a Central de Evolução (ADR 0006) e trocar este quadro manual pela vista gerada** · **⚠️ não cabe numa sessão** (o próprio ADR 0006 §5 estima 2 a 3 sessões: app `evolucao` com modelo + API + seed, frontend com rota e `ReportarModal`, fecho observado por `git_sha` no `/healthz` + scripts, quadro gerado, aviso aos 14 dias, `make deploy`): leitura levada ao Paulo em 2026-10-04 — proposta de fatiar pelas etapas do ADR: 0027a modelo `EvolucaoItem` + API + seed dos itens deste quadro (1 sessão); 0027b fecho observado (`git_sha` no build e no `/healthz`, `evolucao_fechados.sh`, `evolucao_fechar.py`) + `evolucao_quadro.py` a gerar este bloco (1 sessão); 0027c frontend (`/admin/sistema/evolucao`, botão Reportar) + aviso dos 14 dias (1 sessão). Decisão dele; o assistente passou ao item seguinte
-- `EV-0029` **Backend bucketiza séries (60 s) e devolve `{t, in, out}` alinhados, com limite de pontos proporcional ao período**
 - `EV-0030` **OpenAPI (drf-spectacular) e um só esquema de versionamento para `/api/v1/`**
 **Feito — aguarda deploy** (sai daqui quando o commit `fecha` chegar a produção)
 
@@ -141,6 +140,7 @@ log em inglês, como já está.
 - `EV-0024` **Regra dos 100 m e «cabos próximos» em Python O(n²) em vez de `ST_DWithin`; lat/lng não sincroniza com `location`** · P3 · fechado em `perf(spatial)` 2026-10-04 — `usecases/spatial.py` ganha `find_site_within` (ST_DWithin em `Site.location`, geography) e `find_cables_near_path` (pré-filtro `dwithin` em graus no GiST de `FiberCable.path` + `ST_DistanceSphere` exata em metros); o import em lote e `fibers/validate-nearby/` consomem-nas e perdem os dois haversines; `pre_save` em `Site` sincroniza `location` ↔ lat/lng e a migração `inventory 0070` preenche os sites antigos (sem `location` eram invisíveis a toda consulta espacial); 10 testes. **Fica:** cabos sem `path` (só `path_coordinates`) não entram na deteção; `QuerySet.update()` não passa pelo sinal
 - `EV-0025` **Config default incoerente: `DB_ENGINE=mysql` sem driver, `.env.example` com `DATABASE_*` que ninguém lê, `asgi.py` aponta `core.settings`** · P3 · fechado em `fix(config)` 2026-10-04 — `DB_ENGINE` default `postgis` (aliases `postgresql`/`postgres`); qualquer outro valor levanta `ImproperlyConfigured` no arranque; ramo MySQL/MariaDB removido de `settings/base.py` e `settings/test.py`; `asgi.py`/`wsgi.py` caem em `settings.prod` (fail-safe, recusa `SECRET_KEY` de dev) em vez do inexistente `core.settings`; `.env.example` só com variáveis que o código lê (`DJANGO_SETTINGS_MODULE`, `DB_*` na porta 5433 do compose dev, `TEST_DB_ENGINE`); `docker/docker-compose.test.yml` (MariaDB, sem referências) removido; 8 testes. **Fica:** `docker/docker-compose.postgis.yml` é uma 2ª pilha com nomes antigos (`mapsprovefiber`/`provemaps`) — decidir se se apaga
 - `EV-0028` **Alinhamento visual com o CRM — Fase 1: tokens e fontes auto-hospedadas (ADR 0007)** · Ideia · fechado em `feat(design-system)` 2026-10-04 — `design-system/tokens.css` (escala neutra do CRM em RGB, invertida no escuro; `surface`/`canvas`; `primary` teal; semânticas; 10 `@font-face` de Inter/JetBrains Mono/Outfit, woff2 locais, 216 KB); `theme.css` deriva as ~60 variáveis antigas dos tokens (três blocos → um) — toda a app muda para teal/Slate sem tocar em componentes; `tailwind.config.js` = cores e fontes do CRM; 5 testes. **Fica (Fase 3):** 1.775 `dark:` e as classes `gray-*`/`green-*`/`blue-*` literais nos componentes; **validar a olho** (dark e light) antes do deploy — não houve smoke visual nesta sessão
+- `EV-0029` **Backend bucketiza séries (60 s) e devolve séries alinhadas, com limite de pontos proporcional ao período** · Ideia · fechado em `refactor(zabbix)` 2026-10-04 — `zabbix_history.fetch_aligned_series(items, time_from, time_till, max_points)` é a fachada única: um `item.get` (tipo/unidades), históricos em paralelo com o `history` certo, bucket escolhido para ≤ `max_points`, `None` real nos buracos; `get_item_by_key` resolve itens ópticos pela chave. As **5 rotas** (porta óptica/tráfego DRF, cabo óptico/tráfego DRF, `ports/<id>/traffic/`) passaram a fachadas — a função-view perdeu o `limit` do Zabbix que cortava os pontos **mais recentes** em períodos longos (30 d a 1 min = 43 k pontos, `limit` 5 000 → só os 3,5 primeiros dias). Chaves mantidas (`timestamp`/`traffic_in`/`rx_power`): o frontend já as consome; mudar para `{t,in,out}` seria churn sem ganho. 3 testes novos + 1 ajustado
 
 <!-- EVOLUCAO:FIM -->
 
@@ -285,8 +285,12 @@ Regras desde já:
   com `item.get` (como faz `usecases/devices.py:2296`), nunca fixar `3`.
 - Ler `units` do item: `bps` ≠ `Bps` ≠ contador bruto. Converter no backend
   e devolver já em bps.
-- **Sempre `limit`** proporcional ao período; nunca pedir 7 dias a 1 minuto
-  sem downsample.
+- **Nunca usar o `limit` do `history.get` para encolher uma série**: corta pelo
+  fim da janela (os pontos mais recentes). Quem limita a saída é o bucket
+  (`choose_bucket_seconds`, ≤ 1 500 pontos); quem limita a entrada é o tecto do
+  período da rota (7 d nas DRF, 30 d na função-view).
+- **Toda rota de histórico é fachada de `zabbix_history.fetch_aligned_series`**
+  (EV-0029). Não se escreve `history.get` novo em view ou usecase.
 - Alinhar RX/TX e IN/OUT por **bucket** (ex.: 60 s), não por `clock` exato;
   devolver `null` real para buracos; o frontend não faz forward-fill.
 - Thresholds ópticos (`-24/-27 dBm`) vêm da configuração (`/setup_app/api/config/`),

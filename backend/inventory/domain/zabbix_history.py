@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import math
 from collections.abc import Iterable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Any, TypedDict
 
@@ -190,3 +191,96 @@ def merge_series(
             row[name] = (sum(values) / len(values)) if values else None
         rows.append(row)
     return rows
+
+
+# ---------------------------------------------------------------------------
+# Um só serviço de séries (EV-0029)
+# ---------------------------------------------------------------------------
+
+
+class AlignedSeries(TypedDict):
+    rows: list[dict[str, Any]]
+    bucket_seconds: int
+    units: dict[str, str]
+    samples: dict[str, list[Sample]]
+
+
+def get_item_by_key(hostid: Any, key: str | None) -> ItemMeta | None:
+    """Resolve um item pela ``key_`` num host (``item.get`` com filtro).
+
+    Devolve ``ItemMeta`` (``itemid``, ``value_type``, ``units``) ou ``None`` se
+    o host não tem o item — é como as portas ópticas localizam RX/TX quando só
+    guardam a chave e não o ``itemid``.
+    """
+    if not hostid or not key:
+        return None
+    try:
+        raw = zabbix_service.zabbix_request(
+            "item.get",
+            {
+                "hostids": [str(hostid)],
+                "filter": {"key_": key},
+                "output": ["itemid", "value_type", "units"],
+            },
+        )
+    except Exception:
+        logger.warning(
+            "zabbix_history.item_by_key_failed",
+            extra={"hostid": str(hostid), "key": key},
+            exc_info=True,
+        )
+        return None
+    for entry in _coerce_list(raw):
+        itemid = str(entry.get("itemid", "")).strip()
+        if not itemid:
+            continue
+        try:
+            value_type = int(entry.get("value_type", DEFAULT_VALUE_TYPE))
+        except (TypeError, ValueError):
+            value_type = DEFAULT_VALUE_TYPE
+        return ItemMeta(itemid=itemid, value_type=value_type, units=str(entry.get("units") or ""))
+    return None
+
+
+def fetch_aligned_series(
+    items: Mapping[str, Any],
+    time_from: int,
+    time_till: int,
+    *,
+    meta: Mapping[str, ItemMeta] | None = None,
+    max_points: int = DEFAULT_MAX_POINTS,
+) -> AlignedSeries:
+    """Histórico de vários itens, já alinhado por bucket — a fachada das 5 rotas.
+
+    ``items`` mapeia o nome da série (``traffic_in``, ``rx_power``…) para o
+    ``itemid``; nomes com ``itemid`` vazio saem como série vazia (``None`` em
+    todas as linhas). Faz UM ``item.get`` para os tipos/unidades (ou reutiliza
+    ``meta``), pede os históricos em paralelo com o ``history`` certo de cada
+    item, escolhe o bucket que mantém a saída em ≤ ``max_points`` e alinha com
+    ``None`` real nos buracos.
+
+    Não usa o ``limit`` do Zabbix para encolher a série: ``history.get`` corta
+    pelo fim da janela (os pontos mais recentes), que é exatamente o que um
+    gráfico não pode perder. Quem limita o tamanho é o bucket; quem limita a
+    entrada é o tecto do período de cada rota.
+    """
+    ids = {name: str(item_id) for name, item_id in items.items() if item_id}
+    resolved = meta if meta is not None else get_items_meta(ids.values())
+
+    samples: dict[str, list[Sample]] = {name: [] for name in items}
+    if ids:
+        with ThreadPoolExecutor(max_workers=len(ids)) as pool:
+            futures = {
+                name: pool.submit(fetch_history, item_id, time_from, time_till, meta=resolved)
+                for name, item_id in ids.items()
+            }
+            for name, future in futures.items():
+                samples[name] = history_to_samples(future.result())
+
+    bucket = choose_bucket_seconds(time_till - time_from, max_points)
+    return AlignedSeries(
+        rows=merge_series(samples, bucket_seconds=bucket),
+        bucket_seconds=bucket,
+        units={name: meta_or_default(resolved, item_id)["units"] for name, item_id in ids.items()},
+        samples=samples,
+    )

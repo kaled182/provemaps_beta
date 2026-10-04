@@ -12,11 +12,9 @@ from rest_framework.response import Response
 
 from inventory.cache.fibers import invalidate_fiber_cache
 from inventory.domain.zabbix_history import (
-    choose_bucket_seconds,
-    fetch_history,
+    fetch_aligned_series,
+    get_item_by_key,
     get_items_meta,
-    history_to_samples,
-    merge_series,
     meta_or_default,
 )
 from inventory.metrics import track_endpoint_usage, track_model_operation, track_viewset_action
@@ -573,7 +571,6 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
 
         from django.utils import timezone
 
-        from integrations.zabbix.zabbix_service import zabbix_request
         from inventory.domain.optical import _discover_optical_keys_by_portname
 
         port = self.get_object()
@@ -608,49 +605,21 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         time_from = int((timezone.now() - timedelta(hours=hours)).timestamp())
         time_till = int(timezone.now().timestamp())
 
-        # EV-0010: RX e TX são coletados em instantes diferentes; alinhar por
-        # bucket (60 s em 24 h, mais largo em períodos longos) com None real
-        # nos buracos — nunca forward-fill.
-
-        def _history_for_key(key):
-            if not key:
-                return []
-            items = zabbix_request(
-                "item.get",
-                {
-                    "hostids": [str(hostid)],
-                    "filter": {"key_": key},
-                    "output": ["itemid", "value_type"],
-                },
-            )
-            if not items:
-                return []
-            item = items[0]
-            return (
-                zabbix_request(
-                    "history.get",
-                    {
-                        "itemids": [item["itemid"]],
-                        "history": int(item.get("value_type", 0)),
-                        "time_from": time_from,
-                        "time_till": time_till,
-                        "sortfield": "clock",
-                        "sortorder": "ASC",
-                    },
-                )
-                or []
-            )
-
-        bucket = choose_bucket_seconds(time_till - time_from)
-        history_data = merge_series(
+        # EV-0029: um só serviço resolve os itens pela chave, pede o histórico com
+        # o value_type certo e alinha RX/TX por bucket com None real nos buracos.
+        rx_item = get_item_by_key(hostid, rx_key)
+        tx_item = get_item_by_key(hostid, tx_key)
+        meta = {item["itemid"]: item for item in (rx_item, tx_item) if item}
+        series = fetch_aligned_series(
             {
-                "rx_power": history_to_samples(_history_for_key(rx_key)),
-                "tx_power": history_to_samples(_history_for_key(tx_key)),
+                "rx_power": rx_item["itemid"] if rx_item else None,
+                "tx_power": tx_item["itemid"] if tx_item else None,
             },
-            bucket_seconds=bucket,
+            time_from,
+            time_till,
+            meta=meta,
         )
-
-        return Response(history_data)
+        return Response(series["rows"])
 
     @action(detail=True, methods=["get"], permission_classes=[IsAuthenticated])
     def traffic_history(self, request, pk=None):
@@ -685,30 +654,14 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         time_from = int((timezone.now() - timedelta(hours=hours)).timestamp())
         time_till = int(timezone.now().timestamp())
 
-        # EV-0003: `history` tem de ser o value_type REAL do item (0 float / 3 uint);
-        # um único item.get resolve os dois itens e as unidades.
-        items_meta = get_items_meta([traffic_in_id, traffic_out_id])
-        units = {
-            k: meta_or_default(items_meta, k)["units"] for k in (traffic_in_id, traffic_out_id) if k
-        }
-
-        # EV-0010: IN e OUT alinhados por bucket, None real nos buracos.
-        in_samples = history_to_samples(
-            fetch_history(traffic_in_id, time_from, time_till, meta=items_meta)
-            if traffic_in_id
-            else []
+        # EV-0029: um só serviço — item.get único (value_type/units), históricos em
+        # paralelo, IN/OUT alinhados por bucket com None real nos buracos.
+        series = fetch_aligned_series(
+            {"traffic_in": traffic_in_id, "traffic_out": traffic_out_id}, time_from, time_till
         )
-        out_samples = history_to_samples(
-            fetch_history(traffic_out_id, time_from, time_till, meta=items_meta)
-            if traffic_out_id
-            else []
-        )
-        in_values = [v for _, v in in_samples]
-        out_values = [v for _, v in out_samples]
-        traffic_data = merge_series(
-            {"traffic_in": in_samples, "traffic_out": out_samples},
-            bucket_seconds=choose_bucket_seconds(time_till - time_from),
-        )
+        in_values = [v for _, v in series["samples"]["traffic_in"]]
+        out_values = [v for _, v in series["samples"]["traffic_out"]]
+        traffic_data = series["rows"]
 
         # Calcular 95º percentil
         percentile_95_in = None
@@ -743,8 +696,8 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                     "period_hours": hours,
                     # Unidades declaradas no Zabbix (ex.: "bps", "Bps", "pps"); o
                     # frontend não deve assumir bps (EV-0003 → EV-0010).
-                    "unit_in": units.get(traffic_in_id),
-                    "unit_out": units.get(traffic_out_id),
+                    "unit_in": series["units"].get("traffic_in"),
+                    "unit_out": series["units"].get("traffic_out"),
                 },
             }
         )
@@ -1184,7 +1137,6 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
 
         from django.utils import timezone
 
-        from integrations.zabbix.zabbix_service import zabbix_request
         from inventory.usecases.fibers import build_optical_summary
 
         cable = get_object_or_404(
@@ -1196,69 +1148,23 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         time_from = int((timezone.now() - timedelta(hours=hours)).timestamp())
         time_till = int(timezone.now().timestamp())
 
-        def _fetch_items(hostid, key):
-            """Return first Zabbix item matching key on host, or None."""
-            if not key:
-                return None
-            items = zabbix_request(
-                "item.get",
-                {
-                    "hostids": [str(hostid)],
-                    "filter": {"key_": key},
-                    "output": ["itemid", "value_type"],
-                },
-            )
-            return items[0] if items else None
-
-        def _fetch_history(item):
-            """Return history list for a Zabbix item dict."""
-            if not item:
-                return []
-            return (
-                zabbix_request(
-                    "history.get",
-                    {
-                        "itemids": [item["itemid"]],
-                        "history": int(item.get("value_type", 0)),
-                        "time_from": time_from,
-                        "time_till": time_till,
-                        "sortfield": "clock",
-                        "sortorder": "ASC",
-                    },
-                )
-                or []
-            )
-
         def _fetch_port_history(port):
-            """Fetch and merge RX+TX history for one port using parallel Zabbix calls."""
+            """RX+TX de uma porta, alinhados por bucket (EV-0029: um só serviço)."""
             if not port or not port.device or not port.device.zabbix_hostid:
                 return []
             hostid = port.device.zabbix_hostid
-            rx_key = port.rx_power_item_key
-            tx_key = port.tx_power_item_key
-
-            # Stage 1: get item IDs for RX and TX in parallel
-            with ThreadPoolExecutor(max_workers=2) as ex:
-                rx_item_f = ex.submit(_fetch_items, hostid, rx_key)
-                tx_item_f = ex.submit(_fetch_items, hostid, tx_key)
-                rx_item = rx_item_f.result()
-                tx_item = tx_item_f.result()
-
-            # Stage 2: fetch history for both in parallel
-            with ThreadPoolExecutor(max_workers=2) as ex:
-                rx_hist_f = ex.submit(_fetch_history, rx_item)
-                tx_hist_f = ex.submit(_fetch_history, tx_item)
-                rx_history = rx_hist_f.result()
-                tx_history = tx_hist_f.result()
-
-            # EV-0010: alinhar por bucket com None real nos buracos.
-            return merge_series(
+            rx_item = get_item_by_key(hostid, port.rx_power_item_key)
+            tx_item = get_item_by_key(hostid, port.tx_power_item_key)
+            meta = {item["itemid"]: item for item in (rx_item, tx_item) if item}
+            return fetch_aligned_series(
                 {
-                    "rx_power": history_to_samples(rx_history),
-                    "tx_power": history_to_samples(tx_history),
+                    "rx_power": rx_item["itemid"] if rx_item else None,
+                    "tx_power": tx_item["itemid"] if tx_item else None,
                 },
-                bucket_seconds=choose_bucket_seconds(time_till - time_from),
-            )
+                time_from,
+                time_till,
+                meta=meta,
+            )["rows"]
 
         # Fetch history for both ports in parallel
         with ThreadPoolExecutor(max_workers=2) as ex:
@@ -1342,11 +1248,6 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             ]
         )
 
-        def _fetch_history(item_id):
-            if not item_id:
-                return []
-            return fetch_history(item_id, time_from, time_till, meta=items_meta)
-
         def _fetch_port_traffic(port):
             if not port:
                 return {"history": [], "statistics": None, "device": None, "port": None}
@@ -1354,22 +1255,17 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             in_id = port.zabbix_item_id_traffic_in
             out_id = port.zabbix_item_id_traffic_out
 
-            # Fetch IN and OUT in parallel
-            with ThreadPoolExecutor(max_workers=2) as ex:
-                in_f = ex.submit(_fetch_history, in_id)
-                out_f = ex.submit(_fetch_history, out_id)
-                in_raw = in_f.result()
-                out_raw = out_f.result()
-
-            # EV-0010: alinhar por bucket com None real nos buracos.
-            in_samples = history_to_samples(in_raw)
-            out_samples = history_to_samples(out_raw)
-            in_values = [v for _, v in in_samples]
-            out_values = [v for _, v in out_samples]
-            history = merge_series(
-                {"traffic_in": in_samples, "traffic_out": out_samples},
-                bucket_seconds=choose_bucket_seconds(time_till - time_from),
+            # EV-0029: um só serviço — históricos em paralelo com o value_type certo,
+            # IN/OUT alinhados por bucket com None real nos buracos.
+            series = fetch_aligned_series(
+                {"traffic_in": in_id, "traffic_out": out_id},
+                time_from,
+                time_till,
+                meta=items_meta,
             )
+            in_values = [v for _, v in series["samples"]["traffic_in"]]
+            out_values = [v for _, v in series["samples"]["traffic_out"]]
+            history = series["rows"]
 
             def _p95(values):
                 if not values:

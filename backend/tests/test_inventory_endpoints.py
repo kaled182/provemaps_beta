@@ -48,7 +48,7 @@ class PortTrafficHistoryAPITests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("traffic items", response.json()["error"])
 
-    @patch("inventory.usecases.devices.ZABBIX_REQUEST")
+    @patch("integrations.zabbix.zabbix_service.zabbix_request")
     def test_returns_history_payload(self, request_mock):
         self.port.zabbix_item_id_traffic_in = "111"
         self.port.zabbix_item_id_traffic_out = "222"
@@ -59,16 +59,21 @@ class PortTrafficHistoryAPITests(TestCase):
             ]
         )
 
+        meta = {"111": ("3", "bps"), "222": ("0", "pps")}
+
         def fake_zabbix_request(method, params=None, **kwargs):
+            ids = params.get("itemids") or []
+            ids = ids if isinstance(ids, list) else [ids]
             if method == "item.get":
-                itemid = params.get("itemids")
-                if itemid == "111":
-                    return [{"value_type": "3", "units": "bps"}]
-                if itemid == "222":
-                    return [{"value_type": "0", "units": "pps"}]
-                return []
+                return [
+                    {"itemid": i, "value_type": meta[i][0], "units": meta[i][1]}
+                    for i in ids
+                    if i in meta
+                ]
             if method == "history.get":
-                itemid = params.get("itemids")
+                # EV-0029: nenhum `limit` — cortaria os pontos mais recentes.
+                assert "limit" not in params
+                itemid = ids[0]
                 if itemid == "111":
                     return [{"clock": "1690000000", "value": "10"}]
                 if itemid == "222":
@@ -90,6 +95,8 @@ class PortTrafficHistoryAPITests(TestCase):
         self.assertEqual(len(payload["in"]["history"]), 1)
         self.assertEqual(payload["in"]["history"][0]["value"], 10.0)
         self.assertEqual(payload["out"]["history"][0]["value"], 5.0)
+        self.assertEqual(payload["in"]["history"][0]["timestamp"], 1690000000 // 60 * 60)
+        self.assertEqual(payload["bucket_seconds"], 60)
 
 
 class DeviceSelectOptionsAPITests(TestCase):
