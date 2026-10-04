@@ -100,7 +100,6 @@ log em inglês, como já está.
 <!-- EVOLUCAO:INICIO — quadro manual; quando a Central existir, passa a ser gerado. -->
 **A fazer — 🐛 Problemas** (triagem do Paulo, 2026-10-04: todos aceitos com a prioridade proposta)
 
-- `EV-0010` **Merge RX/TX e IN/OUT por `clock` exato gera buracos ou forward-fill que esconde quedas** · P2 · `backend/inventory/viewsets.py:632-685`, `frontend/src/services/fiberService.js:85-120`
 - `EV-0011` **Instâncias Chart.js nunca destruídas; render por `setTimeout`; fetch duplicado sem `AbortController`** · P2 · `frontend/src/components/FiberCableDetailModal.vue`, `PortTrafficModal.vue`
 - `EV-0012` **Quatro pilhas de mapa paralelas; só `CustomMapViewer` honra os três provedores; `NetworkDesign` quebra com `osm`** · P2 · `frontend/src/components/MapView.vue`, `providers/maps/MapProviderFactory.js`, `composables/useMapService.js`
 - `EV-0013` **`list_fiber_cables` devolve geometria duplicada de todos os cabos, sem bbox; N+1 em `cable_type`** · P2 · `backend/inventory/usecases/fibers.py:513-600`, `serializers.py:407,615`
@@ -135,6 +134,7 @@ log em inglês, como já está.
 - `EV-0006` **Cobertura «60 %» do CI mede só `core`, `maps_view`, `setup_app`** · P1 · fechado em `ci(coverage)` 2026-10-04 — todas as apps medidas; cobertura real 51 % (inventory 48 %, setup_app 45 %); limiar do CI passa a 50 % com ratchet
 - `EV-0008` **~61 testes backend nunca coletados; três configs pytest divergentes** · P2 · fechado em `test(pytest)` 2026-10-04 — 1.050 coletados (eram 996); `backend/pytest.ini` canónico, raiz espelha; destapou bug real: colunas `json` das rotas rebentavam no psycopg3 → migração 0069 para `jsonb`
 - `EV-0009` **121 testes frontend fora do `include` do Vitest; Playwright lista 0 testes** · P2 · fechado em `test(frontend)` 2026-10-04 — 426 testes em 35 ficheiros (eram 311/29); Playwright lista os specs E2E; `fiberService.test.js` (importava funções inexistentes) removido
+- `EV-0010` **Merge RX/TX e IN/OUT por `clock` exato gera buracos ou forward-fill que esconde quedas** · P2 · fechado em `fix(charts)` 2026-10-04 — backend alinha por bucket (60 s a 1 h conforme o período, ≤1.500 pontos) com `null` real; frontend sem forward-fill, zero preservado, `spanGaps` desligado
 
 <!-- EVOLUCAO:FIM -->
 

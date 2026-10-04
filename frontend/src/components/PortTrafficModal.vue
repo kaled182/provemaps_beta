@@ -216,6 +216,7 @@ import {
   OPTICAL_HISTORY_EMPTY_MESSAGE,
   OPTICAL_HISTORY_ERROR_MESSAGE,
 } from '@/utils/opticalHistory'
+import { bpsToMbps } from '@/utils/opticalSeries'
 import AlarmConfigModal from './AlarmConfigModal.vue'
 
 const props = defineProps({
@@ -329,8 +330,9 @@ const renderChart = () => {
     })
   })
 
-  const trafficInData = history.map(d => d.traffic_in ? d.traffic_in / 1000000 : null) // Converter para Mbps
-  const trafficOutData = history.map(d => d.traffic_out ? d.traffic_out / 1000000 : null)
+  // EV-0010: zero é tráfego zero (não buraco); null só quando não há amostra.
+  const trafficInData = history.map(d => bpsToMbps(d.traffic_in))
+  const trafficOutData = history.map(d => bpsToMbps(d.traffic_out))
 
   chartInstance = new Chart(ctx, {
     type: 'line',

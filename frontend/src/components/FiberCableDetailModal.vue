@@ -1283,8 +1283,8 @@ const createTrafficOriginChart = async () => {
       data: {
         labels: formatted.labels,
         datasets: [
-          { label: 'Download (IN)', data: formatted.inData, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, spanGaps: true },
-          { label: 'Upload (OUT)', data: formatted.outData, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, spanGaps: true }
+          { label: 'Download (IN)', data: formatted.inData, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, spanGaps: false },
+          { label: 'Upload (OUT)', data: formatted.outData, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, spanGaps: false }
         ]
       },
       options: {
@@ -1328,8 +1328,8 @@ const createTrafficDestinationChart = async () => {
       data: {
         labels: formatted.labels,
         datasets: [
-          { label: 'Download (IN)', data: formatted.inData, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.08)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, spanGaps: true },
-          { label: 'Upload (OUT)', data: formatted.outData, borderColor: '#ec4899', backgroundColor: 'rgba(236,72,153,0.08)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, spanGaps: true }
+          { label: 'Download (IN)', data: formatted.inData, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.08)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, spanGaps: false },
+          { label: 'Upload (OUT)', data: formatted.outData, borderColor: '#ec4899', backgroundColor: 'rgba(236,72,153,0.08)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, spanGaps: false }
         ]
       },
       options: {
@@ -1832,7 +1832,7 @@ const createOriginChart = async () => {
         tension: 0.4,
         pointRadius: 0,
         pointHoverRadius: 6,
-        spanGaps: true,
+        spanGaps: false,
         order: 1
       },
       {
@@ -1845,7 +1845,7 @@ const createOriginChart = async () => {
         tension: 0.4,
         pointRadius: 0,
         pointHoverRadius: 6,
-        spanGaps: true,
+        spanGaps: false,
         order: 1
       }
     ]
@@ -1860,7 +1860,7 @@ const createOriginChart = async () => {
         fill: false,
         pointRadius: 0,
         tension: 0,
-        spanGaps: true,
+        spanGaps: false,
         order: 5
       })
     }
@@ -1875,7 +1875,7 @@ const createOriginChart = async () => {
         fill: false,
         pointRadius: 0,
         tension: 0,
-        spanGaps: true,
+        spanGaps: false,
         order: 5
       })
     }
@@ -1983,7 +1983,7 @@ const createDestinationChart = async () => {
         tension: 0.4,
         pointRadius: 0,
         pointHoverRadius: 6,
-        spanGaps: true,
+        spanGaps: false,
         order: 1
       },
       {
@@ -1996,7 +1996,7 @@ const createDestinationChart = async () => {
         tension: 0.4,
         pointRadius: 0,
         pointHoverRadius: 6,
-        spanGaps: true,
+        spanGaps: false,
         order: 1
       }
     ]
@@ -2011,7 +2011,7 @@ const createDestinationChart = async () => {
         fill: false,
         pointRadius: 0,
         tension: 0,
-        spanGaps: true,
+        spanGaps: false,
         order: 5
       })
     }
@@ -2026,7 +2026,7 @@ const createDestinationChart = async () => {
         fill: false,
         pointRadius: 0,
         tension: 0,
-        spanGaps: true,
+        spanGaps: false,
         order: 5
       })
     }

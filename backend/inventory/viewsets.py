@@ -618,76 +618,44 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         time_from = int((timezone.now() - timedelta(hours=hours)).timestamp())
         time_till = int(timezone.now().timestamp())
         
-        history_data = []
-        
-        # Buscar RX history
-        if rx_key:
-            rx_items = zabbix_request("item.get", {
+        # EV-0010: RX e TX são coletados em instantes diferentes; alinhar por
+        # bucket (60 s em 24 h, mais largo em períodos longos) com None real
+        # nos buracos — nunca forward-fill.
+        from inventory.domain.zabbix_history import (
+            choose_bucket_seconds,
+            history_to_samples,
+            merge_series,
+        )
+
+        def _history_for_key(key):
+            if not key:
+                return []
+            items = zabbix_request("item.get", {
                 "hostids": [str(hostid)],
-                "filter": {"key_": rx_key},
-                "output": ["itemid", "value_type"]
+                "filter": {"key_": key},
+                "output": ["itemid", "value_type"],
             })
-            if rx_items:
-                rx_item = rx_items[0]
-                rx_history = zabbix_request("history.get", {
-                    "itemids": [rx_item["itemid"]],
-                    "history": int(rx_item.get("value_type", 0)),
-                    "time_from": time_from,
-                    "time_till": time_till,
-                    "sortfield": "clock",
-                    "sortorder": "ASC",
-                })
-                if rx_history:
-                    for entry in rx_history:
-                        timestamp = datetime.fromtimestamp(int(entry["clock"]), tz=dt_timezone.utc)
-                        history_data.append({
-                            "timestamp": timestamp.isoformat(),
-                            "rx_power": float(entry.get("value", 0)),
-                            "tx_power": None,
-                        })
-        
-        # Buscar TX history
-        if tx_key:
-            tx_items = zabbix_request("item.get", {
-                "hostids": [str(hostid)],
-                "filter": {"key_": tx_key},
-                "output": ["itemid", "value_type"]
-            })
-            if tx_items:
-                tx_item = tx_items[0]
-                tx_history = zabbix_request("history.get", {
-                    "itemids": [tx_item["itemid"]],
-                    "history": int(tx_item.get("value_type", 0)),
-                    "time_from": time_from,
-                    "time_till": time_till,
-                    "sortfield": "clock",
-                    "sortorder": "ASC",
-                })
-                if tx_history:
-                    # Mesclar com RX history baseado em timestamp
-                    tx_by_time = {int(e["clock"]): float(e.get("value", 0)) for e in tx_history}
-                    
-                    # Atualizar registros existentes ou criar novos
-                    existing_times = {datetime.fromisoformat(d["timestamp"]).timestamp() for d in history_data}
-                    
-                    for entry in history_data:
-                        ts = datetime.fromisoformat(entry["timestamp"]).timestamp()
-                        if int(ts) in tx_by_time:
-                            entry["tx_power"] = tx_by_time[int(ts)]
-                    
-                    # Adicionar TX-only entries
-                    for clock, tx_value in tx_by_time.items():
-                        if clock not in existing_times:
-                            timestamp = datetime.fromtimestamp(clock, tz=dt_timezone.utc)
-                            history_data.append({
-                                "timestamp": timestamp.isoformat(),
-                                "rx_power": None,
-                                "tx_power": tx_value,
-                            })
-        
-        # Ordenar por timestamp
-        history_data.sort(key=lambda x: x["timestamp"])
-        
+            if not items:
+                return []
+            item = items[0]
+            return zabbix_request("history.get", {
+                "itemids": [item["itemid"]],
+                "history": int(item.get("value_type", 0)),
+                "time_from": time_from,
+                "time_till": time_till,
+                "sortfield": "clock",
+                "sortorder": "ASC",
+            }) or []
+
+        bucket = choose_bucket_seconds(time_till - time_from)
+        history_data = merge_series(
+            {
+                "rx_power": history_to_samples(_history_for_key(rx_key)),
+                "tx_power": history_to_samples(_history_for_key(tx_key)),
+            },
+            bucket_seconds=bucket,
+        )
+
         return Response(history_data)
 
     @action(detail=True, methods=["get"], permission_classes=[IsAuthenticated])
@@ -700,7 +668,14 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         """
         from datetime import datetime, timedelta, timezone as dt_timezone
         from django.utils import timezone
-        from inventory.domain.zabbix_history import fetch_history, get_items_meta, meta_or_default
+        from inventory.domain.zabbix_history import (
+            choose_bucket_seconds,
+            fetch_history,
+            get_items_meta,
+            history_to_samples,
+            merge_series,
+            meta_or_default,
+        )
         import statistics
         
         port = self.get_object()
@@ -723,56 +698,24 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         time_from = int((timezone.now() - timedelta(hours=hours)).timestamp())
         time_till = int(timezone.now().timestamp())
         
-        traffic_data = []
-        in_values = []
-        out_values = []
-
         # EV-0003: `history` tem de ser o value_type REAL do item (0 float / 3 uint);
         # um único item.get resolve os dois itens e as unidades.
         items_meta = get_items_meta([traffic_in_id, traffic_out_id])
         units = {k: meta_or_default(items_meta, k)["units"] for k in (traffic_in_id, traffic_out_id) if k}
-        
-        # Buscar tráfego IN
-        if traffic_in_id:
-            in_history = fetch_history(traffic_in_id, time_from, time_till, meta=items_meta)
-            if in_history:
-                for entry in in_history:
-                    timestamp = datetime.fromtimestamp(int(entry["clock"]), tz=dt_timezone.utc)
-                    value_bps = float(entry.get("value", 0))
-                    in_values.append(value_bps)
-                    traffic_data.append({
-                        "timestamp": timestamp.isoformat(),
-                        "traffic_in": value_bps,
-                        "traffic_out": None,
-                    })
-        
-        # Buscar tráfego OUT
-        if traffic_out_id:
-            out_history = fetch_history(traffic_out_id, time_from, time_till, meta=items_meta)
-            if out_history:
-                out_by_time = {int(e["clock"]): float(e.get("value", 0)) for e in out_history}
-                out_values = list(out_by_time.values())
-                
-                # Mesclar com IN data
-                existing_times = {datetime.fromisoformat(d["timestamp"]).timestamp() for d in traffic_data}
-                
-                for entry in traffic_data:
-                    ts = datetime.fromisoformat(entry["timestamp"]).timestamp()
-                    if int(ts) in out_by_time:
-                        entry["traffic_out"] = out_by_time[int(ts)]
-                
-                # Adicionar OUT-only entries
-                for clock, out_value in out_by_time.items():
-                    if clock not in existing_times:
-                        timestamp = datetime.fromtimestamp(clock, tz=dt_timezone.utc)
-                        traffic_data.append({
-                            "timestamp": timestamp.isoformat(),
-                            "traffic_in": None,
-                            "traffic_out": out_value,
-                        })
-        
-        # Ordenar por timestamp
-        traffic_data.sort(key=lambda x: x["timestamp"])
+
+        # EV-0010: IN e OUT alinhados por bucket, None real nos buracos.
+        in_samples = history_to_samples(
+            fetch_history(traffic_in_id, time_from, time_till, meta=items_meta) if traffic_in_id else []
+        )
+        out_samples = history_to_samples(
+            fetch_history(traffic_out_id, time_from, time_till, meta=items_meta) if traffic_out_id else []
+        )
+        in_values = [v for _, v in in_samples]
+        out_values = [v for _, v in out_samples]
+        traffic_data = merge_series(
+            {"traffic_in": in_samples, "traffic_out": out_samples},
+            bucket_seconds=choose_bucket_seconds(time_till - time_from),
+        )
         
         # Calcular 95º percentil
         percentile_95_in = None
@@ -1294,26 +1237,14 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                 rx_history = rx_hist_f.result()
                 tx_history = tx_hist_f.result()
 
-            # Merge by clock timestamp
-            merged: dict[int, dict] = {}
-            for entry in rx_history:
-                clock = int(entry["clock"])
-                merged[clock] = {
-                    "timestamp": datetime.fromtimestamp(clock, tz=dt_timezone.utc).isoformat(),
-                    "rx_power": float(entry["value"]),
-                    "tx_power": None,
-                }
-            for entry in tx_history:
-                clock = int(entry["clock"])
-                if clock in merged:
-                    merged[clock]["tx_power"] = float(entry["value"])
-                else:
-                    merged[clock] = {
-                        "timestamp": datetime.fromtimestamp(clock, tz=dt_timezone.utc).isoformat(),
-                        "rx_power": None,
-                        "tx_power": float(entry["value"]),
-                    }
-            return sorted(merged.values(), key=lambda x: x["timestamp"])
+            # EV-0010: alinhar por bucket com None real nos buracos.
+            return merge_series(
+                {
+                    "rx_power": history_to_samples(rx_history),
+                    "tx_power": history_to_samples(tx_history),
+                },
+                bucket_seconds=choose_bucket_seconds(time_till - time_from),
+            )
 
         # Fetch history for both ports in parallel
         with ThreadPoolExecutor(max_workers=2) as ex:
@@ -1361,7 +1292,14 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         from datetime import datetime, timedelta, timezone as dt_timezone
         from concurrent.futures import ThreadPoolExecutor
         from django.utils import timezone
-        from inventory.domain.zabbix_history import fetch_history, get_items_meta, meta_or_default
+        from inventory.domain.zabbix_history import (
+            choose_bucket_seconds,
+            fetch_history,
+            get_items_meta,
+            history_to_samples,
+            merge_series,
+            meta_or_default,
+        )
         import statistics as stats_lib
 
         cable = get_object_or_404(
@@ -1403,33 +1341,15 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                 in_raw = in_f.result()
                 out_raw = out_f.result()
 
-            # Merge by clock
-            merged: dict[int, dict] = {}
-            in_values, out_values = [], []
-
-            for entry in in_raw:
-                clock = int(entry["clock"])
-                val = float(entry["value"])
-                in_values.append(val)
-                merged[clock] = {
-                    "timestamp": datetime.fromtimestamp(clock, tz=dt_timezone.utc).isoformat(),
-                    "traffic_in": val,
-                    "traffic_out": None,
-                }
-            for entry in out_raw:
-                clock = int(entry["clock"])
-                val = float(entry["value"])
-                out_values.append(val)
-                if clock in merged:
-                    merged[clock]["traffic_out"] = val
-                else:
-                    merged[clock] = {
-                        "timestamp": datetime.fromtimestamp(clock, tz=dt_timezone.utc).isoformat(),
-                        "traffic_in": None,
-                        "traffic_out": val,
-                    }
-
-            history = sorted(merged.values(), key=lambda x: x["timestamp"])
+            # EV-0010: alinhar por bucket com None real nos buracos.
+            in_samples = history_to_samples(in_raw)
+            out_samples = history_to_samples(out_raw)
+            in_values = [v for _, v in in_samples]
+            out_values = [v for _, v in out_samples]
+            history = merge_series(
+                {"traffic_in": in_samples, "traffic_out": out_samples},
+                bucket_seconds=choose_bucket_seconds(time_till - time_from),
+            )
 
             def _p95(values):
                 if not values:

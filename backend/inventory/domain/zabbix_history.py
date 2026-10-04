@@ -12,7 +12,9 @@ histórico — CLAUDE.md §7, EV-0003.
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable, Mapping
+import math
+from collections.abc import Iterable, Mapping, Sequence
+from datetime import UTC, datetime
 from typing import Any, TypedDict
 
 from integrations.zabbix import zabbix_service
@@ -117,3 +119,74 @@ def fetch_history(
     if limit:
         params["limit"] = int(limit)
     return _coerce_list(zabbix_service.zabbix_request("history.get", params))
+
+
+# ---------------------------------------------------------------------------
+# Alinhamento de séries (EV-0010)
+# ---------------------------------------------------------------------------
+
+# Buckets «redondos» (segundos) usados para alinhar amostras de itens que o
+# Zabbix coleta em instantes diferentes. O menor é 1 min: é a frequência típica
+# de coleta de tráfego/óptico; abaixo disso não há ganho.
+BUCKET_LADDER: tuple[int, ...] = (60, 120, 300, 600, 900, 1800, 3600)
+DEFAULT_MAX_POINTS = 1500
+
+Sample = tuple[int, float]
+
+
+def choose_bucket_seconds(span_seconds: int, max_points: int = DEFAULT_MAX_POINTS) -> int:
+    """Menor bucket da escada que mantém a série com no máximo ``max_points``.
+
+    24 h a 1 min são 1.440 pontos (cabem); 7 dias a 1 min seriam 10.080 →
+    bucket de 10 min (1.008 pontos). Acima da escada, cresce em horas inteiras.
+    """
+    span = max(int(span_seconds), 1)
+    points = max(int(max_points), 1)
+    for bucket in BUCKET_LADDER:
+        if math.ceil(span / bucket) <= points:
+            return bucket
+    hours = math.ceil(span / points / 3600)
+    return max(3600, hours * 3600)
+
+
+def history_to_samples(history: Iterable[Mapping[str, Any]]) -> list[Sample]:
+    """``history.get`` → ``[(clock, value)]`` ignorando entradas inválidas."""
+    samples: list[Sample] = []
+    for entry in history or []:
+        try:
+            samples.append((int(entry["clock"]), float(entry["value"])))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return samples
+
+
+def merge_series(
+    series: Mapping[str, Sequence[Sample]],
+    *,
+    bucket_seconds: int,
+) -> list[dict[str, Any]]:
+    """Alinha várias séries por bucket e devolve linhas com ``None`` nos buracos.
+
+    Para cada bucket em que *alguma* série tem amostra sai uma linha
+    ``{"timestamp": <ISO UTC do início do bucket>, <nome>: média | None, ...}``.
+    Um bucket sem amostra de uma série fica ``None`` — é um buraco real, que o
+    gráfico deve mostrar como buraco (nunca forward-fill, que esconde quedas).
+    Zero é um valor e é preservado.
+    """
+    bucket = max(int(bucket_seconds), 1)
+    acc: dict[int, dict[str, list[float]]] = {}
+    for name, samples in series.items():
+        for clock, value in samples:
+            key = (int(clock) // bucket) * bucket
+            acc.setdefault(key, {}).setdefault(name, []).append(float(value))
+
+    rows: list[dict[str, Any]] = []
+    for key in sorted(acc):
+        row: dict[str, Any] = {
+            "timestamp": datetime.fromtimestamp(key, tz=UTC).isoformat(),
+        }
+        for name in series:
+            values = acc[key].get(name)
+            row[name] = (sum(values) / len(values)) if values else None
+        rows.append(row)
+    return rows
