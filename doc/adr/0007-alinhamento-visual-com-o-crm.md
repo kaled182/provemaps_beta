@@ -2,7 +2,7 @@
 
 | Campo            | Valor                                                       |
 |------------------|-------------------------------------------------------------|
-| Estado           | **Proposto**                                                |
+| Estado           | **Aceito** (Paulo, 2026-10-04 — Opção C, quatro fases)                                                |
 | Data             | 2026-10-04                                                  |
 | Decisores        | Equipe Técnica Simples Internet — Paulo Marcelino           |
 | Tags             | `frontend`, `design-system`, `tailwind`, `branding`, `lgpd` |
@@ -76,7 +76,7 @@ identidade; os componentes migram quando são tocados, usando o mesmo
 `tailwind.config` do CRM. **Contras:** convivência de dois estilos durante
 a transição; exige disciplina para não criar CSS novo fora dos tokens.
 
-## 4. Decisão (proposta)
+## 4. Decisão
 
 Escolher a **Opção C**, em quatro fases, cada uma fechando num deploy:
 

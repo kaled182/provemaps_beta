@@ -2,7 +2,7 @@
 
 | Campo            | Valor                                                       |
 |------------------|-------------------------------------------------------------|
-| Estado           | **Proposto**                                                |
+| Estado           | **Aceito** (Paulo, 2026-10-04 — Opção B, Central própria)                                                |
 | Data             | 2026-10-04                                                  |
 | Decisores        | Equipe Técnica Simples Internet — Paulo Marcelino           |
 | Tags             | `processo`, `evolucao`, `agente-ia`, `auditoria`            |
@@ -61,7 +61,7 @@ pequena (modelo, 5 endpoints, uma view, um render do quadro, dois scripts).
 **Prós:** nada a construir. **Contras:** foi exatamente o que o CRM
 abandonou depois de encontrar cinco linhas falsas no quadro.
 
-## 4. Decisão (proposta)
+## 4. Decisão
 
 Escolher a **Opção B**, com a Opção A registrada como alternativa caso o
 Paulo prefira uma fila única. Forma concreta:

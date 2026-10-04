@@ -2,7 +2,7 @@
 
 | Campo            | Valor                                                       |
 |------------------|-------------------------------------------------------------|
-| Estado           | **Proposto**                                                |
+| Estado           | **Aceito** (Paulo, 2026-10-04)                                                |
 | Data             | 2026-10-04                                                  |
 | Decisores        | Equipe Técnica Simples Internet — Paulo Marcelino           |
 | Tags             | `processo`, `agente-ia`, `tooling`, `documentação`          |

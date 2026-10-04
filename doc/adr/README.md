@@ -69,9 +69,9 @@ NNNN-titulo-em-kebab-case.md
 | [000](../architecture/ADR/000-technical-review.md) | Revisão técnica inicial (legado) | Aceito | `legado` |
 | [001](../architecture/ADR/001-fiber-route-builder.md) | Fiber Route Builder (legado) | Aceito | `legado`, `rotas` |
 | [004](../architecture/ADR/004-refactoring-plan.md) | Plano de refatoração 2.0 (legado) | Aceito | `legado`, `refatoração` |
-| [0005](0005-manual-operacional-e-ecossistema-de-agente.md) | `CLAUDE.md` como manual operacional canônico + ecossistema de agente versionado (skills-lock, MCP, ADRs, memória) | Proposto | `processo`, `agente-ia`, `tooling` |
-| [0006](0006-central-de-evolucao-provemaps.md) | Central de Evolução no ProVeMaps — fila de trabalho observada, não escrita | Proposto | `processo`, `evolucao`, `agente-ia` |
-| [0007](0007-alinhamento-visual-com-o-crm.md) | Alinhamento visual com o CRM — tokens compartilhados, shell e migração incremental | Proposto | `frontend`, `design-system`, `tailwind`, `branding` |
+| [0005](0005-manual-operacional-e-ecossistema-de-agente.md) | `CLAUDE.md` como manual operacional canônico + ecossistema de agente versionado (skills-lock, MCP, ADRs, memória) | Aceito | `processo`, `agente-ia`, `tooling` |
+| [0006](0006-central-de-evolucao-provemaps.md) | Central de Evolução no ProVeMaps — fila de trabalho observada, não escrita | Aceito | `processo`, `evolucao`, `agente-ia` |
+| [0007](0007-alinhamento-visual-com-o-crm.md) | Alinhamento visual com o CRM — tokens compartilhados, shell e migração incremental | Aceito | `frontend`, `design-system`, `tailwind`, `branding` |
 
 ---
 

@@ -93,41 +93,40 @@ log em inglês, como já está.
 
 > **Provisório e manual.** Este bloco será substituído por uma vista gerada
 > da Central de Evolução (ADR 0006). Até lá, edita-se **só** no commit que
-> fecha ou abre um item, com o verbo `fecha EV-NNNN`. Prioridades marcadas
-> como **proposta** foram sugeridas pelo levantamento de 2026-10-04 e
-> aguardam triagem do Paulo. Detalhe e evidência de cada item:
+> fecha ou abre um item, com o verbo `fecha EV-NNNN`. As prioridades
+> sugeridas pelo levantamento de 2026-10-04 foram aceitas pelo Paulo em 2026-10-04 («podemos implementar tudo»). Detalhe e evidência de cada item:
 > [`doc/analysis/2026-10-04-levantamento-geral.md`](doc/analysis/2026-10-04-levantamento-geral.md).
 
 <!-- EVOLUCAO:INICIO — quadro manual; quando a Central existir, passa a ser gerado. -->
-**Entrada, por triar — 🐛 Problemas**
+**A fazer — 🐛 Problemas** (triagem do Paulo, 2026-10-04: todos aceitos com a prioridade proposta)
 
-- `EV-0001` **Gráfico óptico desenha dados aleatórios quando o Zabbix não devolve histórico** · P1 proposta · `frontend/src/components/PortTrafficModal.vue:711-735`, `AlarmConfigModal.vue:217-258`
-- `EV-0002` **`/api/config/` entrega chaves Google/Mapbox/Esri a qualquer visitante, sem login** · P1 proposta · `backend/core/views_api.py`, `core/middleware/auth_required.py`
-- `EV-0003` **Endpoints de tráfego pedem `history: 3` fixo; itens float devolvem gráfico vazio** · P1 proposta · `backend/inventory/viewsets.py:733,754,1385`
-- `EV-0004` **`api_port_traffic_history` sem `@login_required`** · P1 proposta · `backend/inventory/api/devices.py:263`
-- `EV-0005` **Tokens Mapbox literais e dump com `auth.user` versionados — rotacionar e remover** · P1 proposta · `backend/maps_view/tests_mapbox_proxy.py:27`, `frontend/test-mapbox*.html`, `backend/static/test-mapbox-*.html`, `backups/QUICK_START.txt`, `data/sqlite_dump.json`
-- `EV-0006` **Cobertura «60 %» do CI mede só `core`, `maps_view`, `setup_app`; `inventory` fica fora** · P1 proposta · `backend/pyproject.toml [tool.coverage.run]`
-- `EV-0007` **`package-lock.json` ignorado + `npm ci` no Dockerfile e no CI → build não reprodutível** · P1 proposta · `.gitignore`, `docker/dockerfile`, `.github/workflows/daily-inventory-tests.yml`
-- `EV-0008` **~61 testes backend nunca coletados; três configs pytest divergentes** · P2 proposta · `pytest.ini`, `backend/pytest.ini`, `backend/pyproject.toml`, `backend/inventory/routes/tests/`
-- `EV-0009` **121 testes frontend fora do `include` do Vitest; Playwright lista 0 testes** · P2 proposta · `frontend/vitest.config.js`, `frontend/playwright.config.js`
-- `EV-0010` **Merge RX/TX e IN/OUT por `clock` exato gera buracos ou forward-fill que esconde quedas** · P2 proposta · `backend/inventory/viewsets.py:632-685`, `frontend/src/services/fiberService.js:85-120`
-- `EV-0011` **Instâncias Chart.js nunca destruídas; render por `setTimeout`; fetch duplicado sem `AbortController`** · P2 proposta · `frontend/src/components/FiberCableDetailModal.vue`, `PortTrafficModal.vue`
-- `EV-0012` **Quatro pilhas de mapa paralelas; só `CustomMapViewer` honra os três provedores; `NetworkDesign` quebra com `osm`** · P2 proposta · `frontend/src/components/MapView.vue`, `providers/maps/MapProviderFactory.js`, `composables/useMapService.js`
-- `EV-0013` **`list_fiber_cables` devolve geometria duplicada de todos os cabos, sem bbox; N+1 em `cable_type`** · P2 proposta · `backend/inventory/usecases/fibers.py:513-600`, `serializers.py:407,615`
-- `EV-0014` **`CustomMapViewer` faz polling de 30 s em vez do WebSocket; `SiteDetailsModal` cria um socket por abertura sem cleanup** · P2 proposta · `frontend/src/views/monitoring/CustomMapViewer.vue:410`, `components/SiteDetailsModal.vue:1536`
-- `EV-0015` **KML: só `LineString` 2.2, Placemarks concatenados num único traçado, sem KMZ/MultiGeometry** · P2 proposta · `backend/inventory/usecases/fibers.py:278-385`
-- `EV-0016` **Segredo TOTP em texto puro, TOTP caseiro, lockout por sessão** · P2 proposta · `backend/core/models.py:43`, `core/api_users.py`, `core/views_auth.py`
-- `EV-0017` **`setup_app/api_views.py` com 4.484 linhas sem usecases; `usecases/devices.py` com 2.501** · P2 proposta
-- `EV-0018` **Dev-tools e pins sem versão na imagem de produção; `django-stubs 5.1` vs Django 5.2; três ficheiros de requirements** · P2 proposta · `backend/requirements.txt`, `docker/dockerfile`
-- `EV-0019` **Build do SPA sem minify, 518 `console.log`, Tailwind/FontAwesome via CDN forçando CSP com `unsafe-eval`** · P2 proposta · `frontend/vite.config.js`, `backend/templates/base_spa.html`
-- `EV-0020` **Lixo versionado: `setup_app_backup/`, `staticfiles/`, `playwright-report`, `.vue.broken_backup`, HTMLs de teste, `dtemp_fibers.json`** · P3 proposta
-- `EV-0021` **Docs obsoletas: 42 citam `zabbix_api`, 20 citam MariaDB; versões 1.4.1 / 2.0.0 / 0.1.3 inconsistentes** · P3 proposta · `doc/`, `CHANGELOG.md`, `VERSION`, `frontend/package.json`
-- `EV-0022` **CI sem lint Python nem ESLint; ESLint falha com 18 erros; pre-commit não aplicado** · P3 proposta · `.github/workflows/tests.yml`, `frontend/.eslintrc.cjs`
-- `EV-0023` **`service_accounts` gera e roda tokens que nenhuma classe de autenticação consome** · P3 proposta · `backend/service_accounts/`
-- `EV-0024` **Regra dos 100 m e «cabos próximos» em Python O(n²) em vez de `ST_DWithin`; lat/lng não sincroniza com `location`** · P3 proposta · `backend/inventory/api/devices.py:795-845`, `signals_spatial.py`
-- `EV-0025` **Config default incoerente: `DB_ENGINE=mysql` sem driver, `.env.example` com `DATABASE_*` que ninguém lê, `asgi.py` aponta `core.settings`** · P3 proposta · `backend/settings/base.py`, `.env.example`, `backend/core/asgi.py:17`
+- `EV-0001` **Gráfico óptico desenha dados aleatórios quando o Zabbix não devolve histórico** · P1 · `frontend/src/components/PortTrafficModal.vue:711-735`, `AlarmConfigModal.vue:217-258`
+- `EV-0002` **`/api/config/` entrega chaves Google/Mapbox/Esri a qualquer visitante, sem login** · P1 · `backend/core/views_api.py`, `core/middleware/auth_required.py`
+- `EV-0003` **Endpoints de tráfego pedem `history: 3` fixo; itens float devolvem gráfico vazio** · P1 · `backend/inventory/viewsets.py:733,754,1385`
+- `EV-0004` **`api_port_traffic_history` sem `@login_required`** · P1 · `backend/inventory/api/devices.py:263`
+- `EV-0005` **Tokens Mapbox literais e dump com `auth.user` versionados — rotacionar e remover** · P1 · `backend/maps_view/tests_mapbox_proxy.py:27`, `frontend/test-mapbox*.html`, `backend/static/test-mapbox-*.html`, `backups/QUICK_START.txt`, `data/sqlite_dump.json`
+- `EV-0006` **Cobertura «60 %» do CI mede só `core`, `maps_view`, `setup_app`; `inventory` fica fora** · P1 · `backend/pyproject.toml [tool.coverage.run]`
+- `EV-0007` **`package-lock.json` ignorado + `npm ci` no Dockerfile e no CI → build não reprodutível** · P1 · `.gitignore`, `docker/dockerfile`, `.github/workflows/daily-inventory-tests.yml`
+- `EV-0008` **~61 testes backend nunca coletados; três configs pytest divergentes** · P2 · `pytest.ini`, `backend/pytest.ini`, `backend/pyproject.toml`, `backend/inventory/routes/tests/`
+- `EV-0009` **121 testes frontend fora do `include` do Vitest; Playwright lista 0 testes** · P2 · `frontend/vitest.config.js`, `frontend/playwright.config.js`
+- `EV-0010` **Merge RX/TX e IN/OUT por `clock` exato gera buracos ou forward-fill que esconde quedas** · P2 · `backend/inventory/viewsets.py:632-685`, `frontend/src/services/fiberService.js:85-120`
+- `EV-0011` **Instâncias Chart.js nunca destruídas; render por `setTimeout`; fetch duplicado sem `AbortController`** · P2 · `frontend/src/components/FiberCableDetailModal.vue`, `PortTrafficModal.vue`
+- `EV-0012` **Quatro pilhas de mapa paralelas; só `CustomMapViewer` honra os três provedores; `NetworkDesign` quebra com `osm`** · P2 · `frontend/src/components/MapView.vue`, `providers/maps/MapProviderFactory.js`, `composables/useMapService.js`
+- `EV-0013` **`list_fiber_cables` devolve geometria duplicada de todos os cabos, sem bbox; N+1 em `cable_type`** · P2 · `backend/inventory/usecases/fibers.py:513-600`, `serializers.py:407,615`
+- `EV-0014` **`CustomMapViewer` faz polling de 30 s em vez do WebSocket; `SiteDetailsModal` cria um socket por abertura sem cleanup** · P2 · `frontend/src/views/monitoring/CustomMapViewer.vue:410`, `components/SiteDetailsModal.vue:1536`
+- `EV-0015` **KML: só `LineString` 2.2, Placemarks concatenados num único traçado, sem KMZ/MultiGeometry** · P2 · `backend/inventory/usecases/fibers.py:278-385`
+- `EV-0016` **Segredo TOTP em texto puro, TOTP caseiro, lockout por sessão** · P2 · `backend/core/models.py:43`, `core/api_users.py`, `core/views_auth.py`
+- `EV-0017` **`setup_app/api_views.py` com 4.484 linhas sem usecases; `usecases/devices.py` com 2.501** · P2
+- `EV-0018` **Dev-tools e pins sem versão na imagem de produção; `django-stubs 5.1` vs Django 5.2; três ficheiros de requirements** · P2 · `backend/requirements.txt`, `docker/dockerfile`
+- `EV-0019` **Build do SPA sem minify, 518 `console.log`, Tailwind/FontAwesome via CDN forçando CSP com `unsafe-eval`** · P2 · `frontend/vite.config.js`, `backend/templates/base_spa.html`
+- `EV-0020` **Lixo versionado: `setup_app_backup/`, `staticfiles/`, `playwright-report`, `.vue.broken_backup`, HTMLs de teste, `dtemp_fibers.json`** · P3
+- `EV-0021` **Docs obsoletas: 42 citam `zabbix_api`, 20 citam MariaDB; versões 1.4.1 / 2.0.0 / 0.1.3 inconsistentes** · P3 · `doc/`, `CHANGELOG.md`, `VERSION`, `frontend/package.json`
+- `EV-0022` **CI sem lint Python nem ESLint; ESLint falha com 18 erros; pre-commit não aplicado** · P3 · `.github/workflows/tests.yml`, `frontend/.eslintrc.cjs`
+- `EV-0023` **`service_accounts` gera e roda tokens que nenhuma classe de autenticação consome** · P3 · `backend/service_accounts/`
+- `EV-0024` **Regra dos 100 m e «cabos próximos» em Python O(n²) em vez de `ST_DWithin`; lat/lng não sincroniza com `location`** · P3 · `backend/inventory/api/devices.py:795-845`, `signals_spatial.py`
+- `EV-0025` **Config default incoerente: `DB_ENGINE=mysql` sem driver, `.env.example` com `DATABASE_*` que ninguém lê, `asgi.py` aponta `core.settings`** · P3 · `backend/settings/base.py`, `.env.example`, `backend/core/asgi.py:17`
 
-**Entrada, por triar — 💡 Ideias**
+**A fazer — 💡 Ideias** (aceitas; EV-0027 e EV-0028 ligadas aos ADRs 0006 e 0007, agora Aceitos)
 
 - `EV-0026` **Componente único `TimeSeriesChart.vue` (eixo temporal, tema por tokens, `destroy` garantido) a substituir os 4 builders e 3 exports**
 - `EV-0027` **Portar a Central de Evolução (ADR 0006) e trocar este quadro manual pela vista gerada**
