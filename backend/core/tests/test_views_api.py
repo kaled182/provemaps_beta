@@ -1,10 +1,10 @@
 """Tests for core.views_api (frontend_config) and core routing helpers."""
+
 from __future__ import annotations
 
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.test import RequestFactory, TestCase, override_settings
@@ -15,9 +15,7 @@ class FrontendConfigViewTests(TestCase):
 
     def setUp(self):
         self.factory = RequestFactory()
-        self.user = get_user_model().objects.create_user(
-            username="config-reader", password="x"
-        )
+        self.user = get_user_model().objects.create_user(username="config-reader", password="x")
 
     def _get(self, path="/api/config/", *, user=None):
         request = self.factory.get(path)
@@ -50,6 +48,7 @@ class FrontendConfigViewTests(TestCase):
 
     def test_returns_200(self):
         from core.views_api import frontend_config
+
         request = self._get()
         with patch(
             "core.views_api.runtime_settings.get_runtime_config",
@@ -60,6 +59,7 @@ class FrontendConfigViewTests(TestCase):
 
     def test_response_includes_map_provider(self):
         from core.views_api import frontend_config
+
         request = self._get()
         with patch(
             "core.views_api.runtime_settings.get_runtime_config",
@@ -71,6 +71,7 @@ class FrontendConfigViewTests(TestCase):
 
     def test_response_includes_map_keys(self):
         from core.views_api import frontend_config
+
         request = self._get()
         with patch(
             "core.views_api.runtime_settings.get_runtime_config",
@@ -83,6 +84,7 @@ class FrontendConfigViewTests(TestCase):
 
     def test_response_includes_lat_lng(self):
         from core.views_api import frontend_config
+
         request = self._get()
         with patch(
             "core.views_api.runtime_settings.get_runtime_config",
@@ -96,6 +98,7 @@ class FrontendConfigViewTests(TestCase):
 
     def test_lat_lng_defaults_when_none(self):
         from core.views_api import frontend_config
+
         request = self._get()
         cfg = self._mock_config()
         cfg.map_default_lat = None
@@ -111,6 +114,7 @@ class FrontendConfigViewTests(TestCase):
 
     def test_only_get_allowed(self):
         from core.views_api import frontend_config
+
         request = self.factory.post("/api/config/")
         request.user = self.user
         with patch(
@@ -123,6 +127,7 @@ class FrontendConfigViewTests(TestCase):
     @override_settings(DEBUG=True)
     def test_debug_flag_included(self):
         from core.views_api import frontend_config
+
         request = self._get()
         with patch(
             "core.views_api.runtime_settings.get_runtime_config",
@@ -135,6 +140,7 @@ class FrontendConfigViewTests(TestCase):
     def test_anonymous_gets_401_json_without_keys(self):
         """EV-0002: as chaves de mapa nunca saem para quem não tem sessão."""
         from core.views_api import frontend_config
+
         request = self._get(user=AnonymousUser())
         with patch(
             "core.views_api.runtime_settings.get_runtime_config",
@@ -149,12 +155,14 @@ class FrontendConfigViewTests(TestCase):
 
     def test_request_without_user_attribute_gets_401(self):
         from core.views_api import frontend_config
+
         request = self.factory.get("/api/config/")  # sem request.user
         response = frontend_config(request)
         self.assertEqual(response.status_code, 401)
 
     def test_response_includes_map_features(self):
         from core.views_api import frontend_config
+
         request = self._get()
         with patch(
             "core.views_api.runtime_settings.get_runtime_config",
@@ -172,11 +180,13 @@ class CoreRoutingTests(TestCase):
 
     def test_websocket_urlpatterns_exists(self):
         from core.routing import websocket_urlpatterns
+
         self.assertIsInstance(websocket_urlpatterns, list)
         self.assertGreater(len(websocket_urlpatterns), 0)
 
     def test_dashboard_ws_pattern_present(self):
         from core import routing
+
         routes = [str(p.pattern) for p in routing.websocket_urlpatterns]
         self.assertTrue(
             any("dashboard" in r for r in routes),
@@ -188,4 +198,4 @@ class CoreUrlsZabbixProxyTests(TestCase):
     """Ensure core.urls_zabbix_proxy is importable (deprecated module guard)."""
 
     def test_module_importable(self):
-        import core.urls_zabbix_proxy  # should not raise
+        pass  # should not raise

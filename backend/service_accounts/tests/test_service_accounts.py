@@ -133,9 +133,7 @@ def test_admin_requires_manage_permission(client: Client) -> None:
 
     client.force_login(user)
 
-    changelist_url = reverse(
-        "admin:service_accounts_serviceaccount_changelist"
-    )
+    changelist_url = reverse("admin:service_accounts_serviceaccount_changelist")
     response = client.get(changelist_url)
     assert response.status_code == 403
 
@@ -160,16 +158,10 @@ def test_enforce_rotation_policies_rotates_due_tokens() -> None:
     token.created_at = timezone.now() - timezone.timedelta(days=31)
     token.save(update_fields=["created_at"])
 
-    result = rotation_services.enforce_rotation_policies(
-        reference=timezone.now()
-    )
+    result = rotation_services.enforce_rotation_policies(reference=timezone.now())
     assert result["rotations"] == 1
 
-    tokens = list(
-        ServiceAccountToken.objects.filter(account=account).order_by(
-            "-created_at"
-        )
-    )
+    tokens = list(ServiceAccountToken.objects.filter(account=account).order_by("-created_at"))
     assert len(tokens) == 2
 
     latest_token = tokens[0]
@@ -219,13 +211,14 @@ def test_enforce_rotation_policies_sends_notice_once(
     assert isinstance(payload, dict)
     assert payload["event"] == "service_account.rotation_warning"
 
-    again = rotation_services.enforce_rotation_policies(
-        reference=now + timezone.timedelta(hours=1)
-    )
+    again = rotation_services.enforce_rotation_policies(reference=now + timezone.timedelta(hours=1))
     assert again["notices"] == 0
     assert len(dispatched) == 1
 
-    assert ServiceAccountAuditLog.objects.filter(
-        account=account,
-        action="rotation_notice",
-    ).count() == 1
+    assert (
+        ServiceAccountAuditLog.objects.filter(
+            account=account,
+            action="rotation_notice",
+        ).count()
+        == 1
+    )

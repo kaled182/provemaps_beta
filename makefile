@@ -116,6 +116,14 @@ fmt:  ## Format code (ruff --fix / black / isort)
 	black .
 	isort .
 
+.PHONY: lint-changed
+lint-changed:  ## Lint only the Python files changed vs BASE (default origin/inicial) — what CI enforces (EV-0022)
+	scripts/lint-changed.sh $(BASE)
+
+.PHONY: precommit
+precommit:  ## Install the pre-commit hooks (black/ruff/isort on staged files)
+	pre-commit install
+
 ### ---------------------------
 ### Docker Compose
 ### ---------------------------

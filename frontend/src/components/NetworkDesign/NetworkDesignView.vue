@@ -1060,7 +1060,7 @@ function startPanelResize(e) {
   const onUp = (me) => {
     const newH = Math.min(maxH, Math.max(minH, startH + (me.clientY - startY)));
     _applyPanelHeight(newH);
-    try { localStorage.setItem(PANEL_HEIGHT_KEY, String(newH)); } catch (_) {}
+    try { localStorage.setItem(PANEL_HEIGHT_KEY, String(newH)); } catch (_) { /* best-effort: ignorado de propósito */ }
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
     document.body.style.userSelect = '';
@@ -1220,7 +1220,7 @@ function refreshLayerGroups() {
   const raw = getLoadedGroups();
   // Load persisted visibility
   let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(LAYER_STORAGE_KEY) || '{}'); } catch (_) {}
+  try { saved = JSON.parse(localStorage.getItem(LAYER_STORAGE_KEY) || '{}'); } catch (_) { /* best-effort: ignorado de propósito */ }
 
   const counts = getGroupCounts();
   const groups = raw.map((g, i) => ({
@@ -1270,7 +1270,7 @@ function toggleAllLayers() {
 }
 
 function persistLayerState() {
-  try { localStorage.setItem(LAYER_STORAGE_KEY, JSON.stringify(layerState.value)); } catch (_) {}
+  try { localStorage.setItem(LAYER_STORAGE_KEY, JSON.stringify(layerState.value)); } catch (_) { /* best-effort: ignorado de propósito */ }
 }
 
 // ── Type filter state ────────────────────────────────────────────────────
@@ -1315,7 +1315,7 @@ async function _fetchTypeNames() {
     if (!r.ok) return;
     const data = await r.json();
     (data.results || []).forEach(t => _typeNameMap.set(String(t.id), t.name));
-  } catch (_) {}
+  } catch (_) { /* best-effort: ignorado de propósito */ }
 }
 _fetchTypeNames();
 

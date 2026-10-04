@@ -116,7 +116,7 @@ class GetOrCreateProfileTests(TestCase):
         type(user).profile = PropertyMock(side_effect=UserProfile.DoesNotExist)
         with patch.object(UserProfile.objects, "create") as mock_create:
             mock_create.return_value = MagicMock()
-            result = _get_or_create_profile(user)
+            _get_or_create_profile(user)
         mock_create.assert_called_once_with(user=user)
 
 

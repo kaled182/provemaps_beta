@@ -1,4 +1,5 @@
 """EV-0013 — listagem de cabos: sem N+1 em cable_type, tolerante a porta nula, filtro bbox."""
+
 from __future__ import annotations
 
 from django.db import connection
@@ -11,7 +12,9 @@ from inventory.usecases import fibers as fiber_uc
 
 def _make_port(site_name, lat, lng, idx):
     site = Site.objects.create(display_name=site_name, city="Goiania", latitude=lat, longitude=lng)
-    device = Device.objects.create(site=site, name=f"DEV-{idx}", vendor="X", model="Y", zabbix_hostid=str(1000 + idx))
+    device = Device.objects.create(
+        site=site, name=f"DEV-{idx}", vendor="X", model="Y", zabbix_hostid=str(1000 + idx)
+    )
     return Port.objects.create(device=device, name=f"GE0/0/{idx}")
 
 
@@ -33,7 +36,10 @@ class ListFiberCablesTests(TestCase):
 
         for i in range(1, 4):
             FiberCable.objects.create(
-                name=f"CABO-{i}", origin_port=self.p2, destination_port=self.p3, cable_type=self.cable_type
+                name=f"CABO-{i}",
+                origin_port=self.p2,
+                destination_port=self.p3,
+                cable_type=self.cable_type,
             )
         with CaptureQueriesContext(connection) as four:
             payload = fiber_uc.list_fiber_cables()
@@ -52,17 +58,26 @@ class ListFiberCablesTests(TestCase):
 
 class BboxFilterTests(TestCase):
     def test_parse_bbox(self):
-        self.assertEqual(fiber_uc.parse_bbox("-49.5,-16.9,-49.0,-16.5"), (-49.5, -16.9, -49.0, -16.5))
+        self.assertEqual(
+            fiber_uc.parse_bbox("-49.5,-16.9,-49.0,-16.5"), (-49.5, -16.9, -49.0, -16.5)
+        )
         self.assertIsNone(fiber_uc.parse_bbox(None))
         self.assertIsNone(fiber_uc.parse_bbox("abc"))
         self.assertIsNone(fiber_uc.parse_bbox("1,2,3"))
         self.assertIsNone(fiber_uc.parse_bbox("-49.0,-16.5,-49.5,-16.9"))  # min > max
 
     def test_filter_keeps_cables_touching_the_box(self):
-        inside = {"id": 1, "path": [{"lat": -16.60, "lng": -49.30}], "origin": {}, "destination": {}}
+        inside = {
+            "id": 1,
+            "path": [{"lat": -16.60, "lng": -49.30}],
+            "origin": {},
+            "destination": {},
+        }
         crossing = {
-            "id": 2, "path": [],
-            "origin": {"lat": -17.0, "lng": -50.0}, "destination": {"lat": -16.0, "lng": -49.0},
+            "id": 2,
+            "path": [],
+            "origin": {"lat": -17.0, "lng": -50.0},
+            "destination": {"lat": -16.0, "lng": -49.0},
         }
         outside = {"id": 3, "path": [{"lat": -20.0, "lng": -45.0}], "origin": {}, "destination": {}}
         no_coords = {"id": 4, "path": [], "origin": {}, "destination": {}}

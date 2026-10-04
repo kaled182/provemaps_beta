@@ -692,7 +692,7 @@ const destroyHlsInstance = () => {
       videoPreviewElement.value.pause();
       videoPreviewElement.value.removeAttribute('src');
       videoPreviewElement.value.load();
-    } catch (e) {}
+    } catch (e) { /* best-effort: ignorado de propósito */ }
   }
   clearIframeFallbackHandle();
 };

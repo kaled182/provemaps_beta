@@ -751,8 +751,6 @@ const handleSubmit = async () => {
           description: form.value.description || '',
         }
         break
-
-        break
     }
 
     await emit('save', payload)

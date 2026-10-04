@@ -173,10 +173,86 @@ class TrafficHistoryEndpointsTests(TestCase):
         self.assertEqual(rows[0]["traffic_out"], 50.0)
         self.assertEqual(rows[1]["traffic_in"], 900.0)
         self.assertIsNone(rows[1]["traffic_out"])  # buraco real, não forward-fill
-        self.assertEqual(rows[0]["timestamp"], "2023-07-22T04:27:00+00:00")  # início do bucket de 60 s
+        self.assertEqual(
+            rows[0]["timestamp"], "2023-07-22T04:27:00+00:00"
+        )  # início do bucket de 60 s
 
     def test_cable_traffic_history_unknown_cable_is_404_not_500(self):
         url = reverse("fibercable-traffic-history", args=[999999])
+        with patch("integrations.zabbix.zabbix_service.zabbix_request", return_value=[]):
+            response = self.client.get(url)
+        self.assertEqual(response.status_code, 404)
+
+
+class CableOpticalHistoryEndpointTests(TestCase):
+    """`fibercable-optical-history` usa os helpers de bucket importados no topo do módulo.
+
+    Regressão EV-0022: o lint apanhou `merge_series`/`history_to_samples`/
+    `choose_bucket_seconds` indefinidos neste endpoint — os imports viviam dentro
+    de outros dois métodos e nenhum teste passava por aqui (NameError em produção).
+    """
+
+    def setUp(self):
+        user = get_user_model().objects.create_user(username="noc", password="x")
+        self.client.force_login(user)
+        site = Site.objects.create(display_name="POP-ANA", city="Anapolis")
+        device = Device.objects.create(
+            site=site, name="OLT-01", vendor="Huawei", model="MA5800", zabbix_hostid="20202"
+        )
+        self.port_a = Port.objects.create(
+            device=device, name="0/1/0", rx_power_item_key="rx.a", tx_power_item_key="tx.a"
+        )
+        self.port_b = Port.objects.create(
+            device=device, name="0/1/1", rx_power_item_key="rx.b", tx_power_item_key="tx.b"
+        )
+        self.cable = FiberCable.objects.create(
+            name="CABO-OPT", origin_port=self.port_a, destination_port=self.port_b
+        )
+
+    @staticmethod
+    def _fake_by_key(items_by_key, histories):
+        def _request(method, params=None, **kwargs):
+            params = params or {}
+            if method == "item.get":
+                key = (params.get("filter") or {}).get("key_")
+                item = items_by_key.get(key)
+                return [item] if item else []
+            if method == "history.get":
+                return histories.get(str(params["itemids"][0]), [])
+            return []
+
+        return _request
+
+    def test_cable_optical_history_merges_rx_and_tx_per_port(self):
+        items = {
+            "rx.a": {"itemid": "71", "value_type": "0"},
+            "tx.a": {"itemid": "72", "value_type": "0"},
+            "rx.b": {"itemid": "73", "value_type": "0"},
+            "tx.b": {"itemid": "74", "value_type": "0"},
+        }
+        histories = {
+            "71": [{"clock": "1690000000", "value": "-21.5"}],
+            "72": [{"clock": "1690000010", "value": "2.1"}],
+            "73": [{"clock": "1690000000", "value": "-23.0"}],
+            "74": [],  # TX em falta: buraco real, não zero
+        }
+        fake = self._fake_by_key(items, histories)
+        url = reverse("fibercable-optical-history", args=[self.cable.pk])
+        with patch("integrations.zabbix.zabbix_service.zabbix_request", side_effect=fake):
+            response = self.client.get(url, {"hours": 24})
+        self.assertEqual(response.status_code, 200, response.content[:300])
+        payload = response.json()
+        origin = payload["origin_history"]
+        self.assertEqual(len(origin), 1)
+        self.assertEqual(origin[0]["rx_power"], -21.5)
+        self.assertEqual(origin[0]["tx_power"], 2.1)
+        dest = payload["destination_history"]
+        self.assertEqual(dest[0]["rx_power"], -23.0)
+        self.assertIsNone(dest[0]["tx_power"])
+        self.assertEqual(payload["origin_optical"]["port_name"], "0/1/0")
+
+    def test_cable_optical_history_unknown_cable_is_404_not_500(self):
+        url = reverse("fibercable-optical-history", args=[999999])
         with patch("integrations.zabbix.zabbix_service.zabbix_request", return_value=[]):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 404)
@@ -217,10 +293,17 @@ class MergeSeriesTests(TestCase):
     def test_choose_bucket_keeps_point_count_bounded(self):
         self.assertEqual(zabbix_history.choose_bucket_seconds(24 * 3600), 60)
         self.assertEqual(zabbix_history.choose_bucket_seconds(7 * 24 * 3600), 600)
-        self.assertEqual(zabbix_history.choose_bucket_seconds(30 * 24 * 3600, max_points=100), 7200 * 4)
+        self.assertEqual(
+            zabbix_history.choose_bucket_seconds(30 * 24 * 3600, max_points=100), 7200 * 4
+        )
 
     def test_history_to_samples_skips_garbage(self):
         samples = zabbix_history.history_to_samples(
-            [{"clock": "10", "value": "1.5"}, {"clock": "x"}, {"value": "2"}, {"clock": "20", "value": None}]
+            [
+                {"clock": "10", "value": "1.5"},
+                {"clock": "x"},
+                {"value": "2"},
+                {"clock": "20", "value": None},
+            ]
         )
         self.assertEqual(samples, [(10, 1.5)])

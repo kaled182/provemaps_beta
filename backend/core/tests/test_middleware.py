@@ -1,23 +1,24 @@
 """Tests for core middleware — auth_required, first_time_setup,
 request_id, security_headers."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 from django.contrib.auth.models import AnonymousUser
 from django.test import RequestFactory, TestCase, override_settings
-
 
 # ---------------------------------------------------------------------------
 # AuthRequiredMiddleware
 # ---------------------------------------------------------------------------
+
 
 class AuthRequiredMiddlewareTests(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
         self.get_response = MagicMock(return_value=MagicMock(status_code=200))
         from core.middleware.auth_required import AuthRequiredMiddleware
+
         self.mw = AuthRequiredMiddleware(self.get_response)
 
     def _anon_request(self, path):
@@ -27,6 +28,7 @@ class AuthRequiredMiddlewareTests(TestCase):
 
     def _auth_request(self, path):
         from django.contrib.auth.models import User
+
         req = self.factory.get(path)
         req.user = MagicMock(spec=User, is_authenticated=True)
         return req
@@ -124,15 +126,15 @@ class AuthRequiredMiddlewareTests(TestCase):
 # FirstTimeSetupRedirectMiddleware
 # ---------------------------------------------------------------------------
 
+
 class FirstTimeSetupMiddlewareTests(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
         self.get_response = MagicMock(return_value=MagicMock(status_code=200))
 
     def _make_mw(self):
-        from core.middleware.first_time_setup import (
-            FirstTimeSetupRedirectMiddleware,
-        )
+        from core.middleware.first_time_setup import FirstTimeSetupRedirectMiddleware
+
         return FirstTimeSetupRedirectMiddleware(self.get_response)
 
     @override_settings(TESTING=True, FORCE_FIRST_TIME_FLOW=False)
@@ -147,8 +149,7 @@ class FirstTimeSetupMiddlewareTests(TestCase):
         mw = self._make_mw()
         req = self.factory.get("/maps/dashboard/")
         with patch(
-            "core.middleware.first_time_setup.FirstTimeSetup"
-            ".objects.filter"
+            "core.middleware.first_time_setup.FirstTimeSetup" ".objects.filter"
         ) as mock_filter:
             mock_filter.return_value.exists.return_value = False
             resp = mw(req)
@@ -159,8 +160,7 @@ class FirstTimeSetupMiddlewareTests(TestCase):
         mw = self._make_mw()
         req = self.factory.get("/maps/dashboard/")
         with patch(
-            "core.middleware.first_time_setup.FirstTimeSetup"
-            ".objects.filter"
+            "core.middleware.first_time_setup.FirstTimeSetup" ".objects.filter"
         ) as mock_filter:
             mock_filter.return_value.exists.return_value = True
             mw(req)
@@ -171,8 +171,7 @@ class FirstTimeSetupMiddlewareTests(TestCase):
         mw = self._make_mw()
         req = self.factory.get("/static/app.css")
         with patch(
-            "core.middleware.first_time_setup.FirstTimeSetup"
-            ".objects.filter"
+            "core.middleware.first_time_setup.FirstTimeSetup" ".objects.filter"
         ) as mock_filter:
             mock_filter.return_value.exists.return_value = False
             mw(req)
@@ -189,8 +188,7 @@ class FirstTimeSetupMiddlewareTests(TestCase):
     def test_is_configured_queries_db(self):
         mw = self._make_mw()
         with patch(
-            "core.middleware.first_time_setup.FirstTimeSetup"
-            ".objects.filter"
+            "core.middleware.first_time_setup.FirstTimeSetup" ".objects.filter"
         ) as mock_filter:
             mock_filter.return_value.exists.return_value = True
             self.assertTrue(mw._is_configured())
@@ -198,8 +196,7 @@ class FirstTimeSetupMiddlewareTests(TestCase):
     def test_is_not_configured_queries_db(self):
         mw = self._make_mw()
         with patch(
-            "core.middleware.first_time_setup.FirstTimeSetup"
-            ".objects.filter"
+            "core.middleware.first_time_setup.FirstTimeSetup" ".objects.filter"
         ) as mock_filter:
             mock_filter.return_value.exists.return_value = False
             self.assertFalse(mw._is_configured())
@@ -209,11 +206,13 @@ class FirstTimeSetupMiddlewareTests(TestCase):
 # RequestIDMiddleware
 # ---------------------------------------------------------------------------
 
+
 class RequestIDMiddlewareTests(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
         self.get_response = MagicMock(return_value=MagicMock(status_code=200))
         from core.middleware.request_id import RequestIDMiddleware
+
         self.mw = RequestIDMiddleware(self.get_response)
 
     def test_generates_request_id(self):
@@ -231,6 +230,7 @@ class RequestIDMiddlewareTests(TestCase):
         req = self.factory.get("/any/")
         self.mw.process_request(req)
         from django.http import HttpResponse
+
         resp = HttpResponse("ok")
         result = self.mw.process_response(req, resp)
         self.assertIn("X-Request-ID", result)
@@ -238,6 +238,7 @@ class RequestIDMiddlewareTests(TestCase):
     def test_process_response_no_request_id_attribute(self):
         req = self.factory.get("/any/")
         from django.http import HttpResponse
+
         resp = HttpResponse("ok")
         # Should not raise even if request_id missing
         result = self.mw.process_response(req, resp)
@@ -262,9 +263,7 @@ class RequestIDMiddlewareTests(TestCase):
         self.assertEqual(ip, "1.2.3.4")
 
     def test_get_client_ip_from_forwarded_for(self):
-        req = self.factory.get(
-            "/", HTTP_X_FORWARDED_FOR="5.6.7.8, 10.0.0.1"
-        )
+        req = self.factory.get("/", HTTP_X_FORWARDED_FOR="5.6.7.8, 10.0.0.1")
         ip = self.mw._get_client_ip(req)
         self.assertEqual(ip, "5.6.7.8")
 
@@ -278,15 +277,18 @@ class RequestIDMiddlewareTests(TestCase):
 # SecurityHeadersMiddleware
 # ---------------------------------------------------------------------------
 
+
 class SecurityHeadersMiddlewareTests(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
         self.get_response = MagicMock(return_value=MagicMock(status_code=200))
         from core.middleware.security_headers import SecurityHeadersMiddleware
+
         self.mw = SecurityHeadersMiddleware(self.get_response)
 
     def _make_response(self):
         from django.http import HttpResponse
+
         return HttpResponse("ok")
 
     def test_adds_x_frame_options(self):
@@ -309,6 +311,7 @@ class SecurityHeadersMiddlewareTests(TestCase):
 
     def test_does_not_override_existing_x_frame_options(self):
         from django.http import HttpResponse
+
         req = self.factory.get("/")
         resp = HttpResponse("ok")
         resp["X-Frame-Options"] = "SAMEORIGIN"

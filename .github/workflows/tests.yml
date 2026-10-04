@@ -102,6 +102,65 @@ jobs:
           path: backend/coverage.xml
           if-no-files-found: error
 
+  backend-lint:
+    # EV-0022: lint só dos .py alterados face à base (a árvore inteira nunca passou;
+    # a regra do projeto é «lint limpo nos ficheiros tocados»). Mesmo script que
+    # `make lint-changed` corre localmente.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install lint tools
+        run: pip install black==24.8.0 ruff==0.6.9 isort==5.13.2
+
+      - name: Resolve base ref
+        id: base
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags origin "${{ github.base_ref }}"
+            echo "ref=origin/${{ github.base_ref }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ] && git cat-file -e "${{ github.event.before }}" 2>/dev/null; then
+            echo "ref=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=HEAD~1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: black / isort / ruff on changed files
+        run: scripts/lint-changed.sh "${{ steps.base.outputs.ref }}"
+
+  frontend-lint:
+    # EV-0022: o ESLint passa a zero erros e fica a guardar isso.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: ESLint
+        run: npm run lint
+
   frontend-unit:
     # Espelha o job `test-front` do CRM.
     runs-on: ubuntu-latest

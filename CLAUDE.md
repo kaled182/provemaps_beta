@@ -102,7 +102,6 @@ log em inglês, como já está.
 
 - `EV-0012` **Quatro pilhas de mapa paralelas; só `CustomMapViewer` honra os três provedores; `NetworkDesign` quebra com `osm`** · P2 · `frontend/src/components/MapView.vue`, `providers/maps/MapProviderFactory.js`, `composables/useMapService.js` · **⚠️ não cabe numa sessão** (MapView 1.943, CustomMapViewer 2.874, NetworkDesign 3.566 linhas): leitura levada ao Paulo em 2026-10-04 — proposta de fatiar em 0012a Leaflet/OSM na factory + apagar pilha 4 morta; 0012b MapView; 0012c CustomMapViewer; 0012d NetworkDesign. Decisão dele; o assistente passou ao item seguinte
 - `EV-0017` **`setup_app/api_views.py` com 4.484 linhas sem usecases; `usecases/devices.py` com 2.501** · P2 · **⚠️ não cabe numa sessão** (66 views em `api_views.py` ligadas a 42 rotas, 7 domínios misturados — config/env, backups+nuvem, testes de ligação, perfil da empresa, servidores de monitorização, gateways de mensagens/WhatsApp QR, vídeo/câmeras — com `setup_app` a 45 % de cobertura; `devices.py` tem 25 funções com descoberta Zabbix e scoring de portas no mesmo ficheiro): leitura levada ao Paulo em 2026-10-04 — proposta de fatiar por domínio, um módulo `setup_app/api/<dominio>.py` + `setup_app/usecases/<dominio>.py` por item (0017a backups, 0017b env/config, 0017c gateways+WhatsApp, 0017d vídeo, 0017e testes de ligação/perfil/monitorização) e 0017f `usecases/devices.py` → `devices_discovery.py` + `devices_ports.py`. Decisão dele; o assistente passou ao item seguinte
-- `EV-0022` **CI sem lint Python nem ESLint; ESLint falha com 18 erros; pre-commit não aplicado** · P3 · `.github/workflows/tests.yml`, `frontend/.eslintrc.cjs`
 - `EV-0023` **`service_accounts` gera e roda tokens que nenhuma classe de autenticação consome** · P3 · `backend/service_accounts/`
 - `EV-0024` **Regra dos 100 m e «cabos próximos» em Python O(n²) em vez de `ST_DWithin`; lat/lng não sincroniza com `location`** · P3 · `backend/inventory/api/devices.py:795-845`, `signals_spatial.py`
 - `EV-0025` **Config default incoerente: `DB_ENGINE=mysql` sem driver, `.env.example` com `DATABASE_*` que ninguém lê, `asgi.py` aponta `core.settings`** · P3 · `backend/settings/base.py`, `.env.example`, `backend/core/asgi.py:17`
@@ -141,6 +140,7 @@ log em inglês, como já está.
 - `EV-0019` **Build do SPA sem minify, 518 `console.log`, Tailwind/FontAwesome via CDN forçando CSP com `unsafe-eval`** · P2 · fechado em `build(frontend)` 2026-10-04 — Tailwind 3.4 **compilado no build** (`tailwind.config.js` mínimo: dark por classe, `primary` = esmeralda atual, safelist do grid do mosaico; o CDN nunca processou o `@apply` nem as 163 classes `primary-*`) e FontAwesome 6.5.1 auto-hospedado via npm; `base_spa.html` sem CDN; build minificado (esbuild) com `console.log/debug/info/trace` e `debugger` removidos só em produção (583 → 0; `warn`/`error` ficam). **Fica (EV-0031):** 15 templates Django legados ainda carregam o Play CDN, por isso `'unsafe-eval'` e os hosts de CDN continuam no CSP
 - `EV-0020` **Lixo versionado: `setup_app_backup/`, `staticfiles/`, `playwright-report`, `.vue.broken_backup`, HTMLs de teste, `dtemp_fibers.json`** · P3 · fechado em `chore(repo)` 2026-10-04 — 277 ficheiros fora do Git (76 de `setup_app_backup/`, 153 da `staticfiles/` da raiz que o Django nunca serviu — `findstatic` confirma que as fontes vivas são `backend/static` e `maps_view/static` —, relatório do Playwright, 3 HTMLs de teste, 3 backups `.vue`, `.md.old`, `doc/archive/{backup-files,broken-components,scripts-deprecated}`, dois JSON soltos em `docker/`, `backend/data/postgis_inventory.json` e o `d:\temp_fibers.json` com nome mangled); `.gitignore` passa a recusar `*.backup|*.bak|*.old|*.broken*|*_REFACTORED.vue|*.phase*_step*` e `/test_media/`. **Fica (EV-0021):** `doc/guides/testing/TESTS_E2E_SETUP.md` e `TESTS_MOSAIC_MODAL.md` ainda citam os HTMLs de teste; `templates/partials/{header,add_device}.html` carregam `js/partials/{header,add_device}.js` que já não existiam em lado nenhum
 - `EV-0021` **Docs obsoletas: 42 citam `zabbix_api`, 20 citam MariaDB; versões 1.4.1 / 2.0.0 / 0.1.3 inconsistentes** · P3 · fechado em `docs(doc)` 2026-10-04 — 38 docs de 2025 (sprints, deploy MySQL, testes MariaDB, caminhos Windows, planos de reorganização) arquivados em `doc/archive/2025-historico/` com banner e índice; 3 duplicados byte a byte removidos (`architecture/ADR/000+004`, `reference/REDIS_HIGH_AVAILABILITY.md`); ~34 docs vivos corrigidos (módulo → `inventory`/`integrations/zabbix`, PostgreSQL+PostGIS, comandos reais do `makefile`, métricas reais, `MODULES.md` reconstruído — eram dois documentos entrelaçados linha a linha); versão única = `VERSION` (1.4.1; `package.json` 0.1.3 → 1.4.1; `doc/README.md` e `releases/README.md` deixam de anunciar 2.0.x como atual; nota do reinício da numeração no CHANGELOG e README). **Fica:** 50 links partidos pré-existentes dentro de `reports/roadmap/archive` e 1 em `guides/WHATSAPP_CONTACTS_IMPLEMENTATION.md` (alvos que nunca existiram), 11 docs vivos com blocos `powershell` fora da lista, e a doc de API (EV-0033)
+- `EV-0022` **CI sem lint Python nem ESLint; ESLint falha com 18 erros; pre-commit não aplicado** · P3 · fechado em `ci(lint)` 2026-10-04 — ESLint a zero (eram 17: escapes inúteis, `catch` vazios, `hasOwnProperty`, `break` morto) e job `frontend-lint`; job `backend-lint` corre `black`/`isort`/`ruff` **só nos `.py` alterados face à base** (`scripts/lint-changed.sh`, `make lint-changed`) porque a árvore inteira tem 2.985 achados e 283 ficheiros por formatar — a regra «lint limpo nos ficheiros tocados» passa a ser mecânica; `PLR09xx` (119 achados nos god-modules do EV-0017), `RUF012` e `DJ001` saem da seleção com nota de ratchet; `isort` e `ruff` alinhados (`known_first_party`, `combine_as_imports`); `pre-commit` em `requirements-dev` + `make precommit`. **Destapou bug real:** `fibercable-optical-history` chamava `merge_series`/`history_to_samples`/`choose_bucket_seconds` sem os importar (`NameError` em produção, sem teste) — import no topo do módulo, 404 em cabo inexistente e 2 testes novos
 
 <!-- EVOLUCAO:FIM -->
 
@@ -322,12 +322,14 @@ pytest -q -m "not slow and not integration"                 # rápidos
 coverage run -m pytest -q && coverage report                 # como o CI
 
 # qualidade backend
-make lint          # ruff + black --check + isort --check  (não `make fmt` em paralelo com outro agente)
+make lint-changed BASE=origin/inicial   # o que o CI exige: black/isort/ruff nos .py alterados (EV-0022)
+make lint          # árvore inteira — ainda não passa (2.985 achados ruff, 283 ficheiros por formatar em 2026-10-04)
+make precommit     # instala os hooks (black/ruff/isort/shellcheck nos ficheiros em staging)
 
 # frontend
 cd frontend && npm install && npm run test:unit             # 306 testes, ~10 s
 cd frontend && npm run build                                # sai em backend/staticfiles/vue-spa (minificado; console.log sai só em produção)
-cd frontend && npm run lint                                 # hoje falha com 18 erros (EV-0022)
+cd frontend && npm run lint                                 # ESLint a zero desde EV-0022; o CI guarda isso
 
 # saúde
 make health · make ready · make live
@@ -356,7 +358,7 @@ make skills        # repõe .claude/skills/ a partir de skills-lock.json
 
 ### Checklist antes do commit
 
-1. `make lint` limpo nos ficheiros tocados.
+1. `make lint-changed` limpo (é o que o job `backend-lint` corre; formatar um ficheiro já sujo que se tocou faz parte).
 2. Testes da área passam; teste novo acompanha código novo.
 3. Migração revista à mão (nome, reversibilidade, índices).
 4. Cache invalidada onde se mutou inventário (§2.4).

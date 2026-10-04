@@ -61,9 +61,7 @@ def _apply_runtime_email_settings() -> None:
         return
 
     if email_host:
-        settings.EMAIL_BACKEND = values.get(
-            "EMAIL_BACKEND", settings.EMAIL_BACKEND
-        )
+        settings.EMAIL_BACKEND = values.get("EMAIL_BACKEND", settings.EMAIL_BACKEND)
         settings.EMAIL_HOST = email_host
         settings.EMAIL_PORT = int(values.get("EMAIL_PORT") or "587")
         settings.EMAIL_HOST_USER = values.get("EMAIL_HOST_USER", "")
@@ -196,9 +194,6 @@ class RuntimeOtpView(FormView):
         backend = settings.AUTHENTICATION_BACKENDS[0]
         user.backend = backend
         login(self.request, user)
-        next_url = self.request.session.pop(
-            "pending_2fa_next",
-            settings.LOGIN_REDIRECT_URL
-        )
+        next_url = self.request.session.pop("pending_2fa_next", settings.LOGIN_REDIRECT_URL)
         self.request.session.pop("pending_2fa_user_id", None)
         return redirect(next_url)

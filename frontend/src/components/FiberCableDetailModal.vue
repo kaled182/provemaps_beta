@@ -1115,7 +1115,7 @@ const exportChart = (port, format) => {
 
   const device = opticalData.value?.portInfo?.[port]?.device || port
   const portName = opticalData.value?.portInfo?.[port]?.port || ''
-  const filename = `nivel-optico_${device}_${portName}_${selectedPeriod.value}h`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '')
+  const filename = `nivel-optico_${device}_${portName}_${selectedPeriod.value}h`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '')
 
   if (format === 'png') {
     const link = document.createElement('a')
@@ -1146,7 +1146,7 @@ const exportChart = (port, format) => {
       <h2>${escapeHtml(device)}</h2>
       <p>${escapeHtml(portName)} — Período: ${selectedPeriod.value}h</p>
       <img src="${imgData}" />
-      <script>window.onload = () => { window.print(); }<\/script>
+      <script>window.onload = () => { window.print(); }<${'/'}script>
     </body>
     </html>
   `)
@@ -1223,7 +1223,7 @@ const exportTrafficChart = (port, format) => {
   const portData = port === 'origin' ? trafficData.value?.origin : trafficData.value?.destination
   const device = portData?.device || port
   const portName = portData?.port || ''
-  const filename = `trafego_${device}_${portName}_${selectedPeriod.value}h`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '')
+  const filename = `trafego_${device}_${portName}_${selectedPeriod.value}h`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '')
   if (format === 'png') {
     const link = document.createElement('a')
     link.download = `${filename}.png`
@@ -1234,7 +1234,7 @@ const exportTrafficChart = (port, format) => {
   const imgData = chartImage
   const win = window.open('', '_blank')
   if (!win) return
-  win.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(device)} — ${escapeHtml(portName)}</title><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#fff;display:flex;flex-direction:column;align-items:center;padding:24px;font-family:sans-serif;}h2{font-size:14px;color:#334155;margin-bottom:4px;}p{font-size:12px;color:#64748b;margin-bottom:16px;}img{max-width:100%;border:1px solid #e2e8f0;border-radius:8px;}</style></head><body><h2>${escapeHtml(device)}</h2><p>${escapeHtml(portName)} — Período: ${selectedPeriod.value}h</p><img src="${imgData}"/><script>window.onload=()=>{window.print()}<\/script></body></html>`)
+  win.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(device)} — ${escapeHtml(portName)}</title><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#fff;display:flex;flex-direction:column;align-items:center;padding:24px;font-family:sans-serif;}h2{font-size:14px;color:#334155;margin-bottom:4px;}p{font-size:12px;color:#64748b;margin-bottom:16px;}img{max-width:100%;border:1px solid #e2e8f0;border-radius:8px;}</style></head><body><h2>${escapeHtml(device)}</h2><p>${escapeHtml(portName)} — Período: ${selectedPeriod.value}h</p><img src="${imgData}"/><script>window.onload=()=>{window.print()}<${'/'}script></body></html>`)
   win.document.close()
 }
 

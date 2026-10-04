@@ -101,7 +101,7 @@ export function useMapSelection() {
     }
     
     devices.forEach(device => {
-      if (statusCount.hasOwnProperty(device.status)) {
+      if (Object.prototype.hasOwnProperty.call(statusCount, device.status)) {
         statusCount[device.status]++
       }
     })

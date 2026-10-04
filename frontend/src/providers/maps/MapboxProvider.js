@@ -191,7 +191,7 @@ class MapboxPolyline extends IPolyline {
       this.mapboxMap.removeSource(this.sourceId);
     }
     // Reset cursor if this polyline was being hovered when removed
-    try { this.mapboxMap.getCanvas().style.cursor = ''; } catch (_) {}
+    try { this.mapboxMap.getCanvas().style.cursor = ''; } catch (_) { /* best-effort: ignorado de propósito */ }
   }
 }
 

@@ -2,17 +2,19 @@
 Middleware to enforce authentication on all routes.
 Redirects unauthenticated users to login page.
 """
-from django.shortcuts import redirect
+
+from collections.abc import Callable
+
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse, JsonResponse
-from typing import Callable
+from django.shortcuts import redirect
 
 
 class AuthRequiredMiddleware:
     """
     Middleware that requires authentication for all views except
     whitelisted paths.
-    
+
     Whitelisted paths:
     - /accounts/login/ (login page)
     - /accounts/logout/ (logout)
@@ -26,41 +28,42 @@ class AuthRequiredMiddleware:
     Any other /api/* path without a session gets a 401 JSON response instead of
     a redirect to the login page (EV-0002).
     """
-    
+
     WHITELIST_PATHS = [
-        '/accounts/login/',
-        '/accounts/logout/',
-        '/accounts/password_reset/',
-        '/accounts/otp/',
-        '/admin/',
-        '/static/',
-        '/media/',
-        '/metrics/',
-        '/healthz',
-        '/ready',
-        '/live',
-        '/favicon.ico',
-        '/celery/status',
-        '/setup_app/first_time/',
+        "/accounts/login/",
+        "/accounts/logout/",
+        "/accounts/password_reset/",
+        "/accounts/otp/",
+        "/admin/",
+        "/static/",
+        "/media/",
+        "/metrics/",
+        "/healthz",
+        "/ready",
+        "/live",
+        "/favicon.ico",
+        "/celery/status",
+        "/setup_app/first_time/",
         # EV-0002: '/api/config/' saiu daqui. Entregava as chaves Google/Mapbox/Esri
         # a qualquer visitante. Pedidos a /api/* sem sessão recebem 401 JSON abaixo.
     ]
-    
+
     WHITELIST_PREFIXES = [
-        '/api/v1/',  # API endpoints have their own auth (DRF)
-        '/setup_app/docs/',
+        "/api/v1/",  # API endpoints have their own auth (DRF)
+        "/setup_app/docs/",
     ]
-    
+
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]):
         self.get_response = get_response
-    
+
     def __call__(self, request: HttpRequest) -> HttpResponse:
         # Allow dashboard to be processed by FirstTimeSetup middleware when forced
         try:
             from setup_app.models import FirstTimeSetup
-            force_flow = getattr(settings, 'FORCE_FIRST_TIME_FLOW', False)
+
+            force_flow = getattr(settings, "FORCE_FIRST_TIME_FLOW", False)
             not_configured = not FirstTimeSetup.objects.filter(configured=True).exists()
-            if force_flow and not_configured and request.path.startswith('/maps_view/dashboard'):
+            if force_flow and not_configured and request.path.startswith("/maps_view/dashboard"):
                 return self.get_response(request)
         except Exception:
             pass
@@ -68,40 +71,40 @@ class AuthRequiredMiddleware:
         # Check if path is whitelisted
         if self._is_whitelisted(request.path):
             return self.get_response(request)
-        
+
         # Check if user is authenticated
         if not request.user.is_authenticated:
             # Chamadas de API (fetch do SPA) recebem 401 JSON, não a página de login
             # em HTML — o cliente consegue distinguir «sem sessão» de «config inválida».
-            if request.path.startswith('/api/'):
+            if request.path.startswith("/api/"):
                 return JsonResponse(
-                    {'detail': 'Authentication required.'},
+                    {"detail": "Authentication required."},
                     status=401,
                 )
             # Store the requested URL to redirect after login
             login_url = settings.LOGIN_URL
-            if request.path != '/':
+            if request.path != "/":
                 # Add 'next' parameter to preserve the requested URL
-                return redirect(f'{login_url}?next={request.path}')
+                return redirect(f"{login_url}?next={request.path}")
             else:
                 # Root path: just redirect to login
                 return redirect(login_url)
-        
+
         return self.get_response(request)
-    
+
     def _is_whitelisted(self, path: str) -> bool:
         """Check if the path is in the whitelist."""
         # Exact match
         if path in self.WHITELIST_PATHS:
             return True
-        
+
         # Prefix match
         for prefix in self.WHITELIST_PREFIXES:
             if path.startswith(prefix):
                 return True
-        
+
         # Check for static/media paths with trailing parts
-        if path.startswith('/static/') or path.startswith('/media/'):
+        if path.startswith("/static/") or path.startswith("/media/"):
             return True
-        
+
         return False

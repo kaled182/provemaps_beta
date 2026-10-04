@@ -208,7 +208,7 @@ const destroyMap = () => {
     if (p === 'mapbox' || p === 'osm') {
       mapInstance.value.remove();
     }
-  } catch (_) {}
+  } catch (_) { /* best-effort: ignorado de propósito */ }
   mapInstance.value = null;
   marker.value = null;
 };

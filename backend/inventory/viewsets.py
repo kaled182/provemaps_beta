@@ -2,29 +2,25 @@
 
 import logging
 
-from django.shortcuts import get_object_or_404
 from django.db.models import Count, Q
+from django.shortcuts import get_object_or_404
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from inventory.cache.fibers import invalidate_fiber_cache
-from inventory.metrics import (
-    track_viewset_action,
-    track_model_operation,
-    track_endpoint_usage,
+from inventory.domain.zabbix_history import (
+    choose_bucket_seconds,
+    fetch_history,
+    get_items_meta,
+    history_to_samples,
+    merge_series,
+    meta_or_default,
 )
-from inventory.models import (
-    Device,
-    DeviceGroup,
-    FiberCable,
-    FiberProfile,
-    Port,
-    Site,
-    ImportRule,
-)
+from inventory.metrics import track_endpoint_usage, track_model_operation, track_viewset_action
+from inventory.models import Device, DeviceGroup, FiberCable, FiberProfile, ImportRule, Port, Site
 from inventory.usecases import fiber_alarm_configs
 from maps_view.cache_swr import invalidate_dashboard_cache
 
@@ -34,9 +30,9 @@ from .serializers import (
     FiberCableSerializer,
     FiberCableStructureSerializer,
     FiberProfileSerializer,
+    ImportRuleSerializer,
     PortSerializer,
     SiteSerializer,
-    ImportRuleSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,12 +41,13 @@ logger = logging.getLogger(__name__)
 class SiteViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
     """ViewSet for Site CRUD operations."""
 
-    queryset = (
-        Site.objects.annotate(device_count=Count("devices", distinct=True))
-        .order_by("display_name")
+    queryset = Site.objects.annotate(device_count=Count("devices", distinct=True)).order_by(
+        "display_name"
     )
     serializer_class = SiteSerializer
-    permission_classes = [IsAuthenticated]  # 🔒 Sprint 1, Week 1: Fixed security vulnerability (was AllowAny)
+    permission_classes = [
+        IsAuthenticated
+    ]  # 🔒 Sprint 1, Week 1: Fixed security vulnerability (was AllowAny)
 
     @track_viewset_action("SiteViewSet")
     def list(self, request, *args, **kwargs):
@@ -106,12 +103,8 @@ class SiteViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             "site_id": site.id,
             "site_name": site.display_name,
             "site_city": site.city,
-            "latitude": float(site.latitude)
-            if site.latitude is not None
-            else None,
-            "longitude": float(site.longitude)
-            if site.longitude is not None
-            else None,
+            "latitude": float(site.latitude) if site.latitude is not None else None,
+            "longitude": float(site.longitude) if site.longitude is not None else None,
             "device_count": devices_qs.count(),
             "devices": serializer.data,
         }
@@ -126,23 +119,23 @@ class SiteViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         from django.db.models import Q
 
         site = self.get_object()
-        
+
         # Buscar cabos onde o site é origem (site_a) ou destino (site_b)
         cables_qs = (
             FiberCable.objects.filter(
                 Q(site_a=site) | Q(site_b=site),
-                parent_cable__isnull=True  # Only parent cables (exclude segments)
+                parent_cable__isnull=True,  # Only parent cables (exclude segments)
             )
             .select_related(
                 "site_a",
                 "site_b",
                 "origin_port__device__site",
                 "destination_port__device__site",
-                "profile"
+                "profile",
             )
             .order_by("name")
         )
-        
+
         serializer = FiberCableSerializer(cables_qs, many=True)
 
         payload = {
@@ -158,11 +151,11 @@ class SiteViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
 class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
     """ViewSet for Device CRUD operations"""
 
-    queryset = Device.objects.select_related("site").order_by(
-        "site__display_name", "name"
-    )
+    queryset = Device.objects.select_related("site").order_by("site__display_name", "name")
     serializer_class = DeviceSerializer
-    permission_classes = [IsAuthenticated]  # 🔒 Sprint 1, Week 1: Fixed security vulnerability (was AllowAny)
+    permission_classes = [
+        IsAuthenticated
+    ]  # 🔒 Sprint 1, Week 1: Fixed security vulnerability (was AllowAny)
 
     @track_viewset_action("DeviceViewSet")
     def list(self, request, *args, **kwargs):
@@ -214,18 +207,12 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
     def by_zabbix_id(self, request, zabbix_id=None):
         """Get device by Zabbix host ID"""
         try:
-            device = Device.objects.select_related("site").get(
-                zabbix_hostid=zabbix_id
-            )
+            device = Device.objects.select_related("site").get(zabbix_hostid=zabbix_id)
             serializer = self.get_serializer(device)
             return Response(serializer.data)
         except Device.DoesNotExist:
             return Response(
-                {
-                    "error": (
-                        f"Device with zabbix_hostid '{zabbix_id}' not found"
-                    )
-                },
+                {"error": (f"Device with zabbix_hostid '{zabbix_id}' not found")},
                 status=404,
             )
 
@@ -276,7 +263,7 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                 return default
             if isinstance(value, bool):
                 return value
-            if isinstance(value, (int, float)):
+            if isinstance(value, int | float):
                 return value != 0
             return str(value).lower() in ("1", "true", "yes", "on")
 
@@ -303,11 +290,9 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         )
 
         # Use existing use case to pull fresh data and apply rules/site logic
-        from inventory.usecases.devices import add_device_from_zabbix
-        from inventory.services.device_groups import (
-            sync_device_groups_for_device,
-        )
+        from inventory.services.device_groups import sync_device_groups_for_device
         from inventory.services.import_rules import apply_import_rules
+        from inventory.usecases.devices import add_device_from_zabbix
 
         original_site_id = device.site_id
 
@@ -349,10 +334,7 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                         ):
                             device.category = rule_result["category"]
                             update_fields.append("category")
-                        if (
-                            not device.monitoring_group_id
-                            and rule_result.get("group_id")
-                        ):
+                        if not device.monitoring_group_id and rule_result.get("group_id"):
                             device.monitoring_group_id = rule_result["group_id"]
                             update_fields.append("monitoring_group")
                         if update_fields:
@@ -396,6 +378,7 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
 
         try:
             from integrations.zabbix.zabbix_service import zabbix_request
+
             hostid = device.zabbix_hostid
             items = []
             if device.uptime_item_key:
@@ -419,7 +402,6 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                     for it in raw:
                         key = it.get("key_", "")
                         last = it.get("lastvalue", "")
-                        units = it.get("units", "")
                         if key == device.uptime_item_key and last:
                             try:
                                 uptime_sec = int(float(last))
@@ -507,12 +489,14 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         if mem_val is None and device.memory_usage_manual_percent is not None:
             mem_val = float(device.memory_usage_manual_percent)
 
-        return Response({
-            "cpu": cpu_val,
-            "memory": mem_val,
-            "uptime_seconds": uptime_sec,
-            "uptime_human": uptime_human,
-        })
+        return Response(
+            {
+                "cpu": cpu_val,
+                "memory": mem_val,
+                "uptime_seconds": uptime_sec,
+                "uptime_human": uptime_human,
+            }
+        )
 
 
 class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
@@ -520,7 +504,9 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
 
     queryset = Port.objects.select_related("device__site").order_by("name")
     serializer_class = PortSerializer
-    permission_classes = [IsAuthenticated]  # 🔒 Sprint 1, Week 1: Fixed security vulnerability (was AllowAny)
+    permission_classes = [
+        IsAuthenticated
+    ]  # 🔒 Sprint 1, Week 1: Fixed security vulnerability (was AllowAny)
 
     @track_viewset_action("PortViewSet")
     def list(self, request, *args, **kwargs):
@@ -565,40 +551,42 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
     def get_queryset(self):
         """Filter ports by device if device query param is provided"""
         queryset = super().get_queryset()
-        device_id = self.request.query_params.get('device')
-        
+        device_id = self.request.query_params.get("device")
+
         if device_id:
             queryset = queryset.filter(device_id=device_id)
-        
+
         return queryset
 
     @action(detail=True, methods=["get"], permission_classes=[IsAuthenticated])
     def optical_history(self, request, pk=None):
         """
         Return historical optical power data from Zabbix history.get API.
-        
+
         Busca últimas 24 horas de dados RX/TX diretamente do Zabbix
         sem persistir no banco local.
-        
+
         Query params:
             hours: número de horas de histórico (default=24, max=168)
         """
-        from datetime import datetime, timedelta, timezone as dt_timezone
+        from datetime import timedelta
+
         from django.utils import timezone
+
         from integrations.zabbix.zabbix_service import zabbix_request
         from inventory.domain.optical import _discover_optical_keys_by_portname
-        
+
         port = self.get_object()
-        
+
         # Buscar chaves ópticas do item no Zabbix
         hostid = port.device.zabbix_hostid if port.device else None
         if not hostid:
             return Response({"error": "Device não possui hostid configurado"}, status=400)
-        
+
         # Usar chaves configuradas na porta ou descobrir dinamicamente
         rx_key = port.rx_power_item_key or None
         tx_key = port.tx_power_item_key or None
-        
+
         # Se não tiver chaves configuradas, tentar descobrir
         if not rx_key and not tx_key:
             optical_keys = _discover_optical_keys_by_portname(
@@ -607,45 +595,51 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             )
             rx_key = optical_keys.get("rx")
             tx_key = optical_keys.get("tx")
-        
+
         if not rx_key and not tx_key:
-            return Response({"error": "Nenhum item óptico encontrado no Zabbix para esta porta"}, status=404)
-        
+            return Response(
+                {"error": "Nenhum item óptico encontrado no Zabbix para esta porta"}, status=404
+            )
+
         # Obter período de consulta
         hours = int(request.query_params.get("hours", 24))
         hours = min(hours, 168)  # Máximo 7 dias
-        
+
         time_from = int((timezone.now() - timedelta(hours=hours)).timestamp())
         time_till = int(timezone.now().timestamp())
-        
+
         # EV-0010: RX e TX são coletados em instantes diferentes; alinhar por
         # bucket (60 s em 24 h, mais largo em períodos longos) com None real
         # nos buracos — nunca forward-fill.
-        from inventory.domain.zabbix_history import (
-            choose_bucket_seconds,
-            history_to_samples,
-            merge_series,
-        )
 
         def _history_for_key(key):
             if not key:
                 return []
-            items = zabbix_request("item.get", {
-                "hostids": [str(hostid)],
-                "filter": {"key_": key},
-                "output": ["itemid", "value_type"],
-            })
+            items = zabbix_request(
+                "item.get",
+                {
+                    "hostids": [str(hostid)],
+                    "filter": {"key_": key},
+                    "output": ["itemid", "value_type"],
+                },
+            )
             if not items:
                 return []
             item = items[0]
-            return zabbix_request("history.get", {
-                "itemids": [item["itemid"]],
-                "history": int(item.get("value_type", 0)),
-                "time_from": time_from,
-                "time_till": time_till,
-                "sortfield": "clock",
-                "sortorder": "ASC",
-            }) or []
+            return (
+                zabbix_request(
+                    "history.get",
+                    {
+                        "itemids": [item["itemid"]],
+                        "history": int(item.get("value_type", 0)),
+                        "time_from": time_from,
+                        "time_till": time_till,
+                        "sortfield": "clock",
+                        "sortorder": "ASC",
+                    },
+                )
+                or []
+            )
 
         bucket = choose_bucket_seconds(time_till - time_from)
         history_data = merge_series(
@@ -662,53 +656,52 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
     def traffic_history(self, request, pk=None):
         """
         Return traffic history with 95th percentile calculation.
-        
+
         Query params:
             hours: número de horas de histórico (default=24, max=168)
         """
-        from datetime import datetime, timedelta, timezone as dt_timezone
-        from django.utils import timezone
-        from inventory.domain.zabbix_history import (
-            choose_bucket_seconds,
-            fetch_history,
-            get_items_meta,
-            history_to_samples,
-            merge_series,
-            meta_or_default,
-        )
         import statistics
-        
+        from datetime import timedelta
+
+        from django.utils import timezone
+
         port = self.get_object()
-        
+
         hostid = port.device.zabbix_hostid if port.device else None
         if not hostid:
             return Response({"error": "Device não possui hostid configurado"}, status=400)
-        
+
         # Item IDs de tráfego
         traffic_in_id = port.zabbix_item_id_traffic_in
         traffic_out_id = port.zabbix_item_id_traffic_out
-        
+
         if not traffic_in_id and not traffic_out_id:
             return Response({"error": "Porta não possui items de tráfego configurados"}, status=404)
-        
+
         # Período de consulta
         hours = int(request.query_params.get("hours", 24))
         hours = min(hours, 168)  # Máximo 7 dias
-        
+
         time_from = int((timezone.now() - timedelta(hours=hours)).timestamp())
         time_till = int(timezone.now().timestamp())
-        
+
         # EV-0003: `history` tem de ser o value_type REAL do item (0 float / 3 uint);
         # um único item.get resolve os dois itens e as unidades.
         items_meta = get_items_meta([traffic_in_id, traffic_out_id])
-        units = {k: meta_or_default(items_meta, k)["units"] for k in (traffic_in_id, traffic_out_id) if k}
+        units = {
+            k: meta_or_default(items_meta, k)["units"] for k in (traffic_in_id, traffic_out_id) if k
+        }
 
         # EV-0010: IN e OUT alinhados por bucket, None real nos buracos.
         in_samples = history_to_samples(
-            fetch_history(traffic_in_id, time_from, time_till, meta=items_meta) if traffic_in_id else []
+            fetch_history(traffic_in_id, time_from, time_till, meta=items_meta)
+            if traffic_in_id
+            else []
         )
         out_samples = history_to_samples(
-            fetch_history(traffic_out_id, time_from, time_till, meta=items_meta) if traffic_out_id else []
+            fetch_history(traffic_out_id, time_from, time_till, meta=items_meta)
+            if traffic_out_id
+            else []
         )
         in_values = [v for _, v in in_samples]
         out_values = [v for _, v in out_samples]
@@ -716,116 +709,129 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             {"traffic_in": in_samples, "traffic_out": out_samples},
             bucket_seconds=choose_bucket_seconds(time_till - time_from),
         )
-        
+
         # Calcular 95º percentil
         percentile_95_in = None
         percentile_95_out = None
-        
+
         if in_values:
             in_values_sorted = sorted(in_values)
             idx_95 = int(len(in_values_sorted) * 0.95)
-            percentile_95_in = in_values_sorted[idx_95] if idx_95 < len(in_values_sorted) else in_values_sorted[-1]
-        
+            percentile_95_in = (
+                in_values_sorted[idx_95] if idx_95 < len(in_values_sorted) else in_values_sorted[-1]
+            )
+
         if out_values:
             out_values_sorted = sorted(out_values)
             idx_95 = int(len(out_values_sorted) * 0.95)
-            percentile_95_out = out_values_sorted[idx_95] if idx_95 < len(out_values_sorted) else out_values_sorted[-1]
-        
-        return Response({
-            "history": traffic_data,
-            "statistics": {
-                "percentile_95_in": percentile_95_in,
-                "percentile_95_out": percentile_95_out,
-                "avg_in": statistics.mean(in_values) if in_values else None,
-                "avg_out": statistics.mean(out_values) if out_values else None,
-                "max_in": max(in_values) if in_values else None,
-                "max_out": max(out_values) if out_values else None,
-                "period_hours": hours,
-                # Unidades declaradas no Zabbix (ex.: "bps", "Bps", "pps"); o
-                # frontend não deve assumir bps (EV-0003 → EV-0010).
-                "unit_in": units.get(traffic_in_id),
-                "unit_out": units.get(traffic_out_id),
+            percentile_95_out = (
+                out_values_sorted[idx_95]
+                if idx_95 < len(out_values_sorted)
+                else out_values_sorted[-1]
+            )
+
+        return Response(
+            {
+                "history": traffic_data,
+                "statistics": {
+                    "percentile_95_in": percentile_95_in,
+                    "percentile_95_out": percentile_95_out,
+                    "avg_in": statistics.mean(in_values) if in_values else None,
+                    "avg_out": statistics.mean(out_values) if out_values else None,
+                    "max_in": max(in_values) if in_values else None,
+                    "max_out": max(out_values) if out_values else None,
+                    "period_hours": hours,
+                    # Unidades declaradas no Zabbix (ex.: "bps", "Bps", "pps"); o
+                    # frontend não deve assumir bps (EV-0003 → EV-0010).
+                    "unit_in": units.get(traffic_in_id),
+                    "unit_out": units.get(traffic_out_id),
+                },
             }
-        })
+        )
 
 
 class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
     """ViewSet for FiberCable CRUD operations"""
 
     # Exclude child segments (only show parent cables in main list)
-    queryset = FiberCable.objects.filter(
-        parent_cable__isnull=True  # Only cables without parent (main cables)
-    ).select_related(
-        "origin_port__device__site",
-        "destination_port__device__site",
-        "site_a",
-        "site_b",
-        "cable_type",
-        "cable_group",
-        "folder",
-        "responsible",
-        "responsible_user",
-    ).prefetch_related(
-        "segments__start_infrastructure",
-        "segments__end_infrastructure"
-    ).order_by("name")
+    queryset = (
+        FiberCable.objects.filter(
+            parent_cable__isnull=True  # Only cables without parent (main cables)
+        )
+        .select_related(
+            "origin_port__device__site",
+            "destination_port__device__site",
+            "site_a",
+            "site_b",
+            "cable_type",
+            "cable_group",
+            "folder",
+            "responsible",
+            "responsible_user",
+        )
+        .prefetch_related("segments__start_infrastructure", "segments__end_infrastructure")
+        .order_by("name")
+    )
     serializer_class = FiberCableSerializer
-    permission_classes = [IsAuthenticated]  # 🔒 Sprint 1, Week 1: Fixed security vulnerability (was AllowAny)
+    permission_classes = [
+        IsAuthenticated
+    ]  # 🔒 Sprint 1, Week 1: Fixed security vulnerability (was AllowAny)
 
     @track_viewset_action("FiberCableViewSet")
     def list(self, request, *args, **kwargs):
         """
         List all fiber cables with ETag caching support.
-        
+
         Performance optimization (Sprint 4 Week 2):
         - Generates ETag from queryset hash + last modified timestamp
         - Returns 304 Not Modified if client ETag matches
         - Reduces bandwidth by ~90% for unchanged data
         """
-        from django.utils.http import http_date, parse_http_date
-        from django.utils.cache import get_conditional_response
         import hashlib
-        
+
+        from django.utils.http import http_date
+
         # Get queryset and calculate ETag
         queryset = self.filter_queryset(self.get_queryset())
-        
+
         # Initialize variables outside try block
         last_modified = None
         etag = None
-        
+
         # Generate ETag from count + last update time
         try:
             count = queryset.count()
-            last_modified = queryset.latest('updated_at').updated_at if count > 0 else None
-            
+            last_modified = queryset.latest("updated_at").updated_at if count > 0 else None
+
             if last_modified:
                 etag_source = f"{count}:{last_modified.isoformat()}"
                 etag = hashlib.md5(etag_source.encode()).hexdigest()
-                
+
                 # Check If-None-Match header
-                client_etag = request.META.get('HTTP_IF_NONE_MATCH', '').strip('"')
-                
+                client_etag = request.META.get("HTTP_IF_NONE_MATCH", "").strip('"')
+
                 if client_etag == etag:
                     # Client has current version - return 304
                     from rest_framework.response import Response
+
                     response = Response(status=304)
-                    response['ETag'] = f'"{etag}"'
-                    response['Last-Modified'] = http_date(last_modified.timestamp())
-                    response['Cache-Control'] = 'private, max-age=30'
+                    response["ETag"] = f'"{etag}"'
+                    response["Last-Modified"] = http_date(last_modified.timestamp())
+                    response["Cache-Control"] = "private, max-age=30"
                     return response
         except Exception:
             # If ETag generation fails, proceed normally
             pass
-        
+
         # Standard list response
         response = super().list(request, *args, **kwargs)
-        
+
         # Add caching headers
         if last_modified and etag:
-            response['ETag'] = f'"{etag}"'
-            response['Last-Modified'] = http_date(last_modified.timestamp())
-            response['Cache-Control'] = 'private, max-age=30'
-        
+            response["ETag"] = f'"{etag}"'
+            response["Last-Modified"] = http_date(last_modified.timestamp())
+            response["Cache-Control"] = "private, max-age=30"
+
         return response
 
     @track_viewset_action("FiberCableViewSet")
@@ -878,11 +884,11 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         """
         Return complete physical structure (Tubes and Strands) of the cable.
         Auto-generates structure on-the-fly if it doesn't exist (lazy creation).
-        
+
         Returns nested hierarchy: Cable -> Tubes -> Strands with ABNT colors.
         """
         cable = self.get_object()
-        
+
         # Auto-generation (Lazy Creation) for legacy cables
         if not cable.tubes.exists() and cable.profile:
             logger.info(
@@ -929,6 +935,7 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
 
         try:
             from integrations.zabbix.zabbix_service import zabbix_request
+
             hostid = device.zabbix_hostid
             items = []
             if device.uptime_item_key:
@@ -952,7 +959,6 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                     for it in raw:
                         key = it.get("key_", "")
                         last = it.get("lastvalue", "")
-                        units = it.get("units", "")
                         if key == device.uptime_item_key and last:
                             try:
                                 uptime_sec = int(float(last))
@@ -1040,12 +1046,14 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         if mem_val is None and device.memory_usage_manual_percent is not None:
             mem_val = float(device.memory_usage_manual_percent)
 
-        return Response({
-            "cpu": cpu_val,
-            "memory": mem_val,
-            "uptime_seconds": uptime_sec,
-            "uptime_human": uptime_human,
-        })
+        return Response(
+            {
+                "cpu": cpu_val,
+                "memory": mem_val,
+                "uptime_seconds": uptime_sec,
+                "uptime_human": uptime_human,
+            }
+        )
 
     @action(detail=False, methods=["get"])
     def profiles(self, request):
@@ -1089,10 +1097,7 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         Accepts multipart/form-data with file field named "kml".
         Parses KML LineString coordinates and updates path/length.
         """
-        from inventory.usecases.fibers import (
-            parse_kml_coordinates,
-            update_fiber_path,
-        )
+        from inventory.usecases.fibers import parse_kml_coordinates, update_fiber_path
 
         cable = self.get_object()
         kml_file = request.FILES.get("kml")
@@ -1105,17 +1110,17 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         except Exception as exc:  # pragma: no cover
             logger.exception("Failed to import KML for cable %s", cable.id)
             return Response({"error": str(exc)}, status=400)
-    
+
     @action(detail=True, methods=["post"])
     def connect(self, request, pk=None):
         """
         Connect a floating cable to sites (Logical Connection).
-        
+
         Implements "Inventory First, Routing Later" pattern:
         - Cables can be created without sites/ports (floating inventory)
         - Later connected via this endpoint (logical routing)
         - Physical termination (ports) added separately
-        
+
         Payload:
             {
                 "site_a": <site_id>,
@@ -1123,69 +1128,69 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             }
         """
         cable = self.get_object()
-        
+
         site_a_id = request.data.get("site_a")
         site_b_id = request.data.get("site_b")
-        
+
         if not site_a_id or not site_b_id:
-            return Response(
-                {"error": "Both site_a and site_b are required"},
-                status=400
-            )
-        
+            return Response({"error": "Both site_a and site_b are required"}, status=400)
+
         if site_a_id == site_b_id:
             return Response(
-                {"error": "Origin and destination sites cannot be the same"},
-                status=400
+                {"error": "Origin and destination sites cannot be the same"}, status=400
             )
-        
+
         # Validate sites exist
         try:
             site_a = Site.objects.get(id=site_a_id)
             site_b = Site.objects.get(id=site_b_id)
         except Site.DoesNotExist as e:
-            return Response(
-                {"error": f"Site not found: {e}"},
-                status=404
-            )
-        
+            return Response({"error": f"Site not found: {e}"}, status=404)
+
         # Update cable connection
         cable.site_a = site_a
         cable.site_b = site_b
         cable.save(update_fields=["site_a", "site_b"])
-        
+
         logger.info(
             "Cable %s connected: %s -> %s",
             cable.id,
             site_a.display_name,
             site_b.display_name,
         )
-        
+
         # Return updated cable
         serializer = self.get_serializer(cable)
         return Response(serializer.data)
 
-    @action(detail=True, methods=["get"], url_path="optical-history", permission_classes=[IsAuthenticated])
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path="optical-history",
+        permission_classes=[IsAuthenticated],
+    )
     def optical_history(self, request, pk=None):
         """
         Fetch optical history for both ports of a cable in a single request.
 
-        Replaces the 3-step frontend flow (cached-status → 2× port history) with
+        Replaces the 3-step frontend flow (cached-status -> 2x port history) with
         one server-side call that parallelises all Zabbix requests.
 
         Query params:
             hours: history window (default=24, max=168)
         """
-        from datetime import datetime, timedelta, timezone as dt_timezone
         from concurrent.futures import ThreadPoolExecutor
+        from datetime import timedelta
+
         from django.utils import timezone
+
         from integrations.zabbix.zabbix_service import zabbix_request
         from inventory.usecases.fibers import build_optical_summary
 
-        cable = FiberCable.objects.select_related(
-            "origin_port__device",
-            "destination_port__device",
-        ).get(pk=pk)
+        cable = get_object_or_404(
+            FiberCable.objects.select_related("origin_port__device", "destination_port__device"),
+            pk=pk,
+        )
 
         hours = min(int(request.query_params.get("hours", 24)), 168)
         time_from = int((timezone.now() - timedelta(hours=hours)).timestamp())
@@ -1195,25 +1200,34 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             """Return first Zabbix item matching key on host, or None."""
             if not key:
                 return None
-            items = zabbix_request("item.get", {
-                "hostids": [str(hostid)],
-                "filter": {"key_": key},
-                "output": ["itemid", "value_type"],
-            })
+            items = zabbix_request(
+                "item.get",
+                {
+                    "hostids": [str(hostid)],
+                    "filter": {"key_": key},
+                    "output": ["itemid", "value_type"],
+                },
+            )
             return items[0] if items else None
 
         def _fetch_history(item):
             """Return history list for a Zabbix item dict."""
             if not item:
                 return []
-            return zabbix_request("history.get", {
-                "itemids": [item["itemid"]],
-                "history": int(item.get("value_type", 0)),
-                "time_from": time_from,
-                "time_till": time_till,
-                "sortfield": "clock",
-                "sortorder": "ASC",
-            }) or []
+            return (
+                zabbix_request(
+                    "history.get",
+                    {
+                        "itemids": [item["itemid"]],
+                        "history": int(item.get("value_type", 0)),
+                        "time_from": time_from,
+                        "time_till": time_till,
+                        "sortfield": "clock",
+                        "sortorder": "ASC",
+                    },
+                )
+                or []
+            )
 
         def _fetch_port_history(port):
             """Fetch and merge RX+TX history for one port using parallel Zabbix calls."""
@@ -1261,26 +1275,37 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         origin_port = cable.origin_port
         dest_port = cable.destination_port
 
-        return Response({
-            "origin_port_id": origin_port.id if origin_port else None,
-            "destination_port_id": dest_port.id if dest_port else None,
-            "origin_optical": {
-                "port_name": origin_port.name if origin_port else None,
-                "device_name": (origin_port.device.name if origin_port and origin_port.device else None),
-                "warning_threshold": origin_sum.get("warning_threshold"),
-                "critical_threshold": origin_sum.get("critical_threshold"),
-            },
-            "destination_optical": {
-                "port_name": dest_port.name if dest_port else None,
-                "device_name": (dest_port.device.name if dest_port and dest_port.device else None),
-                "warning_threshold": dest_sum.get("warning_threshold"),
-                "critical_threshold": dest_sum.get("critical_threshold"),
-            },
-            "origin_history": origin_history,
-            "destination_history": dest_history,
-        })
+        return Response(
+            {
+                "origin_port_id": origin_port.id if origin_port else None,
+                "destination_port_id": dest_port.id if dest_port else None,
+                "origin_optical": {
+                    "port_name": origin_port.name if origin_port else None,
+                    "device_name": (
+                        origin_port.device.name if origin_port and origin_port.device else None
+                    ),
+                    "warning_threshold": origin_sum.get("warning_threshold"),
+                    "critical_threshold": origin_sum.get("critical_threshold"),
+                },
+                "destination_optical": {
+                    "port_name": dest_port.name if dest_port else None,
+                    "device_name": (
+                        dest_port.device.name if dest_port and dest_port.device else None
+                    ),
+                    "warning_threshold": dest_sum.get("warning_threshold"),
+                    "critical_threshold": dest_sum.get("critical_threshold"),
+                },
+                "origin_history": origin_history,
+                "destination_history": dest_history,
+            }
+        )
 
-    @action(detail=True, methods=["get"], url_path="traffic-history", permission_classes=[IsAuthenticated])
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path="traffic-history",
+        permission_classes=[IsAuthenticated],
+    )
     def traffic_history(self, request, pk=None):
         """
         Fetch traffic history (IN/OUT) for both ports of a cable in a single request.
@@ -1289,18 +1314,11 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         Query params:
             hours: history window (default=24, max=168)
         """
-        from datetime import datetime, timedelta, timezone as dt_timezone
-        from concurrent.futures import ThreadPoolExecutor
-        from django.utils import timezone
-        from inventory.domain.zabbix_history import (
-            choose_bucket_seconds,
-            fetch_history,
-            get_items_meta,
-            history_to_samples,
-            merge_series,
-            meta_or_default,
-        )
         import statistics as stats_lib
+        from concurrent.futures import ThreadPoolExecutor
+        from datetime import timedelta
+
+        from django.utils import timezone
 
         cable = get_object_or_404(
             FiberCable.objects.select_related(
@@ -1315,12 +1333,14 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         time_till = int(timezone.now().timestamp())
 
         # EV-0003: um só item.get resolve value_type/units dos 4 itens do cabo.
-        items_meta = get_items_meta([
-            getattr(cable.origin_port, "zabbix_item_id_traffic_in", None),
-            getattr(cable.origin_port, "zabbix_item_id_traffic_out", None),
-            getattr(cable.destination_port, "zabbix_item_id_traffic_in", None),
-            getattr(cable.destination_port, "zabbix_item_id_traffic_out", None),
-        ])
+        items_meta = get_items_meta(
+            [
+                getattr(cable.origin_port, "zabbix_item_id_traffic_in", None),
+                getattr(cable.origin_port, "zabbix_item_id_traffic_out", None),
+                getattr(cable.destination_port, "zabbix_item_id_traffic_in", None),
+                getattr(cable.destination_port, "zabbix_item_id_traffic_out", None),
+            ]
+        )
 
         def _fetch_history(item_id):
             if not item_id:
@@ -1381,11 +1401,13 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             origin_data = origin_f.result()
             dest_data = dest_f.result()
 
-        return Response({
-            "origin": origin_data,
-            "destination": dest_data,
-            "period_hours": hours,
-        })
+        return Response(
+            {
+                "origin": origin_data,
+                "destination": dest_data,
+                "period_hours": hours,
+            }
+        )
 
     @action(detail=True, methods=["get", "post"], url_path="alarms")
     def alarms(self, request, pk=None):
@@ -1405,7 +1427,9 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             )
         except fiber_alarm_configs.FiberCableAlarmValidationError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        except fiber_alarm_configs.FiberCableAlarmError as exc:  # pragma: no cover - unexpected domain errors
+        except (
+            fiber_alarm_configs.FiberCableAlarmError
+        ):  # pragma: no cover - unexpected domain errors
             logger.exception("Failed to create fiber alarm config", exc_info=True)
             return Response(
                 {"error": "Falha ao criar configuração de alarme"},
@@ -1433,7 +1457,9 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         try:
             config = FiberCableAlarmConfig.objects.get(pk=alarm_id, fiber_cable=cable)
         except FiberCableAlarmConfig.DoesNotExist:
-            return Response({"error": "Configuração não encontrada"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Configuração não encontrada"}, status=status.HTTP_404_NOT_FOUND
+            )
 
         if request.method.lower() == "delete":
             config.delete()
@@ -1467,13 +1493,13 @@ class DeviceGroupViewSet(  # type: ignore[misc]
     (list/retrieve + destroy when empty)
     """
 
-    queryset = (
-        DeviceGroup.objects.annotate(
-            device_count=Count("primary_devices", distinct=True)
-        ).order_by("name")
-    )
+    queryset = DeviceGroup.objects.annotate(
+        device_count=Count("primary_devices", distinct=True)
+    ).order_by("name")
     serializer_class = DeviceGroupSerializer
-    permission_classes = [IsAuthenticated]  # 🔒 Sprint 1, Week 1: Fixed security vulnerability (was AllowAny)
+    permission_classes = [
+        IsAuthenticated
+    ]  # 🔒 Sprint 1, Week 1: Fixed security vulnerability (was AllowAny)
 
     def destroy(self, request, *args, **kwargs):
         """Block deletion when group still has devices linked."""
@@ -1497,52 +1523,54 @@ class ImportRuleViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
 
     queryset = ImportRule.objects.all().order_by("priority", "id")
     serializer_class = ImportRuleSerializer
-    permission_classes = [IsAuthenticated]  # 🔒 Sprint 1, Week 1: Fixed security vulnerability (was AllowAny)
+    permission_classes = [
+        IsAuthenticated
+    ]  # 🔒 Sprint 1, Week 1: Fixed security vulnerability (was AllowAny)
 
     @action(detail=False, methods=["post"])
     def reorder(self, request):
         """
         Bulk update priorities for drag-and-drop reordering.
-        
+
         Expects:
             {"rules": [{"id": 1, "priority": 0}, {"id": 2, "priority": 10}]}
         """
         rules_data = request.data.get("rules", [])
-        
+
         if not isinstance(rules_data, list):
             return Response(
                 {"error": "Expected 'rules' array"},
                 status=400,
             )
-        
+
         # Bulk update priorities
         for item in rules_data:
             rule_id = item.get("id")
             priority = item.get("priority")
-            
+
             if rule_id is None or priority is None:
                 continue
-            
+
             ImportRule.objects.filter(id=rule_id).update(priority=priority)
-        
+
         return Response({"status": "ok", "updated": len(rules_data)})
-    
+
     @action(detail=False, methods=["post"])
     def test_pattern(self, request):
         """
         Test regex pattern against sample device names.
-        
+
         Expects: {"pattern": "^OLT.*", "samples": ["OLT-01", "SWITCH-02", ...]}
         Returns: {"matches": ["OLT-01"], "non_matches": ["SWITCH-02"]}
         """
         import re
-        
+
         pattern = request.data.get("pattern", "")
         samples = request.data.get("samples", [])
-        
+
         if not pattern:
             return Response({"error": "Pattern required"}, status=400)
-        
+
         try:
             regex = re.compile(pattern, re.IGNORECASE)
         except re.error as e:
@@ -1550,17 +1578,19 @@ class ImportRuleViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                 {"error": f"Invalid regex: {e}"},
                 status=400,
             )
-        
+
         matches = []
         non_matches = []
-        
+
         for sample in samples:
             if regex.match(str(sample)):
                 matches.append(sample)
             else:
                 non_matches.append(sample)
-        
-        return Response({
-            "matches": matches,
-            "non_matches": non_matches,
-        })
+
+        return Response(
+            {
+                "matches": matches,
+                "non_matches": non_matches,
+            }
+        )
