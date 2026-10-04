@@ -146,10 +146,20 @@ def import_kml_modal(request: HttpRequest) -> HttpResponse:
 @api_login_required
 @handle_api_errors
 def api_fiber_cables(request: HttpRequest) -> JsonResponse:
-    """List all fiber cables with detailed information (cached with SWR)."""
+    """List all fiber cables with detailed information (cached with SWR).
+
+    Query params:
+        bbox: ``minLng,minLat,maxLng,maxLat`` — devolve só os cabos cuja caixa
+              envolvente toca a área (EV-0013). Filtra o payload cacheado, sem
+              queries extra. Inválido → ignorado (lista completa).
+    """
     data, is_fresh = get_cached_fiber_list(fiber_uc.list_fiber_cables)
 
-    response = JsonResponse({"cables": data})
+    bbox = fiber_uc.parse_bbox(request.GET.get("bbox"))
+    if bbox is not None:
+        data = fiber_uc.filter_cables_by_bbox(data, bbox)
+
+    response = JsonResponse({"cables": data, "total": len(data)})
 
     # Force browsers to revalidate so new cables show up immediately after creation.
     response["Cache-Control"] = "no-store, no-cache, must-revalidate"

@@ -139,4 +139,30 @@ def test_api_fiber_cables_returns_payload(
     response = fibers_api.api_fiber_cables(request)
 
     assert response.status_code == 200
-    assert json.loads(response.content) == {"cables": expected_payload}
+    assert json.loads(response.content) == {"cables": expected_payload, "total": 1}
+
+
+@pytest.mark.django_db
+def test_api_fiber_cables_filters_by_bbox(
+    rf: Any,
+    django_user_model: Any,
+    monkeypatch: Any,
+) -> None:
+    """EV-0013: ?bbox= devolve só o que toca a área, sobre o payload cacheado."""
+    user = django_user_model.objects.create_user(username="v2", password="secret123")
+    payload = [
+        {"id": 1, "path": [{"lat": -16.6, "lng": -49.3}], "origin": {}, "destination": {}},
+        {"id": 2, "path": [{"lat": -20.0, "lng": -45.0}], "origin": {}, "destination": {}},
+    ]
+    monkeypatch.setattr(fibers_api.fiber_uc, "list_fiber_cables", lambda: payload)
+
+    request = rf.get("/api/v1/inventory/fibers/", {"bbox": "-49.5,-16.9,-49.0,-16.5"})
+    request.user = user
+    body = json.loads(fibers_api.api_fiber_cables(request).content)
+    assert [c["id"] for c in body["cables"]] == [1]
+    assert body["total"] == 1
+
+    request = rf.get("/api/v1/inventory/fibers/", {"bbox": "lixo"})
+    request.user = user
+    body = json.loads(fibers_api.api_fiber_cables(request).content)
+    assert body["total"] == 2  # bbox inválido é ignorado

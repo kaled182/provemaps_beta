@@ -9,6 +9,7 @@ import logging
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass
+from collections.abc import Mapping
 from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
 
 from integrations.zabbix.zabbix_service import (
@@ -510,17 +511,49 @@ def cable_value_mapping_status(
     }
 
 
-def list_fiber_cables() -> List[Dict[str, object]]:
+def _port_site(port: Port | None):
+    device = getattr(port, "device", None)
+    return getattr(device, "site", None)
+
+
+def _site_coord(site, attr: str) -> float | None:
+    value = getattr(site, attr, None) if site else None
+    return float(value) if value is not None else None
+
+
+def _endpoint_payload(port: Port | None) -> dict[str, object]:
+    site = _port_site(port)
+    device = getattr(port, "device", None)
+    return {
+        "site": site.name if site else None,
+        "city": site.city if site else None,
+        "lat": _site_coord(site, "latitude"),
+        "lng": _site_coord(site, "longitude"),
+        "device": device.name if device else None,
+        "port": port.name if port else None,
+    }
+
+
+def list_fiber_cables() -> list[dict[str, object]]:
+    """Payload da listagem de cabos (dashboard/mapa), servido com cache SWR.
+
+    EV-0013: `cable_type` entra no `select_related` (antes era uma query por
+    cabo) e cabos com uma ponta ainda não terminada (porta nula — o modelo
+    permite) deixam de rebentar com AttributeError.
+    """
     cables = FiberCable.objects.select_related(
         "origin_port__device__site",
         "destination_port__device__site",
         "cable_group",
+        "cable_type",
         "folder",
     )
     payload = []
     for cable in cables:
-        origin_site = cable.origin_port.device.site
-        dest_site = cable.destination_port.device.site
+        origin_port = cable.origin_port
+        dest_port = cable.destination_port
+        origin_site = _port_site(origin_port)
+        dest_site = _port_site(dest_port)
         optical_summary = build_optical_summary(cable)
         payload.append(
             {
@@ -535,49 +568,19 @@ def list_fiber_cables() -> List[Dict[str, object]]:
                     else None
                 ),
                 # Campos enriquecidos (flat) para uso rápido no modal Vue
-                "origin_port_id": cable.origin_port.id,
-                "destination_port_id": cable.destination_port.id,
-                "origin_port_name": cable.origin_port.name,
-                "destination_port_name": cable.destination_port.name,
-                "origin_device_id": cable.origin_port.device.id,
-                "destination_device_id": cable.destination_port.device.id,
+                "origin_port_id": origin_port.id if origin_port else None,
+                "destination_port_id": dest_port.id if dest_port else None,
+                "origin_port_name": origin_port.name if origin_port else None,
+                "destination_port_name": dest_port.name if dest_port else None,
+                "origin_device_id": origin_port.device.id if origin_port and origin_port.device else None,
+                "destination_device_id": dest_port.device.id if dest_port and dest_port.device else None,
                 "parent_cable_id": cable.parent_cable_id,
-                "origin_device_name": cable.origin_port.device.name,
-                "destination_device_name": cable.destination_port.device.name,
+                "origin_device_name": origin_port.device.name if origin_port and origin_port.device else None,
+                "destination_device_name": dest_port.device.name if dest_port and dest_port.device else None,
                 "origin_site_id": origin_site.id if origin_site else None,
                 "destination_site_id": dest_site.id if dest_site else None,
-                "origin": {
-                    "site": origin_site.name if origin_site else None,
-                    "city": origin_site.city if origin_site else None,
-                    "lat": (
-                        float(origin_site.latitude)
-                        if origin_site and origin_site.latitude is not None
-                        else None
-                    ),
-                    "lng": (
-                        float(origin_site.longitude)
-                        if origin_site and origin_site.longitude is not None
-                        else None
-                    ),
-                    "device": cable.origin_port.device.name,
-                    "port": cable.origin_port.name,
-                },
-                "destination": {
-                    "site": dest_site.name if dest_site else None,
-                    "city": dest_site.city if dest_site else None,
-                    "lat": (
-                        float(dest_site.latitude)
-                        if dest_site and dest_site.latitude is not None
-                        else None
-                    ),
-                    "lng": (
-                        float(dest_site.longitude)
-                        if dest_site and dest_site.longitude is not None
-                        else None
-                    ),
-                    "device": cable.destination_port.device.name,
-                    "port": cable.destination_port.name,
-                },
+                "origin": _endpoint_payload(origin_port),
+                "destination": _endpoint_payload(dest_port),
                 "path": (
                     linestring_to_coords(cable.path) if cable.path else []
                 ),
@@ -599,6 +602,55 @@ def list_fiber_cables() -> List[Dict[str, object]]:
             }
         )
     return payload
+
+
+def parse_bbox(raw: str | None) -> tuple[float, float, float, float] | None:
+    """``"minLng,minLat,maxLng,maxLat"`` → tupla, ou ``None`` se ausente/inválido."""
+    if not raw:
+        return None
+    try:
+        parts = [float(x) for x in str(raw).split(",")]
+    except ValueError:
+        return None
+    if len(parts) != 4:
+        return None
+    min_lng, min_lat, max_lng, max_lat = parts
+    if min_lng > max_lng or min_lat > max_lat:
+        return None
+    return (min_lng, min_lat, max_lng, max_lat)
+
+
+def filter_cables_by_bbox(
+    cables: list[dict[str, object]],
+    bbox: tuple[float, float, float, float],
+) -> list[dict[str, object]]:
+    """Mantém só os cabos cuja caixa envolvente (traçado + pontas) toca ``bbox``.
+
+    EV-0013: a listagem é cacheada inteira; o filtro corre sobre o payload, por
+    isso não custa queries e serve para o mapa pedir só o que está no ecrã.
+    """
+    min_lng, min_lat, max_lng, max_lat = bbox
+
+    def _points(cable: dict[str, object]):
+        for pt in cable.get("path") or []:
+            if isinstance(pt, Mapping) and pt.get("lat") is not None and pt.get("lng") is not None:
+                yield float(pt["lat"]), float(pt["lng"])
+        for end in ("origin", "destination"):
+            e = cable.get(end) or {}
+            if isinstance(e, Mapping) and e.get("lat") is not None and e.get("lng") is not None:
+                yield float(e["lat"]), float(e["lng"])
+
+    kept: list[dict[str, object]] = []
+    for cable in cables:
+        pts = list(_points(cable))
+        if not pts:
+            continue
+        lats = [p[0] for p in pts]
+        lngs = [p[1] for p in pts]
+        if max(lngs) < min_lng or min(lngs) > max_lng or max(lats) < min_lat or min(lats) > max_lat:
+            continue
+        kept.append(cable)
+    return kept
 
 
 def fiber_detail_payload(cable: FiberCable) -> Dict[str, object]:
@@ -1306,6 +1358,8 @@ __all__ = [
     "fiber_to_payload",
     "cable_value_mapping_status",
     "list_fiber_cables",
+    "filter_cables_by_bbox",
+    "parse_bbox",
     "fiber_detail_payload",
     "update_fiber_path",
     "update_fiber_metadata",
