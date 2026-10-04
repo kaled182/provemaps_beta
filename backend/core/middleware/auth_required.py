@@ -4,7 +4,7 @@ Redirects unauthenticated users to login page.
 """
 from django.shortcuts import redirect
 from django.conf import settings
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from typing import Callable
 
 
@@ -22,6 +22,9 @@ class AuthRequiredMiddleware:
     - /metrics/ (Prometheus metrics)
     - /healthz, /ready, /live (health checks)
     - /api/v1/ (API endpoints - protected by DRF permissions)
+
+    Any other /api/* path without a session gets a 401 JSON response instead of
+    a redirect to the login page (EV-0002).
     """
     
     WHITELIST_PATHS = [
@@ -39,7 +42,8 @@ class AuthRequiredMiddleware:
         '/favicon.ico',
         '/celery/status',
         '/setup_app/first_time/',
-        '/api/config/',  # Frontend configuration (map provider, API keys, etc)
+        # EV-0002: '/api/config/' saiu daqui. Entregava as chaves Google/Mapbox/Esri
+        # a qualquer visitante. Pedidos a /api/* sem sessão recebem 401 JSON abaixo.
     ]
     
     WHITELIST_PREFIXES = [
@@ -67,6 +71,13 @@ class AuthRequiredMiddleware:
         
         # Check if user is authenticated
         if not request.user.is_authenticated:
+            # Chamadas de API (fetch do SPA) recebem 401 JSON, não a página de login
+            # em HTML — o cliente consegue distinguir «sem sessão» de «config inválida».
+            if request.path.startswith('/api/'):
+                return JsonResponse(
+                    {'detail': 'Authentication required.'},
+                    status=401,
+                )
             # Store the requested URL to redirect after login
             login_url = settings.LOGIN_URL
             if request.path != '/':

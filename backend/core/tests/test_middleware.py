@@ -82,6 +82,27 @@ class AuthRequiredMiddlewareTests(TestCase):
         self.mw(req)
         self.get_response.assert_called_once()
 
+    def test_api_config_not_whitelisted_anymore(self):
+        """EV-0002: /api/config/ exigia zero autenticação e entregava as chaves."""
+        self.assertFalse(self.mw._is_whitelisted("/api/config/"))
+
+    def test_anon_api_path_gets_401_json_not_redirect(self):
+        req = self._anon_request("/api/config/")
+        resp = self.mw(req)
+        self.assertEqual(resp.status_code, 401)
+        self.assertEqual(resp["Content-Type"], "application/json")
+        self.get_response.assert_not_called()
+
+    def test_anon_other_api_path_gets_401(self):
+        req = self._anon_request("/api/users/")
+        resp = self.mw(req)
+        self.assertEqual(resp.status_code, 401)
+
+    def test_auth_api_config_passes_through(self):
+        req = self._auth_request("/api/config/")
+        self.mw(req)
+        self.get_response.assert_called_once()
+
     def test_is_whitelisted_exact_match(self):
         self.assertTrue(self.mw._is_whitelisted("/healthz"))
         self.assertTrue(self.mw._is_whitelisted("/accounts/login/"))

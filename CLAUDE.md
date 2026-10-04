@@ -100,7 +100,6 @@ log em inglês, como já está.
 <!-- EVOLUCAO:INICIO — quadro manual; quando a Central existir, passa a ser gerado. -->
 **A fazer — 🐛 Problemas** (triagem do Paulo, 2026-10-04: todos aceitos com a prioridade proposta)
 
-- `EV-0002` **`/api/config/` entrega chaves Google/Mapbox/Esri a qualquer visitante, sem login** · P1 · `backend/core/views_api.py`, `core/middleware/auth_required.py`
 - `EV-0003` **Endpoints de tráfego pedem `history: 3` fixo; itens float devolvem gráfico vazio** · P1 · `backend/inventory/viewsets.py:733,754,1385`
 - `EV-0004` **`api_port_traffic_history` sem `@login_required`** · P1 · `backend/inventory/api/devices.py:263`
 - `EV-0005` **Tokens Mapbox literais e dump com `auth.user` versionados — rotacionar e remover** · P1 · `backend/maps_view/tests_mapbox_proxy.py:27`, `frontend/test-mapbox*.html`, `backend/static/test-mapbox-*.html`, `backups/QUICK_START.txt`, `data/sqlite_dump.json`
@@ -135,6 +134,7 @@ log em inglês, como já está.
 **Feito — aguarda deploy** (sai daqui quando o commit `fecha` chegar a produção)
 
 - `EV-0001` **Gráfico óptico desenha dados aleatórios quando o Zabbix não devolve histórico** · P1 · fechado em `fix(charts)` 2026-10-04 — `frontend/src/utils/opticalHistory.js` é a única fonte das mensagens «sem dados»/«erro»
+- `EV-0002` **`/api/config/` entrega chaves Google/Mapbox/Esri a qualquer visitante, sem login** · P1 · fechado em `fix(auth)` 2026-10-04 — middleware responde 401 JSON a `/api/*` sem sessão; a view tem guarda própria. «Mapbox só via proxy» fica para EV-0012 (uma pilha de mapa)
 
 <!-- EVOLUCAO:FIM -->
 
