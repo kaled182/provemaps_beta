@@ -248,7 +248,8 @@ class ListDepartmentsViewTests(TestCase):
     def test_unauthenticated_returns_redirect_or_403(self):
         self.client.logout()
         resp = self._get()
-        self.assertIn(resp.status_code, (302, 403))
+        # EV-0002: rotas /api/* sem sessão respondem 401 JSON (antes: redirect 302).
+        self.assertIn(resp.status_code, (302, 401, 403))
 
 
 class DepartmentDetailViewTests(TestCase):
@@ -522,7 +523,8 @@ class MeUserViewTests(TestCase):
     def test_unauthenticated_returns_redirect_or_403(self):
         self.client.logout()
         resp = self.client.get(_me_url())
-        self.assertIn(resp.status_code, (302, 403))
+        # EV-0002: rotas /api/* sem sessão respondem 401 JSON (antes: redirect 302).
+        self.assertIn(resp.status_code, (302, 401, 403))
 
 
 # ---------------------------------------------------------------------------
@@ -561,7 +563,8 @@ class MeAvatarViewTests(TestCase):
     def test_unauthenticated_returns_redirect(self):
         self.client.logout()
         resp = self.client.post(_me_avatar_url(), {})
-        self.assertIn(resp.status_code, (302, 403))
+        # EV-0002: rotas /api/* sem sessão respondem 401 JSON (antes: redirect 302).
+        self.assertIn(resp.status_code, (302, 401, 403))
 
 
 # ---------------------------------------------------------------------------
@@ -626,7 +629,8 @@ class MeTotpViewTests(TestCase):
     def test_unauthenticated_returns_redirect(self):
         self.client.logout()
         resp = self.client.get(_me_totp_url())
-        self.assertIn(resp.status_code, (302, 403))
+        # EV-0002: rotas /api/* sem sessão respondem 401 JSON (antes: redirect 302).
+        self.assertIn(resp.status_code, (302, 401, 403))
 
 
 class MeTotpVerifyViewTests(TestCase):
@@ -672,7 +676,8 @@ class MeTotpVerifyViewTests(TestCase):
     def test_unauthenticated_returns_redirect(self):
         self.client.logout()
         resp = _post_json(self.client, _me_totp_verify_url(), {"code": "123456"})
-        self.assertIn(resp.status_code, (302, 403))
+        # EV-0002: rotas /api/* sem sessão respondem 401 JSON (antes: redirect 302).
+        self.assertIn(resp.status_code, (302, 401, 403))
 
 
 class MeTotpDisableViewTests(TestCase):
@@ -709,4 +714,5 @@ class MeTotpDisableViewTests(TestCase):
     def test_unauthenticated_returns_redirect(self):
         self.client.logout()
         resp = _post_json(self.client, _me_totp_disable_url(), {})
-        self.assertIn(resp.status_code, (302, 403))
+        # EV-0002: rotas /api/* sem sessão respondem 401 JSON (antes: redirect 302).
+        self.assertIn(resp.status_code, (302, 401, 403))

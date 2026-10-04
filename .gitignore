@@ -160,7 +160,7 @@ Desktop.ini
 
 # Node.js artifacts
 node_modules/
-package-lock.json
+# package-lock.json É versionado (EV-0007): `npm ci` no Dockerfile e no CI exige-o.
 
 # Project-specific generated artifacts (post folder-structure refactor)
 backend/logs/
