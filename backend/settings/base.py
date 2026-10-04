@@ -283,45 +283,28 @@ LOGIN_REDIRECT_URL = "/monitoring/monitoring-all/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
 
 # -----------------------------------------------------
-# Database (MySQL/MariaDB with fallbacks) - optimized
-# Phase 10: Support for PostgreSQL + PostGIS via DB_ENGINE env var
+# Database — PostgreSQL 16 + PostGIS é o ÚNICO banco suportado (EV-0025).
+# `DB_ENGINE` aceita postgis | postgresql | postgres (sinónimos). Qualquer outro
+# valor falha no arranque: o driver MySQL não está em requirements.txt e o
+# default antigo (`mysql`) fazia um ambiente sem `.env` arrancar contra um banco
+# que não existe. Os campos espaciais (GDAL/GEOS) exigem o backend postgis.
 # -----------------------------------------------------
-DB_ENGINE = os.getenv("DB_ENGINE", "mysql").lower()
+_POSTGIS_ENGINE_ALIASES = ("postgis", "postgresql", "postgres")
+DB_ENGINE = os.getenv("DB_ENGINE", "postgis").lower()
+if DB_ENGINE not in _POSTGIS_ENGINE_ALIASES:
+    from django.core.exceptions import ImproperlyConfigured
 
-# MySQL/MariaDB configuration (default, current production)
-DB_OPTIONS: dict[str, Any] = {}
+    raise ImproperlyConfigured(
+        f"DB_ENGINE={DB_ENGINE!r} não é suportado. O ProVeMaps corre só em PostgreSQL + "
+        "PostGIS: use DB_ENGINE=postgis (ou postgresql/postgres)."
+    )
 
-if DB_ENGINE == "mysql":
-    DB_OPTIONS = {
-        "charset": "utf8mb4",
-        "init_command": "SET sql_mode='STRICT_ALL_TABLES'",
-        "connect_timeout": 10,
-    }
-
-    # Optional pool settings when supported by the driver
-    if os.getenv("DB_USE_CONNECTION_POOL", "false").lower() == "true":
-        DB_OPTIONS.update(
-            {
-                "pool_size": int(os.getenv("DB_POOL_SIZE", "10")),
-                "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "20")),
-                "pool_pre_ping": True,
-                "pool_recycle": 300,
-            }
-        )
-elif DB_ENGINE in ("postgres", "postgresql", "postgis"):
-    # PostgreSQL + PostGIS configuration (Phase 10)
-    DB_OPTIONS = {
-        "connect_timeout": 10,
-        "options": "-c search_path=public,postgis",
-    }
-
-# Database engine selection
-if DB_ENGINE in ("postgres", "postgresql", "postgis"):
-    DB_BACKEND = "django.contrib.gis.db.backends.postgis"
-    DEFAULT_PORT = "5432"
-else:
-    DB_BACKEND = "django.db.backends.mysql"
-    DEFAULT_PORT = "3306"
+DB_BACKEND = "django.contrib.gis.db.backends.postgis"
+DEFAULT_PORT = "5432"
+DB_OPTIONS: dict[str, Any] = {
+    "connect_timeout": 10,
+    "options": "-c search_path=public,postgis",
+}
 
 DATABASES: dict[str, dict[str, Any]] = {
     "default": {

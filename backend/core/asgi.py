@@ -12,9 +12,12 @@ import os
 from channels.auth import AuthMiddlewareStack
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.core.asgi import get_asgi_application
-from django.urls import path
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
+# EV-0025: `core.settings` nunca existiu. Servidores arrancam em produção por
+# omissão (fail-safe: `settings.prod` recusa SECRET_KEY de desenvolvimento);
+# `manage.py` e o Celery continuam a assumir `settings.dev`. O Docker define a
+# variável explicitamente.
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "settings.prod")
 
 django_asgi_app = get_asgi_application()
 
