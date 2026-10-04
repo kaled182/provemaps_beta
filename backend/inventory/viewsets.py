@@ -2,6 +2,7 @@
 
 import logging
 
+from django.shortcuts import get_object_or_404
 from django.db.models import Count, Q
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -699,7 +700,7 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         """
         from datetime import datetime, timedelta, timezone as dt_timezone
         from django.utils import timezone
-        from integrations.zabbix.zabbix_service import zabbix_request
+        from inventory.domain.zabbix_history import fetch_history, get_items_meta, meta_or_default
         import statistics
         
         port = self.get_object()
@@ -725,17 +726,15 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         traffic_data = []
         in_values = []
         out_values = []
+
+        # EV-0003: `history` tem de ser o value_type REAL do item (0 float / 3 uint);
+        # um único item.get resolve os dois itens e as unidades.
+        items_meta = get_items_meta([traffic_in_id, traffic_out_id])
+        units = {k: meta_or_default(items_meta, k)["units"] for k in (traffic_in_id, traffic_out_id) if k}
         
         # Buscar tráfego IN
         if traffic_in_id:
-            in_history = zabbix_request("history.get", {
-                "itemids": [traffic_in_id],
-                "history": 3,  # Numeric (unsigned) - típico para contadores de tráfego
-                "time_from": time_from,
-                "time_till": time_till,
-                "sortfield": "clock",
-                "sortorder": "ASC",
-            })
+            in_history = fetch_history(traffic_in_id, time_from, time_till, meta=items_meta)
             if in_history:
                 for entry in in_history:
                     timestamp = datetime.fromtimestamp(int(entry["clock"]), tz=dt_timezone.utc)
@@ -749,14 +748,7 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         
         # Buscar tráfego OUT
         if traffic_out_id:
-            out_history = zabbix_request("history.get", {
-                "itemids": [traffic_out_id],
-                "history": 3,
-                "time_from": time_from,
-                "time_till": time_till,
-                "sortfield": "clock",
-                "sortorder": "ASC",
-            })
+            out_history = fetch_history(traffic_out_id, time_from, time_till, meta=items_meta)
             if out_history:
                 out_by_time = {int(e["clock"]): float(e.get("value", 0)) for e in out_history}
                 out_values = list(out_by_time.values())
@@ -806,6 +798,10 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                 "max_in": max(in_values) if in_values else None,
                 "max_out": max(out_values) if out_values else None,
                 "period_hours": hours,
+                # Unidades declaradas no Zabbix (ex.: "bps", "Bps", "pps"); o
+                # frontend não deve assumir bps (EV-0003 → EV-0010).
+                "unit_in": units.get(traffic_in_id),
+                "unit_out": units.get(traffic_out_id),
             }
         })
 
@@ -1365,29 +1361,33 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         from datetime import datetime, timedelta, timezone as dt_timezone
         from concurrent.futures import ThreadPoolExecutor
         from django.utils import timezone
-        from integrations.zabbix.zabbix_service import zabbix_request
+        from inventory.domain.zabbix_history import fetch_history, get_items_meta, meta_or_default
         import statistics as stats_lib
 
-        cable = FiberCable.objects.select_related(
-            "origin_port__device",
-            "destination_port__device",
-        ).get(pk=pk)
+        cable = get_object_or_404(
+            FiberCable.objects.select_related(
+                "origin_port__device",
+                "destination_port__device",
+            ),
+            pk=pk,
+        )
 
         hours = min(int(request.query_params.get("hours", 24)), 168)
         time_from = int((timezone.now() - timedelta(hours=hours)).timestamp())
         time_till = int(timezone.now().timestamp())
 
+        # EV-0003: um só item.get resolve value_type/units dos 4 itens do cabo.
+        items_meta = get_items_meta([
+            getattr(cable.origin_port, "zabbix_item_id_traffic_in", None),
+            getattr(cable.origin_port, "zabbix_item_id_traffic_out", None),
+            getattr(cable.destination_port, "zabbix_item_id_traffic_in", None),
+            getattr(cable.destination_port, "zabbix_item_id_traffic_out", None),
+        ])
+
         def _fetch_history(item_id):
             if not item_id:
                 return []
-            return zabbix_request("history.get", {
-                "itemids": [item_id],
-                "history": 3,
-                "time_from": time_from,
-                "time_till": time_till,
-                "sortfield": "clock",
-                "sortorder": "ASC",
-            }) or []
+            return fetch_history(item_id, time_from, time_till, meta=items_meta)
 
         def _fetch_port_traffic(port):
             if not port:
@@ -1444,6 +1444,8 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                 "avg_out": stats_lib.mean(out_values) if out_values else None,
                 "max_in": max(in_values) if in_values else None,
                 "max_out": max(out_values) if out_values else None,
+                "unit_in": meta_or_default(items_meta, in_id)["units"] if in_id else None,
+                "unit_out": meta_or_default(items_meta, out_id)["units"] if out_id else None,
             }
 
             return {

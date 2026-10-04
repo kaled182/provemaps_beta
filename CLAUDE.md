@@ -100,9 +100,6 @@ log em inglês, como já está.
 <!-- EVOLUCAO:INICIO — quadro manual; quando a Central existir, passa a ser gerado. -->
 **A fazer — 🐛 Problemas** (triagem do Paulo, 2026-10-04: todos aceitos com a prioridade proposta)
 
-- `EV-0003` **Endpoints de tráfego pedem `history: 3` fixo; itens float devolvem gráfico vazio** · P1 · `backend/inventory/viewsets.py:733,754,1385`
-- `EV-0004` **`api_port_traffic_history` sem `@login_required`** · P1 · `backend/inventory/api/devices.py:263`
-- `EV-0005` **Tokens Mapbox literais e dump com `auth.user` versionados — rotacionar e remover** · P1 · `backend/maps_view/tests_mapbox_proxy.py:27`, `frontend/test-mapbox*.html`, `backend/static/test-mapbox-*.html`, `backups/QUICK_START.txt`, `data/sqlite_dump.json`
 - `EV-0006` **Cobertura «60 %» do CI mede só `core`, `maps_view`, `setup_app`; `inventory` fica fora** · P1 · `backend/pyproject.toml [tool.coverage.run]`
 - `EV-0007` **`package-lock.json` ignorado + `npm ci` no Dockerfile e no CI → build não reprodutível** · P1 · `.gitignore`, `docker/dockerfile`, `.github/workflows/daily-inventory-tests.yml`
 - `EV-0008` **~61 testes backend nunca coletados; três configs pytest divergentes** · P2 · `pytest.ini`, `backend/pytest.ini`, `backend/pyproject.toml`, `backend/inventory/routes/tests/`
@@ -135,6 +132,9 @@ log em inglês, como já está.
 
 - `EV-0001` **Gráfico óptico desenha dados aleatórios quando o Zabbix não devolve histórico** · P1 · fechado em `fix(charts)` 2026-10-04 — `frontend/src/utils/opticalHistory.js` é a única fonte das mensagens «sem dados»/«erro»
 - `EV-0002` **`/api/config/` entrega chaves Google/Mapbox/Esri a qualquer visitante, sem login** · P1 · fechado em `fix(auth)` 2026-10-04 — middleware responde 401 JSON a `/api/*` sem sessão; a view tem guarda própria. «Mapbox só via proxy» fica para EV-0012 (uma pilha de mapa)
+- `EV-0003` **Endpoints de tráfego pedem `history: 3` fixo; itens float devolvem gráfico vazio** · P1 · fechado em `fix(zabbix)` 2026-10-04 — `inventory/domain/zabbix_history.py` resolve `value_type`/`units` por `item.get` e os dois endpoints DRF usam-no; resposta ganha `unit_in`/`unit_out`
+- `EV-0004` **`api_port_traffic_history` sem `@login_required`** · P1 · fechado em `fix(auth)` 2026-10-04
+- `EV-0005` **Tokens Mapbox literais e dump com `auth.user` versionados** · P1 · ficheiros removidos/placeholder em `chore(security)` 2026-10-04 — **a rotação do token no Mapbox é manual, pelo Paulo**; o token continua no histórico do Git até lá
 
 <!-- EVOLUCAO:FIM -->
 
