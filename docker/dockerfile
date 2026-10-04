@@ -112,8 +112,9 @@ WORKDIR /app/backend
 # Instalar dependências a partir dos wheels compilados no Stage 1
 COPY --from=builder /wheels /wheels
 COPY backend/requirements.txt /app/backend/requirements.txt
+# gunicorn/uvicorn/celery vêm pinados em requirements.txt (EV-0018): nada se
+# instala fora dos wheels do Stage 1, para a imagem ser reprodutível.
 RUN pip install --no-index --find-links=/wheels -r requirements.txt && \
-    pip install --no-cache-dir gunicorn uvicorn celery && \
     rm -rf /wheels /root/.cache
 
 # Código da aplicação

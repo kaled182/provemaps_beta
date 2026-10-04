@@ -64,7 +64,7 @@ jobs:
         run: |
           python -m venv venv
           venv/bin/python -m pip install --upgrade pip
-          venv/bin/pip install -r backend/requirements.txt
+          venv/bin/pip install -r backend/requirements-dev.txt
 
       - name: Wait for PostGIS service
         run: |

@@ -64,8 +64,12 @@ skills:  ## Repõe as skills de agente (.claude/skills/) a partir do skills-lock
 ### ---------------------------
 
 .PHONY: requirements
-requirements:  ## Install backend project dependencies
+requirements:  ## Install backend runtime dependencies (what the production image gets)
 	pip install -r $(BACKEND_DIR)/requirements.txt
+
+.PHONY: requirements-dev
+requirements-dev:  ## Install runtime + test/lint/type-check dependencies
+	pip install -r $(BACKEND_DIR)/requirements-dev.txt
 
 .PHONY: clean
 clean:  ## Remove caches and temporary artifacts

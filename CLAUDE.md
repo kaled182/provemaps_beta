@@ -102,7 +102,6 @@ log em inglês, como já está.
 
 - `EV-0012` **Quatro pilhas de mapa paralelas; só `CustomMapViewer` honra os três provedores; `NetworkDesign` quebra com `osm`** · P2 · `frontend/src/components/MapView.vue`, `providers/maps/MapProviderFactory.js`, `composables/useMapService.js` · **⚠️ não cabe numa sessão** (MapView 1.943, CustomMapViewer 2.874, NetworkDesign 3.566 linhas): leitura levada ao Paulo em 2026-10-04 — proposta de fatiar em 0012a Leaflet/OSM na factory + apagar pilha 4 morta; 0012b MapView; 0012c CustomMapViewer; 0012d NetworkDesign. Decisão dele; o assistente passou ao item seguinte
 - `EV-0017` **`setup_app/api_views.py` com 4.484 linhas sem usecases; `usecases/devices.py` com 2.501** · P2 · **⚠️ não cabe numa sessão** (66 views em `api_views.py` ligadas a 42 rotas, 7 domínios misturados — config/env, backups+nuvem, testes de ligação, perfil da empresa, servidores de monitorização, gateways de mensagens/WhatsApp QR, vídeo/câmeras — com `setup_app` a 45 % de cobertura; `devices.py` tem 25 funções com descoberta Zabbix e scoring de portas no mesmo ficheiro): leitura levada ao Paulo em 2026-10-04 — proposta de fatiar por domínio, um módulo `setup_app/api/<dominio>.py` + `setup_app/usecases/<dominio>.py` por item (0017a backups, 0017b env/config, 0017c gateways+WhatsApp, 0017d vídeo, 0017e testes de ligação/perfil/monitorização) e 0017f `usecases/devices.py` → `devices_discovery.py` + `devices_ports.py`. Decisão dele; o assistente passou ao item seguinte
-- `EV-0018` **Dev-tools e pins sem versão na imagem de produção; `django-stubs 5.1` vs Django 5.2; três ficheiros de requirements** · P2 · `backend/requirements.txt`, `docker/dockerfile`
 - `EV-0019` **Build do SPA sem minify, 518 `console.log`, Tailwind/FontAwesome via CDN forçando CSP com `unsafe-eval`** · P2 · `frontend/vite.config.js`, `backend/templates/base_spa.html`
 - `EV-0020` **Lixo versionado: `setup_app_backup/`, `staticfiles/`, `playwright-report`, `.vue.broken_backup`, HTMLs de teste, `dtemp_fibers.json`** · P3
 - `EV-0021` **Docs obsoletas: 42 citam `zabbix_api`, 20 citam MariaDB; versões 1.4.1 / 2.0.0 / 0.1.3 inconsistentes** · P3 · `doc/`, `CHANGELOG.md`, `VERSION`, `frontend/package.json`
@@ -135,6 +134,7 @@ log em inglês, como já está.
 - `EV-0014` **`CustomMapViewer` faz polling de 30 s em vez do WebSocket; `SiteDetailsModal` cria um socket por abertura sem cleanup** · P2 · fechado em `fix(realtime)` 2026-10-04 — destapou que o contrato do canal estava quebrado em TODOS os consumidores (store esperava `host_update`, modal esperava `data.devices`; o backend publica `dashboard.status`/`cable_status_update`): `composables/useRealtimeStatus.js` passa a ser o único intérprete
 - `EV-0015` **KML: só `LineString` 2.2, Placemarks concatenados num único traçado, sem KMZ/MultiGeometry** · P2 · fechado em `feat(kml)` 2026-10-04 — `inventory/domain/kml.py`: qualquer namespace, KMZ, `MultiGeometry`, `gx:Track`, um traçado por Placemark (o mais longo vira o cabo), dedupe. **Fica:** mover `features/networkDesign/partials/import_kml.js` (DOM legado, `window.*`) para componente Vue — é parte da pilha NetworkDesign (EV-0012d)
 - `EV-0016` **Segredo TOTP em texto puro, TOTP caseiro, lockout por sessão** · P2 · fechado em `fix(auth)` 2026-10-04 — `UserProfile.totp_secret` passa a `EncryptedCharField` (Fernet, migração `core 0006` cifra os segredos existentes e é reversível); TOTP pelo `pyotp` (RFC 6238) em vez da implementação caseira; lockout por utilizador na cache (3 falhas → 5 min), não na sessão — limpar o cookie já não zera as tentativas
+- `EV-0018` **Dev-tools e pins sem versão na imagem de produção; `django-stubs 5.1` vs Django 5.2; três ficheiros de requirements** · P2 · fechado em `build(deps)` 2026-10-04 — `requirements.txt` só runtime, tudo pinado (`psycopg`, `setuptools`, `uvicorn`+`h11` que o Dockerfile instalava solto); `requirements-dev.txt` novo com pytest/coverage/lint/stubs (django-stubs 5.2.9, drf-stubs 3.16.9) que o CI e o `make requirements-dev` instalam; `requirements_full.txt` (freeze UTF-16 de Windows com MySQL e Playwright) apagado. **Fica:** `uvicorn.workers.UvicornWorker` está depreciado a favor do pacote `uvicorn-worker` — trocar nos compose quando se mexer na infra
 
 <!-- EVOLUCAO:FIM -->
 
@@ -303,6 +303,9 @@ Regras desde já:
 # stack completo (PostGIS, Redis, web, celery) — porta 8100
 make up            # docker compose -f docker/docker-compose.yml up -d
 make logs / make down
+
+# dependências: runtime (= imagem de produção) ou runtime + testes/lint/stubs
+make requirements · make requirements-dev     # pip -r backend/requirements[-dev].txt
 
 # backend local (precisa de GDAL/GEOS e DJANGO_SETTINGS_MODULE=settings.dev)
 make run · make migrate · make makemigrations · make shell
