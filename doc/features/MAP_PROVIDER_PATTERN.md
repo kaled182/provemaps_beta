@@ -682,6 +682,7 @@ describe('MapboxPolyline', () => {
 ### Médio Prazo (1 mês)
 - [x] Suporte a **OpenStreetMap/Leaflet** — `LeafletProvider.js`, provider `osm` (EV-0012a, 2026-10-04)
 - [x] `MapView.vue` (rota `/map` + Dashboard) migrado do `vue3-google-map` para a factory; `IMap` ganhou `getBounds`/`getContainer`/`idle`/`move`, `IMarker` ganhou `iconUrl`, `IPolyline` eventos de hover; janelas via `components/Map/MapPopup.vue` (EV-0012b, 2026-10-04)
+- [x] `CustomMapViewer.vue`, `SiteEditModal.vue` e `DeviceEditModal.vue` sem ramos por provider; `IMap` ganhou `createPolygon`/`setCursor`/`resize`/`setTheme`, `IMarker.setStyle`, `IPolyline.setStyle`; estilo Mapbox resolvido no provider com fallback (EV-0012c, 2026-10-04)
 - [ ] Suporte a **Esri ArcGIS**
 - [ ] **Edição interativa** de vértices (Mapbox GL Draw)
 - [ ] **Documentação** completa da API

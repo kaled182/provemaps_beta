@@ -13,7 +13,7 @@
 
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { IMapProvider, IMap, IPolyline, IMarker } from './IMapProvider.js';
+import { IMapProvider, IMap, IPolyline, IMarker, IPolygon } from './IMapProvider.js';
 import { getMarkerConfig } from './markerStyles.js';
 
 export const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -40,6 +40,46 @@ function toMapEvent(e) {
 
 function toLatLngs(path) {
   return (path || []).map((p) => [p.lat, p.lng]);
+}
+
+function normalizeFitOptions(options) {
+  if (typeof options === 'number') return { padding: options, maxZoom: 18 };
+  return { padding: options?.padding ?? options?.top ?? 50, maxZoom: options?.maxZoom ?? 18 };
+}
+
+/**
+ * Implementação Leaflet do IPolygon
+ */
+class LeafletPolygon extends IPolygon {
+  constructor(map, options) {
+    super();
+    this.polygon = L.polygon(toLatLngs(options.path), {
+      color: options.strokeColor || '#f59e0b',
+      weight: options.strokeWeight || 2,
+      opacity: options.strokeOpacity ?? 0.9,
+      fillColor: options.fillColor || options.strokeColor || '#f59e0b',
+      fillOpacity: options.fillOpacity ?? 0.12,
+      interactive: options.clickable ?? false,
+    }).addTo(map.leafletMap);
+  }
+
+  setPath(path) {
+    this.polygon.setLatLngs(toLatLngs(path));
+  }
+
+  setStyle(style) {
+    const next = {};
+    if (style.strokeColor !== undefined) next.color = style.strokeColor;
+    if (style.strokeWeight !== undefined) next.weight = style.strokeWeight;
+    if (style.strokeOpacity !== undefined) next.opacity = style.strokeOpacity;
+    if (style.fillColor !== undefined) next.fillColor = style.fillColor;
+    if (style.fillOpacity !== undefined) next.fillOpacity = style.fillOpacity;
+    this.polygon.setStyle(next);
+  }
+
+  remove() {
+    this.polygon.remove();
+  }
 }
 
 /**
@@ -110,6 +150,18 @@ class LeafletPolyline extends IPolyline {
     return this.polyline.getLatLngs().map((ll) => ({ lat: ll.lat, lng: ll.lng }));
   }
 
+  setStyle(style) {
+    if (style.strokeColor !== undefined) this._baseStyle.color = style.strokeColor;
+    if (style.strokeWeight !== undefined) this._baseStyle.weight = style.strokeWeight;
+    if (style.strokeOpacity !== undefined) this._baseStyle.opacity = style.strokeOpacity;
+    if (this._hovered) {
+      this.polyline.setStyle({ color: this._baseStyle.color, weight: this._baseStyle.weight + 2, opacity: 1 });
+    } else {
+      this.polyline.setStyle({ ...this._baseStyle });
+    }
+    if (style.zIndex !== undefined && style.zIndex >= 1000) this.polyline.bringToFront?.();
+  }
+
   setEditable(editable) {
     // Leaflet puro não edita vértices (precisaria de leaflet-editable/geoman).
     this._editable = editable;
@@ -160,15 +212,19 @@ class LeafletMarker extends IMarker {
 
     const markerType = options.markerType || 'default';
     const config = getMarkerConfig(markerType);
-
-    const icon = options.iconUrl
-      ? this._createImageIcon(markerType, options.iconUrl, options.iconSize || 24)
-      : this._createIcon(markerType, { ...config, label: options.label ?? config.label }, options.draggable);
+    this.markerType = markerType;
+    this._style = {
+      color: options.color ?? config.color,
+      size: options.size ?? config.size,
+      label: options.label ?? config.label,
+      iconUrl: options.iconUrl,
+      iconSize: options.iconSize || 24,
+    };
 
     this.marker = L.marker([this.position.lat, this.position.lng], {
       draggable: options.draggable || false,
       title: options.title || '',
-      icon,
+      icon: this._buildIcon(),
     }).addTo(this.leafletMap);
 
     this.marker.on('drag', () => {
@@ -180,6 +236,18 @@ class LeafletMarker extends IMarker {
       this._emit('dragend');
     });
     this.marker.on('click', (e) => this._emit('click', { originalEvent: e.originalEvent }));
+  }
+
+  _buildIcon() {
+    const s = this._style;
+    return s.iconUrl
+      ? this._createImageIcon(this.markerType, s.iconUrl, s.iconSize)
+      : this._createIcon(this.markerType, { color: s.color, size: s.size, label: s.label }, this.options.draggable);
+  }
+
+  setStyle(style) {
+    this._style = { ...this._style, ...style };
+    this.marker.setIcon(this._buildIcon());
   }
 
   _createImageIcon(markerType, url, size) {
@@ -315,13 +383,21 @@ class LeafletMap extends IMap {
     return this.leafletMap.getZoom();
   }
 
-  fitBounds(bounds, padding) {
+  fitBounds(bounds, options) {
     if (!bounds || bounds.length === 0) return;
-    const paddingValue = typeof padding === 'number' ? padding : (padding?.top ?? 50);
+    const { padding, maxZoom } = normalizeFitOptions(options);
     this.leafletMap.fitBounds(L.latLngBounds(toLatLngs(bounds)), {
-      padding: [paddingValue, paddingValue],
-      maxZoom: 18,
+      padding: [padding, padding],
+      maxZoom,
     });
+  }
+
+  setCursor(cursor) {
+    this.leafletMap.getContainer().style.cursor = cursor || '';
+  }
+
+  resize() {
+    this.leafletMap.invalidateSize({ animate: false });
   }
 
   panTo(latLng) {
@@ -378,6 +454,10 @@ class LeafletMap extends IMap {
 
   createMarker(options) {
     return new LeafletMarker(this, options);
+  }
+
+  createPolygon(options) {
+    return new LeafletPolygon(this, options);
   }
 
   destroy() {

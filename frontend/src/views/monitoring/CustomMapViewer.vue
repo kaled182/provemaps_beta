@@ -2,7 +2,7 @@
   <div class="custom-map-viewer" @contextmenu.prevent="onViewerContextMenu">
     <!-- Main Content -->
     <div class="map-content">
-      <!-- Mapa Google Maps -->
+      <!-- Mapa: criado pelo provider configurado (providers/maps) -->
       <div ref="mapContainer" class="map-container"></div>
 
       <!-- Painel Lateral: Gerenciar Itens -->
@@ -152,24 +152,21 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+/**
+ * CustomMapViewer — mapa de monitoramento (backbone / mapas personalizados).
+ *
+ * EV-0012c: deixou de ter um ramo `if provider === …` por função. O mapa vem
+ * da `MapProviderFactory` (google | mapbox | osm, conforme a configuração) e
+ * marcadores, cabos, área de manutenção, cursor e redimensionamento falam só
+ * a interface `IMap`. Estado em tempo real: `useRealtimeStatus` (EV-0014).
+ */
+import { ref, shallowRef, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { useApi } from '@/composables/useApi'
-import { useSystemConfig } from '@/composables/useSystemConfig'
-import { loadGoogleMaps } from '@/utils/googleMapsLoader'
-import { getMapStyles } from '@/utils/mapStyles'
 import { useUiStore } from '@/stores/ui'
 import { useRealtimeStatus, availabilityToStatus } from '@/composables/useRealtimeStatus'
-// ✅ LAZY LOADING: Bibliotecas de mapas carregadas sob demanda
-import { loadMapbox } from '@/composables/map/providers/useMapbox'
-import { loadLeaflet } from '@/composables/map/providers/useLeaflet'
-import { loadMarkerClusterer } from '@/composables/map/providers/useMarkerClusterer'
-// ✅ FASE 3: Composables de lógica de negócio
-import { useMapMarkers } from '@/composables/map/core/useMapMarkers'
-import { useMapPolylines } from '@/composables/map/core/useMapPolylines'
-import { useMapSelection } from '@/composables/map/core/useMapSelection'
-import { useMapData } from '@/composables/map/core/useMapData'
-import { runMapboxStyleDiagnostics, MAPBOX_STYLE_DIAGNOSTICS_DEFAULTS } from '@/utils/mapboxDiagnostics'
+import { createMap, getMapConfig } from '@/providers/maps/MapProviderFactory.js'
+import { useMapSelection } from '@/composables/map/useMapSelection'
+import { useMapData } from '@/composables/map/useMapData'
 import SiteDetailsModal from '@/components/SiteDetailsModal.vue'
 import FiberCableQuickModal from '@/components/FiberCableQuickModal.vue'
 import FiberCableDetailModal from '@/components/FiberCableDetailModal.vue'
@@ -180,17 +177,38 @@ import MaintenanceAreaPanel from './components/MaintenanceAreaPanel.vue'
 import MapContextMenu from './components/MapContextMenu.vue'
 import MaintenanceNotifyModal from './components/MaintenanceNotifyModal.vue'
 
-// Variáveis para bibliotecas lazy loaded
-let mapboxgl = null
-let L = null
-let MarkerClusterer = null
-
 const route = useRoute()
-const { get, post } = useApi()
-const { configForm, loadSystemConfig } = useSystemConfig()
 const uiStore = useUiStore()
 
 const mapContainer = ref(null)
+const map = shallowRef(null) // IMap (providers/maps)
+const providerName = ref('')
+
+// ── Cores por estado (eram de useMapMarkers / useMapPolylines) ─────────────
+const DEVICE_STATUS_COLORS = {
+  online: '#10b981',
+  warning: '#f59e0b',
+  critical: '#ef4444',
+  offline: '#6b7280',
+}
+const CABLE_STATUS_COLORS = {
+  online: '#10b981',
+  offline: '#ef4444',
+  warning: '#f59e0b',
+  critical: '#dc2626',
+  unknown: '#6b7280',
+}
+const DEVICE_MARKER_SIZE = 14
+const MAINTENANCE_STYLE = { strokeColor: '#f59e0b', strokeOpacity: 0.9, strokeWeight: 2, fillColor: '#f59e0b', fillOpacity: 0.12 }
+const DEFAULT_CENTER = { lat: -15.7801, lng: -47.9292 }
+const DEFAULT_ZOOM = 12
+
+const deviceColor = (status) => DEVICE_STATUS_COLORS[status] || DEVICE_STATUS_COLORS.offline
+const cableColor = (status) => CABLE_STATUS_COLORS[status] || CABLE_STATUS_COLORS.unknown
+const cableBaseStyle = () => {
+  const dark = uiStore.theme === 'dark'
+  return { strokeWeight: dark ? 2 : 3, strokeOpacity: dark ? 0.7 : 0.8 }
+}
 
 // ── Toast notifications ────────────────────────────────────────────────────
 const toast = ref({ visible: false, type: 'success', message: '' })
@@ -222,36 +240,18 @@ function onNotifySent(result) {
     showToast(result.error || 'Erro ao enviar notificação', 'error')
   }
 }
-const googleMap = ref(null)
-const currentMapProvider = ref('google') // Armazena o provedor ativo
-const markerClusterer = ref(null) // Clusterer para agrupar markers próximos
 
-// ✅ FASE 3: Usar composables para lógica de negócio
-const { activeMarkers, createMarker, updateMapMarkers, getMarkerIcon, clearAllMarkers, addMarkerListener, clearMarkerListeners } = useMapMarkers()
-const { activePolylines, createPolyline, updateCablePolylines, highlightCable: highlightCablePolyline, unhighlightCable: unhighlightCablePolyline, clearAllPolylines, addPolylineListener, clearPolylineListeners } = useMapPolylines()
-const { 
-  selectedItems, 
-  expandedSites, 
-  expandedCameraSites, 
-  selectedSites, 
-  selectedCameraSites,
+// ── Seleção e dados (composables sem provider) ─────────────────────────────
+const {
+  selectedItems,
+  expandedSites,
+  expandedCameraSites,
   toggleSiteExpansion,
-  isSiteExpanded,
   toggleSite: toggleSiteSelection,
-  isSiteSelected,
-  isSitePartiallySelected,
-  getSiteStatusSummary,
   toggleCameraSiteExpansion,
-  isCameraSiteExpanded,
   toggleCameraSite: toggleCameraSiteSelection,
-  isCameraSiteSelected,
-  isCameraSitePartiallySelected,
-  getCameraSiteStatusSummary,
   toggleItem: toggleItemSelection,
   selectAll: selectAllItems,
-  clearAllSelections,
-  isItemSelected,
-  getSelectionCount
 } = useMapSelection()
 const { availableItems, sitesMap, foldersTree, loadInventoryItems: loadInventory } = useMapData()
 const showInventoryPanel = ref(false)
@@ -289,104 +289,6 @@ function _globalKeydown(e) {
   if (maintenanceMode.value)       { exitMaintenanceMode(); return }
   if (showInventoryPanel.value)    { showInventoryPanel.value = false; return }
   if (isFullscreen.value)          { toggleFullscreen(); return }
-}
-// ───────────────────────────────────────────────────────────────────────────── // Flag para controlar animação inicial
-
-let detachZoomListener = null
-
-const DEFAULT_ZOOM_FALLBACK = 12
-const MAPBOX_MARKER_SIZE_RULES = {
-  minZoom: 5,
-  maxZoom: 16,
-  minSize: 10,
-  maxSize: 18,
-  minBorder: 2,
-  maxBorder: 3
-}
-
-const clampNumber = (value, min, max) => Math.min(max, Math.max(min, value))
-
-const getActiveMapZoom = () => {
-  if (!googleMap.value || typeof googleMap.value.getZoom !== 'function') {
-    return DEFAULT_ZOOM_FALLBACK
-  }
-  const zoom = googleMap.value.getZoom()
-  return Number.isFinite(zoom) ? zoom : DEFAULT_ZOOM_FALLBACK
-}
-
-const computeMapboxMarkerDimensions = (zoom) => {
-  const clampedZoom = clampNumber(
-    zoom,
-    MAPBOX_MARKER_SIZE_RULES.minZoom,
-    MAPBOX_MARKER_SIZE_RULES.maxZoom
-  )
-  const zoomSpan = Math.max(
-    1,
-    MAPBOX_MARKER_SIZE_RULES.maxZoom - MAPBOX_MARKER_SIZE_RULES.minZoom
-  )
-  const ratio = (clampedZoom - MAPBOX_MARKER_SIZE_RULES.minZoom) / zoomSpan
-  const size =
-    MAPBOX_MARKER_SIZE_RULES.minSize +
-    (MAPBOX_MARKER_SIZE_RULES.maxSize - MAPBOX_MARKER_SIZE_RULES.minSize) * ratio
-  const border =
-    MAPBOX_MARKER_SIZE_RULES.minBorder +
-    (MAPBOX_MARKER_SIZE_RULES.maxBorder - MAPBOX_MARKER_SIZE_RULES.minBorder) * ratio
-
-  return {
-    size: Math.round(size),
-    border: Math.max(1, Math.round(border))
-  }
-}
-
-const applyMapboxMarkerDimensions = (marker, zoom) => {
-  const element = typeof marker?.getElement === 'function' ? marker.getElement() : null
-  if (!element) {
-    return
-  }
-  const { size, border } = computeMapboxMarkerDimensions(zoom)
-  element.style.width = `${size}px`
-  element.style.height = `${size}px`
-  element.style.borderWidth = `${border}px`
-}
-
-const updateMapboxMarkerSizes = () => {
-  if (currentMapProvider.value !== 'mapbox' || activeMarkers.size === 0) {
-    return
-  }
-  const zoom = getActiveMapZoom()
-  activeMarkers.forEach((marker) => {
-    if (typeof marker?._applySize === 'function') {
-      marker._applySize(zoom)
-    } else {
-      applyMapboxMarkerDimensions(marker, zoom)
-    }
-  })
-}
-
-const resetZoomListener = () => {
-  if (typeof detachZoomListener === 'function') {
-    try {
-      detachZoomListener()
-    } catch (error) {
-      console.warn('[CustomMapViewer] Falha ao remover listener de zoom:', error)
-    }
-  }
-  detachZoomListener = null
-}
-
-const registerMapboxZoomListener = () => {
-  resetZoomListener()
-  if (!googleMap.value || typeof googleMap.value.on !== 'function') {
-    return
-  }
-  const mapInstance = googleMap.value
-  const handler = () => updateMapboxMarkerSizes()
-  mapInstance.on('zoom', handler)
-  detachZoomListener = () => {
-    if (mapInstance && typeof mapInstance.off === 'function') {
-      mapInstance.off('zoom', handler)
-    }
-  }
 }
 
 // Modal de detalhes do site
@@ -546,9 +448,9 @@ const statusLegend = [
 const filteredItems = computed(() => {
   const items = availableItems.value[activeCategory.value] || []
   if (!searchQuery.value) return items
-  
+
   const query = searchQuery.value.toLowerCase()
-  return items.filter(item => 
+  return items.filter(item =>
     item.name.toLowerCase().includes(query) ||
     (item.description && item.description.toLowerCase().includes(query))
   )
@@ -556,10 +458,10 @@ const filteredItems = computed(() => {
 
 const devicesBySite = computed(() => {
   if (activeCategory.value !== 'devices') return []
-  
+
   const devices = filteredItems.value
   const siteMap = new Map()
-  
+
   devices.forEach(device => {
     const siteKey = device.site_id
     if (!siteMap.has(siteKey)) {
@@ -571,18 +473,18 @@ const devicesBySite = computed(() => {
     }
     siteMap.get(siteKey).devices.push(device)
   })
-  
-  return Array.from(siteMap.values()).sort((a, b) => 
+
+  return Array.from(siteMap.values()).sort((a, b) =>
     a.site_name.localeCompare(b.site_name)
   )
 })
 
 const camerasBySite = computed(() => {
   if (activeCategory.value !== 'cameras') return []
-  
+
   const cameras = filteredItems.value
   const siteMap = new Map()
-  
+
   cameras.forEach(camera => {
     const siteName = camera.site_name || 'Sem Site'
     if (!siteMap.has(siteName)) {
@@ -593,43 +495,11 @@ const camerasBySite = computed(() => {
     }
     siteMap.get(siteName).cameras.push(camera)
   })
-  
-  return Array.from(siteMap.values()).sort((a, b) => 
+
+  return Array.from(siteMap.values()).sort((a, b) =>
     a.site_name.localeCompare(b.site_name)
   )
 })
-
-const getSelectedCount = (category) => {
-  return selectedItems.value[category]?.length || 0
-}
-
-const getAvailableCount = (category) => {
-  return availableItems.value[category]?.length || 0
-}
-
-const getStatusLabel = (status) => {
-  // Garantir que status seja uma string
-  const statusStr = String(status || 'offline').toLowerCase()
-  
-  const labels = {
-    'online': 'ONLINE',
-    'warning': 'ATENÇÃO',
-    'critical': 'CRÍTICO',
-    'offline': 'OFFLINE',
-    'unknown': 'DESCONHECIDO',
-    '0': 'OFFLINE',
-    'null': 'OFFLINE',
-    'undefined': 'OFFLINE',
-    // Aliases para status de cabos
-    'up': 'ONLINE',
-    'down': 'OFFLINE',
-    'degraded': 'ATENÇÃO',
-    'operational': 'ONLINE',
-    'unavailable': 'OFFLINE'
-  }
-  
-  return labels[statusStr] || 'DESCONHECIDO'
-}
 
 const toggleSite = (siteId, devices) => {
   toggleSiteSelection(siteId, devices)
@@ -642,114 +512,145 @@ const toggleCameraSite = (siteName, cameras) => {
   updateMap()
 }
 
-// Ajusta o mapa para mostrar todos os itens visíveis (markers + polylines)
-const fitAllItemsBounds = () => {
-  const provider = currentMapProvider.value
-  const mapInstance = googleMap.value
-  if (!mapInstance) return
+// ── Marcadores (diff incremental por id) ────────────────────────────────────
+const activeMarkers = new Map() // deviceId → IMarker
 
-  const points = []
+function updateMarkers() {
+  if (!map.value) return
+  const wanted = new Set(selectedItems.value.devices)
 
-  // Coletar posições dos markers (devices)
-  activeMarkers.forEach(marker => {
-    if (provider === 'google') {
-      const pos = marker.getPosition()
-      if (pos) points.push({ lat: pos.lat(), lng: pos.lng() })
-    } else if (provider === 'mapbox') {
-      if (typeof marker.getLngLat === 'function') {
-        const lngLat = marker.getLngLat()
-        points.push({ lat: lngLat.lat, lng: lngLat.lng })
-      }
-    } else if (provider === 'osm') {
-      if (typeof marker.getLatLng === 'function') {
-        const latlng = marker.getLatLng()
-        points.push({ lat: latlng.lat, lng: latlng.lng })
-      }
+  activeMarkers.forEach((marker, id) => {
+    if (!wanted.has(id)) {
+      marker.remove()
+      activeMarkers.delete(id)
     }
   })
 
-  // Coletar pontos dos cabos selecionados
+  availableItems.value.devices
+    .filter(device => wanted.has(device.id) && device.lat && device.lng)
+    .forEach(device => {
+      const existing = activeMarkers.get(device.id)
+      if (existing) {
+        existing.setStyle({ color: deviceColor(device.status) })
+        return
+      }
+
+      const lat = parseFloat(device.lat)
+      const lng = parseFloat(device.lng)
+      if (Number.isNaN(lat) || Number.isNaN(lng)) return
+      if (!sitesMap.value.get(String(device.site))) return
+
+      const marker = map.value.createMarker({
+        position: { lat, lng },
+        title: device.name,
+        color: deviceColor(device.status),
+        size: DEVICE_MARKER_SIZE,
+      })
+      marker.on('click', () => handleDeviceClick(device))
+      activeMarkers.set(device.id, marker)
+    })
+}
+
+function clearAllMarkers() {
+  activeMarkers.forEach(marker => marker.remove())
+  activeMarkers.clear()
+}
+
+// ── Cabos (diff incremental por id) ──────────────────────────────────────────
+const activePolylines = new Map() // cableId → IPolyline
+const highlightedCables = new Set()
+
+function cablePath(cable) {
+  return (cable.path_coordinates || [])
+    .map(coord => ({ lat: parseFloat(coord.lat), lng: parseFloat(coord.lng) }))
+    .filter(point => !Number.isNaN(point.lat) && !Number.isNaN(point.lng))
+}
+
+function updatePolylines() {
+  if (!map.value) return
+  const wanted = new Set(selectedItems.value.cables)
+  const base = cableBaseStyle()
+
+  activePolylines.forEach((polyline, id) => {
+    if (!wanted.has(id)) {
+      polyline.remove()
+      activePolylines.delete(id)
+      highlightedCables.delete(id)
+    }
+  })
+
+  availableItems.value.cables
+    .filter(cable => wanted.has(cable.id) && cable.path_coordinates?.length > 0)
+    .forEach(cable => {
+      const existing = activePolylines.get(cable.id)
+      if (existing) {
+        if (!highlightedCables.has(cable.id)) {
+          existing.setStyle({ strokeColor: cableColor(cable.status), ...base })
+        }
+        return
+      }
+
+      const path = cablePath(cable)
+      if (path.length < 2) return
+
+      const polyline = map.value.createPolyline({
+        path,
+        strokeColor: cableColor(cable.status),
+        ...base,
+        clickable: true,
+      })
+      polyline.on('click', () => handleCableClick(cable))
+      polyline.on('mouseover', (event) => handleCableHover(cable, event))
+      polyline.on('mouseout', handleCableUnhover)
+      activePolylines.set(cable.id, polyline)
+    })
+}
+
+function clearAllPolylines() {
+  activePolylines.forEach(polyline => polyline.remove())
+  activePolylines.clear()
+  highlightedCables.clear()
+}
+
+// Destaque pedido pelo painel lateral (hover no item)
+const highlightCable = (cableId) => {
+  const polyline = activePolylines.get(cableId)
+  if (!polyline) return
+  highlightedCables.add(cableId)
+  polyline.setStyle({ strokeWeight: 5, strokeOpacity: 1, zIndex: 1000 })
+}
+
+const unhighlightCable = (cableId) => {
+  const polyline = activePolylines.get(cableId)
+  if (!polyline) return
+  highlightedCables.delete(cableId)
+  polyline.setStyle({ ...cableBaseStyle(), zIndex: 1 })
+}
+
+// Ajusta o mapa para mostrar todos os itens visíveis (markers + polylines)
+const fitAllItemsBounds = () => {
+  if (!map.value) return
+  const points = []
+
+  activeMarkers.forEach(marker => points.push(marker.getPosition()))
+
   const selectedCableIds = new Set(selectedItems.value.cables)
   availableItems.value.cables
     .filter(cable => selectedCableIds.has(cable.id) && cable.path_coordinates)
-    .forEach(cable => {
-      cable.path_coordinates.forEach(coord => {
-        const lat = parseFloat(coord.lat)
-        const lng = parseFloat(coord.lng)
-        if (!isNaN(lat) && !isNaN(lng)) points.push({ lat, lng })
-      })
-    })
+    .forEach(cable => points.push(...cablePath(cable)))
 
-  if (points.length === 0) {
-    console.log('[fitAllItemsBounds] Nenhum ponto para ajustar bounds')
-    return
-  }
-
-  console.log(`[fitAllItemsBounds] Ajustando bounds para ${points.length} pontos (provider: ${provider})`)
-
-  if (provider === 'google') {
-    const bounds = new google.maps.LatLngBounds()
-    points.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }))
-    mapInstance.fitBounds(bounds)
-    if (points.length === 1) {
-      const listener = google.maps.event.addListener(mapInstance, 'idle', () => {
-        if (mapInstance.getZoom() > 15) mapInstance.setZoom(15)
-        google.maps.event.removeListener(listener)
-      })
-    }
-  } else if (provider === 'mapbox') {
-    if (window.mapboxgl) {
-      const bounds = new window.mapboxgl.LngLatBounds()
-      points.forEach(p => bounds.extend([p.lng, p.lat]))
-      if (!bounds.isEmpty()) {
-        mapInstance.fitBounds(bounds, { padding: 80, maxZoom: 15 })
-      }
-    }
-  } else if (provider === 'osm') {
-    const latlngs = points.map(p => [p.lat, p.lng])
-    mapInstance.fitBounds(latlngs, { padding: [50, 50] })
-  }
+  if (points.length === 0) return
+  map.value.fitBounds(points, { padding: 50, maxZoom: 15 })
 }
 
 // Função unificada para atualizar todo o mapa (markers + polylines)
-const updateMap = (animateItemId = null) => {
-  if (!googleMap.value) return
-
+const updateMap = () => {
+  if (!map.value) return
   const wasInitialLoad = isInitialLoad.value
 
-  // Atualizar markers usando composable (sem auto-fit — faremos depois com todos os itens)
-  updateMapMarkers({
-    mapInstance: googleMap.value,
-    provider: currentMapProvider.value,
-    selectedDeviceIds: selectedItems.value.devices,
-    availableDevices: availableItems.value.devices,
-    sitesMap: sitesMap.value,
-    isInitialLoad: isInitialLoad.value,
-    animateItemId: animateItemId,
-    getMarkerIcon: getMarkerIcon,
-    onMarkerClick: handleDeviceClick,
-    updateMapboxMarkerSizes: updateMapboxMarkerSizes,
-    getActiveMapZoom: getActiveMapZoom,
-    applyMapboxMarkerDimensions: applyMapboxMarkerDimensions,
-    skipAutoFit: true
-  })
-
-  // Marcar que não é mais carregamento inicial
-  if (isInitialLoad.value) {
-    isInitialLoad.value = false
-  }
-
-  // Atualizar polylines usando composable
-  updateCablePolylines({
-    mapInstance: googleMap.value,
-    provider: currentMapProvider.value,
-    selectedCableIds: selectedItems.value.cables,
-    availableCables: availableItems.value.cables,
-    isDarkMode: uiStore.theme === 'dark',
-    onPolylineClick: handleCableClick,
-    onPolylineHover: handleCableHover,
-    onPolylineUnhover: handleCableUnhover
-  })
+  updateMarkers()
+  updatePolylines()
+  isInitialLoad.value = false
 
   // Na carga inicial, ajustar bounds para mostrar TODOS os itens (markers + cabos)
   if (wasInitialLoad) {
@@ -758,15 +659,8 @@ const updateMap = (animateItemId = null) => {
 }
 
 const toggleItem = (itemId) => {
-  const category = activeCategory.value
-  const wasSelected = toggleItemSelection(itemId, category)
-  
-  // Se foi marcado e é device, animar
-  if (wasSelected && category === 'devices') {
-    updateMap(itemId)
-  } else {
-    updateMap()
-  }
+  toggleItemSelection(itemId, activeCategory.value)
+  updateMap()
 }
 
 const selectAll = () => {
@@ -775,74 +669,29 @@ const selectAll = () => {
   updateMap()
 }
 
-// Função para limpar TODAS as overlays - versão otimizada com Maps
 const clearAllOverlays = () => {
-  // Limpar clusterer primeiro
-  if (markerClusterer.value) {
-    markerClusterer.value.clearMarkers()
-    markerClusterer.value = null
-  }
-  
-  // Limpar todos os markers
-  activeMarkers.forEach((marker, id) => {
-    try {
-      clearMarkerListeners(marker)
-      if (typeof marker.setMap === 'function') {
-        marker.setMap(null)
-      } else if (typeof marker.remove === 'function') {
-        marker.remove()
-      }
-    } catch (e) {
-      // Ignorar erros de limpeza
-    }
-  })
-  activeMarkers.clear()
-  
-  // Limpar todas as polylines
-  activePolylines.forEach((polyline, id) => {
-    try {
-      clearPolylineListeners(polyline)
-      if (typeof polyline.setMap === 'function') {
-        polyline.setMap(null)
-      } else if (currentMapProvider.value === 'mapbox') {
-        if (polyline.layerId && googleMap.value.getLayer(polyline.layerId)) {
-          googleMap.value.removeLayer(polyline.layerId)
-        }
-        if (polyline.sourceId && googleMap.value.getSource(polyline.sourceId)) {
-          googleMap.value.removeSource(polyline.sourceId)
-        }
-      } else if (currentMapProvider.value === 'osm' && typeof polyline.remove === 'function') {
-        polyline.remove()
-      }
-    } catch (e) {
-      // Ignorar erros de limpeza
-    }
-  })
-  activePolylines.clear()
+  clearAllMarkers()
+  clearAllPolylines()
 }
 
 const focusOnItem = (item) => {
-  if (!googleMap.value) return
-  
+  if (!map.value) return
+
   // Para devices e cameras que têm lat/lng diretamente
   if (item.lat && item.lng) {
-    googleMap.value.setCenter({ lat: parseFloat(item.lat), lng: parseFloat(item.lng) })
-    googleMap.value.setZoom(15)
+    map.value.setCenter({ lat: parseFloat(item.lat), lng: parseFloat(item.lng) })
+    map.value.setZoom(15)
     return
   }
-  
-  // Para cabos que têm path_coordinates
+
+  // Para cabos que têm path_coordinates: centralizar no ponto médio
   if (item.path_coordinates && item.path_coordinates.length > 0) {
-    // Centralizar no ponto médio do cabo
     const midIndex = Math.floor(item.path_coordinates.length / 2)
     const midPoint = item.path_coordinates[midIndex]
-    
+
     if (midPoint && midPoint.lat && midPoint.lng) {
-      googleMap.value.setCenter({ 
-        lat: parseFloat(midPoint.lat), 
-        lng: parseFloat(midPoint.lng) 
-      })
-      googleMap.value.setZoom(13) // Zoom menor para ver mais da rota
+      map.value.setCenter({ lat: parseFloat(midPoint.lat), lng: parseFloat(midPoint.lng) })
+      map.value.setZoom(13) // Zoom menor para ver mais da rota
     }
   }
 }
@@ -850,18 +699,15 @@ const focusOnItem = (item) => {
 const toggleFullscreen = () => {
   isFullscreen.value = !isFullscreen.value
   const el = document.querySelector('.custom-map-viewer')
-  if (isFullscreen.value) {
-    el.classList.add('fullscreen')
-  } else {
-    el.classList.remove('fullscreen')
-  }
-  // ResizeObserver detecta a mudança de tamanho automaticamente
+  if (!el) return
+  el.classList.toggle('fullscreen', isFullscreen.value)
+  // ResizeObserver detecta a mudança de tamanho e chama map.resize()
 }
 
 const loadMapData = async () => {
   try {
     const mapId = route.params.mapId
-    
+
     if (mapId === 'default') {
       // Mapa padrão: carregar tudo
       mapData.value = {
@@ -870,21 +716,19 @@ const loadMapData = async () => {
         category: route.params.category || 'backbone',
         description: 'Visualização completa de todos os equipamentos'
       }
-      console.log('[CustomMapViewer] Mapa padrão configurado')
     } else {
       // Carregar mapa customizado
       const response = await fetch(`/api/v1/maps/custom/${mapId}/`, {
         credentials: 'include'
       })
-      
+
       if (!response.ok) {
         throw new Error(`Erro ao carregar mapa: ${response.status}`)
       }
-      
+
       const data = await response.json()
       mapData.value = data.map
       selectedItems.value = data.selected_items || selectedItems.value
-      console.log('[CustomMapViewer] Mapa customizado carregado:', mapData.value.name)
     }
   } catch (error) {
     console.error('[CustomMapViewer] Erro ao carregar mapa:', error)
@@ -907,17 +751,12 @@ const loadInventoryItems = async () => {
 }
 
 const destroyCurrentMap = () => {
-  resetZoomListener()
-  clearAllMarkers(currentMapProvider.value, googleMap.value)
-  clearAllPolylines(currentMapProvider.value, googleMap.value)
-  
-  if (googleMap.value) {
-    if (currentMapProvider.value === 'mapbox' || currentMapProvider.value === 'osm') {
-      googleMap.value.remove()
-    }
-    googleMap.value = null
+  clearAllOverlays()
+  if (map.value) {
+    map.value.off('click', _onMaintMapClick)
+    map.value.destroy()
+    map.value = null
   }
-  
   if (mapContainer.value) {
     mapContainer.value.innerHTML = ''
   }
@@ -937,29 +776,24 @@ const handleCableClick = (cable) => {
   showCableModal.value = true
 }
 
-// Handlers para hover em cabos (tooltip)
+// Handlers para hover em cabos (tooltip) — `event` é o MapEvent comum (clientX/clientY)
 const handleCableHover = (cable, event) => {
-  console.log('[CustomMapViewer] Cable hover detected:', cable.label, event)
-  
-  // Limpar timeout anterior se existir
   if (tooltipTimeout) {
     clearTimeout(tooltipTimeout)
   }
-  
+
   // Pequeno delay antes de mostrar tooltip
   tooltipTimeout = setTimeout(() => {
     hoveredCable.value = cable
     tooltipPosition.value = {
-      x: event.clientX || event.pageX || event.point?.x || 0,
-      y: event.clientY || event.pageY || event.point?.y || 0
+      x: event?.clientX || 0,
+      y: event?.clientY || 0
     }
     showCableTooltip.value = true
-    console.log('[CustomMapViewer] Tooltip shown at:', tooltipPosition.value)
-  }, 300) // 300ms de delay
+  }, 300)
 }
 
 const handleCableUnhover = () => {
-  console.log('[CustomMapViewer] Cable unhover detected')
   if (tooltipTimeout) {
     clearTimeout(tooltipTimeout)
     tooltipTimeout = null
@@ -968,545 +802,48 @@ const handleCableUnhover = () => {
   hoveredCable.value = null
 }
 
+// ── Mapa: criação pelo provider configurado ──────────────────────────────────
 const initMap = async () => {
   if (!mapContainer.value) return
-  
+
   try {
-    // Carregar configurações do sistema primeiro
-    console.log('[CustomMapViewer] Carregando configurações do sistema...')
-    await loadSystemConfig()
-    
-    // Verificar qual provedor de mapa está configurado
-    const mapProvider = configForm.value.MAP_PROVIDER || 'google'
-    console.log(`[CustomMapViewer] 🔄 Provedor de mapa selecionado: ${mapProvider}`)
-    
-    // 🔒 EXCLUSÃO MÚTUA: Destruir mapa anterior se mudou de provider
-    if (googleMap.value && currentMapProvider.value !== mapProvider) {
-      console.log(`[CustomMapViewer] ⚠️ Trocando de ${currentMapProvider.value} para ${mapProvider}`)
-      destroyCurrentMap()
-    }
-    
-    // Inicializar o provider selecionado (sem fallback)
-    if (mapProvider === 'google') {
-      await initGoogleMap()
-    } else if (mapProvider === 'mapbox') {
-      await initMapboxMap()
-    } else if (mapProvider === 'osm') {
-      await initOpenStreetMap()
-    } else {
-      console.error(`[CustomMapViewer] Provedor de mapa não suportado: ${mapProvider}`)
-      throw new Error(`Provedor de mapa '${mapProvider}' não suportado`)
-    }
+    const config = await getMapConfig()
+    providerName.value = config.mapProvider || 'google'
+
+    const lat = parseFloat(config.mapDefaultLat)
+    const lng = parseFloat(config.mapDefaultLng)
+    const zoom = parseInt(config.mapDefaultZoom, 10)
+
+    const created = await createMap(mapContainer.value, {
+      center: Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : DEFAULT_CENTER,
+      zoom: Number.isFinite(zoom) && zoom > 0 ? zoom : DEFAULT_ZOOM,
+      mapTypeId: config.mapType || 'roadmap',
+      theme: uiStore.theme === 'dark' ? 'dark' : 'light',
+      controls: {
+        mapType: true,
+        streetView: config.enableStreetView !== false,
+        fullscreen: config.enableFullscreen !== false,
+        traffic: config.enableTraffic === true,
+        scale: true,
+      },
+      minZoom: 3,
+      maxZoom: 20,
+    })
+
+    map.value = created
+    updateMap()
   } catch (error) {
     console.error('[CustomMapViewer] Erro ao inicializar mapa:', error)
     showToast('Erro ao carregar o mapa: ' + error.message, 'error', 5000)
   }
 }
 
-const initGoogleMap = async () => {
-  // Carregar Google Maps API se necessário
-  console.log('[CustomMapViewer] Iniciando carregamento do Google Maps...')
-  await loadGoogleMaps()
-  
-  if (!window.google?.maps) {
-    throw new Error('Google Maps API não carregou corretamente')
-  }
-  resetZoomListener()
-  
-  currentMapProvider.value = 'google'
-  console.log('[CustomMapViewer] Google Maps API disponível, criando mapa...')
-  
-  // Obter configurações do banco de dados
-  const mapZoom = parseInt(configForm.value.MAP_DEFAULT_ZOOM) || 12
-  const mapLat = parseFloat(configForm.value.MAP_DEFAULT_LAT) || -15.7801
-  const mapLng = parseFloat(configForm.value.MAP_DEFAULT_LNG) || -47.9292
-  const mapType = configForm.value.MAP_TYPE || 'roadmap'
-  const mapTheme = configForm.value.MAP_THEME || 'light'
-  const enableStreetView = configForm.value.ENABLE_STREET_VIEW !== false
-  const enableTraffic = configForm.value.ENABLE_TRAFFIC === true
-  const enableFullscreen = configForm.value.ENABLE_FULLSCREEN !== false
-  
-  console.log('[CustomMapViewer] Configurações:', {
-    zoom: mapZoom,
-    center: { lat: mapLat, lng: mapLng },
-    type: mapType,
-    theme: mapTheme,
-    streetView: enableStreetView,
-    traffic: enableTraffic,
-    fullscreen: enableFullscreen
-  })
-    
-    // Determinar tema efetivo usando uiStore (tema do usuário) ao invés do sistema
-    const userTheme = uiStore.theme
-    const effectiveTheme = userTheme || 'dark'
-    const mapStyles = getMapStyles(effectiveTheme, effectiveTheme)
-    
-    console.log('[CustomMapViewer] Aplicando estilos:', {
-      userTheme,
-      effectiveTheme,
-      stylesCount: mapStyles.length,
-      firstStyle: mapStyles[0]
-    })
-    
-    googleMap.value = new google.maps.Map(mapContainer.value, {
-      center: { lat: mapLat, lng: mapLng },
-      zoom: mapZoom,
-      mapTypeId: mapType,  // terrain, roadmap, satellite, hybrid
-      styles: mapStyles,
-      mapTypeControl: true,
-      streetViewControl: enableStreetView,
-      fullscreenControl: enableFullscreen,
-      zoomControl: true,
-      // Opções adicionais para remover grid e otimizar renderização
-      disableDefaultUI: false,
-      clickableIcons: true,
-      backgroundColor: effectiveTheme === 'dark' ? '#242f3e' : '#F1F3F4',  // Azul noite (dark) / Cinza Cloud (light)
-      // Configurações de renderização para evitar artifacts/grid
-      gestureHandling: 'greedy',
-      tilt: 0,  // Vista 2D sem inclinação (evita artifacts 3D)
-      restriction: null,  // Sem restrição de área
-      minZoom: 3,
-      maxZoom: 20
-    })
-    
-    // Habilitar camada de tráfego se configurado
-    if (enableTraffic) {
-      const trafficLayer = new google.maps.TrafficLayer()
-      trafficLayer.setMap(googleMap.value)
-      console.log('[CustomMapViewer] Camada de tráfego ativada')
-    }
-    
-    console.log('[CustomMapViewer] Mapa criado com sucesso - Tipo:', googleMap.value.getMapTypeId())
-    console.log('[CustomMapViewer] Mapa zoom:', googleMap.value.getZoom())
-    console.log('[CustomMapViewer] Mapa center:', googleMap.value.getCenter().toString())
-    
-    // Watch para mudanças de tema do usuário (uiStore)
-    watch(
-      () => uiStore.theme,
-      (newTheme) => {
-        console.log('[CustomMapViewer] Tema do usuário alterado para:', newTheme)
-        if (googleMap.value) {
-          const newStyles = getMapStyles(newTheme, newTheme)
-          const newBgColor = newTheme === 'dark' ? '#242f3e' : '#F1F3F4'
-          googleMap.value.setOptions({
-            styles: newStyles,
-            backgroundColor: newBgColor
-          })
-          console.log('[CustomMapViewer] Estilos do mapa atualizados para:', newTheme)
-          
-          // Atualizar polylines com nova espessura baseada no tema
-          updateCablePolylines()
-        }
-      },
-      { immediate: false }
-    )
-    
-    // ✅ ATUALIZAR MAPA após inicialização completa do Google Maps
-    console.log('[CustomMapViewer] Google Maps pronto - aplicando seleção inicial')
-    updateMap()
-}
-
-const MAPBOX_STYLE_PRESETS = {
-  streets: 'mapbox://styles/mapbox/streets-v12',
-  'streets-v12': 'mapbox://styles/mapbox/streets-v12',
-  'street-v12': 'mapbox://styles/mapbox/streets-v12',
-  satellite: 'mapbox://styles/mapbox/satellite-v9',
-  'satellite-v9': 'mapbox://styles/mapbox/satellite-v9',
-  'satellite-streets': 'mapbox://styles/mapbox/satellite-streets-v12',
-  'satellite-streets-v12': 'mapbox://styles/mapbox/satellite-streets-v12',
-  outdoors: 'mapbox://styles/mapbox/outdoors-v12',
-  'outdoors-v12': 'mapbox://styles/mapbox/outdoors-v12',
-  terrain: 'mapbox://styles/mapbox/outdoors-v12',
-  light: 'mapbox://styles/mapbox/light-v11',
-  'light-v11': 'mapbox://styles/mapbox/light-v11',
-  dark: 'mapbox://styles/mapbox/dark-v11',
-  'dark-v11': 'mapbox://styles/mapbox/dark-v11',
-  navigation: 'mapbox://styles/mapbox/navigation-day-v1',
-  'navigation-day': 'mapbox://styles/mapbox/navigation-day-v1',
-  'navigation-day-v1': 'mapbox://styles/mapbox/navigation-day-v1',
-  'navigation-night': 'mapbox://styles/mapbox/navigation-night-v1',
-  'navigation-night-v1': 'mapbox://styles/mapbox/navigation-night-v1'
-}
-
-const mapboxDiagnosticsState = {
-  running: false
-}
-
-const resolveMapboxStyle = (rawStyle, sourceLabel) => {
-  const style = (rawStyle || '').trim()
-  if (!style) {
-    return ''
-  }
-
-  const lower = style.toLowerCase()
-
-  if (style.startsWith('mapbox://') || style.startsWith('http://') || style.startsWith('https://')) {
-    return style
-  }
-
-  if (MAPBOX_STYLE_PRESETS[lower]) {
-    console.log(`[CustomMapViewer] Normalizando estilo Mapbox (${sourceLabel}):`, style, '→', MAPBOX_STYLE_PRESETS[lower])
-    return MAPBOX_STYLE_PRESETS[lower]
-  }
-
-  console.warn(`[CustomMapViewer] Estilo Mapbox inválido (${sourceLabel}):`, style)
-  return ''
-}
-
-const buildStyleValidationUrl = (styleUrl, token) => {
-  if (!styleUrl) {
-    return null
-  }
-
-  if (styleUrl.startsWith('mapbox://styles/')) {
-    const stylePath = styleUrl.substring('mapbox://styles/'.length)
-    return `https://api.mapbox.com/styles/v1/${stylePath}?access_token=${token}`
-  }
-
-  if (styleUrl.startsWith('https://api.mapbox.com') || styleUrl.startsWith('http://api.mapbox.com')) {
-    try {
-      const url = new URL(styleUrl)
-      if (!url.searchParams.has('access_token')) {
-        url.searchParams.set('access_token', token)
-      }
-      return url.toString()
-    } catch (error) {
-      console.warn('[CustomMapViewer] URL de estilo Mapbox inválida:', styleUrl, error)
-      return null
-    }
-  }
-
-  // URLs externas não podem ser validadas com antecedência (CORS), assumir válidas
-  return null
-}
-
-const validateMapboxStyleReachability = async (styleUrl, token) => {
-  const validationUrl = buildStyleValidationUrl(styleUrl, token)
-  if (!validationUrl) {
-    console.log('[CustomMapViewer] Validação pulada (sem URL) para estilo:', styleUrl)
-    return true
-  }
-
-  try {
-    const response = await fetch(validationUrl, { method: 'GET', mode: 'cors' })
-    if (response.ok) {
-      console.log('[CustomMapViewer] Estilo disponível:', styleUrl)
-      return true
-    }
-
-    const status = response.status
-    let detail = ''
-    try {
-      const raw = await response.text()
-      detail = raw.slice(0, 140)
-    } catch (readError) {
-      detail = String(readError)
-    }
-    console.warn(`[CustomMapViewer] Estilo Mapbox indisponível (${status}) para ${styleUrl}:`, detail)
-    return false
-  } catch (error) {
-    console.error('[CustomMapViewer] Erro ao validar estilo Mapbox:', styleUrl, error)
-    return false
-  }
-}
-
-const buildMapboxStyleCandidates = () => {
-  const customStyle = resolveMapboxStyle(configForm.value.MAPBOX_CUSTOM_STYLE, 'custom')
-  const configuredStyle = resolveMapboxStyle(configForm.value.MAPBOX_STYLE, 'config')
-
-  const styles = Array.from(new Set([
-    customStyle,
-    configuredStyle,
-    'mapbox://styles/mapbox/streets-v12',
-    'mapbox://styles/mapbox/streets-v11',
-    'mapbox://styles/mapbox/outdoors-v12',
-    'mapbox://styles/mapbox/light-v11',
-    'mapbox://styles/mapbox/dark-v11',
-    'mapbox://styles/mapbox/satellite-streets-v12',
-    'mapbox://styles/mapbox/satellite-v9'
-  ].filter(Boolean)))
-
-  return {
-    styles,
-    customStyle,
-    configuredStyle
-  }
-}
-
-const runAutomaticMapboxDiagnostics = async ({ token, styles, center, zoom }) => {
-  if (mapboxDiagnosticsState.running) {
-    console.log('[CustomMapViewer] Diagnóstico Mapbox já em execução, ignorando chamada')
-    return null
-  }
-
-  mapboxDiagnosticsState.running = true
-  try {
-    const diagnosticStyles = styles?.length ? styles : MAPBOX_STYLE_DIAGNOSTICS_DEFAULTS
-    console.log('[CustomMapViewer] Iniciando diagnóstico automático Mapbox com estilos:', diagnosticStyles.map((s) => (typeof s === 'string' ? s : s.url)))
-    const results = await runMapboxStyleDiagnostics({
-      mapboxgl,
-      token,
-      styles: diagnosticStyles,
-      center,
-      zoom,
-      verbose: true
-    })
-    console.log('[CustomMapViewer] Diagnóstico Mapbox concluído:', results)
-    return results
-  } catch (diagnosticError) {
-    console.error('[CustomMapViewer] Falha ao executar diagnóstico Mapbox:', diagnosticError)
-    return null
-  } finally {
-    mapboxDiagnosticsState.running = false
-  }
-}
-
-const createMapboxInstanceForStyle = ({ styleUrl, center, zoom }) => {
-  const containerEl = mapContainer.value
-  if (!containerEl) {
-    throw new Error('Container do mapa não encontrado para inicializar o Mapbox')
-  }
-
-  // Garantir que o container esteja limpo para evitar avisos do Mapbox
-  if (containerEl.firstChild) {
-    containerEl.replaceChildren()
-  }
-
-  console.log(`[CustomMapViewer] Tentando carregar estilo Mapbox: ${styleUrl}`)
-
-  return new Promise((resolve, reject) => {
-    let settled = false
-
-    const map = new mapboxgl.Map({
-      container: containerEl,
-      style: styleUrl,
-      center,
-      zoom,
-      attributionControl: true,
-      cooperativeGestures: true,
-      pitch: 0,
-      bearing: 0
-    })
-
-    const settle = (error) => {
-      if (settled) {
-        return
-      }
-      settled = true
-
-      map.off('load', onLoad)
-      map.off('error', onError)
-      window.clearTimeout(timeoutId)
-
-      if (error) {
-        try {
-          map.remove()
-        } catch (removeError) {
-          console.warn('[CustomMapViewer] Falha ao remover instância Mapbox após erro:', removeError)
-        }
-
-        const normalized = error instanceof Error ? error : new Error(String(error))
-        normalized.mapboxStyle = styleUrl
-        reject(normalized)
-      } else {
-        resolve(map)
-      }
-    }
-
-    const onLoad = () => {
-      console.log(`[CustomMapViewer] ✅ Estilo Mapbox carregado: ${styleUrl}`)
-      settle()
-    }
-
-    const onError = (event) => {
-      const rawError = event?.error || event
-      let detailMessage = 'Erro desconhecido ao carregar Mapbox'
-
-      if (rawError) {
-        if (rawError instanceof Error) {
-          detailMessage = rawError.message
-        } else if (typeof rawError === 'string') {
-          detailMessage = rawError
-        } else if (typeof rawError?.message === 'string') {
-          detailMessage = rawError.message
-        }
-      }
-
-      console.error(`[CustomMapViewer] ❌ Mapbox erro (${styleUrl}):`, rawError)
-      settle(new Error(detailMessage))
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      console.warn(`[CustomMapViewer] ⏱️ Timeout ao carregar estilo Mapbox (${styleUrl})`)
-      settle(new Error('Timeout ao carregar Mapbox'))
-    }, 30000)
-
-    map.once('load', onLoad)
-    map.once('error', onError)
-  })
-}
-
-const initMapboxMap = async () => {
-  console.log('[CustomMapViewer] Iniciando Mapbox com lógica direta (sem proxy)...')
-  resetZoomListener()
-
-  const mapboxToken = (configForm.value.MAPBOX_TOKEN || '').trim()
-  if (!mapboxToken) {
-    console.error('[CustomMapViewer] Token do Mapbox não configurado')
-    console.error('[CustomMapViewer] Campos disponíveis em configForm:', Object.keys(configForm.value))
-    throw new Error('Token do Mapbox não configurado. Configure em Setup > Mapas.')
-  }
-
-  // ✅ LAZY LOADING: Carregar Mapbox apenas quando necessário
-  if (!mapboxgl) {
-    console.log('[CustomMapViewer] Carregando biblioteca Mapbox sob demanda...')
-    mapboxgl = await loadMapbox()
-    // Expor globalmente para uso pelos composables
-    if (mapboxgl && typeof window !== 'undefined') {
-      window.mapboxgl = mapboxgl
-    }
-  }
-
-  mapboxgl.accessToken = mapboxToken
-  console.log('[CustomMapViewer] mapboxgl.version:', mapboxgl.version)
-
-  let candidateStyles = []
-  let selectedStyle = ''
-  let mapZoom = parseInt(configForm.value.MAP_DEFAULT_ZOOM) || 12
-  let mapLat = parseFloat(configForm.value.MAP_DEFAULT_LAT) || -15.7801
-  let mapLng = parseFloat(configForm.value.MAP_DEFAULT_LNG) || -47.9292
-
-  try {
-    currentMapProvider.value = 'mapbox'
-
-    const { styles, customStyle, configuredStyle } = buildMapboxStyleCandidates()
-    candidateStyles = styles
-
-    if (candidateStyles.length === 0) {
-      candidateStyles.push('mapbox://styles/mapbox/streets-v12')
-    }
-
-    const styleErrors = []
-
-    for (const styleCandidate of candidateStyles) {
-      let reachable = true
-      try {
-        reachable = await validateMapboxStyleReachability(styleCandidate, mapboxToken)
-      } catch (validationError) {
-        reachable = false
-        console.warn('[CustomMapViewer] Validação do estilo Mapbox falhou (exceção):', styleCandidate, validationError)
-      }
-
-      if (!reachable) {
-        console.warn('[CustomMapViewer] Estilo reprovado na validação, pulando tentativa direta:', styleCandidate)
-        styleErrors.push({ style: styleCandidate, message: 'Validação falhou (HTTP ou CORS)' })
-        continue
-      }
-
-      try {
-        const mapInstance = await createMapboxInstanceForStyle({
-          styleUrl: styleCandidate,
-          center: [mapLng, mapLat],
-          zoom: mapZoom
-        })
-
-        googleMap.value = mapInstance
-        selectedStyle = styleCandidate
-        break
-      } catch (attemptError) {
-        console.warn('[CustomMapViewer] Falha ao aplicar estilo Mapbox:', styleCandidate, attemptError)
-        styleErrors.push({ style: styleCandidate, message: attemptError.message })
-      }
-    }
-
-    if (!googleMap.value) {
-      const aggregated = styleErrors.map((entry) => `${entry.style}: ${entry.message}`).join(' | ')
-      throw new Error(aggregated ? `Falha ao carregar estilos Mapbox. Detalhes: ${aggregated}` : 'Nenhum estilo Mapbox pôde ser carregado. Verifique o token e tente novamente.')
-    }
-
-    googleMap.value.addControl(new mapboxgl.NavigationControl(), 'top-right')
-    googleMap.value.addControl(new mapboxgl.ScaleControl({ unit: 'metric' }))
-
-    const preferredStyle = customStyle || configuredStyle
-    if (preferredStyle && preferredStyle !== selectedStyle) {
-      console.warn(`[CustomMapViewer] Estilo preferido (${preferredStyle}) indisponível. Aplicando fallback ${selectedStyle}`)
-    } else if (!preferredStyle) {
-      console.warn('[CustomMapViewer] Nenhum estilo Mapbox personalizado configurado. Utilizando fallback automático', selectedStyle)
-    }
-
-    console.log('[CustomMapViewer] Mapbox inicializado com sucesso!', {
-      style: selectedStyle,
-      zoom: mapZoom,
-      center: [mapLng, mapLat]
-    })
-
-    registerMapboxZoomListener()
-    updateMapboxMarkerSizes()
-    
-    console.log('[CustomMapViewer] 🎯 Mapbox inicializado')
-    console.log('[CustomMapViewer] Devices selecionados:', selectedItems.value.devices.length)
-    console.log('[CustomMapViewer] Cabos selecionados:', selectedItems.value.cables.length)
-    
-    // Aguardar 500ms para garantir que o mapa está completamente renderizado
-    setTimeout(() => {
-      console.log('[CustomMapViewer] 🚀 Renderizando overlays após delay...')
-      updateMap()
-    }, 500)
-  } catch (error) {
-    console.error('[CustomMapViewer] Erro detalhado ao inicializar Mapbox:')
-    console.error('  - Message:', error.message)
-    console.error('  - Stack:', error.stack)
-    console.error('  - Error object:', error)
-
-    // Executar diagnóstico expandido em caso de falha
-    runAutomaticMapboxDiagnostics({
-      token: mapboxToken,
-      styles: candidateStyles,
-      center: [mapLng, mapLat],
-      zoom: mapZoom
-    }).catch((diagnosticError) => {
-      console.error('[CustomMapViewer] Diagnóstico automático falhou:', diagnosticError)
-    })
-    throw error
-  }
-}
-
-const initOpenStreetMap = async () => {
-  console.log('[CustomMapViewer] Iniciando OpenStreetMap com Leaflet...')
-  
-  // ✅ LAZY LOADING: Carregar Leaflet apenas quando necessário
-  if (!L) {
-    console.log('[CustomMapViewer] Carregando biblioteca Leaflet sob demanda...')
-    L = await loadLeaflet()
-  }
-  
-  console.log('[CustomMapViewer] L disponível:', !!L)
-  console.log('[CustomMapViewer] L.version:', L.version)
-  
-  currentMapProvider.value = 'osm'
-  resetZoomListener()
-  
-  const mapZoom = parseInt(configForm.value.MAP_DEFAULT_ZOOM) || 12
-  const mapLat = parseFloat(configForm.value.MAP_DEFAULT_LAT) || -15.7801
-  const mapLng = parseFloat(configForm.value.MAP_DEFAULT_LNG) || -47.9292
-  
-  googleMap.value = L.map(mapContainer.value).setView([mapLat, mapLng], mapZoom)
-  
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors'
-  }).addTo(googleMap.value)
-  
-  console.log('[CustomMapViewer] OpenStreetMap inicializado com sucesso')
-  
-  // ✅ ATUALIZAR MAPA após inicialização completa do OSM
-  console.log('[CustomMapViewer] OSM pronto - aplicando seleção inicial')
-  updateMap()
-}
-
-// ==========================================
-// CAMADA DE ABSTRAÇÃO PARA MÚLTIPLOS PROVEDORES
-// ==========================================
-// ✅ FASE 3: Funções movidas para composables (useMapMarkers, useMapPolylines)
+// Tema do utilizador: o provider re-estiliza o fundo (Google) e os cabos mudam de espessura
+watch(() => uiStore.theme, (newTheme) => {
+  if (!map.value) return
+  map.value.setTheme(newTheme === 'dark' ? 'dark' : 'light')
+  updatePolylines()
+})
 
 const saveMapItems = async () => {
   try {
@@ -1515,7 +852,7 @@ const saveMapItems = async () => {
       showToast('Não é possível salvar o mapa padrão', 'warning')
       return
     }
-    
+
     const response = await fetch(`/api/v1/maps/custom/${mapId}/items/`, {
       method: 'POST',
       credentials: 'include',
@@ -1527,13 +864,12 @@ const saveMapItems = async () => {
         selected_items: selectedItems.value
       })
     })
-    
+
     if (!response.ok) {
       throw new Error(`Erro ao salvar: ${response.status}`)
     }
-    
+
     showToast('Itens salvos com sucesso!')
-    console.log('[CustomMapViewer] Itens salvos com sucesso')
   } catch (error) {
     console.error('[CustomMapViewer] Erro ao salvar itens:', error)
     showToast('Erro ao salvar itens do mapa', 'error')
@@ -1542,66 +878,32 @@ const saveMapItems = async () => {
 
 // Observar mudanças nos items selecionados e atualizar mapa
 watch(() => selectedItems.value.devices, () => {
-  if (!googleMap.value) return
-  console.log('[CustomMapViewer] Devices selecionados alterados → updateMap')
-  updateMap()
+  if (map.value) updateMap()
 }, { deep: true })
 
 watch(() => selectedItems.value.cables, () => {
-  if (!googleMap.value) return
-  console.log('[CustomMapViewer] Cabos selecionados alterados → updateMap')
-  updateMap()
+  if (map.value) updateMap()
 }, { deep: true })
-
-// 🔄 WATCHER: Detecta mudanças no provider e reinicializa o mapa (EXCLUSÃO MÚTUA)
-watch(
-  () => configForm.value.MAP_PROVIDER,
-  async (newProvider, oldProvider) => {
-    if (!mapContainer.value || !oldProvider) return // Ignora primeira inicialização
-    
-    console.log(`[CustomMapViewer] 🔄 Provider mudou: ${oldProvider} → ${newProvider}`)
-    console.log('[CustomMapViewer] 🗑️ Destruindo mapa anterior...')
-    
-    // Destruir mapa anterior
-    if (googleMap.value) {
-      destroyCurrentMap()
-    }
-    
-    console.log(`[CustomMapViewer] 🆕 Inicializando ${newProvider}...`)
-    // Inicializar novo mapa
-    await initMap()
-    _initResizeObserver()
-  }
-)
 
 // ── Maintenance Area (Fase 5.2) ─────────────────────────────────────────────
 const maintenanceMode = ref(false)
 const maintenanceVertices = ref([]) // [{ lat, lng }, ...]
 const affectedCables = ref([])
 const affectedDevices = ref([])
-let _maintPolygon = null
-let _maintMapListeners = []
+let _maintOverlay = null       // IPolyline (2 vértices) ou IPolygon (3+)
+let _maintOverlayKind = null   // 'line' | 'polygon'
 let _resizeObserver = null
 
 // Observa mudanças no tamanho do container (nav toggle, fullscreen, etc.)
-// e notifica o provider de mapa para recalcular o canvas.
+// e pede ao provider para recalcular o canvas.
 function _initResizeObserver() {
   if (!mapContainer.value || typeof ResizeObserver === 'undefined') return
   if (_resizeObserver) { _resizeObserver.disconnect(); _resizeObserver = null }
 
   _resizeObserver = new ResizeObserver(() => {
-    const map = googleMap.value
-    const provider = currentMapProvider.value
-    if (!map) return
     try {
-      if (provider === 'mapbox' && typeof map.resize === 'function') {
-        map.resize()
-      } else if (provider === 'osm' && typeof map.invalidateSize === 'function') {
-        map.invalidateSize({ animate: false })
-      } else if (provider === 'google' && window.google?.maps) {
-        google.maps.event.trigger(map, 'resize')
-      }
-    } catch (e) { /* ignore */ }
+      map.value?.resize()
+    } catch (e) { /* best-effort: ignorado de propósito */ }
   })
   _resizeObserver.observe(mapContainer.value)
 }
@@ -1639,144 +941,38 @@ function _runMaintenanceSpatialQuery() {
 }
 
 function _clearMaintPolygonOverlay() {
-  if (!_maintPolygon) return
-  const map = googleMap.value
-  const provider = currentMapProvider.value
-  try {
-    if (provider === 'google' && typeof _maintPolygon.setMap === 'function') {
-      _maintPolygon.setMap(null)
-    } else if (provider === 'mapbox' && map) {
-      // Remove both line and fill layers/sources
-      for (const id of ['__maint_fill', '__maint_line']) {
-        if (map.getLayer(id)) map.removeLayer(id)
-      }
-      for (const id of ['__maint_fill_src', '__maint_line_src']) {
-        if (map.getSource(id)) map.removeSource(id)
-      }
-    } else if (provider === 'osm' && typeof _maintPolygon.remove === 'function') {
-      _maintPolygon.remove()
-    }
-  } catch (e) { /* ignore */ }
-  _maintPolygon = null
+  if (!_maintOverlay) return
+  try { _maintOverlay.remove() } catch (e) { /* best-effort */ }
+  _maintOverlay = null
+  _maintOverlayKind = null
 }
 
 function _drawMaintPolygon() {
   const verts = maintenanceVertices.value
-  const map = googleMap.value
-  const provider = currentMapProvider.value
-  if (!map || verts.length < 2) return
+  if (!map.value || verts.length < 2) return
+  const path = verts.map(v => ({ lat: v.lat, lng: v.lng }))
+  const kind = verts.length === 2 ? 'line' : 'polygon'
 
-  if (provider === 'google') {
-    const paths = verts.map(v => ({ lat: v.lat, lng: v.lng }))
-    if (verts.length === 2) {
-      // Polyline para 2 pontos (Polygon com 2 vértices não renderiza bem)
-      if (_maintPolygon) { _maintPolygon.setMap(null); _maintPolygon = null }
-      _maintPolygon = new google.maps.Polyline({
-        path: paths, strokeColor: '#f59e0b', strokeOpacity: 0.9, strokeWeight: 2, map, clickable: false
-      })
-    } else {
-      if (_maintPolygon && typeof _maintPolygon.setPath === 'function') {
-        _maintPolygon.setPath(paths)
-      } else {
-        if (_maintPolygon) { _maintPolygon.setMap(null); _maintPolygon = null }
-        _maintPolygon = new google.maps.Polygon({
-          paths, strokeColor: '#f59e0b', strokeOpacity: 0.9, strokeWeight: 2,
-          fillColor: '#f59e0b', fillOpacity: 0.12, map, clickable: false
-        })
-      }
-    }
-  } else if (provider === 'mapbox') {
-    // LineString: mostra a linha de todos os vértices + fecha para o primeiro quando >= 3
-    const lineCoords = verts.map(v => [v.lng, v.lat])
-    if (verts.length >= 3) lineCoords.push([verts[0].lng, verts[0].lat])
-    const lineGeojson = { type: 'Feature', geometry: { type: 'LineString', coordinates: lineCoords } }
-
-    if (map.getSource('__maint_line_src')) {
-      map.getSource('__maint_line_src').setData(lineGeojson)
-    } else {
-      map.addSource('__maint_line_src', { type: 'geojson', data: lineGeojson })
-      map.addLayer({ id: '__maint_line', type: 'line', source: '__maint_line_src',
-        paint: { 'line-color': '#f59e0b', 'line-width': 2, 'line-opacity': 0.9 } })
-    }
-
-    // Fill só quando polígono tem 3+ vértices (GeoJSON Polygon precisa de ≥4 coords)
-    if (verts.length >= 3) {
-      const polyCoords = [...verts.map(v => [v.lng, v.lat]), [verts[0].lng, verts[0].lat]]
-      const fillGeojson = { type: 'Feature', geometry: { type: 'Polygon', coordinates: [polyCoords] } }
-      if (map.getSource('__maint_fill_src')) {
-        map.getSource('__maint_fill_src').setData(fillGeojson)
-      } else {
-        map.addSource('__maint_fill_src', { type: 'geojson', data: fillGeojson })
-        map.addLayer({ id: '__maint_fill', type: 'fill', source: '__maint_fill_src',
-          paint: { 'fill-color': '#f59e0b', 'fill-opacity': 0.12 } })
-      }
-    }
-    _maintPolygon = '__maint_line_src'
-  } else if (provider === 'osm') {
-    const latlngs = verts.map(v => [v.lat, v.lng])
-    if (verts.length === 2) {
-      if (_maintPolygon) { _maintPolygon.remove(); _maintPolygon = null }
-      _maintPolygon = L.polyline(latlngs, { color: '#f59e0b', weight: 2, opacity: 0.9 }).addTo(map)
-    } else {
-      if (_maintPolygon && typeof _maintPolygon.setLatLngs === 'function') {
-        _maintPolygon.setLatLngs(latlngs)
-      } else {
-        if (_maintPolygon) { _maintPolygon.remove(); _maintPolygon = null }
-        _maintPolygon = L.polygon(latlngs, { color: '#f59e0b', weight: 2, fillOpacity: 0.12 }).addTo(map)
-      }
-    }
+  if (_maintOverlay && _maintOverlayKind === kind) {
+    _maintOverlay.setPath(path)
+    return
   }
+
+  _clearMaintPolygonOverlay()
+  _maintOverlay = kind === 'line'
+    ? map.value.createPolyline({ path, strokeColor: MAINTENANCE_STYLE.strokeColor, strokeOpacity: MAINTENANCE_STYLE.strokeOpacity, strokeWeight: MAINTENANCE_STYLE.strokeWeight, clickable: false })
+    : map.value.createPolygon({ path, ...MAINTENANCE_STYLE, clickable: false })
+  _maintOverlayKind = kind
 }
 
 function _setCursor(style) {
-  const map = googleMap.value
-  const provider = currentMapProvider.value
-  if (!map) return
-  try {
-    if (provider === 'google') map.setOptions({ draggableCursor: style || '' })
-    else if (provider === 'mapbox') map.getCanvas().style.cursor = style || ''
-    else if (provider === 'osm') map.getContainer().style.cursor = style || ''
-  } catch (e) { /* ignore */ }
+  map.value?.setCursor(style || '')
 }
 
-function _attachMaintListeners() {
-  const map = googleMap.value
-  const provider = currentMapProvider.value
-  if (!map) return
-
-  if (provider === 'google') {
-    const listener = google.maps.event.addListener(map, 'click', e => {
-      _onMaintClick(e.latLng.lat(), e.latLng.lng())
-    })
-    _maintMapListeners.push(listener)
-  } else if (provider === 'mapbox') {
-    const handler = e => _onMaintClick(e.lngLat.lat, e.lngLat.lng)
-    map.on('click', handler)
-    _maintMapListeners.push({ type: 'mapbox', handler })
-  } else if (provider === 'osm') {
-    const handler = e => _onMaintClick(e.latlng.lat, e.latlng.lng)
-    map.on('click', handler)
-    _maintMapListeners.push({ type: 'osm', handler })
-  }
-}
-
-function _detachMaintListeners() {
-  const map = googleMap.value
-  const provider = currentMapProvider.value
-  _maintMapListeners.forEach(listener => {
-    try {
-      if (listener.type === 'mapbox' || listener.type === 'osm') {
-        if (map && typeof map.off === 'function') map.off('click', listener.handler)
-      } else if (provider === 'google') {
-        google.maps.event.removeListener(listener)
-      }
-    } catch (e) { /* ignore */ }
-  })
-  _maintMapListeners = []
-}
-
-function _onMaintClick(lat, lng) {
-  maintenanceVertices.value.push({ lat, lng })
+function _onMaintMapClick(event) {
+  if (!maintenanceMode.value) return
+  if (!Number.isFinite(event?.lat) || !Number.isFinite(event?.lng)) return
+  maintenanceVertices.value.push({ lat: event.lat, lng: event.lng })
   _drawMaintPolygon()
   if (maintenanceVertices.value.length >= 3) _runMaintenanceSpatialQuery()
 }
@@ -1791,12 +987,12 @@ function enterMaintenanceMode() {
   maintenanceVertices.value = []
   affectedCables.value = []
   affectedDevices.value = []
-  _attachMaintListeners()
+  map.value?.on('click', _onMaintMapClick)
   _setCursor('crosshair')
 }
 
 function exitMaintenanceMode() {
-  _detachMaintListeners()
+  map.value?.off('click', _onMaintMapClick)
   _setCursor('')
   _clearMaintPolygonOverlay()
   maintenanceMode.value = false
@@ -1821,7 +1017,7 @@ function exportMaintenanceCSV() {
     rows.push(['Equipamento', device.name, device.status || '', device.site_name || '', device.lat || '', device.lng || ''])
   })
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -1835,167 +1031,64 @@ function exportMaintenanceCSV() {
 
 // Função para abrir detalhes completos do cabo
 const openCableFullDetails = (cable) => {
-  console.log('[CustomMapViewer] Abrir detalhes completos do cabo:', cable.name)
   showCableModal.value = false
   selectedCable.value = cable
   showCableDetailModal.value = true
 }
 
 // Função para salvar alterações do cabo
-const handleCableSave = async (cable) => {
-  console.log('[CustomMapViewer] Salvando cabo:', cable)
-  // TODO: Implementar salvamento no backend
+const handleCableSave = async () => {
+  // TODO(EV-0012d): persistir no backend; hoje só recarrega o inventário
   showCableDetailModal.value = false
-  // Recarregar inventário para atualizar dados
   await loadInventoryItems()
   updateMap()
 }
 
 onMounted(async () => {
-  console.log('[CustomMapViewer] Componente montado, iniciando carregamento...')
   document.addEventListener('click', _hideCtxMenu)
   document.addEventListener('keydown', _globalKeydown)
-  
+
   // 1. Carregar inventário primeiro
   await loadInventoryItems()
-  
+
   // 2. Carregar dados do mapa
   await loadMapData()
-  
+
   // 3. Se for mapa default, selecionar todos os items automaticamente
-  const mapId = route.params.mapId
-  if (mapId === 'default') {
+  if (route.params.mapId === 'default') {
     if (availableItems.value.devices.length > 0) {
       selectedItems.value.devices = availableItems.value.devices.map(d => d.id)
-      console.log(`[CustomMapViewer] Mapa default: ${selectedItems.value.devices.length} devices selecionados automaticamente`)
     }
-    
     if (availableItems.value.cables.length > 0) {
       selectedItems.value.cables = availableItems.value.cables.map(c => c.id)
-      console.log(`[CustomMapViewer] Mapa default: ${selectedItems.value.cables.length} cabos selecionados automaticamente`)
     }
   }
 
-  if (typeof window !== 'undefined') {
-    window.__runMapboxStyleDiagnostics = async (overrideStyles) => {
-      const token = (configForm.value.MAPBOX_TOKEN || '').trim()
-      const lat = parseFloat(configForm.value.MAP_DEFAULT_LAT) || -15.7801
-      const lng = parseFloat(configForm.value.MAP_DEFAULT_LNG) || -47.9292
-      const zoom = parseInt(configForm.value.MAP_DEFAULT_ZOOM) || 12
-      const candidateSet = buildMapboxStyleCandidates()
-      const styles = overrideStyles && overrideStyles.length ? overrideStyles : candidateSet.styles
-
-      console.log('[CustomMapViewer] Executando diagnóstico manual de estilos Mapbox...', { styles, lat, lng, zoom, candidateSet })
-      const results = await runAutomaticMapboxDiagnostics({
-        token,
-        styles,
-        center: [lng, lat],
-        zoom
-      })
-      console.log('[CustomMapViewer] Resultado diagnóstico manual:', results)
-      return results
-    }
-  }
-  
-  // 4. Inicializar mapa (updateMap() será chamado automaticamente após concluir init)
+  // 4. Inicializar mapa (updateMap() corre no fim do init)
   await initMap()
 
   // 4b. Observar mudanças de tamanho do container (nav toggle, fullscreen)
   _initResizeObserver()
 
-  // 5. Iniciar polling de status Zabbix (Fase 5.1)
+  // 5. Estado em tempo real (REST inicial + WebSocket)
   startStatusPolling()
-
-  // 6. Marcar que o carregamento inicial foi concluído
-  // Aguardar um pouco para garantir que a animação inicial aconteceu
-  setTimeout(() => {
-    isInitialLoad.value = false
-    console.log('[CustomMapViewer] Carregamento inicial concluído - animações desativadas')
-  }, 2000)
-  
-  console.log('[CustomMapViewer] ✓ onMounted completo')
 })
 
 onBeforeUnmount(() => {
-  console.log('[CustomMapViewer] Limpando recursos antes de desmontar')
-  
-  // 1. Limpar MarkerClusterer
-  if (markerClusterer.value) {
-    markerClusterer.value.clearMarkers()
-    if (typeof markerClusterer.value.setMap === 'function') {
-      markerClusterer.value.setMap(null)
-    }
-    markerClusterer.value = null
-  }
-  
-  // 2. Limpar todos os markers do Map
-  activeMarkers.forEach((marker) => {
-    try {
-      clearMarkerListeners(marker)
-    } catch (error) {
-      console.warn('[CustomMapViewer] Falha ao limpar listeners do marker ao desmontar:', error)
-    }
-
-    if (typeof marker.setMap === 'function') {
-      marker.setMap(null)
-    } else if (typeof marker.remove === 'function') {
-      marker.remove()
-    }
-  })
-  activeMarkers.clear()
-  
-  // 3. Limpar todas as polylines do Map
-  activePolylines.forEach((polyline) => {
-    try {
-      clearPolylineListeners(polyline)
-    } catch (error) {
-      console.warn('[CustomMapViewer] Falha ao limpar listeners da polyline ao desmontar:', error)
-    }
-
-    if (typeof polyline.setMap === 'function') {
-      polyline.setMap(null)
-    } else if (currentMapProvider.value === 'mapbox') {
-      if (polyline.layerId && googleMap.value?.getLayer(polyline.layerId)) {
-        googleMap.value.removeLayer(polyline.layerId)
-      }
-      if (polyline.sourceId && googleMap.value?.getSource(polyline.sourceId)) {
-        googleMap.value.removeSource(polyline.sourceId)
-      }
-    } else if (currentMapProvider.value === 'osm' && typeof polyline.remove === 'function') {
-      polyline.remove()
-    }
-  })
-  activePolylines.clear()
-  
-  // 4. Limpar listeners do mapa
-  if (googleMap.value) {
-    if (currentMapProvider.value === 'mapbox' && typeof googleMap.value.remove === 'function') {
-      googleMap.value.remove()
-    } else if (currentMapProvider.value === 'osm' && typeof googleMap.value.remove === 'function') {
-      googleMap.value.remove()
-    }
-    if (currentMapProvider.value === 'google') {
-      google.maps.event.clearInstanceListeners(googleMap.value)
-    }
-    googleMap.value = null
-  }
-  
-  // 5. Parar polling de status (Fase 5.1)
   stopStatusPolling()
 
-  // 6. Limpar modo de manutenção (Fase 5.2)
   if (maintenanceMode.value) {
-    _detachMaintListeners()
-    _clearMaintPolygonOverlay()
+    exitMaintenanceMode()
   }
 
-  // 6. Remover event listeners e observers
-  window.removeEventListener('google-maps-loaded', initMap)
+  destroyCurrentMap()
+
   document.removeEventListener('click', _hideCtxMenu)
   document.removeEventListener('keydown', _globalKeydown)
   if (_resizeObserver) { _resizeObserver.disconnect(); _resizeObserver = null }
-  
-  console.log('[CustomMapViewer] Recursos limpos')
+  if (tooltipTimeout) clearTimeout(tooltipTimeout)
+  if (_toastTimer) clearTimeout(_toastTimer)
+  if (_badgeTimer) clearTimeout(_badgeTimer)
 })
 </script>
 

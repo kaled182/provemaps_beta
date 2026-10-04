@@ -132,11 +132,8 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
-import { loadGoogleMaps } from '@/utils/googleMapsLoader';
-import { loadMapbox } from '@/composables/map/providers/useMapbox';
-import { loadLeaflet, getLeaflet } from '@/composables/map/providers/useLeaflet';
-import { useSystemConfig } from '@/composables/useSystemConfig';
+import { computed, nextTick, onMounted, ref, shallowRef, watch } from 'vue';
+import { createMap } from '@/providers/maps/MapProviderFactory.js';
 
 const props = defineProps({
   show: Boolean,
@@ -144,8 +141,6 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close', 'saved']);
-
-const { configForm, loadSystemConfig } = useSystemConfig();
 
 // ─── State ───────────────────────────────────────────────────
 const form = ref({
@@ -157,9 +152,8 @@ const form = ref({
   lng: '',
 });
 const mapContainer = ref(null);
-const mapInstance = ref(null);
-const marker = ref(null);
-const activeProvider = ref('google');
+const mapInstance = shallowRef(null); // IMap (providers/maps)
+const marker = shallowRef(null);      // IMarker
 const addressQuery = ref('');
 const addressSuggestions = ref([]);
 const mapError = ref('');
@@ -199,18 +193,13 @@ const save = () => {
   });
 };
 
-// ─── Map lifecycle ───────────────────────────────────────────
+// ─── Map lifecycle (EV-0012c: provider configurado, via factory) ─────────
 
 const destroyMap = () => {
-  if (!mapInstance.value) return;
-  const p = activeProvider.value;
-  try {
-    if (p === 'mapbox' || p === 'osm') {
-      mapInstance.value.remove();
-    }
-  } catch (_) { /* best-effort: ignorado de propósito */ }
-  mapInstance.value = null;
+  try { marker.value?.remove(); } catch (_) { /* best-effort */ }
   marker.value = null;
+  try { mapInstance.value?.destroy(); } catch (_) { /* best-effort */ }
+  mapInstance.value = null;
 };
 
 const initMap = async () => {
@@ -218,20 +207,30 @@ const initMap = async () => {
   mapError.value = '';
 
   try {
-    await loadSystemConfig();
-    activeProvider.value = configForm.value.MAP_PROVIDER || 'google';
-
     const hasCoords = !!Number(form.value.lat) && !!Number(form.value.lng);
     const lat = Number(form.value.lat) || -15.793889;
     const lng = Number(form.value.lng) || -47.882778;
     const zoom = hasCoords ? 15 : 6;
 
-    if (activeProvider.value === 'mapbox') {
-      await initMapboxMap(lat, lng, zoom, hasCoords);
-    } else if (activeProvider.value === 'osm') {
-      await initLeafletMap(lat, lng, zoom, hasCoords);
-    } else {
-      await initGoogleMap(lat, lng, zoom, hasCoords);
+    const map = await createMap(mapContainer.value, {
+      center: { lat, lng },
+      zoom,
+      controls: { mapType: false, streetView: false, fullscreen: false },
+    });
+    mapInstance.value = map;
+
+    map.on('click', (event) => {
+      if (!Number.isFinite(event?.lat) || !Number.isFinite(event?.lng)) return;
+      form.value.lat = event.lat;
+      form.value.lng = event.lng;
+      placeMarker({ lat: event.lat, lng: event.lng });
+      reverseGeocode(event.lat, event.lng);
+    });
+
+    if (hasCoords) {
+      placeMarker({ lat, lng });
+      map.setZoom(16);
+      reverseGeocode(lat, lng);
     }
   } catch (err) {
     console.error('[SiteEditModal] Erro ao carregar mapa:', err);
@@ -239,176 +238,32 @@ const initMap = async () => {
   }
 };
 
-// ─── Google Maps ─────────────────────────────────────────────
-
-const initGoogleMap = async (lat, lng, zoom, hasCoords) => {
-  await loadGoogleMaps();
-  mapInstance.value = new window.google.maps.Map(mapContainer.value, {
-    center: { lat, lng },
-    zoom,
-  });
-  mapInstance.value.addListener('click', (event) => {
-    const newLat = event.latLng.lat();
-    const newLng = event.latLng.lng();
-    form.value.lat = newLat;
-    form.value.lng = newLng;
-    placeMarker({ lat: newLat, lng: newLng });
-    reverseGeocode(newLat, newLng);
-  });
-  if (hasCoords) {
-    placeMarker({ lat, lng });
-    mapInstance.value.setZoom(16);
-    reverseGeocode(lat, lng);
-  }
-};
-
-// ─── Mapbox ──────────────────────────────────────────────────
-
-const initMapboxMap = async (lat, lng, zoom, hasCoords) => {
-  const mapboxgl = await loadMapbox();
-  window.mapboxgl = mapboxgl;
-
-  const token = configForm.value.MAPBOX_TOKEN;
-  if (!token) throw new Error('Token do Mapbox não configurado. Configure em Setup > Mapas.');
-  mapboxgl.accessToken = token;
-
-  const styleAliases = {
-    streets: 'mapbox://styles/mapbox/streets-v12',
-    satellite: 'mapbox://styles/mapbox/satellite-v9',
-    dark: 'mapbox://styles/mapbox/dark-v11',
-    light: 'mapbox://styles/mapbox/light-v11',
-    outdoors: 'mapbox://styles/mapbox/outdoors-v12',
-  };
-  let style = configForm.value.MAPBOX_CUSTOM_STYLE || configForm.value.MAPBOX_STYLE || 'streets';
-  if (!style.startsWith('mapbox://') && !style.startsWith('http')) {
-    style = styleAliases[style] || styleAliases.streets;
-  }
-
-  mapInstance.value = new mapboxgl.Map({
-    container: mapContainer.value,
-    style,
-    center: [lng, lat],
-    zoom,
-  });
-
-  await new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(() => reject(new Error('Timeout ao carregar mapa Mapbox')), 15000);
-    mapInstance.value.once('load', () => { clearTimeout(timeoutId); resolve(); });
-    mapInstance.value.once('error', (e) => { clearTimeout(timeoutId); reject(e.error || e); });
-  });
-
-  mapInstance.value.on('click', (e) => {
-    const newLat = e.lngLat.lat;
-    const newLng = e.lngLat.lng;
-    form.value.lat = newLat;
-    form.value.lng = newLng;
-    placeMarker({ lat: newLat, lng: newLng });
-    reverseGeocode(newLat, newLng);
-  });
-
-  if (hasCoords) {
-    placeMarker({ lat, lng });
-    reverseGeocode(lat, lng);
-  }
-};
-
-// ─── Leaflet / OSM ───────────────────────────────────────────
-
-const initLeafletMap = async (lat, lng, zoom, hasCoords) => {
-  const L = await loadLeaflet();
-
-  mapInstance.value = L.map(mapContainer.value).setView([lat, lng], zoom);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors',
-  }).addTo(mapInstance.value);
-
-  mapInstance.value.on('click', (e) => {
-    const newLat = e.latlng.lat;
-    const newLng = e.latlng.lng;
-    form.value.lat = newLat;
-    form.value.lng = newLng;
-    placeMarker({ lat: newLat, lng: newLng });
-    reverseGeocode(newLat, newLng);
-  });
-
-  if (hasCoords) {
-    placeMarker({ lat, lng });
-    reverseGeocode(lat, lng);
-  }
-};
-
-// ─── Provider-agnostic marker ────────────────────────────────
+// ─── Marcador arrastável (IMarker) ───────────────────────────
 
 const placeMarker = ({ lat, lng }) => {
   if (!mapInstance.value) return;
-  const p = activeProvider.value;
-
-  if (p === 'google') {
-    if (!marker.value) {
-      marker.value = new window.google.maps.Marker({
-        position: { lat, lng },
-        map: mapInstance.value,
-        draggable: true,
-      });
-      marker.value.addListener('dragend', (event) => {
-        const newLat = event.latLng.lat();
-        const newLng = event.latLng.lng();
-        form.value.lat = newLat;
-        form.value.lng = newLng;
-        reverseGeocode(newLat, newLng);
-      });
-    } else {
-      marker.value.setPosition({ lat, lng });
-    }
-    mapInstance.value.panTo({ lat, lng });
-
-  } else if (p === 'mapbox') {
-    if (!marker.value) {
-      marker.value = new window.mapboxgl.Marker({ draggable: true })
-        .setLngLat([lng, lat])
-        .addTo(mapInstance.value);
-      marker.value.on('dragend', () => {
-        const pos = marker.value.getLngLat();
-        form.value.lat = pos.lat;
-        form.value.lng = pos.lng;
-        reverseGeocode(pos.lat, pos.lng);
-      });
-    } else {
-      marker.value.setLngLat([lng, lat]);
-    }
-    mapInstance.value.flyTo({ center: [lng, lat] });
-
-  } else if (p === 'osm') {
-    let L;
-    try { L = getLeaflet(); } catch (_) { return; }
-    if (!marker.value) {
-      marker.value = L.marker([lat, lng], { draggable: true }).addTo(mapInstance.value);
-      marker.value.on('dragend', (e) => {
-        const pos = e.target.getLatLng();
-        form.value.lat = pos.lat;
-        form.value.lng = pos.lng;
-        reverseGeocode(pos.lat, pos.lng);
-      });
-    } else {
-      marker.value.setLatLng([lat, lng]);
-    }
-    mapInstance.value.setView([lat, lng]);
+  if (!marker.value) {
+    marker.value = mapInstance.value.createMarker({
+      position: { lat, lng },
+      draggable: true,
+      title: 'Posição do site',
+    });
+    marker.value.on('dragend', () => {
+      const pos = marker.value.getPosition();
+      form.value.lat = pos.lat;
+      form.value.lng = pos.lng;
+      reverseGeocode(pos.lat, pos.lng);
+    });
+  } else {
+    marker.value.setPosition({ lat, lng });
   }
+  mapInstance.value.panTo({ lat, lng });
 };
-
-// ─── Provider-agnostic pan ───────────────────────────────────
 
 const panToCoords = (lat, lng, zoom) => {
   if (!mapInstance.value) return;
-  const p = activeProvider.value;
-  if (p === 'google') {
-    mapInstance.value.panTo({ lat, lng });
-    if (zoom) mapInstance.value.setZoom(zoom);
-  } else if (p === 'mapbox') {
-    mapInstance.value.flyTo({ center: [lng, lat], ...(zoom ? { zoom } : {}) });
-  } else if (p === 'osm') {
-    mapInstance.value.setView([lat, lng], zoom || mapInstance.value.getZoom());
-  }
+  mapInstance.value.panTo({ lat, lng });
+  if (zoom) mapInstance.value.setZoom(zoom);
 };
 
 // ─── Address search (Nominatim) ───────────────────────────────
@@ -441,32 +296,9 @@ const applySuggestion = (s) => {
 };
 
 // ─── Reverse geocode ─────────────────────────────────────────
+// Sempre Nominatim: igual para os três provedores e sem depender de um SDK.
 
-const reverseGeocode = (lat, lng) => {
-  if (activeProvider.value === 'google' && window.google?.maps?.Geocoder) {
-    const geocoder = new window.google.maps.Geocoder();
-    geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-      if (status === 'OK' && results?.length > 0) {
-        const result = results[0];
-        form.value.address = result.formatted_address || '';
-        addressQuery.value = result.formatted_address || '';
-        const addr = {};
-        result.address_components?.forEach((c) => {
-          if (c.types.includes('locality')) addr.city = c.long_name;
-          if (c.types.includes('administrative_area_level_1')) addr.state = c.long_name;
-          if (c.types.includes('postal_code')) addr.postcode = c.long_name;
-        });
-        form.value.city = addr.city || form.value.city || '';
-        form.value.state = addr.state || form.value.state || '';
-        form.value.zip_code = addr.postcode || form.value.zip_code || '';
-        return;
-      }
-      reverseGeocodeNominatim(lat, lng);
-    });
-  } else {
-    reverseGeocodeNominatim(lat, lng);
-  }
-};
+const reverseGeocode = (lat, lng) => reverseGeocodeNominatim(lat, lng);
 
 const reverseGeocodeNominatim = (lat, lng) => {
   fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`, {

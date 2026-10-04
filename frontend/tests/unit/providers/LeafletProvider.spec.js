@@ -18,6 +18,7 @@ function evented() {
 const fake = {
   maps: [],
   polylines: [],
+  polygons: [],
   markers: [],
   tileLayers: [],
 };
@@ -42,7 +43,9 @@ vi.mock('leaflet', () => {
         remove: vi.fn(),
         latLngToContainerPoint: vi.fn(() => ({ x: 10, y: 20 })),
         getBounds: vi.fn(() => ({ getSouth: () => -2, getWest: () => -3, getNorth: () => 2, getEast: () => 3 })),
-        getContainer: vi.fn(() => container),
+        containerEl: { style: {} },
+        getContainer: vi.fn(function () { return this.containerEl; }),
+        invalidateSize: vi.fn(),
       };
       fake.maps.push(m);
       return m;
@@ -61,10 +64,16 @@ vi.mock('leaflet', () => {
         setLatLngs: vi.fn(function (ll) { this.latlngs = ll; }),
         getLatLngs: vi.fn(function () { return this.latlngs.map(([lat, lng]) => ({ lat, lng })); }),
         setStyle: vi.fn(),
+        bringToFront: vi.fn(),
         remove: vi.fn(),
       };
       fake.polylines.push(p);
       return p;
+    }),
+    polygon: vi.fn((latlngs, opts) => {
+      const g = { latlngs, opts, addTo: vi.fn(function () { return this; }), setLatLngs: vi.fn(), setStyle: vi.fn(), remove: vi.fn() };
+      fake.polygons.push(g);
+      return g;
     }),
     marker: vi.fn((latlng, opts) => {
       const m = {
@@ -75,6 +84,7 @@ vi.mock('leaflet', () => {
         addTo: vi.fn(function () { return this; }),
         setLatLng: vi.fn(function (ll) { this.latlng = ll; }),
         getLatLng: vi.fn(function () { return { lat: this.latlng[0], lng: this.latlng[1] }; }),
+        setIcon: vi.fn(),
         remove: vi.fn(),
       };
       fake.markers.push(m);
@@ -103,6 +113,7 @@ async function makeMap() {
 beforeEach(() => {
   fake.maps.length = 0;
   fake.polylines.length = 0;
+  fake.polygons.length = 0;
   fake.markers.length = 0;
   fake.tileLayers.length = 0;
   vi.clearAllMocks();
@@ -322,7 +333,7 @@ describe('LeafletMap — viewport (EV-0012b)', () => {
   it('getBounds devolve a bbox no formato da API e getContainer o elemento', async () => {
     const { map } = await makeMap();
     expect(map.getBounds()).toEqual({ lat_min: -2, lng_min: -3, lat_max: 2, lng_max: 3 });
-    expect(map.getContainer()).toEqual({ id: 'map' });
+    expect(map.getContainer()).toEqual(expect.objectContaining({ style: expect.any(Object) }));
   });
 
   it('idle liga-se ao moveend e move ao move, uma só vez por evento', async () => {
@@ -382,5 +393,48 @@ describe('LeafletPolyline — eventos de hover (EV-0012b)', () => {
     expect(over).toHaveBeenCalledWith(expect.objectContaining({ lat: 5, lng: 6, clientX: 11, clientY: 22 }));
     expect(move).toHaveBeenCalledWith(expect.objectContaining({ clientX: 11 }));
     expect(out).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('LeafletMap — cursor, resize, fitBounds, polígono, setStyle (EV-0012c)', () => {
+  it('setCursor escreve no container; resize invalida o tamanho; fitBounds respeita maxZoom', async () => {
+    const { map } = await makeMap();
+    map.setCursor('crosshair');
+    expect(fake.maps[0].getContainer().style.cursor).toBe('crosshair');
+    map.resize();
+    expect(fake.maps[0].invalidateSize).toHaveBeenCalledWith({ animate: false });
+    map.fitBounds([{ lat: 1, lng: 2 }], { padding: 40, maxZoom: 15 });
+    expect(fake.maps[0].fitBounds).toHaveBeenLastCalledWith(expect.anything(), { padding: [40, 40], maxZoom: 15 });
+  });
+
+  it('createPolygon usa L.polygon não interativo; setPath/setStyle/remove', async () => {
+    const { map } = await makeMap();
+    const poly = map.createPolygon({ path: [{ lat: 0, lng: 0 }, { lat: 0, lng: 1 }, { lat: 1, lng: 1 }], strokeColor: '#f59e0b', fillOpacity: 0.2 });
+    expect(L.polygon).toHaveBeenCalledWith([[0, 0], [0, 1], [1, 1]], expect.objectContaining({ color: '#f59e0b', fillOpacity: 0.2, interactive: false }));
+    poly.setPath([{ lat: 5, lng: 6 }]);
+    expect(fake.polygons[0].setLatLngs).toHaveBeenCalledWith([[5, 6]]);
+    poly.setStyle({ strokeWeight: 4, fillColor: '#000' });
+    expect(fake.polygons[0].setStyle).toHaveBeenCalledWith({ weight: 4, fillColor: '#000' });
+    poly.remove();
+    expect(fake.polygons[0].remove).toHaveBeenCalled();
+  });
+
+  it('polyline.setStyle atualiza a base do hover; marker com cor/tamanho e setStyle troca o ícone', async () => {
+    const { map } = await makeMap();
+    const line = map.createPolyline({ path: [{ lat: 1, lng: 2 }], strokeWeight: 3, strokeOpacity: 0.8 });
+    line.setStyle({ strokeColor: '#111', strokeWeight: 2 });
+    expect(fake.polylines[0].setStyle).toHaveBeenLastCalledWith({ color: '#111', weight: 2, opacity: 0.8 });
+    fake.polylines[0].fire('mouseover', {});
+    expect(fake.polylines[0].setStyle).toHaveBeenLastCalledWith({ weight: 4, opacity: 1 });
+    line.setStyle({ zIndex: 1000 });
+    expect(fake.polylines[0].bringToFront).toHaveBeenCalled();
+
+    const marker = map.createMarker({ position: { lat: 1, lng: 2 }, color: '#10b981', size: 14 });
+    expect(fake.markers[0].opts.icon.html).toContain('#10b981');
+    expect(fake.markers[0].opts.icon.iconSize).toEqual([14, 14]);
+    marker.setStyle({ color: '#ef4444', size: 20 });
+    const next = fake.markers[0].setIcon.mock.calls[0][0];
+    expect(next.html).toContain('#ef4444');
+    expect(next.iconSize).toEqual([20, 20]);
   });
 });

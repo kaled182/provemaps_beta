@@ -3,11 +3,20 @@
  * Implementa IMapProvider para Google Maps JavaScript API
  */
 
-import { IMapProvider, IMap, IPolyline, IMarker } from './IMapProvider.js';
+import { IMapProvider, IMap, IPolyline, IMarker, IPolygon } from './IMapProvider.js';
 import { getMarkerConfig } from './markerStyles.js';
+import { getMapStyles } from '../../utils/mapStyles.js';
 
 let googleMapsLoaded = false;
 let loadingPromise = null;
+
+// Fundo do mapa enquanto os tiles carregam, por tema (era do CustomMapViewer)
+const BACKGROUND_BY_THEME = { dark: '#242f3e', light: '#F1F3F4' };
+
+function normalizeFitOptions(options) {
+  if (typeof options === 'number') return { padding: options, maxZoom: undefined };
+  return { padding: options?.padding ?? options?.top ?? 50, maxZoom: options?.maxZoom };
+}
 
 /**
  * Implementação Google Maps do IPolyline
@@ -33,20 +42,31 @@ class GooglePolyline extends IPolyline {
       geodesic: true,
     });
 
+    this._base = {
+      strokeWeight: options.strokeWeight || 4,
+      strokeOpacity: options.strokeOpacity || 0.9,
+    };
     if (options.clickable !== false) {
-      const baseWeight = options.strokeWeight || 4;
-      const baseOpacity = options.strokeOpacity || 0.9;
       this.polyline.addListener('mouseover', () => {
-        this.polyline.setOptions({ strokeWeight: baseWeight + 2, strokeOpacity: 1 });
+        this.polyline.setOptions({ strokeWeight: this._base.strokeWeight + 2, strokeOpacity: 1 });
       });
       this.polyline.addListener('mouseout', () => {
-        this.polyline.setOptions({ strokeWeight: baseWeight, strokeOpacity: baseOpacity });
+        this.polyline.setOptions({ ...this._base });
       });
     }
   }
 
   setPath(path) {
     this.polyline.setPath(path);
+  }
+
+  setStyle(style) {
+    const next = {};
+    if (style.strokeColor !== undefined) next.strokeColor = style.strokeColor;
+    if (style.strokeWeight !== undefined) next.strokeWeight = this._base.strokeWeight = style.strokeWeight;
+    if (style.strokeOpacity !== undefined) next.strokeOpacity = this._base.strokeOpacity = style.strokeOpacity;
+    if (style.zIndex !== undefined) next.zIndex = style.zIndex;
+    this.polyline.setOptions(next);
   }
 
   getPath() {
@@ -131,18 +151,34 @@ class GoogleMarkerClass extends IMarker {
     const markerType = options.markerType || 'default';
     const config = this._getMarkerConfig(markerType);
 
-    // Ícone por URL (ex.: ícone do dispositivo) ou o círculo SVG do tipo
-    const icon = options.iconUrl
-      ? this._createUrlIcon(options.iconUrl, options.iconSize || 24)
-      : this._createCustomIcon({ ...config, label: options.label ?? config.label });
+    this._style = {
+      color: options.color ?? config.color,
+      size: options.size ?? config.size,
+      label: options.label ?? config.label,
+      iconUrl: options.iconUrl,
+      iconSize: options.iconSize || 24,
+    };
 
     this.marker = new google.maps.Marker({
       position: options.position,
       map: this.googleMap,
       draggable: options.draggable || false,
       title: options.title || '',
-      icon: icon,
+      icon: this._buildIcon(),
     });
+  }
+
+  /** Ícone por URL (ex.: ícone do dispositivo) ou o círculo SVG com a cor/tamanho atuais */
+  _buildIcon() {
+    const s = this._style;
+    return s.iconUrl
+      ? this._createUrlIcon(s.iconUrl, s.iconSize)
+      : this._createCustomIcon({ color: s.color, size: s.size, label: s.label });
+  }
+
+  setStyle(style) {
+    this._style = { ...this._style, ...style };
+    this.marker.setIcon(this._buildIcon());
   }
 
   _createUrlIcon(url, size) {
@@ -230,6 +266,37 @@ class GoogleMarkerClass extends IMarker {
 }
 
 /**
+ * Implementação Google Maps do IPolygon
+ */
+class GooglePolygon extends IPolygon {
+  constructor(map, options) {
+    super();
+    this.polygon = new google.maps.Polygon({
+      paths: options.path || [],
+      map: map.googleMap,
+      strokeColor: options.strokeColor || '#f59e0b',
+      strokeOpacity: options.strokeOpacity ?? 0.9,
+      strokeWeight: options.strokeWeight || 2,
+      fillColor: options.fillColor || options.strokeColor || '#f59e0b',
+      fillOpacity: options.fillOpacity ?? 0.12,
+      clickable: options.clickable ?? false,
+    });
+  }
+
+  setPath(path) {
+    this.polygon.setPaths(path || []);
+  }
+
+  setStyle(style) {
+    this.polygon.setOptions(style);
+  }
+
+  remove() {
+    this.polygon.setMap(null);
+  }
+}
+
+/**
  * Implementação Google Maps do IMap
  */
 class GoogleMapClass extends IMap {
@@ -239,11 +306,41 @@ class GoogleMapClass extends IMap {
     this.options = options;
     this.listeners = {};
 
+    const controls = options.controls || {};
+    const theme = options.theme;
+
     this.googleMap = new google.maps.Map(container, {
       center: options.center,
       zoom: options.zoom || 10,
       mapTypeId: options.mapTypeId || 'terrain',
+      ...(theme ? { styles: getMapStyles(theme, theme), backgroundColor: BACKGROUND_BY_THEME[theme] } : {}),
+      mapTypeControl: controls.mapType ?? true,
+      streetViewControl: controls.streetView ?? true,
+      fullscreenControl: controls.fullscreen ?? true,
+      zoomControl: true,
+      gestureHandling: 'greedy',
+      tilt: 0,
+      ...(options.minZoom ? { minZoom: options.minZoom } : {}),
+      ...(options.maxZoom ? { maxZoom: options.maxZoom } : {}),
     });
+
+    if (controls.traffic) {
+      this.trafficLayer = new google.maps.TrafficLayer();
+      this.trafficLayer.setMap(this.googleMap);
+    }
+  }
+
+  setTheme(theme) {
+    if (!theme) return;
+    this.googleMap.setOptions({ styles: getMapStyles(theme, theme), backgroundColor: BACKGROUND_BY_THEME[theme] });
+  }
+
+  setCursor(cursor) {
+    this.googleMap.setOptions({ draggableCursor: cursor || '' });
+  }
+
+  resize() {
+    google.maps.event.trigger(this.googleMap, 'resize');
   }
 
   setCenter(latLng) {
@@ -263,17 +360,22 @@ class GoogleMapClass extends IMap {
     return this.googleMap.getZoom();
   }
 
-  fitBounds(bounds, padding) {
+  fitBounds(bounds, options) {
+    if (!bounds || bounds.length === 0) return;
+    const { padding, maxZoom } = normalizeFitOptions(options);
     const googleBounds = new google.maps.LatLngBounds();
     bounds.forEach(point => {
       googleBounds.extend(new google.maps.LatLng(point.lat, point.lng));
     });
 
-    const paddingValue = typeof padding === 'number' 
-      ? { top: padding, right: padding, bottom: padding, left: padding }
-      : padding;
+    this.googleMap.fitBounds(googleBounds, { top: padding, right: padding, bottom: padding, left: padding });
 
-    this.googleMap.fitBounds(googleBounds, paddingValue);
+    if (maxZoom) {
+      // O Google aproxima ao máximo num só ponto; corrige-se quando o viewport assentar
+      google.maps.event.addListenerOnce(this.googleMap, 'idle', () => {
+        if (this.googleMap.getZoom() > maxZoom) this.googleMap.setZoom(maxZoom);
+      });
+    }
   }
 
   panTo(latLng) {
@@ -334,8 +436,13 @@ class GoogleMapClass extends IMap {
     return new GoogleMarkerClass(this, options);
   }
 
+  createPolygon(options) {
+    return new GooglePolygon(this, options);
+  }
+
   destroy() {
     this.listeners = {};
+    if (this.trafficLayer) this.trafficLayer.setMap(null);
     google.maps.event.clearInstanceListeners(this.googleMap);
   }
 
