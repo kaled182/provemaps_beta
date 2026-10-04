@@ -52,6 +52,14 @@ shell:  ## Open Django shell
 	$(MANAGE) shell
 
 ### ---------------------------
+### Agent tooling (Claude Code)
+### ---------------------------
+
+.PHONY: skills
+skills:  ## Repõe as skills de agente (.claude/skills/) a partir do skills-lock.json
+	@./scripts/skills-install.sh
+
+### ---------------------------
 ### Dependencies & cleanup
 ### ---------------------------
 

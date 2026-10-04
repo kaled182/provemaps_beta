@@ -1,3 +1,8 @@
+> **Nota (2026-10-04):** o briefing canônico do projeto é o [`CLAUDE.md`](../CLAUDE.md)
+> na raiz. Em caso de divergência com este ficheiro, vale o `CLAUDE.md`. Partes
+> deste playbook estão desatualizadas (uso de `django-environ`, caminhos de testes,
+> `CELERYBEAT_SCHEDULE`, MariaDB/SQLite) — ver ADR 0005.
+
 # AI Agent Playbook — MapsProveFiber
 Django 5 platform for fiber optic network infrastructure with real-time Zabbix monitoring and geospatial route planning.
 

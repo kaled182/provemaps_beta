@@ -97,3 +97,25 @@ jobs:
           name: coverage-xml
           path: backend/coverage.xml
           if-no-files-found: error
+
+  frontend-unit:
+    # Espelha o job `test-front` do CRM. `npm install` (não `npm ci`) porque o
+    # package-lock.json está no .gitignore — ver EV-0007 no CLAUDE.md.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install frontend dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run unit tests (Vitest)
+        run: npm run test:unit
