@@ -1,9 +1,8 @@
-"""Tests for get_env_file and related helpers in setup_app.api_views."""
+"""Tests for get_env_file (setup_app.api_views) and backup helpers (setup_app.usecases.backups)."""
+
 from __future__ import annotations
 
 import json
-import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from django.test import RequestFactory, TestCase
@@ -20,6 +19,7 @@ class GetEnvFileTests(TestCase):
 
     def test_returns_empty_content_when_file_missing(self):
         from setup_app.api_views import get_env_file
+
         request = self._make_request()
         with patch("setup_app.api_views.env_manager") as mock_em:
             mock_em.ENV_PATH = MagicMock()
@@ -31,6 +31,7 @@ class GetEnvFileTests(TestCase):
 
     def test_returns_file_content(self):
         from setup_app.api_views import get_env_file
+
         request = self._make_request()
         with patch("setup_app.api_views.env_manager") as mock_em:
             mock_em.ENV_PATH = MagicMock()
@@ -43,6 +44,7 @@ class GetEnvFileTests(TestCase):
 
     def test_returns_400_when_file_too_large(self):
         from setup_app.api_views import get_env_file
+
         request = self._make_request()
         with patch("setup_app.api_views.env_manager") as mock_em:
             mock_em.ENV_PATH = MagicMock()
@@ -53,6 +55,7 @@ class GetEnvFileTests(TestCase):
 
     def test_returns_500_on_exception(self):
         from setup_app.api_views import get_env_file
+
         request = self._make_request()
         with patch("setup_app.api_views.env_manager") as mock_em:
             mock_em.ENV_PATH = MagicMock()
@@ -63,7 +66,8 @@ class GetEnvFileTests(TestCase):
 
 class EnsureBackupDirTests(TestCase):
     def test_creates_backup_dir(self):
-        from setup_app.api_views import _ensure_backup_dir
+        from setup_app.usecases.backups import ensure_backup_dir as _ensure_backup_dir
+
         with patch("pathlib.Path.mkdir") as mock_mkdir:
             _ensure_backup_dir()
         mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
@@ -71,26 +75,30 @@ class EnsureBackupDirTests(TestCase):
 
 class EnsureFtpDirTests(TestCase):
     def test_returns_immediately_for_empty_path(self):
-        from setup_app.api_views import _ensure_ftp_dir
+        from setup_app.usecases.backups import ensure_ftp_dir as _ensure_ftp_dir
+
         ftp = MagicMock()
         _ensure_ftp_dir(ftp, "")
         ftp.cwd.assert_not_called()
 
     def test_returns_immediately_for_whitespace_path(self):
-        from setup_app.api_views import _ensure_ftp_dir
+        from setup_app.usecases.backups import ensure_ftp_dir as _ensure_ftp_dir
+
         ftp = MagicMock()
         _ensure_ftp_dir(ftp, "   ")
         ftp.cwd.assert_not_called()
 
     def test_navigates_relative_path(self):
-        from setup_app.api_views import _ensure_ftp_dir
+        from setup_app.usecases.backups import ensure_ftp_dir as _ensure_ftp_dir
+
         ftp = MagicMock()
         _ensure_ftp_dir(ftp, "backups/daily")
         # Should try to cwd into "backups" then "daily"
         self.assertGreaterEqual(ftp.cwd.call_count, 2)
 
     def test_navigates_absolute_path(self):
-        from setup_app.api_views import _ensure_ftp_dir
+        from setup_app.usecases.backups import ensure_ftp_dir as _ensure_ftp_dir
+
         ftp = MagicMock()
         _ensure_ftp_dir(ftp, "/backups/daily")
         # First cwd should be to "/"
@@ -98,7 +106,8 @@ class EnsureFtpDirTests(TestCase):
         self.assertIn("/", calls)
 
     def test_creates_directory_when_cwd_fails(self):
-        from setup_app.api_views import _ensure_ftp_dir
+        from setup_app.usecases.backups import ensure_ftp_dir as _ensure_ftp_dir
+
         ftp = MagicMock()
         ftp.cwd.side_effect = [Exception("not found"), None]
         _ensure_ftp_dir(ftp, "newdir")
@@ -107,13 +116,15 @@ class EnsureFtpDirTests(TestCase):
 
 class UploadBackupViaFtpTests(TestCase):
     def test_returns_failure_for_empty_filename(self):
-        from setup_app.api_views import _upload_backup_via_ftp
+        from setup_app.usecases.backups import upload_backup_via_ftp as _upload_backup_via_ftp
+
         result = _upload_backup_via_ftp("")
         self.assertFalse(result["success"])
 
     def test_returns_failure_when_ftp_disabled(self):
-        from setup_app.api_views import _upload_backup_via_ftp
-        with patch("setup_app.api_views._get_ftp_settings", return_value={"enabled": False}):
+        from setup_app.usecases.backups import upload_backup_via_ftp as _upload_backup_via_ftp
+
+        with patch("setup_app.usecases.backups.get_ftp_settings", return_value={"enabled": False}):
             result = _upload_backup_via_ftp("backup.zip")
         self.assertFalse(result["success"])
         self.assertIn("desabilitado", result["message"].lower())
