@@ -112,7 +112,6 @@ log em inglês, como já está.
 **A fazer — 💡 Ideias** (aceitas; EV-0027 e EV-0028 ligadas aos ADRs 0006 e 0007, agora Aceitos)
 
 - `EV-0027` **Portar a Central de Evolução (ADR 0006) e trocar este quadro manual pela vista gerada** · **⚠️ não cabe numa sessão** (o próprio ADR 0006 §5 estima 2 a 3 sessões: app `evolucao` com modelo + API + seed, frontend com rota e `ReportarModal`, fecho observado por `git_sha` no `/healthz` + scripts, quadro gerado, aviso aos 14 dias, `make deploy`): leitura levada ao Paulo em 2026-10-04 — proposta de fatiar pelas etapas do ADR: 0027a modelo `EvolucaoItem` + API + seed dos itens deste quadro (1 sessão); 0027b fecho observado (`git_sha` no build e no `/healthz`, `evolucao_fechados.sh`, `evolucao_fechar.py`) + `evolucao_quadro.py` a gerar este bloco (1 sessão); 0027c frontend (`/admin/sistema/evolucao`, botão Reportar) + aviso dos 14 dias (1 sessão). Decisão dele; o assistente passou ao item seguinte
-- `EV-0030` **OpenAPI (drf-spectacular) e um só esquema de versionamento para `/api/v1/`**
 **Feito — aguarda deploy** (sai daqui quando o commit `fecha` chegar a produção)
 
 - `EV-0001` **Gráfico óptico desenha dados aleatórios quando o Zabbix não devolve histórico** · P1 · fechado em `fix(charts)` 2026-10-04 — `frontend/src/utils/opticalHistory.js` é a única fonte das mensagens «sem dados»/«erro»
@@ -141,6 +140,7 @@ log em inglês, como já está.
 - `EV-0025` **Config default incoerente: `DB_ENGINE=mysql` sem driver, `.env.example` com `DATABASE_*` que ninguém lê, `asgi.py` aponta `core.settings`** · P3 · fechado em `fix(config)` 2026-10-04 — `DB_ENGINE` default `postgis` (aliases `postgresql`/`postgres`); qualquer outro valor levanta `ImproperlyConfigured` no arranque; ramo MySQL/MariaDB removido de `settings/base.py` e `settings/test.py`; `asgi.py`/`wsgi.py` caem em `settings.prod` (fail-safe, recusa `SECRET_KEY` de dev) em vez do inexistente `core.settings`; `.env.example` só com variáveis que o código lê (`DJANGO_SETTINGS_MODULE`, `DB_*` na porta 5433 do compose dev, `TEST_DB_ENGINE`); `docker/docker-compose.test.yml` (MariaDB, sem referências) removido; 8 testes. **Fica:** `docker/docker-compose.postgis.yml` é uma 2ª pilha com nomes antigos (`mapsprovefiber`/`provemaps`) — decidir se se apaga
 - `EV-0028` **Alinhamento visual com o CRM — Fase 1: tokens e fontes auto-hospedadas (ADR 0007)** · Ideia · fechado em `feat(design-system)` 2026-10-04 — `design-system/tokens.css` (escala neutra do CRM em RGB, invertida no escuro; `surface`/`canvas`; `primary` teal; semânticas; 10 `@font-face` de Inter/JetBrains Mono/Outfit, woff2 locais, 216 KB); `theme.css` deriva as ~60 variáveis antigas dos tokens (três blocos → um) — toda a app muda para teal/Slate sem tocar em componentes; `tailwind.config.js` = cores e fontes do CRM; 5 testes. **Fica (Fase 3):** 1.775 `dark:` e as classes `gray-*`/`green-*`/`blue-*` literais nos componentes; **validar a olho** (dark e light) antes do deploy — não houve smoke visual nesta sessão
 - `EV-0029` **Backend bucketiza séries (60 s) e devolve séries alinhadas, com limite de pontos proporcional ao período** · Ideia · fechado em `refactor(zabbix)` 2026-10-04 — `zabbix_history.fetch_aligned_series(items, time_from, time_till, max_points)` é a fachada única: um `item.get` (tipo/unidades), históricos em paralelo com o `history` certo, bucket escolhido para ≤ `max_points`, `None` real nos buracos; `get_item_by_key` resolve itens ópticos pela chave. As **5 rotas** (porta óptica/tráfego DRF, cabo óptico/tráfego DRF, `ports/<id>/traffic/`) passaram a fachadas — a função-view perdeu o `limit` do Zabbix que cortava os pontos **mais recentes** em períodos longos (30 d a 1 min = 43 k pontos, `limit` 5 000 → só os 3,5 primeiros dias). Chaves mantidas (`timestamp`/`traffic_in`/`rx_power`): o frontend já as consome; mudar para `{t,in,out}` seria churn sem ganho. 3 testes novos + 1 ajustado
+- `EV-0030` **OpenAPI (drf-spectacular) e um só esquema de versionamento para `/api/v1/`** · Ideia · fechado em `feat(api)` 2026-10-04 — `drf-spectacular` 0.30 com Swagger UI **auto-hospedado** (`drf-spectacular-sidecar`, sem CDN) em `/api/schema/` e `/api/schema/swagger/`, só para autenticados; esquemas de segurança `cookieAuth` (sessão) e `bearerAuth` (ADR 0008); `core/api_versioning.PathPrefixVersioning` lê `/api/v<N>/` do caminho, rotas legadas sem prefixo contam como `v1`, qualquer outra versão → 404; 5 testes. **Fica:** o gerador documenta 65 caminhos DRF e emite 46 avisos + 22 erros de introspeção (views sem serializer declarado ficam de fora) — resolvem-se com `@extend_schema` quando cada view for tocada; as function views Django (`/api/v1/inventory/*`, `/api/users/*`, `/setup_app/api/*`) não entram no esquema até virarem DRF
 
 <!-- EVOLUCAO:FIM -->
 
@@ -237,7 +237,9 @@ docker/, scripts/, services/
   `inventory/api`, `usecases`, `services`, `integrations/zabbix`.
 - **DRF:** serializers mapeiam 1:1 os dicts dos usecases, **sem reordenar
   chaves** (há testes sensíveis à ordem). `get_object_or_404`, nunca
-  `.objects.get(pk=pk)` sem guarda.
+  `.objects.get(pk=pk)` sem guarda. Endpoint DRF novo ou tocado declara o
+  esquema (`serializer_class`/`@extend_schema`) para aparecer limpo em
+  `/api/schema/swagger/` (EV-0030); a versão é só `v1`, lida do prefixo do caminho.
 - **Celery:** tasks em `tasks.py` de cada app; filas `default`, `zabbix`,
   `maps`; agendamento em `beat_schedule` de `core/celery.py` (o
   `django_celery_beat` é uma segunda fonte — não acrescentar lá).
@@ -473,6 +475,7 @@ para `feedback_<tema>.md`.
 - [`README.md`](README.md) — visão geral; [`doc/README.md`](doc/README.md) — índice da documentação (o que descreve um estado antigo está em `doc/archive/`).
 - [`doc/analysis/2026-10-04-levantamento-geral.md`](doc/analysis/2026-10-04-levantamento-geral.md) — diagnóstico completo e origem do quadro.
 - [`doc/adr/`](doc/adr/README.md) — decisões; ADR 0005 (este manual), 0006 (Central), 0007 (visual), 0008 (tokens de conta de serviço).
+- `/api/schema/swagger/` (autenticado) — referência viva da API DRF (OpenAPI 3, EV-0030); `python manage.py spectacular --file openapi.yaml` gera o ficheiro.
 - [`doc/ferramentas-agente.md`](doc/ferramentas-agente.md) — skills, MCP, plugins, hooks, memória; como repor numa máquina nova.
 - [`doc/architecture/DATA_FLOW.md`](doc/architecture/DATA_FLOW.md), [`FIBER_PHYSICAL_HIERARCHY.md`](doc/architecture/FIBER_PHYSICAL_HIERARCHY.md) — domínio.
 - [`DEPLOY.md`](DEPLOY.md), [`docker/docker-compose.prod.yml`](docker/docker-compose.prod.yml), [`scripts/deploy.sh`](scripts/deploy.sh) — produção.

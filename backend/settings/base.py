@@ -225,6 +225,9 @@ INSTALLED_APPS = [
     "channels",
     # REST API
     "rest_framework",
+    # OpenAPI 3 (EV-0030): esquema em /api/schema/, Swagger UI auto-hospedado (sem CDN)
+    "drf_spectacular",
+    "drf_spectacular_sidecar",
     # Project apps
     "core.apps.CoreConfig",
     "maps_view",
@@ -607,6 +610,41 @@ REST_FRAMEWORK: dict[str, object] = {
     ],
     "DEFAULT_PAGINATION_CLASS": ("rest_framework.pagination.PageNumberPagination"),
     "PAGE_SIZE": 100,
+    # EV-0030: um só esquema de versionamento — o prefixo /api/v<N>/ do caminho;
+    # rotas legadas sem prefixo contam como v1. Só existe v1.
+    "DEFAULT_VERSIONING_CLASS": "core.api_versioning.PathPrefixVersioning",
+    "DEFAULT_VERSION": "v1",
+    "ALLOWED_VERSIONS": ["v1"],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# OpenAPI 3 — drf-spectacular (EV-0030). O esquema cobre as views DRF
+# (router /api/v1/ e @api_view); as function views Django (JsonResponse) não
+# são introspetadas e migram quando forem tocadas. Swagger UI vem do pacote
+# `drf-spectacular-sidecar` (ficheiros estáticos locais) — CLAUDE.md §2.8, sem CDN.
+SPECTACULAR_SETTINGS = {
+    "TITLE": "ProVeMaps API",
+    "DESCRIPTION": (
+        "Inventário físico de fibra (sites, dispositivos, portas, cabos, rotas), "
+        "estado via Zabbix, dashboard e configuração. Autenticação por sessão "
+        "(pessoas) ou `Authorization: Bearer <token>` (contas de serviço, ADR 0008)."
+    ),
+    # None: a versão do documento é a do pedido (PathPrefixVersioning → "v1"), sem sufixo.
+    "VERSION": None,
+    "SERVE_INCLUDE_SCHEMA": False,
+    "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAuthenticated"],
+    "SCHEMA_PATH_PREFIX": r"/api/v1",
+    "SWAGGER_UI_DIST": "SIDECAR",
+    "SWAGGER_UI_FAVICON_HREF": "SIDECAR",
+    "REDOC_DIST": "SIDECAR",
+    "COMPONENT_SPLIT_REQUEST": True,
+    "SECURITY": [{"cookieAuth": []}, {"bearerAuth": []}],
+    "APPEND_COMPONENTS": {
+        "securitySchemes": {
+            "cookieAuth": {"type": "apiKey", "in": "cookie", "name": "sessionid"},
+            "bearerAuth": {"type": "http", "scheme": "bearer"},
+        }
+    },
 }
 
 # ===========================

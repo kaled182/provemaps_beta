@@ -95,3 +95,12 @@ openpyxl==3.1.5  # Para importação de arquivos Excel
 
 uvicorn==0.54.0  # servidor ASGI (gunicorn -k uvicorn.workers.UvicornWorker)
 h11==0.16.0  # dependência do uvicorn
+# OpenAPI 3 (EV-0030) — drf-spectacular e dependências transitivas (wheels --no-deps)
+drf-spectacular==0.30.0
+drf-spectacular-sidecar==2026.10.1  # Swagger UI/ReDoc servidos localmente (sem CDN)
+inflection==0.5.1
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+referencing==0.37.0
+rpds-py==2026.6.3
+PyYAML==6.0.3
