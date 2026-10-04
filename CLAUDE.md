@@ -101,7 +101,6 @@ log em inglês, como já está.
 **A fazer — 🐛 Problemas** (triagem do Paulo, 2026-10-04: todos aceitos com a prioridade proposta)
 
 - `EV-0012` **Quatro pilhas de mapa paralelas; só `CustomMapViewer` honra os três provedores; `NetworkDesign` quebra com `osm`** · P2 · `frontend/src/components/MapView.vue`, `providers/maps/MapProviderFactory.js`, `composables/useMapService.js` · **⚠️ não cabe numa sessão** (MapView 1.943, CustomMapViewer 2.874, NetworkDesign 3.566 linhas): leitura levada ao Paulo em 2026-10-04 — proposta de fatiar em 0012a Leaflet/OSM na factory + apagar pilha 4 morta; 0012b MapView; 0012c CustomMapViewer; 0012d NetworkDesign. Decisão dele; o assistente passou ao item seguinte
-- `EV-0015` **KML: só `LineString` 2.2, Placemarks concatenados num único traçado, sem KMZ/MultiGeometry** · P2 · `backend/inventory/usecases/fibers.py:278-385`
 - `EV-0016` **Segredo TOTP em texto puro, TOTP caseiro, lockout por sessão** · P2 · `backend/core/models.py:43`, `core/api_users.py`, `core/views_auth.py`
 - `EV-0017` **`setup_app/api_views.py` com 4.484 linhas sem usecases; `usecases/devices.py` com 2.501** · P2
 - `EV-0018` **Dev-tools e pins sem versão na imagem de produção; `django-stubs 5.1` vs Django 5.2; três ficheiros de requirements** · P2 · `backend/requirements.txt`, `docker/dockerfile`
@@ -135,6 +134,7 @@ log em inglês, como já está.
 - `EV-0026` **Componente único `TimeSeriesChart.vue`** · Ideia · fechado no mesmo commit — substitui os 4 builders de `FiberCableDetailModal` (3.859 → 3.385 linhas), o Chart.js e o canvas manual de `PortTrafficModal`, e o canvas de `AlarmConfigModal`; eixo temporal proporcional, cores por tokens
 - `EV-0013` **`list_fiber_cables` devolve geometria duplicada de todos os cabos, sem bbox; N+1 em `cable_type`** · P2 · fechado em `perf(inventory)` 2026-10-04 — `cable_type` por JOIN, cabo com porta nula não rebenta, `?bbox=` filtra o payload cacheado. **Fica:** `path`+`path_coordinates` duplicados no serializer DRF e `ST_Simplify` — os consumidores são as pilhas de mapa (EV-0012)
 - `EV-0014` **`CustomMapViewer` faz polling de 30 s em vez do WebSocket; `SiteDetailsModal` cria um socket por abertura sem cleanup** · P2 · fechado em `fix(realtime)` 2026-10-04 — destapou que o contrato do canal estava quebrado em TODOS os consumidores (store esperava `host_update`, modal esperava `data.devices`; o backend publica `dashboard.status`/`cable_status_update`): `composables/useRealtimeStatus.js` passa a ser o único intérprete
+- `EV-0015` **KML: só `LineString` 2.2, Placemarks concatenados num único traçado, sem KMZ/MultiGeometry** · P2 · fechado em `feat(kml)` 2026-10-04 — `inventory/domain/kml.py`: qualquer namespace, KMZ, `MultiGeometry`, `gx:Track`, um traçado por Placemark (o mais longo vira o cabo), dedupe. **Fica:** mover `features/networkDesign/partials/import_kml.js` (DOM legado, `window.*`) para componente Vue — é parte da pilha NetworkDesign (EV-0012d)
 
 <!-- EVOLUCAO:FIM -->
 
@@ -343,7 +343,7 @@ make skills        # repõe .claude/skills/ a partir de skills-lock.json
   sobe (ratchet) quando um item acrescenta testes: ao fechar um item com
   testes novos, correr a suite completa e subir `--fail-under` em
   `.github/workflows/tests.yml` para o valor medido menos um ponto de margem
-  (EV-0006: 51 % → 50; EV-0008: 52 % → 51).
+  (EV-0006: 51 % → 50; EV-0008: 52 % → 51; EV-0015: 53 % → 52).
 
 ### Checklist antes do commit
 

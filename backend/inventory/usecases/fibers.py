@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import logging
 import time
-import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass
 from collections.abc import Mapping
 from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
@@ -19,6 +18,7 @@ from integrations.zabbix.zabbix_service import (
 )
 
 from inventory.cache.fibers import invalidate_fiber_cache
+from inventory.domain import kml as kml_domain
 from inventory.domain.geometry import (
     calculate_path_length,
     sanitize_path_points,
@@ -277,31 +277,21 @@ def get_fiber_cable(cable_id: int) -> FiberCable:
 
 
 def parse_kml_coordinates(kml_file) -> List[Dict[str, float]]:
-    try:
-        tree = ET.parse(kml_file)
-        root = tree.getroot()
-    except Exception as exc:
-        raise FiberValidationError(f"Failed to process KML: {exc}") from exc
+    """Traçado principal de um KML/KMZ: o Placemark mais longo.
 
-    ns = {"kml": "http://www.opengis.net/kml/2.2"}
-    coords: List[Dict[str, float]] = []
-    for linestring in root.findall(".//kml:LineString", ns):
-        coord_text = linestring.find("kml:coordinates", ns)
-        if coord_text is None:
-            continue
-        raw = (coord_text.text or "").strip().replace("\n", " ")
-        for pair in raw.split():
-            parts = pair.split(",")
-            if len(parts) < 2:
-                continue
-            try:
-                lng, lat = float(parts[0]), float(parts[1])
-            except ValueError:
-                continue
-            if -90.0 <= lat <= 90.0 and -180.0 <= lng <= 180.0:
-                coords.append({"lat": lat, "lng": lng})
-    if not coords:
-        raise FiberValidationError("No coordinates found in the KML payload")
+    EV-0015: delega em ``inventory.domain.kml`` (qualquer namespace, KMZ,
+    ``MultiGeometry``, ``gx:Track``, dedupe). Antes, todas as LineStrings do
+    ficheiro eram concatenadas num só caminho — vários Placemarks viravam um
+    zigue-zague. Para importar vários traçados de uma vez usar
+    ``inventory.domain.kml.parse_kml_paths``.
+    """
+    try:
+        paths = kml_domain.parse_kml_paths(kml_file)
+    except kml_domain.KmlParseError as exc:
+        raise FiberValidationError(str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 — ficheiro ilegível por qualquer razão
+        raise FiberValidationError(f"Failed to process KML: {exc}") from exc
+    coords = kml_domain.longest_path(paths).coords
     if len(coords) < 2:
         raise FiberValidationError("Path requires at least two valid points")
     return coords
