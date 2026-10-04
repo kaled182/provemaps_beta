@@ -2,7 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from . import api_views, views, views_docs
-from .api import backups as api_backups, config as api_config  # EV-0017a/b
+from .api import backups as api_backups, config as api_config, gateways as api_gateways
 from .viewsets_alert_templates import AlertTemplateViewSet
 from .viewsets_contacts import ContactGroupViewSet, ContactViewSet, ImportHistoryViewSet
 
@@ -50,10 +50,10 @@ urlpatterns = [
         api_views.monitoring_server_detail,
         name="monitoring_server_detail",
     ),
-    path("api/gateways/", api_views.messaging_gateways, name="messaging_gateways"),
+    path("api/gateways/", api_gateways.messaging_gateways, name="messaging_gateways"),
     path(
         "api/gateways/<int:gateway_id>/",
-        api_views.messaging_gateway_detail,
+        api_gateways.messaging_gateway_detail,
         name="messaging_gateway_detail",
     ),
     path(
@@ -79,27 +79,27 @@ urlpatterns = [
     ),
     path(
         "api/gateways/<int:gateway_id>/whatsapp/qr/",
-        api_views.whatsapp_qr_start,
+        api_gateways.whatsapp_qr_start,
         name="whatsapp_qr_start",
     ),
     path(
         "api/gateways/<int:gateway_id>/whatsapp/qr/status/",
-        api_views.whatsapp_qr_status,
+        api_gateways.whatsapp_qr_status,
         name="whatsapp_qr_status",
     ),
     path(
         "api/gateways/<int:gateway_id>/whatsapp/qr/disconnect/",
-        api_views.whatsapp_qr_disconnect,
+        api_gateways.whatsapp_qr_disconnect,
         name="whatsapp_qr_disconnect",
     ),
     path(
         "api/gateways/<int:gateway_id>/whatsapp/qr/reset/",
-        api_views.whatsapp_qr_reset,
+        api_gateways.whatsapp_qr_reset,
         name="whatsapp_qr_reset",
     ),
     path(
         "api/gateways/<int:gateway_id>/whatsapp/qr/test-message/",
-        api_views.whatsapp_qr_test_message,
+        api_gateways.whatsapp_qr_test_message,
         name="whatsapp_qr_test_message",
     ),
     path("api/env/", api_config.get_env_file, name="get_env"),

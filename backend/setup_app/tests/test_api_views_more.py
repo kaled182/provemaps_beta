@@ -167,7 +167,9 @@ class GetBackupPasswordTests(TestCase):
 
 class GetWhatsappQrServiceUrlTests(TestCase):
     def test_returns_config_url_when_set(self):
-        from setup_app.api_views import _get_whatsapp_qr_service_url
+        from setup_app.usecases.gateways import (
+            get_whatsapp_qr_service_url as _get_whatsapp_qr_service_url,
+        )
 
         gw = MagicMock()
         gw.config = {"qr_service_url": "http://qr.local:3000"}
@@ -175,24 +177,28 @@ class GetWhatsappQrServiceUrlTests(TestCase):
         self.assertEqual(result, "http://qr.local:3000")
 
     def test_falls_back_to_env_when_config_empty(self):
-        from setup_app.api_views import _get_whatsapp_qr_service_url
+        from setup_app.usecases.gateways import (
+            get_whatsapp_qr_service_url as _get_whatsapp_qr_service_url,
+        )
 
         gw = MagicMock()
         gw.config = {}
         with patch(
-            "setup_app.api_views.env_manager.read_values",
+            "setup_app.usecases.gateways.env_manager.read_values",
             return_value={"WHATSAPP_QR_SERVICE_URL": "http://env.qr.local"},
         ):
             result = _get_whatsapp_qr_service_url(gw)
         self.assertEqual(result, "http://env.qr.local")
 
     def test_returns_empty_when_nothing_configured(self):
-        from setup_app.api_views import _get_whatsapp_qr_service_url
+        from setup_app.usecases.gateways import (
+            get_whatsapp_qr_service_url as _get_whatsapp_qr_service_url,
+        )
 
         gw = MagicMock()
         gw.config = {}
         with patch(
-            "setup_app.api_views.env_manager.read_values",
+            "setup_app.usecases.gateways.env_manager.read_values",
             return_value={"WHATSAPP_QR_SERVICE_URL": ""},
         ):
             result = _get_whatsapp_qr_service_url(gw)

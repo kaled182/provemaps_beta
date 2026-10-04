@@ -193,7 +193,7 @@ class MessagingGatewaysGetTests(TestCase):
         return rt
 
     def test_superuser_get_returns_all_gateways(self):
-        with patch("setup_app.api_views.runtime_settings") as mock_rs:
+        with patch("setup_app.usecases.gateways.runtime_settings") as mock_rs:
             mock_rs.get_runtime_config.return_value = self._mock_runtime()
             resp = self.client.get("/setup_app/api/gateways/")
         self.assertEqual(resp.status_code, 200)
@@ -217,7 +217,7 @@ class MessagingGatewaysGetTests(TestCase):
         self.assertEqual(resp.status_code, 400)
 
     def test_post_creates_sms_gateway(self):
-        with patch("setup_app.api_views._sync_gateway_env"):
+        with patch("setup_app.usecases.gateways.sync_gateway_env"):
             resp = self.client.post(
                 "/setup_app/api/gateways/",
                 json.dumps({"gateway_type": "sms", "name": "SMS Test"}),

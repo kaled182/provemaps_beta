@@ -137,7 +137,9 @@ class SafeBackupPathTests(TestCase):
 
 class UserCanAccessVideoGatewayTests(TestCase):
     def test_superuser_always_has_access(self):
-        from setup_app.api_views import _user_can_access_video_gateway
+        from setup_app.usecases.gateways import (
+            user_can_access_video_gateway as _user_can_access_video_gateway,
+        )
 
         user = MagicMock(is_superuser=True)
         gateway = MagicMock()
@@ -145,7 +147,9 @@ class UserCanAccessVideoGatewayTests(TestCase):
         self.assertTrue(_user_can_access_video_gateway(user, gateway))
 
     def test_gateway_without_departments_is_public(self):
-        from setup_app.api_views import _user_can_access_video_gateway
+        from setup_app.usecases.gateways import (
+            user_can_access_video_gateway as _user_can_access_video_gateway,
+        )
 
         user = MagicMock(is_superuser=False)
         gateway = MagicMock()
@@ -153,7 +157,9 @@ class UserCanAccessVideoGatewayTests(TestCase):
         self.assertTrue(_user_can_access_video_gateway(user, gateway))
 
     def test_user_without_profile_returns_false(self):
-        from setup_app.api_views import _user_can_access_video_gateway
+        from setup_app.usecases.gateways import (
+            user_can_access_video_gateway as _user_can_access_video_gateway,
+        )
 
         user = MagicMock(is_superuser=False)
         user.profile = None
@@ -258,7 +264,7 @@ class SerializeGatewayTests(TestCase):
         return gw
 
     def test_serializes_basic_fields(self):
-        from setup_app.api_views import _serialize_gateway
+        from setup_app.usecases.gateways import serialize_gateway as _serialize_gateway
 
         gw = self._make_gateway()
         result = _serialize_gateway(gw)
@@ -268,37 +274,39 @@ class SerializeGatewayTests(TestCase):
         self.assertTrue(result["enabled"])
 
     def test_is_active_alias(self):
-        from setup_app.api_views import _serialize_gateway
+        from setup_app.usecases.gateways import serialize_gateway as _serialize_gateway
 
         gw = self._make_gateway(enabled=False)
         result = _serialize_gateway(gw)
         self.assertFalse(result["is_active"])
 
     def test_video_gateway_adds_playback_url(self):
-        from setup_app.api_views import _serialize_gateway
+        from setup_app.usecases.gateways import serialize_gateway as _serialize_gateway
 
         gw = self._make_gateway(gateway_type="video", config={"stream_url": "rtmp://live"})
         with patch(
-            "setup_app.api_views.video_gateway_service.build_playback_url",
+            "setup_app.usecases.gateways.video_gateway_service.build_playback_url",
             return_value="http://hls.example.com/live/gw1/index.m3u8",
         ):
             result = _serialize_gateway(gw)
         self.assertEqual(result["playback_url"], "http://hls.example.com/live/gw1/index.m3u8")
 
     def test_video_gateway_omits_playback_url_when_empty(self):
-        from setup_app.api_views import _serialize_gateway
+        from setup_app.usecases.gateways import serialize_gateway as _serialize_gateway
 
         gw = self._make_gateway(gateway_type="video")
-        with patch("setup_app.api_views.video_gateway_service.build_playback_url", return_value=""):
+        with patch(
+            "setup_app.usecases.gateways.video_gateway_service.build_playback_url", return_value=""
+        ):
             result = _serialize_gateway(gw)
         self.assertNotIn("playback_url", result)
 
     def test_video_gateway_handles_exception(self):
-        from setup_app.api_views import _serialize_gateway
+        from setup_app.usecases.gateways import serialize_gateway as _serialize_gateway
 
         gw = self._make_gateway(gateway_type="video")
         with patch(
-            "setup_app.api_views.video_gateway_service.build_playback_url",
+            "setup_app.usecases.gateways.video_gateway_service.build_playback_url",
             side_effect=Exception("error"),
         ):
             result = _serialize_gateway(gw)
