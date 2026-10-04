@@ -111,7 +111,7 @@ log em inglês, como já está.
 
 **A fazer — 💡 Ideias** (aceitas; EV-0027 e EV-0028 ligadas aos ADRs 0006 e 0007, agora Aceitos)
 
-- `EV-0027` **Portar a Central de Evolução (ADR 0006) e trocar este quadro manual pela vista gerada**
+- `EV-0027` **Portar a Central de Evolução (ADR 0006) e trocar este quadro manual pela vista gerada** · **⚠️ não cabe numa sessão** (o próprio ADR 0006 §5 estima 2 a 3 sessões: app `evolucao` com modelo + API + seed, frontend com rota e `ReportarModal`, fecho observado por `git_sha` no `/healthz` + scripts, quadro gerado, aviso aos 14 dias, `make deploy`): leitura levada ao Paulo em 2026-10-04 — proposta de fatiar pelas etapas do ADR: 0027a modelo `EvolucaoItem` + API + seed dos itens deste quadro (1 sessão); 0027b fecho observado (`git_sha` no build e no `/healthz`, `evolucao_fechados.sh`, `evolucao_fechar.py`) + `evolucao_quadro.py` a gerar este bloco (1 sessão); 0027c frontend (`/admin/sistema/evolucao`, botão Reportar) + aviso dos 14 dias (1 sessão). Decisão dele; o assistente passou ao item seguinte
 - `EV-0028` **Alinhamento visual com o CRM — Fase 1: tokens e fontes auto-hospedadas (ADR 0007)**
 - `EV-0029` **Backend bucketiza séries (60 s) e devolve `{t, in, out}` alinhados, com limite de pontos proporcional ao período**
 - `EV-0030` **OpenAPI (drf-spectacular) e um só esquema de versionamento para `/api/v1/`**
