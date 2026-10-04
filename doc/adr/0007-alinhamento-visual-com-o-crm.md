@@ -90,6 +90,16 @@ Inter, JetBrains Mono e Outfit em `frontend/public/fonts/` e remover o
 Tailwind e o FontAwesome via CDN de `base_spa.html` (permite apertar o CSP).
 Resultado: toda a app muda para teal/Slate sem tocar em componentes.
 
+> **Fase 1 feita (2026-10-04, EV-0028).** `frontend/src/design-system/tokens.css`
+> traz a escala neutra do CRM em tripletos RGB (invertida em `[data-theme=dark]`/`.dark`),
+> `--surface`/`--canvas`, a paleta `primary` teal, semânticas e `@font-face` de Inter,
+> JetBrains Mono e Outfit (woff2 em `design-system/fonts/`, 216 KB). `theme.css`
+> passou a derivar todas as variáveis antigas desses tokens — os três blocos
+> (dark/light/default) colapsaram num só; `tailwind.config.js` tem as mesmas
+> cores e fontes do CRM. A remoção dos CDNs já tinha vindo no EV-0019. Fica para
+> a Fase 3 trocar `gray-*`/`green-*`/`blue-*` literais dos componentes por
+> `neutral-*`/semânticas.
+
 **Fase 2 — Shell (1 a 2 sessões).**
 `AppLayout.vue` com header de duas linhas, `useNavSections` com as seções do
 ProVeMaps (Mapa, Inventário, Monitoramento, Projeto de Rede, Vídeo,

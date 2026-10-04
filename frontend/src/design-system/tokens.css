@@ -1,0 +1,168 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   TOKENS DO DESIGN SYSTEM — ADR 0007 (alinhamento com o CRM), Fase 1 / EV-0028
+   ═══════════════════════════════════════════════════════════════════════════
+   Fonte canónica dos valores: CRM Simples Internet (`tailwind.config.ts` +
+   `style.css`, ADR 0016 do CRM). Quando os dois produtos partilharem um pacote
+   (ADR 0007, Fase 4), este ficheiro passa a ser gerado — até lá, muda-se aqui
+   e só aqui.
+
+   Formato `R G B` (sem `rgb()`): é o que permite `rgb(var(--n-700) / 0.5)` em
+   CSS e `<alpha-value>` no Tailwind. Para a cor sólida: `rgb(var(--n-700))`.
+
+   A escala neutra INVERTE no tema escuro (50 passa a ser o mais escuro), com
+   um ligeiro desvio turquesa — um `#020617` como fundo é um poço preto. É esta
+   inversão que faz o escuro funcionar sem pares `dark:` nos componentes.
+
+   Tipografia auto-hospedada (LGPD/CSP — CLAUDE.md §2.8): Inter (UI),
+   JetBrains Mono (números/tabelas), Outfit (marca). Nunca Google Fonts CDN.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/Inter-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./fonts/Inter-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./fonts/Inter-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/Inter-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/JetBrainsMono-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./fonts/JetBrainsMono-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/JetBrainsMono-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/Outfit-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./fonts/Outfit-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('./fonts/Outfit-800.woff2') format('woff2');
+}
+
+:root {
+  /* ── Neutros (Slate, tema claro) ─────────────────────────────────────── */
+  --n-50: 248 250 252;
+  --n-100: 241 245 249;
+  --n-200: 226 232 240;
+  --n-300: 203 213 225;
+  --n-400: 148 163 184;
+  --n-500: 100 116 139;
+  --n-600: 71 85 105;
+  --n-700: 51 65 85;
+  --n-800: 30 41 59;
+  --n-900: 15 23 42;
+  --n-950: 2 6 23;
+
+  /* Superfície de cartão/painel e fundo da página (por baixo das superfícies). */
+  --surface: 255 255 255;
+  --canvas: 248 250 252;
+
+  /* ── Marca: teal institucional Simples Internet ───────────────────────── */
+  --primary-50: 240 250 251;
+  --primary-100: 217 242 244;
+  --primary-200: 180 225 228;
+  --primary-300: 141 208 212;
+  --primary-400: 95 191 195;
+  --primary-500: 66 180 184;   /* #42B4B8 — CTAs, links, foco */
+  --primary-600: 56 152 156;   /* #38989C — hover */
+  --primary-700: 45 122 125;
+  --primary-800: 35 92 95;
+  --primary-900: 25 64 63;
+  --primary-950: 15 39 40;
+
+  --accent-warm-500: 249 115 22;
+  --accent-warm-600: 234 88 12;
+  --accent-cool-500: 16 185 129;
+  --accent-cool-600: 5 150 105;
+
+  /* ── Semânticas ──────────────────────────────────────────────────────── */
+  --success: 22 163 74;        /* #16A34A */
+  --warning: 245 158 11;       /* #F59E0B — âmbar, distinto do accent-warm */
+  --danger: 220 38 38;         /* #DC2626 */
+  --info: 14 165 233;          /* #0EA5E9 */
+  --info-strong: 2 132 199;    /* #0284C7 — info sobre fundo claro, links */
+
+  /* ── Tipografia ──────────────────────────────────────────────────────── */
+  --font-sans: 'Inter', system-ui, -apple-system, 'Apple Color Emoji', 'Segoe UI Emoji',
+    'Noto Color Emoji', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-display: 'Outfit', 'Inter', system-ui, 'Apple Color Emoji', sans-serif;
+}
+
+/* O ProVeMaps alterna o tema por `data-theme` (stores/ui.js) E pela classe
+   `.dark` (Tailwind); os dois seletores têm de concordar. */
+:root[data-theme="dark"],
+.dark {
+  /* Escuro — os papéis trocam: 50 passa a ser o mais escuro. */
+  --n-50: 15 21 23;
+  --n-100: 23 32 35;
+  --n-200: 31 44 48;
+  --n-300: 44 61 66;
+  --n-400: 107 128 133;
+  --n-500: 143 163 168;
+  --n-600: 168 188 192;
+  --n-700: 201 217 220;
+  --n-800: 221 233 235;
+  --n-900: 237 244 245;
+  --n-950: 247 250 251;
+
+  --surface: 24 34 37;
+  --canvas: 15 21 23;
+
+  /* Semânticas sobre fundo escuro: mais claras e menos saturadas, a dizer o
+     mesmo sem vibrar. */
+  --success: 95 203 134;       /* #5FCB86 */
+  --warning: 224 162 84;       /* #E0A254 */
+  --danger: 232 135 140;       /* #E8878C */
+  --info: 86 189 234;          /* #56BDEA */
+  --info-strong: 125 211 252;  /* #7DD3FC */
+}
