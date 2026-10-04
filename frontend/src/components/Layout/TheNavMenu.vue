@@ -122,7 +122,7 @@
         <button
           @click="toggleGroup('System')"
           class="nav-item nav-item-toggle"
-          :class="{ 'active': isPathActive('/setup/config') || isPathActive('/metrics/health') || isPathActive('/admin/') || isPathActive('/docs') }"
+          :class="{ 'active': isPathActive('/setup/config') || isPathActive('/metrics/health') || isPathActive('/admin/') || isPathActive('/docs') || isPathActive('/system/evolucao') }"
           :title="!uiStore.isNavMenuOpen ? 'System' : ''"
         >
           <span class="nav-icon">
@@ -176,6 +176,17 @@
                 <PhUsers :size="18" weight="regular" />
               </span>
               <span class="nav-label">Users</span>
+            </RouterLink>
+            <RouterLink
+              to="/system/evolucao"
+              class="nav-item nav-item-child"
+              :class="{ 'active': isPathActive('/system/evolucao') }"
+              title="Central de Evolução"
+            >
+              <span class="nav-icon child-icon">
+                <PhMegaphone :size="18" weight="regular" />
+              </span>
+              <span class="nav-label">Evolução</span>
             </RouterLink>
             <RouterLink
               to="/setup/config"
@@ -244,6 +255,15 @@
         </button>
 
         <button
+          @click="showReportar = true"
+          class="icon-btn"
+          title="Reportar problema ou ideia"
+          data-testid="nav-reportar"
+        >
+          <PhMegaphone :size="20" weight="regular" />
+        </button>
+
+        <button
           @click="showChangelog = true"
           class="icon-btn"
           title="Changelog & Sugestões"
@@ -269,6 +289,7 @@
       </div>
 
       <ChangelogModal :show="showChangelog" @close="showChangelog = false" />
+      <ReportarModal :show="showReportar" @close="showReportar = false" />
       <SystemPanel :show="showSystemPanel" @close="showSystemPanel = false" />
     </div>
   </aside>
@@ -279,6 +300,7 @@ import { ref, computed, onBeforeMount, onMounted, onUnmounted, watch } from 'vue
 import { useRoute } from 'vue-router';
 import { useUiStore } from '@/stores/ui';
 import ChangelogModal from './ChangelogModal.vue';
+import ReportarModal from '@/components/Evolucao/ReportarModal.vue';
 import SystemPanel from './SystemPanel.vue';
 import {
   PhChartBar,
@@ -307,10 +329,12 @@ import {
   PhSquaresFour,
   PhInfo,
   PhHardDrives,
+  PhMegaphone,
 } from '@phosphor-icons/vue';
 
 const showChangelog = ref(false);
 const showSystemPanel = ref(false);
+const showReportar = ref(false);
 
 const uiStore = useUiStore();
 const route = useRoute();

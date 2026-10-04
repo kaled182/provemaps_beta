@@ -92,7 +92,7 @@ jobs:
           # O «60 %» antigo media só core/maps_view/setup_app. Limiar honesto,
           # a subir (ratchet) à medida que os itens EV- acrescentam testes.
           # 2026-10-04 EV-0008: 52 % medidos → limiar 51; EV-0015: 53 % → 52; EV-0023: 54 % → 53.
-          coverage report --show-missing --fail-under=59
+          coverage report --show-missing --fail-under=60
           coverage xml
 
       - name: Upload coverage report

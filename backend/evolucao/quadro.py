@@ -51,7 +51,7 @@ def render(linhas: Sequence[LinhaQuadro], *, agora: datetime) -> str:
         # Data e NÃO minuto: só se grava quando o bloco difere, e um carimbo ao minuto
         # fá-lo diferir sempre.
         f"> Gerado da Central de Evolução a {agora:%Y-%m-%d} (`make evolucao-quadro`). Para mexer, use",
-        "> `/admin/sistema/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na",
+        "> `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na",
         "> próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.",
         "",
     ]

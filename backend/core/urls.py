@@ -91,6 +91,7 @@ urlpatterns: list[Any] = [
         name="api_remove_department",
     ),
     path("system/users", SPAView.as_view(), name="users_page"),
+    path("system/evolucao", SPAView.as_view(), name="evolucao_page"),  # Central de Evolução
     # OpenAPI 3 (EV-0030) — só para utilizadores autenticados (SERVE_PERMISSIONS)
     path("api/schema/", SpectacularAPIView.as_view(), name="openapi-schema"),
     path(

@@ -133,6 +133,7 @@ source = [
     "integrations",
     "monitoring",
     "service_accounts",
+    "evolucao",
     "telemetry",
     "gpon",
     "dwdm",
