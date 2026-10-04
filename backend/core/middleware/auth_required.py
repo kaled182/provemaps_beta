@@ -72,6 +72,18 @@ class AuthRequiredMiddleware:
         if self._is_whitelisted(request.path):
             return self.get_response(request)
 
+        # EV-0023: integrações autenticam por token de conta de serviço
+        # (`Authorization: Bearer`). O principal não é um User do Django — só
+        # satisfaz `is_authenticated`; o DRF reaproveita-o em vez de validar de novo.
+        if not request.user.is_authenticated and request.META.get("HTTP_AUTHORIZATION"):
+            from service_accounts.authentication import authenticate_request
+
+            principal = authenticate_request(request)
+            if principal is not None:
+                request.user = principal
+                request.service_account_principal = principal
+                return self.get_response(request)
+
         # Check if user is authenticated
         if not request.user.is_authenticated:
             # Chamadas de API (fetch do SPA) recebem 401 JSON, não a página de login

@@ -72,6 +72,7 @@ NNNN-titulo-em-kebab-case.md
 | [0005](0005-manual-operacional-e-ecossistema-de-agente.md) | `CLAUDE.md` como manual operacional canônico + ecossistema de agente versionado (skills-lock, MCP, ADRs, memória) | Aceito | `processo`, `agente-ia`, `tooling` |
 | [0006](0006-central-de-evolucao-provemaps.md) | Central de Evolução no ProVeMaps — fila de trabalho observada, não escrita | Aceito | `processo`, `evolucao`, `agente-ia` |
 | [0007](0007-alinhamento-visual-com-o-crm.md) | Alinhamento visual com o CRM — tokens compartilhados, shell e migração incremental | Aceito | `frontend`, `design-system`, `tailwind`, `branding` |
+| [0008](0008-autenticacao-de-contas-de-servico-por-token-bearer.md) | Contas de serviço autenticam a API por `Authorization: Bearer` (classe DRF + middleware sobre `service_accounts`) | Aceito | `segurança`, `autenticação`, `api`, `integrações` |
 
 ---
 
