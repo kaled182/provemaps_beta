@@ -159,6 +159,7 @@ import { useSystemConfig } from '@/composables/useSystemConfig'
 import { loadGoogleMaps } from '@/utils/googleMapsLoader'
 import { getMapStyles } from '@/utils/mapStyles'
 import { useUiStore } from '@/stores/ui'
+import { useRealtimeStatus, availabilityToStatus } from '@/composables/useRealtimeStatus'
 // ✅ LAZY LOADING: Bibliotecas de mapas carregadas sob demanda
 import { loadMapbox } from '@/composables/map/providers/useMapbox'
 import { loadLeaflet } from '@/composables/map/providers/useLeaflet'
@@ -403,11 +404,14 @@ const hoveredCable = ref(null)
 const tooltipPosition = ref({ x: 0, y: 0 })
 let tooltipTimeout = null
 
-// ── Status polling (Fase 5.1) ──────────────────────────────────────────────
+// ── Estado em tempo real (EV-0014) ───────────────────────────────────────────
+// WebSocket `/ws/dashboard/status/` é a fonte; o polling só entra como
+// degradação quando o socket esgota as tentativas de reconexão.
 const deviceStatusMap = ref(new Map()) // device_id (string) → 'online'|'offline'|'warning'|'unknown'
 const lastStatusUpdate = ref(null)     // Date | null
 let statusPollTimer = null
-const STATUS_POLL_INTERVAL = 30_000   // 30 segundos
+const STATUS_POLL_INTERVAL = 60_000   // só em modo degradado
+const realtime = useRealtimeStatus({ autoConnect: false })
 
 const STATUS_SEVERITY = { offline: 4, critical: 3, warning: 2, online: 1, unknown: 0 }
 
@@ -429,12 +433,7 @@ const lastUpdateLabel = computed(() => {
   return `${Math.round(secs / 60)}min atrás`
 })
 
-function _normalizeAvailability(avail) {
-  const s = String(avail ?? '0')
-  if (s === '1') return 'online'
-  if (s === '2') return 'offline'
-  return 'unknown'
-}
+const _normalizeAvailability = (avail) => availabilityToStatus(avail, 'unknown')
 
 function _deriveCableStatus(cable) {
   const a = deviceStatusMap.value.get(String(cable.origin_device_id)) || 'unknown'
@@ -445,46 +444,78 @@ function _deriveCableStatus(cable) {
   return sevA >= sevB ? a : b
 }
 
+function applyDeviceStatuses(newMap) {
+  deviceStatusMap.value = newMap
+  lastStatusUpdate.value = new Date()
+
+  availableItems.value.devices.forEach(device => {
+    const live = newMap.get(String(device.id))
+    if (live) device.status = live
+  })
+  availableItems.value.cables.forEach(cable => {
+    if (cable.origin_device_id || cable.destination_device_id) {
+      cable.status = _deriveCableStatus(cable)
+    }
+  })
+  updateMap()
+}
+
+function applyCableStatuses(cableMap) {
+  let changed = false
+  availableItems.value.cables.forEach(cable => {
+    const live = cableMap.get(String(cable.id))
+    if (live && live !== cable.status) {
+      cable.status = live
+      changed = true
+    }
+  })
+  if (changed) {
+    lastStatusUpdate.value = new Date()
+    updateMap()
+  }
+}
+
+// Primeira pintura (e modo degradado): leitura REST única do estado atual.
 async function fetchAndApplyDeviceStatuses() {
   try {
     const res = await fetch('/api/v1/monitoring/hosts/status/', { credentials: 'include' })
     if (!res.ok) return
     const data = await res.json()
-    const hosts = data.hosts_status || []
-
     const newMap = new Map()
-    hosts.forEach(host => {
-      const status = _normalizeAvailability(host.available)
-      if (host.device_id) newMap.set(String(host.device_id), status)
+    ;(data.hosts_status || []).forEach(host => {
+      if (host.device_id) newMap.set(String(host.device_id), _normalizeAvailability(host.available))
     })
-    deviceStatusMap.value = newMap
-    lastStatusUpdate.value = new Date()
-
-    // Atualizar status dos devices
-    availableItems.value.devices.forEach(device => {
-      const live = newMap.get(String(device.id))
-      if (live) device.status = live
-    })
-
-    // Atualizar status dos cabos derivado dos devices
-    availableItems.value.cables.forEach(cable => {
-      if (cable.origin_device_id || cable.destination_device_id) {
-        cable.status = _deriveCableStatus(cable)
-      }
-    })
-
-    updateMap()
+    applyDeviceStatuses(newMap)
   } catch (err) {
-    console.warn('[CustomMapViewer] Erro no status poll:', err)
+    console.warn('[CustomMapViewer] Erro ao ler estado inicial:', err)
   }
 }
 
-function startStatusPolling() {
-  fetchAndApplyDeviceStatuses()
+function startDegradedPolling() {
+  if (statusPollTimer) return
+  console.warn('[CustomMapViewer] WebSocket indisponível; polling de 60 s em modo degradado')
   statusPollTimer = setInterval(fetchAndApplyDeviceStatuses, STATUS_POLL_INTERVAL)
 }
 
+realtime.onHosts((_hosts, next) => applyDeviceStatuses(new Map([...deviceStatusMap.value, ...next])))
+realtime.onCables((_cables, next) => applyCableStatuses(next))
+watch(realtime.error, (err) => {
+  if (err === 'Max reconnect attempts reached') startDegradedPolling()
+})
+watch(realtime.connected, (isConnected) => {
+  if (isConnected && statusPollTimer) {
+    clearInterval(statusPollTimer)
+    statusPollTimer = null
+  }
+})
+
+function startStatusPolling() {
+  fetchAndApplyDeviceStatuses()
+  realtime.connect()
+}
+
 function stopStatusPolling() {
+  realtime.disconnect()
   if (statusPollTimer) {
     clearInterval(statusPollTimer)
     statusPollTimer = null

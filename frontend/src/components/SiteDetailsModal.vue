@@ -377,6 +377,7 @@ import { useNotification } from '@/composables/useNotification'
 import { useEscapeKey } from '@/composables/useEscapeKey'
 import { useUiStore } from '@/stores/ui'
 import { useWebSocket } from '@/composables/useWebSocket'
+import { normalizeRealtimeMessage } from '@/composables/useRealtimeStatus'
 import { useWebRTC } from '@/composables/useWebRTC'
 import DeviceDetailsModal from './DeviceDetailsModal.vue'
 import CameraPlayer from '@/components/Video/CameraPlayer.vue'
@@ -1475,7 +1476,9 @@ const wsUrl = computed(() => {
   return `${protocol}//${host}/ws/dashboard/status/`
 })
 
-const { connected: wsConnected, lastMessage } = useWebSocket(wsUrl.value, {
+// EV-0014: UMA instância, ligada ao abrir e desligada ao fechar. Antes, cada
+// abertura criava outro useWebSocket (autoConnect) sem cleanup — vazamento de sockets.
+const { connected: wsConnected, lastMessage, connect: wsConnect, disconnect: wsDisconnect } = useWebSocket(wsUrl.value, {
   autoConnect: false,
   reconnectDelay: 5000,
   maxReconnectAttempts: 10
@@ -1486,12 +1489,12 @@ watch(lastMessage, (message) => {
   if (!message || !props.isOpen) return
   
   try {
-    // Handle dashboard.status messages
-    if (message.type === 'dashboard.status' && message.data?.devices) {
-      const wsDevices = message.data.devices
-      
+    // O backend publica { event: 'dashboard.status', data: { hosts } } (hosts_status).
+    const { kind, hosts } = normalizeRealtimeMessage(message)
+    if (kind === 'hosts' && hosts.length) {
       devices.value.forEach(device => {
-        const wsDevice = wsDevices.find(d => d.id === device.id)
+        const match = hosts.find(h => String(h.device_id) === String(device.id))
+        const wsDevice = match ? { ...match.raw, status: match.status } : null
         if (wsDevice) {
           // Update metrics from WebSocket
           if (typeof wsDevice.cpu === 'number') {
@@ -1505,20 +1508,18 @@ watch(lastMessage, (message) => {
             device.uptime_human = wsDevice.uptime_human
           }
           
-          // Recalculate status based on new metrics
-          const hasUptime = device.uptime > 0
+          // Estado de disponibilidade vem do Zabbix; métricas só agravam.
           const cpuCritical = device.cpu >= 90
           const cpuWarning = device.cpu >= 70 && device.cpu < 90
           const memCritical = device.memory >= 90
           const memWarning = device.memory >= 70 && device.memory < 90
-          
-          if (!hasUptime) {
+          if (wsDevice.status === 'offline') {
             device.status = 'offline'
           } else if (cpuCritical || memCritical) {
             device.status = 'critical'
           } else if (cpuWarning || memWarning) {
             device.status = 'warning'
-          } else {
+          } else if (wsDevice.status === 'online') {
             device.status = 'online'
           }
         }
@@ -1529,15 +1530,12 @@ watch(lastMessage, (message) => {
   }
 })
 
-// Connect/disconnect WebSocket based on modal visibility
+// Liga ao abrir, desliga ao fechar — sem criar instâncias novas.
 watch(() => props.isOpen, (isOpen) => {
-  if (isOpen && wsUrl.value) {
-    // Connect when modal opens
-    const ws = useWebSocket(wsUrl.value, {
-      reconnectDelay: 5000,
-      maxReconnectAttempts: 10
-    })
-    // Store reference for cleanup if needed
+  if (isOpen) {
+    wsConnect()
+  } else {
+    wsDisconnect()
   }
 })
 
