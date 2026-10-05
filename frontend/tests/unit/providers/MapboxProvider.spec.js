@@ -59,10 +59,13 @@ vi.mock('mapbox-gl', () => {
 
 import { MapboxProvider, resolveMapboxStyle, mapboxStyleCandidates, MAPBOX_DEFAULT_STYLE } from '@/providers/maps/MapboxProvider.js';
 
-async function makeMap(config = {}, options = {}) {
+async function makeMap(config = {}, options = {}, { loaded = true } = {}) {
   const provider = new MapboxProvider();
   await provider.load({ mapboxToken: 'pk.test', ...config });
-  return provider.createMap({ id: 'c' }, { center: { lat: 0, lng: 0 }, zoom: 3, ...options });
+  const map = provider.createMap({ id: 'c' }, { center: { lat: 0, lng: 0 }, zoom: 3, ...options });
+  // Por omissão o estilo já carregou: sources/camadas entram logo (é o caso dos testes antigos).
+  if (loaded) created.maps[created.maps.length - 1].fire('load');
+  return map;
 }
 
 beforeEach(() => {
@@ -167,7 +170,7 @@ describe('MapboxProvider — estilo configurado com fallback (EV-0012c)', () => 
   });
 
   it('o mapa nasce com o 1.º candidato e, se falhar antes do load, passa ao seguinte', async () => {
-    const map = await makeMap({ mapboxCustomStyle: 'mapbox://styles/x/custom', mapboxStyle: 'light' });
+    const map = await makeMap({ mapboxCustomStyle: 'mapbox://styles/x/custom', mapboxStyle: 'light' }, {}, { loaded: false });
     const native = created.maps[0];
     expect(native.opts.style).toBe('mapbox://styles/x/custom');
 
@@ -266,5 +269,47 @@ describe('MapboxMarker — rightclick (EV-0012d)', () => {
     el.dispatchEvent(ev);
     expect(cb).toHaveBeenCalledWith(expect.objectContaining({ lat: 1, lng: 2, clientX: 5, clientY: 6 }));
     expect(ev.defaultPrevented).toBe(true);
+  });
+});
+
+describe('MapboxMap — sources só depois do estilo carregar (produção 1.5.0: «Style is not done loading»)', () => {
+  it('polyline e polígono criados antes do load ficam em fila e entram no load; estilo e traçado dados entretanto são respeitados', async () => {
+    const map = await makeMap({}, {}, { loaded: false });
+    const native = created.maps[0];
+    const line = map.createPolyline({ path: [{ lat: 0, lng: 0 }, { lat: 1, lng: 1 }], strokeColor: '#111' });
+    const poly = map.createPolygon({ path: [{ lat: 0, lng: 0 }, { lat: 1, lng: 1 }, { lat: 1, lng: 0 }] });
+    expect(native.addSource).not.toHaveBeenCalled();
+
+    line.setStyle({ strokeColor: '#ef4444' });
+    poly.setPath([{ lat: 0, lng: 0 }, { lat: 2, lng: 2 }, { lat: 2, lng: 0 }]);
+    expect(native.setPaintProperty).not.toHaveBeenCalled();
+
+    native.fire('load');
+    expect(native.addSource).toHaveBeenCalledTimes(2);
+    const lineLayer = native.addLayer.mock.calls.find(([l]) => l.id === line.layerId)[0];
+    expect(lineLayer.paint['line-color']).toBe('#ef4444');
+    const polySource = native.addSource.mock.calls.find(([id]) => id === poly.sourceId)[1];
+    expect(polySource.data.geometry.coordinates[0][1]).toEqual([2, 2]);
+  });
+
+  it('remover antes do load cancela a entrada; o fallback de estilo volta a esperar pelo load', async () => {
+    const map = await makeMap({ mapboxCustomStyle: 'mapbox://styles/x/custom' }, {}, { loaded: false });
+    const native = created.maps[0];
+    const line = map.createPolyline({ path: [{ lat: 0, lng: 0 }, { lat: 1, lng: 1 }] });
+    line.remove();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    native.fire('error', { error: new Error('style not found') }); // → setStyle(default), estilo por carregar
+    const kept = map.createPolyline({ path: [{ lat: 0, lng: 0 }, { lat: 1, lng: 1 }] });
+    expect(native.addSource).not.toHaveBeenCalled();
+    native.fire('style.load');
+    expect(native.addSource).toHaveBeenCalledTimes(1);
+    expect(native.addSource.mock.calls[0][0]).toBe(kept.sourceId);
+    expect(native.removeSource).not.toHaveBeenCalled();
+  });
+
+  it('com o estilo já carregado, criar uma polyline entra no mapa imediatamente', async () => {
+    const map = await makeMap();
+    map.createPolyline({ path: [{ lat: 0, lng: 0 }, { lat: 1, lng: 1 }] });
+    expect(created.maps[0].addSource).toHaveBeenCalledTimes(1);
   });
 });
