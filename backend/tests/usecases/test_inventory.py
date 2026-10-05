@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Dict, List
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
@@ -27,11 +27,7 @@ class GetDevicePortsTests(TestCase):
         self.assertIn("ports", result)
         self.assertEqual(len(result["ports"]), 2)
 
-        port_data = next(
-            payload
-            for payload in result["ports"]
-            if payload["id"] == self.port2.pk
-        )
+        port_data = next(payload for payload in result["ports"] if payload["id"] == self.port2.pk)
         self.assertEqual(port_data["name"], "Port 2")
         self.assertEqual(port_data["device"], "Test Device")
         self.assertEqual(port_data["notes"], "some notes")
@@ -42,12 +38,10 @@ class GetDevicePortsTests(TestCase):
 
 
 class AddDeviceFromZabbixTests(TestCase):
-    @patch("inventory.usecases.devices.ZABBIX_REQUEST")
-    def test_add_new_device_happy_path(
-        self, mock_zabbix_request: MagicMock
-    ) -> None:
+    @patch("inventory.usecases.devices_common.ZABBIX_REQUEST")
+    def test_add_new_device_happy_path(self, mock_zabbix_request: MagicMock) -> None:
         zabbix_hostid = "10101"
-        mock_host_response: List[Dict[str, Any]] = [
+        mock_host_response: list[dict[str, Any]] = [
             {
                 "hostid": zabbix_hostid,
                 "name": "Zabbix Host Name",
@@ -60,7 +54,7 @@ class AddDeviceFromZabbixTests(TestCase):
                 },
             }
         ]
-        mock_items_response: List[Dict[str, Any]] = [
+        mock_items_response: list[dict[str, Any]] = [
             {
                 "itemid": "20202",
                 "key_": "ifOperStatus[eth0]",
@@ -76,12 +70,9 @@ class AddDeviceFromZabbixTests(TestCase):
 
         def zabbix_side_effect(
             method: str,
-            params: Dict[str, Any],
-        ) -> List[Dict[str, Any]]:
-            if (
-                method == "host.get"
-                and params.get("selectInventory") == "extend"
-            ):
+            params: dict[str, Any],
+        ) -> list[dict[str, Any]]:
+            if method == "host.get" and params.get("selectInventory") == "extend":
                 return mock_host_response
             if method == "item.get":
                 return mock_items_response
@@ -118,10 +109,8 @@ class AddDeviceFromZabbixTests(TestCase):
         self.assertEqual(result["created"]["devices"], 1)
         self.assertEqual(result["created"]["ports"], 1)
 
-    @patch("inventory.usecases.devices.ZABBIX_REQUEST")
-    def test_add_device_updates_existing_device(
-        self, mock_zabbix_request: MagicMock
-    ) -> None:
+    @patch("inventory.usecases.devices_common.ZABBIX_REQUEST")
+    def test_add_device_updates_existing_device(self, mock_zabbix_request: MagicMock) -> None:
         existing_site = Site.objects.create(display_name="Legacy Confresa")
         existing_device = Device.objects.create(
             site=existing_site,
@@ -129,7 +118,7 @@ class AddDeviceFromZabbixTests(TestCase):
             zabbix_hostid="10101",
         )
 
-        mock_host_response: List[Dict[str, Any]] = [
+        mock_host_response: list[dict[str, Any]] = [
             {
                 "hostid": "10101",
                 "name": "Zabbix Host Name",
@@ -141,7 +130,7 @@ class AddDeviceFromZabbixTests(TestCase):
                 },
             }
         ]
-        mock_items_response: List[Dict[str, Any]] = [
+        mock_items_response: list[dict[str, Any]] = [
             {
                 "itemid": "20202",
                 "key_": "ifOperStatus[eth0]",
@@ -152,12 +141,9 @@ class AddDeviceFromZabbixTests(TestCase):
 
         def zabbix_side_effect(
             method: str,
-            params: Dict[str, Any],
-        ) -> List[Dict[str, Any]]:
-            if (
-                method == "host.get"
-                and params.get("selectInventory") == "extend"
-            ):
+            params: dict[str, Any],
+        ) -> list[dict[str, Any]]:
+            if method == "host.get" and params.get("selectInventory") == "extend":
                 return mock_host_response
             if method == "item.get":
                 return mock_items_response

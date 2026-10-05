@@ -135,7 +135,7 @@ Signals a possible bottleneck when many tasks run concurrently for long periods.
 
 Recommended response:
 - Inspect `/celery/status` for slow tasks
-- Search logs for errors: `docker compose logs celery | Select-String "ERROR"`
+- Search logs for errors: `docker compose logs celery | grep "ERROR"`
 - Adjust task time limits (`CELERY_TASK_TIME_LIMIT`)
 
 ---
@@ -249,7 +249,7 @@ Featured panels:
 - Request volume (`sum(rate(zabbix_requests_total[5m])) by (method, status)`)
 - Current circuit breaker state (`zabbix_circuit_breaker_state`)
 - Recent retries (`increase(zabbix_retry_attempts_total[5m])`)
-- Requests within the last minute (`sum(increase(zabbix_api_calls_total[1m]))`)
+- Requests within the last minute (`sum(increase(zabbix_requests_total[1m]))`)
 
 Import the JSON to enable the Stage 3 dashboard.
 
@@ -295,26 +295,26 @@ receivers:
 
 Check whether metrics are present before deployment:
 
-```powershell
-# scripts/validate_metrics.ps1
+```bash
+# scripts/validate_metrics.sh
 
-$MetricsUrl = "http://localhost:8000/metrics"
-$RequiredMetrics = @(
-  "celery_worker_available",
-  "celery_status_latency_ms",
+METRICS_URL="http://localhost:8000/metrics/metrics"
+REQUIRED_METRICS=(
+  "celery_worker_available"
+  "celery_status_latency_ms"
   "celery_worker_count"
 )
 
-$metricsContent = (Invoke-WebRequest -Uri $MetricsUrl -UseBasicParsing).Content
+metrics_content=$(curl -fsS "$METRICS_URL")
 
-foreach ($metric in $RequiredMetrics) {
-  if (-not $metricsContent.Contains($metric)) {
-    Write-Host "Metric missing: $metric" -ForegroundColor Red
+for metric in "${REQUIRED_METRICS[@]}"; do
+  if ! grep -q "$metric" <<< "$metrics_content"; then
+    echo "Metric missing: $metric"
     exit 1
-  }
-}
+  fi
+done
 
-Write-Host "All Celery metrics detected" -ForegroundColor Green
+echo "All Celery metrics detected"
 ```
 
 ### Kubernetes Health Checks
@@ -354,13 +354,13 @@ spec:
 **Symptom:** Values look stale or missing.
 
 **Checks:**
-```powershell
+```bash
 docker compose exec celery celery -A core inspect scheduled
-docker compose logs beat --tail=50 | Select-String "update_celery_metrics_task"
+docker compose logs beat --tail=50 | grep "update_celery_metrics_task"
 ```
 
 **Resolution:**
-```powershell
+```bash
 docker compose restart beat
 docker compose exec web python -c "import os; print(os.getenv('CELERY_METRICS_ENABLED', 'true'))"
 ```
@@ -397,5 +397,5 @@ docker compose exec web python -c "import os; print(os.getenv('CELERY_METRICS_EN
 
 ---
 
-**Last updated:** 26 October 2025  
+**Last updated:** 4 October 2026  
 **Author:** Automated development system

@@ -3,8 +3,7 @@
 import { getPath, setPath as setPathState, addPoint, updatePoint, removePoint, reorderPath, clearPath, totalDistance as calculateDistance, onPathChange } from './modules/pathState.js';
 import { initMap as initializeMap, onMapClick, onMapRightClick, drawPolyline, clearPolyline, addMarker as createMarker, removeMarker, clearMarkers as clearAllMarkers, attachPolylineRightClick, createCablePolyline, getMapInstance, cleanupMap, fitMapToBounds } from './modules/mapCore-refactored.js';
 import { latLngToPixel, distanceBetweenPixels, distancePointToSegmentPx } from '@/utils/mapUtils.js';
-import { getCurrentProviderName } from '@/providers/maps/MapProviderFactory.js';
-import { getMapConfig } from '@/utils/mapLoader.js';
+import { getMapConfig } from '@/providers/maps/MapProviderFactory.js';
 import { initContextMenu, showContextMenu, hideContextMenu, updateContextMenuState, cleanupContextMenu } from './modules/contextMenu.js';
 import {
     initModalEditor,
@@ -260,15 +259,6 @@ async function validateNearbyCablesPath(path) {
 // Debounced validation (1 second delay to avoid spam)
 const debouncedNearbyCablesValidation = debounce(validateNearbyCablesPath, 1000);
 const modalDefaultParent = { current: null };
-let googleRetryCount = 0;
-const GOOGLE_MAX_RETRY = 50;
-
-const getGoogleApiKey = () => {
-    if (typeof document === 'undefined') return '';
-    return document.querySelector('meta[name="google-maps-api-key"]')?.getAttribute('content')
-        || (typeof import.meta !== 'undefined' && import.meta?.env?.VITE_GOOGLE_MAPS_API_KEY) || '';
-};
-
 const SEGMENT_INSERT_THRESHOLD_PX = 28;
 const ENDPOINT_THRESHOLD_PX = 36;
 
@@ -286,7 +276,6 @@ function resetNetworkDesignState() {
     mapsInitStarted = false;
     activeEndpoint = 'end';
     modalDefaultParent.current = null;
-    googleRetryCount = 0;
 }
 
 function getFullscreenElement() {
@@ -495,7 +484,6 @@ function destroyNetworkDesignApp() {
     
     // Clear global references
     delete window.clearMapAndResetState;
-    delete window.initMap;
     delete window.loadFibers;
     delete window.cancelFiberEditing;
     delete window.closeManualSaveModal;
@@ -751,6 +739,10 @@ function setPath(points) {
 }
 
 async function initMap() {
+    // O provider já foi carregado pela NetworkDesignView via MapProviderFactory;
+    // `initializeMap` (mapCore-refactored) devolve a instância IMap do provider configurado.
+    // Centro/zoom por omissão vêm da configuração (main, v1.4.14): os valores fixos
+    // só valem quando a API não responde.
     let centerLat = -16.6869;
     let centerLng = -49.2648;
     let defaultZoom = 6;
@@ -758,12 +750,12 @@ async function initMap() {
         const config = await getMapConfig();
         if (config.mapDefaultLat) centerLat = parseFloat(config.mapDefaultLat);
         if (config.mapDefaultLng) centerLng = parseFloat(config.mapDefaultLng);
-        if (config.mapDefaultZoom) defaultZoom = parseInt(config.mapDefaultZoom);
+        if (config.mapDefaultZoom) defaultZoom = parseInt(config.mapDefaultZoom, 10);
     } catch (e) {
         console.warn('[initMap] Could not load map config, using defaults:', e);
     }
 
-    map = initializeMap('builderMap', {
+    map = await initializeMap('builderMap', {
         center: { lat: centerLat, lng: centerLng },
         zoom: defaultZoom,
         mapTypeId: 'terrain',
@@ -914,71 +906,17 @@ async function reloadCableVisualization(options = {}) {
     await loadAllCablesForVisualization({ fitToBounds });
 }
 
-// Make initMap available globally for Google Maps callback (legacy support)
-try {
-    window.initMap = initMap;
-    console.log('[Global] window.initMap assigned successfully');
-} catch (e) {
-    console.error('[Global] Failed to assign window.initMap:', e);
-}
-
-// Module load self-check
-console.log('[SelfCheck] Modules loaded:', {
-    hasPathState: typeof getPath === 'function',
-    hasMapCore: typeof initializeMap === 'function',
-    hasCableService: typeof initCableService === 'function'
-});
-
-// Initialize map when Google Maps API is ready
-async function waitForGoogleMaps() {
-    const key = getGoogleApiKey();
-    if (!key) {
-        console.warn('[waitForGoogleMaps] Google Maps API key not configured; skipping init.');
-        return;
-    }
-    if (googleRetryCount > GOOGLE_MAX_RETRY) {
-        console.error('[waitForGoogleMaps] Google Maps API not ready after retries, giving up.');
-        return;
-    }
-    if (typeof google !== 'undefined' && google.maps) {
-        console.log('[waitForGoogleMaps] Google Maps API is ready, calling initMap()');
-        try {
-            await initMap();
-        } catch (e) {
-            console.error('[waitForGoogleMaps] Error calling initMap():', e);
-        }
-    } else {
-        googleRetryCount += 1;
-        console.log('[waitForGoogleMaps] Google Maps API not ready yet, retrying...', googleRetryCount);
-        setTimeout(waitForGoogleMaps, 150);
-    }
-}
-
-async function startGoogleMapsWatcher() {
+// Arranque do mapa, uma vez por montagem (EV-0012d: sem esperar pelo SDK do Google —
+// o provider configurado é quem cria o mapa).
+function startMapInit() {
     if (mapsInitStarted) {
         return;
     }
     mapsInitStarted = true;
-
-    // Check configured map provider; only wait for Google when provider is 'google'
-    let provider = 'google';
-    try {
-        provider = await getCurrentProviderName();
-    } catch (e) {
-        console.warn('[startGoogleMapsWatcher] Could not detect provider, assuming google:', e);
-    }
-
-    if (provider !== 'google') {
-        console.log(`[startGoogleMapsWatcher] Provider is '${provider}', calling initMap() directly.`);
-        try {
-            await initMap();
-        } catch (e) {
-            console.error('[startGoogleMapsWatcher] Error calling initMap():', e);
-        }
-        return;
-    }
-
-    waitForGoogleMaps();
+    initMap().catch((e) => {
+        console.error('[startMapInit] Error initializing map:', e);
+        showErrorMessage('Could not load the map.');
+    });
 }
 
 async function loadFibers() {
@@ -2169,7 +2107,7 @@ export function initializeNetworkDesignApp(options = {}) {
         initializeDomBindings();
     }
     if (initMap) {
-        startGoogleMapsWatcher();
+        startMapInit();
     }
 
     appInitialized = true;
@@ -2200,47 +2138,37 @@ export function flyToLocation(lng, lat, zoom = 14) {
     mapInstance.flyTo({ lat, lng }, zoom);
 }
 
-const _HIGHLIGHT_SRC = '__nd_search_highlight_src';
-const _HIGHLIGHT_LAYER = '__nd_search_highlight_layer';
 let _highlightTimer = null;
+let _highlightMarker = null;
 
-function _removeHighlightPoint(map) {
-    if (map.getLayer(_HIGHLIGHT_LAYER)) map.removeLayer(_HIGHLIGHT_LAYER);
-    if (map.getSource(_HIGHLIGHT_SRC)) map.removeSource(_HIGHLIGHT_SRC);
+function _removeHighlightPoint() {
+    if (_highlightMarker) {
+        _highlightMarker.remove();
+        _highlightMarker = null;
+    }
 }
 
-function _addHighlightPoint(map, lng, lat) {
-    _removeHighlightPoint(map);
-    map.addSource(_HIGHLIGHT_SRC, {
-        type: 'geojson',
-        data: { type: 'Feature', geometry: { type: 'Point', coordinates: [lng, lat] } },
-    });
-    map.addLayer({
-        id: _HIGHLIGHT_LAYER,
-        type: 'circle',
-        source: _HIGHLIGHT_SRC,
-        paint: {
-            'circle-radius': 20,
-            'circle-color': '#facc15',
-            'circle-opacity': 0.55,
-            'circle-stroke-color': '#f59e0b',
-            'circle-stroke-width': 3,
-            'circle-stroke-opacity': 0.9,
-        },
+function _addHighlightPoint(mapInstance, lng, lat) {
+    _removeHighlightPoint();
+    _highlightMarker = mapInstance.createMarker({
+        position: { lat, lng },
+        markerType: 'preview',
+        color: '#facc15',
+        size: 40,
+        title: 'Resultado da pesquisa',
     });
     clearTimeout(_highlightTimer);
-    _highlightTimer = setTimeout(() => _removeHighlightPoint(map), 4000);
+    _highlightTimer = setTimeout(_removeHighlightPoint, 4000);
 }
 
 export function highlightSearchResult(item) {
     const mapInstance = getMapInstance();
-    if (!mapInstance || !mapInstance.mapboxMap) return;
-    const map = mapInstance.mapboxMap;
+    if (!mapInstance) return;
 
     if (item.type === 'cable') {
         highlightCable(item.id);
     }
     if (item.lat != null && item.lng != null) {
-        _addHighlightPoint(map, item.lng, item.lat);
+        _addHighlightPoint(mapInstance, item.lng, item.lat);
     }
 }

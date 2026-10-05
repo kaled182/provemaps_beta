@@ -1,14 +1,12 @@
 """Cron Job management API — DRF views with CSRF-exempt session auth."""
 
-import json
 import logging
 from pathlib import Path
 
+from django.conf import settings
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
-from django.conf import settings
 
 from .models_cron import CronJob
 
@@ -111,11 +109,11 @@ class CronJobDetailView(APIView):
         if err:
             return err
         data = request.data
-        job.name        = data.get("name", job.name).strip()
+        job.name = data.get("name", job.name).strip()
         job.description = data.get("description", job.description).strip()
-        job.schedule    = data.get("schedule", job.schedule).strip()
-        job.command     = data.get("command", job.command).strip()
-        job.enabled     = data.get("enabled", job.enabled)
+        job.schedule = data.get("schedule", job.schedule).strip()
+        job.command = data.get("command", job.command).strip()
+        job.enabled = data.get("enabled", job.enabled)
         job.save()
         _write_crontab_file(CronJob.objects.all())
         return Response({"success": True, "job": _cron_to_dict(job)})
@@ -158,8 +156,10 @@ class CronApplyView(APIView):
         jobs = CronJob.objects.all()
         _write_crontab_file(jobs)
         enabled_count = jobs.filter(enabled=True).count()
-        return Response({
-            "success": True,
-            "message": f"Arquivo crontab gerado com {enabled_count} job(s) ativo(s).",
-            "path": str(DATABASE_DIR / "provemaps.crontab"),
-        })
+        return Response(
+            {
+                "success": True,
+                "message": f"Arquivo crontab gerado com {enabled_count} job(s) ativo(s).",
+                "path": str(DATABASE_DIR / "provemaps.crontab"),
+            }
+        )

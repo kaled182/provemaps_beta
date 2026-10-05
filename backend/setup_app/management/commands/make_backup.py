@@ -66,8 +66,7 @@ class Command(BaseCommand):
                     cmd,
                     env=env,
                     check=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    capture_output=True,
                     text=True,
                 )
             except FileNotFoundError as exc:
@@ -127,9 +126,7 @@ class Command(BaseCommand):
             values = env_manager.read_values(["BACKUP_ZIP_PASSWORD", "SECRET_KEY"])
             password = values.get("BACKUP_ZIP_PASSWORD", "").strip()
             if len(password) < 8:
-                raise RuntimeError(
-                    "A senha do backup precisa ter pelo menos 8 caracteres."
-                )
+                raise RuntimeError("A senha do backup precisa ter pelo menos 8 caracteres.")
 
             try:
                 import pyzipper

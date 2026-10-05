@@ -20,14 +20,12 @@ logger = logging.getLogger(__name__)
 
 
 def _build_folders_tree() -> dict:
-    from inventory.models import CableFolder, FiberCable
     from inventory.api.cable_folders import _build_tree
+    from inventory.models import CableFolder, FiberCable
 
     folders = list(CableFolder.objects.select_related("parent").order_by("order", "name"))
     counts_qs = (
-        FiberCable.objects.filter(folder__isnull=False)
-        .values("folder_id")
-        .annotate(n=Count("id"))
+        FiberCable.objects.filter(folder__isnull=False).values("folder_id").annotate(n=Count("id"))
     )
     cable_counts = {row["folder_id"]: row["n"] for row in counts_qs}
     tree = _build_tree(folders, cable_counts)
@@ -48,7 +46,9 @@ def _serialize_cameras(request) -> list[dict]:
         cfg = gw.config or {}
         webrtc_base = (cfg.get("webrtc_public_base_url") or "").strip()
         if not webrtc_base:
-            webrtc_base = getattr(settings, "VIDEO_WEBRTC_PUBLIC_BASE_URL", None) or os.environ.get("VIDEO_WEBRTC_PUBLIC_BASE_URL")
+            webrtc_base = getattr(settings, "VIDEO_WEBRTC_PUBLIC_BASE_URL", None) or os.environ.get(
+                "VIDEO_WEBRTC_PUBLIC_BASE_URL"
+            )
         if not webrtc_base:
             return None
         restream_key = cfg.get("restream_key") or f"gateway_{gw.id}"
@@ -56,19 +56,21 @@ def _serialize_cameras(request) -> list[dict]:
 
     results = []
     for gw in qs.order_by("name"):
-        results.append({
-            "id": gw.id,
-            "name": gw.name,
-            "display_name": gw.name,
-            "enabled": gw.enabled,
-            "site_name": gw.site_name,
-            "playback_url": video_gateway_service.build_playback_url(gw),
-            "whep_url": _whep_url(gw),
-            "status": "online" if gw.enabled else "offline",
-            "latitude": None,
-            "longitude": None,
-            "description": "",
-        })
+        results.append(
+            {
+                "id": gw.id,
+                "name": gw.name,
+                "display_name": gw.name,
+                "enabled": gw.enabled,
+                "site_name": gw.site_name,
+                "playback_url": video_gateway_service.build_playback_url(gw),
+                "whep_url": _whep_url(gw),
+                "status": "online" if gw.enabled else "offline",
+                "latitude": None,
+                "longitude": None,
+                "description": "",
+            }
+        )
     return results
 
 
@@ -88,22 +90,17 @@ def backbone_init_api(request):
           "zabbix": {hosts_status, hosts_summary, ...}
         }
     """
-    from inventory.models import Site, Device, FiberCable
-    from inventory.serializers import (
-        SiteSerializer,
-        DeviceSerializer,
-        FiberCableSerializer,
-    )
+    from inventory.models import Device, FiberCable, Site
+    from inventory.serializers import DeviceSerializer, FiberCableSerializer, SiteSerializer
     from maps_view.cache_swr import get_dashboard_cached
     from maps_view.services import get_hosts_status_data
     from maps_view.tasks import refresh_dashboard_cache_task
 
     try:
         sites_qs = Site.objects.all().order_by("display_name")[:500]
-        devices_qs = (
-            Device.objects.select_related("site")
-            .order_by("site__display_name", "name")[:1000]
-        )
+        devices_qs = Device.objects.select_related("site").order_by("site__display_name", "name")[
+            :1000
+        ]
         cables_qs = FiberCable.objects.all()
 
         sites_data = SiteSerializer(sites_qs, many=True).data
@@ -128,14 +125,16 @@ def backbone_init_api(request):
             logger.warning("backbone_init: zabbix failed: %s", exc, exc_info=True)
             zabbix_data = {"hosts_status": [], "hosts_summary": {}}
 
-        return JsonResponse({
-            "sites": sites_data,
-            "devices": devices_data,
-            "cables": cables_data,
-            "folders": folders_data,
-            "cameras": cameras_data,
-            "zabbix": zabbix_data,
-        })
+        return JsonResponse(
+            {
+                "sites": sites_data,
+                "devices": devices_data,
+                "cables": cables_data,
+                "folders": folders_data,
+                "cameras": cameras_data,
+                "zabbix": zabbix_data,
+            }
+        )
     except Exception as exc:
         logger.exception("backbone_init failed")
         return JsonResponse(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple, cast
+from typing import Any, cast
 
 from integrations.zabbix.zabbix_service import zabbix_request
 from inventory.models import CableSegment
@@ -20,25 +20,26 @@ DOWN_VALUES = {"2", 2, "0", 0}
 
 # Industry-standard defaults by SFP distance category (dBm).
 # Keys are max km of the category; "100" covers everything above 80km.
-DEFAULT_DISTANCE_THRESHOLDS: Dict[str, Dict[str, float]] = {
-    "10":  {"warning": -20.0, "critical": -28.0},   # SFP LR ≤10km
-    "40":  {"warning": -23.0, "critical": -30.0},   # SFP ER ≤40km
-    "80":  {"warning": -26.0, "critical": -30.0},   # SFP ZR ≤80km
-    "100": {"warning": -28.0, "critical": -35.0},   # DWDM/EZR >80km
+DEFAULT_DISTANCE_THRESHOLDS: dict[str, dict[str, float]] = {
+    "10": {"warning": -20.0, "critical": -28.0},  # SFP LR ≤10km
+    "40": {"warning": -23.0, "critical": -30.0},  # SFP ER ≤40km
+    "80": {"warning": -26.0, "critical": -30.0},  # SFP ZR ≤80km
+    "100": {"warning": -28.0, "critical": -35.0},  # DWDM/EZR >80km
 }
 
 
-def _get_thresholds_for_length(length_km: Any) -> Dict[str, float]:
+def _get_thresholds_for_length(length_km: Any) -> dict[str, float]:
     """Return warning/critical thresholds for the given cable length in km."""
     try:
         from setup_app.services.runtime_settings import get_runtime_config
+
         config = get_runtime_config()
         overrides = getattr(config, "optical_thresholds_by_distance", None) or {}
     except Exception:
         overrides = {}
 
     # Merge defaults with any saved overrides
-    thresholds: Dict[str, Dict[str, float]] = {
+    thresholds: dict[str, dict[str, float]] = {
         k: dict(v) for k, v in DEFAULT_DISTANCE_THRESHOLDS.items()
     }
     for key, vals in overrides.items():
@@ -61,8 +62,8 @@ def _get_thresholds_for_length(length_km: Any) -> Dict[str, float]:
     return thresholds["100"]
 
 
-def _request_list(method: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
-    return cast(List[Dict[str, Any]], zabbix_request(method, params) or [])
+def _request_list(method: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+    return cast(list[dict[str, Any]], zabbix_request(method, params) or [])
 
 
 def _interpret_item_value(value: Any) -> str:
@@ -80,11 +81,11 @@ def fetch_interface_status_advanced(
     rx_key: str | None = None,
     tx_key: str | None = None,
     length_km: Any = None,
-) -> Tuple[str, Dict[str, Any]]:
+) -> tuple[str, dict[str, Any]]:
     if not hostid:
         return "unknown", {"error": "missing_hostid"}
 
-    def _get_item(key: str | None) -> Dict[str, Any] | None:
+    def _get_item(key: str | None) -> dict[str, Any] | None:
         if not key:
             return None
         items = _request_list(
@@ -140,7 +141,7 @@ def fetch_interface_status_advanced(
                 },
             )
 
-    discovered: Dict[str, Any] = {}
+    discovered: dict[str, Any] = {}
     rx_item = _get_item(rx_key)
     tx_item = _get_item(tx_key)
 
@@ -174,7 +175,7 @@ def fetch_interface_status_advanced(
             "tx high",
         ]
 
-        def match_any(text: str, patterns: List[str]) -> bool:
+        def match_any(text: str, patterns: list[str]) -> bool:
             lowered = text.lower()
             return any(pattern in lowered for pattern in patterns)
 
@@ -182,18 +183,10 @@ def fetch_interface_status_advanced(
             key_text = (item.get("key_") or "").lower()
             name_text = (item.get("name") or "").lower()
             combined = f"{key_text} {name_text}".strip()
-            if (
-                not rx_item
-                and match_any(combined, rx_patterns)
-                and "tx" not in combined
-            ):
+            if not rx_item and match_any(combined, rx_patterns) and "tx" not in combined:
                 rx_item = item
                 discovered["rx_key"] = item.get("key_")
-            elif (
-                not tx_item
-                and match_any(combined, tx_patterns)
-                and "rx" not in combined
-            ):
+            elif not tx_item and match_any(combined, tx_patterns) and "rx" not in combined:
                 tx_item = item
                 discovered["tx_key"] = item.get("key_")
             if rx_item and tx_item:
@@ -213,7 +206,7 @@ def fetch_interface_status_advanced(
             discovered["auto_discovered"] = True
 
     if not rx_item and not tx_item:
-        reason: Dict[str, Any] = {"method": "no_items_found"}
+        reason: dict[str, Any] = {"method": "no_items_found"}
         if interfaceid:
             reason["interfaceid"] = interfaceid
             reason["auto_discovery_attempt"] = True
@@ -308,11 +301,10 @@ def combine_cable_status(origin_status: str, dest_status: str) -> str:
     return "unknown"
 
 
-def evaluate_cable_status_for_cable(cable: Any) -> Dict[str, Any]:
+def evaluate_cable_status_for_cable(cable: Any) -> dict[str, Any]:
     # Verificação prioritária: segmentos físicos rompidos
     broken_segment = (
-        cable.segments
-        .filter(
+        cable.segments.filter(
             status__in=[
                 CableSegment.STATUS_BROKEN,
                 "broken",
@@ -323,7 +315,7 @@ def evaluate_cable_status_for_cable(cable: Any) -> Dict[str, Any]:
                 "ROMPEU",
             ]
         )
-        .order_by('segment_number')
+        .order_by("segment_number")
         .first()
     )
 
@@ -366,11 +358,7 @@ def evaluate_cable_status_for_cable(cable: Any) -> Dict[str, Any]:
     )
     combined = combine_cable_status(origin_status, dest_status)
 
-    if (
-        combined == "unknown"
-        and origin_status == "unknown"
-        and dest_status == "unknown"
-    ):
+    if combined == "unknown" and origin_status == "unknown" and dest_status == "unknown":
         host_av_origin = _host_availability_status(origin_device.zabbix_hostid)
         host_av_dest = _host_availability_status(dest_device.zabbix_hostid)
         if host_av_origin != "unknown" or host_av_dest != "unknown":
@@ -423,7 +411,7 @@ def _host_availability_status(hostid: Any) -> str:
 def get_oper_status_from_zabbix(
     device: Any,
     port_name: str,
-) -> Tuple[str, Any, Dict[str, str]]:
+) -> tuple[str, Any, dict[str, str]]:
     item_key = f"ifOperStatus[{port_name}]"
     items = _request_list(
         "item.get",
@@ -446,17 +434,14 @@ def get_oper_status_from_zabbix(
         return "unknown", None, {}
     item = items[0]
     valuemapid = item.get("valuemapid")
-    valuemap: Dict[str, str] | None = None
+    valuemap: dict[str, str] | None = None
     if valuemapid:
         maps = _request_list(
             "valuemap.get",
             {"output": "extend", "valuemapids": [valuemapid]},
         )
         if maps:
-            valuemap = {
-                entry["value"]: entry["newvalue"]
-                for entry in maps[0].get("mappings", [])
-            }
+            valuemap = {entry["value"]: entry["newvalue"] for entry in maps[0].get("mappings", [])}
     raw = item.get("lastvalue")
     if raw is None:
         history = _request_list(
@@ -479,7 +464,7 @@ def get_oper_status_from_zabbix(
     return status, raw, valuemap or {}
 
 
-def get_oper_status_from_port(port: Any) -> Tuple[str, Any, Dict[str, Any]]:
+def get_oper_status_from_port(port: Any) -> tuple[str, Any, dict[str, Any]]:
     hostid = port.device.zabbix_hostid
     key = (port.zabbix_item_key or "").strip()
     itemid = (port.zabbix_itemid or "").strip()
@@ -513,11 +498,15 @@ def get_oper_status_from_port(port: Any) -> Tuple[str, Any, Dict[str, Any]]:
             raw = item.get("lastvalue")
             status = _interpret(raw)
             if status != "unknown":
-                return status, raw, {
-                    "method": "item_key",
-                    "key": key,
-                    "itemid": item.get("itemid"),
-                }
+                return (
+                    status,
+                    raw,
+                    {
+                        "method": "item_key",
+                        "key": key,
+                        "itemid": item.get("itemid"),
+                    },
+                )
             key_itemid = item.get("itemid")
             if not itemid and key_itemid:
                 itemid = key_itemid
@@ -541,14 +530,22 @@ def get_oper_status_from_port(port: Any) -> Tuple[str, Any, Dict[str, Any]]:
             item = items[0]
             raw = item.get("lastvalue")
             status = _interpret(raw)
-            return status, raw, {
-                "method": "itemid",
-                "itemid": itemid,
-                "key": item.get("key_"),
-            }
+            return (
+                status,
+                raw,
+                {
+                    "method": "itemid",
+                    "itemid": itemid,
+                    "key": item.get("key_"),
+                },
+            )
 
-    return "unknown", None, {
-        "method": "not_found_or_unknown",
-        "key": key,
-        "itemid": itemid,
-    }
+    return (
+        "unknown",
+        None,
+        {
+            "method": "not_found_or_unknown",
+            "key": key,
+            "itemid": itemid,
+        },
+    )

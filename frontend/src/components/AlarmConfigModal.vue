@@ -39,7 +39,7 @@
             <div class="signal-history">
               <h4>Histórico do Sinal (últimas 24h)</h4>
               <div class="chart-container">
-                <canvas ref="chartCanvas"></canvas>
+                <TimeSeriesChart :series="historySeries" :thresholds="thresholdLines" unit="dBm" :decimals="2" :height="200" :empty-message="historyEmptyMessage" />
               </div>
             </div>
 
@@ -143,6 +143,12 @@ import { useApi } from '@/composables/useApi'
 import { useNotification } from '@/composables/useNotification'
 import { useEscapeKey } from '@/composables/useEscapeKey'
 import { useUiStore } from '@/stores/ui'
+import {
+  normalizeOpticalHistory,
+  OPTICAL_HISTORY_EMPTY_MESSAGE,
+  OPTICAL_HISTORY_ERROR_MESSAGE,
+} from '@/utils/opticalHistory'
+import TimeSeriesChart from './charts/TimeSeriesChart.vue'
 
 const props = defineProps({
   isOpen: {
@@ -175,8 +181,9 @@ const notifications = ref({
   telegram: false
 })
 const saving = ref(false)
-const chartCanvas = ref(null)
-let chartInstance = null
+// EV-0011: o gráfico é o TimeSeriesChart; aqui só vivem os dados.
+const historyPoints = ref([])
+const historyEmptyMessage = ref(OPTICAL_HISTORY_EMPTY_MESSAGE)
 
 // Global thresholds from configuration
 const globalWarningThreshold = ref(-24)
@@ -216,165 +223,31 @@ const getSignalClass = (value) => {
 
 const loadHistoricalData = async () => {
   if (!props.port?.id) return
-  
+
+  // EV-0001: histórico vazio ou erro mostram mensagem explícita — nunca dados inventados.
+  historyEmptyMessage.value = OPTICAL_HISTORY_EMPTY_MESSAGE
   try {
-    // Tentar buscar dados reais do endpoint com período de 24h
     const response = await get(`/api/v1/ports/${props.port.id}/optical_history/`, { hours: 24 })
-    
-    if (response && Array.isArray(response) && response.length > 0) {
-      // Converter formato do backend para formato do gráfico
-      const chartData = response.map(snapshot => ({
-        timestamp: new Date(snapshot.timestamp).getTime(),
-        rx: snapshot.rx_power,
-        tx: snapshot.tx_power
-      }))
-      
-      await nextTick()
-      renderChart(chartData)
-      return
-    }
+    historyPoints.value = normalizeOpticalHistory(response).points
   } catch (error) {
-    console.warn('Falha ao carregar histórico real, usando dados mockados:', error)
+    console.error('[AlarmConfigModal] Falha ao carregar histórico óptico:', error)
+    historyPoints.value = []
+    historyEmptyMessage.value = OPTICAL_HISTORY_ERROR_MESSAGE
   }
-  
-  // Fallback para mock data se API falhar ou não retornar dados
-  const mockData = generateMockData()
-  await nextTick()
-  renderChart(mockData)
 }
 
-const generateMockData = () => {
-  const now = Date.now()
-  const points = []
-  
-  for (let i = 24; i >= 0; i--) {
-    const timestamp = now - (i * 60 * 60 * 1000) // hourly points
-    const rx = props.port?.optical_rx_power || -22
-    const tx = props.port?.optical_tx_power || -3
-    
-    // Add some variation
-    const rxVariation = (Math.random() - 0.5) * 2
-    const txVariation = (Math.random() - 0.5) * 1
-    
-    points.push({
-      timestamp,
-      rx: rx + rxVariation,
-      tx: tx + txVariation
-    })
-  }
-  
-  return points
-}
+const historySeries = computed(() => {
+  if (!historyPoints.value.length) return []
+  return [
+    { label: 'RX (dBm)', data: historyPoints.value.map(p => ({ x: p.timestamp, y: p.rx })) },
+    { label: 'TX (dBm)', data: historyPoints.value.map(p => ({ x: p.timestamp, y: p.tx })) },
+  ]
+})
 
-const renderChart = (data) => {
-  if (!chartCanvas.value) return
-  
-  const ctx = chartCanvas.value.getContext('2d')
-  const width = chartCanvas.value.width = chartCanvas.value.offsetWidth
-  const height = chartCanvas.value.height = 200
-  
-  // Clear canvas
-  ctx.clearRect(0, 0, width, height)
-  
-  // Setup
-  const padding = 40
-  const graphWidth = width - padding * 2
-  const graphHeight = height - padding * 2
-  
-  // Find min/max for scaling
-  const rxValues = data.map(d => d.rx)
-  const txValues = data.map(d => d.tx)
-  const allValues = [...rxValues, ...txValues]
-  const minValue = Math.min(...allValues) - 2
-  const maxValue = Math.max(...allValues) + 2
-  
-  // Draw grid
-  ctx.strokeStyle = isDark.value ? '#334155' : '#e2e8f0'
-  ctx.lineWidth = 1
-  
-  for (let i = 0; i <= 5; i++) {
-    const y = padding + (graphHeight / 5) * i
-    ctx.beginPath()
-    ctx.moveTo(padding, y)
-    ctx.lineTo(width - padding, y)
-    ctx.stroke()
-  }
-  
-  // Draw threshold lines
-  const drawThreshold = (value, color, label) => {
-    const y = padding + graphHeight - ((value - minValue) / (maxValue - minValue)) * graphHeight
-    ctx.strokeStyle = color
-    ctx.lineWidth = 1
-    ctx.setLineDash([5, 5])
-    ctx.beginPath()
-    ctx.moveTo(padding, y)
-    ctx.lineTo(width - padding, y)
-    ctx.stroke()
-    ctx.setLineDash([])
-    
-    // Label
-    ctx.fillStyle = color
-    ctx.font = '10px sans-serif'
-    ctx.fillText(label, width - padding + 5, y + 4)
-  }
-  
-  drawThreshold(warningThreshold.value, '#f59e0b', 'Atenção')
-  drawThreshold(criticalThreshold.value, '#ef4444', 'Crítico')
-  
-  // Draw RX line
-  ctx.strokeStyle = '#3b82f6'
-  ctx.lineWidth = 2
-  ctx.beginPath()
-  
-  data.forEach((point, index) => {
-    const x = padding + (graphWidth / (data.length - 1)) * index
-    const y = padding + graphHeight - ((point.rx - minValue) / (maxValue - minValue)) * graphHeight
-    
-    if (index === 0) {
-      ctx.moveTo(x, y)
-    } else {
-      ctx.lineTo(x, y)
-    }
-  })
-  
-  ctx.stroke()
-  
-  // Draw TX line
-  ctx.strokeStyle = '#8b5cf6'
-  ctx.lineWidth = 2
-  ctx.beginPath()
-  
-  data.forEach((point, index) => {
-    const x = padding + (graphWidth / (data.length - 1)) * index
-    const y = padding + graphHeight - ((point.tx - minValue) / (maxValue - minValue)) * graphHeight
-    
-    if (index === 0) {
-      ctx.moveTo(x, y)
-    } else {
-      ctx.lineTo(x, y)
-    }
-  })
-  
-  ctx.stroke()
-  
-  // Draw legend
-  ctx.font = '12px sans-serif'
-  ctx.fillStyle = '#3b82f6'
-  ctx.fillText('RX', 10, 20)
-  ctx.fillStyle = '#8b5cf6'
-  ctx.fillText('TX', 40, 20)
-  
-  // Draw Y-axis labels
-  ctx.fillStyle = isDark.value ? '#94a3b8' : '#64748b'
-  ctx.font = '10px sans-serif'
-  ctx.textAlign = 'right'
-  
-  for (let i = 0; i <= 5; i++) {
-    const value = minValue + ((maxValue - minValue) / 5) * (5 - i)
-    const y = padding + (graphHeight / 5) * i
-    ctx.fillText(value.toFixed(1), padding - 5, y + 4)
-  }
-}
+const thresholdLines = computed(() => [
+  { value: warningThreshold.value, label: 'Atenção' },
+  { value: criticalThreshold.value, label: 'Crítico', color: '#f87171' },
+])
 
 const saveAlarmConfig = async () => {
   if (!props.port?.id) return
@@ -420,11 +293,8 @@ watch(() => props.isOpen, async (newVal) => {
 })
 
 // Redraw chart when thresholds change
-watch([warningThreshold, criticalThreshold], () => {
-  if (props.isOpen && chartCanvas.value) {
-    loadHistoricalData()
-  }
-})
+// As linhas de limiar são computadas a partir dos refs: mudar o limiar redesenha
+// o gráfico sem nova chamada ao Zabbix (antes recarregava o histórico a cada tecla).
 </script>
 
 <style scoped>

@@ -1,7 +1,7 @@
 # Code Style Guide - MapsProveFiber
 
-**Version**: v2.0.0  
-**Last Updated**: 2025-11-10
+**Versão do produto**: ver [VERSION](../../VERSION)  
+**Last Updated**: 2026-10-04
 
 ---
 
@@ -21,7 +21,7 @@ Follow [PEP 8](https://pep8.org/) with these modifications:
 
 ### Formatting Tools
 
-```powershell
+```bash
 # Format all code
 make fmt
 
@@ -147,9 +147,11 @@ inventory/
 ├── models.py             # Database models (or models/ package)
 ├── serializers.py        # DRF serializers
 ├── views.py              # Views (or views/ package)
+├── viewsets.py           # DRF viewsets
+├── api/                  # Function-based API modules
 ├── urls.py               # URL routing
-├── services.py           # Business logic
-├── usecases.py           # Use case orchestration
+├── services/             # Reusable domain services
+├── usecases/             # Use case orchestration (return dicts; views stay thin)
 ├── tasks.py              # Celery tasks
 ├── signals.py            # Django signals
 └── tests/                # Test package
@@ -343,4 +345,4 @@ except ValueError as e:
 
 ---
 
-**Last Updated**: 2025-11-10
+**Last Updated**: 2026-10-04

@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import types
-
-import json
 
 import pytest
 from django.test import RequestFactory
 
 from inventory.models import Site
+from setup_app.api.video import video_cameras_list
 from setup_app.models import MessagingGateway
-from setup_app.api_views import video_cameras_list
 
 
 class _DummyStats:

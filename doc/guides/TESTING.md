@@ -1,7 +1,7 @@
 # Testing Guide - MapsProveFiber
 
-**Version**: v2.0.0  
-**Last Updated**: 2025-11-10  
+**Versão do produto**: ver [VERSION](../../VERSION)  
+**Last Updated**: 2026-10-04  
 **Target Audience**: Developers, QA Engineers
 
 ---
@@ -17,7 +17,7 @@ This guide covers testing strategies, practices, and workflows for MapsProveFibe
 ### Principles
 
 1. **Test-Driven Development (TDD)**: Write tests before implementation when possible
-2. **Comprehensive Coverage**: Maintain >80% code coverage
+2. **Comprehensive Coverage**: aim for >80% (the CI gate is a ratchet, currently 52% across all apps; see [Coverage Targets](#-coverage-targets))
 3. **Fast Feedback**: Tests should run quickly (< 2 minutes for full suite)
 4. **Isolated Tests**: Each test should be independent and reproducible
 5. **Readable Tests**: Tests serve as documentation
@@ -40,8 +40,10 @@ This guide covers testing strategies, practices, and workflows for MapsProveFibe
 
 ### Quick Commands
 
-```powershell
-# Run all tests
+Run the backend suite **from the repository root** (the root `pytest.ini` mirrors `backend/pytest.ini`; both set `DJANGO_SETTINGS_MODULE = settings.test`). `settings.test` uses SQLite by default; set `TEST_DB_ENGINE=postgis` (plus `DB_*`) to run against PostGIS like the CI. Install the tooling with `make requirements-dev`.
+
+```bash
+# Run all tests (make test)
 pytest -q
 
 # Run with verbose output
@@ -50,17 +52,17 @@ pytest -v
 # Run specific test file
 pytest backend/tests/test_smoke.py -v
 
-# Run specific test class
-pytest backend/inventory/tests/test_models.py::TestSiteModel -v
+# Run a specific directory / area
+pytest -q backend/inventory/tests
 
-# Run specific test method
-pytest backend/inventory/tests/test_models.py::TestSiteModel::test_site_creation -v
+# Run a specific test (file::Class::method, or -k)
+pytest -q backend/inventory/tests/test_fibers_api.py -k "some_name"
 
 # Run tests matching pattern
 pytest -k "test_site" -v
 
-# Run in parallel (faster)
-pytest -n auto
+# Fast subset (skip slow and integration markers)
+pytest -q -m "not slow and not integration"
 
 # Stop on first failure
 pytest -x
@@ -77,12 +79,12 @@ pytest --ff
 
 ### Coverage Reports
 
-```powershell
-# Run with coverage
+```bash
+# Run with coverage (make test-coverage)
 pytest --cov --cov-report=html
 
 # View coverage report
-start htmlcov/index.html
+xdg-open htmlcov/index.html
 
 # Coverage for specific module
 pytest --cov=inventory --cov-report=term
@@ -90,21 +92,31 @@ pytest --cov=inventory --cov-report=term
 # Coverage with missing lines
 pytest --cov --cov-report=term-missing
 
-# Minimum coverage threshold
-pytest --cov --cov-fail-under=80
+# Same as CI: run from backend/ (branch coverage over all first-party apps,
+# configured in [tool.coverage.run] of backend/pyproject.toml)
+cd backend && coverage run -m pytest -q && coverage report --fail-under=52
 ```
 
 ### Docker Testing
 
-```powershell
-# Run tests in Docker
-docker compose exec web pytest -q
+```bash
+# Run tests in Docker (dev stack; container workdir is /app/backend)
+docker compose -f docker/docker-compose.yml exec web pytest -q
 
 # Run with coverage in Docker
-docker compose exec web pytest --cov --cov-report=html
+docker compose -f docker/docker-compose.yml exec web pytest --cov --cov-report=html
 
 # Copy coverage report from container
-docker compose cp web:/app/htmlcov ./htmlcov
+docker compose -f docker/docker-compose.yml cp web:/app/backend/htmlcov ./htmlcov
+```
+
+### Frontend Testing
+
+```bash
+cd frontend
+npm ci
+npm run test:unit      # Vitest (unit/component tests in frontend/tests)
+npm run test:e2e       # Playwright (specs in frontend/tests/e2e)
 ```
 
 ---
@@ -115,21 +127,18 @@ docker compose cp web:/app/htmlcov ./htmlcov
 
 ```
 backend/
-├── tests/                      # Global integration tests
-│   ├── conftest.py            # Global fixtures
-│   ├── test_smoke.py          # Smoke tests
-│   └── test_health.py         # Health check tests
+├── conftest.py                 # Global fixtures
+├── pytest.ini                  # Pytest configuration (root pytest.ini mirrors it)
+├── tests/                      # Global tests (smoke, Zabbix client, cache, metrics, spatial ...)
+├── core/tests/
+├── maps_view/tests/
+├── setup_app/tests/
+├── monitoring/tests/
 ├── inventory/
-│   └── tests/
-│       ├── conftest.py        # App-specific fixtures
-│       ├── test_models.py     # Model tests
-│       ├── test_api.py        # API endpoint tests
-│       └── test_services.py   # Service layer tests
-├── monitoring/
-│   └── tests/
-│       ├── conftest.py
-│       └── test_usecases.py
-└── pytest.ini                 # Pytest configuration
+│   ├── tests/                  # usecases, API, KML, fusion, Zabbix history ...
+│   └── routes/tests/
+└── service_accounts/tests/
+frontend/tests/                 # Vitest (unit, components) and Playwright (e2e/)
 ```
 
 ### Test Naming Conventions
@@ -149,6 +158,8 @@ def test_<action>_<condition>_<expected>:  # e.g., test_create_site_duplicate_na
 ---
 
 ## 🧪 Writing Tests
+
+> The snippets below are illustrative: file names such as `test_models.py` / `test_api.py` and some model fields (e.g. `is_active`, `port_type`) are examples, not existing code. Look at `backend/inventory/tests/` and `backend/tests/` for real tests. The models live in `inventory` (`inventory.models`); the `zabbix_api_*` names are only inherited database table names.
 
 ### Unit Tests
 
@@ -353,7 +364,7 @@ def test_create_port_via_api(authenticated_client, device):
 ### Mock External Services
 
 ```python
-# backend/integrations/zabbix/tests/test_client.py
+# illustrative; the real client tests are in backend/tests/test_resilient_zabbix_client.py
 import pytest
 from unittest.mock import patch, Mock
 from integrations.zabbix.client import ZabbixClient
@@ -456,13 +467,16 @@ def test_increment(input, expected):
 ### Custom Markers
 
 ```python
-# pytest.ini
+# backend/pytest.ini (excerpt; `--strict-markers` is on, so register new markers here)
 [pytest]
 markers =
-    slow: marks tests as slow (deselect with '-m "not slow"')
-    integration: marks tests as integration tests
-    unit: marks tests as unit tests
-    smoke: marks tests as smoke tests
+    slow: slow tests (run with --slow or -m "slow")
+    integration: integration tests (require external services)
+    unit: unit tests (isolated and fast)
+    db: tests using the database
+    celery: Celery task tests
+    zabbix: Zabbix integration tests
+    maps: maps/geolocation tests
 
 # Usage
 @pytest.mark.integration
@@ -482,56 +496,55 @@ pytest -m "not slow"
 
 ### GitHub Actions
 
+The workflow lives in `.github/workflows/tests.yml` (jobs `pytest` and `frontend-unit`). Backend job, abridged:
+
 ```yaml
-# .github/workflows/tests.yml
-name: Tests
-
-on: [push, pull_request]
-
+# .github/workflows/tests.yml (abridged)
 jobs:
-  test:
+  pytest:
     runs-on: ubuntu-latest
-    
     services:
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-      
-      db:
-        image: mariadb:10.11
+      postgres:
+        image: postgis/postgis:16-3.4
         env:
-          MYSQL_DATABASE: test_db
-          MYSQL_ROOT_PASSWORD: root
+          POSTGRES_DB: app
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
         ports:
-          - 3306:3306
-    
+          - 5432:5432
+    env:
+      DJANGO_SETTINGS_MODULE: settings.test
+      DB_ENGINE: postgis
+      TEST_DB_ENGINE: postgis
+      DB_NAME: app
+      DB_USER: app
+      DB_PASSWORD: app
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y gdal-bin libgdal-dev libgeos-dev postgresql-client
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      
-      - name: Install dependencies
-        run: |
-          cd backend
-          pip install -r requirements.txt
-      
-      - name: Run tests
-        env:
-          DJANGO_SETTINGS_MODULE: settings.test
-          DB_HOST: 127.0.0.1
-          REDIS_URL: redis://localhost:6379/1
-        run: |
-          cd backend
-          pytest --cov --cov-report=xml
-      
-      - name: Upload coverage
-        uses: codecov/codecov-action@v3
+          python-version: "3.13"
+      - run: pip install -r backend/requirements-dev.txt
+      - working-directory: backend
+        run: python manage.py migrate --noinput && python manage.py check --tag gis
+      - working-directory: backend
+        run: coverage run -m pytest -q && coverage report --show-missing --fail-under=52 && coverage xml
+
+  frontend-unit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          file: ./backend/coverage.xml
+          node-version: "20"
+      - run: npm ci --no-audit --no-fund
+      - run: npm run test:unit
 ```
 
 ---
@@ -540,18 +553,20 @@ jobs:
 
 ### Minimum Requirements
 
-- **Overall**: 80% minimum
-- **Critical Paths**: 95% minimum (auth, payments, data integrity)
+- **Overall (target)**: 80%
+- **Critical Paths**: 95% minimum (auth, data integrity)
 - **New Code**: 90% minimum
+
+> The CI gate is a ratchet, not the 80% target: since EV-0006 it measures all first-party apps (branch coverage) and fails below the `--fail-under` value in `.github/workflows/tests.yml` (currently 52%). Raise it whenever a change adds tests.
 
 ### Checking Coverage
 
-```powershell
+```bash
 # Generate report
 pytest --cov --cov-report=term-missing
 
-# Fail if below threshold
-pytest --cov --cov-fail-under=80
+# Fail if below the CI threshold (run from backend/)
+cd backend && coverage run -m pytest -q && coverage report --fail-under=52
 
 # Coverage by module
 pytest --cov=inventory --cov=monitoring --cov-report=term
@@ -559,15 +574,12 @@ pytest --cov=inventory --cov=monitoring --cov-report=term
 
 ### Excluded from Coverage
 
-```python
-# .coveragerc
-[run]
-omit =
-    */migrations/*
-    */tests/*
-    */conftest.py
-    */__pycache__/*
-    */venv/*
+Coverage settings live in `backend/pyproject.toml` (`[tool.coverage.run]` / `[tool.coverage.report]`), not in a `.coveragerc`:
+
+```toml
+[tool.coverage.run]
+branch = true
+source = ["core", "maps_view", "setup_app", "inventory", "integrations", "monitoring", "service_accounts", ...]
 ```
 
 ---
@@ -584,7 +596,7 @@ def test_example():
 ```
 
 Run with `-s` to see prints:
-```powershell
+```bash
 pytest -s
 ```
 
@@ -601,7 +613,7 @@ Or use `pytest --pdb` to break on failures.
 
 ### Verbose Output
 
-```powershell
+```bash
 # Show all test names
 pytest -v
 
@@ -658,8 +670,9 @@ class DashboardUser(HttpUser):
 ```
 
 Run:
-```powershell
-locust -f locustfile.py --host=http://localhost:8000
+```bash
+locust -f locustfile.py --host=http://localhost:8100   # Docker dev stack; `make run` serves on 8000
+# (locust is not in backend/requirements-dev.txt: `pip install locust`)
 ```
 
 ---
@@ -667,12 +680,13 @@ locust -f locustfile.py --host=http://localhost:8000
 ## 📖 Additional Resources
 
 - [pytest Documentation](https://docs.pytest.org/)
-- [Django Testing Documentation](https://docs.djangoproject.com/en/5.0/topics/testing/)
+- [Django Testing Documentation](https://docs.djangoproject.com/en/5.2/topics/testing/)
 - [Coverage.py Documentation](https://coverage.readthedocs.io/)
 - [Development Guide](DEVELOPMENT.md)
-- [CI/CD Guide](../operations/CICD.md)
+- CI workflow: [`.github/workflows/tests.yml`](../../.github/workflows/tests.yml)
+- [Testing Standards](../contributing/TESTING_STANDARDS.md)
 
 ---
 
-**Last Updated**: 2025-11-10  
+**Last Updated**: 2026-10-04  
 **Maintainers**: QA Team, Development Team

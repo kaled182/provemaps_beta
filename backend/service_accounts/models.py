@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, cast
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from django.db.models.manager import RelatedManager
@@ -25,7 +25,7 @@ class ServiceAccountAuditLog(models.Model):
         TOKEN_EXPIRED = "token_expired", "Token Expired"
         ROTATION_NOTICE = "rotation_notice", "Rotation Notice Sent"
 
-    account: models.ForeignKey["ServiceAccount"] = models.ForeignKey(
+    account: models.ForeignKey[ServiceAccount] = models.ForeignKey(
         "service_accounts.ServiceAccount",
         on_delete=models.CASCADE,
         related_name="audit_logs",
@@ -40,7 +40,7 @@ class ServiceAccountAuditLog(models.Model):
     )
     message = models.TextField(blank=True)
     remote_addr = models.CharField(max_length=64, blank=True)
-    extra_data: models.JSONField[Dict[str, Any]] = models.JSONField(
+    extra_data: models.JSONField[dict[str, Any]] = models.JSONField(
         default=dict,
         blank=True,
     )
@@ -60,14 +60,14 @@ class ServiceAccountAuditLog(models.Model):
     def log(
         cls,
         *,
-        account: "ServiceAccount",
-        action: "ServiceAccountAuditLog.Action",
-        actor: Optional[models.Model] = None,
-        message: Optional[str] = None,
-        extra_data: Optional[Dict[str, Any]] = None,
-        remote_addr: Optional[str] = None,
-    ) -> "ServiceAccountAuditLog":
-        payload: Dict[str, Any] = extra_data or {}
+        account: ServiceAccount,
+        action: ServiceAccountAuditLog.Action,
+        actor: models.Model | None = None,
+        message: str | None = None,
+        extra_data: dict[str, Any] | None = None,
+        remote_addr: str | None = None,
+    ) -> ServiceAccountAuditLog:
+        payload: dict[str, Any] = extra_data or {}
         return cls.objects.create(
             account=account,
             action=action,
@@ -93,10 +93,7 @@ class ServiceAccount(models.Model):
     notify_before_days = models.PositiveIntegerField(
         null=True,
         blank=True,
-        help_text=(
-            "Quantos dias antes da expiração avisar responsáveis "
-            "sobre o token ativo."
-        ),
+        help_text=("Quantos dias antes da expiração avisar responsáveis " "sobre o token ativo."),
     )
     notification_webhook_url = models.URLField(
         blank=True,
@@ -120,7 +117,7 @@ class ServiceAccount(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     if TYPE_CHECKING:
-        tokens: "RelatedManager[ServiceAccountToken]"
+        tokens: RelatedManager[ServiceAccountToken]
 
     class Meta:
         ordering = ("name",)
@@ -143,11 +140,11 @@ class ServiceAccount(models.Model):
     def create_token(
         self,
         *,
-        created_by: Optional[models.Model] = None,
-        expires_at: Optional[timezone.datetime] = None,
-        note: Optional[str] = None,
-        remote_addr: Optional[str] = None,
-    ) -> Tuple[str, "ServiceAccountToken"]:
+        created_by: models.Model | None = None,
+        expires_at: timezone.datetime | None = None,
+        note: str | None = None,
+        remote_addr: str | None = None,
+    ) -> tuple[str, ServiceAccountToken]:
         """Generate a token, store its hash, return the clear value once."""
 
         plain_token = secrets.token_urlsafe(32)
@@ -161,7 +158,7 @@ class ServiceAccount(models.Model):
 
         token_created_action = cast(
             "ServiceAccountAuditLog.Action",
-            getattr(ServiceAccountAuditLog.Action, "TOKEN_CREATED"),
+            ServiceAccountAuditLog.Action.TOKEN_CREATED,
         )
         ServiceAccountAuditLog.log(
             account=self,
@@ -174,16 +171,12 @@ class ServiceAccount(models.Model):
 
         return plain_token, token
 
-    def get_active_token(self) -> Optional["ServiceAccountToken"]:
+    def get_active_token(self) -> ServiceAccountToken | None:
         if not self.pk:
             return None
-        return (
-            self.tokens.filter(revoked_at__isnull=True)
-            .order_by("-created_at")
-            .first()
-        )
+        return self.tokens.filter(revoked_at__isnull=True).order_by("-created_at").first()
 
-    def get_rotation_deadline(self) -> Optional[timezone.datetime]:
+    def get_rotation_deadline(self) -> timezone.datetime | None:
         if not self.auto_rotate_days:
             return None
 
@@ -193,7 +186,7 @@ class ServiceAccount(models.Model):
 
         return active_token.created_at + timedelta(days=self.auto_rotate_days)
 
-    def get_notification_deadline(self) -> Optional[timezone.datetime]:
+    def get_notification_deadline(self) -> timezone.datetime | None:
         deadline = self.get_rotation_deadline()
         if not deadline or not self.notify_before_days:
             return None
@@ -228,6 +221,11 @@ class ServiceAccountToken(models.Model):
     rotated_at = models.DateTimeField(null=True, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
     last_notified_at = models.DateTimeField(null=True, blank=True)
+    last_used_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Última autenticação bem-sucedida com este token (EV-0023).",
+    )
 
     class Meta:
         ordering = ("-created_at",)
@@ -253,9 +251,9 @@ class ServiceAccountToken(models.Model):
     def revoke(
         self,
         *,
-        actor: Optional[models.Model] = None,
-        reason: Optional[str] = None,
-        remote_addr: Optional[str] = None,
+        actor: models.Model | None = None,
+        reason: str | None = None,
+        remote_addr: str | None = None,
         mark_rotated: bool = False,
     ) -> None:
         if self.revoked_at:
@@ -270,7 +268,7 @@ class ServiceAccountToken(models.Model):
         self.save(update_fields=update_fields)
         token_revoked_action = cast(
             "ServiceAccountAuditLog.Action",
-            getattr(ServiceAccountAuditLog.Action, "TOKEN_REVOKED"),
+            ServiceAccountAuditLog.Action.TOKEN_REVOKED,
         )
         ServiceAccountAuditLog.log(
             account=self.account,

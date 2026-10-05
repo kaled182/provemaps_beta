@@ -1,7 +1,7 @@
 # Testing Standards - MapsProveFiber
 
-**Version**: v2.0.0  
-**Last Updated**: 2025-11-10
+**Versão do produto**: ver [VERSION](../../VERSION)  
+**Last Updated**: 2026-10-04
 
 ---
 
@@ -15,24 +15,26 @@ This document defines testing standards and best practices for MapsProveFiber.
 
 ### Minimum Coverage
 
-- **Overall**: 80% minimum
+- **Overall (target)**: 80%
 - **New Code**: 90% minimum
 - **Critical Paths**: 95% minimum
   - Authentication
   - Data integrity
   - External integrations
 
+> The CI gate is a ratchet, not the 80% target: since EV-0006 it measures **all** first-party apps (branch coverage, see `[tool.coverage.run]` in `backend/pyproject.toml`) and fails below the value set in `.github/workflows/tests.yml` (currently 52%). Raise it whenever a change adds tests.
+
 ### Checking Coverage
 
-```powershell
-# Run tests with coverage
+```bash
+# Run tests with coverage (from the repo root; or `make test-coverage`)
 pytest --cov --cov-report=html
 
-# Fail if below threshold
-pytest --cov --cov-fail-under=80
+# Same as CI: run from backend/ and fail below the CI threshold
+cd backend && coverage run -m pytest -q && coverage report --fail-under=52
 
 # View report
-start htmlcov/index.html
+xdg-open htmlcov/index.html
 ```
 
 ---
@@ -292,7 +294,7 @@ def test_increment(input, expected):
 
 ### Running Specific Tests
 
-```powershell
+```bash
 # Only unit tests
 pytest -m unit
 
@@ -308,6 +310,8 @@ pytest -m integration
 ## 📊 Performance Testing
 
 ### Benchmark Tests
+
+> Requires `pytest-benchmark`, which is not in `backend/requirements-dev.txt`.
 
 ```python
 def test_query_performance(benchmark):
@@ -391,7 +395,7 @@ def calculate_loss(distance: float, attenuation: float) -> float:
 ```
 
 Run doctests:
-```powershell
+```bash
 pytest --doctest-modules
 ```
 
@@ -405,13 +409,20 @@ pytest --doctest-modules
 - name: Run tests
   run: |
     cd backend
-    pytest --cov --cov-report=xml --cov-fail-under=80
+    coverage run -m pytest -q
+    coverage report --fail-under=52
+    coverage xml
 
-- name: Upload coverage
-  uses: codecov/codecov-action@v3
+- name: Upload coverage report
+  uses: actions/upload-artifact@v4
+  with:
+    name: coverage-xml
+    path: backend/coverage.xml
 ```
 
 ### Pre-commit Hooks
+
+Example only: the repository's `.pre-commit-config.yaml` runs black, ruff, isort, hadolint and generic hooks, not pytest.
 
 ```yaml
 # .pre-commit-config.yaml
@@ -468,7 +479,7 @@ def test_b():
 5. **Use fixtures** for setup
 6. **Mock external services**
 7. **Test error conditions**
-8. **Maintain coverage** > 80%
+8. **Maintain coverage** (target 80%; never lower the CI gate)
 9. **Run tests before commit**
 10. **Update tests with code**
 
@@ -478,9 +489,9 @@ def test_b():
 
 - [pytest Documentation](https://docs.pytest.org/)
 - [Testing Guide](../guides/TESTING.md)
-- [Django Testing](https://docs.djangoproject.com/en/5.0/topics/testing/)
+- [Django Testing](https://docs.djangoproject.com/en/5.2/topics/testing/)
 - [Code Style Guide](CODE_STYLE.md)
 
 ---
 
-**Last Updated**: 2025-11-10
+**Last Updated**: 2026-10-04

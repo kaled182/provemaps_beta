@@ -251,6 +251,8 @@ CSRF_TRUSTED_ORIGINS=https://seu-dominio.com
 | **1.2.0** | 2026-03-15 | Painel de detalhes de cabo, lazy-load de providers de mapa |
 | **2.0.0** | 2025-01-07 | Refatoração interna — migração `zabbix_api/` → `inventory/` + `integrations/` |
 
+> A versão corrente é a de [`VERSION`](./VERSION) (1.4.1). O «2.0.0» de 2025 foi o rótulo da refatoração modular; a numeração recomeçou em 1.2.0 em 2026-03.
+
 Histórico completo: [CHANGELOG.md](./CHANGELOG.md)
 
 ---

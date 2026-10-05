@@ -16,65 +16,20 @@
 </template>
 
 <script setup>
-import { RouterView, useRouter } from 'vue-router';
-import { onMounted, nextTick } from 'vue';
+import { RouterView } from 'vue-router';
+import { onMounted } from 'vue';
 import TheNavMenu from '@/components/Layout/TheNavMenu.vue';
 import SiteDeviceModal from '@/components/Map/SiteDeviceModal.vue';
 import ToastContainer from '@/components/Notifications/ToastContainer.vue';
 import { useUiStore } from '@/stores/ui';
-import { loadGoogleMaps } from '@/utils/googleMapsLoader';
-import { getMapConfig, loadConfiguredMapProvider } from '@/utils/mapLoader';
 
 const uiStore = useUiStore();
-const router = useRouter();
 
-// Rotas que REALMENTE precisam do Google Maps
-const ROUTES_WITH_MAPS = [
-  '/monitoring/backbone',
-  '/Network/NetworkDesign',
-  '/NetworkDesign', // Legacy support
-  '/dashboard'
-];
-
-// Verifica se a rota precisa de mapas
-function routeNeedsMaps(path) {
-  return ROUTES_WITH_MAPS.some(route => path.startsWith(route));
-}
-
-// Aplicar tema ao montar
+// Aplicar tema ao montar. Os SDKs de mapa são carregados pelo provider
+// configurado (providers/maps) quando um ecrã cria o mapa — não há
+// pré-carregamento do Google por rota (EV-0012c).
 onMounted(() => {
-  console.log('[App] Mounting application...');
   uiStore.applyTheme();
-  console.log('[App] Google Maps will be loaded on-demand for specific routes');
-});
-
-// Intercepta navegação e carrega Google Maps apenas quando necessário
-router.beforeEach(async (to, from, next) => {
-  const needsMaps = routeNeedsMaps(to.path);
-  
-  console.log(`[App] Navigation: ${from.path} → ${to.path}`);
-  console.log(`[App] Route needs maps: ${needsMaps}`);
-  
-  if (needsMaps) {
-    await nextTick();
-    try {
-      const config = await getMapConfig();
-      const provider = config.mapProvider || 'google';
-      if (provider === 'google') {
-        await loadGoogleMaps();
-        console.log('[App] ✅ Google Maps loaded successfully');
-      } else {
-        await loadConfiguredMapProvider();
-        console.log(`[App] ✅ Map provider '${provider}' loaded successfully`);
-      }
-    } catch (err) {
-      console.error('[App] ❌ Failed to load map provider:', err.message);
-    }
-  } else {
-    console.log('[App] Skipping Google Maps load (not needed for this route)');
-  }
-  
-  next();
 });
 </script>
 

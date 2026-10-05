@@ -279,19 +279,19 @@
 ### Arquivos Criados (Total: 12+ arquivos)
 
 **Composables:**
-- [useSiteCameras.js](frontend/src/composables/useSiteCameras.js) - 283 linhas
-- [useSiteFibers.js](frontend/src/composables/useSiteFibers.js) - 201 linhas
-- [useSiteDevices.js](frontend/src/composables/useSiteDevices.js) - 250 linhas
+- [useSiteCameras.js](../../frontend/src/composables/useSiteCameras.js) - 283 linhas
+- [useSiteFibers.js](../../frontend/src/composables/useSiteFibers.js) - 201 linhas
+- [useSiteDevices.js](../../frontend/src/composables/useSiteDevices.js) - 250 linhas
 
 **Componentes:**
-- [SiteCamerasTab.vue](frontend/src/components/Site/SiteCamerasTab.vue) - 404 linhas
-- [SiteFibersTab.vue](frontend/src/components/Site/SiteFibersTab.vue) - 442 linhas
-- [SiteDevicesTab.vue](frontend/src/components/Site/SiteDevicesTab.vue) - 482 linhas
+- [SiteCamerasTab.vue](../../frontend/src/components/Site/SiteCamerasTab.vue) - 404 linhas
+- [SiteFibersTab.vue](../../frontend/src/components/Site/SiteFibersTab.vue) - 442 linhas
+- [SiteDevicesTab.vue](../../frontend/src/components/Site/SiteDevicesTab.vue) - 482 linhas
 
 **Testes:**
-- [useSiteCameras.spec.js](frontend/tests/unit/useSiteCameras.spec.js) - 20 testes
-- [useSiteFibers.spec.js](frontend/tests/unit/useSiteFibers.spec.js) - 22 testes  
-- [useSiteDevices.spec.js](frontend/tests/unit/useSiteDevices.spec.js) - 15+ testes
+- [useSiteCameras.spec.js](../../frontend/tests/unit/useSiteCameras.spec.js) - 20 testes
+- [useSiteFibers.spec.js](../../frontend/tests/unit/useSiteFibers.spec.js) - 22 testes  
+- [useSiteDevices.spec.js](../../frontend/tests/unit/useSiteDevices.spec.js) - 15+ testes
 - [SiteCamerasTab.spec.vue] - 14 testes
 - [SiteFibersTab.spec.vue] - 13 testes
 - [SiteDevicesTab.spec.vue] - 4+ testes

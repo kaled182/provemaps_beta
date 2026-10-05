@@ -6,13 +6,17 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('inventory', '0069_fiberalarmnotificationlog'),
+        ("inventory", "0069_fiberalarmnotificationlog"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='fibercablealarmconfig',
-            name='snooze_until',
-            field=models.DateTimeField(blank=True, help_text='Quando preenchido, suprime notificações automáticas até esse momento.', null=True),
+            model_name="fibercablealarmconfig",
+            name="snooze_until",
+            field=models.DateTimeField(
+                blank=True,
+                help_text="Quando preenchido, suprime notificações automáticas até esse momento.",
+                null=True,
+            ),
         ),
     ]

@@ -3,7 +3,7 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from inventory.models import Device, Site
-from inventory.usecases import devices as device_uc
+from inventory.usecases import devices as device_uc, devices_common, devices_discovery
 
 
 class DeviceSyncFlagsTest(TestCase):
@@ -26,9 +26,7 @@ class DeviceSyncFlagsTest(TestCase):
                         "hostid": "10667",
                         "name": "Huawei - Switch CDT",
                         "host": "huawei-switch-cdt",
-                        "interfaces": [
-                            {"ip": "10.1.0.6", "type": "1", "dns": "", "port": "161"}
-                        ],
+                        "interfaces": [{"ip": "10.1.0.6", "type": "1", "dns": "", "port": "161"}],
                         "inventory": {
                             # Valor que criaria/mudaria site se update_site estivesse true
                             "location": "SITE QUE NAO DEVE SER CRIADO",
@@ -41,9 +39,11 @@ class DeviceSyncFlagsTest(TestCase):
                 return []
             return []
 
-        with patch.object(device_uc, "ZABBIX_REQUEST", side_effect=fake_zabbix_request), patch.object(
-            device_uc, "sync_device_groups_for_device", return_value=None
-        ), patch("inventory.services.import_rules.apply_import_rules", return_value=None):
+        with (
+            patch.object(devices_common, "ZABBIX_REQUEST", side_effect=fake_zabbix_request),
+            patch.object(devices_discovery, "sync_device_groups_for_device", return_value=None),
+            patch("inventory.services.import_rules.apply_import_rules", return_value=None),
+        ):
             payload = device_uc.add_device_from_zabbix(
                 {
                     "hostid": "10667",

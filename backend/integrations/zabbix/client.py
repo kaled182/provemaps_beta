@@ -36,7 +36,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, cast
 
 import environ  # type: ignore[import]
 import requests
@@ -80,15 +80,9 @@ ZABBIX_RETRY_MAX_ATTEMPTS_DEBUG: int = _env_int(
     "ZABBIX_RETRY_MAX_ATTEMPTS_DEBUG",
     0,
 )
-ZABBIX_RETRY_BACKOFF_FACTOR: float = _env_float(
-    "ZABBIX_RETRY_BACKOFF_FACTOR", 2.0
-)
-ZABBIX_CIRCUIT_BREAKER_THRESHOLD: int = _env_int(
-    "ZABBIX_CIRCUIT_BREAKER_THRESHOLD", 5
-)
-ZABBIX_CIRCUIT_BREAKER_TIMEOUT: int = _env_int(
-    "ZABBIX_CIRCUIT_BREAKER_TIMEOUT", 60
-)
+ZABBIX_RETRY_BACKOFF_FACTOR: float = _env_float("ZABBIX_RETRY_BACKOFF_FACTOR", 2.0)
+ZABBIX_CIRCUIT_BREAKER_THRESHOLD: int = _env_int("ZABBIX_CIRCUIT_BREAKER_THRESHOLD", 5)
+ZABBIX_CIRCUIT_BREAKER_TIMEOUT: int = _env_int("ZABBIX_CIRCUIT_BREAKER_TIMEOUT", 60)
 ZABBIX_BATCH_SIZE: int = _env_int("ZABBIX_BATCH_SIZE", 10)
 API_KEY_BACKOFF_SECONDS: int = _env_int("ZABBIX_API_KEY_BACKOFF", 1800)
 
@@ -116,11 +110,11 @@ READ_ONLY_SAFE_METHODS = {
 UNAUTHENTICATED_METHODS = {"user.login", "apiinfo.version"}
 
 
-def _sanitize_params(value: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def _sanitize_params(value: dict[str, Any] | None) -> dict[str, Any]:
     """Return params with sensitive keys masked for debug logging."""
     if not isinstance(value, dict):
         return {}
-    masked: Dict[str, Any] = {}
+    masked: dict[str, Any] = {}
     for key, val in value.items():
         if key and key.lower() in {"password", "auth", "token"}:
             masked[key] = "***"
@@ -129,7 +123,7 @@ def _sanitize_params(value: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     return masked
 
 
-def _is_api_key(token: Optional[str]) -> bool:
+def _is_api_key(token: str | None) -> bool:
     """Check if token is a Zabbix API Key (64 hex chars) vs session token.
 
     Zabbix 7.x+ API Keys are 64-character hex strings that must be sent
@@ -138,15 +132,15 @@ def _is_api_key(token: Optional[str]) -> bool:
     if not token or not isinstance(token, str):
         return False
     # Zabbix API Keys are exactly 64 hex characters
-    return len(token) == 64 and all(c in '0123456789abcdef' for c in token.lower())
+    return len(token) == 64 and all(c in "0123456789abcdef" for c in token.lower())
 
 
 # Cache em memória da versão do Zabbix server. Detecta uma vez e reusa.
 # Resetada quando o app reinicia (apiinfo.version não muda em runtime).
-_zabbix_version_cache: Optional[tuple[int, int]] = None
+_zabbix_version_cache: tuple[int, int] | None = None
 
 
-def _detect_zabbix_version(url: str) -> Optional[tuple[int, int]]:
+def _detect_zabbix_version(url: str) -> tuple[int, int] | None:
     """Consulta apiinfo.version (sem autenticação) e devolve (major, minor).
 
     Zabbix 7.0+ rejeita o parâmetro `auth` no payload com erro
@@ -154,7 +148,7 @@ def _detect_zabbix_version(url: str) -> Optional[tuple[int, int]]:
     enviar Authorization: Bearer header em vez do auth no payload — mesmo
     quando o token é uma session token (não uma API key 64-hex).
     """
-    global _zabbix_version_cache
+    global _zabbix_version_cache  # noqa: PLW0603
     if _zabbix_version_cache is not None:
         return _zabbix_version_cache
     try:
@@ -216,9 +210,7 @@ try:
     )
 except ImportError:
     METRICS_ENABLED = False
-    logger.info(
-        "prometheus_client not installed; Zabbix metrics disabled"
-    )
+    logger.info("prometheus_client not installed; Zabbix metrics disabled")
 
 
 # ==============================================================================
@@ -283,9 +275,7 @@ class CircuitBreaker:
             if (time.time() - self.last_failure_time) >= self.timeout:
                 self.state = CircuitState.HALF_OPEN
                 if METRICS_ENABLED:
-                    zabbix_circuit_breaker_state.set(
-                        CircuitState.HALF_OPEN.value
-                    )
+                    zabbix_circuit_breaker_state.set(CircuitState.HALF_OPEN.value)
                 logger.info("Circuit breaker transitioning to HALF_OPEN")
                 return True
             return False
@@ -322,10 +312,10 @@ class ResilientZabbixClient:
 
     def __init__(self):
         self.circuit_breaker = CircuitBreaker()
-        self._cached_token: Optional[str] = None
+        self._cached_token: str | None = None
         self._token_timestamp: float = 0.0
-        self._last_api_key_used: Optional[str] = None
-        self._failed_api_key: Optional[str] = None
+        self._last_api_key_used: str | None = None
+        self._failed_api_key: str | None = None
         self._api_key_backoff_until: float = 0.0
 
     # --------------------------------------------------------------------------
@@ -339,9 +329,7 @@ class ResilientZabbixClient:
         return ZabbixConfig(
             url=self._normalize_url(base_url),
             user=config.zabbix_api_user or settings.ZABBIX_API_USER,
-            password=(
-                config.zabbix_api_password or settings.ZABBIX_API_PASSWORD
-            ),
+            password=(config.zabbix_api_password or settings.ZABBIX_API_PASSWORD),
             api_key=config.zabbix_api_key or settings.ZABBIX_API_KEY,
         )
 
@@ -362,15 +350,11 @@ class ResilientZabbixClient:
         if trimmed.endswith("/api_jsonrpc.php/"):
             trimmed = trimmed[:-1]
         if not trimmed.endswith("api_jsonrpc.php"):
-            suffix = (
-                "api_jsonrpc.php"
-                if trimmed.endswith("/")
-                else "/api_jsonrpc.php"
-            )
+            suffix = "api_jsonrpc.php" if trimmed.endswith("/") else "/api_jsonrpc.php"
             trimmed = trimmed + suffix
         return trimmed
 
-    def _get_token(self) -> Optional[str]:
+    def _get_token(self) -> str | None:
         """Return an authentication token (from cache or login)."""
         config = self._get_config()
         configured_api_key = (config.api_key or "").strip()
@@ -397,8 +381,7 @@ class ResilientZabbixClient:
         # Perform login when cache is empty
         api_key = configured_api_key
         credentials_available = bool(
-            (config.user or "").strip()
-            and (config.password or "").strip()
+            (config.user or "").strip() and (config.password or "").strip()
         )
         now = time.time()
 
@@ -430,19 +413,15 @@ class ResilientZabbixClient:
                 return api_key
 
         # User/password login fallback
-        global WARNED_MISSING_API_KEY
-        if (
-            not api_key
-            and credentials_available
-            and not WARNED_MISSING_API_KEY
-        ):
+        global WARNED_MISSING_API_KEY  # noqa: PLW0603
+        if not api_key and credentials_available and not WARNED_MISSING_API_KEY:
             logger.warning(
                 "ZABBIX_API_KEY not configured; falling back to user.login "
                 "which is slower and less stable",
             )
             WARNED_MISSING_API_KEY = True
 
-        payload: Dict[str, Any] = {}
+        payload: dict[str, Any] = {}
         payload["jsonrpc"] = "2.0"
         payload["method"] = "user.login"
         payload["params"] = {
@@ -477,7 +456,7 @@ class ResilientZabbixClient:
             logger.error("Zabbix login request failed: %s", exc)
             return None
 
-    def login(self) -> Optional[str]:
+    def login(self) -> str | None:
         """Compatibility helper returning the current authenticated token."""
         return self._get_token()
 
@@ -497,27 +476,21 @@ class ResilientZabbixClient:
     def call(
         self,
         method: str,
-        params: Optional[Dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
         retry: bool = True,
-    ) -> Optional[Any]:
+    ) -> Any | None:
         """Execute a Zabbix API call with retry and circuit breaker."""
         # Guard read-only deployments
         read_only = getattr(settings, "ZABBIX_READ_ONLY", True)
         if read_only and method not in READ_ONLY_SAFE_METHODS:
-            logger.warning(
-                "Blocked unsafe method in READ_ONLY mode: %s", method
-            )
+            logger.warning("Blocked unsafe method in READ_ONLY mode: %s", method)
             return None
 
         # Circuit breaker guardrail
         if not self.circuit_breaker.can_attempt():
-            logger.warning(
-                "Circuit breaker OPEN, skipping call to %s", method
-            )
+            logger.warning("Circuit breaker OPEN, skipping call to %s", method)
             if METRICS_ENABLED:
-                zabbix_requests_total.labels(
-                    method=method, status="circuit_open"
-                ).inc()
+                zabbix_requests_total.labels(method=method, status="circuit_open").inc()
             return None
 
         max_attempts = ZABBIX_RETRY_MAX_ATTEMPTS if retry else 1
@@ -539,9 +512,7 @@ class ResilientZabbixClient:
                 # Success resets the circuit breaker
                 self.circuit_breaker.record_success()
                 if METRICS_ENABLED:
-                    zabbix_requests_total.labels(
-                        method=method, status="success"
-                    ).inc()
+                    zabbix_requests_total.labels(method=method, status="success").inc()
 
                 return result
 
@@ -566,21 +537,19 @@ class ResilientZabbixClient:
                     # Permanent failure
                     self.circuit_breaker.record_failure()
                     if METRICS_ENABLED:
-                        zabbix_requests_total.labels(
-                            method=method, status="failure"
-                        ).inc()
+                        zabbix_requests_total.labels(method=method, status="failure").inc()
 
         return None
 
     def _execute_request(
         self,
         method: str,
-        params: Optional[Dict[str, Any]],
+        params: dict[str, Any] | None,
         attempt: int,
         *,
         retry_without_auth: bool = False,
         token_retry: bool = False,
-    ) -> Optional[Any]:
+    ) -> Any | None:
         """Execute the HTTP request destined for the Zabbix API."""
         config = self._get_config()
 
@@ -593,13 +562,13 @@ class ResilientZabbixClient:
                 raise requests.RequestException("Failed to obtain auth token")
 
         # Payload
-        payload: Dict[str, Any] = {}
+        payload: dict[str, Any] = {}
         payload["jsonrpc"] = "2.0"
         payload["method"] = method
         payload["id"] = attempt
         if params is not None:
             payload["params"] = cast(Any, params)
-        
+
         # Decidir como enviar o token:
         #   - API Key (64 hex chars) → SEMPRE Bearer header
         #   - Servidor Zabbix 7.0+ → SEMPRE Bearer header (mesmo session token);
@@ -608,11 +577,7 @@ class ResilientZabbixClient:
         #   - Senão (Zabbix 6.x com session token) → `auth` no payload
         use_bearer_header = False
         if include_auth and token:
-            if (
-                _is_api_key(token)
-                or retry_without_auth
-                or _server_requires_bearer(config.url)
-            ):
+            if _is_api_key(token) or retry_without_auth or _server_requires_bearer(config.url):
                 use_bearer_header = True
             else:
                 payload["auth"] = token
@@ -632,13 +597,11 @@ class ResilientZabbixClient:
                 timeout=ZABBIX_REQUEST_TIMEOUT,
             )
             response.raise_for_status()
-            data = cast(Dict[str, Any], response.json())
+            data = cast(dict[str, Any], response.json())
         except requests.RequestException as exc:
             duration_seconds = time.perf_counter() - start_time
             if METRICS_ENABLED:
-                zabbix_request_duration_seconds.labels(
-                    method=method
-                ).observe(duration_seconds)
+                zabbix_request_duration_seconds.labels(method=method).observe(duration_seconds)
 
             logger.debug(
                 "Zabbix call %s (attempt %d) completed in %.3f seconds",
@@ -658,9 +621,7 @@ class ResilientZabbixClient:
         else:
             duration_seconds = time.perf_counter() - start_time
             if METRICS_ENABLED:
-                zabbix_request_duration_seconds.labels(
-                    method=method
-                ).observe(duration_seconds)
+                zabbix_request_duration_seconds.labels(method=method).observe(duration_seconds)
 
             logger.debug(
                 "Zabbix call %s (attempt %d) completed in %.3f seconds",
@@ -669,18 +630,13 @@ class ResilientZabbixClient:
                 duration_seconds,
             )
 
-    # Inspect Zabbix error responses
+        # Inspect Zabbix error responses
         if "error" in data:
             error = data["error"]
 
-            if (
-                include_auth
-                and not retry_without_auth
-                and error.get("code") in (-32602, -32500)
-            ):
+            if include_auth and not retry_without_auth and error.get("code") in (-32602, -32500):
                 logger.debug(
-                    "Zabbix call %s returned error code %s; retrying with "
-                    "Authorization header",
+                    "Zabbix call %s returned error code %s; retrying with " "Authorization header",
                     method,
                     error.get("code"),
                 )
@@ -700,15 +656,11 @@ class ResilientZabbixClient:
                 ]
                 if part
             ).lower()
-            token_expired = (
-                "token expired" in error_blob
-                or "session terminated" in error_blob
-            )
+            token_expired = "token expired" in error_blob or "session terminated" in error_blob
 
             if include_auth and not token_retry and token_expired:
                 logger.info(
-                    "Zabbix token expired while calling %s; retrying "
-                    "authentication",
+                    "Zabbix token expired while calling %s; retrying " "authentication",
                     method,
                 )
                 self._mark_token_as_expired()
@@ -741,11 +693,7 @@ class ResilientZabbixClient:
                 self.clear_token_cache()
             if _record_zabbix_call:
                 error_code = error.get("code")
-                coded = (
-                    f"zabbix_error_{error_code}"
-                    if error_code is not None
-                    else "zabbix_error"
-                )
+                coded = f"zabbix_error_{error_code}" if error_code is not None else "zabbix_error"
                 _record_zabbix_call(
                     method,
                     duration_seconds,
@@ -769,9 +717,9 @@ class ResilientZabbixClient:
 
     def batch(
         self,
-        calls: List[Tuple[str, Optional[Dict[str, Any]]]],
+        calls: list[tuple[str, dict[str, Any] | None]],
         retry: bool = True,
-    ) -> List[Optional[Any]]:
+    ) -> list[Any | None]:
         """Execute multiple calls within a single HTTP request.
 
         Args:
@@ -797,13 +745,13 @@ class ResilientZabbixClient:
                 len(calls),
                 ZABBIX_BATCH_SIZE,
             )
-            results: List[Optional[Any]] = []
+            results: list[Any | None] = []
             for i in range(0, len(calls), ZABBIX_BATCH_SIZE):
-                chunk = calls[i:i + ZABBIX_BATCH_SIZE]
+                chunk = calls[i : i + ZABBIX_BATCH_SIZE]
                 results.extend(self.batch(chunk, retry=retry))
             return results
 
-    # Circuit breaker guardrail for batches
+        # Circuit breaker guardrail for batches
         if not self.circuit_breaker.can_attempt():
             logger.warning("Circuit breaker OPEN, skipping batch call")
             return [None] * len(calls)
@@ -815,9 +763,7 @@ class ResilientZabbixClient:
                 results = self._execute_batch(calls, attempt)
                 self.circuit_breaker.record_success()
                 if METRICS_ENABLED:
-                    zabbix_requests_total.labels(
-                        method="batch", status="success"
-                    ).inc()
+                    zabbix_requests_total.labels(method="batch", status="success").inc()
                 return results
 
             except requests.RequestException as exc:
@@ -834,22 +780,20 @@ class ResilientZabbixClient:
                 else:
                     self.circuit_breaker.record_failure()
                     if METRICS_ENABLED:
-                        zabbix_requests_total.labels(
-                            method="batch", status="failure"
-                        ).inc()
+                        zabbix_requests_total.labels(method="batch", status="failure").inc()
 
         return [None] * len(calls)
 
     def _execute_batch(
         self,
-        calls: List[Tuple[str, Optional[Dict[str, Any]]]],
+        calls: list[tuple[str, dict[str, Any] | None]],
         attempt: int,
-    ) -> List[Optional[Any]]:
+    ) -> list[Any | None]:
         """Execute a batch of requests."""
         config = self._get_config()
         token = self._get_token()
 
-    # Build individual payloads
+        # Build individual payloads
         # Note: Batch API no Zabbix ainda usa 'auth' field mesmo com API Keys
         # pois o header Authorization não é suportado em requests batch
         # Mesma lógica do single request: Zabbix 7+ rejeita `auth` no payload.
@@ -859,9 +803,9 @@ class ResilientZabbixClient:
             _is_api_key(token) or _server_requires_bearer(config.url)
         )
 
-        payloads: List[Dict[str, Any]] = []
+        payloads: list[dict[str, Any]] = []
         for idx, (method, params) in enumerate(calls):
-            payload: Dict[str, Any] = {
+            payload: dict[str, Any] = {
                 "jsonrpc": "2.0",
                 "method": method,
                 "id": idx + 1,
@@ -895,13 +839,10 @@ class ResilientZabbixClient:
         finally:
             duration_seconds = time.perf_counter() - start_time
             if METRICS_ENABLED:
-                zabbix_request_duration_seconds.labels(
-                    method="batch"
-                ).observe(duration_seconds)
+                zabbix_request_duration_seconds.labels(method="batch").observe(duration_seconds)
 
             logger.debug(
-                "Batch call with %d requests (attempt %d) completed in %.3f "
-                "seconds",
+                "Batch call with %d requests (attempt %d) completed in %.3f " "seconds",
                 len(calls),
                 attempt,
                 duration_seconds,
@@ -915,9 +856,9 @@ class ResilientZabbixClient:
             )
             return [None] * len(calls)
 
-        data_list = cast(List[Dict[str, Any]], raw_data)
+        data_list = cast(list[dict[str, Any]], raw_data)
 
-        results: List[Optional[Any]] = []
+        results: list[Any | None] = []
         for data in data_list:
             if "error" in data:
                 error_blob = " ".join(
@@ -928,14 +869,9 @@ class ResilientZabbixClient:
                     ]
                     if part
                 ).lower()
-                if (
-                    "token expired" in error_blob
-                    or "session terminated" in error_blob
-                ):
+                if "token expired" in error_blob or "session terminated" in error_blob:
                     self._mark_token_as_expired()
-                    raise requests.RequestException(
-                        "Token expired during batch"
-                    )
+                    raise requests.RequestException("Token expired during batch")
                 logger.warning("Batch item error: %s", data["error"])
                 results.append(None)
             else:
@@ -952,13 +888,11 @@ class ResilientZabbixClient:
         self.circuit_breaker.record_success()
         logger.info("Circuit breaker manually reset")
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> dict[str, Any]:
         """Return the current client metrics snapshot."""
         return {
             "circuit_breaker_state": self.circuit_breaker.state.name,
-            "circuit_breaker_failure_count": (
-                self.circuit_breaker.failure_count
-            ),
+            "circuit_breaker_failure_count": (self.circuit_breaker.failure_count),
             "token_cached": self._cached_token is not None,
             "failed_api_key": self._failed_api_key,
             "api_key_backoff_seconds_remaining": max(
@@ -986,29 +920,21 @@ class ResilientZabbixClient:
         failed_key = self._last_api_key_used
         configured_api_key = (self._get_config().api_key or "").strip()
 
-        if (
-            failed_key
-            and configured_api_key
-            and failed_key == configured_api_key
-        ):
+        if failed_key and configured_api_key and failed_key == configured_api_key:
             self._cached_token = configured_api_key
             self._token_timestamp = time.time()
             self._last_api_key_used = configured_api_key
             self._failed_api_key = None
             self._api_key_backoff_until = 0.0
             cache.set(TOKEN_CACHE_KEY, configured_api_key, timeout=None)
-            logger.debug(
-                "Preserved configured Zabbix API key after expiry notice"
-            )
+            logger.debug("Preserved configured Zabbix API key after expiry notice")
             return
 
         self._reset_cached_token()
         cache.delete(TOKEN_CACHE_KEY)
         if failed_key:
             self._failed_api_key = failed_key
-            self._api_key_backoff_until = (
-                time.time() + API_KEY_BACKOFF_SECONDS
-            )
+            self._api_key_backoff_until = time.time() + API_KEY_BACKOFF_SECONDS
             logger.debug(
                 "Applied backoff to Zabbix API key; retry after %.0fs",
                 API_KEY_BACKOFF_SECONDS,
@@ -1031,16 +957,12 @@ resilient_client = ResilientZabbixClient()
 # ==============================================================================
 
 
-def zabbix_call(
-    method: str, params: Optional[Dict[str, Any]] = None
-) -> Optional[Any]:
+def zabbix_call(method: str, params: dict[str, Any] | None = None) -> Any | None:
     """Wrapper around a single Zabbix API call."""
     return resilient_client.call(method, params)
 
 
-def zabbix_batch(
-    calls: List[Tuple[str, Optional[Dict[str, Any]]]]
-) -> List[Optional[Any]]:
+def zabbix_batch(calls: list[tuple[str, dict[str, Any] | None]]) -> list[Any | None]:
     """Wrapper around batching multiple Zabbix API calls."""
     return resilient_client.batch(calls)
 

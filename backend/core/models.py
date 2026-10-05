@@ -1,7 +1,9 @@
-from django.db import models
 from django.contrib.auth.models import User
+from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+
+from setup_app.fields import EncryptedCharField
 
 
 class UserProfile(models.Model):
@@ -40,7 +42,9 @@ class UserProfile(models.Model):
         related_name="user_profiles",
         blank=True,
     )
-    totp_secret = models.CharField("TOTP Secret", max_length=64, blank=True, null=True)
+    # EV-0016: segredo TOTP cifrado em repouso (Fernet). Em texto puro, quem
+    # lesse a tabela gerava códigos válidos para qualquer utilizador.
+    totp_secret = EncryptedCharField("TOTP Secret", max_plain_length=64, blank=True, null=True)
     totp_enabled = models.BooleanField("TOTP Ativo", default=False)
 
     def __str__(self) -> str:

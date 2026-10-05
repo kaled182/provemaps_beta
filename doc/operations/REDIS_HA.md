@@ -252,7 +252,7 @@ CHANNEL_LAYERS = {
 ## Failover Testing
 
 ### Test Sentinel failover
-```powershell
+```bash
 # 1. Check current master
 docker compose exec redis-sentinel-1 redis-cli -p 26379 SENTINEL get-master-addr-by-name mymaster
 
@@ -348,10 +348,10 @@ Recommendation: choose a managed service for production unless the budget is ext
 - [ ] Update `settings/prod.py` with the selected configuration.
 - [ ] Set environment variables (`REDIS_URL` or `REDIS_SENTINELS`).
 - [ ] Test failover scenarios in staging.
-- [ ] Add Redis health checks to the `/health/` endpoint.
+- [ ] Add Redis health checks to the `/healthz` endpoint.
 - [ ] Configure monitoring and alerting for Redis metrics.
 - [ ] Document a runbook for manual failover if needed.
-- [ ] Update `DEPLOYMENT.md` with Redis HA setup instructions.
+- [ ] Update [`DEPLOY.md`](../../DEPLOY.md) with Redis HA setup instructions.
 
 ---
 

@@ -3,6 +3,7 @@
  */
 
 import { useApi } from '@/composables/useApi'
+import { formatOpticalSeries } from '@/utils/opticalSeries'
 
 const { get, post, patch, delete: del } = useApi()
 
@@ -70,69 +71,8 @@ export async function getCableOpticalHistory(cableId, hours = 24) {
       }
     }
     
-    // Processar dados separadamente para cada porta
-    const formatPortData = (historyArray, thresholds) => {
-      if (!historyArray || historyArray.length === 0) return null
-
-      // Garantir ordenação por timestamp e alinhar as séries por tempo
-      const sorted = [...historyArray].sort((a, b) => {
-        const ta = new Date(a.timestamp).getTime()
-        const tb = new Date(b.timestamp).getTime()
-        return ta - tb
-      })
-
-      const labels = []
-      const rxData = []
-      const txData = []
-
-      // Forward-fill: mantém último valor conhecido quando o ponto vier como null
-      // Evita que uma das linhas termine antes da outra
-      let lastRx = null
-      let lastTx = null
-
-      sorted.forEach(point => {
-        const date = new Date(point.timestamp)
-        labels.push(date.toLocaleTimeString('pt-BR', {
-          hour: '2-digit',
-          minute: '2-digit',
-          day: '2-digit',
-          month: '2-digit'
-        }))
-
-        const rx = point.rx_power
-        const tx = point.tx_power
-
-        // RX: só começa a preencher após primeiro valor válido; depois faz forward-fill
-        if (rx !== null && rx !== undefined && !Number.isNaN(rx)) {
-          lastRx = rx
-          rxData.push(rx)
-        } else {
-          rxData.push(lastRx)
-        }
-
-        // TX: mesma lógica do RX
-        if (tx !== null && tx !== undefined && !Number.isNaN(tx)) {
-          lastTx = tx
-          txData.push(tx)
-        } else {
-          txData.push(lastTx)
-        }
-      })
-
-      const warningValue = thresholds?.warning ?? null
-      const criticalValue = thresholds?.critical ?? null
-      const warningLine = warningValue !== null ? labels.map(() => warningValue) : null
-      const criticalLine = criticalValue !== null ? labels.map(() => criticalValue) : null
-
-      return {
-        labels,
-        rxData,
-        txData,
-        thresholds,
-        warningLine,
-        criticalLine
-      }
-    }
+    // EV-0010: sem forward-fill — um ponto sem valor é um buraco no gráfico.
+    const formatPortData = (historyArray, thresholds) => formatOpticalSeries(historyArray, thresholds)
     
     const calculatePortStats = (historyArray) => {
       if (!historyArray || historyArray.length === 0) {

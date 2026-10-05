@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import path from 'path';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [vue()],
 
   root: '.', // Vite serves from frontend/
@@ -13,7 +13,10 @@ export default defineConfig({
     outDir: '../backend/staticfiles/vue-spa', // Output to Django static collection area for SPA (Phase 11)
     emptyOutDir: true,
     manifest: true, // Generate manifest.json for Django asset mapping
-    minify: false, // Disable minification to keep console.log for debugging
+    // EV-0019: minificação ligada (esbuild). O build anterior saía sem minify
+    // «para manter console.log» — em produção o log de depuração sai no
+    // `esbuild.pure` abaixo; warn/error ficam.
+    minify: 'esbuild',
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, 'index.html'),
@@ -44,4 +47,14 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src'),
     },
   },
-});
+
+  // Só no build de produção: remove console.log/debug/info/trace e `debugger`.
+  // console.warn/console.error ficam (são o sinal de «Zabbix fora» etc.).
+  esbuild:
+    mode === 'production'
+      ? {
+          pure: ['console.log', 'console.debug', 'console.info', 'console.trace'],
+          drop: ['debugger'],
+        }
+      : {},
+}));

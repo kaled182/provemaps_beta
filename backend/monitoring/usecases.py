@@ -1,20 +1,17 @@
-from __future__ import annotations
-
 """Core monitoring use cases for dashboard and host status data."""
+
+from __future__ import annotations
 
 import hashlib
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from django.conf import settings
 from django.db.models import Q
 
+from integrations.zabbix.zabbix_service import safe_cache_get, safe_cache_set, zabbix_request
 from inventory.models import Device
-from integrations.zabbix.zabbix_service import (
-    safe_cache_get,
-    safe_cache_set,
-    zabbix_request,
-)
+
 HOST_STATUS_CACHE_TTL = int(
     getattr(
         settings,
@@ -25,7 +22,7 @@ HOST_STATUS_CACHE_TTL = int(
 HOST_STATUS_CACHE_PREFIX = "monitoring:zabbix_hosts"
 
 
-def _host_status_cache_key(hostids: List[str]) -> str:
+def _host_status_cache_key(hostids: list[str]) -> str:
     """Return deterministic cache key for a hostid collection."""
 
     joined = ",".join(sorted(hostids))
@@ -55,8 +52,8 @@ class HostStatusProcessor:
     @classmethod
     def get_primary_interface(
         cls,
-        interfaces: List[Dict[str, Any]],
-    ) -> Optional[Dict[str, Any]]:
+        interfaces: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
         """Return the primary interface; otherwise use the first entry."""
         if not interfaces:
             return None
@@ -71,8 +68,8 @@ class HostStatusProcessor:
     @classmethod
     def calculate_availability(
         cls,
-        host_data: Dict[str, Any],
-        primary_interface: Optional[Dict[str, Any]],
+        host_data: dict[str, Any],
+        primary_interface: dict[str, Any] | None,
     ) -> str:
         """Prefer interface availability when host reports an unknown state."""
         host_avail = str(host_data.get("available", "0"))
@@ -87,8 +84,8 @@ class HostStatusProcessor:
     @classmethod
     def calculate_statistics(
         cls,
-        hosts_status: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        hosts_status: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """Compute aggregated statistics for cards/JSON."""
         total = len(hosts_status)
         if total == 0:
@@ -100,12 +97,8 @@ class HostStatusProcessor:
                 "availability_percentage": 0,
             }
 
-        available = sum(
-            1 for host in hosts_status if str(host.get("available")) == "1"
-        )
-        unavailable = sum(
-            1 for host in hosts_status if str(host.get("available")) == "2"
-        )
+        available = sum(1 for host in hosts_status if str(host.get("available")) == "1")
+        unavailable = sum(1 for host in hosts_status if str(host.get("available")) == "2")
         unknown = total - available - unavailable
 
         return {
@@ -113,9 +106,7 @@ class HostStatusProcessor:
             "available": available,
             "unavailable": unavailable,
             "unknown": unknown,
-            "availability_percentage": round((available / total * 100), 2)
-            if total > 0
-            else 0,
+            "availability_percentage": round((available / total * 100), 2) if total > 0 else 0,
         }
 
 
@@ -126,7 +117,7 @@ def get_devices_with_zabbix():
     )
 
 
-def fetch_zabbix_hosts_data(hostids: List[str]) -> List[Dict[str, Any]]:
+def fetch_zabbix_hosts_data(hostids: list[str]) -> list[dict[str, Any]]:
     """Fetch host details from Zabbix, including status and interfaces."""
     if not hostids:
         return []
@@ -175,16 +166,16 @@ def fetch_zabbix_hosts_data(hostids: List[str]) -> List[Dict[str, Any]]:
 
 
 def build_zabbix_map(
-    zabbix_hosts: List[Dict[str, Any]],
-) -> Dict[str, Dict[str, Any]]:
+    zabbix_hosts: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
     """Convert list of Zabbix hosts to a map hostid -> data."""
     return {str(host["hostid"]): host for host in zabbix_hosts}
 
 
 def process_host_status(
     device: Device,
-    zabbix_map: Dict[str, Dict[str, Any]],
-) -> Dict[str, Any]:
+    zabbix_map: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
     """Format a single host entry ready for template or API consumption."""
     host_key = str(device.zabbix_hostid)
     host_data = zabbix_map.get(host_key, {})
@@ -199,7 +190,7 @@ def process_host_status(
         availability,
     )
 
-    interface_data: Dict[str, Any] = {
+    interface_data: dict[str, Any] = {
         "interfaceid": None,
         "ip": None,
         "available": availability,
@@ -217,11 +208,15 @@ def process_host_status(
     cpu_value = None
     memory_value = None
     icmp_alive = False  # True quando icmpping retorna 1 (host responde ao ping)
-    
-    if device.uptime_item_key or device.cpu_usage_item_key or getattr(device, "memory_usage_item_key", ""):
+
+    if (
+        device.uptime_item_key
+        or device.cpu_usage_item_key
+        or getattr(device, "memory_usage_item_key", "")
+    ):
         try:
             from integrations.zabbix.zabbix_service import zabbix_request
-            
+
             items_to_fetch = []
             if device.uptime_item_key:
                 items_to_fetch.append(device.uptime_item_key)
@@ -230,7 +225,7 @@ def process_host_status(
             mem_key = getattr(device, "memory_usage_item_key", "")
             if mem_key:
                 items_to_fetch.append(mem_key)
-            
+
             item_values = zabbix_request(
                 "item.get",
                 {
@@ -239,11 +234,11 @@ def process_host_status(
                     "filter": {"key_": items_to_fetch},
                 },
             )
-            
+
             for item in item_values:
                 key = item.get("key_", "")
                 lastvalue = item.get("lastvalue", "")
-                
+
                 if key == device.uptime_item_key and lastvalue:
                     try:
                         seconds = int(float(lastvalue))
@@ -263,7 +258,7 @@ def process_host_status(
                         uptime_value = " ".join(parts) if parts else "< 1m"
                     except (ValueError, TypeError):
                         uptime_value = lastvalue
-                
+
                 elif key == device.cpu_usage_item_key and lastvalue:
                     try:
                         cpu_float = float(lastvalue)
@@ -276,24 +271,19 @@ def process_host_status(
                         memory_value = f"{mem_float:.1f}%"
                     except (ValueError, TypeError):
                         memory_value = lastvalue
-        
+
         except Exception as e:
-            logger.warning(
-                f"Failed to fetch Zabbix values for device {device.id}: {e}"
-            )
+            logger.warning(f"Failed to fetch Zabbix values for device {device.id}: {e}")
 
     # Extract device type from inventory DeviceGroups
     device_type = None
     device_groups = device.groups.all()
-    
+
     if device_groups:
         # Try to find a group that indicates device type
         # Priority: exact type keywords first
-        type_keywords = [
-            "Switch", "Router", "OLT", "Server",
-            "Firewall", "Access Point", "GPON"
-        ]
-        
+        type_keywords = ["Switch", "Router", "OLT", "Server", "Firewall", "Access Point", "GPON"]
+
         for group in device_groups:
             group_name = group.name
             # First, try to find type keywords
@@ -305,7 +295,7 @@ def process_host_status(
                     break
             if device_type:
                 break
-        
+
         # If no type found, use first group name as fallback
         if not device_type and device_groups:
             device_type = device_groups[0].name
@@ -332,6 +322,7 @@ def process_host_status(
             # (mesmo sem SNMP funcionando, o equipamento pode estar online).
             try:
                 from integrations.zabbix.zabbix_service import zabbix_request
+
                 ping_items = zabbix_request(
                     "item.get",
                     {
@@ -348,9 +339,7 @@ def process_host_status(
                             promoted_from_icmp = True
                             break
             except Exception as exc:
-                logger.debug(
-                    "ICMP fallback failed for device %s: %s", device.pk, exc
-                )
+                logger.debug("ICMP fallback failed for device %s: %s", device.pk, exc)
 
     if promoted_from_uptime or promoted_from_icmp:
         # Recalcular classes/cores agora que está available
@@ -371,9 +360,7 @@ def process_host_status(
         ),
         "available_promoted": promoted_from_uptime or promoted_from_icmp,
         "available_promoted_via": (
-            "uptime" if promoted_from_uptime
-            else "icmp" if promoted_from_icmp
-            else ""
+            "uptime" if promoted_from_uptime else "icmp" if promoted_from_icmp else ""
         ),
         "icmp_alive": icmp_alive,
         "ip": interface_data["ip"],
@@ -394,52 +381,47 @@ def process_host_status(
     }
 
 
-def get_hosts_status_data() -> Dict[str, Any]:
+def get_hosts_status_data() -> dict[str, Any]:
     """Build host status data for reuse across views and APIs."""
     devices = get_devices_with_zabbix()
-    hosts_status: List[Dict[str, Any]] = []
+    hosts_status: list[dict[str, Any]] = []
 
     if devices.exists():
         hostids = [device.zabbix_hostid for device in devices]
         zabbix_hosts = fetch_zabbix_hosts_data(hostids)
         zabbix_map = build_zabbix_map(zabbix_hosts)
 
-        hosts_status = [
-            process_host_status(device, zabbix_map)
-            for device in devices
-        ]
+        hosts_status = [process_host_status(device, zabbix_map) for device in devices]
 
     return {
         "hosts_status": hosts_status,
-        "hosts_summary": HostStatusProcessor.calculate_statistics(
-            hosts_status
-        ),
+        "hosts_summary": HostStatusProcessor.calculate_statistics(hosts_status),
     }
 
 
-def get_sites_with_devices_data() -> Dict[str, Any]:
+def get_sites_with_devices_data() -> dict[str, Any]:
     """Build sites data with devices grouped by site for map visualization."""
     from inventory.models import Site
-    
+
     # Get all hosts status data first
     hosts_data = get_hosts_status_data()
     hosts_status = hosts_data.get("hosts_status", [])
     hosts_summary = hosts_data.get("hosts_summary", {})
-    
+
     logger.info(f"get_sites_with_devices_data: Processing {len(hosts_status)} hosts")
-    
+
     # Group devices by site
-    sites_map: Dict[int, Dict[str, Any]] = {}
-    
+    sites_map: dict[int, dict[str, Any]] = {}
+
     for host in hosts_status:
         site_id = host.get("site_id")
         site_name = host.get("site_name", "N/A")
         device_name = host.get("name", "Unknown")
-        
+
         if not site_id:
             logger.debug(f"Skipping device {device_name}: no site_id")
             continue
-        
+
         if site_id not in sites_map:
             sites_map[site_id] = {
                 "site_id": site_id,
@@ -448,45 +430,38 @@ def get_sites_with_devices_data() -> Dict[str, Any]:
                 "latitude": None,
                 "longitude": None,
             }
-        
+
         sites_map[site_id]["devices"].append(host)
         logger.debug(
             f"Added device {device_name} to site {site_name} "
             f"(total devices: {len(sites_map[site_id]['devices'])})"
         )
-    
+
     # Enrich with Site coordinates
     site_ids = list(sites_map.keys())
     if site_ids:
         sites = Site.objects.filter(pk__in=site_ids).only(
             "pk", "display_name", "latitude", "longitude", "city"
         )
-        
+
         for site in sites:
             if site.pk in sites_map:
-                sites_map[site.pk]["latitude"] = (
-                    float(site.latitude) if site.latitude else None
-                )
-                sites_map[site.pk]["longitude"] = (
-                    float(site.longitude) if site.longitude else None
-                )
+                sites_map[site.pk]["latitude"] = float(site.latitude) if site.latitude else None
+                sites_map[site.pk]["longitude"] = float(site.longitude) if site.longitude else None
                 sites_map[site.pk]["city"] = site.city or ""
-                
+
                 logger.info(
                     f"Site {site.display_name}: "
                     f"{len(sites_map[site.pk]['devices'])} devices, "
                     f"coords: {sites_map[site.pk]['latitude']}, "
                     f"{sites_map[site.pk]['longitude']}"
                 )
-    
+
     # Convert to list and sort by name
-    sites_list = sorted(
-        sites_map.values(),
-        key=lambda s: s.get("site_name", "").lower()
-    )
-    
+    sites_list = sorted(sites_map.values(), key=lambda s: s.get("site_name", "").lower())
+
     logger.info(f"Returning {len(sites_list)} sites with devices")
-    
+
     return {
         "sites": sites_list,
         "hosts_summary": hosts_summary,

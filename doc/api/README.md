@@ -1,6 +1,9 @@
 # 🔌 API Documentation
 
-Complete REST API reference for MapsProveFiber v2.0.0.
+Complete REST API reference for MapsProveFiber.
+
+**Versão do produto**: ver [VERSION](../../VERSION)  
+**Last Updated**: 2026-10-04
 
 ---
 
@@ -8,7 +11,7 @@ Complete REST API reference for MapsProveFiber v2.0.0.
 
 | Document | Description | Status | Audience |
 |----------|-------------|--------|----------|
-| **[ENDPOINTS.md](ENDPOINTS.md)** | ✅ **Complete endpoint reference** (updated 2025-11-07) | Ready | All developers |
+| **[ENDPOINTS.md](ENDPOINTS.md)** | ✅ **Complete endpoint reference** (updated 2026-10-04) | Ready | All developers |
 | **[AUTHENTICATION.md](AUTHENTICATION.md)** | Auth, permissions, RBAC | Placeholder | Backend, security |
 | **[EXAMPLES.md](EXAMPLES.md)** | Usage examples (cURL, Python, JS) | Placeholder | Frontend, integration |
 
@@ -50,7 +53,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for details.
 
 ### v1 Endpoints
 
-All v2.0.0 endpoints are under `/api/v1/`:
+All endpoints are under `/api/v1/`:
 
 ```
 /api/v1/
@@ -60,8 +63,8 @@ All v2.0.0 endpoints are under `/api/v1/`:
 │   ├── ports/              # GET, POST, PUT, DELETE
 │   └── routes/             # GET, POST, PUT, DELETE
 ├── monitoring/
-│   ├── status/             # GET (combined inventory + Zabbix)
-│   └── health/             # GET (system health)
+│   ├── hosts/status/       # GET (combined inventory + Zabbix)
+│   └── dashboard/snapshot/ # GET (cached dashboard payload)
 └── maps/
     └── dashboard/          # GET (dashboard data)
 ```
@@ -201,7 +204,7 @@ GET /api/v1/inventory/sites/?page=1&page_size=50
 ### Get Combined Status
 
 ```bash
-GET /api/v1/monitoring/status/
+GET /api/v1/monitoring/hosts/status/
 ```
 
 **Response**:
@@ -238,13 +241,13 @@ GET /api/v1/monitoring/status/
 
 ```bash
 # Full health check
-GET /healthz/
+GET /healthz
 
 # Readiness probe
-GET /ready/
+GET /ready
 
 # Liveness probe
-GET /live/
+GET /live
 ```
 
 See [../guides/OBSERVABILITY.md](../guides/OBSERVABILITY.md) for health check details.
@@ -384,17 +387,17 @@ See [EXAMPLES.md](EXAMPLES.md) for more examples.
 
 ## 🔄 Migrating from v1.x
 
-### Removed Endpoints (v2.0.0)
+### Removed Endpoints (2025-01 refactoring)
 
 ❌ All `/zabbix_api/*` endpoints removed.
 
 **Migration map**:
 
-| Old Endpoint (v1.x) | New Endpoint (v2.0.0) |
-|---------------------|------------------------|
+| Old Endpoint (v1.x) | New Endpoint |
+|---------------------|--------------|
 | `GET /zabbix_api/sites/` | `GET /api/v1/inventory/sites/` |
 | `GET /zabbix_api/devices/` | `GET /api/v1/inventory/devices/` |
-| `GET /zabbix_api/status/` | `GET /api/v1/monitoring/status/` |
+| `GET /zabbix_api/status/` | `GET /api/v1/monitoring/hosts/status/` |
 
 See [../releases/v2.0.0/BREAKING_CHANGES.md](../releases/v2.0.0/BREAKING_CHANGES.md) for complete migration guide.
 
@@ -405,7 +408,7 @@ See [../releases/v2.0.0/BREAKING_CHANGES.md](../releases/v2.0.0/BREAKING_CHANGES
 - **[Architecture](../architecture/)** — System design
 - **[Development Guide](../guides/DEVELOPMENT.md)** — Local setup
 - **[Operations Guide](../operations/)** — Deployment
-- **[Breaking Changes](../releases/v2.0.0/BREAKING_CHANGES.md)** — v2.0.0 migration
+- **[Breaking Changes](../releases/v2.0.0/BREAKING_CHANGES.md)** — 2025-01 modular refactoring migration
 
 ---
 

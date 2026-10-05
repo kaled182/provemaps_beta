@@ -22,9 +22,7 @@ def validate_db_password(value: str) -> None:
     if not re.search(r"[^A-Za-z0-9]", value):
         errors.append("pelo menos 1 caractere especial (!@#$%...)")
     if errors:
-        raise ValidationError(
-            f"Senha fraca. Necessário: {', '.join(errors)}."
-        )
+        raise ValidationError(f"Senha fraca. Necessário: {', '.join(errors)}.")
 
 
 def _env_default(*keys: str, fallback: str = "") -> str:
@@ -96,10 +94,7 @@ class FirstTimeSetupForm(forms.Form):
         max_length=255,
         widget=forms.PasswordInput(render_value=True),
         validators=[validate_db_password],
-        help_text=(
-            "Mínimo 12 caracteres · maiúscula · minúscula"
-            " · número · caractere especial"
-        ),
+        help_text=("Mínimo 12 caracteres · maiúscula · minúscula" " · número · caractere especial"),
     )
     redis_url = forms.CharField(
         label="Redis URL",
@@ -145,7 +140,9 @@ class EnvConfigForm(forms.Form):
         required=False,
         help_text="Use when authenticating via API token.",
     )
-    google_maps_api_key = forms.CharField(label="GOOGLE_MAPS_API_KEY", max_length=255, required=False)
+    google_maps_api_key = forms.CharField(
+        label="GOOGLE_MAPS_API_KEY", max_length=255, required=False
+    )
     allowed_hosts = forms.CharField(
         label="ALLOWED_HOSTS",
         max_length=255,
@@ -199,10 +196,7 @@ class EnvConfigForm(forms.Form):
             "focus:border-blue-500 focus:outline-none focus:ring "
             "focus:ring-blue-500/20 w-full"
         )
-        checkbox_class = (
-            "h-4 w-4 text-blue-600 rounded border-gray-300 "
-            "focus:ring-blue-500"
-        )
+        checkbox_class = "h-4 w-4 text-blue-600 rounded border-gray-300 " "focus:ring-blue-500"
         for field in self.fields.values():
             if isinstance(field.widget, forms.CheckboxInput):
                 field.widget.attrs.setdefault("class", checkbox_class)

@@ -15,8 +15,8 @@ Todas as referências no projeto foram atualizadas para apontar para este guia u
 
 ## 🎯 Objetivo
 Fornecer um caminho rápido e confiável para colocar o MapsProveFiber em funcionamento em:
-- Ambiente local (Python + SQLite)
-- Ambiente containerizado (Docker Compose: web, celery, beat, redis, db)
+- Ambiente local (Python + PostgreSQL/PostGIS; GDAL/GEOS obrigatórios)
+- Ambiente containerizado (Docker Compose: web, celery, beat, redis, postgres)
 
 ---
 
@@ -24,25 +24,25 @@ Fornecer um caminho rápido e confiável para colocar o MapsProveFiber em funcio
 
 | Serviço | Função |
 |---------|--------|
-| web | Django + Gunicorn/Uvicorn (porta 8000) |
+| web | Django + Gunicorn/Uvicorn (porta 8100 no host, 8000 no container) |
 | celery | Worker para tarefas assíncronas |
 | beat | Agendador de tarefas periódicas |
 | redis | Cache e broker Celery |
-| db | MariaDB (dados persistentes) |
+| postgres | PostgreSQL 16 + PostGIS (dados persistentes; porta 5433 no host) |
 
-Script `docker-entrypoint.sh` automatiza: espera de saúde, migrações, collectstatic, start do servidor.
+O compose de desenvolvimento é `docker/docker-compose.yml` (atalhos: `make up`, `make down`, `make logs`). Script `docker-entrypoint.sh` automatiza: espera de saúde, migrações, collectstatic, start do servidor.
 
 ---
 
 ## ✅ Credenciais Padrão
 | Item | Valor |
 |------|-------|
-| App | http://localhost:8000 |
-| Admin | http://localhost:8000/admin/ |
+| App | http://localhost:8100 (Docker) · http://localhost:8000 (local, `make run`) |
+| Admin | http://localhost:8100/admin/ (Docker) |
 | Usuário | `admin` |
 | Senha | `admin123` |
 
-No Docker o superusuário é criado automaticamente (variáveis `INIT_ENSURE_SUPERUSER=true`). Localmente rode: `python manage.py ensure_superuser`.
+No Docker o superusuário é criado automaticamente (variáveis `INIT_ENSURE_SUPERUSER=true`). Localmente rode: `python backend/manage.py ensure_superuser` (ou `make superuser`).
 
 ---
 
@@ -50,52 +50,64 @@ No Docker o superusuário é criado automaticamente (variáveis `INIT_ENSURE_SUP
 
 | Objetivo | Ambiente Local | Docker Compose |
 |----------|----------------|----------------|
-| Iniciar aplicação | `python manage.py runserver` | `docker compose up -d --build` |
-| Rodar testes | `pytest -q` | `docker compose exec web pytest -q` |
-| Criar superuser | `python manage.py createsuperuser` | `docker compose exec web python manage.py createsuperuser` |
-| Migrações | `python manage.py migrate` | `docker compose exec web python manage.py migrate` |
-| Shell Django | `python manage.py shell` | `docker compose exec web python manage.py shell` |
-| Coletar estáticos | `python manage.py collectstatic --noinput` | (automático) |
+| Iniciar aplicação | `make run` | `make up` (ou `docker compose -f docker/docker-compose.yml up -d --build`) |
+| Rodar testes | `pytest -q` (da raiz do repo) | `docker compose -f docker/docker-compose.yml exec web pytest -q` |
+| Criar superuser | `make superuser` | `docker compose -f docker/docker-compose.yml exec web python manage.py createsuperuser` |
+| Migrações | `make migrate` | `docker compose -f docker/docker-compose.yml exec web python manage.py migrate` |
+| Shell Django | `make shell` | `docker compose -f docker/docker-compose.yml exec web python manage.py shell` |
+| Coletar estáticos | `make collectstatic` | (automático) |
 
 ---
 
-## 🛠️ Setup Local (Python + SQLite)
+## 🛠️ Setup Local (Python + PostgreSQL/PostGIS)
 
-1. Criar ambiente virtual:
-```powershell
+Requer GDAL/GEOS no sistema (veja [`doc/developer/gis-setup.md`](../developer/gis-setup.md)) e um PostgreSQL com PostGIS. O mais simples é subir só o banco e o Redis pelo Compose:
+```bash
+docker compose -f docker/docker-compose.yml up -d postgres redis   # postgres em localhost:5433, redis em localhost:6380
+```
+
+1. Criar ambiente virtual e instalar dependências (runtime + testes/lint):
+```bash
 python -m venv venv
-venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+source venv/bin/activate
+make requirements-dev
 ```
-2. Migrar banco:
-```powershell
-python manage.py migrate
-python manage.py ensure_superuser
+2. Apontar o Django para o PostGIS (`.env` ou variáveis de ambiente):
+```bash
+export DB_ENGINE=postgis DB_HOST=127.0.0.1 DB_PORT=5433 DB_NAME=app DB_USER=app DB_PASSWORD=app
+export REDIS_URL=redis://127.0.0.1:6380/0
 ```
-3. Rodar servidor:
-```powershell
-python manage.py runserver
+3. Migrar banco:
+```bash
+make migrate
+make superuser          # ou: python backend/manage.py ensure_superuser
 ```
-4. Acessar: http://localhost:8000
+4. Rodar servidor:
+```bash
+make run                # 0.0.0.0:8000, settings.dev
+```
+5. Acessar: http://localhost:8000
 
 ### Comandos úteis
-```powershell
-python manage.py makemigrations
-python manage.py collectstatic --noinput
-python manage.py shell
+```bash
+make makemigrations
+make collectstatic
+make shell
 ```
 
 ### Testes
-```powershell
-pytest -q
-pytest tests/test_smoke.py -v
-pytest --cov --cov-report=html
+```bash
+pytest -q                                   # da raiz do repo; settings.test usa SQLite por omissão,
+                                            # TEST_DB_ENGINE=postgis (+ DB_*) liga ao PostGIS, como no CI
+pytest -q backend/tests/test_smoke.py
+make test-coverage                          # pytest --cov --cov-report=html
+cd frontend && npm ci && npm run test:unit  # Vitest
 ```
 
 ### Health & Metrics
-```powershell
-Invoke-WebRequest http://localhost:8000/healthz
-Invoke-WebRequest http://localhost:8000/metrics/metrics
+```bash
+make health                                 # curl /healthz
+curl http://localhost:8000/metrics/metrics
 ```
 
 ---
@@ -118,9 +130,7 @@ cp .env.example .env
 ```
 Exemplo mínimo:
 ```env
-DB_HOST=db
-DB_USER=app
-DB_PASSWORD=app
+# O compose já define DB_ENGINE=postgis, DB_HOST=postgres e DB_NAME/DB_USER/DB_PASSWORD=app
 REDIS_URL=redis://redis:6379/1
 DJANGO_SETTINGS_MODULE=settings.dev
 SERVICE_ACCOUNT_ROTATION_INTERVAL_SECONDS=3600
@@ -129,46 +139,41 @@ SERVICE_ACCOUNT_WEBHOOK_READ_TIMEOUT=5
 ```
 4. Subir stack:
 ```bash
-docker compose up -d --build
+make up                 # ou: docker compose -f docker/docker-compose.yml up -d --build
 ```
 5. Verificar:
 ```bash
-docker compose ps
-docker compose logs -f web
+docker compose -f docker/docker-compose.yml ps
+make logs
 ```
-6. Acessar: http://localhost:8000
+6. Acessar: http://localhost:8100
 
 ### Comandos frequentes
 ```bash
-docker compose logs -f web
-docker compose restart web
-docker compose down
-docker compose down -v  # remove volumes
+docker compose -f docker/docker-compose.yml logs -f web
+docker compose -f docker/docker-compose.yml restart web
+make down
+docker compose -f docker/docker-compose.yml down -v  # remove volumes
 ```
 
 ### Hot Reload (Desenvolvimento)
-No `docker-compose.yml` garantir volume montado:
-```yaml
-volumes:
-  - .:/app
-  - ./logs:/app/logs
-```
-Start:
+O `docker/docker-compose.yml` já monta `../backend` e `../frontend` no container (volumes `../backend:/app/backend`, `../frontend:/app/frontend`, `../logs:/app/backend/logs`). Start:
 ```bash
-docker compose up -d web
+docker compose -f docker/docker-compose.yml up -d web
 ```
 
 ### Bootstrap manual (se necessário)
 ```bash
-docker compose exec web python manage.py migrate
-docker compose exec web python manage.py createsuperuser
-docker compose exec web python manage.py collectstatic --noinput
+docker compose -f docker/docker-compose.yml exec web python manage.py migrate
+docker compose -f docker/docker-compose.yml exec web python manage.py createsuperuser
+docker compose -f docker/docker-compose.yml exec web python manage.py collectstatic --noinput
 ```
 
 ### Script de Deploy
+Produção usa `docker/docker-compose.prod.yml` (padrão do script). Passo a passo e variáveis em [`DEPLOY.md`](../../DEPLOY.md):
 ```bash
 chmod +x scripts/deploy.sh
-./scripts/deploy.sh --compose docker-compose.yml --settings settings.prod --health http://localhost:8000/healthz
+./scripts/deploy.sh --help
 ```
 
 ---
@@ -188,14 +193,12 @@ chmod +x scripts/deploy.sh
 ---
 
 ## 🩺 Verificações Rápidas
-```powershell
-Invoke-WebRequest http://localhost:8000/ready | Select-Object StatusCode
-Invoke-WebRequest http://localhost:8000/metrics/metrics
-```
-
+(Docker: porta 8100; local com `make run`: porta 8000.)
 ```bash
-curl -I http://localhost:8000/healthz
-curl http://localhost:8000/api/v1/inventory/sites/
+curl -I http://localhost:8100/ready
+curl http://localhost:8100/metrics/metrics
+curl -I http://localhost:8100/healthz
+curl http://localhost:8100/api/v1/inventory/sites/   # requer sessão autenticada
 ```
 
 ---
@@ -208,20 +211,20 @@ Sem Redis:
 
 Para subir Redis isolado:
 ```bash
-docker compose up -d redis
+docker compose -f docker/docker-compose.yml up -d redis
 ```
 
 ---
 
 ## 🧪 Testes em Docker
 ```bash
-docker compose exec web pytest -q
-docker compose exec web pytest tests/test_smoke.py -v
+docker compose -f docker/docker-compose.yml exec web pytest -q
+docker compose -f docker/docker-compose.yml exec web pytest tests/test_smoke.py -v
 ```
 
 Cobertura:
 ```bash
-docker compose exec web pytest --cov --cov-report=term-missing
+docker compose -f docker/docker-compose.yml exec web pytest --cov --cov-report=term-missing
 ```
 
 ---
@@ -229,18 +232,17 @@ docker compose exec web pytest --cov --cov-report=term-missing
 ## 🧰 Troubleshooting
 | Sintoma | Ação |
 |---------|------|
-| Porta ocupada (local) | `python manage.py runserver 8080` |
-| Web não sobe (Docker) | `docker compose logs -f web` |
-| DB erros | `docker compose exec web python manage.py migrate` |
+| Porta ocupada (local) | `python backend/manage.py runserver 8080` |
+| Web não sobe (Docker) | `docker compose -f docker/docker-compose.yml logs -f web` |
+| DB erros | `docker compose -f docker/docker-compose.yml exec web python manage.py migrate` |
 | Health falha | Revisar `.env` e variáveis obrigatórias |
-| Redis indisponível | `docker compose restart redis` |
+| Redis indisponível | `docker compose -f docker/docker-compose.yml restart redis` |
 | Superuser ausente | Verificar `INIT_ENSURE_SUPERUSER=true` ou rodar manual |
 
-Resetar banco local:
-```powershell
-Remove-Item db.sqlite3
-python manage.py migrate
-python manage.py ensure_superuser
+Resetar banco local (apaga dados!):
+```bash
+make resetdb            # reset_db (django-extensions) + migrate + superuser admin
+# ou, no Docker: docker compose -f docker/docker-compose.yml down -v && make up
 ```
 
 ---
@@ -249,14 +251,14 @@ python manage.py ensure_superuser
 Atualizar:
 ```bash
 git pull
-docker compose build
-docker compose up -d
+docker compose -f docker/docker-compose.yml build
+docker compose -f docker/docker-compose.yml up -d
 ```
 Rollback rápido (último build saudável):
 ```bash
-docker compose down
+docker compose -f docker/docker-compose.yml down
 git checkout <commit-estável>
-docker compose up -d --build
+docker compose -f docker/docker-compose.yml up -d --build
 ```
 
 ---
@@ -280,10 +282,10 @@ Os arquivos antigos serão marcados como DEPRECATED e removidos futuramente.
 ---
 
 ## 🏁 Notas Finais
-- Produção: usar MariaDB gerenciado e Redis HA
+- Produção: usar PostgreSQL 16 + PostGIS (o único banco suportado) e Redis HA; ver [`DEPLOY.md`](../../DEPLOY.md)
 - Ajustar intervalos de rotação de service accounts conforme política interna
-- Para builds repetíveis: `docker compose build --pull --no-cache`
+- Para builds repetíveis: `docker compose -f docker/docker-compose.yml build --pull --no-cache`
 
 ---
 
-**Última atualização:** 2025-11-07
+**Última atualização:** 2026-10-04

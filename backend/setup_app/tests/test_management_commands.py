@@ -2,23 +2,24 @@
 Unit tests for setup_app management commands.
 Covers: make_backup, restore_db, sync_env_from_setup
 """
+
 from __future__ import annotations
 
 import subprocess
 import tempfile
 from io import StringIO
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _runtime_config(**kwargs):
     cfg = MagicMock()
@@ -70,14 +71,13 @@ def _env_manager_mock(password="strongpass123"):
 # make_backup
 # ---------------------------------------------------------------------------
 
+
 class MakeBackupCommandTests(TestCase):
     """Tests for the make_backup management command."""
 
     @patch(_PATCH_RUNTIME)
     def test_incomplete_db_config_raises(self, mock_runtime):
-        mock_runtime.get_runtime_config.return_value = _runtime_config(
-            db_host=""
-        )
+        mock_runtime.get_runtime_config.return_value = _runtime_config(db_host="")
         with tempfile.TemporaryDirectory() as base:
             with override_settings(BASE_DIR=base):
                 with pytest.raises(RuntimeError, match="incomplete"):
@@ -101,9 +101,7 @@ class MakeBackupCommandTests(TestCase):
     @patch(_PATCH_ENV)
     @patch(_PATCH_RUNTIME)
     @patch(_PATCH_RUN)
-    def test_pg_dump_subprocess_error_raises(
-        self, mock_run, mock_runtime, mock_env
-    ):
+    def test_pg_dump_subprocess_error_raises(self, mock_run, mock_runtime, mock_env):
         mock_runtime.get_runtime_config.return_value = _runtime_config()
         mock_env.read_values.return_value = _env_manager_mock().read_values()
         mock_env.ENV_PATH = MagicMock()
@@ -138,9 +136,7 @@ class MakeBackupCommandTests(TestCase):
     @patch(_PATCH_ENV)
     @patch(_PATCH_RUNTIME)
     @patch(_PATCH_RUN)
-    def test_pg_dump_called_with_correct_args(
-        self, mock_run, mock_runtime, mock_env
-    ):
+    def test_pg_dump_called_with_correct_args(self, mock_run, mock_runtime, mock_env):
         mock_runtime.get_runtime_config.return_value = _runtime_config(
             db_host="db.local",
             db_port="5433",
@@ -172,9 +168,7 @@ class MakeBackupCommandTests(TestCase):
 # restore_db
 # ---------------------------------------------------------------------------
 
-_PATCH_RESTORE_RUN = (
-    "setup_app.management.commands.restore_db.subprocess.run"
-)
+_PATCH_RESTORE_RUN = "setup_app.management.commands.restore_db.subprocess.run"
 
 
 class RestoreDbCommandTests(TestCase):
@@ -259,13 +253,11 @@ class RestoreDbCommandTests(TestCase):
             backup_dir.mkdir(parents=True)
             (backup_dir / "backup.dump").touch()
 
+            # O comando corre o pg_restore com check=False e lê o returncode/stderr
+            # (main, v1.4.x): só linhas "ERROR:" reais levantam; "does not exist" é aviso.
+            failed = Mock(returncode=1, stdout="", stderr="pg_restore: ERROR: relation x is broken")
             with override_settings(BASE_DIR=base):
-                with patch(
-                    _PATCH_RESTORE_RUN,
-                    side_effect=subprocess.CalledProcessError(
-                        1, "pg_restore"
-                    ),
-                ):
+                with patch(_PATCH_RESTORE_RUN, return_value=failed):
                     with pytest.raises(RuntimeError, match="restore"):
                         call_command("restore_db", "backup.dump")
 
@@ -289,15 +281,9 @@ class RestoreDbCommandTests(TestCase):
 # sync_env_from_setup
 # ---------------------------------------------------------------------------
 
-_PATCH_FTS = (
-    "setup_app.management.commands.sync_env_from_setup.FirstTimeSetup"
-)
-_PATCH_SYNC_ENV = (
-    "setup_app.management.commands.sync_env_from_setup.env_manager"
-)
-_PATCH_RESTART = (
-    "setup_app.management.commands.sync_env_from_setup.trigger_restart"
-)
+_PATCH_FTS = "setup_app.management.commands.sync_env_from_setup.FirstTimeSetup"
+_PATCH_SYNC_ENV = "setup_app.management.commands.sync_env_from_setup.env_manager"
+_PATCH_RESTART = "setup_app.management.commands.sync_env_from_setup.trigger_restart"
 
 
 class SyncEnvFromSetupCommandTests(TestCase):
@@ -322,12 +308,7 @@ class SyncEnvFromSetupCommandTests(TestCase):
         return record
 
     def _setup_model(self, mock_model, record):
-        (
-            mock_model.objects
-            .filter.return_value
-            .order_by.return_value
-            .first.return_value
-        ) = record
+        (mock_model.objects.filter.return_value.order_by.return_value.first.return_value) = record
 
     @patch(_PATCH_FTS)
     def test_no_record_raises_command_error(self, mock_model):
@@ -338,9 +319,7 @@ class SyncEnvFromSetupCommandTests(TestCase):
     @patch(_PATCH_RESTART, return_value=False)
     @patch(_PATCH_SYNC_ENV)
     @patch(_PATCH_FTS)
-    def test_login_auth_writes_user_and_password(
-        self, mock_model, mock_env, mock_restart
-    ):
+    def test_login_auth_writes_user_and_password(self, mock_model, mock_env, mock_restart):
         self._setup_model(mock_model, self._make_record(auth_type="login"))
 
         call_command("sync_env_from_setup", stdout=StringIO())
@@ -353,9 +332,7 @@ class SyncEnvFromSetupCommandTests(TestCase):
     @patch(_PATCH_RESTART, return_value=False)
     @patch(_PATCH_SYNC_ENV)
     @patch(_PATCH_FTS)
-    def test_token_auth_writes_api_key(
-        self, mock_model, mock_env, mock_restart
-    ):
+    def test_token_auth_writes_api_key(self, mock_model, mock_env, mock_restart):
         self._setup_model(mock_model, self._make_record(auth_type="token"))
 
         call_command("sync_env_from_setup", stdout=StringIO())
@@ -369,9 +346,7 @@ class SyncEnvFromSetupCommandTests(TestCase):
     @patch(_PATCH_SYNC_ENV)
     @patch(_PATCH_FTS)
     def test_db_fields_in_payload(self, mock_model, mock_env, mock_restart):
-        record = self._make_record(
-            db_name="mydb", db_host="db.local", db_port="5433"
-        )
+        record = self._make_record(db_name="mydb", db_host="db.local", db_port="5433")
         self._setup_model(mock_model, record)
 
         call_command("sync_env_from_setup", stdout=StringIO())
@@ -384,9 +359,7 @@ class SyncEnvFromSetupCommandTests(TestCase):
     @patch(_PATCH_RESTART, return_value=True)
     @patch(_PATCH_SYNC_ENV)
     @patch(_PATCH_FTS)
-    def test_restart_triggered_prints_success(
-        self, mock_model, mock_env, mock_restart
-    ):
+    def test_restart_triggered_prints_success(self, mock_model, mock_env, mock_restart):
         self._setup_model(mock_model, self._make_record())
 
         out = StringIO()
@@ -399,9 +372,7 @@ class SyncEnvFromSetupCommandTests(TestCase):
     @patch(_PATCH_RESTART, return_value=False)
     @patch(_PATCH_SYNC_ENV)
     @patch(_PATCH_FTS)
-    def test_no_restart_prints_skipped(
-        self, mock_model, mock_env, mock_restart
-    ):
+    def test_no_restart_prints_skipped(self, mock_model, mock_env, mock_restart):
         self._setup_model(mock_model, self._make_record())
 
         out = StringIO()
@@ -413,9 +384,7 @@ class SyncEnvFromSetupCommandTests(TestCase):
     @patch(_PATCH_RESTART, return_value=False)
     @patch(_PATCH_SYNC_ENV)
     @patch(_PATCH_FTS)
-    def test_env_path_in_success_output(
-        self, mock_model, mock_env, mock_restart
-    ):
+    def test_env_path_in_success_output(self, mock_model, mock_env, mock_restart):
         self._setup_model(mock_model, self._make_record())
         mock_env.ENV_PATH = "/app/.env"
 

@@ -1,6 +1,9 @@
 <template>
   <div class="map-wrapper">
-    <!-- Signal Tooltip (hover) - Positioned overlay -->
+    <!-- O mapa em si: criado pelo provider configurado (providers/maps) -->
+    <div ref="mapContainer" class="map-canvas"></div>
+
+    <!-- Signal Tooltip (hover) — segue o rato (clientX/clientY) -->
     <div
       v-if="signalTooltipVisible && signalTooltipPixelPosition"
       class="signal-tooltip-overlay"
@@ -39,227 +42,151 @@
         </div>
       </div>
     </div>
-    
-    <GoogleMap
-      v-if="apiKey"
-      ref="mapRef"
-      :api-key="apiKey"
-      :center="center"
-      :zoom="zoom"
-      @idle="onIdle"
-      style="width:100%;height:100vh"
+
+    <!-- Janela do segmento / cabo selecionado -->
+    <MapPopup
+      v-if="map && selectedSegment && infoWindowPosition"
+      :map="map"
+      :position="infoWindowPosition"
     >
-      <!-- Polylines desenhadas via Google Maps API nativa em drawNativePolylines() -->
-      
-      <Marker
-        v-for="marker in deviceMarkers"
-        :key="marker.id"
-        :options="{
-          position: marker.position,
-          title: marker.title || marker.siteName,
-          label: marker.label,
-          clickable: true
-        }"
-        @click="() => handleSiteMarkerClick(marker)"
-      />
-      
-      <!-- InfoWindow for selected segment/fiber cable -->
-      <InfoWindow
-        v-if="selectedSegment"
-        :options="{ 
-          position: infoWindowPosition,
-          pixelOffset: { width: 0, height: -10 }
-        }"
-        @closeclick="closeInfoWindow"
-      >
-        <div class="fiber-info-window">
-          <div class="info-window-header">
-            <h4>{{ selectedSegment.properties?.name || `Cabo #${selectedSegment.id}` }}</h4>
-            <button @click="closeInfoWindow" class="close-button" aria-label="Fechar">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+      <div class="fiber-info-window">
+        <div class="info-window-header">
+          <h4>{{ selectedSegment.properties?.name || `Cabo #${selectedSegment.id}` }}</h4>
+          <button @click="closeInfoWindow" class="close-button" aria-label="Fechar">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div v-if="fiberInfoLoading" class="loading-spinner">
+          Carregando detalhes...
+        </div>
+
+        <div v-else-if="fiberInfoData?.error" class="error-message">
+          Erro ao carregar detalhes
+        </div>
+
+        <div v-else-if="fiberInfoData?.cable" class="cable-details">
+          <div class="info-row">
+            <span class="info-label">Status:</span>
+            <span class="info-value" :class="`status-${getSegmentStatus(selectedSegment)}`">
+              {{ getSegmentStatusLabel(selectedSegment) }}
+            </span>
+          </div>
+
+          <div class="info-row" v-if="fiberInfoData.cable.length_km">
+            <span class="info-label">Comprimento:</span>
+            <span class="info-value">{{ fiberInfoData.cable.length_km }} km</span>
+          </div>
+
+          <div class="port-section">
+            <div class="port-header">📍 Origem</div>
+            <div class="port-info">
+              <div><strong>{{ fiberInfoData.cable.origin?.device || 'N/A' }}</strong></div>
+              <div class="port-name">{{ fiberInfoData.cable.origin?.port || 'N/A' }}</div>
+              <div v-if="fiberInfoData.originPort?.optical" class="optical-levels">
+                <div class="level-row">
+                  <span>RX:</span>
+                  <span :class="getSignalClass(fiberInfoData.originPort.optical.rx_dbm)">
+                    {{ formatOptical(fiberInfoData.originPort.optical.rx_dbm) }}
+                  </span>
+                </div>
+                <div class="level-row">
+                  <span>TX:</span>
+                  <span :class="getSignalClass(fiberInfoData.originPort.optical.tx_dbm)">
+                    {{ formatOptical(fiberInfoData.originPort.optical.tx_dbm) }}
+                  </span>
+                </div>
+              </div>
+              <div v-else class="no-data">Sem dados de sinal</div>
+            </div>
+          </div>
+
+          <div class="port-section">
+            <div class="port-header">🎯 Destino</div>
+            <div class="port-info">
+              <div><strong>{{ fiberInfoData.cable.destination?.device || 'N/A' }}</strong></div>
+              <div class="port-name">{{ fiberInfoData.cable.destination?.port || 'N/A' }}</div>
+              <div v-if="fiberInfoData.destPort?.optical" class="optical-levels">
+                <div class="level-row">
+                  <span>RX:</span>
+                  <span :class="getSignalClass(fiberInfoData.destPort.optical.rx_dbm)">
+                    {{ formatOptical(fiberInfoData.destPort.optical.rx_dbm) }}
+                  </span>
+                </div>
+                <div class="level-row">
+                  <span>TX:</span>
+                  <span :class="getSignalClass(fiberInfoData.destPort.optical.tx_dbm)">
+                    {{ formatOptical(fiberInfoData.destPort.optical.tx_dbm) }}
+                  </span>
+                </div>
+              </div>
+              <div v-else class="no-data">Sem dados de sinal</div>
+            </div>
+          </div>
+
+          <div class="action-buttons">
+            <button
+              v-if="fiberInfoData.originPort?.optical"
+              @click="showPortChart(fiberInfoData.cable.origin.port_id, 'origin')"
+              class="chart-button"
+            >
+              📊 Gráfico Origem
+            </button>
+            <button
+              v-if="fiberInfoData.destPort?.optical"
+              @click="showPortChart(fiberInfoData.cable.destination.port_id, 'destination')"
+              class="chart-button"
+            >
+              📊 Gráfico Destino
             </button>
           </div>
-          
-          <!-- Loading state -->
-          <div v-if="fiberInfoLoading" class="loading-spinner">
-            Carregando detalhes...
-          </div>
-          
-          <!-- Error state -->
-          <div v-else-if="fiberInfoData?.error" class="error-message">
-            Erro ao carregar detalhes
-          </div>
-          
-          <!-- Cable details -->
-          <div v-else-if="fiberInfoData?.cable" class="cable-details">
-            <!-- Status -->
-            <div class="info-row">
-              <span class="info-label">Status:</span>
-              <span class="info-value" :class="`status-${getSegmentStatus(selectedSegment)}`">
-                {{ getSegmentStatusLabel(selectedSegment) }}
-              </span>
-            </div>
-            
-            <!-- Length -->
-            <div class="info-row" v-if="fiberInfoData.cable.length_km">
-              <span class="info-label">Comprimento:</span>
-              <span class="info-value">{{ fiberInfoData.cable.length_km }} km</span>
-            </div>
-            
-            <!-- Origin -->
-            <div class="port-section">
-              <div class="port-header">📍 Origem</div>
-              <div class="port-info">
-                <div><strong>{{ fiberInfoData.cable.origin?.device || 'N/A' }}</strong></div>
-                <div class="port-name">{{ fiberInfoData.cable.origin?.port || 'N/A' }}</div>
-                <div v-if="fiberInfoData.originPort?.optical" class="optical-levels">
-                  <div class="level-row">
-                    <span>RX:</span>
-                    <span :class="getSignalClass(fiberInfoData.originPort.optical.rx_dbm)">
-                      {{ formatOptical(fiberInfoData.originPort.optical.rx_dbm) }}
-                    </span>
-                  </div>
-                  <div class="level-row">
-                    <span>TX:</span>
-                    <span :class="getSignalClass(fiberInfoData.originPort.optical.tx_dbm)">
-                      {{ formatOptical(fiberInfoData.originPort.optical.tx_dbm) }}
-                    </span>
-                  </div>
-                </div>
-                <div v-else class="no-data">Sem dados de sinal</div>
-              </div>
-            </div>
-            
-            <!-- Destination -->
-            <div class="port-section">
-              <div class="port-header">🎯 Destino</div>
-              <div class="port-info">
-                <div><strong>{{ fiberInfoData.cable.destination?.device || 'N/A' }}</strong></div>
-                <div class="port-name">{{ fiberInfoData.cable.destination?.port || 'N/A' }}</div>
-                <div v-if="fiberInfoData.destPort?.optical" class="optical-levels">
-                  <div class="level-row">
-                    <span>RX:</span>
-                    <span :class="getSignalClass(fiberInfoData.destPort.optical.rx_dbm)">
-                      {{ formatOptical(fiberInfoData.destPort.optical.rx_dbm) }}
-                    </span>
-                  </div>
-                  <div class="level-row">
-                    <span>TX:</span>
-                    <span :class="getSignalClass(fiberInfoData.destPort.optical.tx_dbm)">
-                      {{ formatOptical(fiberInfoData.destPort.optical.tx_dbm) }}
-                    </span>
-                  </div>
-                </div>
-                <div v-else class="no-data">Sem dados de sinal</div>
-              </div>
-            </div>
-            
-            <!-- Action buttons -->
-            <div class="action-buttons">
-              <button 
-                v-if="fiberInfoData.originPort?.optical"
-                @click="showPortChart(fiberInfoData.cable.origin.port_id, 'origin')"
-                class="chart-button"
-              >
-                📊 Gráfico Origem
-              </button>
-              <button 
-                v-if="fiberInfoData.destPort?.optical"
-                @click="showPortChart(fiberInfoData.cable.destination.port_id, 'destination')"
-                class="chart-button"
-              >
-                📊 Gráfico Destino
-              </button>
-            </div>
-          </div>
-          
-          <!-- Fallback for non-fiber segments -->
-          <div v-else class="simple-info">
-            <div class="info-row">
-              <span class="info-label">Status:</span>
-              <span class="info-value" :class="`status-${getSegmentStatus(selectedSegment)}`">
-                {{ getSegmentStatusLabel(selectedSegment) }}
-              </span>
-            </div>
-            <div class="info-row" v-if="selectedSegment.properties?.length">
-              <span class="info-label">Comprimento:</span>
-              <span class="info-value">{{ selectedSegment.properties.length }} km</span>
-            </div>
-          </div>
         </div>
-      </InfoWindow>
-      
-      <!-- Signal Tooltip (hover) - Positioned overlay -->
-      <div
-        v-if="signalTooltipVisible && signalTooltipPixelPosition"
-        class="signal-tooltip-overlay"
-        :style="{
-          left: signalTooltipPixelPosition.x + 'px',
-          top: signalTooltipPixelPosition.y + 'px'
-        }"
-      >
-        <div class="signal-tooltip">
-          <div v-if="signalTooltipData?.loading" class="tooltip-loading">
-            Carregando...
+
+        <div v-else class="simple-info">
+          <div class="info-row">
+            <span class="info-label">Status:</span>
+            <span class="info-value" :class="`status-${getSegmentStatus(selectedSegment)}`">
+              {{ getSegmentStatusLabel(selectedSegment) }}
+            </span>
           </div>
-          <div v-else-if="signalTooltipData?.error" class="tooltip-error">
-            Sem dados
-          </div>
-          <div v-else-if="signalTooltipData" class="tooltip-content">
-            <div class="tooltip-header">{{ signalTooltipData.name }}</div>
-            <div class="signal-row">
-              <span class="signal-label">📍 Origem:</span>
-              <span :class="getSignalClass(signalTooltipData.origin.rx)">
-                RX: {{ formatOptical(signalTooltipData.origin.rx) }}
-              </span>
-              <span :class="getSignalClass(signalTooltipData.origin.tx)">
-                TX: {{ formatOptical(signalTooltipData.origin.tx) }}
-              </span>
-            </div>
-            <div class="signal-row">
-              <span class="signal-label">🎯 Destino:</span>
-              <span :class="getSignalClass(signalTooltipData.destination.rx)">
-                RX: {{ formatOptical(signalTooltipData.destination.rx) }}
-              </span>
-              <span :class="getSignalClass(signalTooltipData.destination.tx)">
-                TX: {{ formatOptical(signalTooltipData.destination.tx) }}
-              </span>
-            </div>
+          <div class="info-row" v-if="selectedSegment.properties?.length">
+            <span class="info-label">Comprimento:</span>
+            <span class="info-value">{{ selectedSegment.properties.length }} km</span>
           </div>
         </div>
       </div>
+    </MapPopup>
 
-      <InfoWindow
-        v-if="selectedDevice && deviceInfoWindowPosition"
-        :options="{
-          position: deviceInfoWindowPosition,
-          pixelOffset: { width: 0, height: -10 }
-        }"
-        @closeclick="closeDeviceInfo"
-      >
-        <div v-html="deviceInfoHtml"></div>
-      </InfoWindow>
-    </GoogleMap>
-    <div v-else class="missing-key">Google Maps API key não configurada.</div>
-    
+    <!-- Janela do dispositivo -->
+    <MapPopup
+      v-if="map && selectedDevice && deviceInfoWindowPosition"
+      :map="map"
+      :position="deviceInfoWindowPosition"
+    >
+      <div v-html="deviceInfoHtml"></div>
+    </MapPopup>
+
+    <div v-if="mapLoadError" class="missing-key">{{ mapLoadError }}</div>
+
     <!-- Map Controls -->
-    <MapControls 
-      v-if="apiKey" 
+    <MapControls
+      v-if="map"
       @fit-bounds="fitBounds"
       @toggle-legend="toggleLegend"
     />
-    
-    <!-- Radius Search Tool (Phase 7) -->
+
+    <!-- Radius Search Tool (Phase 7) — ainda desenha com google.maps diretamente,
+         por isso só aparece com o provider Google (dívida registada em EV-0012) -->
     <RadiusSearchTool
-      v-if="apiKey && enableRadiusSearch"
-      :map-ref="mapRef"
+      v-if="radiusSearchAvailable"
+      :map-ref="nativeMapRef"
       :initial-radius="10"
       @search-completed="handleRadiusSearchResults"
       @search-error="handleRadiusSearchError"
     />
-    
+
     <!-- Status Legend -->
     <div v-if="showLegend" class="map-legend" :class="{ 'legend-collapsed': legendCollapsed }" :style="{ left: legendLeftPosition }">
       <div class="legend-header">
@@ -280,22 +207,30 @@
         </div>
       </div>
     </div>
-    
+
     <div class="status" v-if="loading">Carregando segmentos...</div>
     <div class="error" v-if="error">Erro: {{ error }}</div>
-    <div class="error" v-if="mapLoadError">{{ mapLoadError }}</div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, onErrorCaptured } from 'vue';
-import { GoogleMap, InfoWindow, Marker } from 'vue3-google-map';
+/**
+ * MapView — mapa principal (rota /map e Dashboard).
+ *
+ * EV-0012b: deixou o `vue3-google-map` e passou a criar o mapa pela
+ * `MapProviderFactory` (google | mapbox | osm, conforme a configuração).
+ * Polylines, marcadores e janelas usam só a interface `IMap`; nada aqui
+ * conhece `google.maps`.
+ */
+import { ref, shallowRef, computed, onMounted, onBeforeUnmount, watch, onErrorCaptured } from 'vue';
+import { storeToRefs } from 'pinia';
 import { useMapStore } from '@/stores/map';
 import { useInventoryStore } from '@/stores/inventory';
-import { storeToRefs } from 'pinia';
 import { colorForStatus, SEGMENT_STATUS_COLORS } from '@/constants/segmentStatusColors';
 import { debounce } from '@/utils/debounce';
+import { createMap, getMapConfig } from '@/providers/maps/MapProviderFactory.js';
 import MapControls from '@/components/Map/MapControls.vue';
+import MapPopup from '@/components/Map/MapPopup.vue';
 import RadiusSearchTool from '@/components/Map/RadiusSearchTool.vue';
 
 const props = defineProps({
@@ -317,23 +252,23 @@ const props = defineProps({
   }
 });
 
+const DEFAULT_CENTER = { lat: -15.7801, lng: -47.9292 }; // Brasília
+const DEFAULT_ZOOM = 12;
+const POLYLINE_STYLE = { strokeWeight: 3, strokeOpacity: 0.8 };
+const MARKER_ICON_SIZE = 24;
+
 const mapStore = useMapStore();
 const inventoryStore = useInventoryStore();
 const { focusedItem } = storeToRefs(mapStore);
 const { sites } = storeToRefs(inventoryStore);
 
-const runtimeKey = typeof document !== 'undefined'
-  ? document.querySelector('meta[name="google-maps-api-key"]')?.getAttribute('content')
-  : '';
-
-const apiKey = runtimeKey || import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-const center = ref({ lat: -15.7801, lng: -47.9292 }); // Brasília
-const zoom = ref(12);
-const mapRef = ref(null);
+const mapContainer = ref(null);
+const map = shallowRef(null); // IMap (providers/maps)
+const providerName = ref('');
+const mapLoadError = ref(null);
 
 const loading = computed(() => mapStore.loading);
 const error = computed(() => mapStore.error);
-const mapLoadError = ref(null);
 const segmentList = computed(() => Array.from(mapStore.segments.values()));
 
 const fiberSegments = ref([]);
@@ -350,13 +285,11 @@ const deviceInfoLoading = ref(false);
 const deviceInfoError = ref(null);
 
 // Fiber cable info state
-const selectedFiberCable = ref(null);
 const fiberInfoLoading = ref(false);
 const fiberInfoData = ref(null);
 
 // Signal tooltip state (hover)
 const signalTooltipVisible = ref(false);
-const signalTooltipPosition = ref(null);
 const signalTooltipPixelPosition = ref(null);
 const signalTooltipData = ref(null);
 
@@ -366,11 +299,22 @@ const infoWindowPosition = ref(null);
 const showLegend = ref(true);
 const legendCollapsed = ref(false);
 
+// Objetos desenhados no mapa (IPolyline / IMarker), fora da reatividade
+let drawnPolylines = [];
+let drawnMarkers = [];
+let initialFitDone = false;
+
+// RadiusSearchTool continua a falar google.maps diretamente (EV-0012 «Fica»)
+const radiusSearchAvailable = computed(
+  () => props.enableRadiusSearch && providerName.value === 'google' && Boolean(map.value),
+);
+const nativeMapRef = computed(() => ({ map: map.value?.getNativeMap?.() || null }));
+
 // Legend position based on sidebar state
 const legendLeftPosition = computed(() => {
   // Menu lateral esquerdo
   const navMenuWidth = props.uiStore?.isNavMenuOpen ? 280 : 60;
-  
+
   // Se sidebar (Status dos Hosts) está à esquerda
   if (props.sidebarPosition === 'left') {
     if (props.sidebarCollapsed) {
@@ -378,7 +322,7 @@ const legendLeftPosition = computed(() => {
     }
     return `${navMenuWidth + 370}px`; // nav + 350px sidebar + 20px margin
   }
-  
+
   // Sidebar à direita, legenda só respeita menu esquerdo
   return `${navMenuWidth + 20}px`;
 });
@@ -391,6 +335,40 @@ const legendItems = computed(() => ({
   'Desconhecido': SEGMENT_STATUS_COLORS.unknown,
 }));
 
+// ---------------------------------------------------------------------------
+// Mapa: criação pelo provider configurado e viewport → bbox
+// ---------------------------------------------------------------------------
+
+async function initMap() {
+  if (!mapContainer.value) return;
+  try {
+    const config = await getMapConfig();
+    providerName.value = config.mapProvider || 'google';
+
+    const lat = Number(config.mapDefaultLat);
+    const lng = Number(config.mapDefaultLng);
+    const zoom = Number(config.mapDefaultZoom);
+
+    const created = await createMap(mapContainer.value, {
+      center: Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : DEFAULT_CENTER,
+      zoom: Number.isFinite(zoom) && zoom > 0 ? zoom : DEFAULT_ZOOM,
+      mapTypeId: 'roadmap',
+    });
+
+    created.on('idle', onIdle);
+    map.value = created;
+
+    // O que já chegou das stores antes do mapa existir desenha-se agora
+    drawMarkers();
+    drawPolylines();
+    maybeInitialFit();
+    onIdle();
+  } catch (err) {
+    mapLoadError.value = `Mapa indisponível: ${err?.message || err}`;
+    console.error('[MapView] Failed to create map', err);
+  }
+}
+
 // Debounce & duplicate-bbox suppression
 const DEBOUNCE_MS = 300;
 const lastBoundsStr = ref(null);
@@ -398,47 +376,25 @@ function bboxToString(b) {
   return `${b.lng_min},${b.lat_min},${b.lng_max},${b.lat_max}`;
 }
 
-const debouncedFetch = debounce((bbox) => {
-  mapStore.fetchSegmentsByBbox(bbox);
+const debouncedFetch = debounce(async (bbox) => {
   lastBoundsStr.value = bboxToString(bbox);
-  
-  // Prune segments outside viewport after fetch completes
-  // Small delay to ensure fetch completes first
-  setTimeout(() => mapStore.pruneOutside(bbox), 500);
+  await mapStore.fetchSegmentsByBbox(bbox);
+  // Só depois de a resposta entrar é que faz sentido podar o que saiu do ecrã
+  mapStore.pruneOutside(bbox);
 }, DEBOUNCE_MS);
 
-function resolveMapInstance(eventPayload) {
-  if (eventPayload && typeof eventPayload.getBounds === 'function') {
-    return eventPayload;
-  }
-  if (eventPayload?.map && typeof eventPayload.map.getBounds === 'function') {
-    return eventPayload.map;
-  }
-  if (eventPayload?.target?.$mapObject) {
-    return eventPayload.target.$mapObject;
-  }
-  return mapRef.value?.map || null;
-}
-
-function onIdle(eventPayload) {
-  const map = resolveMapInstance(eventPayload);
-  if (!map) return;
-  const bounds = map.getBounds();
-  if (!bounds) return;
-  const ne = bounds.getNorthEast();
-  const sw = bounds.getSouthWest();
-  const bbox = {
-    lng_min: sw.lng(),
-    lat_min: sw.lat(),
-    lng_max: ne.lng(),
-    lat_max: ne.lat(),
-  };
-  const bboxStr = bboxToString(bbox);
-  if (bboxStr === lastBoundsStr.value) {
+function onIdle() {
+  const bbox = map.value?.getBounds?.();
+  if (!bbox) return;
+  if (bboxToString(bbox) === lastBoundsStr.value) {
     return; // Skip identical viewport
   }
   debouncedFetch(bbox);
 }
+
+// ---------------------------------------------------------------------------
+// Segmentos / cabos
+// ---------------------------------------------------------------------------
 
 function getSegmentColor(feature) {
   const status = feature?.properties?.status || feature?.status || 'unknown';
@@ -461,16 +417,55 @@ function getSegmentStatusLabel(feature) {
   return statusMap[status] || 'Desconhecido';
 }
 
+function featurePath(feature) {
+  const coords = feature?.geometry?.coordinates;
+  if (!Array.isArray(coords)) return [];
+  return coords.map(([lng, lat]) => ({ lat, lng }));
+}
+
+function clearPolylines() {
+  drawnPolylines.forEach((p) => p.remove());
+  drawnPolylines = [];
+}
+
+function drawPolylines() {
+  if (!map.value) return;
+  clearPolylines();
+
+  combinedSegments.value.forEach((feature) => {
+    const path = featurePath(feature);
+    if (!path.length) return;
+
+    const polyline = map.value.createPolyline({
+      path,
+      strokeColor: getSegmentColor(feature),
+      ...POLYLINE_STYLE,
+      clickable: true,
+    });
+
+    polyline.on('click', () => showSegmentInfo(feature));
+    polyline.on('mouseover', (event) => showSignalTooltip(feature, event));
+    polyline.on('mouseout', hideSignalTooltip);
+    polyline.on('mousemove', (event) => {
+      if (signalTooltipVisible.value) {
+        updateTooltipPosition(event);
+      }
+    });
+
+    drawnPolylines.push(polyline);
+  });
+}
+
 function showSegmentInfo(feature) {
   selectedSegment.value = feature;
-  // Calculate center of polyline for InfoWindow position
+  // Centro da polyline para ancorar a janela
   const coords = feature.geometry.coordinates;
   if (coords && coords.length > 0) {
     const midIndex = Math.floor(coords.length / 2);
     const [lng, lat] = coords[midIndex];
     infoWindowPosition.value = { lat, lng };
   }
-  
+
   // Se for um fiber cable (id começa com 'fiber-'), buscar detalhes
   if (feature.id && feature.id.toString().startsWith('fiber-')) {
     const cableId = feature.id.replace('fiber-', '');
@@ -478,55 +473,34 @@ function showSegmentInfo(feature) {
   }
 }
 
+async function fetchCableWithPorts(cableId) {
+  const response = await fetch(`/api/v1/inventory/fibers/${cableId}/`, {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  const cableData = await response.json();
+
+  const fetchPort = (portId) => portId
+    ? fetch(`/api/v1/inventory/ports/${portId}/optical/`, { credentials: 'include' })
+        .then((r) => (r.ok ? r.json() : null))
+    : Promise.resolve(null);
+
+  const [originPort, destPort] = await Promise.all([
+    fetchPort(cableData.origin?.port_id),
+    fetchPort(cableData.destination?.port_id),
+  ]);
+
+  return { cable: cableData, originPort, destPort };
+}
+
 async function loadFiberCableDetails(cableId) {
   fiberInfoLoading.value = true;
   fiberInfoData.value = null;
-  
+
   try {
-    // Buscar detalhes do cabo
-    const response = await fetch(`/api/v1/inventory/fibers/${cableId}/`, {
-      credentials: 'include',
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    
-    const cableData = await response.json();
-    console.log('[loadFiberCableDetails] Cable data:', cableData);
-    
-    // Buscar níveis de sinal das portas
-    const portPromises = [];
-    
-    if (cableData.origin?.port_id) {
-      portPromises.push(
-        fetch(`/api/v1/inventory/ports/${cableData.origin.port_id}/optical/`, {
-          credentials: 'include',
-        }).then(r => r.ok ? r.json() : null)
-      );
-    } else {
-      portPromises.push(Promise.resolve(null));
-    }
-    
-    if (cableData.destination?.port_id) {
-      portPromises.push(
-        fetch(`/api/v1/inventory/ports/${cableData.destination.port_id}/optical/`, {
-          credentials: 'include',
-        }).then(r => r.ok ? r.json() : null)
-      );
-    } else {
-      portPromises.push(Promise.resolve(null));
-    }
-    
-    const [originPortData, destPortData] = await Promise.all(portPromises);
-    
-    fiberInfoData.value = {
-      cable: cableData,
-      originPort: originPortData,
-      destPort: destPortData,
-    };
-    
-    console.log('[loadFiberCableDetails] Complete data:', fiberInfoData.value);
+    fiberInfoData.value = await fetchCableWithPorts(cableId);
   } catch (err) {
     console.error('[loadFiberCableDetails] Error:', err);
     fiberInfoData.value = { error: err.message };
@@ -544,70 +518,28 @@ function closeInfoWindow() {
 
 // Tooltip de sinal (hover)
 async function showSignalTooltip(feature, event) {
-  console.log('[showSignalTooltip] Called with:', feature.id, event);
-  
   // Só mostrar tooltip para fiber cables
   if (!feature.id || !feature.id.toString().startsWith('fiber-')) {
-    console.log('[showSignalTooltip] Not a fiber cable, skipping');
     return;
   }
-  
+
   signalTooltipVisible.value = true;
   updateTooltipPosition(event);
   signalTooltipData.value = { loading: true };
-  
-  console.log('[showSignalTooltip] Tooltip visible:', signalTooltipVisible.value);
-  console.log('[showSignalTooltip] Position:', signalTooltipPixelPosition.value);
-  
+
   const cableId = feature.id.replace('fiber-', '');
-  
+
   try {
-    // Buscar dados do cabo
-    const response = await fetch(`/api/v1/inventory/fibers/${cableId}/`, {
-      credentials: 'include',
-    });
-    
-    if (!response.ok) {
-      signalTooltipData.value = { error: true };
-      return;
-    }
-    
-    const cableData = await response.json();
-    
-    // Buscar níveis de sinal das portas
-    const portPromises = [];
-    
-    if (cableData.origin?.port_id) {
-      portPromises.push(
-        fetch(`/api/v1/inventory/ports/${cableData.origin.port_id}/optical/`, {
-          credentials: 'include',
-        }).then(r => r.ok ? r.json() : null)
-      );
-    } else {
-      portPromises.push(Promise.resolve(null));
-    }
-    
-    if (cableData.destination?.port_id) {
-      portPromises.push(
-        fetch(`/api/v1/inventory/ports/${cableData.destination.port_id}/optical/`, {
-          credentials: 'include',
-        }).then(r => r.ok ? r.json() : null)
-      );
-    } else {
-      portPromises.push(Promise.resolve(null));
-    }
-    
-    const [originPortData, destPortData] = await Promise.all(portPromises);
-    
+    const { cable, originPort, destPort } = await fetchCableWithPorts(cableId);
     signalTooltipData.value = {
-      name: cableData.name,
+      name: cable.name,
       origin: {
-        rx: originPortData?.optical?.rx_dbm,
-        tx: originPortData?.optical?.tx_dbm,
+        rx: originPort?.optical?.rx_dbm,
+        tx: originPort?.optical?.tx_dbm,
       },
       destination: {
-        rx: destPortData?.optical?.rx_dbm,
-        tx: destPortData?.optical?.tx_dbm,
+        rx: destPort?.optical?.rx_dbm,
+        tx: destPort?.optical?.tx_dbm,
       },
     };
   } catch (err) {
@@ -617,17 +549,13 @@ async function showSignalTooltip(feature, event) {
 }
 
 function updateTooltipPosition(event) {
-  if (event && event.domEvent) {
-    signalTooltipPixelPosition.value = {
-      x: event.domEvent.clientX,
-      y: event.domEvent.clientY
-    };
+  if (event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+    signalTooltipPixelPosition.value = { x: event.clientX, y: event.clientY };
   }
 }
 
 function hideSignalTooltip() {
   signalTooltipVisible.value = false;
-  signalTooltipPosition.value = null;
   signalTooltipPixelPosition.value = null;
   signalTooltipData.value = null;
 }
@@ -643,7 +571,7 @@ function getSignalClass(dbm) {
   if (dbm === null || dbm === undefined) return 'signal-unknown';
   const val = Number(dbm);
   if (Number.isNaN(val)) return 'signal-unknown';
-  
+
   // Typical optical signal levels:
   // Good: > -15 dBm
   // Warning: -15 to -25 dBm
@@ -654,8 +582,7 @@ function getSignalClass(dbm) {
 }
 
 function showPortChart(portId, portType) {
-  console.log('[showPortChart] Port ID:', portId, 'Type:', portType);
-  // TODO: Implementar modal/página de gráficos
+  // TODO(EV-0012d): abrir o PortTrafficModal/TimeSeriesChart em vez do alert
   alert(`Gráfico da porta ${portType} (ID: ${portId}) - Em desenvolvimento`);
 }
 
@@ -682,13 +609,10 @@ function normalizeFiberStatus(status) {
 }
 
 function mapFiberToFeature(fiber) {
-  console.log('[mapFiberToFeature] Input fiber:', fiber);
   if (!fiber) return null;
 
   let path = [];
   if (Array.isArray(fiber.path) && fiber.path.length) {
-    console.log('[mapFiberToFeature] fiber.path recebido, comprimento:', fiber.path.length);
-    console.log('[mapFiberToFeature] Primeiro ponto:', fiber.path[0]);
     path = fiber.path
       .map(point => {
         const lat = Number(point.lat);
@@ -696,10 +620,7 @@ function mapFiberToFeature(fiber) {
         return { lat, lng };
       })
       .filter(coord => !Number.isNaN(coord.lat) && !Number.isNaN(coord.lng));
-    console.log('[mapFiberToFeature] Path após processamento, comprimento:', path.length);
-    console.log('[mapFiberToFeature] Primeiro ponto processado:', path[0]);
   } else if (fiber.origin && fiber.destination) {
-    console.log('[mapFiberToFeature] Usando origin/destination fallback');
     const originLat = Number(fiber.origin.lat);
     const originLng = Number(fiber.origin.lng);
     const destLat = Number(fiber.destination.lat);
@@ -713,15 +634,12 @@ function mapFiberToFeature(fiber) {
   }
 
   if (!path.length) {
-    console.warn('[mapFiberToFeature] Path vazio, retornando null');
     return null;
   }
 
   const coordinates = path.map(({ lat, lng }) => [lng, lat]);
-  console.log('[mapFiberToFeature] Coordinates GeoJSON, comprimento:', coordinates.length);
-  console.log('[mapFiberToFeature] Primeiro coordinate:', coordinates[0]);
 
-  const feature = {
+  return {
     id: `fiber-${fiber.id}`,
     type: 'Feature',
     geometry: {
@@ -735,10 +653,6 @@ function mapFiberToFeature(fiber) {
       fiber_count: fiber.fiber_count || fiber.fibers_count || fiber.fiber_total || null,
     },
   };
-  
-  console.log('[mapFiberToFeature] Feature final:', feature);
-  console.log('[mapFiberToFeature] Feature.geometry.coordinates comprimento:', feature.geometry.coordinates.length);
-  return feature;
 }
 
 async function loadFiberSegments() {
@@ -748,8 +662,7 @@ async function loadFiberSegments() {
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    console.log('[loadFiberSegments] API response:', data);
-    
+
     const items = Array.isArray(data?.fibers)
       ? data.fibers
       : Array.isArray(data?.cables)
@@ -758,18 +671,17 @@ async function loadFiberSegments() {
           ? data
           : [];
 
-    console.log('[loadFiberSegments] Items extraídos:', items);
-    console.log('[loadFiberSegments] Primeiro item:', items[0]);
-
     fiberSegments.value = items
       .map(mapFiberToFeature)
       .filter(Boolean);
-    
-    console.log('[loadFiberSegments] Fiber segments processados:', fiberSegments.value);
   } catch (err) {
     console.error('[MapView] Failed to load fiber network', err);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Marcadores de sites / dispositivos
+// ---------------------------------------------------------------------------
 
 function buildSiteMarker(site) {
   if (!site || typeof site !== 'object') {
@@ -831,17 +743,34 @@ function refreshSiteMarkers(siteList) {
     }
   });
 
-  const markers = Array.from(byCoordinate.values()).sort(
+  deviceMarkers.value = Array.from(byCoordinate.values()).sort(
     (a, b) => (b.deviceCount ?? 0) - (a.deviceCount ?? 0),
   );
 
-  deviceMarkers.value = markers;
+  drawMarkers();
+  maybeInitialFit();
+}
 
-  if (markers.length) {
-    setTimeout(() => {
-      fitBoundsToAllObjects();
-    }, 300);
-  }
+function clearMarkers() {
+  drawnMarkers.forEach((m) => m.remove());
+  drawnMarkers = [];
+}
+
+function drawMarkers() {
+  if (!map.value) return;
+  clearMarkers();
+
+  deviceMarkers.value.forEach((marker) => {
+    const drawn = map.value.createMarker({
+      position: marker.position,
+      title: marker.title || marker.siteName,
+      label: marker.label,
+      iconUrl: marker.icon || undefined,
+      iconSize: MARKER_ICON_SIZE,
+    });
+    drawn.on('click', () => handleSiteMarkerClick(marker));
+    drawnMarkers.push(drawn);
+  });
 }
 
 function buildDeviceMarker(site, device) {
@@ -852,13 +781,13 @@ function buildDeviceMarker(site, device) {
 
   const lat = Number(site.latitude ?? site.lat);
   const lng = Number(site.longitude ?? site.lng);
-  
+
   if (Number.isNaN(lat) || Number.isNaN(lng)) {
     console.warn('[buildDeviceMarker] Invalid coordinates - lat:', lat, 'lng:', lng);
     return null;
   }
 
-  const marker = {
+  return {
     id: device.id,
     hostid: device.hostid || device.host_id || null, // Preservar hostid se existir
     name: device.name || `Device #${device.id}`,
@@ -870,50 +799,34 @@ function buildDeviceMarker(site, device) {
     raw: device,
     isSiteOnly: Boolean(device.isSiteOnly),
   };
-  
-  return marker;
 }
 
-function getMarkerIcon(marker) {
-  if (!marker?.icon) return undefined;
-  if (typeof window !== 'undefined' && window.google?.maps?.Size) {
-    return { url: marker.icon, scaledSize: new google.maps.Size(24, 24) };
-  }
-  return { url: marker.icon };
+// Todos os pontos desenhados (marcadores + polylines), para fitBounds
+function allDrawnPoints() {
+  const points = deviceMarkers.value.map((m) => m.position);
+  combinedSegments.value.forEach((feature) => {
+    points.push(...featurePath(feature));
+  });
+  return points;
 }
 
-// Função para ajustar bounds incluindo markers E polylines
 function fitBoundsToAllObjects() {
-  if (!mapRef.value?.map || !window.google?.maps) {
-    console.warn('[fitBoundsToAllObjects] Mapa não disponível');
-    return;
-  }
+  if (!map.value) return;
+  const points = allDrawnPoints();
+  if (!points.length) return;
+  map.value.fitBounds(points, 50);
+}
 
-  const bounds = new window.google.maps.LatLngBounds();
-  let hasObjects = false;
-
-  // Incluir todos os markers
-  deviceMarkers.value.forEach(marker => {
-    bounds.extend(marker.position);
-    hasObjects = true;
-  });
-
-  // Incluir todas as polylines
-  combinedSegments.value.forEach(feature => {
-    if (feature.geometry?.coordinates) {
-      feature.geometry.coordinates.forEach(([lng, lat]) => {
-        bounds.extend({ lat, lng });
-        hasObjects = true;
-      });
-    }
-  });
-
-  if (hasObjects) {
-    console.log('[fitBoundsToAllObjects] Aplicando bounds para', deviceMarkers.value.length, 'markers e', combinedSegments.value.length, 'segmentos');
-    mapRef.value.map.fitBounds(bounds);
-  } else {
-    console.warn('[fitBoundsToAllObjects] Nenhum objeto para ajustar bounds');
-  }
+/**
+ * Enquadra tudo UMA vez, quando o primeiro lote de dados chega com o mapa
+ * pronto. Depois disso o viewport é do utilizador (botão «Enquadrar» à parte):
+ * refazer o fit a cada fetch por bbox devolvia o mapa ao sítio de onde ele saiu.
+ */
+function maybeInitialFit() {
+  if (initialFitDone || !map.value) return;
+  if (!deviceMarkers.value.length && !combinedSegments.value.length) return;
+  initialFitDone = true;
+  fitBoundsToAllObjects();
 }
 
 async function handleSiteMarkerClick(marker) {
@@ -945,7 +858,7 @@ async function handleSiteMarkerClick(marker) {
 
 function buildDeviceInfoHtml(device, ports) {
   const siteLine = `${device.siteName}${device.siteCity ? ` - ${device.siteCity}` : ''}`;
-  
+
   // Filtrar apenas portas em uso (que têm valores de optical ou status diferente de disponível)
   const portsInUse = Array.isArray(ports) ? ports.filter(port => {
     const hasOpticalData = port?.optical?.rx_dbm !== null || port?.optical?.tx_dbm !== null;
@@ -953,7 +866,7 @@ function buildDeviceInfoHtml(device, ports) {
     return hasOpticalData || isInUse;
   }) : [];
 
-  const formatOptical = (dbm) => {
+  const formatOpticalHtml = (dbm) => {
     if (dbm === null || dbm === undefined) return 'N/A';
     const val = Number(dbm);
     if (Number.isNaN(val)) return 'N/A';
@@ -983,11 +896,11 @@ function buildDeviceInfoHtml(device, ports) {
         <div class="optical-levels">
           <div class="level-row">
             <span>RX:</span>
-            <span>${formatOptical(port?.optical?.rx_dbm)}</span>
+            <span>${formatOpticalHtml(port?.optical?.rx_dbm)}</span>
           </div>
           <div class="level-row">
             <span>TX:</span>
-            <span>${formatOptical(port?.optical?.tx_dbm)}</span>
+            <span>${formatOpticalHtml(port?.optical?.tx_dbm)}</span>
           </div>
         </div>
       </div>
@@ -1009,7 +922,7 @@ function buildDeviceInfoHtml(device, ports) {
           <span class="info-label">Site:</span>
           <span class="info-value">${siteLine}</span>
         </div>
-        
+
         <div class="collapsible-section">
           <button onclick="window.toggleDeviceInfo(event)" class="collapse-toggle">
             <svg class="collapse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1036,7 +949,7 @@ function buildDeviceInfoHtml(device, ports) {
             </div>
           </div>
         </div>
-        
+
         ${portsInUse.length > 0 ? `
           <div class="ports-container">
             <div class="port-header" style="border-bottom: none; padding-bottom: 0; margin-bottom: 12px;">Portas em Uso:</div>
@@ -1060,25 +973,21 @@ function closeDeviceInfo() {
 /**
  * Handle radius search results (Phase 7)
  */
-function handleRadiusSearchResults(results) {
-  console.log('[MapView] Radius search completed:', results);
+function handleRadiusSearchResults() {
   // Results are already rendered by RadiusSearchTool
-  // Can add additional logic here if needed (e.g., analytics, notifications)
 }
 
 /**
  * Handle radius search error (Phase 7)
  */
-function handleRadiusSearchError(error) {
-  console.error('[MapView] Radius search error:', error);
-  // Can show toast/notification here if needed
+function handleRadiusSearchError(err) {
+  console.error('[MapView] Radius search error:', err);
 }
 
 function toggleDeviceInfo(event) {
   const button = event.currentTarget;
   const content = button.nextElementSibling;
-  const icon = button.querySelector('.collapse-icon');
-  
+
   if (content.style.maxHeight && content.style.maxHeight !== '0px') {
     // Collapse
     content.style.maxHeight = '0px';
@@ -1090,10 +999,23 @@ function toggleDeviceInfo(event) {
   }
 }
 
-// Expor função globalmente para o botão de fechar
+// Expor função globalmente para o botão de fechar (HTML gerado em buildDeviceInfoHtml)
 if (typeof window !== 'undefined') {
   window.closeDeviceInfoWindow = closeDeviceInfo;
   window.toggleDeviceInfo = toggleDeviceInfo;
+}
+
+function deviceInfoHeaderHtml(name) {
+  return `
+    <div class="info-window-header">
+      <h4>${name}</h4>
+      <button onclick="window.closeDeviceInfoWindow()" class="close-button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+  `;
 }
 
 async function showDeviceInfo(marker) {
@@ -1110,14 +1032,7 @@ async function showDeviceInfo(marker) {
   if (marker.isSiteOnly) {
     deviceInfoHtml.value = `
       <div class="fiber-info-window">
-        <div class="info-window-header">
-          <h4>${marker.name}</h4>
-          <button onclick="window.closeDeviceInfoWindow()" class="close-button">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 6L6 18M6 6l12 12"/>
-            </svg>
-          </button>
-        </div>
+        ${deviceInfoHeaderHtml(marker.name)}
         <div class="cable-details">
           <div class="info-row">
             <span class="info-label">Site:</span>
@@ -1144,38 +1059,24 @@ async function showDeviceInfo(marker) {
       credentials: 'include',
     });
 
-    let ports = [];
-    let deviceData = { ...marker };
-    if (response.ok) {
-      const data = await response.json();
-      ports = Array.isArray(data?.ports) ? data.ports : [];
-      // Incluir dados do device do retorno da API
-      if (data?.primary_ip) {
-        deviceData.primary_ip = data.primary_ip;
-      }
-      if (data?.uptime_value) {
-        deviceData.uptime_value = data.uptime_value;
-      }
-      if (data?.cpu_value) {
-        deviceData.cpu_value = data.cpu_value;
-      }
-    } else {
+    if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
+
+    const data = await response.json();
+    const ports = Array.isArray(data?.ports) ? data.ports : [];
+    const deviceData = { ...marker };
+    // Incluir dados do device do retorno da API
+    if (data?.primary_ip) deviceData.primary_ip = data.primary_ip;
+    if (data?.uptime_value) deviceData.uptime_value = data.uptime_value;
+    if (data?.cpu_value) deviceData.cpu_value = data.cpu_value;
 
     deviceInfoHtml.value = buildDeviceInfoHtml(deviceData, ports);
   } catch (err) {
     deviceInfoError.value = err.message;
     deviceInfoHtml.value = `
       <div class="fiber-info-window">
-        <div class="info-window-header">
-          <h4>${marker.name}</h4>
-          <button onclick="window.closeDeviceInfoWindow()" class="close-button">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 6L6 18M6 6l12 12"/>
-            </svg>
-          </button>
-        </div>
+        ${deviceInfoHeaderHtml(marker.name)}
         <div class="cable-details">
           <div class="error-message">
             Falha ao carregar detalhes: ${err.message}
@@ -1188,133 +1089,53 @@ async function showDeviceInfo(marker) {
   }
 }
 
-// Store polylines criadas diretamente com Google Maps API
-const nativePolylines = ref([]);
-
-// Função para desenhar polylines nativamente
-function drawNativePolylines() {
-  // Limpar polylines antigas
-  nativePolylines.value.forEach(p => p.setMap(null));
-  nativePolylines.value = [];
-  
-  const map = mapRef.value?.map;
-  if (!map || typeof google === 'undefined') {
-    console.warn('[drawNativePolylines] Map ou Google Maps API não disponível');
-    return;
-  }
-  
-  console.log('[drawNativePolylines] Desenhando', combinedSegments.value.length, 'segmentos');
-  
-  combinedSegments.value.forEach(feature => {
-    if (!feature.geometry?.coordinates?.length) {
-      console.warn('[drawNativePolylines] Feature sem coordinates:', feature.id);
-      return;
-    }
-    
-    const path = feature.geometry.coordinates.map(([lng, lat]) => ({ lat, lng }));
-    console.log('[drawNativePolylines] Criando polyline', feature.id, 'com', path.length, 'pontos');
-    
-    const polyline = new google.maps.Polyline({
-      path: path,
-      strokeColor: getSegmentColor(feature),
-      strokeWeight: 3,
-      strokeOpacity: 0.8,
-      map: map,
-      clickable: true
-    });
-    
-    // Click handler - mostra janela completa
-    polyline.addListener('click', () => {
-      console.log('[Polyline] Clicked:', feature.id);
-      showSegmentInfo(feature);
-    });
-    
-    // TESTE: Adicionar log para verificar se listeners são anexados
-    console.log('[drawNativePolylines] Listeners anexados para:', feature.id);
-    
-    // Hover handlers - IMPORTANTE: Google Maps Polyline suporta mouseover/mouseout nativamente
-    const mouseoverListener = google.maps.event.addListener(polyline, 'mouseover', (event) => {
-      console.log('[Polyline] MOUSEOVER EVENT:', feature.id, event);
-      polyline.setOptions({ strokeWeight: 5, strokeOpacity: 1.0 });
-      showSignalTooltip(feature, event);
-    });
-    
-    const mouseoutListener = google.maps.event.addListener(polyline, 'mouseout', () => {
-      console.log('[Polyline] MOUSEOUT EVENT:', feature.id);
-      polyline.setOptions({ strokeWeight: 3, strokeOpacity: 0.8 });
-      hideSignalTooltip();
-    });
-    
-    const mousemoveListener = google.maps.event.addListener(polyline, 'mousemove', (event) => {
-      if (signalTooltipVisible.value) {
-        updateTooltipPosition(event);
-      }
-    });
-    
-    // Armazenar listeners para cleanup
-    polyline._hoverListeners = [mouseoverListener, mouseoutListener, mousemoveListener];
-    
-    nativePolylines.value.push(polyline);
-  });
-  
-  console.log('[drawNativePolylines] Total de polylines criadas:', nativePolylines.value.length);
-  
-  // Ajustar bounds após desenhar polylines
-  setTimeout(() => {
-    fitBoundsToAllObjects();
-  }, 200);
-}
+// ---------------------------------------------------------------------------
+// Ciclo de vida e watchers
+// ---------------------------------------------------------------------------
 
 onMounted(() => {
+  initMap();
   inventoryStore.fetchSites();
   loadFiberSegments();
 });
 
-// Watch deviceMarkers to debug
+onBeforeUnmount(() => {
+  clearPolylines();
+  clearMarkers();
+  if (map.value) {
+    map.value.off('idle', onIdle);
+    map.value.destroy();
+    map.value = null;
+  }
+  if (typeof window !== 'undefined') {
+    if (window.closeDeviceInfoWindow === closeDeviceInfo) delete window.closeDeviceInfoWindow;
+    if (window.toggleDeviceInfo === toggleDeviceInfo) delete window.toggleDeviceInfo;
+  }
+});
+
 watch(sites, (newSites) => {
   refreshSiteMarkers(newSites);
 }, { deep: true, immediate: true });
 
-watch(deviceMarkers, (newMarkers) => {
-  console.debug('[MapView] deviceMarkers mudou:', newMarkers.length);
-}, { deep: true });
-
-// Watch combinedSegments e redesenhar polylines quando mudar
+// Redesenhar polylines quando os segmentos mudam (fetch por bbox, fibras, poda)
 watch(combinedSegments, () => {
-  console.log('[MapView] combinedSegments mudou:', combinedSegments.value.length);
-  // Aguardar o mapa estar pronto
-  setTimeout(() => {
-    drawNativePolylines();
-  }, 500);
+  drawPolylines();
+  maybeInitialFit();
 }, { deep: true });
 
-// Watch mapRef para desenhar quando o mapa carregar
-watch(mapRef, (newMap) => {
-  if (newMap?.map) {
-    console.log('[MapView] Map ref disponível, aguardando idle...');
-    google.maps.event.addListenerOnce(newMap.map, 'idle', () => {
-      console.log('[MapView] Map idle, desenhando polylines');
-      drawNativePolylines();
-    });
-  }
-});
-
-// --- NOVO WATCHER ---
 // Observa mudanças no 'focusedItem' da store
 watch(focusedItem, async (newItem) => {
-  if (!newItem || !mapRef.value?.map) {
+  if (!newItem || !map.value) {
     return;
   }
 
-  const map = mapRef.value.map;
   const lat = Number(newItem.latitude);
   const lng = Number(newItem.longitude);
 
   if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
-    map.panTo({ lat, lng });
-    const currentZoom = map.getZoom();
-    if (currentZoom < 14) {
-      map.setZoom(14);
+    map.value.panTo({ lat, lng });
+    if (map.value.getZoom() < 14) {
+      map.value.setZoom(14);
     }
   }
 
@@ -1369,11 +1190,13 @@ watch(focusedItem, async (newItem) => {
   } catch (err) {
     console.error('[MapView] Failed to focus on item', err);
   } finally {
+    // O foco é um pedido pontual da sidebar; depois de atendido, solta-se
     setTimeout(() => {
       mapStore.clearFocus();
     }, 3000);
   }
 });
+
 onErrorCaptured((err) => {
   mapLoadError.value = err?.message || "Erro ao renderizar mapa";
   console.error("[MapView] Captured error", err);
@@ -1728,6 +1551,7 @@ onErrorCaptured((err) => {
 
 <style scoped>
 .map-wrapper { position: relative; }
+.map-canvas { width: 100%; height: 100vh; }
 .status { position:absolute; top:8px; left:8px; background:var(--surface-card); padding:4px 8px; font-size:12px; border:1px solid var(--border-primary); color:var(--text-primary); }
 .error { position:absolute; top:32px; left:8px; background:var(--danger-soft-bg); color:var(--accent-danger); padding:4px 8px; font-size:12px; border:1px solid var(--accent-danger); }
 .missing-key { padding:16px; color:var(--accent-danger); }

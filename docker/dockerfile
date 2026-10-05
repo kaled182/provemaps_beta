@@ -112,8 +112,9 @@ WORKDIR /app/backend
 # Instalar dependências a partir dos wheels compilados no Stage 1
 COPY --from=builder /wheels /wheels
 COPY backend/requirements.txt /app/backend/requirements.txt
+# gunicorn/uvicorn/celery vêm pinados em requirements.txt (EV-0018): nada se
+# instala fora dos wheels do Stage 1, para a imagem ser reprodutível.
 RUN pip install --no-index --find-links=/wheels -r requirements.txt && \
-    pip install --no-cache-dir gunicorn uvicorn celery && \
     rm -rf /wheels /root/.cache
 
 # Código da aplicação
@@ -130,6 +131,12 @@ RUN ls -lah /app/backend/staticfiles/vue-spa/assets/ || echo "Frontend assets no
 RUN mkdir -p /app/backend/logs /app/backend/media /app/backend/staticfiles /app/backend/tmp && \
     chown -R ${APP_USER}:${APP_USER} /app && \
     chmod -R 755 /app
+
+# EV-0027b / ADR 0006: o commit implantado, cozido na imagem. O `scripts/deploy.sh` passa-o;
+# um build à mão sem ele deixa o `/healthz` sem `git_sha` e a Central não fecha nada (fail-closed).
+ARG GIT_SHA=
+ENV GIT_SHA=${GIT_SHA}
+LABEL org.opencontainers.image.revision="${GIT_SHA}"
 
 USER ${APP_USER}
 

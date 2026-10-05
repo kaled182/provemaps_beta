@@ -11,7 +11,9 @@ class Command(BaseCommand):
     help = "Restaura um backup. CUIDADO: Apaga dados atuais."
 
     def add_arguments(self, parser):
-        parser.add_argument("filename", type=str, help="Nome do arquivo .dump/.sql na pasta de backups")
+        parser.add_argument(
+            "filename", type=str, help="Nome do arquivo .dump/.sql na pasta de backups"
+        )
         parser.add_argument(
             "--config-json",
             type=str,
@@ -43,13 +45,17 @@ class Command(BaseCommand):
         if backup_path.suffix.lower() == ".dump":
             cmd = [
                 "pg_restore",
-                "-h", str(db_host),
-                "-p", str(db_port),
-                "-U", str(db_user),
-                "-d", str(db_name),
-                "-c",            # drop before recreate
-                "--if-exists",   # skip errors for missing objects
-                "--no-owner",    # ignore ownership differences
+                "-h",
+                str(db_host),
+                "-p",
+                str(db_port),
+                "-U",
+                str(db_user),
+                "-d",
+                str(db_name),
+                "-c",  # drop before recreate
+                "--if-exists",  # skip errors for missing objects
+                "--no-owner",  # ignore ownership differences
                 "--no-privileges",
                 "-v",
                 str(backup_path),
@@ -57,11 +63,16 @@ class Command(BaseCommand):
         elif backup_path.suffix.lower() == ".sql":
             cmd = [
                 "psql",
-                "-h", str(db_host),
-                "-p", str(db_port),
-                "-U", str(db_user),
-                "-d", str(db_name),
-                "-f", str(backup_path),
+                "-h",
+                str(db_host),
+                "-p",
+                str(db_port),
+                "-U",
+                str(db_user),
+                "-d",
+                str(db_name),
+                "-f",
+                str(backup_path),
             ]
         else:
             raise RuntimeError("Formato de backup nao suportado.")
@@ -73,14 +84,14 @@ class Command(BaseCommand):
                 env=env,
                 check=False,
                 text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
             )
 
             if result.returncode != 0:
                 stderr_lines = result.stderr or ""
                 real_errors = [
-                    line for line in stderr_lines.splitlines()
+                    line
+                    for line in stderr_lines.splitlines()
                     if "ERROR:" in line and "does not exist" not in line
                 ]
                 if real_errors:
@@ -89,9 +100,7 @@ class Command(BaseCommand):
 
             self.stdout.write(self.style.SUCCESS("Restauracao do banco concluida!"))
         except FileNotFoundError as exc:
-            raise RuntimeError(
-                "Os comandos 'pg_restore/psql' nao foram encontrados."
-            ) from exc
+            raise RuntimeError("Os comandos 'pg_restore/psql' nao foram encontrados.") from exc
 
         # Restore the Fernet key from the backup config.json so that
         # EncryptedCharFields in the restored database can be decrypted.
@@ -110,12 +119,16 @@ class Command(BaseCommand):
                 if fernet_key:
                     fernet_key_file = Path(settings.BASE_DIR) / "database" / "fernet.key"
                     fernet_key_file.write_text(fernet_key, encoding="utf-8")
-                    self.stdout.write(self.style.SUCCESS(
-                        f"fernet.key atualizado com a chave do backup."
-                    ))
+                    self.stdout.write(
+                        self.style.SUCCESS("fernet.key atualizado com a chave do backup.")
+                    )
                 else:
-                    self.stderr.write("[restore_db] config.json nao contem fernet_key — chave nao atualizada.")
+                    self.stderr.write(
+                        "[restore_db] config.json nao contem fernet_key — chave nao atualizada."
+                    )
             except Exception as exc:
                 self.stderr.write(f"[restore_db] Nao foi possivel restaurar fernet_key: {exc}")
         else:
-            self.stderr.write("[restore_db] config.json nao encontrado — fernet_key nao atualizada.")
+            self.stderr.write(
+                "[restore_db] config.json nao encontrado — fernet_key nao atualizada."
+            )

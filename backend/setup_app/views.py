@@ -1,25 +1,23 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
-import logging
+from types import SimpleNamespace
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db import connection
-
-from django.shortcuts import redirect, render
 from django.http import HttpResponse, HttpResponseForbidden
+from django.shortcuts import redirect, render
 
 from integrations.zabbix.guards import reload_diagnostics_flag_cache
+from setup_app.services import runtime_settings
+from setup_app.utils import env_manager
 
 from .forms import EnvConfigForm, FirstTimeSetupForm
-from setup_app.utils import env_manager
-from setup_app.services import runtime_settings
-from .services.service_reloader import restart_via_sigterm, trigger_restart
-from types import SimpleNamespace
-
 from .models import CompanyProfile, FirstTimeSetup
+from .services.service_reloader import restart_via_sigterm, trigger_restart
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +53,9 @@ def _is_setup_locked():
     Check if setup is locked via filesystem flag.
     This prevents production servers from being reconfigured remotely.
     """
-    lock_file = os.path.join(settings.BASE_DIR, 'SETUP_LOCKED')
+    lock_file = os.path.join(settings.BASE_DIR, "SETUP_LOCKED")
     # Also check parent directory (project root)
-    lock_file_root = os.path.join(settings.BASE_DIR, '..', 'SETUP_LOCKED')
+    lock_file_root = os.path.join(settings.BASE_DIR, "..", "SETUP_LOCKED")
     return os.path.exists(lock_file) or os.path.exists(lock_file_root)
 
 
@@ -70,7 +68,7 @@ def first_time_setup(request):
             "<p>To unlock, remove the <code>SETUP_LOCKED</code> file "
             "from the server and restart the application.</p>"
         )
-    
+
     if FirstTimeSetup.objects.filter(configured=True).exists():
         return redirect("/")
 
@@ -78,7 +76,7 @@ def first_time_setup(request):
         form = FirstTimeSetupForm(request.POST, request.FILES)
         if form.is_valid():
             data = form.cleaned_data
-            
+
             # Credenciais do banco: user vem do form, name é fixo
             db_user = data.get("db_user") or os.environ.get("DB_USER", "app")
             db_password = data["db_password"]
@@ -89,30 +87,32 @@ def first_time_setup(request):
 
             # Create new configuration with configured=True
             logo_file = request.FILES.get("logo")
-            create_kwargs = dict(
-                company_name=data["company_name"],
-                logo=logo_file,
-                zabbix_url=data["zabbix_url"],
-                auth_type=data["auth_type"],
-                zabbix_api_key=data.get("zabbix_api_key"),
-                zabbix_user=data.get("zabbix_user"),
-                zabbix_password=data.get("zabbix_password"),
-                map_provider=data.get("map_provider", "osm"),
-                maps_api_key=data.get("maps_api_key", ""),
-                mapbox_token=data.get("mapbox_token", ""),
-                unique_licence=data.get("unique_licence", ""),
-                db_host=data["db_host"],
-                db_port=data["db_port"],
-                db_name=db_name,
-                db_user=db_user,
-                db_password=db_password,
-                redis_url=data["redis_url"],
-                configured=True,
-            )
+            create_kwargs = {
+                "company_name": data["company_name"],
+                "logo": logo_file,
+                "zabbix_url": data["zabbix_url"],
+                "auth_type": data["auth_type"],
+                "zabbix_api_key": data.get("zabbix_api_key"),
+                "zabbix_user": data.get("zabbix_user"),
+                "zabbix_password": data.get("zabbix_password"),
+                "map_provider": data.get("map_provider", "osm"),
+                "maps_api_key": data.get("maps_api_key", ""),
+                "mapbox_token": data.get("mapbox_token", ""),
+                "unique_licence": data.get("unique_licence", ""),
+                "db_host": data["db_host"],
+                "db_port": data["db_port"],
+                "db_name": db_name,
+                "db_user": db_user,
+                "db_password": db_password,
+                "redis_url": data["redis_url"],
+                "configured": True,
+            }
             try:
                 setup_instance = FirstTimeSetup.objects.create(**create_kwargs)
             except PermissionError:
-                logger.warning("Could not save logo (media dir permission denied) — proceeding without logo")
+                logger.warning(
+                    "Could not save logo (media dir permission denied) — proceeding without logo"
+                )
                 create_kwargs["logo"] = None
                 setup_instance = FirstTimeSetup.objects.create(**create_kwargs)
 
@@ -174,9 +174,7 @@ def first_time_setup(request):
 
             clear_token_cache()
             reload_diagnostics_flag_cache()
-            logger.info(
-                "Setup completed for company: %s", data["company_name"]
-            )
+            logger.info("Setup completed for company: %s", data["company_name"])
 
             # Reinicia o container via SIGTERM ao PID 1.
             # O Docker reinicia automaticamente (restart: unless-stopped)
@@ -191,11 +189,23 @@ def first_time_setup(request):
 
     # Map each form field to its wizard step so the JS can navigate there on error
     _FIELD_STEP = {
-        "company_name": 1, "logo": 1,
-        "zabbix_url": 2, "auth_type": 2, "zabbix_api_key": 2, "zabbix_user": 2, "zabbix_password": 2,
-        "map_provider": 3, "maps_api_key": 3, "mapbox_token": 3,
-        "db_host": 4, "db_port": 4, "db_user": 4, "db_password": 4,
-        "redis_url": 5, "domain_name": 5, "certbot_email": 5,
+        "company_name": 1,
+        "logo": 1,
+        "zabbix_url": 2,
+        "auth_type": 2,
+        "zabbix_api_key": 2,
+        "zabbix_user": 2,
+        "zabbix_password": 2,
+        "map_provider": 3,
+        "maps_api_key": 3,
+        "mapbox_token": 3,
+        "db_host": 4,
+        "db_port": 4,
+        "db_user": 4,
+        "db_password": 4,
+        "redis_url": 5,
+        "domain_name": 5,
+        "certbot_email": 5,
         "unique_licence": 6,
     }
     error_step = None
@@ -385,6 +395,7 @@ def manage_environment(request):
         # Clear Zabbix token cache after credential changes
         try:
             from integrations.zabbix.zabbix_service import clear_token_cache
+
             clear_token_cache()
         except Exception:
             pass
@@ -400,4 +411,9 @@ def manage_environment(request):
         return redirect("setup_app:manage_environment")
 
     # Invalid form: render with 400 to indicate issue
-    return render(request, "setup_dashboard.html", {"title": "System Settings", "setup_logo": get_setup_logo()}, status=400)
+    return render(
+        request,
+        "setup_dashboard.html",
+        {"title": "System Settings", "setup_logo": get_setup_logo()},
+        status=400,
+    )

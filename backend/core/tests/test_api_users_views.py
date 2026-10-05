@@ -4,13 +4,14 @@ Covers: list_departments, department_detail, remove_department,
         list_users, get_user, create_user, update_user, delete_user,
         list_groups, me_user.
 """
+
 from __future__ import annotations
 
 import json
 
 from django.contrib.auth.models import User
 from django.test import TestCase
-from django.urls import reverse, NoReverseMatch
+from django.urls import NoReverseMatch, reverse
 
 
 def _post_json(client, url, data, **kwargs):
@@ -28,6 +29,7 @@ def _put_json(client, url, data, **kwargs):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _dept_list_url():
     try:
@@ -103,34 +105,41 @@ def _me_url():
 # Helper functions (non-view) tests
 # ---------------------------------------------------------------------------
 
+
 class CoerceBoolTests(TestCase):
     def test_bool_passthrough(self):
         from core.api_users import _coerce_bool
+
         self.assertTrue(_coerce_bool(True))
         self.assertFalse(_coerce_bool(False))
 
     def test_none_returns_none(self):
         from core.api_users import _coerce_bool
+
         self.assertIsNone(_coerce_bool(None))
 
     def test_truthy_strings(self):
         from core.api_users import _coerce_bool
+
         for v in ("1", "true", "yes", "on", "TRUE", "Yes"):
             self.assertTrue(_coerce_bool(v), f"Expected True for {v!r}")
 
     def test_falsy_strings(self):
         from core.api_users import _coerce_bool
+
         for v in ("0", "false", "no", "off", "FALSE"):
             self.assertFalse(_coerce_bool(v), f"Expected False for {v!r}")
 
     def test_unrecognised_string_returned_as_is(self):
         from core.api_users import _coerce_bool
+
         self.assertEqual(_coerce_bool("maybe"), "maybe")
 
 
 class ExtractProfileDataTests(TestCase):
     def test_extracts_nested_profile_dict(self):
         from core.api_users import _extract_profile_data
+
         raw = {"profile": {"phone_number": "123", "notify_via_email": "true"}}
         result = _extract_profile_data(raw)
         self.assertEqual(result["phone_number"], "123")
@@ -138,6 +147,7 @@ class ExtractProfileDataTests(TestCase):
 
     def test_extracts_dotted_profile_keys(self):
         from core.api_users import _extract_profile_data
+
         raw = {"profile.phone_number": "+5511", "profile.notify_via_whatsapp": "false"}
         result = _extract_profile_data(raw)
         self.assertEqual(result["phone_number"], "+5511")
@@ -145,13 +155,16 @@ class ExtractProfileDataTests(TestCase):
 
     def test_empty_raw_returns_empty(self):
         from core.api_users import _extract_profile_data
+
         self.assertEqual(_extract_profile_data({}), {})
 
 
 class TotpHelpersTests(TestCase):
     def test_generate_secret_is_base32(self):
-        from core.api_users import _generate_totp_secret
         import base64
+
+        from core.api_users import _generate_totp_secret
+
         secret = _generate_totp_secret()
         self.assertTrue(len(secret) > 0)
         # Should be decodeable as base32 (padded)
@@ -160,6 +173,7 @@ class TotpHelpersTests(TestCase):
 
     def test_totp_at_returns_int(self):
         from core.api_users import _generate_totp_secret, _totp_at
+
         secret = _generate_totp_secret()
         code = _totp_at(secret, 1000)
         self.assertIsInstance(code, int)
@@ -167,16 +181,19 @@ class TotpHelpersTests(TestCase):
 
     def test_verify_totp_rejects_nonnumeric(self):
         from core.api_users import _generate_totp_secret, _verify_totp
+
         secret = _generate_totp_secret()
         self.assertFalse(_verify_totp(secret, "abc"))
 
     def test_verify_totp_rejects_empty(self):
         from core.api_users import _generate_totp_secret, _verify_totp
+
         secret = _generate_totp_secret()
         self.assertFalse(_verify_totp(secret, ""))
 
     def test_build_otpauth_url_contains_secret(self):
         from core.api_users import _build_otpauth_url
+
         url = _build_otpauth_url("MYSECRET", "alice", "Acme")
         self.assertIn("MYSECRET", url)
         self.assertIn("otpauth://totp/", url)
@@ -184,20 +201,26 @@ class TotpHelpersTests(TestCase):
 
 class IsStaffOrSuperuserTests(TestCase):
     def test_staff_returns_true(self):
-        from core.api_users import is_staff_or_superuser
         from unittest.mock import MagicMock
+
+        from core.api_users import is_staff_or_superuser
+
         user = MagicMock(is_staff=True, is_superuser=False)
         self.assertTrue(is_staff_or_superuser(user))
 
     def test_superuser_returns_true(self):
-        from core.api_users import is_staff_or_superuser
         from unittest.mock import MagicMock
+
+        from core.api_users import is_staff_or_superuser
+
         user = MagicMock(is_staff=False, is_superuser=True)
         self.assertTrue(is_staff_or_superuser(user))
 
     def test_regular_user_returns_false(self):
-        from core.api_users import is_staff_or_superuser
         from unittest.mock import MagicMock
+
+        from core.api_users import is_staff_or_superuser
+
         user = MagicMock(is_staff=False, is_superuser=False)
         self.assertFalse(is_staff_or_superuser(user))
 
@@ -205,6 +228,7 @@ class IsStaffOrSuperuserTests(TestCase):
 # ---------------------------------------------------------------------------
 # Department views (integrated with real DB)
 # ---------------------------------------------------------------------------
+
 
 class ListDepartmentsViewTests(TestCase):
     def setUp(self):
@@ -248,7 +272,8 @@ class ListDepartmentsViewTests(TestCase):
     def test_unauthenticated_returns_redirect_or_403(self):
         self.client.logout()
         resp = self._get()
-        self.assertIn(resp.status_code, (302, 403))
+        # EV-0002: rotas /api/* sem sessão respondem 401 JSON (antes: redirect 302).
+        self.assertIn(resp.status_code, (302, 401, 403))
 
 
 class DepartmentDetailViewTests(TestCase):
@@ -293,6 +318,7 @@ class DepartmentDetailViewTests(TestCase):
 # ---------------------------------------------------------------------------
 # User management views
 # ---------------------------------------------------------------------------
+
 
 class ListUsersViewTests(TestCase):
     def setUp(self):
@@ -359,27 +385,25 @@ class CreateUserViewTests(TestCase):
         self.assertTrue(data.get("success"))
 
     def test_missing_username_returns_400(self):
-        resp = _post_json(self.client, _create_user_url(), {
-            "email": "x@test.com", "password": "pass"
-        })
+        resp = _post_json(
+            self.client, _create_user_url(), {"email": "x@test.com", "password": "pass"}
+        )
         self.assertEqual(resp.status_code, 400)
 
     def test_missing_email_returns_400(self):
-        resp = _post_json(self.client, _create_user_url(), {
-            "username": "x", "password": "pass"
-        })
+        resp = _post_json(self.client, _create_user_url(), {"username": "x", "password": "pass"})
         self.assertEqual(resp.status_code, 400)
 
     def test_missing_password_returns_400(self):
-        resp = _post_json(self.client, _create_user_url(), {
-            "username": "x", "email": "x@test.com"
-        })
+        resp = _post_json(self.client, _create_user_url(), {"username": "x", "email": "x@test.com"})
         self.assertEqual(resp.status_code, 400)
 
     def test_invalid_email_returns_400(self):
-        resp = _post_json(self.client, _create_user_url(), {
-            "username": "x", "email": "not-an-email", "password": "pass"
-        })
+        resp = _post_json(
+            self.client,
+            _create_user_url(),
+            {"username": "x", "email": "not-an-email", "password": "pass"},
+        )
         self.assertEqual(resp.status_code, 400)
 
     def test_duplicate_username_returns_400(self):
@@ -403,9 +427,7 @@ class UpdateUserViewTests(TestCase):
         self.client.force_login(self.superuser)
 
     def test_updates_first_name(self):
-        resp = _patch_json(self.client, _update_user_url(self.target.pk), {
-            "first_name": "Charles"
-        })
+        resp = _patch_json(self.client, _update_user_url(self.target.pk), {"first_name": "Charles"})
         self.assertIn(resp.status_code, (200, 201))
         data = json.loads(resp.content)
         self.assertTrue(data.get("success"))
@@ -421,27 +443,37 @@ class UpdateUserViewTests(TestCase):
         self.assertEqual(resp.status_code, 400)
 
     def test_invalid_email_returns_400(self):
-        resp = _patch_json(self.client, _update_user_url(self.target.pk), {
-            "email": "not-valid"
-        })
+        resp = _patch_json(self.client, _update_user_url(self.target.pk), {"email": "not-valid"})
         self.assertEqual(resp.status_code, 400)
 
     def test_patch_profile_with_empty_departments_list(self):
-        resp = _patch_json(self.client, _update_user_url(self.target.pk), {
-            "profile": {"departments": []},
-        })
+        resp = _patch_json(
+            self.client,
+            _update_user_url(self.target.pk),
+            {
+                "profile": {"departments": []},
+            },
+        )
         self.assertIn(resp.status_code, (200, 201))
 
     def test_patch_profile_with_nonexistent_department_name(self):
-        resp = _patch_json(self.client, _update_user_url(self.target.pk), {
-            "profile": {"department": "NonExistentDept"},
-        })
+        resp = _patch_json(
+            self.client,
+            _update_user_url(self.target.pk),
+            {
+                "profile": {"department": "NonExistentDept"},
+            },
+        )
         self.assertIn(resp.status_code, (200, 201))
 
     def test_patch_profile_with_empty_department_name(self):
-        resp = _patch_json(self.client, _update_user_url(self.target.pk), {
-            "profile": {"department": ""},
-        })
+        resp = _patch_json(
+            self.client,
+            _update_user_url(self.target.pk),
+            {
+                "profile": {"department": ""},
+            },
+        )
         self.assertIn(resp.status_code, (200, 201))
 
 
@@ -514,20 +546,20 @@ class MeUserViewTests(TestCase):
         self.assertEqual(resp.status_code, 400)
 
     def test_patch_invalid_json_returns_400(self):
-        resp = self.client.patch(
-            _me_url(), "bad", content_type="application/json"
-        )
+        resp = self.client.patch(_me_url(), "bad", content_type="application/json")
         self.assertEqual(resp.status_code, 400)
 
     def test_unauthenticated_returns_redirect_or_403(self):
         self.client.logout()
         resp = self.client.get(_me_url())
-        self.assertIn(resp.status_code, (302, 403))
+        # EV-0002: rotas /api/* sem sessão respondem 401 JSON (antes: redirect 302).
+        self.assertIn(resp.status_code, (302, 401, 403))
 
 
 # ---------------------------------------------------------------------------
 # me_avatar
 # ---------------------------------------------------------------------------
+
 
 def _me_avatar_url():
     try:
@@ -551,6 +583,7 @@ class MeAvatarViewTests(TestCase):
 
     def test_post_with_avatar_returns_200(self):
         from django.core.files.uploadedfile import SimpleUploadedFile
+
         avatar = SimpleUploadedFile("avatar.png", b"\x89PNG\r\n", content_type="image/png")
         resp = self.client.post(_me_avatar_url(), {"avatar": avatar})
         self.assertEqual(resp.status_code, 200)
@@ -561,12 +594,14 @@ class MeAvatarViewTests(TestCase):
     def test_unauthenticated_returns_redirect(self):
         self.client.logout()
         resp = self.client.post(_me_avatar_url(), {})
-        self.assertIn(resp.status_code, (302, 403))
+        # EV-0002: rotas /api/* sem sessão respondem 401 JSON (antes: redirect 302).
+        self.assertIn(resp.status_code, (302, 401, 403))
 
 
 # ---------------------------------------------------------------------------
 # me_totp
 # ---------------------------------------------------------------------------
+
 
 def _me_totp_url():
     try:
@@ -626,7 +661,8 @@ class MeTotpViewTests(TestCase):
     def test_unauthenticated_returns_redirect(self):
         self.client.logout()
         resp = self.client.get(_me_totp_url())
-        self.assertIn(resp.status_code, (302, 403))
+        # EV-0002: rotas /api/* sem sessão respondem 401 JSON (antes: redirect 302).
+        self.assertIn(resp.status_code, (302, 401, 403))
 
 
 class MeTotpVerifyViewTests(TestCase):
@@ -644,9 +680,7 @@ class MeTotpVerifyViewTests(TestCase):
         self.assertIn("not configured", data["error"])
 
     def test_post_invalid_json_returns_400(self):
-        resp = self.client.post(
-            _me_totp_verify_url(), "not-json", content_type="application/json"
-        )
+        resp = self.client.post(_me_totp_verify_url(), "not-json", content_type="application/json")
         self.assertEqual(resp.status_code, 400)
 
     def test_post_wrong_code_returns_400(self):
@@ -659,6 +693,7 @@ class MeTotpVerifyViewTests(TestCase):
 
     def test_post_valid_code_enables_totp(self):
         from unittest.mock import patch
+
         # Create a secret first
         self.client.get(_me_totp_url(), {"setup": "true"})
         # Patch _verify_totp to return True
@@ -672,7 +707,8 @@ class MeTotpVerifyViewTests(TestCase):
     def test_unauthenticated_returns_redirect(self):
         self.client.logout()
         resp = _post_json(self.client, _me_totp_verify_url(), {"code": "123456"})
-        self.assertIn(resp.status_code, (302, 403))
+        # EV-0002: rotas /api/* sem sessão respondem 401 JSON (antes: redirect 302).
+        self.assertIn(resp.status_code, (302, 401, 403))
 
 
 class MeTotpDisableViewTests(TestCase):
@@ -699,9 +735,7 @@ class MeTotpDisableViewTests(TestCase):
         self.assertFalse(data["configured"])
 
     def test_post_invalid_json_uses_defaults(self):
-        resp = self.client.post(
-            _me_totp_disable_url(), "not-json", content_type="application/json"
-        )
+        resp = self.client.post(_me_totp_disable_url(), "not-json", content_type="application/json")
         self.assertEqual(resp.status_code, 200)
         data = json.loads(resp.content)
         self.assertTrue(data["success"])
@@ -709,4 +743,5 @@ class MeTotpDisableViewTests(TestCase):
     def test_unauthenticated_returns_redirect(self):
         self.client.logout()
         resp = _post_json(self.client, _me_totp_disable_url(), {})
-        self.assertIn(resp.status_code, (302, 403))
+        # EV-0002: rotas /api/* sem sessão respondem 401 JSON (antes: redirect 302).
+        self.assertIn(resp.status_code, (302, 401, 403))

@@ -7,7 +7,7 @@ Provides helpers to import environment modules like ``settings.dev`` or
 
 import os
 import sys
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any
 
 
 def _resolve_settings_module() -> str:
@@ -54,7 +54,7 @@ def _resolve_settings_module() -> str:
 current_settings: str = _resolve_settings_module()
 
 
-def get_settings_info() -> Dict[str, Any]:
+def get_settings_info() -> dict[str, Any]:
     """Return metadata about the current settings for debugging purposes."""
     env = (
         "production"
@@ -70,6 +70,6 @@ def get_settings_info() -> Dict[str, Any]:
 
 
 if TYPE_CHECKING:  # pragma: no cover — assists type checkers only
-    from .base import *  # noqa: F401,F403
-    from .dev import *   # noqa: F401,F403
-    from .prod import *  # noqa: F401,F403
+    from .base import *  # noqa: F403
+    from .dev import *  # noqa: F403
+    from .prod import *  # noqa: F403

@@ -11,8 +11,8 @@ Coverage:
 """
 
 import time
-from collections.abc import Iterator
-from typing import Any, Mapping
+from collections.abc import Iterator, Mapping
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
@@ -20,12 +20,8 @@ import requests
 from django.core.cache import cache
 from django.test import SimpleTestCase, override_settings
 
-from integrations.zabbix.client import (
-    CircuitState,
-    resilient_client,
-    zabbix_batch,
-    zabbix_call,
-)
+import integrations.zabbix.client as client_module
+from integrations.zabbix.client import CircuitState, resilient_client, zabbix_batch, zabbix_call
 
 
 @pytest.fixture(autouse=True)
@@ -51,9 +47,15 @@ class ResilientZabbixClientTests(SimpleTestCase):
         cache.clear()
         resilient_client.clear_token_cache()
         resilient_client.reset_circuit_breaker()
+        # O cliente sonda `apiinfo.version` (um `requests.post` extra, sem auth) para saber
+        # se o servidor é 7+ e exige Bearer. Fixa-se 6.x: estes testes descrevem o
+        # comportamento legado (`auth` no payload) e a sonda consumiria os mocks de `post`.
+        self._version_patch = patch.object(client_module, "_zabbix_version_cache", (6, 0))
+        self._version_patch.start()
 
     def tearDown(self) -> None:
         """Reset the circuit breaker after each test."""
+        self._version_patch.stop()
         resilient_client.reset_circuit_breaker()
 
     # -------------------------------------------------------------------- #
@@ -62,9 +64,7 @@ class ResilientZabbixClientTests(SimpleTestCase):
 
     @patch("integrations.zabbix.client.runtime_settings.get_runtime_config")
     @patch("integrations.zabbix.client.requests.post")
-    def test_login_with_user_password(
-        self, post_mock: Mock, config_mock: Mock
-    ) -> None:
+    def test_login_with_user_password(self, post_mock: Mock, config_mock: Mock) -> None:
         """Validate login using username/password over HTTP."""
         # Mock configuration
         config_mock.return_value = Mock(
@@ -116,6 +116,34 @@ class ResilientZabbixClientTests(SimpleTestCase):
     @patch.object(resilient_client, "_get_token", return_value="token-123")
     @patch("integrations.zabbix.client.runtime_settings.get_runtime_config")
     @patch("integrations.zabbix.client.requests.post")
+    def test_zabbix_7_sends_bearer_header_even_with_session_token(
+        self, post_mock: Mock, config_mock: Mock, _token_mock: Mock
+    ) -> None:
+        """Zabbix 7 rejeita `auth` no payload (-32600): com a versão detectada como 7.x o
+        session token vai no header Authorization logo na primeira chamada."""
+        config_mock.return_value = Mock(
+            zabbix_api_url="http://example.com/api_jsonrpc.php",
+            zabbix_api_user="admin",
+            zabbix_api_password="password",
+            zabbix_api_key="",
+        )
+        ok = Mock()
+        ok.raise_for_status.return_value = None
+        ok.json.return_value = {"result": ["ok"]}
+        post_mock.return_value = ok
+
+        with patch.object(client_module, "_zabbix_version_cache", (7, 0)):
+            result = resilient_client.call("host.get", {"output": ["hostid"]})
+
+        self.assertEqual(result, ["ok"])
+        kwargs: Mapping[str, Any] = post_mock.call_args.kwargs
+        self.assertNotIn("auth", kwargs["json"])
+        self.assertEqual(kwargs["headers"].get("Authorization"), "Bearer token-123")
+
+    @override_settings(ZABBIX_READ_ONLY=False)
+    @patch.object(resilient_client, "_get_token", return_value="token-123")
+    @patch("integrations.zabbix.client.runtime_settings.get_runtime_config")
+    @patch("integrations.zabbix.client.requests.post")
     def test_retry_on_network_failure(
         self,
         post_mock: Mock,
@@ -132,14 +160,10 @@ class ResilientZabbixClientTests(SimpleTestCase):
 
         # Simulate request attempts: failure, failure, then success
         fail_response = Mock()
-        fail_response.raise_for_status.side_effect = (
-            requests.ConnectionError("Network error")
-        )
+        fail_response.raise_for_status.side_effect = requests.ConnectionError("Network error")
 
         fail_response_2 = Mock()
-        fail_response_2.raise_for_status.side_effect = (
-            requests.ConnectionError("Network error")
-        )
+        fail_response_2.raise_for_status.side_effect = requests.ConnectionError("Network error")
 
         success_response = Mock()
         success_response.json.return_value = {"result": ["ok"]}
@@ -171,12 +195,8 @@ class ResilientZabbixClientTests(SimpleTestCase):
         )
 
         resilient_client.clear_token_cache()
-        setattr(resilient_client, "_failed_api_key", "api-key-123")
-        setattr(
-            resilient_client,
-            "_api_key_backoff_until",
-            time.time() + 120,
-        )
+        resilient_client._failed_api_key = "api-key-123"
+        resilient_client._api_key_backoff_until = time.time() + 120
 
         token = resilient_client.login()
         metrics = resilient_client.get_metrics()
@@ -206,12 +226,8 @@ class ResilientZabbixClientTests(SimpleTestCase):
         post_mock.return_value = success_response
 
         resilient_client.clear_token_cache()
-        setattr(resilient_client, "_failed_api_key", "api-key-123")
-        setattr(
-            resilient_client,
-            "_api_key_backoff_until",
-            time.time() + 60,
-        )
+        resilient_client._failed_api_key = "api-key-123"
+        resilient_client._api_key_backoff_until = time.time() + 60
 
         token = resilient_client.login()
         metrics = resilient_client.get_metrics()
@@ -369,9 +385,7 @@ class ResilientZabbixClientTests(SimpleTestCase):
 
         post_mock.side_effect = [expired_batch, success_batch]
 
-        results = resilient_client.batch(
-            [("host.get", {"output": ["hostid"]})]
-        )
+        results = resilient_client.batch([("host.get", {"output": ["hostid"]})])
 
         self.assertEqual(results, [["ok"]])
         self.assertEqual(post_mock.call_count, 2)
@@ -397,9 +411,7 @@ class ResilientZabbixClientTests(SimpleTestCase):
         # Simulate repeated failures
         def create_fail_response():
             fail = Mock()
-            fail.raise_for_status.side_effect = (
-                requests.ConnectionError("Network error")
-            )
+            fail.raise_for_status.side_effect = requests.ConnectionError("Network error")
             return fail
 
         post_mock.side_effect = [
@@ -414,29 +426,17 @@ class ResilientZabbixClientTests(SimpleTestCase):
         resilient_client.reset_circuit_breaker()
 
         # Five calls fail (default threshold = 5, retry disabled)
-        result1 = resilient_client.call(
-            "host.get", {"output": ["hostid"]}, retry=False
-        )
-        result2 = resilient_client.call(
-            "host.get", {"output": ["hostid"]}, retry=False
-        )
-        result3 = resilient_client.call(
-            "host.get", {"output": ["hostid"]}, retry=False
-        )
-        result4 = resilient_client.call(
-            "host.get", {"output": ["hostid"]}, retry=False
-        )
-        result5 = resilient_client.call(
-            "host.get", {"output": ["hostid"]}, retry=False
-        )
+        result1 = resilient_client.call("host.get", {"output": ["hostid"]}, retry=False)
+        result2 = resilient_client.call("host.get", {"output": ["hostid"]}, retry=False)
+        result3 = resilient_client.call("host.get", {"output": ["hostid"]}, retry=False)
+        result4 = resilient_client.call("host.get", {"output": ["hostid"]}, retry=False)
+        result5 = resilient_client.call("host.get", {"output": ["hostid"]}, retry=False)
 
         # Circuit breaker should now be open
         self.assertTrue(resilient_client.circuit_breaker.is_open)
 
         # Sixth call is blocked because the circuit is open
-        result6 = resilient_client.call(
-            "host.get", {"output": ["hostid"]}, retry=False
-        )
+        result6 = resilient_client.call("host.get", {"output": ["hostid"]}, retry=False)
 
         self.assertIsNone(result1)
         self.assertIsNone(result2)
@@ -445,7 +445,7 @@ class ResilientZabbixClientTests(SimpleTestCase):
         self.assertIsNone(result5)
         self.assertIsNone(result6)
 
-    # Sixth invocation never hits HTTP (only five requests issued)
+        # Sixth invocation never hits HTTP (only five requests issued)
         self.assertEqual(post_mock.call_count, 5)
 
     # -------------------------------------------------------------------- #
@@ -545,9 +545,7 @@ class ResilientZabbixClientTests(SimpleTestCase):
         self.assertIn("metrics_enabled", metrics)
         self.assertIn("config", metrics)
 
-        self.assertEqual(
-            metrics["circuit_breaker_state"], CircuitState.CLOSED.name
-        )
+        self.assertEqual(metrics["circuit_breaker_state"], CircuitState.CLOSED.name)
 
     # -------------------------------------------------------------------- #
     # Convenience Function Tests
@@ -600,7 +598,7 @@ class ResilientZabbixClientTests(SimpleTestCase):
             zabbix_api_key="",
         )
 
-    # Batch response (list)
+        # Batch response (list)
         batch_response = Mock()
         batch_response.json.return_value = [
             {"id": 1, "result": ["host1"]},

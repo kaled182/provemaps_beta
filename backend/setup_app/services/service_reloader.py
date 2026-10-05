@@ -5,7 +5,7 @@ import os
 import signal
 import subprocess
 import threading
-from typing import Iterable, List
+from collections.abc import Iterable
 
 logger = logging.getLogger(__name__)
 
@@ -23,13 +23,11 @@ def restart_via_sigterm(delay: float = 3.0) -> None:
     O sinal é enviado em background após ``delay`` segundos para
     garantir que a resposta HTTP já chegou ao navegador do usuário.
     """
+
     def _send_sigterm() -> None:
         try:
             os.kill(1, signal.SIGTERM)
-            logger.info(
-                "SIGTERM enviado ao PID 1 — "
-                "container será reiniciado pelo Docker"
-            )
+            logger.info("SIGTERM enviado ao PID 1 — " "container será reiniciado pelo Docker")
         except Exception as exc:
             logger.error("Falha ao enviar SIGTERM ao PID 1: %s", exc)
 
@@ -67,13 +65,15 @@ def _run_commands(commands: Iterable[str]) -> None:
             logger.exception("Unexpected error executing restart command: %s", command)
 
 
-def trigger_restart(additional_commands: Iterable[str] | None = None, *, async_mode: bool = True) -> bool:
+def trigger_restart(
+    additional_commands: Iterable[str] | None = None, *, async_mode: bool = True
+) -> bool:
     """
     Execute configured restart commands.
 
     Returns True if at least one command is scheduled/executed.
     """
-    commands: List[str] = _collect_base_commands()
+    commands: list[str] = _collect_base_commands()
     if additional_commands:
         commands.extend(cmd for cmd in additional_commands if cmd)
 

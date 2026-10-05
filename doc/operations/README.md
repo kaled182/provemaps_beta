@@ -2,19 +2,28 @@
 
 Production deployment, monitoring, and maintenance guides.
 
+**Versão do produto**: ver [VERSION](../../VERSION)  
+**Last Updated**: 2026-10-04
+
 ---
 
 ## 📚 Operations Documents
 
+The current deployment guide is [`DEPLOY.md`](../../DEPLOY.md) (repository root), together with
+[`docker/docker-compose.prod.yml`](../../docker/docker-compose.prod.yml) and
+[`scripts/deploy.sh`](../../scripts/deploy.sh).
+
 | Document | Description | Audience |
 |----------|-------------|----------|
-| **[DEPLOYMENT.md](DEPLOYMENT.md)** | **Production deployment guide** (unificado: setup, checklist, rollback) | DevOps, SRE |
-| **[MIGRATION_PRODUCTION_GUIDE.md](MIGRATION_PRODUCTION_GUIDE.md)** | v2.0.0 migration specifics | DevOps, SRE |
-| **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** | Diagnostics and resolution | All |
-| **[STATUS_SERVICOS.md](STATUS_SERVICOS.md)** | Service status and health | DevOps, SRE |
+| **[DEPLOY.md](../../DEPLOY.md)** | **Production deployment guide** (requirements, `.env.production`, profiles, SSL, backup, update, troubleshooting) | DevOps, SRE |
+| **[DOCKER_PRODUCTION.md](DOCKER_PRODUCTION.md)** | Alternative install via `scripts/deploy-docker.sh` (nginx, Gunicorn/Uvicorn, PostgreSQL + PostGIS, Redis, Celery) | DevOps, SRE |
+| **[MONITORING.md](MONITORING.md)** | Prometheus metrics, Celery/Zabbix alerts, Grafana panels | DevOps, SRE |
+| **[REDIS_HA.md](REDIS_HA.md)** | Redis high availability (managed service or Sentinel) | DevOps, SRE |
+| **[dashboards/](dashboards/)** | Grafana dashboard JSON (Celery tasks, inventory API) | DevOps, SRE |
+| **[Troubleshooting notes](../troubleshooting/)** | Case-by-case diagnostics and fixes (there is no single `TROUBLESHOOTING.md`) | All |
 
-### Deprecated Documents
-- ~~`DEPLOYMENT_CHECKLIST_v2.0.0.md`~~ → Consolidated into `DEPLOYMENT.md`
+Historical 2025 deployment and rollout material (Sprint 1, Phase 1/7/10, v2.0.0 migration, PostGIS setup) lives in
+[`doc/archive/2025-historico/`](../archive/2025-historico/) (index in [`doc/archive/README.md`](../archive/README.md)); it does not describe the current system.
 
 ---
 
@@ -24,14 +33,13 @@ Production deployment, monitoring, and maintenance guides.
 
 Before deploying to production:
 
-- [ ] All tests passing (`pytest -q`)
-- [ ] Environment variables configured
-- [ ] Database migrations ready
-- [ ] Static files collected
+- [ ] All tests passing (see [CLAUDE.md](../../CLAUDE.md) section 9)
+- [ ] `.env.production` configured (template: `.env.production.example`)
+- [ ] Database migrations reviewed
 - [ ] Health checks working
-- [ ] Monitoring configured
+- [ ] Monitoring profile enabled if required
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for complete checklist.
+See [DEPLOY.md](../../DEPLOY.md) for the complete procedure.
 
 ---
 
@@ -39,16 +47,19 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for complete checklist.
 
 ```bash
 # Full health check
-curl http://localhost:8000/healthz/
+curl http://localhost:8000/healthz
 
 # Readiness probe
-curl http://localhost:8000/ready/
+curl http://localhost:8000/ready
 
 # Liveness probe
-curl http://localhost:8000/live/
+curl http://localhost:8000/live
 
-# Metrics
-curl http://localhost:8000/metrics/
+# Prometheus metrics
+curl http://localhost:8000/metrics/metrics
+
+# Celery status (staff authentication required)
+curl http://localhost:8000/celery/status
 ```
 
 See [MONITORING.md](MONITORING.md) for monitoring setup.
@@ -60,24 +71,12 @@ See [MONITORING.md](MONITORING.md) for monitoring setup.
 ### Deployment
 
 ```bash
-# Pull latest code
-git pull origin main
-
-# Update dependencies
-pip install -r requirements.txt
-
-# Run migrations
-python manage.py migrate
-
-# Collect static files
-python manage.py collectstatic --noinput
-
-# Restart services
-sudo systemctl restart mapsprove-web
-sudo systemctl restart mapsprove-celery
+# Pull latest code and redeploy (migrations run automatically before restart)
+git pull
+./scripts/deploy.sh
 ```
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed procedure.
+See [DEPLOY.md](../../DEPLOY.md) for the detailed procedure, profiles and SSL.
 
 ---
 
@@ -85,16 +84,16 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed procedure.
 
 ```bash
 # Check migration status
-python manage.py showmigrations
+docker compose -f docker/docker-compose.prod.yml exec web \
+  python manage.py showmigrations
 
 # Run migrations
-python manage.py migrate
+docker compose -f docker/docker-compose.prod.yml exec web \
+  python manage.py migrate
 
 # Rollback migration
-python manage.py migrate <app_name> <migration_name>
-
-# Create migration
-python manage.py makemigrations
+docker compose -f docker/docker-compose.prod.yml exec web \
+  python manage.py migrate <app_name> <migration_name>
 ```
 
 ---
@@ -103,16 +102,18 @@ python manage.py makemigrations
 
 ```bash
 # Check Celery workers
-celery -A core inspect active
+docker compose -f docker/docker-compose.prod.yml exec celery \
+  celery -A core.celery_app inspect active
 
-# Check Celery queues
-celery -A core inspect stats
+# Check Celery stats
+docker compose -f docker/docker-compose.prod.yml exec celery \
+  celery -A core.celery_app inspect stats
 
 # View Prometheus metrics
-curl http://localhost:8000/metrics/
+curl http://localhost:8000/metrics/metrics
 
 # Check logs
-tail -f logs/mapsprove.log
+docker compose -f docker/docker-compose.prod.yml logs -f web
 ```
 
 See [MONITORING.md](MONITORING.md) for monitoring best practices.
@@ -125,43 +126,36 @@ See [MONITORING.md](MONITORING.md) for monitoring best practices.
 
 | Problem | Solution | Guide |
 |---------|----------|-------|
-| Server won't start | Check logs, ports, database | [TROUBLESHOOTING.md](TROUBLESHOOTING.md#server-wont-start) |
-| Migrations failing | Check database state, rollback | [TROUBLESHOOTING.md](TROUBLESHOOTING.md#migrations-failing) |
-| Celery tasks not running | Check Redis, worker status | [TROUBLESHOOTING.md](TROUBLESHOOTING.md#celery-issues) |
-| High memory usage | Check Celery, cache, queries | [TROUBLESHOOTING.md](TROUBLESHOOTING.md#performance) |
-| Zabbix integration down | Check circuit breaker, API | [TROUBLESHOOTING.md](TROUBLESHOOTING.md#zabbix) |
-
-See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for complete guide.
+| Server won't start / health check fails | Check logs, `manage.py check --deploy`, ports, database | [DEPLOY.md](../../DEPLOY.md#troubleshooting) |
+| Migrations pending | `showmigrations`, then `migrate` | [DEPLOY.md](../../DEPLOY.md#troubleshooting) |
+| Redis authentication error | Match `REDIS_PASSWORD` and `REDIS_URL` | [DEPLOY.md](../../DEPLOY.md#troubleshooting) |
+| Celery workers not responding | Check Redis, worker status | [MONITORING.md](MONITORING.md#-troubleshooting) |
+| Zabbix integration down | Check circuit breaker, Zabbix API | [MONITORING.md](MONITORING.md#-troubleshooting) |
+| Docker / Celery startup problems, port and fiber data issues | Case notes | [doc/troubleshooting/](../troubleshooting/) |
 
 ---
 
 ## 📊 Monitoring Stack
 
+Prometheus and Grafana run only with the `monitoring` profile (see [DEPLOY.md](../../DEPLOY.md)).
+
 ### Components
 
 | Component | Purpose | Endpoint |
 |-----------|---------|----------|
-| **Prometheus** | Metrics collection | `:9090/targets` |
-| **Grafana** | Dashboards | `:3000/dashboards` |
-| **AlertManager** | Alert routing | `:9093` |
-| **Loki** | Log aggregation | `:3100` |
+| **Prometheus** | Metrics collection | `127.0.0.1:9090/targets` |
+| **Grafana** | Dashboards | `127.0.0.1:3002` |
 
 ### Key Metrics
 
 ```promql
-# Request rate
-rate(django_http_requests_total[5m])
+# Celery workers available
+celery_worker_available
 
-# Error rate
-rate(django_http_responses_total{status=~"5.."}[5m])
+# Zabbix request rate by method and status
+sum(rate(zabbix_requests_total[5m])) by (method, status)
 
-# Response time (p95)
-histogram_quantile(0.95, django_http_request_duration_seconds_bucket)
-
-# Celery queue size
-celery_queue_length
-
-# Zabbix circuit breaker state
+# Zabbix circuit breaker state (0=closed, 1=open, 2=half_open)
 zabbix_circuit_breaker_state
 ```
 
@@ -188,36 +182,37 @@ See [MONITORING.md](MONITORING.md) for dashboard setup.
 4. **Resolve**: Fix root cause
 5. **Document**: Update runbook, create postmortem
 
-See [DEPLOYMENT.md](DEPLOYMENT.md#incident-response) for procedures.
+See [DEPLOY.md](../../DEPLOY.md#troubleshooting) for procedures.
 
 ---
 
 ## 🔄 Backup & Recovery
 
+PostgreSQL 16 + PostGIS is the only database; see [DEPLOY.md](../../DEPLOY.md#backup).
+
 ### Database Backups
 
 ```bash
-# Create backup
-python manage.py dumpdata > backup_$(date +%Y%m%d).json
+# Full backup (postgres + redis), keep last 7
+./scripts/backup.sh
 
-# Restore backup
-python manage.py loaddata backup_20250107.json
+# PostgreSQL only
+./scripts/backup.sh --no-redis
 
-# PostgreSQL backup (if using)
-pg_dump -U postgres mapsprove > backup.sql
+# Manual PostgreSQL dump
+docker compose -f docker/docker-compose.prod.yml exec -T postgres \
+  pg_dump -U mapsprovefiber mapsprovefiber > backup.sql
 
 # Restore PostgreSQL
-psql -U postgres mapsprove < backup.sql
+docker compose -f docker/docker-compose.prod.yml exec -T postgres \
+  psql -U mapsprovefiber mapsprovefiber < backup.sql
 ```
 
 ### Configuration Backups
 
 ```bash
-# Backup .env
-cp .env .env.backup
-
-# Backup secrets
-cp service_accounts/*.json backups/
+# Backup environment file
+cp .env.production .env.production.backup
 ```
 
 ---
@@ -227,31 +222,20 @@ cp service_accounts/*.json backups/
 ### Database Optimization
 
 ```bash
-# Analyze queries
-python manage.py debugsqlshell
-
-# Check slow queries
-tail -f logs/slow_queries.log
-
-# Vacuum database (PostgreSQL)
-python manage.py dbshell
-VACUUM ANALYZE;
+# Vacuum and analyze (PostgreSQL)
+docker compose -f docker/docker-compose.prod.yml exec postgres \
+  psql -U mapsprovefiber mapsprovefiber -c "VACUUM ANALYZE;"
 ```
 
 ### Caching
 
 ```bash
 # Check Redis status
-redis-cli INFO stats
-
-# Clear cache
-python manage.py clear_cache
-
-# Warm cache
-python manage.py warm_cache
+docker compose -f docker/docker-compose.prod.yml exec redis \
+  sh -c 'redis-cli -a "$REDIS_PASSWORD" INFO stats'
 ```
 
-See [MONITORING.md](MONITORING.md#performance) for tuning guide.
+See [REDIS_HA.md](REDIS_HA.md) for Redis availability options.
 
 ---
 
@@ -260,35 +244,30 @@ See [MONITORING.md](MONITORING.md#performance) for tuning guide.
 ### SSL/TLS
 
 ```bash
-# Check certificate expiry
-openssl x509 -in cert.pem -noout -dates
-
-# Renew Let's Encrypt
-certbot renew --nginx
+# Renew Let's Encrypt (manual)
+docker compose -f docker/docker-compose.prod.yml exec certbot \
+  certbot renew --webroot -w /var/www/certbot
+docker compose -f docker/docker-compose.prod.yml exec nginx nginx -s reload
 ```
 
 ### Access Control
 
 ```bash
 # Create admin user
-python manage.py createsuperuser
-
-# Grant permissions
-python manage.py shell
-from django.contrib.auth.models import User, Permission
-user = User.objects.get(username='john')
-user.user_permissions.add(Permission.objects.get(codename='view_site'))
+docker compose -f docker/docker-compose.prod.yml exec web \
+  python manage.py createsuperuser
 ```
 
 ---
 
 ## 📖 Related Documentation
 
-- **[Deployment Checklist](DEPLOYMENT.md)** — Pre-deployment steps
+- **[Deployment Guide](../../DEPLOY.md)** — Production deployment
 - **[Monitoring Guide](MONITORING.md)** — Prometheus, Grafana
-- **[Troubleshooting Guide](TROUBLESHOOTING.md)** — Common issues
+- **[Troubleshooting notes](../troubleshooting/)** — Case-by-case fixes
 - **[Architecture](../architecture/)** — System design
+- **[Historical archive](../archive/README.md)** — 2025 deployment reports (not current)
 
 ---
 
-**Need urgent help?** See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) or check runbooks.
+**Need urgent help?** See [DEPLOY.md](../../DEPLOY.md#troubleshooting) or [doc/troubleshooting/](../troubleshooting/).

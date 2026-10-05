@@ -68,6 +68,21 @@ ignore = [
     "C901",   # too complex
     "PLR2004", # magic value used in comparison
     "DJ008",  # jQuery is not available in Django
+    # EV-0022 (2026-10-04): o lint passa a correr no CI sobre os ficheiros alterados.
+    # Estas regras tinham 119 achados pré-existentes concentrados nos god-modules
+    # (usecases/devices.py, viewsets.py — EV-0017; api_views.py já foi partido) e
+    # exigem refatoração, não formatação. Voltam a entrar quando o EV-0017 fatiar
+    # esses ficheiros (ratchet: medir, reativar uma regra, corrigir o resto).
+    "PLR0911", # too-many-return-statements
+    "PLR0912", # too-many-branches
+    "PLR0913", # too-many-arguments
+    "PLR0915", # too-many-statements
+    # Idioma Django/DRF: `permission_classes = [...]`, `Meta.fields = [...]`,
+    # `EXEMPT_PATHS = [...]` em middleware. Anotar tudo com ClassVar não acrescenta nada.
+    "RUF012",  # mutable-class-default
+    # `CharField(null=True)` pré-existente em vários modelos; corrigir é migração de
+    # dados (NULL → ""), não lint. Entra como item EV- próprio quando se mexer nos modelos.
+    "DJ001",   # django-nullable-model-string-field
 ]
 
 [tool.ruff.format]
@@ -76,7 +91,9 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 
 [tool.ruff.lint.isort]
-known-first-party = ["core", "maps_view", "setup_app"]
+# Mesmas escolhas do [tool.isort] acima, senão `isort --check` e `ruff I001` discordam.
+combine-as-imports = true
+known-first-party = ["core", "maps_view", "setup_app", "inventory", "integrations", "monitoring", "service_accounts", "telemetry", "gpon", "dwdm", "settings"]
 
 [tool.mypy]
 python_version = 3.12
@@ -105,7 +122,22 @@ ignore_missing_imports = true
 
 [tool.coverage.run]
 branch = true
-source = ["core", "maps_view", "setup_app"]
+# EV-0006: medir TODAS as apps de primeira parte. Até 2026-10-04 só core,
+# maps_view e setup_app contavam — inventory (a maior app), integrations,
+# monitoring e service_accounts ficavam fora do «60 %» que o CI exigia.
+source = [
+    "core",
+    "maps_view",
+    "setup_app",
+    "inventory",
+    "integrations",
+    "monitoring",
+    "service_accounts",
+    "evolucao",
+    "telemetry",
+    "gpon",
+    "dwdm",
+]
 omit = [
     "*/tests/*",
     "*/migrations/*",
@@ -132,20 +164,5 @@ exclude_lines = [
     "class .*:\\.\\.\\.",
 ]
 
-[tool.pytest.ini_options]
-addopts = "-ra -q --strict-markers --strict-config"
-testpaths = ["tests", "core/tests", "maps_view/tests", "setup_app/tests"]
-python_files = ["test_*.py", "*_test.py"]
-python_classes = ["Test*", "*Test"]
-python_functions = ["test_*"]
-markers = [
-    "slow: marks tests as slow",
-    "integration: integration tests",
-    "unit: unit tests",
-    "db: tests requiring database",
-]
-DJANGO_SETTINGS_MODULE = "settings.test"
-filterwarnings = [
-    "ignore::DeprecationWarning",
-    "ignore::UserWarning",
-]
+# A configuração do pytest vive em backend/pytest.ini (espelhada em ../pytest.ini).
+# A secção [tool.pytest.ini_options] que existia aqui era ignorada: pytest.ini prevalece.

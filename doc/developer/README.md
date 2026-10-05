@@ -15,6 +15,6 @@ This folder gathers the main guides for developers:
 
 ## Additional topics
 - Security: .env usage, Fernet keys, OWASP recommendations (see [`../security/SECURITY.md`](../security/SECURITY.md))
-- Redis in production: [`../reference/REDIS_HIGH_AVAILABILITY.md`](../reference/REDIS_HIGH_AVAILABILITY.md)
+- Redis in production: [`../operations/REDIS_HA.md`](../operations/REDIS_HA.md)
 
 Refer to this directory for the latest standardized information.

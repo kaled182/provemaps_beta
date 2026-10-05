@@ -1,0 +1,364 @@
+"""EV-0003 — `history.get` com o value_type real do item, não `3` fixo."""
+
+from __future__ import annotations
+
+from unittest.mock import patch
+
+from django.contrib.auth import get_user_model
+from django.test import TestCase
+from django.urls import reverse
+
+from inventory.domain import zabbix_history
+from inventory.models import Device, FiberCable, Port, Site
+
+
+def _fake_zabbix(items_meta, histories):
+    """Simula item.get/history.get e regista o `history` pedido por item."""
+    calls: dict[str, int] = {}
+
+    def _request(method, params=None, **kwargs):
+        params = params or {}
+        if method == "item.get":
+            ids = [str(i) for i in params.get("itemids", [])]
+            return [
+                {"itemid": i, "value_type": items_meta[i][0], "units": items_meta[i][1]}
+                for i in ids
+                if i in items_meta
+            ]
+        if method == "history.get":
+            itemid = str(params["itemids"][0])
+            calls[itemid] = params["history"]
+            # Como o Zabbix real: tipo errado devolve lista vazia.
+            if int(params["history"]) != int(items_meta.get(itemid, ("3", ""))[0]):
+                return []
+            return histories.get(itemid, [])
+        return []
+
+    return _request, calls
+
+
+class ZabbixHistoryHelperTests(TestCase):
+    def test_get_items_meta_resolves_type_and_units(self):
+        fake, _ = _fake_zabbix({"111": ("0", "bps"), "222": ("3", "Bps")}, {})
+        with patch.object(zabbix_history.zabbix_service, "zabbix_request", side_effect=fake):
+            meta = zabbix_history.get_items_meta(["111", 222, None, ""])
+        self.assertEqual(meta["111"], {"itemid": "111", "value_type": 0, "units": "bps"})
+        self.assertEqual(meta["222"]["value_type"], 3)
+        self.assertEqual(meta["222"]["units"], "Bps")
+
+    def test_fetch_history_uses_float_type_for_float_item(self):
+        fake, calls = _fake_zabbix(
+            {"111": ("0", "bps")},
+            {"111": [{"clock": "1690000000", "value": "12.5"}]},
+        )
+        with patch.object(zabbix_history.zabbix_service, "zabbix_request", side_effect=fake):
+            history = zabbix_history.fetch_history("111", 1689990000, 1690000001)
+        self.assertEqual(calls["111"], 0)
+        self.assertEqual(history, [{"clock": "1690000000", "value": "12.5"}])
+
+    def test_fetch_history_defaults_to_unsigned_when_meta_missing(self):
+        fake, calls = _fake_zabbix({}, {"999": [{"clock": "1", "value": "1"}]})
+        with patch.object(zabbix_history.zabbix_service, "zabbix_request", side_effect=fake):
+            zabbix_history.fetch_history("999", 0, 10)
+        self.assertEqual(calls["999"], zabbix_history.DEFAULT_VALUE_TYPE)
+
+    def test_fetch_history_skips_non_numeric_items(self):
+        fake, calls = _fake_zabbix({"555": ("4", "")}, {})
+        with patch.object(zabbix_history.zabbix_service, "zabbix_request", side_effect=fake):
+            self.assertEqual(zabbix_history.fetch_history("555", 0, 10), [])
+        self.assertNotIn("555", calls)
+
+    def test_item_get_failure_falls_back_without_raising(self):
+        def boom(method, params=None, **kwargs):
+            if method == "item.get":
+                raise RuntimeError("zabbix down")
+            return []
+
+        with patch.object(zabbix_history.zabbix_service, "zabbix_request", side_effect=boom):
+            self.assertEqual(zabbix_history.get_items_meta(["1"]), {})
+            self.assertEqual(zabbix_history.fetch_history("1", 0, 10), [])
+
+    def test_limit_is_forwarded(self):
+        seen = {}
+
+        def _request(method, params=None, **kwargs):
+            if method == "item.get":
+                return [{"itemid": "7", "value_type": "3", "units": ""}]
+            seen.update(params)
+            return []
+
+        with patch.object(zabbix_history.zabbix_service, "zabbix_request", side_effect=_request):
+            zabbix_history.fetch_history("7", 0, 10, limit=500)
+        self.assertEqual(seen["limit"], 500)
+
+
+class TrafficHistoryEndpointsTests(TestCase):
+    """Os endpoints DRF deixam de devolver vazio para itens float."""
+
+    def setUp(self):
+        user = get_user_model().objects.create_user(username="ops", password="x")
+        self.client.force_login(user)
+        site = Site.objects.create(display_name="POP-GYN", city="Goiania")
+        self.device = Device.objects.create(
+            site=site, name="SW-01", vendor="Huawei", model="S6730", zabbix_hostid="10101"
+        )
+        self.port_a = Port.objects.create(
+            device=self.device,
+            name="GE0/0/1",
+            zabbix_item_id_traffic_in="111",
+            zabbix_item_id_traffic_out="222",
+        )
+        self.port_b = Port.objects.create(
+            device=self.device,
+            name="GE0/0/2",
+            zabbix_item_id_traffic_in="333",
+            zabbix_item_id_traffic_out="444",
+        )
+        # 111/333 são float (0) — era aqui que `history: 3` devolvia vazio.
+        self.meta = {
+            "111": ("0", "bps"),
+            "222": ("3", "bps"),
+            "333": ("0", "Bps"),
+            "444": ("3", "Bps"),
+        }
+        self.histories = {
+            "111": [{"clock": "1690000000", "value": "1000.5"}],
+            "222": [{"clock": "1690000000", "value": "2000"}],
+            "333": [{"clock": "1690000000", "value": "30"}],
+            "444": [{"clock": "1690000060", "value": "40"}],
+        }
+
+    def test_port_traffic_history_uses_real_value_type(self):
+        fake, calls = _fake_zabbix(self.meta, self.histories)
+        url = reverse("port-traffic-history", args=[self.port_a.pk])
+        with patch("integrations.zabbix.zabbix_service.zabbix_request", side_effect=fake):
+            response = self.client.get(url, {"hours": 24})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(calls, {"111": 0, "222": 3})
+        payload = response.json()
+        self.assertEqual(len(payload["history"]), 1)
+        self.assertEqual(payload["history"][0]["traffic_in"], 1000.5)
+        self.assertEqual(payload["history"][0]["traffic_out"], 2000.0)
+        self.assertEqual(payload["statistics"]["unit_in"], "bps")
+        self.assertEqual(payload["statistics"]["unit_out"], "bps")
+
+    def test_cable_traffic_history_uses_real_value_type_for_both_ports(self):
+        cable = FiberCable.objects.create(
+            name="CABO-01", origin_port=self.port_a, destination_port=self.port_b
+        )
+        fake, calls = _fake_zabbix(self.meta, self.histories)
+        url = reverse("fibercable-traffic-history", args=[cable.pk])
+        with patch("integrations.zabbix.zabbix_service.zabbix_request", side_effect=fake):
+            response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(calls, {"111": 0, "222": 3, "333": 0, "444": 3})
+        payload = response.json()
+        self.assertEqual(payload["origin"]["history"][0]["traffic_in"], 1000.5)
+        self.assertEqual(payload["destination"]["statistics"]["unit_in"], "Bps")
+        self.assertEqual(len(payload["destination"]["history"]), 2)
+
+    def test_port_traffic_history_aligns_in_and_out_by_bucket(self):
+        """EV-0010: IN aos +7 s e OUT aos +43 s caem na mesma linha; 0 bps é valor."""
+        histories = {
+            "111": [{"clock": "1690000027", "value": "0"}, {"clock": "1690000147", "value": "900"}],
+            "222": [{"clock": "1690000063", "value": "50"}],
+        }
+        fake, _ = _fake_zabbix(self.meta, histories)
+        url = reverse("port-traffic-history", args=[self.port_a.pk])
+        with patch("integrations.zabbix.zabbix_service.zabbix_request", side_effect=fake):
+            payload = self.client.get(url, {"hours": 24}).json()
+        rows = payload["history"]
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["traffic_in"], 0.0)
+        self.assertEqual(rows[0]["traffic_out"], 50.0)
+        self.assertEqual(rows[1]["traffic_in"], 900.0)
+        self.assertIsNone(rows[1]["traffic_out"])  # buraco real, não forward-fill
+        self.assertEqual(
+            rows[0]["timestamp"], "2023-07-22T04:27:00+00:00"
+        )  # início do bucket de 60 s
+
+    def test_cable_traffic_history_unknown_cable_is_404_not_500(self):
+        url = reverse("fibercable-traffic-history", args=[999999])
+        with patch("integrations.zabbix.zabbix_service.zabbix_request", return_value=[]):
+            response = self.client.get(url)
+        self.assertEqual(response.status_code, 404)
+
+
+class CableOpticalHistoryEndpointTests(TestCase):
+    """`fibercable-optical-history` usa os helpers de bucket importados no topo do módulo.
+
+    Regressão EV-0022: o lint apanhou `merge_series`/`history_to_samples`/
+    `choose_bucket_seconds` indefinidos neste endpoint — os imports viviam dentro
+    de outros dois métodos e nenhum teste passava por aqui (NameError em produção).
+    """
+
+    def setUp(self):
+        user = get_user_model().objects.create_user(username="noc", password="x")
+        self.client.force_login(user)
+        site = Site.objects.create(display_name="POP-ANA", city="Anapolis")
+        device = Device.objects.create(
+            site=site, name="OLT-01", vendor="Huawei", model="MA5800", zabbix_hostid="20202"
+        )
+        self.port_a = Port.objects.create(
+            device=device, name="0/1/0", rx_power_item_key="rx.a", tx_power_item_key="tx.a"
+        )
+        self.port_b = Port.objects.create(
+            device=device, name="0/1/1", rx_power_item_key="rx.b", tx_power_item_key="tx.b"
+        )
+        self.cable = FiberCable.objects.create(
+            name="CABO-OPT", origin_port=self.port_a, destination_port=self.port_b
+        )
+
+    @staticmethod
+    def _fake_by_key(items_by_key, histories):
+        def _request(method, params=None, **kwargs):
+            params = params or {}
+            if method == "item.get":
+                key = (params.get("filter") or {}).get("key_")
+                item = items_by_key.get(key)
+                return [item] if item else []
+            if method == "history.get":
+                return histories.get(str(params["itemids"][0]), [])
+            return []
+
+        return _request
+
+    def test_cable_optical_history_merges_rx_and_tx_per_port(self):
+        items = {
+            "rx.a": {"itemid": "71", "value_type": "0"},
+            "tx.a": {"itemid": "72", "value_type": "0"},
+            "rx.b": {"itemid": "73", "value_type": "0"},
+            "tx.b": {"itemid": "74", "value_type": "0"},
+        }
+        histories = {
+            "71": [{"clock": "1690000000", "value": "-21.5"}],
+            "72": [{"clock": "1690000010", "value": "2.1"}],
+            "73": [{"clock": "1690000000", "value": "-23.0"}],
+            "74": [],  # TX em falta: buraco real, não zero
+        }
+        fake = self._fake_by_key(items, histories)
+        url = reverse("fibercable-optical-history", args=[self.cable.pk])
+        with patch("integrations.zabbix.zabbix_service.zabbix_request", side_effect=fake):
+            response = self.client.get(url, {"hours": 24})
+        self.assertEqual(response.status_code, 200, response.content[:300])
+        payload = response.json()
+        origin = payload["origin_history"]
+        self.assertEqual(len(origin), 1)
+        self.assertEqual(origin[0]["rx_power"], -21.5)
+        self.assertEqual(origin[0]["tx_power"], 2.1)
+        dest = payload["destination_history"]
+        self.assertEqual(dest[0]["rx_power"], -23.0)
+        self.assertIsNone(dest[0]["tx_power"])
+        self.assertEqual(payload["origin_optical"]["port_name"], "0/1/0")
+
+    def test_cable_optical_history_unknown_cable_is_404_not_500(self):
+        url = reverse("fibercable-optical-history", args=[999999])
+        with patch("integrations.zabbix.zabbix_service.zabbix_request", return_value=[]):
+            response = self.client.get(url)
+        self.assertEqual(response.status_code, 404)
+
+
+class AlignedSeriesServiceTests(TestCase):
+    """EV-0029: `fetch_aligned_series` é a fachada única das rotas de histórico."""
+
+    def test_aligned_series_resolves_types_units_and_bucket(self):
+        meta = {"1": ("0", "bps"), "2": ("3", "Bps")}
+        histories = {
+            # 1690000020..1690000079 é um só bucket de 60 s (1690000020 = :00 do minuto)
+            "1": [{"clock": "1690000025", "value": "100"}, {"clock": "1690000055", "value": "300"}],
+            "2": [{"clock": "1690000040", "value": "7"}],
+        }
+        fake, calls = _fake_zabbix(meta, histories)
+        with patch("integrations.zabbix.zabbix_service.zabbix_request", side_effect=fake):
+            series = zabbix_history.fetch_aligned_series(
+                {"in": "1", "out": "2", "vazio": None}, 1690000000, 1690000000 + 3600
+            )
+        self.assertEqual(calls, {"1": 0, "2": 3})
+        self.assertEqual(series["bucket_seconds"], 60)
+        self.assertEqual(series["units"], {"in": "bps", "out": "Bps"})
+        self.assertEqual(series["samples"]["vazio"], [])
+        self.assertEqual(len(series["rows"]), 1)
+        row = series["rows"][0]
+        self.assertEqual(row["in"], 200.0)  # média dos dois pontos no bucket
+        self.assertEqual(row["out"], 7.0)
+        self.assertIsNone(row["vazio"])
+
+    def test_long_period_is_bucketed_not_truncated(self):
+        """7 dias: o bucket cresce (600 s) e o Zabbix não recebe `limit`."""
+        seen = {}
+
+        def fake(method, params=None, **kwargs):
+            if method == "item.get":
+                return [{"itemid": "9", "value_type": "3", "units": "bps"}]
+            seen.update(params)
+            return [{"clock": str(1690000000 + 7 * 86400 - 5), "value": "1"}]
+
+        with patch("integrations.zabbix.zabbix_service.zabbix_request", side_effect=fake):
+            series = zabbix_history.fetch_aligned_series(
+                {"in": "9"}, 1690000000, 1690000000 + 7 * 86400
+            )
+        self.assertNotIn("limit", seen)
+        self.assertEqual(series["bucket_seconds"], 600)
+        self.assertEqual(len(series["rows"]), 1)  # o ponto mais recente sobrevive
+
+    def test_get_item_by_key_resolves_itemid_and_type(self):
+        def fake(method, params=None, **kwargs):
+            assert method == "item.get"
+            assert params["filter"] == {"key_": "rx.power"}
+            return [{"itemid": "77", "value_type": "0", "units": "dBm"}]
+
+        with patch("integrations.zabbix.zabbix_service.zabbix_request", side_effect=fake):
+            item = zabbix_history.get_item_by_key("10101", "rx.power")
+        self.assertEqual(item, {"itemid": "77", "value_type": 0, "units": "dBm"})
+        self.assertIsNone(zabbix_history.get_item_by_key("10101", None))
+
+
+class MergeSeriesTests(TestCase):
+    """EV-0010 — alinhamento por bucket com `None` real nos buracos."""
+
+    def test_samples_in_different_seconds_land_in_the_same_bucket(self):
+        # 1_000_000_020 é início de bucket (múltiplo de 60); RX aos +7 s, TX aos +43 s.
+        rows = zabbix_history.merge_series(
+            {"rx": [(1_000_000_027, -21.0)], "tx": [(1_000_000_063, -3.0)]},
+            bucket_seconds=60,
+        )
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["rx"], -21.0)
+        self.assertEqual(rows[0]["tx"], -3.0)
+        self.assertEqual(rows[0]["timestamp"], "2001-09-09T01:47:00+00:00")
+
+    def test_gap_is_none_not_previous_value(self):
+        rows = zabbix_history.merge_series(
+            {"in": [(0, 100.0), (120, 300.0)], "out": [(0, 50.0), (60, 70.0), (120, 90.0)]},
+            bucket_seconds=60,
+        )
+        self.assertEqual([r["in"] for r in rows], [100.0, None, 300.0])
+        self.assertEqual([r["out"] for r in rows], [50.0, 70.0, 90.0])
+
+    def test_zero_is_a_value(self):
+        rows = zabbix_history.merge_series({"in": [(0, 0.0)]}, bucket_seconds=60)
+        self.assertEqual(rows[0]["in"], 0.0)
+
+    def test_bucket_averages_multiple_samples(self):
+        rows = zabbix_history.merge_series(
+            {"in": [(0, 10.0), (20, 20.0), (40, 30.0)]}, bucket_seconds=60
+        )
+        self.assertEqual(rows[0]["in"], 20.0)
+
+    def test_choose_bucket_keeps_point_count_bounded(self):
+        self.assertEqual(zabbix_history.choose_bucket_seconds(24 * 3600), 60)
+        self.assertEqual(zabbix_history.choose_bucket_seconds(7 * 24 * 3600), 600)
+        self.assertEqual(
+            zabbix_history.choose_bucket_seconds(30 * 24 * 3600, max_points=100), 7200 * 4
+        )
+
+    def test_history_to_samples_skips_garbage(self):
+        samples = zabbix_history.history_to_samples(
+            [
+                {"clock": "10", "value": "1.5"},
+                {"clock": "x"},
+                {"value": "2"},
+                {"clock": "20", "value": None},
+            ]
+        )
+        self.assertEqual(samples, [(10, 1.5)])

@@ -844,7 +844,7 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed, watch, nextTick, onUnmounted } from 'vue';
+import { reactive, ref, computed, watch, nextTick, onUnmounted, shallowRef } from 'vue';
 import { createMap } from '@/providers/maps/MapProviderFactory.js';
 import { useApi } from '@/composables/useApi';
 import { useNotification } from '@/composables/useNotification';
@@ -903,8 +903,8 @@ const mapLng = ref(-46.6333);
 
 // Google Maps state
 const mapContainer = ref(null);
-const mapInstance = ref(null);
-const mapMarker = ref(null);
+const mapInstance = shallowRef(null); // IMap (providers/maps)
+const mapMarker = shallowRef(null);   // IMarker
 const mapLoading = ref(false);
 const mapError = ref(null);
 
@@ -1148,55 +1148,57 @@ const confirmLocation = () => {
   nextTick(() => newSiteInput.value?.focus());
 };
 
-// --- MAP FUNCTIONS (provider-agnostic) ---
+// --- MAPA DE POSIÇÃO (provider configurado, via factory — EV-0012c) ---
+
+const destroyMap = () => {
+  try { mapMarker.value?.remove(); } catch (_) { /* best-effort */ }
+  mapMarker.value = null;
+  try { mapInstance.value?.destroy(); } catch (_) { /* best-effort */ }
+  mapInstance.value = null;
+};
 
 const initializeMap = async () => {
   mapLoading.value = true;
   mapError.value = null;
 
   try {
-    console.log('[DeviceEditModal] Initializing map...');
-
     // Aguarda o container estar disponível no DOM
     await nextTick();
-
     if (!mapContainer.value) {
       throw new Error('Map container not found');
     }
+    destroyMap();
 
-    console.log('[DeviceEditModal] Creating map instance...');
-
-    // Cria instância do mapa usando o provider configurado (Google, Mapbox, etc.)
-    mapInstance.value = await createMap(mapContainer.value, {
+    const map = await createMap(mapContainer.value, {
       center: { lat: mapLat.value, lng: mapLng.value },
       zoom: 15,
+      mapTypeId: 'roadmap',
+      controls: { mapType: true, streetView: false, fullscreen: true },
     });
+    mapInstance.value = map;
 
-    // Cria marcador arrastável
-    mapMarker.value = mapInstance.value.createMarker({
+    mapMarker.value = map.createMarker({
       position: { lat: mapLat.value, lng: mapLng.value },
       draggable: true,
       title: 'Posição do Site',
     });
 
     // Event: arrastar marcador
-    mapMarker.value.on('dragend', ({ lat, lng }) => {
-      mapLat.value = lat;
-      mapLng.value = lng;
-      console.log('[DeviceEditModal] Marker dragged to:', lat, lng);
+    mapMarker.value.on('dragend', () => {
+      const pos = mapMarker.value.getPosition();
+      mapLat.value = pos.lat;
+      mapLng.value = pos.lng;
     });
 
-    // Event: clicar no mapa
-    mapInstance.value.on('click', ({ lat, lng }) => {
-      mapLat.value = lat;
-      mapLng.value = lng;
-      mapMarker.value.setPosition({ lat, lng });
-      console.log('[DeviceEditModal] Map clicked:', lat, lng);
+    // Event: clicar no mapa move o marcador
+    map.on('click', (event) => {
+      if (!Number.isFinite(event?.lat) || !Number.isFinite(event?.lng)) return;
+      mapLat.value = event.lat;
+      mapLng.value = event.lng;
+      mapMarker.value?.setPosition({ lat: event.lat, lng: event.lng });
     });
 
-    console.log('[DeviceEditModal] ✅ Map initialized successfully');
     mapLoading.value = false;
-
   } catch (error) {
     console.error('[DeviceEditModal] Error initializing map:', error);
     mapError.value = error.message || 'Erro ao carregar o mapa';
@@ -1208,11 +1210,10 @@ const initializeMap = async () => {
 watch(showMapPicker, async (isOpen) => {
   if (isOpen) {
     // Sempre recria o mapa para usar as coordenadas atualizadas
-    if (mapInstance.value) {
-      mapInstance.value = null;
-    }
     await nextTick(); // Aguarda o DOM renderizar
     await initializeMap();
+  } else {
+    destroyMap();
   }
 });
 
@@ -1278,11 +1279,7 @@ watch(showInterfacesModal, async (isOpen) => {
 
 // Cleanup ao desmontar componente
 onUnmounted(() => {
-  if (mapMarker.value) {
-    mapMarker.value.setMap(null);
-    mapMarker.value = null;
-  }
-  mapInstance.value = null;
+  destroyMap();
 });
 
 // --- SALVAMENTO ---

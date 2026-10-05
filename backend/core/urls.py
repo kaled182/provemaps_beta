@@ -1,27 +1,32 @@
 """
 URL configuration for core project.
 """
-from django.contrib import admin
-from django.urls import path, include, re_path
-from django.conf import settings
-from django.conf.urls.static import static
-from django.views.generic import RedirectView
+
 from typing import Any
 
+from django.conf import settings
+from django.conf.urls.static import static
+from django.contrib import admin
+from django.urls import include, path, re_path
+from django.views.generic import RedirectView
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+
 # Health endpoints
-from core import views_health as health_views
-from core import views_metrics as metrics_views
-from core import views_docs as docs_views
 # Views antigas
-from core import views as core_views
+# API views
+from core import (
+    api_users,
+    views as core_views,
+    views_api as api_views,
+    views_auth,
+    views_docs as docs_views,
+    views_health as health_views,
+    views_metrics as metrics_views,
+)
+
 # SPA views
 from core.views_spa import SPAView
-from core import views_auth
-# API views
-from core import views_api as api_views
-from core import api_users
-from setup_app import api_views as setup_api_views
-
+from setup_app.api import video as setup_api_video
 
 # Customize Django Admin
 admin.site.site_header = "SIMPLES INTERNET - Administração"
@@ -31,131 +36,102 @@ admin.site.index_title = "Gerenciamento do Sistema"
 
 # Define API, Admin e Health routes FIRST
 urlpatterns: list[Any] = [
-    path('admin/', admin.site.urls),
+    path("admin/", admin.site.urls),
     path(
-        'accounts/password_reset/',
+        "accounts/password_reset/",
         views_auth.RuntimeEmailPasswordResetView.as_view(),
-        name='password_reset',
+        name="password_reset",
     ),
     path(
-        'accounts/login/',
+        "accounts/login/",
         views_auth.TwoStepLoginView.as_view(),
-        name='login',
+        name="login",
     ),
     path(
-        'accounts/otp/',
+        "accounts/otp/",
         views_auth.RuntimeOtpView.as_view(),
-        name='login_otp',
+        name="login_otp",
     ),
     path(
-        'accounts/',
-        include('django.contrib.auth.urls'),
+        "accounts/",
+        include("django.contrib.auth.urls"),
     ),
     path(
-        'metrics',
-        RedirectView.as_view(url='/metrics/metrics', permanent=False),
-        name='metrics_root_redirect',
+        "metrics",
+        RedirectView.as_view(url="/metrics/metrics", permanent=False),
+        name="metrics_root_redirect",
     ),
-    path('metrics/', include('django_prometheus.urls')),
-    path(
-        'api/metrics/health/',
-        metrics_views.system_health_metrics,
-        name='system_health_metrics'
-    ),
-    path('metrics/health', SPAView.as_view(), name='metrics_health_page'),
-
+    path("metrics/", include("django_prometheus.urls")),
+    path("api/metrics/health/", metrics_views.system_health_metrics, name="system_health_metrics"),
+    path("metrics/health", SPAView.as_view(), name="metrics_health_page"),
     # Documentation API
-    path(
-        'api/docs/<path:doc_path>',
-        docs_views.serve_doc_file,
-        name='serve_doc'
-    ),
-    path('docs', SPAView.as_view(), name='docs_page'),
-
+    path("api/docs/<path:doc_path>", docs_views.serve_doc_file, name="serve_doc"),
+    path("docs", SPAView.as_view(), name="docs_page"),
     # User Management API
-    path('api/users/', api_users.list_users, name='api_list_users'),
-    path('api/users/create/', api_users.create_user, name='api_create_user'),
-    path('api/users/<int:user_id>/', api_users.get_user, name='api_get_user'),
+    path("api/users/", api_users.list_users, name="api_list_users"),
+    path("api/users/create/", api_users.create_user, name="api_create_user"),
+    path("api/users/<int:user_id>/", api_users.get_user, name="api_get_user"),
+    path("api/users/<int:user_id>/update/", api_users.update_user, name="api_update_user"),
+    path("api/users/<int:user_id>/delete/", api_users.delete_user, name="api_delete_user"),
+    path("api/users/me/", api_users.me_user, name="api_me_user"),
+    path("api/users/me/avatar/", api_users.me_avatar, name="api_me_avatar"),
+    path("api/users/me/totp/", api_users.me_totp, name="api_me_totp"),
+    path("api/users/me/totp/verify/", api_users.me_totp_verify, name="api_me_totp_verify"),
+    path("api/users/me/totp/disable/", api_users.me_totp_disable, name="api_me_totp_disable"),
+    path("api/groups/", api_users.list_groups, name="api_list_groups"),
+    path("api/departments/", api_users.list_departments, name="api_list_departments"),
     path(
-        'api/users/<int:user_id>/update/',
-        api_users.update_user,
-        name='api_update_user'
-    ),
-    path(
-        'api/users/<int:user_id>/delete/',
-        api_users.delete_user,
-        name='api_delete_user'
-    ),
-    path('api/users/me/', api_users.me_user, name='api_me_user'),
-    path('api/users/me/avatar/', api_users.me_avatar, name='api_me_avatar'),
-    path('api/users/me/totp/', api_users.me_totp, name='api_me_totp'),
-    path('api/users/me/totp/verify/', api_users.me_totp_verify, name='api_me_totp_verify'),
-    path('api/users/me/totp/disable/', api_users.me_totp_disable, name='api_me_totp_disable'),
-    path('api/groups/', api_users.list_groups, name='api_list_groups'),
-    path('api/departments/', api_users.list_departments, name='api_list_departments'),
-    path(
-        'api/departments/<int:department_id>/',
+        "api/departments/<int:department_id>/",
         api_users.department_detail,
-        name='api_department_detail'
+        name="api_department_detail",
     ),
     path(
-        'api/departments/<int:department_id>/remove/',
+        "api/departments/<int:department_id>/remove/",
         api_users.remove_department,
-        name='api_remove_department'
+        name="api_remove_department",
     ),
-    path('system/users', SPAView.as_view(), name='users_page'),
-
+    path("system/users", SPAView.as_view(), name="users_page"),
+    path("system/evolucao", SPAView.as_view(), name="evolucao_page"),  # Central de Evolução
+    # OpenAPI 3 (EV-0030) — só para utilizadores autenticados (SERVE_PERMISSIONS)
+    path("api/schema/", SpectacularAPIView.as_view(), name="openapi-schema"),
+    path(
+        "api/schema/swagger/",
+        SpectacularSwaggerView.as_view(url_name="openapi-schema"),
+        name="openapi-swagger",
+    ),
     # APIs
-    path('api/v1/telemetry/', include('telemetry.urls')),
-    path('api/v1/inventory/', include('inventory.urls_api')),
-    path('api/v1/', include('inventory.urls_rest')),
-    path('api/v1/monitoring/', include('monitoring.urls_api')),
-    path('', include('inventory.urls')),  # Custom maps and legacy HTML views
-    path('api/v1/cameras/', setup_api_views.video_cameras_list, name='api_video_cameras'),
-    path('api/config/', api_views.frontend_config, name='frontend_config'),
-    path('setup_app/', include('setup_app.urls')),
-    path('maps_view/', include('maps_view.urls')),
-    path('monitoring/', include('monitoring.urls')),
-
+    path("api/v1/telemetry/", include("telemetry.urls")),
+    path("api/v1/inventory/", include("inventory.urls_api")),
+    path("api/v1/", include("inventory.urls_rest")),
+    path("api/v1/monitoring/", include("monitoring.urls_api")),
+    path("api/v1/evolucao/", include("evolucao.urls")),  # Central de Evolução (ADR 0006)
+    path("", include("inventory.urls")),  # Custom maps and legacy HTML views
+    path("api/v1/cameras/", setup_api_video.video_cameras_list, name="api_video_cameras"),
+    path("api/config/", api_views.frontend_config, name="frontend_config"),
+    path("setup_app/", include("setup_app.urls")),
+    path("maps_view/", include("maps_view.urls")),
+    path("monitoring/", include("monitoring.urls")),
     # Health checks
-    path('healthz', health_views.healthz, name='healthz'),
-    path('ready', health_views.healthz_ready, name='healthz_ready'),
-    path('live', health_views.healthz_live, name='healthz_live'),
-    path(
-        'celery/status',
-        health_views.celery_status,
-        name='celery_status'
-    ),
-
+    path("healthz", health_views.healthz, name="healthz"),
+    path("ready", health_views.healthz_ready, name="healthz_ready"),
+    path("live", health_views.healthz_live, name="healthz_live"),
+    path("celery/status", health_views.celery_status, name="celery_status"),
     # Zabbix lookup page (if still needed)
-    path(
-        'zabbix/lookup/',
-        core_views.zabbix_lookup_page,
-        name='zabbix_lookup'
-    ),
-
+    path("zabbix/lookup/", core_views.zabbix_lookup_page, name="zabbix_lookup"),
     # Favicon
-    path(
-        'favicon.ico',
-        RedirectView.as_view(url='/static/favicon.ico', permanent=True)
-    ),
+    path("favicon.ico", RedirectView.as_view(url="/static/favicon.ico", permanent=True)),
 ]
 
 # Django Debug Toolbar (dev only)
-if settings.DEBUG and 'debug_toolbar' in settings.INSTALLED_APPS:
+if settings.DEBUG and "debug_toolbar" in settings.INSTALLED_APPS:
     import debug_toolbar
-    urlpatterns.insert(0, path('__debug__/', include(debug_toolbar.urls)))
+
+    urlpatterns.insert(0, path("__debug__/", include(debug_toolbar.urls)))
 
 # Serve static and media files (dev only)
 if settings.DEBUG:
-    urlpatterns += static(
-        settings.STATIC_URL,
-        document_root=settings.STATIC_ROOT
-    )
-    urlpatterns += static(
-        settings.MEDIA_URL,
-        document_root=settings.MEDIA_ROOT
-    )
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 # Vue SPA Catch-All Route
 # This MUST be the last route. It captures any URL not matched above

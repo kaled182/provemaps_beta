@@ -1,7 +1,7 @@
 # Monitoring Guide - MapsProveFiber
 
-**Version**: v2.0.0  
-**Last Updated**: 2025-11-10  
+**Versão do produto**: ver [VERSION](../../VERSION)  
+**Last Updated**: 2026-10-04  
 **Target Audience**: DevOps, SRE
 
 ---
@@ -46,7 +46,7 @@ celery_reserved_tasks 3
 #### Zabbix Integration Metrics
 ```prometheus
 # API calls
-zabbix_api_calls_total{method="host.get",status="success"} 456
+zabbix_requests_total{method="host.get",status="success"} 456
 
 # Circuit breaker
 zabbix_circuit_breaker_state{method="host.get"} 0
@@ -89,22 +89,6 @@ CELERY_METRICS_UPDATE_INTERVAL=30 # Update interval (seconds)
 
 ### Monitoring Script
 
-**PowerShell:**
-```powershell
-# scripts/check_celery.ps1
-$response = Invoke-WebRequest -Uri "http://localhost:8000/celery/status"
-if ($response.StatusCode -eq 200) {
-    $data = $response.Content | ConvertFrom-Json
-    if ($data.available) {
-        Write-Host "Celery OK: $($data.workers) workers, $($data.active_tasks) active tasks"
-        exit 0
-    }
-}
-Write-Host "Celery FAIL"
-exit 1
-```
-
-**Bash:**
 ```bash
 # scripts/check_celery.sh
 response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/celery/status)
@@ -193,7 +177,7 @@ groups:
           summary: "Excessive retry attempts"
       
       - alert: ZabbixHighErrorRate
-        expr: rate(zabbix_api_calls_total{status="failure"}[5m]) > 0.1
+        expr: rate(zabbix_requests_total{status="failure"}[5m]) > 0.1
         for: 5m
         labels:
           severity: warning
@@ -283,7 +267,7 @@ MapsProveFiber continues operating without Redis:
       {
         "title": "Zabbix API Calls",
         "targets": [
-          {"expr": "rate(zabbix_api_calls_total[5m])"}
+          {"expr": "rate(zabbix_requests_total[5m])"}
         ]
       }
     ]
@@ -324,7 +308,7 @@ MapsProveFiber continues operating without Redis:
 - `/celery/status` returns errors
 
 **Resolution:**
-```powershell
+```bash
 # Check worker status
 docker compose ps celery
 
@@ -332,7 +316,7 @@ docker compose ps celery
 docker compose logs celery --tail=100
 
 # Restart workers
-docker compose restart celery beat
+docker compose restart celery celery-beat
 
 # Verify Redis connection
 docker compose logs redis
@@ -345,7 +329,7 @@ docker compose logs redis
 - Slow task execution
 
 **Resolution:**
-```powershell
+```bash
 # Check resource usage
 docker compose stats celery
 
@@ -367,7 +351,7 @@ docker compose exec web python manage.py shell
 - Zabbix integration failing
 
 **Resolution:**
-```powershell
+```bash
 # Check Zabbix connectivity
 curl http://zabbix-server/api_jsonrpc.php
 
@@ -385,10 +369,10 @@ docker compose restart web
 
 - [Observability Guide](../guides/OBSERVABILITY.md)
 - [Redis HA Configuration](REDIS_HA.md)
-- [Deployment Guide](DEPLOYMENT.md)
-- [Troubleshooting Guide](TROUBLESHOOTING.md)
+- [Deployment Guide](../../DEPLOY.md)
+- [Troubleshooting notes](../troubleshooting/)
 
 ---
 
-**Last Updated**: 2025-11-10  
+**Last Updated**: 2026-10-04  
 **Maintainers**: SRE Team

@@ -9,45 +9,34 @@ import socket
 import subprocess
 import time
 from datetime import datetime
-from typing import Any, Dict, cast
+from typing import Any, cast
 
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
-from django.http import (
-    HttpRequest,
-    HttpResponse,
-    HttpResponseBadRequest,
-    JsonResponse,
-)
+from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.test import RequestFactory
-from django.views.decorators.http import (
-    require_GET,
-    require_POST,
-    require_http_methods,
-)
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from integrations.zabbix.decorators import handle_api_errors
 from integrations.zabbix.guards import diagnostics_guard
-
-from inventory.usecases import devices as device_uc
+from inventory.models import FiberCable, FiberEvent
+from inventory.usecases import devices as device_uc, fibers as fiber_uc
 from inventory.usecases.devices import (
     InventoryNotFound,
     InventoryUseCaseError,
     InventoryValidationError,
 )
-from inventory.usecases import fibers as fiber_uc
 from inventory.usecases.fibers import FiberNotFound
-from inventory.models import FiberCable, FiberEvent
 
 logger = logging.getLogger(__name__)
 
 CACHE_TTL_SECONDS = 60
 
-JsonDict = Dict[str, Any]
+JsonDict = dict[str, Any]
 
 
 def _current_status(cable: FiberCable) -> str:
-    status_value: Any = getattr(cable, "status")
+    status_value: Any = cable.status
     if isinstance(status_value, str):
         return status_value
     return str(status_value)
@@ -118,7 +107,7 @@ def api_device_ports_live(
     """
     Retorna portas do dispositivo com dados em tempo real do Zabbix.
     Endpoint: GET /api/v1/inventory/devices/{device_id}/ports/live/
-    
+
     Sem cache - sempre busca dados atualizados do Zabbix.
     Inclui: status operacional, velocidade, níveis de sinal óptico.
     """
@@ -144,9 +133,9 @@ def api_devices_autocomplete(request: HttpRequest) -> HttpResponse:
     """
     Return devices with enriched data for autocomplete component.
     Includes coordinates, Zabbix hostid, IP, vendor, model, and location.
-    
+
     Endpoint: GET /api/v1/inventory/devices/autocomplete/
-    
+
     Response: {
         "devices": [
             {
@@ -211,7 +200,7 @@ def api_add_device_from_zabbix(request: HttpRequest) -> HttpResponse:
     except InventoryUseCaseError as exc:
         logger.exception("Failed to register device via Zabbix: %s", exc)
         detail = str(exc).strip()
-        payload: Dict[str, Any] = {"error": "Failed to register device"}
+        payload: dict[str, Any] = {"error": "Failed to register device"}
         if detail:
             payload["detail"] = detail
         return JsonResponse(payload, status=500)
@@ -261,6 +250,7 @@ def api_sites(request: HttpRequest) -> HttpResponse:
 
 
 @require_GET
+@login_required
 @handle_api_errors
 def api_port_traffic_history(
     request: HttpRequest,
@@ -323,7 +313,7 @@ def api_test_telnet(request: HttpRequest) -> JsonResponse:
     except ValueError:
         timeout = 3.0
 
-    result: Dict[str, Any] = {"host": host, "port": port, "timeout": timeout}
+    result: dict[str, Any] = {"host": host, "port": port, "timeout": timeout}
     try:
         with socket.create_connection((host, port), timeout=timeout) as conn:
             elapsed = time.time() - started
@@ -399,6 +389,7 @@ def api_test_ping(request: HttpRequest) -> JsonResponse:
             capture_output=True,
             text=True,
             timeout=timeout + count + 1,
+            check=False,
         )
     except subprocess.TimeoutExpired:
         return JsonResponse(
@@ -413,39 +404,26 @@ def api_test_ping(request: HttpRequest) -> JsonResponse:
     try:
         if system == "windows":
             m_stats = re.search(
-                (
-                    r"Enviados = (\d+), Recebidos = (\d+), "
-                    r"Perdidos = (\d+).*?\((\d+)%"
-                ),
+                (r"Enviados = (\d+), Recebidos = (\d+), " r"Perdidos = (\d+).*?\((\d+)%"),
                 stdout,
                 re.S,
             ) or re.search(
-                (
-                    r"Sent = (\d+), Received = (\d+), "
-                    r"Lost = (\d+).*?\((\d+)%"
-                ),
+                (r"Sent = (\d+), Received = (\d+), " r"Lost = (\d+).*?\((\d+)%"),
                 stdout,
                 re.S,
             )
             if m_stats:
-                transmitted, received, _lost, packet_loss = map(
-                    int, m_stats.groups()
-                )
+                transmitted, received, _lost, packet_loss = map(int, m_stats.groups())
             m_rtt = re.search(r"Average = (\d+)ms", stdout)
             if m_rtt:
                 avg_ms = float(m_rtt.group(1))
         else:
             m_stats = re.search(
-                (
-                    r"(\d+) packets transmitted, (\d+) "
-                    r"(?:packets )?received, (\d+)% packet loss"
-                ),
+                (r"(\d+) packets transmitted, (\d+) " r"(?:packets )?received, (\d+)% packet loss"),
                 stdout,
             )
             if m_stats:
-                transmitted, received, packet_loss = map(
-                    int, m_stats.groups()
-                )
+                transmitted, received, packet_loss = map(int, m_stats.groups())
             m_rtt = re.search(
                 r"rtt min/avg/max/[a-z]+ = [0-9.]+/([0-9.]+)/",
                 stdout,
@@ -614,58 +592,60 @@ def api_test_set_cable_unknown(
 # DEVICE IMPORT SYSTEM APIS (Phase 11 - Nov 2025)
 # ============================================================================
 
+
 @login_required
 @require_GET
 def api_inventory_grouped(request: HttpRequest) -> JsonResponse:
     """
     Retorna o inventário organizado por grupos para a aba 'Inventário (Pós)'.
-    
+
     Endpoint: GET /api/v1/inventory/devices/grouped/
     Response: Array de objetos {group_id, group_name, devices: [...]}
     """
-    from inventory.models import DeviceGroup, Device
+    from inventory.models import Device, DeviceGroup
     from inventory.serializers import DeviceSerializer
-    
+
     try:
         # Busca todos os grupos que tenham devices associados
-        groups = DeviceGroup.objects.prefetch_related(
-            'primary_devices__site'
-        ).filter(primary_devices__isnull=False).distinct()
-        
+        groups = (
+            DeviceGroup.objects.prefetch_related("primary_devices__site")
+            .filter(primary_devices__isnull=False)
+            .distinct()
+        )
+
         response_data = []
-        
+
         # Grupos definidos
         for group in groups:
-            devices = group.primary_devices.select_related('site').all()
+            devices = group.primary_devices.select_related("site").all()
             if devices.exists():
-                response_data.append({
-                    "group_id": group.id,
-                    "group_name": group.name,
-                    "device_count": devices.count(),
-                    "devices": DeviceSerializer(devices, many=True).data
-                })
-        
+                response_data.append(
+                    {
+                        "group_id": group.id,
+                        "group_name": group.name,
+                        "device_count": devices.count(),
+                        "devices": DeviceSerializer(devices, many=True).data,
+                    }
+                )
+
         # Devices sem grupo (órfãos)
-        orphan_devices = Device.objects.filter(
-            monitoring_group__isnull=True
-        ).select_related('site')
-        
+        orphan_devices = Device.objects.filter(monitoring_group__isnull=True).select_related("site")
+
         if orphan_devices.exists():
-            response_data.append({
-                "group_id": "orphans",
-                "group_name": "Sem Grupo Definido",
-                "device_count": orphan_devices.count(),
-                "devices": DeviceSerializer(orphan_devices, many=True).data
-            })
+            response_data.append(
+                {
+                    "group_id": "orphans",
+                    "group_name": "Sem Grupo Definido",
+                    "device_count": orphan_devices.count(),
+                    "devices": DeviceSerializer(orphan_devices, many=True).data,
+                }
+            )
 
         return JsonResponse(response_data, safe=False)
-    
+
     except Exception as e:
         logger.exception("Erro ao buscar inventário agrupado")
-        return JsonResponse(
-            {"error": str(e)},
-            status=500
-        )
+        return JsonResponse({"error": str(e)}, status=500)
 
 
 @login_required
@@ -673,9 +653,9 @@ def api_inventory_grouped(request: HttpRequest) -> JsonResponse:
 def api_import_batch(request: HttpRequest) -> JsonResponse:
     """
     Processa importação/edição vinda do DeviceEditModal.vue (Batch ou Single).
-    
+
     Endpoint: POST /api/v1/inventory/devices/import-batch/
-    
+
     Body (Batch):
     {
         "mode": "batch",
@@ -691,14 +671,14 @@ def api_import_batch(request: HttpRequest) -> JsonResponse:
             }
         ]
     }
-    
+
     Body (Single):
     {
         "name": "Router-01",
         "ip_address": "192.168.1.1",
         ...
     }
-    
+
     Response:
     {
         "success": true,
@@ -709,70 +689,62 @@ def api_import_batch(request: HttpRequest) -> JsonResponse:
     }
     """
     from django.db import transaction
+
     from inventory.models import Device, DeviceGroup, Site
-    
+
     try:
         data = json.loads(request.body)
-        mode = data.get('mode', 'single')
-        
+        mode = data.get("mode", "single")
+
         # DEBUG: Log do payload recebido
         logger.info(f"[IMPORT_DEBUG] Mode: {mode}")
-        logger.info(
-            f"[IMPORT_DEBUG] Payload: {json.dumps(data, indent=2)}"
-        )
-        
+        logger.info(f"[IMPORT_DEBUG] Payload: {json.dumps(data, indent=2)}")
+
         # Normaliza entrada para sempre ser uma lista
-        if mode == 'batch':
-            items_to_process = data.get('devices', [])
+        if mode == "batch":
+            items_to_process = data.get("devices", [])
         else:
             # Single mode: wrap em array
             items_to_process = [data]
-        
+
         if not items_to_process:
             return JsonResponse(
-                {"success": False, "error": "Nenhum dispositivo fornecido"},
-                status=400
+                {"success": False, "error": "Nenhum dispositivo fornecido"}, status=400
             )
-        
+
         processed_ids = []
         created_count = 0
         updated_count = 0
         errors = []
         proximity_warnings = []
-        
+
         with transaction.atomic():
             for idx, item in enumerate(items_to_process):
                 try:
                     # 1. Lógica de Grupo (Criar ou Buscar)
                     group_instance = None
-                    group_name = item.get('group')
-                    
+                    group_name = item.get("group")
+
                     if group_name:
                         # get_or_create garante que o grupo exista
                         # Gera ID seguro: MANUAL_GROUPNAME (limitado a 32)
-                        safe_group_id = (
-                            f"MANUAL_{group_name.upper().replace(' ', '_')}"
-                        )[:32]
-                        
-                        group_instance, created = (
-                            DeviceGroup.objects.get_or_create(
-                                name=group_name,
-                                defaults={'zabbix_groupid': safe_group_id}
-                            )
+                        safe_group_id = (f"MANUAL_{group_name.upper().replace(' ', '_')}")[:32]
+
+                        group_instance, created = DeviceGroup.objects.get_or_create(
+                            name=group_name, defaults={"zabbix_groupid": safe_group_id}
                         )
                         if created:
                             logger.info(
-                                f"Novo grupo criado: {group_name} "
-                                f"(ID: {safe_group_id})"
+                                f"Novo grupo criado: {group_name} " f"(ID: {safe_group_id})"
                             )
-                    
+
                     # 2. Lógica de Site (Obrigatório para Device Model)
                     site_instance = None
-                    site_id_or_name = item.get('site')
-                    is_new_site = item.get('is_new_site', False)
-                    site_coordinates = item.get('site_coordinates')
+                    site_id_or_name = item.get("site")
+                    is_new_site = item.get("is_new_site", False)
+                    site_coordinates = item.get("site_coordinates")
                     # Flag: site omitido intencionalmente (batch sem site comum)
-                    site_omitted = 'site' not in item
+                    site_omitted = "site" not in item
 
                     if not site_id_or_name:
                         if site_omitted:
@@ -785,65 +757,54 @@ def api_import_batch(request: HttpRequest) -> JsonResponse:
                             default_site = Site.objects.first()
                             if not default_site:
                                 default_site = Site.objects.create(
-                                    display_name="Site Padrão",
-                                    city="Default"
+                                    display_name="Site Padrão", city="Default"
                                 )
                                 logger.info("Site padrão criado automaticamente")
                             site_instance = default_site
                     elif is_new_site:
                         # Criar novo Site com coordenadas
-                        from django.contrib.gis.geos import Point
-                        import math
-
-                        PROXIMITY_RADIUS_KM = 0.1  # 100 metros
-
-                        def _haversine_km(lat1, lon1, lat2, lon2):
-                            R = 6371.0088
-                            phi1, phi2 = math.radians(lat1), math.radians(lat2)
-                            dphi = math.radians(lat2 - lat1)
-                            dlambda = math.radians(lon2 - lon1)
-                            a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
-                            return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+                        from inventory.usecases.spatial import (
+                            SITE_PROXIMITY_RADIUS_M,
+                            find_site_within,
+                        )
 
                         new_site_name = site_id_or_name
-                        site_defaults = {'city': 'A definir'}
+                        site_defaults = {"city": "A definir"}
 
                         has_coords = (
                             site_coordinates
-                            and 'lat' in site_coordinates
-                            and 'lng' in site_coordinates
+                            and "lat" in site_coordinates
+                            and "lng" in site_coordinates
                         )
 
                         if has_coords:
-                            lat = float(site_coordinates['lat'])
-                            lng = float(site_coordinates['lng'])
+                            lat = float(site_coordinates["lat"])
+                            lng = float(site_coordinates["lng"])
 
-                            # Regra 100 m: se já existe um site próximo, reutilizá-lo
-                            nearest_site = None
-                            nearest_dist = None
-                            for candidate in Site.objects.exclude(latitude=None).exclude(longitude=None):
-                                dist = _haversine_km(lat, lng, float(candidate.latitude), float(candidate.longitude))
-                                if dist <= PROXIMITY_RADIUS_KM:
-                                    if nearest_dist is None or dist < nearest_dist:
-                                        nearest_site = candidate
-                                        nearest_dist = dist
+                            # Regra 100 m: se já existe um site próximo, reutilizá-lo.
+                            # EV-0024: ST_DWithin sobre Site.location (GiST), não haversine
+                            # em Python sobre todos os sites.
+                            match = find_site_within(lat, lng, SITE_PROXIMITY_RADIUS_M)
+                            nearest_site, nearest_dist_m = match if match else (None, None)
 
                             if nearest_site:
                                 site_instance = nearest_site
                                 logger.info(
                                     f"Site '{nearest_site.display_name}' encontrado a "
-                                    f"{nearest_dist * 1000:.0f}m das coordenadas fornecidas — "
+                                    f"{nearest_dist_m:.0f}m das coordenadas fornecidas — "
                                     f"reutilizado em vez de criar '{new_site_name}'"
                                 )
-                                proximity_warnings.append({
-                                    'new_site_name': new_site_name,
-                                    'reused_site': nearest_site.display_name,
-                                    'distance_m': round(nearest_dist * 1000),
-                                })
+                                proximity_warnings.append(
+                                    {
+                                        "new_site_name": new_site_name,
+                                        "reused_site": nearest_site.display_name,
+                                        "distance_m": round(nearest_dist_m),
+                                    }
+                                )
                             else:
-                                site_defaults['latitude'] = lat
-                                site_defaults['longitude'] = lng
-                                site_defaults['location'] = Point(lng, lat)
+                                site_defaults["latitude"] = lat
+                                site_defaults["longitude"] = lng
+                                # `location` vem do sinal pre_save (EV-0024)
                                 site_instance, created = Site.objects.get_or_create(
                                     display_name=new_site_name,
                                     defaults=site_defaults,
@@ -864,9 +825,7 @@ def api_import_batch(request: HttpRequest) -> JsonResponse:
                     else:
                         # Usar Site existente por ID
                         try:
-                            site_instance = Site.objects.get(
-                                id=int(site_id_or_name)
-                            )
+                            site_instance = Site.objects.get(id=int(site_id_or_name))
                         except (ValueError, Site.DoesNotExist):
                             # Fallback: buscar por nome
                             site_instance = Site.objects.filter(
@@ -877,46 +836,37 @@ def api_import_batch(request: HttpRequest) -> JsonResponse:
                                 site_instance = Site.objects.first()
                                 if not site_instance:
                                     site_instance = Site.objects.create(
-                                        display_name="Site Padrão",
-                                        city="Default"
+                                        display_name="Site Padrão", city="Default"
                                     )
                                 logger.warning(
                                     f"Site ID/nome '{site_id_or_name}' não "
                                     f"encontrado, usando "
                                     f"'{site_instance.display_name}'"
                                 )
-                    
+
                     # 3. Identificar Dispositivo (Atualizar ou Criar)
                     device_qs = Device.objects.none()
-                    
+
                     # Tenta identificar por Zabbix ID
-                    zabbix_id = (
-                        item.get('zabbix_id') or item.get('zabbix_hostid')
-                    )
+                    zabbix_id = item.get("zabbix_id") or item.get("zabbix_hostid")
                     if zabbix_id:
-                        device_qs = Device.objects.filter(
-                            zabbix_hostid=zabbix_id
-                        )
-                    
+                        device_qs = Device.objects.filter(zabbix_hostid=zabbix_id)
+
                     # Fallback: IP address
                     if not device_qs.exists():
-                        ip = (
-                            item.get('ip') or
-                            item.get('ip_address') or
-                            item.get('primary_ip')
-                        )
+                        ip = item.get("ip") or item.get("ip_address") or item.get("primary_ip")
                         if ip:
                             device_qs = Device.objects.filter(primary_ip=ip)
-                    
+
                     # Fallback: ID direto
-                    if not device_qs.exists() and item.get('id'):
-                        device_qs = Device.objects.filter(id=item.get('id'))
-                    
+                    if not device_qs.exists() and item.get("id"):
+                        device_qs = Device.objects.filter(id=item.get("id"))
+
                     # Atualizar ou Criar
                     if device_qs.exists():
                         device = device_qs.first()
-                        device.name = item.get('name', device.name)
-                        device.category = item.get('category', device.category)
+                        device.name = item.get("name", device.name)
+                        device.category = item.get("category", device.category)
                         device.monitoring_group = group_instance
                         # Só sobrescreve site se um site foi explicitamente selecionado
                         if site_instance is not None:
@@ -930,50 +880,39 @@ def api_import_batch(request: HttpRequest) -> JsonResponse:
                             resolved_site = Site.objects.first()
                             if not resolved_site:
                                 resolved_site = Site.objects.create(
-                                    display_name="Site Padrão",
-                                    city="Default"
+                                    display_name="Site Padrão", city="Default"
                                 )
                         device = Device(
-                            name=item.get('name', f'Device-{idx+1}'),
-                            primary_ip=(
-                                item.get('ip') or item.get('ip_address')
-                            ),
-                            zabbix_hostid=zabbix_id or '',
+                            name=item.get("name", f"Device-{idx+1}"),
+                            primary_ip=(item.get("ip") or item.get("ip_address")),
+                            zabbix_hostid=zabbix_id or "",
                             site=resolved_site,
-                            category=item.get('category', 'backbone'),
+                            category=item.get("category", "backbone"),
                             monitoring_group=group_instance,
-                            vendor=item.get('vendor', ''),
-                            model=item.get('model', '')
+                            vendor=item.get("vendor", ""),
+                            model=item.get("model", ""),
                         )
                         created_count += 1
                         logger.info(f"Novo device criado: {device.name}")
-                    
+
                     # 4. Salva Alertas
-                    alerts = item.get('alerts', {})
-                    device.enable_screen_alert = alerts.get('screen', True)
-                    device.enable_whatsapp_alert = (
-                        alerts.get('whatsapp', False)
-                    )
-                    device.enable_email_alert = alerts.get('email', False)
-                    
+                    alerts = item.get("alerts", {})
+                    device.enable_screen_alert = alerts.get("screen", True)
+                    device.enable_whatsapp_alert = alerts.get("whatsapp", False)
+                    device.enable_email_alert = alerts.get("email", False)
+
                     device.save()
                     processed_ids.append(device.id)
-                    
+
                     # 5. Adiciona ao ManyToMany 'groups' se grupo existir
                     if group_instance:
-                        if not device.groups.filter(
-                            id=group_instance.id
-                        ).exists():
+                        if not device.groups.filter(id=group_instance.id).exists():
                             device.groups.add(group_instance)
-                    
+
                     # 6. IMPORTA INTERFACES DO ZABBIX AUTOMATICAMENTE
                     if device.zabbix_hostid:
                         try:
-                            import_stats = (
-                                device_uc.import_interfaces_from_zabbix(
-                                    device
-                                )
-                            )
+                            import_stats = device_uc.import_interfaces_from_zabbix(device)
                             logger.info(
                                 f"Interfaces importadas para "
                                 f"{device.name}: "
@@ -984,7 +923,7 @@ def api_import_batch(request: HttpRequest) -> JsonResponse:
                         except Exception as import_error:
                             logger.warning(
                                 f"Erro ao importar interfaces para "
-                                f"{device.name}: {str(import_error)}"
+                                f"{device.name}: {import_error!s}"
                             )
                             # Não quebra o processo se importação falhar
                         # 6b. Sincroniza campos de monitoração (uptime/cpu/host groups) na primeira importação
@@ -1004,22 +943,20 @@ def api_import_batch(request: HttpRequest) -> JsonResponse:
                                 f"[IMPORT_DEBUG] Falha ao aplicar sync inicial "
                                 f"para {device.name}: {sync_error}"
                             )
-                
+
                 except Exception as item_error:
                     import traceback
-                    error_msg = f"Erro no item {idx+1}: {str(item_error)}"
+
+                    error_msg = f"Erro no item {idx+1}: {item_error!s}"
                     errors.append(error_msg)
                     logger.error(error_msg)
                     logger.error(f"Traceback: {traceback.format_exc()}")
                     # Continua processando os demais (não quebra o batch)
-        
+
         # Resposta consolidada
         response_data = {
             "success": len(processed_ids) > 0,
-            "message": (
-                f"{len(processed_ids)} dispositivos "
-                f"processados com sucesso."
-            ),
+            "message": (f"{len(processed_ids)} dispositivos " f"processados com sucesso."),
             "ids": processed_ids,
             "created": created_count,
             "updated": updated_count,
@@ -1027,21 +964,17 @@ def api_import_batch(request: HttpRequest) -> JsonResponse:
             "errors": errors if errors else None,
             "proximity_warnings": proximity_warnings if proximity_warnings else None,
         }
-        
+
         return JsonResponse(response_data)
-    
+
     except json.JSONDecodeError as e:
         logger.error(f"JSON inválido: {e}")
         return JsonResponse(
-            {"success": False, "error": "JSON inválido no body da requisição"},
-            status=400
+            {"success": False, "error": "JSON inválido no body da requisição"}, status=400
         )
     except Exception as e:
         logger.exception("Erro ao processar importação em lote")
-        return JsonResponse(
-            {"success": False, "error": str(e)},
-            status=500
-        )
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
 
 
 @require_http_methods(["DELETE", "PATCH"])
@@ -1051,14 +984,16 @@ def api_device_detail(request: HttpRequest, device_id: int) -> JsonResponse:
     PATCH  /api/v1/inventory/devices/{device_id}/ — atualiza campos do dispositivo
     DELETE /api/v1/inventory/devices/{device_id}/ — exclui o dispositivo
     """
-    from inventory.models import Device, Site, DeviceGroup
+    from inventory.models import Device, DeviceGroup, Site
 
     if request.method == "PATCH":
         logger.info(f"[PATCH device] device_id={device_id} user={request.user}")
         try:
             device = Device.objects.get(id=device_id)
         except Device.DoesNotExist:
-            return JsonResponse({"success": False, "error": "Dispositivo não encontrado"}, status=404)
+            return JsonResponse(
+                {"success": False, "error": "Dispositivo não encontrado"}, status=404
+            )
 
         try:
             data = json.loads(request.body or "{}")
@@ -1068,8 +1003,11 @@ def api_device_detail(request: HttpRequest, device_id: int) -> JsonResponse:
 
         # CharField: None → '' (coluna NOT NULL no DB)
         char_fields = [
-            "name", "primary_ip",
-            "uptime_item_key", "cpu_usage_item_key", "memory_usage_item_key",
+            "name",
+            "primary_ip",
+            "uptime_item_key",
+            "cpu_usage_item_key",
+            "memory_usage_item_key",
             "category",
         ]
         for field in char_fields:
@@ -1138,40 +1076,33 @@ def _api_device_delete(request: HttpRequest, device_id: int) -> JsonResponse:
     }
     """
     from inventory.models import Device
-    
+
     try:
         device = Device.objects.get(id=device_id)
         device_name = device.name
         device.delete()
-        
+
         logger.info(f"Device excluído: {device_name} (ID: {device_id})")
-        
-        return JsonResponse({
-            "success": True,
-            "message": f"Dispositivo '{device_name}' excluído com sucesso"
-        })
-    
-    except Device.DoesNotExist:
+
         return JsonResponse(
-            {"success": False, "error": "Dispositivo não encontrado"},
-            status=404
+            {"success": True, "message": f"Dispositivo '{device_name}' excluído com sucesso"}
         )
+
+    except Device.DoesNotExist:
+        return JsonResponse({"success": False, "error": "Dispositivo não encontrado"}, status=404)
     except Exception as e:
         logger.exception(f"Erro ao excluir device {device_id}")
-        return JsonResponse(
-            {"success": False, "error": str(e)},
-            status=500
-        )
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
 
 
 @require_GET
 def api_devices_zabbix_status(request: HttpRequest) -> JsonResponse:
     """
     Retorna status do Zabbix para múltiplos devices em batch.
-    
+
     Endpoint: GET /api/v1/inventory/devices/zabbix-status/
     Query params: device_ids (comma-separated)
-    
+
     Response: {
         "statuses": {
             "123": "online",
@@ -1180,70 +1111,56 @@ def api_devices_zabbix_status(request: HttpRequest) -> JsonResponse:
         }
     }
     """
-    from inventory.models import Device
     from integrations.zabbix.zabbix_service import zabbix_request
-    
+    from inventory.models import Device
+
     try:
-        device_ids_param = request.GET.get('device_ids', '')
+        device_ids_param = request.GET.get("device_ids", "")
         if not device_ids_param:
             return JsonResponse({"statuses": {}})
-        
-        device_ids = [
-            int(id.strip())
-            for id in device_ids_param.split(',')
-            if id.strip()
-        ]
-        
+
+        device_ids = [int(id.strip()) for id in device_ids_param.split(",") if id.strip()]
+
         # Busca devices com zabbix_hostid
-        devices = Device.objects.filter(
-            id__in=device_ids,
-            zabbix_hostid__isnull=False
-        ).exclude(zabbix_hostid='')
-        
-        logger.info(f"[Zabbix Status] Devices solicitados: {device_ids}")
-        device_info = [
-            (d.id, d.name, d.zabbix_hostid) for d in devices
-        ]
-        logger.info(
-            f"[Zabbix Status] Devices com zabbix_hostid: {device_info}"
+        devices = Device.objects.filter(id__in=device_ids, zabbix_hostid__isnull=False).exclude(
+            zabbix_hostid=""
         )
-        
+
+        logger.info(f"[Zabbix Status] Devices solicitados: {device_ids}")
+        device_info = [(d.id, d.name, d.zabbix_hostid) for d in devices]
+        logger.info(f"[Zabbix Status] Devices com zabbix_hostid: {device_info}")
+
         # Coleta todos os hostids
         hostids = [d.zabbix_hostid for d in devices]
-        
+
         if not hostids:
             # Nenhum device tem zabbix_hostid
-            logger.warning(
-                "[Zabbix Status] Nenhum device tem zabbix_hostid configurado"
-            )
-            return JsonResponse({
-                "statuses": {str(d_id): "unknown" for d_id in device_ids}
-            })
-        
+            logger.warning("[Zabbix Status] Nenhum device tem zabbix_hostid configurado")
+            return JsonResponse({"statuses": {str(d_id): "unknown" for d_id in device_ids}})
+
         # Busca status de todos os hosts em uma única chamada
         try:
-            logger.info(
-                f"[Zabbix Status] Chamando Zabbix com hostids: {hostids}"
+            logger.info(f"[Zabbix Status] Chamando Zabbix com hostids: {hostids}")
+            result = zabbix_request(
+                "host.get",
+                {
+                    "output": ["hostid", "name", "available", "status"],
+                    "hostids": hostids,
+                    "selectInterfaces": ["interfaceid", "available", "main"],
+                },
             )
-            result = zabbix_request("host.get", {
-                "output": ["hostid", "name", "available", "status"],
-                "hostids": hostids,
-                "selectInterfaces": ["interfaceid", "available", "main"],
-            })
             logger.info(f"[Zabbix Status] Resposta Zabbix: {result}")
         except Exception as e:
             logger.error(f"Erro ao buscar status Zabbix em batch: {e}")
-            return JsonResponse({
-                "statuses": {str(d_id): "unknown" for d_id in device_ids}
-            })
-        
+            return JsonResponse({"statuses": {str(d_id): "unknown" for d_id in device_ids}})
+
         # Mapeia hostid → status
         hostid_status = {}
         for host in result:
             hostid = host.get("hostid")
             zabbix_status = int(host.get("status", 1))
             host_available = str(host.get("available", "0"))
-            
+
             # Lógica do dashboard: preferir interface availability
             interfaces = host.get("interfaces", [])
             primary_interface = None
@@ -1251,18 +1168,18 @@ def api_devices_zabbix_status(request: HttpRequest) -> JsonResponse:
                 if str(iface.get("main", "0")) == "1":
                     primary_interface = iface
                     break
-            
+
             # Se não achou interface principal, usa a primeira
             if not primary_interface and interfaces:
                 primary_interface = interfaces[0]
-            
+
             # Availability final: interface ou host
             availability = host_available
             if primary_interface and host_available == "0":
                 interface_avail = primary_interface.get("available")
                 if interface_avail is not None:
                     availability = str(interface_avail)
-            
+
             # Converte para status string
             if zabbix_status == 1:  # Disabled no Zabbix
                 status = "disabled"
@@ -1272,41 +1189,35 @@ def api_devices_zabbix_status(request: HttpRequest) -> JsonResponse:
                 status = "offline"
             else:  # Unknown
                 status = "unknown"
-            
+
             logger.info(
                 f"[Zabbix Status] Host {hostid}: "
                 f"host_status={zabbix_status}, host_avail={host_available}, "
                 f"interface_avail={availability} → {status}"
             )
             hostid_status[hostid] = status
-        
+
         # Mapeia device_id → status
         device_status = {}
         for device in devices:
-            device_status[str(device.id)] = hostid_status.get(
-                device.zabbix_hostid,
-                "unknown"
-            )
+            device_status[str(device.id)] = hostid_status.get(device.zabbix_hostid, "unknown")
             logger.info(
                 f"[Zabbix Status] Device {device.id} ({device.name}): "
                 f"zabbix_hostid={device.zabbix_hostid} → "
                 f"{device_status[str(device.id)]}"
             )
-        
+
         # Adiciona devices sem zabbix_hostid como unknown
         for d_id in device_ids:
             if str(d_id) not in device_status:
                 device_status[str(d_id)] = "unknown"
-        
+
         logger.info(f"[Zabbix Status] Resultado final: {device_status}")
         return JsonResponse({"statuses": device_status})
-    
+
     except Exception as e:
         logger.exception("Erro ao buscar status Zabbix")
-        return JsonResponse(
-            {"error": str(e), "statuses": {}},
-            status=500
-        )
+        return JsonResponse({"error": str(e), "statuses": {}}, status=500)
 
 
 __all__ = [
@@ -1331,6 +1242,5 @@ __all__ = [
     # Phase 11: Device Import System
     "api_inventory_grouped",
     "api_import_batch",
-    "api_device_delete",
     "api_devices_zabbix_status",
 ]

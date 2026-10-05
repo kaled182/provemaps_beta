@@ -22,7 +22,7 @@ _COLLECTSTATIC_DUPE_WARNING = "another file with the destination path"
 def _run(cmd: list[str], cwd: str, timeout: int = 120) -> dict:
     try:
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd
+            cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd, check=False
         )
         return {
             "ok": result.returncode == 0,
@@ -31,9 +31,19 @@ def _run(cmd: list[str], cwd: str, timeout: int = 120) -> dict:
             "returncode": result.returncode,
         }
     except FileNotFoundError:
-        return {"ok": False, "stdout": "", "stderr": f"Comando não encontrado: {cmd[0]}", "returncode": -1}
+        return {
+            "ok": False,
+            "stdout": "",
+            "stderr": f"Comando não encontrado: {cmd[0]}",
+            "returncode": -1,
+        }
     except subprocess.TimeoutExpired:
-        return {"ok": False, "stdout": "", "stderr": "Timeout ao executar comando", "returncode": -1}
+        return {
+            "ok": False,
+            "stdout": "",
+            "stderr": "Timeout ao executar comando",
+            "returncode": -1,
+        }
     except Exception as e:
         return {"ok": False, "stdout": "", "stderr": str(e), "returncode": -1}
 
@@ -61,30 +71,35 @@ def _stream_update():
         # No container, o código é baked na imagem — git pull não funciona.
         # Reportar como aviso (warning), não como erro crítico.
         git_msg = (
-            "ℹ️  git pull não disponível no container (código baked na imagem).\n"
+            "ℹ️  git pull não disponível no container (código baked na imagem).\n"  # noqa: RUF001
             "Para atualizar o código, execute scripts/update.sh no servidor."
         )
 
-    yield _sse({
-        "step": "git",
-        "ok": True,          # sempre ok — não é um passo crítico
-        "warning": not res["ok"],   # sinaliza aviso visual sem bloquear
-        "msg": git_msg,
-        "running": False,
-    })
+    yield _sse(
+        {
+            "step": "git",
+            "ok": True,  # sempre ok — não é um passo crítico
+            "warning": not res["ok"],  # sinaliza aviso visual sem bloquear
+            "msg": git_msg,
+            "running": False,
+        }
+    )
 
     # ── Step 2: migrate ──────────────────────────────────────────────────────
     yield _sse({"step": "migrate", "msg": "Aplicando migrações do banco…", "running": True})
     res = _run(
         ["python", "manage.py", "migrate", "--noinput", "--skip-checks"],
-        cwd=BACKEND_DIR, timeout=120,
+        cwd=BACKEND_DIR,
+        timeout=120,
     )
-    yield _sse({
-        "step": "migrate",
-        "ok": res["ok"],
-        "msg": _msg_for(res, "Migrações aplicadas com sucesso."),
-        "running": False,
-    })
+    yield _sse(
+        {
+            "step": "migrate",
+            "ok": res["ok"],
+            "msg": _msg_for(res, "Migrações aplicadas com sucesso."),
+            "running": False,
+        }
+    )
 
     if not res["ok"]:
         yield _sse({"step": "done", "msg": "Atualização interrompida: falha nas migrações."})
@@ -94,25 +109,33 @@ def _stream_update():
     yield _sse({"step": "static", "msg": "Coletando arquivos estáticos…", "running": True})
     res = _run(
         ["python", "manage.py", "collectstatic", "--noinput", "--skip-checks"],
-        cwd=BACKEND_DIR, timeout=120,
+        cwd=BACKEND_DIR,
+        timeout=120,
     )
 
     # Warnings de arquivo duplicado (legacy JS) são normais — não são erros
     is_real_error = not res["ok"] and _COLLECTSTATIC_DUPE_WARNING not in res.get("stdout", "")
 
     # Mensagem limpa: pegar só a última linha relevante (evita o aviso de duplicata)
-    lines = [l for l in (res.get("stdout") or "").splitlines()
-             if l.strip() and _COLLECTSTATIC_DUPE_WARNING not in l]
+    lines = [
+        ln
+        for ln in (res.get("stdout") or "").splitlines()
+        if ln.strip() and _COLLECTSTATIC_DUPE_WARNING not in ln
+    ]
     clean_msg = lines[-1].strip() if lines else (_msg_for(res, "Arquivos estáticos coletados."))
 
-    yield _sse({
-        "step": "static",
-        "ok": not is_real_error,
-        "msg": clean_msg,
-        "running": False,
-    })
+    yield _sse(
+        {
+            "step": "static",
+            "ok": not is_real_error,
+            "msg": clean_msg,
+            "running": False,
+        }
+    )
 
-    yield _sse({"step": "done", "msg": "Atualização concluída! Recarregue a página para ver as novidades."})
+    yield _sse(
+        {"step": "done", "msg": "Atualização concluída! Recarregue a página para ver as novidades."}
+    )
 
 
 @csrf_exempt

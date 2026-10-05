@@ -6,8 +6,9 @@ Inherits from ``settings.base`` and applies development-safe overrides.
 """
 
 import os
+from collections.abc import Callable
 from importlib import import_module
-from typing import Any, Callable, Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .base import *  # noqa
 
@@ -34,7 +35,7 @@ def _load_runtime_email_env() -> None:
         "DEFAULT_FROM_EMAIL",
         "SERVER_EMAIL",
     }
-    with open(runtime_env_path, "r", encoding="utf-8-sig") as handler:
+    with open(runtime_env_path, encoding="utf-8-sig") as handler:
         for raw_line in handler:
             line = raw_line.strip()
             if not line or line.startswith("#") or "=" not in line:
@@ -52,8 +53,6 @@ _load_runtime_email_env()
 if TYPE_CHECKING:  # pragma: no cover - assists type checkers only
     from .base import (
         BASE_DIR,
-        BACKEND_DIR,
-        FRONTEND_DIR,
         DATABASE_DIR,
         DATABASES,
         INSTALLED_APPS,
@@ -114,9 +113,11 @@ SERVER_EMAIL = DEFAULT_FROM_EMAIL
 # -----------------------------------------------------
 # Short-lived connections for development
 DATABASES["default"]["CONN_MAX_AGE"] = 0
-DATABASES["default"]["OPTIONS"].update({
-    "connect_timeout": 3,
-})
+DATABASES["default"]["OPTIONS"].update(
+    {
+        "connect_timeout": 3,
+    }
+)
 
 # Fallback to SQLite when explicitly requested
 if os.getenv("DB_ENGINE") == "sqlite":
@@ -158,7 +159,7 @@ if ENABLE_DEBUG_TOOLBAR:
             0,
             "debug_toolbar.middleware.DebugToolbarMiddleware",
         )
-        DEBUG_TOOLBAR_CONFIG: Dict[str, Callable[[Any], bool]] = {
+        DEBUG_TOOLBAR_CONFIG: dict[str, Callable[[Any], bool]] = {
             "SHOW_TOOLBAR_CALLBACK": lambda request: True,
         }
         INTERNAL_IPS = ["127.0.0.1", "localhost", "0.0.0.0", "172.16.0.0/12"]
@@ -176,9 +177,7 @@ else:
 # -----------------------------------------------------
 
 # Static files in development (Manifest to hash by content)
-STATICFILES_STORAGE = (
-    "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"
-)
+STATICFILES_STORAGE = "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"
 
 # -----------------------------------------------------
 # Vue 3 Dashboard Feature Flags (always enabled in dev)
@@ -188,17 +187,21 @@ STATICFILES_STORAGE = (
 USE_VUE_DASHBOARD = True  # type: ignore[assignment]
 VUE_DASHBOARD_ROLLOUT_PERCENTAGE = 100  # type: ignore[assignment]
 
-import time as _time  # noqa: E402
 import subprocess  # noqa: E402
+import time as _time  # noqa: E402
 
 
 def _git_sha() -> str:
     """Return the short git SHA for the current commit, or ``nosha``."""
     try:
-        sha = subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
-            cwd=BASE_DIR,
-        ).decode().strip()
+        sha = (
+            subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=BASE_DIR,
+            )
+            .decode()
+            .strip()
+        )
         if sha:
             return sha
     except Exception:
@@ -224,10 +227,11 @@ if not _static_version_override:
 if _static_version_override:
     STATIC_ASSET_VERSION = _static_version_override
 else:
-    STATIC_ASSET_VERSION = (
-        f"{_git_sha()}-{_time.strftime('%Y%m%d%H%M%S', _time.gmtime())}"
-    )
+    STATIC_ASSET_VERSION = f"{_git_sha()}-{_time.strftime('%Y%m%d%H%M%S', _time.gmtime())}"
 print(f"[STATIC_VERSION] STATIC_ASSET_VERSION={STATIC_ASSET_VERSION}")
+
+# Em dev não há build: o SHA vem do próprio repositório (EV-0027b).
+GIT_SHA = os.getenv("GIT_SHA") or _git_sha()
 
 # No-cache middleware for sensitive routes
 MIDDLEWARE.append("core.middleware.no_cache_dev.NoCacheDevMiddleware")
@@ -237,7 +241,7 @@ if DEBUG:
     SECURE_SSL_REDIRECT = False  # type: ignore[assignment]
     SESSION_COOKIE_SECURE = False  # type: ignore[assignment]
     CSRF_COOKIE_SECURE = False  # type: ignore[assignment]
-    
+
     # Template debugging
     TEMPLATES[0]["OPTIONS"]["debug"] = True
 

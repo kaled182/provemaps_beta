@@ -14,11 +14,11 @@ Celery application for the MapsProveFiber project.
 
 import os
 import time
-from typing import Any, Dict
+from typing import Any
 
 from celery import Celery  # type: ignore[import-not-found]
 from celery.app.task import Task  # type: ignore[import-not-found]
-from kombu import Queue, Exchange  # type: ignore[import-not-found]
+from kombu import Exchange, Queue  # type: ignore[import-not-found]
 
 # ---------------------------------------------------------------------
 # Django settings bootstrap
@@ -38,23 +38,15 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 # Broker/backend fallbacks derived from environment variables
 # ---------------------------------------------------------------------
 # Priority: CELERY_BROKER_URL -> REDIS_URL -> local default
-_broker_url = (
-    os.getenv("CELERY_BROKER_URL")
-    or os.getenv("REDIS_URL")
-    or "redis://localhost:6379/1"
-)
+_broker_url = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL") or "redis://localhost:6379/1"
 _result_backend = os.getenv("CELERY_RESULT_BACKEND") or _broker_url
 _default_queue = os.getenv("CELERY_DEFAULT_QUEUE", "default")
 
 # Default interval (seconds) for dashboard refresh via SWR
-_dashboard_refresh_interval = float(
-    os.getenv("DASHBOARD_CACHE_REFRESH_INTERVAL", "60")
-)
+_dashboard_refresh_interval = float(os.getenv("DASHBOARD_CACHE_REFRESH_INTERVAL", "60"))
 
 # Default interval (seconds) for Zabbix inventory sync
-_inventory_sync_interval = float(
-    os.getenv("INVENTORY_SYNC_INTERVAL_SECONDS", "86400")
-)
+_inventory_sync_interval = float(os.getenv("INVENTORY_SYNC_INTERVAL_SECONDS", "86400"))
 
 _service_account_rotation_interval = float(
     os.getenv("SERVICE_ACCOUNT_ROTATION_INTERVAL_SECONDS", "3600")
@@ -66,43 +58,28 @@ _service_account_rotation_interval = float(
 app.conf.update(
     broker_url=_broker_url,
     result_backend=_result_backend,
-
     # Serialization (avoid pickle for safety)
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
-
     # Timezone / clock
     timezone=os.getenv("TIME_ZONE", "UTC"),
     enable_utc=True,
-
     # Reliability / performance
     # Avoid losing a task if the worker crashes mid-execution
     task_acks_late=True,
-    worker_prefetch_multiplier=int(
-        os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER", "1")
-    ),
-    worker_max_tasks_per_child=int(
-        os.getenv("CELERY_WORKER_MAX_TASKS_PER_CHILD", "100")
-    ),
+    worker_prefetch_multiplier=int(os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER", "1")),
+    worker_max_tasks_per_child=int(os.getenv("CELERY_WORKER_MAX_TASKS_PER_CHILD", "100")),
     # 5 minutes
-    task_soft_time_limit=int(
-        os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", "300")
-    ),
+    task_soft_time_limit=int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", "300")),
     # 10 minutes
     task_time_limit=int(os.getenv("CELERY_TASK_TIME_LIMIT", "600")),
     # Example: "10/s"
-    task_default_rate_limit=os.getenv(
-        "CELERY_TASK_DEFAULT_RATE_LIMIT", None
-    ),
+    task_default_rate_limit=os.getenv("CELERY_TASK_DEFAULT_RATE_LIMIT", None),
     broker_connection_retry_on_startup=True,
-
     # Synchronous execution during tests (can be defined in env/test)
-    task_always_eager=(
-        os.getenv("CELERY_TASK_ALWAYS_EAGER", "false").lower() == "true"
-    ),
+    task_always_eager=(os.getenv("CELERY_TASK_ALWAYS_EAGER", "false").lower() == "true"),
     task_eager_propagates=True,
-
     # Verbose logging
     worker_log_format=os.getenv(
         "CELERY_WORKER_LOG_FORMAT",
@@ -116,34 +93,27 @@ app.conf.update(
         ),
     ),
     worker_redirect_stdouts=False,
-
     # Retry policies
     task_publish_retry=True,
     task_publish_retry_policy={
-        'max_retries': 3,
-        'interval_start': 0,
-        'interval_step': 0.2,
-        'interval_max': 0.2,
+        "max_retries": 3,
+        "interval_start": 0,
+        "interval_step": 0.2,
+        "interval_max": 0.2,
     },
-
     # Monitoring and observability
     worker_send_task_events=True,
     task_send_sent_event=True,
-    
     # Result expiration (avoid piling up stale records)
     result_expires=int(os.getenv("CELERY_RESULT_EXPIRES", "3600")),  # 1 hour
-
     # Dead letter queue behavior for repeatedly failing tasks
     task_reject_on_worker_lost=True,
     task_acks_on_failure_or_timeout=False,
-    
     # Beat schedule for recurring tasks
     beat_schedule={
         "update-celery-metrics": {
             "task": "core.celery.update_celery_metrics_task",
-            "schedule": float(
-                os.getenv("CELERY_METRICS_UPDATE_INTERVAL", "30")
-            ),
+            "schedule": float(os.getenv("CELERY_METRICS_UPDATE_INTERVAL", "30")),
             "options": {"queue": "default"},
         },
         "refresh-dashboard-cache": {
@@ -192,6 +162,12 @@ app.conf.update(
             "schedule": _service_account_rotation_interval,
             "options": {"queue": "default"},
         },
+        # Central de Evolução (ADR 0006 §4.6): avisa o staff dos itens parados há 14+ dias.
+        "evolucao-avisar-parados": {
+            "task": "evolucao.tasks.avisar_parados_task",
+            "schedule": 86400.0,  # diário
+            "options": {"queue": "default"},
+        },
         # Telemetry: daily anonymous ping (opt-out via TELEMETRY_ENABLED=false)
         "telemetry-daily-ping": {
             "task": "telemetry.tasks.send_ping",
@@ -223,10 +199,8 @@ app.conf.task_queues = (
 app.conf.task_routes = {
     # Inventory warmers live in inventory.tasks but still use the zabbix queue
     "inventory.tasks.warm_*": {"queue": "zabbix", "routing_key": "zabbix"},
-
     # Fiber/route domain tasks exposed via inventory namespace
     "inventory.routes.tasks.*": {"queue": "maps", "routing_key": "maps"},
-
     # Dashboard/maps view tasks (legacy shim) + monitoring tasks (new location)
     "maps_view.tasks.*": {"queue": "maps", "routing_key": "maps"},
     "monitoring.tasks.*": {"queue": "maps", "routing_key": "maps"},
@@ -251,14 +225,14 @@ def ping(self: Task) -> str:
 # Comprehensive worker health check task
 # ---------------------------------------------------------------------
 @app.task(bind=True)
-def health_check(self: Task) -> Dict[str, Any]:
+def health_check(self: Task) -> dict[str, Any]:
     """Run a set of lightweight diagnostics against the worker."""
     # Basic functionality test
     basic_test = "pong"
-    
+
     # Timestamp check (confirms the worker is processing requests)
     timestamp = time.time()
-    
+
     # Optional broker connectivity test
     broker_ok = True
     broker_error = None
@@ -268,14 +242,14 @@ def health_check(self: Task) -> Dict[str, Any]:
     except Exception as e:
         broker_ok = False
         broker_error = str(e)
-    
+
     return {
         "status": "healthy",
         "worker_id": self.request.hostname,
         "timestamp": timestamp,
         "broker_connected": broker_ok,
         "broker_error": broker_error if not broker_ok else None,
-        "response": basic_test
+        "response": basic_test,
     }
 
 
@@ -283,7 +257,7 @@ def health_check(self: Task) -> Dict[str, Any]:
 # Queue statistics task (feeds dashboards)
 # ---------------------------------------------------------------------
 @app.task(bind=True)
-def get_queue_stats(self: Task) -> Dict[str, Any]:
+def get_queue_stats(self: Task) -> dict[str, Any]:
     """Return queue statistics for dashboard consumption."""
     try:
         inspector = self.app.control.inspect()
@@ -291,13 +265,13 @@ def get_queue_stats(self: Task) -> Dict[str, Any]:
         active = inspector.active()
         scheduled = inspector.scheduled()
         reserved = inspector.reserved()
-        
+
         return {
             "workers": list(stats.keys()) if stats else [],
             "active_tasks": active,
             "scheduled_tasks": scheduled,
             "reserved_tasks": reserved,
-            "timestamp": time.time()
+            "timestamp": time.time(),
         }
     except Exception as e:
         return {"error": str(e), "timestamp": time.time()}
@@ -320,7 +294,7 @@ def update_celery_metrics_task(self):
             "status": "degraded",
             "worker": {"available": False, "error": None, "stats": None},
         }
-        
+
         # Attempt ping
         ping_ok = False
         try:
@@ -345,6 +319,6 @@ def update_celery_metrics_task(self):
         # Update metrics
         update_metrics(payload)
         return {"status": "updated", "worker_available": ping_ok}
-    
+
     except Exception as e:
         return {"status": "error", "message": str(e)[:200]}

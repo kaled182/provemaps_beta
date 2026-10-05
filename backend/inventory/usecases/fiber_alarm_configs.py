@@ -1,8 +1,9 @@
 """Use cases for managing fiber cable alarm configurations."""
+
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractBaseUser
@@ -10,6 +11,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from inventory.models import FiberCable, FiberCableAlarmConfig
+
 try:
     from core.models import Department
 except Exception:  # pragma: no cover
@@ -48,12 +50,12 @@ ALLOWED_ALERT_TYPES = {
 
 # Map alert_type → AlertTemplate category
 ALERT_TYPE_TO_CATEGORY = {
-    FiberCableAlarmConfig.ALERT_BREAK: 'cable_break',
-    FiberCableAlarmConfig.ALERT_ATTENUATION: 'cable_attenuation',
-    FiberCableAlarmConfig.ALERT_NORMALIZATION: 'cable_normalization',
+    FiberCableAlarmConfig.ALERT_BREAK: "cable_break",
+    FiberCableAlarmConfig.ALERT_ATTENUATION: "cable_attenuation",
+    FiberCableAlarmConfig.ALERT_NORMALIZATION: "cable_normalization",
 }
 
-DEFAULT_TEMPLATE_CATEGORY = 'cable_break'
+DEFAULT_TEMPLATE_CATEGORY = "cable_break"
 
 
 class FiberCableAlarmError(Exception):
@@ -73,23 +75,23 @@ class TargetContext:
     model_object: object | None
 
 
-def _template_snapshot(template: 'AlertTemplate') -> dict[str, object]:  # type: ignore[name-defined]
-    updated_at = getattr(template, 'updated_at', None)
+def _template_snapshot(template: AlertTemplate) -> dict[str, object]:  # type: ignore[name-defined]
+    updated_at = getattr(template, "updated_at", None)
     try:
         updated_at_iso = timezone.localtime(updated_at).isoformat() if updated_at else None
     except Exception:  # pragma: no cover - timezone edge cases
         updated_at_iso = updated_at.isoformat() if updated_at else None
     return {
-        'id': template.pk,
-        'name': template.name,
-        'description': template.description,
-        'subject': template.subject,
-        'content': template.content,
-        'placeholders': list(template.placeholders or []),
-        'channel': template.channel,
-        'category': template.category,
-        'is_default': template.is_default,
-        'updated_at': updated_at_iso,
+        "id": template.pk,
+        "name": template.name,
+        "description": template.description,
+        "subject": template.subject,
+        "content": template.content,
+        "placeholders": list(template.placeholders or []),
+        "channel": template.channel,
+        "category": template.category,
+        "is_default": template.is_default,
+        "updated_at": updated_at_iso,
     }
 
 
@@ -98,12 +100,12 @@ def _category_for_alert_type(alert_type: str) -> str:
     return ALERT_TYPE_TO_CATEGORY.get(alert_type, DEFAULT_TEMPLATE_CATEGORY)
 
 
-def _normalize_template_category(raw_category: object, alert_type: str = '') -> str:
+def _normalize_template_category(raw_category: object, alert_type: str = "") -> str:
     if AlertTemplate is None:
         return _category_for_alert_type(alert_type)
     # Prefer the category derived from alert_type when no explicit category given
-    category = str(raw_category or '').strip() or _category_for_alert_type(alert_type)
-    valid_categories = {choice[0] for choice in getattr(AlertTemplate, 'CATEGORY_CHOICES', [])}
+    category = str(raw_category or "").strip() or _category_for_alert_type(alert_type)
+    valid_categories = {choice[0] for choice in getattr(AlertTemplate, "CATEGORY_CHOICES", [])}
     if category not in valid_categories:
         return _category_for_alert_type(alert_type)
     return category
@@ -115,9 +117,9 @@ def _build_template_metadata(
     requested_map: object,
 ) -> dict[str, object]:
     metadata: dict[str, object] = {
-        'category': category,
-        'bindings': {},
-        'snapshots': {},
+        "category": category,
+        "bindings": {},
+        "snapshots": {},
     }
 
     if not channels:
@@ -138,37 +140,40 @@ def _build_template_metadata(
             try:
                 template_pk = int(template_id)
             except (TypeError, ValueError):
-                raise FiberCableAlarmValidationError('Modelo de aviso inválido.') from None
+                raise FiberCableAlarmValidationError("Modelo de aviso inválido.") from None
             try:
                 template = AlertTemplate.objects.get(pk=template_pk, is_active=True)
             except AlertTemplate.DoesNotExist:
-                raise FiberCableAlarmValidationError('Modelo de aviso selecionado não encontrado.') from None
+                raise FiberCableAlarmValidationError(
+                    "Modelo de aviso selecionado não encontrado."
+                ) from None
             if template.channel != channel:
-                raise FiberCableAlarmValidationError('Canal do modelo não corresponde ao canal selecionado.')
+                raise FiberCableAlarmValidationError(
+                    "Canal do modelo não corresponde ao canal selecionado."
+                )
             if template.category != category:
-                raise FiberCableAlarmValidationError('Modelo de aviso incompatível com esta categoria de alerta.')
+                raise FiberCableAlarmValidationError(
+                    "Modelo de aviso incompatível com esta categoria de alerta."
+                )
             resolved[channel] = template.pk
             snapshots[channel] = _template_snapshot(template)
 
     missing_channels = [channel for channel in channels_list if channel not in resolved]
     if missing_channels:
-        defaults = (
-            AlertTemplate.objects.filter(
-                category=category,
-                channel__in=missing_channels,
-                is_active=True,
-            )
-            .order_by('-is_default', '-updated_at', 'name')
-        )
+        defaults = AlertTemplate.objects.filter(
+            category=category,
+            channel__in=missing_channels,
+            is_active=True,
+        ).order_by("-is_default", "-updated_at", "name")
         for template in defaults:
             channel = template.channel
             if channel not in resolved:
                 resolved[channel] = template.pk
                 snapshots[channel] = _template_snapshot(template)
 
-    metadata['bindings'] = resolved
-    metadata['snapshots'] = snapshots
-    metadata['resolved_at'] = timezone.now().isoformat()
+    metadata["bindings"] = resolved
+    metadata["snapshots"] = snapshots
+    metadata["resolved_at"] = timezone.now().isoformat()
     return metadata
 
 
@@ -176,7 +181,7 @@ def _normalize_channels(raw_channels: Sequence[object] | object | None) -> list[
     channels: list[str] = []
     if raw_channels is None:
         return channels
-    if isinstance(raw_channels, (str, bytes)):
+    if isinstance(raw_channels, str | bytes):
         candidates: Iterable[str] = str(raw_channels).split(",")
     elif isinstance(raw_channels, Sequence):
         candidates = (str(item) for item in raw_channels)
@@ -191,7 +196,13 @@ def _normalize_channels(raw_channels: Sequence[object] | object | None) -> list[
             channels.append(key)
 
     # Preserve canonical order for stable diffs/UI
-    channels.sort(key=lambda value: DEFAULT_CHANNEL_ORDER.index(value) if value in DEFAULT_CHANNEL_ORDER else len(DEFAULT_CHANNEL_ORDER))
+    channels.sort(
+        key=lambda value: (
+            DEFAULT_CHANNEL_ORDER.index(value)
+            if value in DEFAULT_CHANNEL_ORDER
+            else len(DEFAULT_CHANNEL_ORDER)
+        )
+    )
     return channels
 
 
@@ -261,7 +272,12 @@ def _extract_target_context(payload: dict[str, object]) -> TargetContext:
         system_user = _resolve_user(payload.get("system_user") or payload.get("target_id"))
         if system_user is None:
             raise FiberCableAlarmValidationError("Usuário do sistema obrigatório")
-        display = system_user.get_full_name() or system_user.username or system_user.email or str(system_user.pk)
+        display = (
+            system_user.get_full_name()
+            or system_user.username
+            or system_user.email
+            or str(system_user.pk)
+        )
         snapshot = {
             "name": display,
             "display": display,
@@ -351,10 +367,10 @@ def alarm_config_to_payload(config: FiberCableAlarmConfig) -> dict[str, object]:
     }
     if created_by_snapshot:
         payload["created_by"] = created_by_snapshot
-    templates_meta = metadata.get('templates') if isinstance(metadata, dict) else None
+    templates_meta = metadata.get("templates") if isinstance(metadata, dict) else None
     if isinstance(templates_meta, dict):
-        payload['templates'] = templates_meta
-        payload['template_category'] = templates_meta.get('category')
+        payload["templates"] = templates_meta
+        payload["template_category"] = templates_meta.get("category")
     return payload
 
 
@@ -382,7 +398,15 @@ def create_alarm_config(
     if not channels:
         raise FiberCableAlarmValidationError("Selecione pelo menos um canal de notificação")
 
-    trigger_level = str(payload.get("trigger_level") or payload.get("triggerLevel") or FiberCableAlarmConfig.TRIGGER_WARNING).strip().lower()
+    trigger_level = (
+        str(
+            payload.get("trigger_level")
+            or payload.get("triggerLevel")
+            or FiberCableAlarmConfig.TRIGGER_WARNING
+        )
+        .strip()
+        .lower()
+    )
     if trigger_level not in ALLOWED_TRIGGERS:
         trigger_level = FiberCableAlarmConfig.TRIGGER_WARNING
 
@@ -400,11 +424,11 @@ def create_alarm_config(
     metadata_raw = payload.get("metadata")
     metadata = metadata_raw if isinstance(metadata_raw, dict) else {}
 
-    template_category = _normalize_template_category(payload.get('template_category'), alert_type)
-    templates_meta = _build_template_metadata(template_category, channels, payload.get('templates'))
+    template_category = _normalize_template_category(payload.get("template_category"), alert_type)
+    templates_meta = _build_template_metadata(template_category, channels, payload.get("templates"))
     if templates_meta:
         metadata = dict(metadata)
-        metadata['templates'] = templates_meta
+        metadata["templates"] = templates_meta
 
     created_by = requested_by if getattr(requested_by, "is_authenticated", False) else None
 
@@ -436,6 +460,7 @@ def create_alarm_config(
 
 # ── Envio de teste manual ──────────────────────────────────────────────────
 
+
 def _resolve_recipients(config: FiberCableAlarmConfig) -> list[dict[str, str]]:
     """Resolve a lista de destinatários ({name, phone, email}) para uma config.
 
@@ -452,7 +477,9 @@ def _resolve_recipients(config: FiberCableAlarmConfig) -> list[dict[str, str]]:
             return out
         for c in group.contacts.filter(is_active=True):
             phone = c.formatted_phone if c.phone else ""
-            out.append({"name": c.name or c.phone or "Contato", "phone": phone, "email": c.email or ""})
+            out.append(
+                {"name": c.name or c.phone or "Contato", "phone": phone, "email": c.email or ""}
+            )
         return out
 
     if target_type == FiberCableAlarmConfig.TARGET_CONTACT and config.contact_id:
@@ -468,11 +495,13 @@ def _resolve_recipients(config: FiberCableAlarmConfig) -> list[dict[str, str]]:
             return out
         profile = getattr(u, "profile", None)
         phone = (getattr(profile, "phone_number", "") or "").strip()
-        return [{
-            "name": u.get_full_name() or u.username or u.email or f"User {u.pk}",
-            "phone": phone,
-            "email": (u.email or "").strip(),
-        }]
+        return [
+            {
+                "name": u.get_full_name() or u.username or u.email or f"User {u.pk}",
+                "phone": phone,
+                "email": (u.email or "").strip(),
+            }
+        ]
 
     if target_type == FiberCableAlarmConfig.TARGET_DEPARTMENT and config.department_id:
         dept = config.department
@@ -481,11 +510,15 @@ def _resolve_recipients(config: FiberCableAlarmConfig) -> list[dict[str, str]]:
         for p in dept.user_profiles.select_related("user").all():
             phone = (p.phone_number or "").strip()
             user = p.user
-            out.append({
-                "name": (user.get_full_name() if user else "") or (user.username if user else "") or "Usuário",
-                "phone": phone,
-                "email": (user.email if user else "").strip(),
-            })
+            out.append(
+                {
+                    "name": (user.get_full_name() if user else "")
+                    or (user.username if user else "")
+                    or "Usuário",
+                    "phone": phone,
+                    "email": (user.email if user else "").strip(),
+                }
+            )
         return out
 
     return out
@@ -520,6 +553,7 @@ def _format_event_endpoints_block(cable) -> str:
     """Linha multi-line com Origem/Destino do cabo (Device + Porta + Site).
     Vazio se ambos endpoints não tiverem porta cadastrada."""
     from inventory.api.maintenance_alert import _format_endpoint
+
     lines = []
     origin = _format_endpoint(cable.origin_port, getattr(cable, "site_a", None))
     dest = _format_endpoint(cable.destination_port, getattr(cable, "site_b", None))
@@ -542,16 +576,26 @@ def _format_event_email_subject(alert_type: str, cable_name: str) -> str:
 def _format_event_email_body(config: FiberCableAlarmConfig, alert_type: str, event=None) -> str:
     """HTML email body para notificação automática de evento de fibra."""
     from inventory.api.maintenance_alert import _format_endpoint
+
     cable = config.fiber_cable
     cable_name = cable.name or f"Cabo #{cable.pk}"
 
     headline_map = {
-        FiberCableAlarmConfig.ALERT_BREAK: ("⚠️ Cabo OFFLINE", "#ef4444",
-                                            "ENLACE OFF — possível rompimento ou queda de equipamento."),
-        FiberCableAlarmConfig.ALERT_ATTENUATION: ("⚠️ Sinal Degradado", "#f59e0b",
-                                                  "Atenuação detectada no sinal óptico."),
-        FiberCableAlarmConfig.ALERT_NORMALIZATION: ("✅ Cabo NORMALIZADO", "#10b981",
-                                                    "Serviço restabelecido — operação normal."),
+        FiberCableAlarmConfig.ALERT_BREAK: (
+            "⚠️ Cabo OFFLINE",
+            "#ef4444",
+            "ENLACE OFF — possível rompimento ou queda de equipamento.",
+        ),
+        FiberCableAlarmConfig.ALERT_ATTENUATION: (
+            "⚠️ Sinal Degradado",
+            "#f59e0b",
+            "Atenuação detectada no sinal óptico.",
+        ),
+        FiberCableAlarmConfig.ALERT_NORMALIZATION: (
+            "✅ Cabo NORMALIZADO",
+            "#10b981",
+            "Serviço restabelecido — operação normal.",
+        ),
     }
     headline, color, description = headline_map.get(
         alert_type, ("⚠️ Alerta — ProveMaps", "#f59e0b", "Mudança de estado detectada.")
@@ -559,7 +603,7 @@ def _format_event_email_body(config: FiberCableAlarmConfig, alert_type: str, eve
 
     origin = _format_endpoint(cable.origin_port, getattr(cable, "site_a", None))
     dest = _format_endpoint(cable.destination_port, getattr(cable, "site_b", None))
-    reason = (event.detected_reason if event and event.detected_reason else "")
+    reason = event.detected_reason if event and event.detected_reason else ""
     timestamp = ""
     if event:
         try:
@@ -623,7 +667,7 @@ def _format_event_message(config: FiberCableAlarmConfig, alert_type: str, event=
         FiberCableAlarmConfig.ALERT_NORMALIZATION: "Serviço restabelecido — operação normal.",
     }.get(alert_type, "Mudança de estado detectada.")
 
-    lines = [headline, "", description, "", f"*Cabos afetados (1):*", f"• *{cable_name}*"]
+    lines = [headline, "", description, "", "*Cabos afetados (1):*", f"• *{cable_name}*"]
     endpoints = _format_event_endpoints_block(cable)
     if endpoints:
         lines.append(endpoints)
@@ -656,8 +700,10 @@ def _dispatch_message(
     para auditoria, dedupe e métricas.
     """
     from inventory.api.maintenance_alert import (
-        _get_whatsapp_gateway, _send_whatsapp,
-        _get_smtp_config, _send_email,
+        _get_smtp_config,
+        _get_whatsapp_gateway,
+        _send_email,
+        _send_whatsapp,
     )
     from inventory.models import FiberAlarmNotificationLog
 
@@ -686,6 +732,7 @@ def _dispatch_message(
             )
         except Exception as exc:  # pragma: no cover - logging falha não deve quebrar envio
             import logging as _logging
+
             _logging.getLogger(__name__).warning("Failed to log notification: %s", exc)
         # Métricas Prometheus (best-effort) — registrado independente de log no DB
         _record_notification_metric(channel, success, alert_type or config.alert_type or "")
@@ -694,26 +741,37 @@ def _dispatch_message(
         gw, service_url = _get_whatsapp_gateway()
         if not gw:
             err = "Gateway WhatsApp não configurado/habilitado"
-            results.append({"channel": "whatsapp", "recipient": "—", "success": False, "error": err})
+            results.append(
+                {"channel": "whatsapp", "recipient": "—", "success": False, "error": err}
+            )
             _log("whatsapp", {"name": "—"}, False, err)
         else:
             for r in recipients:
                 phone = r.get("phone", "")
                 if not phone:
                     err = "Sem telefone cadastrado"
-                    results.append({"channel": "whatsapp", "recipient": r.get("name") or "—",
-                                    "phone": "", "success": False, "error": err})
+                    results.append(
+                        {
+                            "channel": "whatsapp",
+                            "recipient": r.get("name") or "—",
+                            "phone": "",
+                            "success": False,
+                            "error": err,
+                        }
+                    )
                     _log("whatsapp", r, False, err)
                     continue
                 ok = _send_whatsapp(service_url, gw.id, phone, message)
                 err = "" if ok else "Falha no envio (ver logs)"
-                results.append({
-                    "channel": "whatsapp",
-                    "recipient": r.get("name") or phone,
-                    "phone": phone,
-                    "success": bool(ok),
-                    **({"error": err} if err else {}),
-                })
+                results.append(
+                    {
+                        "channel": "whatsapp",
+                        "recipient": r.get("name") or phone,
+                        "phone": phone,
+                        "success": bool(ok),
+                        **({"error": err} if err else {}),
+                    }
+                )
                 _log("whatsapp", r, bool(ok), err)
 
     if "email" in channels and email_subject and email_html:
@@ -727,19 +785,28 @@ def _dispatch_message(
                 email_addr = r.get("email", "")
                 if not email_addr:
                     err = "Sem e-mail cadastrado"
-                    results.append({"channel": "email", "recipient": r.get("name") or "—",
-                                    "email": "", "success": False, "error": err})
+                    results.append(
+                        {
+                            "channel": "email",
+                            "recipient": r.get("name") or "—",
+                            "email": "",
+                            "success": False,
+                            "error": err,
+                        }
+                    )
                     _log("email", r, False, err)
                     continue
                 ok = _send_email(smtp, email_addr, email_subject, email_html)
                 err = "" if ok else "Falha no envio (ver logs SMTP)"
-                results.append({
-                    "channel": "email",
-                    "recipient": r.get("name") or email_addr,
-                    "email": email_addr,
-                    "success": bool(ok),
-                    **({"error": err} if err else {}),
-                })
+                results.append(
+                    {
+                        "channel": "email",
+                        "recipient": r.get("name") or email_addr,
+                        "email": email_addr,
+                        "success": bool(ok),
+                        **({"error": err} if err else {}),
+                    }
+                )
                 _log("email", r, bool(ok), err)
 
     return results
@@ -760,10 +827,11 @@ def _record_notification_metric(channel: str, success: bool, alert_type: str) ->
     custo no app loading. Falha silenciosamente se prometheus_client não
     estiver instalado (ambiente de desenvolvimento sem métricas).
     """
-    global _alarm_notifications_counter
+    global _alarm_notifications_counter  # noqa: PLW0603
     try:
         if _alarm_notifications_counter is None:
             from prometheus_client import Counter
+
             _alarm_notifications_counter = Counter(
                 "provemaps_alarm_notifications_total",
                 "Total de notificações de alarme de fibra enviadas (por canal/status/tipo)",
@@ -788,6 +856,7 @@ def set_snooze(config: FiberCableAlarmConfig, hours: float | None) -> dict[str, 
         config.snooze_until = None
     else:
         from datetime import timedelta
+
         config.snooze_until = timezone.now() + timedelta(hours=float(hours))
     config.save(update_fields=["snooze_until", "updated_at"])
     return alarm_config_to_payload(config)
@@ -803,7 +872,11 @@ def send_test_alarm(config: FiberCableAlarmConfig) -> dict[str, object]:
     recipients = _resolve_recipients(config)
     if not recipients:
         return {
-            "ok": False, "sent": 0, "total": 0, "results": [], "message": message,
+            "ok": False,
+            "sent": 0,
+            "total": 0,
+            "results": [],
+            "message": message,
             "error": "Nenhum destinatário com dados de contato encontrado",
         }
 
@@ -821,8 +894,10 @@ def send_test_alarm(config: FiberCableAlarmConfig) -> dict[str, object]:
         )
 
     results = _dispatch_message(
-        config, message,
-        email_subject=email_subject, email_html=email_html,
+        config,
+        message,
+        email_subject=email_subject,
+        email_html=email_html,
         is_test=True,
     )
     sent_ok = sum(1 for r in results if r.get("success"))
@@ -836,6 +911,7 @@ def send_test_alarm(config: FiberCableAlarmConfig) -> dict[str, object]:
 
 
 # ── Dispatcher automático (Fase A) ─────────────────────────────────────────
+
 
 # Mapa transição (previous_status, new_status) → alert_type da config
 def _classify_transition(previous_status: str, new_status: str) -> str | None:
@@ -874,11 +950,13 @@ def _should_skip_for_retry_policy(config, event, now) -> tuple[bool, str]:
       - backoff: última tentativa muito recente para o nível atual → adia
       - "" → pode tentar agora
     """
+
     from inventory.models import FiberAlarmNotificationLog
-    from datetime import timedelta
 
     qs = FiberAlarmNotificationLog.objects.filter(
-        config=config, event=event, is_test=False,
+        config=config,
+        event=event,
+        is_test=False,
     )
     if qs.filter(success=True).exists():
         return True, "dedupe"
@@ -909,24 +987,32 @@ def dispatch_pending_alarms(window_minutes: int = 30) -> dict[str, object]:
     - Snooze: skipa configs com snooze_until > now (Evolução 2).
     """
     import logging as _logging
+
     from inventory.models import FiberEvent
+
     log = _logging.getLogger(__name__)
 
     from datetime import timedelta
+
     cutoff = timezone.now() - timedelta(minutes=window_minutes)
 
     events_qs = (
-        FiberEvent.objects
-        .select_related("fiber")
+        FiberEvent.objects.select_related("fiber")
         .filter(timestamp__gte=cutoff)
         .order_by("timestamp")
     )
 
     summary = {
-        "events_scanned": 0, "events_matched": 0, "configs_evaluated": 0,
-        "sent": 0, "failed": 0,
-        "skipped_persist": 0, "skipped_dedupe": 0,
-        "skipped_exhausted": 0, "skipped_backoff": 0, "skipped_snooze": 0,
+        "events_scanned": 0,
+        "events_matched": 0,
+        "configs_evaluated": 0,
+        "sent": 0,
+        "failed": 0,
+        "skipped_persist": 0,
+        "skipped_dedupe": 0,
+        "skipped_exhausted": 0,
+        "skipped_backoff": 0,
+        "skipped_snooze": 0,
     }
 
     now = timezone.now()
@@ -937,11 +1023,9 @@ def dispatch_pending_alarms(window_minutes: int = 30) -> dict[str, object]:
             continue
         summary["events_matched"] += 1
 
-        configs = (
-            FiberCableAlarmConfig.objects
-            .filter(fiber_cable=event.fiber, alert_type=alert_type)
-            .select_related("contact_group", "contact", "system_user", "department")
-        )
+        configs = FiberCableAlarmConfig.objects.filter(
+            fiber_cable=event.fiber, alert_type=alert_type
+        ).select_related("contact_group", "contact", "system_user", "department")
 
         for config in configs:
             summary["configs_evaluated"] += 1
@@ -975,14 +1059,20 @@ def dispatch_pending_alarms(window_minutes: int = 30) -> dict[str, object]:
 
             try:
                 results = _dispatch_message(
-                    config, message,
-                    email_subject=email_subject, email_html=email_html,
-                    event=event, alert_type=alert_type, is_test=False,
+                    config,
+                    message,
+                    email_subject=email_subject,
+                    email_html=email_html,
+                    event=event,
+                    alert_type=alert_type,
+                    is_test=False,
                 )
                 summary["sent"] += sum(1 for r in results if r.get("success"))
                 summary["failed"] += sum(1 for r in results if not r.get("success"))
-            except Exception as exc:  # pragma: no cover - safety
-                log.exception("dispatch_pending_alarms: failed for config=%s event=%s", config.pk, event.pk)
+            except Exception:  # pragma: no cover - safety
+                log.exception(
+                    "dispatch_pending_alarms: failed for config=%s event=%s", config.pk, event.pk
+                )
                 summary["failed"] += 1
 
     return summary

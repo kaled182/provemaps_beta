@@ -1,7 +1,7 @@
 # API Authentication Guide - MapsProveFiber
 
-**Version**: v2.0.0  
-**Last Updated**: 2025-11-10  
+**Versão do produto**: ver [VERSION](../../VERSION)  
+**Last Updated**: 2026-10-04  
 **Target Audience**: API Developers, Integrators
 
 ---
@@ -54,7 +54,7 @@ Recommended for:
 - Third-party integrations
 
 **Generate Token:**
-```powershell
+```bash
 # Via Django shell
 python manage.py shell
 
@@ -146,7 +146,7 @@ class IsStaffOrReadOnly(permissions.BasePermission):
 
 ### Create API User
 
-```powershell
+```bash
 # Interactive
 python manage.py createsuperuser
 
@@ -548,5 +548,5 @@ console.log(`Total sites: ${sites.length}`);
 
 ---
 
-**Last Updated**: 2025-11-10  
+**Last Updated**: 2026-10-04  
 **Maintainers**: API Team

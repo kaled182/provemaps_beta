@@ -271,7 +271,7 @@
                     
                     <div class="panel-content" v-show="expandedOrigin">
                       <div class="optical-chart-container">
-                        <canvas ref="originChartCanvas"></canvas>
+                        <TimeSeriesChart ref="originChartRef" :series="opticalSeries('origin')" :thresholds="opticalThresholds('origin')" unit="dBm" :decimals="2" :height="260" />
                       </div>
                       <div class="optical-stats">
                         <div class="stat-box">
@@ -329,7 +329,7 @@
                     
                     <div class="panel-content" v-show="expandedDestination">
                       <div class="optical-chart-container">
-                        <canvas ref="destinationChartCanvas"></canvas>
+                        <TimeSeriesChart ref="destinationChartRef" :series="opticalSeries('destination')" :thresholds="opticalThresholds('destination')" unit="dBm" :decimals="2" :height="260" />
                       </div>
                       <div class="optical-stats">
                         <div class="stat-box">
@@ -422,7 +422,7 @@
                     </div>
                     <div class="panel-content" v-show="trafficExpandedOrigin">
                       <div v-if="trafficData.origin?.history?.length" class="optical-chart-container">
-                        <canvas ref="trafficOriginChartCanvas"></canvas>
+                        <TimeSeriesChart ref="trafficOriginChartRef" :series="trafficSeries('origin')" unit="Mbps" :begin-at-zero="true" :height="260" />
                       </div>
                       <div class="traffic-stats-grid">
                         <div class="traffic-stat-card">
@@ -488,7 +488,7 @@
                     </div>
                     <div class="panel-content" v-show="trafficExpandedDestination">
                       <div v-if="trafficData.destination?.history?.length" class="optical-chart-container">
-                        <canvas ref="trafficDestinationChartCanvas"></canvas>
+                        <TimeSeriesChart ref="trafficDestinationChartRef" :series="trafficSeries('destination')" unit="Mbps" :begin-at-zero="true" :height="260" />
                       </div>
                       <div class="traffic-stats-grid">
                         <div class="traffic-stat-card">
@@ -915,7 +915,8 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useEscapeKey } from '@/composables/useEscapeKey'
-import Chart from 'chart.js/auto'
+import TimeSeriesChart from './charts/TimeSeriesChart.vue'
+import { bpsToMbps } from '@/utils/opticalSeries'
 import { getCableOpticalHistory, getCableTrafficHistory, getCableAlarms, createCableAlarm, deleteCableAlarm, testCableAlarm, getCableAlarmNotifications, snoozeCableAlarm } from '@/services/fiberService'
 import { useAlertTemplatesStore } from '@/stores/alertTemplates'
 
@@ -940,8 +941,8 @@ const emit = defineEmits(['close', 'save'])
 const activeTab = ref('info')
 const isEditMode = ref(false)
 const isSaving = ref(false)
-const originChartCanvas = ref(null)
-const destinationChartCanvas = ref(null)
+const originChartRef = ref(null)
+const destinationChartRef = ref(null)
 const expandedOrigin = ref(true)
 const expandedDestination = ref(false)
 const showCableDetails = ref(true)
@@ -952,18 +953,11 @@ const trafficData = ref(null)
 const isLoadingTraffic = ref(false)
 const trafficExpandedOrigin = ref(true)
 const trafficExpandedDestination = ref(false)
-const trafficOriginChartCanvas = ref(null)
-const trafficDestinationChartCanvas = ref(null)
+const trafficOriginChartRef = ref(null)
+const trafficDestinationChartRef = ref(null)
 const trafficExportMenuOpen = ref(null)
-let originChart = null
-let destinationChart = null
-let trafficOriginChart = null
-let trafficDestinationChart = null
-let originChartRetry = 0
-let destinationChartRetry = 0
-let trafficOriginChartRetry = 0
-let trafficDestinationChartRetry = 0
-const MAX_CHART_RETRIES = 6
+// EV-0011: o ciclo de vida dos gráficos vive em TimeSeriesChart (uma instância por componente,
+// destruída ao desmontar); sem retries por setTimeout.
 
 const alertTemplatesStore = useAlertTemplatesStore()
 
@@ -983,21 +977,6 @@ const contactOptions = computed(() =>
     summary: c.summary || 'Sem detalhes',
   }))
 )
-
-// Aguarda canvas ficar disponível antes de criar o gráfico
-const waitForCanvas = async (canvasRef, retries = 6, delay = 80) => {
-  for (let attempt = 0; attempt < retries; attempt += 1) {
-    if (canvasRef.value) {
-      return canvasRef.value
-    }
-    await nextTick()
-    if (delay > 0) {
-      await new Promise(resolve => setTimeout(resolve, delay))
-    }
-  }
-
-  return null
-}
 
 // Tabs
 const tabs = [
@@ -1224,8 +1203,6 @@ const closeModal = () => {
     if (!confirm) return
     isEditMode.value = false
   }
-  originChartRetry = 0
-  destinationChartRetry = 0
   showAlarmModal.value = false
   emit('close')
 }
@@ -1238,32 +1215,36 @@ const toggleCableDetails = () => {
   showCableDetails.value = !showCableDetails.value
 }
 
+const escapeHtml = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
 const exportChart = (port, format) => {
   exportMenuOpen.value = null
-  const canvas = port === 'origin' ? originChartCanvas.value : destinationChartCanvas.value
-  if (!canvas) return
+  const chartRef = port === 'origin' ? originChartRef.value : destinationChartRef.value
+  const chartImage = chartRef?.toDataURL?.()
+  if (!chartImage) return
 
   const device = opticalData.value?.portInfo?.[port]?.device || port
   const portName = opticalData.value?.portInfo?.[port]?.port || ''
-  const filename = `nivel-optico_${device}_${portName}_${selectedPeriod.value}h`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '')
+  const filename = `nivel-optico_${device}_${portName}_${selectedPeriod.value}h`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '')
 
   if (format === 'png') {
     const link = document.createElement('a')
     link.download = `${filename}.png`
-    link.href = canvas.toDataURL('image/png')
+    link.href = chartImage
     link.click()
     return
   }
 
   // PDF: abre janela com a imagem em alta resolução e dispara impressão
-  const imgData = canvas.toDataURL('image/png')
+  const imgData = chartImage
   const win = window.open('', '_blank')
   if (!win) return
   win.document.write(`
     <!DOCTYPE html>
     <html>
     <head>
-      <title>${device} — ${portName}</title>
+      <title>${escapeHtml(device)} — ${escapeHtml(portName)}</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #fff; display: flex; flex-direction: column; align-items: center; padding: 24px; font-family: sans-serif; }
@@ -1273,10 +1254,10 @@ const exportChart = (port, format) => {
       </style>
     </head>
     <body>
-      <h2>${device}</h2>
-      <p>${portName} — Período: ${selectedPeriod.value}h</p>
+      <h2>${escapeHtml(device)}</h2>
+      <p>${escapeHtml(portName)} — Período: ${selectedPeriod.value}h</p>
       <img src="${imgData}" />
-      <script>window.onload = () => { window.print(); }<\/script>
+      <script>window.onload = () => { window.print(); }<${'/'}script>
     </body>
     </html>
   `)
@@ -1306,11 +1287,6 @@ const loadOpticalData = async () => {
       
       console.log('[FiberCableDetailModal] Dados formatados:', opticalData.value)
       
-      // Criar gráficos após carregar dados
-      await nextTick()
-      if (activeTab.value === 'optical') {
-        await createOpticalCharts()
-      }
     } else {
       console.warn('[FiberCableDetailModal] Sem dados ópticos disponíveis no histórico')
       opticalData.value = null
@@ -1329,10 +1305,6 @@ const loadTrafficData = async () => {
   try {
     const data = await getCableTrafficHistory(props.cable.id, selectedPeriod.value)
     trafficData.value = data
-    await nextTick()
-    if (activeTab.value === 'traffic') {
-      await createTrafficCharts()
-    }
   } catch (error) {
     console.error('[FiberCableDetailModal] Erro ao carregar tráfego:', error)
     trafficData.value = null
@@ -1344,143 +1316,36 @@ const loadTrafficData = async () => {
 /**
  * Formata array de histórico de tráfego em labels + inData + outData (com forward-fill)
  */
-const formatTrafficHistoryData = (historyArray) => {
-  if (!historyArray || historyArray.length === 0) return null
-  const sorted = [...historyArray].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
-  const labels = []
-  const inData = []
-  const outData = []
-  let lastIn = null
-  let lastOut = null
-  sorted.forEach(point => {
-    const date = new Date(point.timestamp)
-    labels.push(date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }))
-    const inVal = point.traffic_in
-    const outVal = point.traffic_out
-    if (inVal !== null && inVal !== undefined && !Number.isNaN(inVal)) { lastIn = inVal; inData.push(inVal) } else { inData.push(lastIn) }
-    if (outVal !== null && outVal !== undefined && !Number.isNaN(outVal)) { lastOut = outVal; outData.push(outVal) } else { outData.push(lastOut) }
-  })
-  return { labels, inData, outData }
-}
-
-const createTrafficCharts = async () => {
-  if (trafficExpandedOrigin.value && trafficData.value?.origin?.history?.length) {
-    await createTrafficOriginChart()
-  }
-  if (trafficExpandedDestination.value && trafficData.value?.destination?.history?.length) {
-    await createTrafficDestinationChart()
-  }
-}
-
-const createTrafficOriginChart = async () => {
-  const canvasEl = await waitForCanvas(trafficOriginChartCanvas)
-  if (!canvasEl || !trafficData.value?.origin?.history?.length) {
-    if (trafficOriginChartRetry < MAX_CHART_RETRIES) {
-      trafficOriginChartRetry += 1
-      setTimeout(() => createTrafficOriginChart(), 150)
-    } else {
-      trafficOriginChartRetry = 0
-    }
-    return
-  }
-  try {
-    trafficOriginChartRetry = 0
-    const ctx = canvasEl.getContext('2d')
-    if (trafficOriginChart) { trafficOriginChart.destroy() }
-    const formatted = formatTrafficHistoryData(trafficData.value.origin.history)
-    if (!formatted) return
-    trafficOriginChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: formatted.labels,
-        datasets: [
-          { label: 'Download (IN)', data: formatted.inData, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, spanGaps: true },
-          { label: 'Upload (OUT)', data: formatted.outData, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, spanGaps: true }
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { display: true, labels: { color: '#94a3b8' } },
-          tooltip: { mode: 'index', intersect: false, backgroundColor: 'rgba(0,0,0,0.8)', titleColor: '#fff', bodyColor: '#fff', borderColor: '#3b82f6', borderWidth: 1,
-            callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${formatBps(ctx.parsed.y)}` }
-          }
-        },
-        scales: {
-          x: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#94a3b8', maxRotation: 45, minRotation: 45 } },
-          y: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#94a3b8', callback: (v) => formatBps(v) } }
-        }
-      }
-    })
-  } catch (error) {
-    console.error('[FiberCableDetailModal] Erro ao criar gráfico tráfego origem:', error)
-  }
-}
-
-const createTrafficDestinationChart = async () => {
-  const canvasEl = await waitForCanvas(trafficDestinationChartCanvas)
-  if (!canvasEl || !trafficData.value?.destination?.history?.length) {
-    if (trafficDestinationChartRetry < MAX_CHART_RETRIES) {
-      trafficDestinationChartRetry += 1
-      setTimeout(() => createTrafficDestinationChart(), 150)
-    } else {
-      trafficDestinationChartRetry = 0
-    }
-    return
-  }
-  try {
-    trafficDestinationChartRetry = 0
-    const ctx = canvasEl.getContext('2d')
-    if (trafficDestinationChart) { trafficDestinationChart.destroy() }
-    const formatted = formatTrafficHistoryData(trafficData.value.destination.history)
-    if (!formatted) return
-    trafficDestinationChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: formatted.labels,
-        datasets: [
-          { label: 'Download (IN)', data: formatted.inData, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.08)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, spanGaps: true },
-          { label: 'Upload (OUT)', data: formatted.outData, borderColor: '#ec4899', backgroundColor: 'rgba(236,72,153,0.08)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, spanGaps: true }
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { display: true, labels: { color: '#94a3b8' } },
-          tooltip: { mode: 'index', intersect: false, backgroundColor: 'rgba(0,0,0,0.8)', titleColor: '#fff', bodyColor: '#fff', borderColor: '#f59e0b', borderWidth: 1,
-            callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${formatBps(ctx.parsed.y)}` }
-          }
-        },
-        scales: {
-          x: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#94a3b8', maxRotation: 45, minRotation: 45 } },
-          y: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#94a3b8', callback: (v) => formatBps(v) } }
-        }
-      }
-    })
-  } catch (error) {
-    console.error('[FiberCableDetailModal] Erro ao criar gráfico tráfego destino:', error)
-  }
+// EV-0011/EV-0026: séries para o TimeSeriesChart (x em epoch ms, y em Mbps, null = buraco).
+const trafficSeries = (side) => {
+  const history = trafficData.value?.[side]?.history || []
+  if (!history.length) return []
+  return [
+    { label: 'Download (IN)', data: history.map(p => ({ x: p.timestamp, y: bpsToMbps(p.traffic_in) })) },
+    { label: 'Upload (OUT)', data: history.map(p => ({ x: p.timestamp, y: bpsToMbps(p.traffic_out) })) },
+  ]
 }
 
 const exportTrafficChart = (port, format) => {
   trafficExportMenuOpen.value = null
-  const canvas = port === 'origin' ? trafficOriginChartCanvas.value : trafficDestinationChartCanvas.value
-  if (!canvas) return
+  const chartRef = port === 'origin' ? trafficOriginChartRef.value : trafficDestinationChartRef.value
+  const chartImage = chartRef?.toDataURL?.()
+  if (!chartImage) return
   const portData = port === 'origin' ? trafficData.value?.origin : trafficData.value?.destination
   const device = portData?.device || port
   const portName = portData?.port || ''
-  const filename = `trafego_${device}_${portName}_${selectedPeriod.value}h`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '')
+  const filename = `trafego_${device}_${portName}_${selectedPeriod.value}h`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '')
   if (format === 'png') {
     const link = document.createElement('a')
     link.download = `${filename}.png`
-    link.href = canvas.toDataURL('image/png')
+    link.href = chartImage
     link.click()
     return
   }
-  const imgData = canvas.toDataURL('image/png')
+  const imgData = chartImage
   const win = window.open('', '_blank')
   if (!win) return
-  win.document.write(`<!DOCTYPE html><html><head><title>${device} — ${portName}</title><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#fff;display:flex;flex-direction:column;align-items:center;padding:24px;font-family:sans-serif;}h2{font-size:14px;color:#334155;margin-bottom:4px;}p{font-size:12px;color:#64748b;margin-bottom:16px;}img{max-width:100%;border:1px solid #e2e8f0;border-radius:8px;}</style></head><body><h2>${device}</h2><p>${portName} — Período: ${selectedPeriod.value}h</p><img src="${imgData}"/><script>window.onload=()=>{window.print()}<\/script></body></html>`)
+  win.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(device)} — ${escapeHtml(portName)}</title><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#fff;display:flex;flex-direction:column;align-items:center;padding:24px;font-family:sans-serif;}h2{font-size:14px;color:#334155;margin-bottom:4px;}p{font-size:12px;color:#64748b;margin-bottom:16px;}img{max-width:100%;border:1px solid #e2e8f0;border-radius:8px;}</style></head><body><h2>${escapeHtml(device)}</h2><p>${escapeHtml(portName)} — Período: ${selectedPeriod.value}h</p><img src="${imgData}"/><script>window.onload=()=>{window.print()}<${'/'}script></body></html>`)
   win.document.close()
 }
 
@@ -2050,321 +1915,24 @@ const formatEventDate = (date) => {
 }
 
 // Criar/atualizar gráficos ópticos (dois gráficos separados)
-const createOpticalCharts = async () => {
-  console.log('[FiberCableDetailModal] createOpticalCharts chamado')
-  
-  if (expandedOrigin.value && opticalData.value?.origin) {
-    await createOriginChart()
-  }
-  
-  if (expandedDestination.value && opticalData.value?.destination) {
-    await createDestinationChart()
-  }
+// EV-0011/EV-0026: séries ópticas para o TimeSeriesChart.
+const opticalSeries = (side) => {
+  const data = opticalData.value?.[side]
+  if (!data?.timestamps?.length) return []
+  return [
+    { label: 'RX (dBm)', data: data.timestamps.map((t, i) => ({ x: t, y: data.rxData[i] })) },
+    { label: 'TX (dBm)', data: data.timestamps.map((t, i) => ({ x: t, y: data.txData[i] })) },
+  ]
 }
 
-const createOriginChart = async () => {
-  const canvasEl = await waitForCanvas(originChartCanvas)
-
-  if (!canvasEl || !opticalData.value?.origin) {
-    if (originChartRetry < MAX_CHART_RETRIES) {
-      originChartRetry += 1
-      console.warn('[FiberCableDetailModal] Canvas origem não encontrado, tentando novamente...', {
-        attempt: originChartRetry,
-        hasCanvas: !!canvasEl,
-        hasData: !!opticalData.value?.origin
-      })
-      setTimeout(() => {
-        createOriginChart()
-      }, 150)
-    } else {
-      console.error('[FiberCableDetailModal] Falha ao obter canvas origem após múltiplas tentativas', {
-        attempts: originChartRetry,
-        hasCanvas: !!canvasEl,
-        hasData: !!opticalData.value?.origin
-      })
-      originChartRetry = 0
-    }
-    return
-  }
-  
-  try {
-    originChartRetry = 0
-    const ctx = canvasEl.getContext('2d')
-    
-    if (originChart) {
-      originChart.destroy()
-    }
-    
-    const originData = opticalData.value.origin
-    console.log('[FiberCableDetailModal] Criando gráfico origem com', originData.labels.length, 'pontos')
-
-    const datasets = [
-      {
-        label: 'RX (dBm)',
-        data: originData.rxData,
-        borderColor: '#3b82f6',
-        backgroundColor: 'transparent',
-        borderWidth: 2,
-        fill: false,
-        tension: 0.4,
-        pointRadius: 0,
-        pointHoverRadius: 6,
-        spanGaps: true,
-        order: 1
-      },
-      {
-        label: 'TX (dBm)',
-        data: originData.txData,
-        borderColor: '#10b981',
-        backgroundColor: 'transparent',
-        borderWidth: 2,
-        fill: false,
-        tension: 0.4,
-        pointRadius: 0,
-        pointHoverRadius: 6,
-        spanGaps: true,
-        order: 1
-      }
-    ]
-
-    if (originData.warningLine) {
-      datasets.push({
-        label: 'Atenção',
-        data: originData.warningLine,
-        borderColor: '#fbbf24',
-        borderDash: [6, 6],
-        borderWidth: 1.5,
-        fill: false,
-        pointRadius: 0,
-        tension: 0,
-        spanGaps: true,
-        order: 5
-      })
-    }
-
-    if (originData.criticalLine) {
-      datasets.push({
-        label: 'Crítico',
-        data: originData.criticalLine,
-        borderColor: '#f87171',
-        borderDash: [6, 6],
-        borderWidth: 1.5,
-        fill: false,
-        pointRadius: 0,
-        tension: 0,
-        spanGaps: true,
-        order: 5
-      })
-    }
-
-    originChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: originData.labels,
-        datasets
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: true,
-            labels: {
-              color: '#94a3b8'
-            }
-          },
-          tooltip: {
-            mode: 'index',
-            intersect: false,
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            titleColor: '#fff',
-            bodyColor: '#fff',
-            borderColor: '#3b82f6',
-            borderWidth: 1
-          }
-        },
-        scales: {
-          x: {
-            grid: {
-              color: 'rgba(255, 255, 255, 0.1)'
-            },
-            ticks: {
-              color: '#94a3b8',
-              maxRotation: 45,
-              minRotation: 45
-            }
-          },
-          y: {
-            grid: {
-              color: 'rgba(255, 255, 255, 0.1)'
-            },
-            ticks: {
-              color: '#94a3b8',
-              callback: (value) => `${value} dBm`
-            }
-          }
-        }
-      }
-    })
-    
-    console.log('[FiberCableDetailModal] Gráfico origem criado com sucesso')
-  } catch (error) {
-    console.error('[FiberCableDetailModal] Erro ao criar gráfico origem:', error)
-  }
+const opticalThresholds = (side) => {
+  const t = opticalData.value?.thresholds?.[side]
+  const out = []
+  if (t?.warning !== null && t?.warning !== undefined) out.push({ value: t.warning, label: 'Atenção' })
+  if (t?.critical !== null && t?.critical !== undefined) out.push({ value: t.critical, label: 'Crítico', color: '#f87171' })
+  return out
 }
 
-const createDestinationChart = async () => {
-  const canvasEl = await waitForCanvas(destinationChartCanvas)
-
-  if (!canvasEl || !opticalData.value?.destination) {
-    if (destinationChartRetry < MAX_CHART_RETRIES) {
-      destinationChartRetry += 1
-      console.warn('[FiberCableDetailModal] Canvas destino não encontrado, tentando novamente...', {
-        attempt: destinationChartRetry,
-        hasCanvas: !!canvasEl,
-        hasData: !!opticalData.value?.destination
-      })
-      setTimeout(() => {
-        createDestinationChart()
-      }, 150)
-    } else {
-      console.error('[FiberCableDetailModal] Falha ao obter canvas destino após múltiplas tentativas', {
-        attempts: destinationChartRetry,
-        hasCanvas: !!canvasEl,
-        hasData: !!opticalData.value?.destination
-      })
-      destinationChartRetry = 0
-    }
-    return
-  }
-  
-  try {
-    destinationChartRetry = 0
-    const ctx = canvasEl.getContext('2d')
-    
-    if (destinationChart) {
-      destinationChart.destroy()
-    }
-    
-    const destinationData = opticalData.value.destination
-    console.log('[FiberCableDetailModal] Criando gráfico destino com', destinationData.labels.length, 'pontos')
-
-    const datasets = [
-      {
-        label: 'RX (dBm)',
-        data: destinationData.rxData,
-        borderColor: '#f59e0b',
-        backgroundColor: 'transparent',
-        borderWidth: 2,
-        fill: false,
-        tension: 0.4,
-        pointRadius: 0,
-        pointHoverRadius: 6,
-        spanGaps: true,
-        order: 1
-      },
-      {
-        label: 'TX (dBm)',
-        data: destinationData.txData,
-        borderColor: '#ec4899',
-        backgroundColor: 'transparent',
-        borderWidth: 2,
-        fill: false,
-        tension: 0.4,
-        pointRadius: 0,
-        pointHoverRadius: 6,
-        spanGaps: true,
-        order: 1
-      }
-    ]
-
-    if (destinationData.warningLine) {
-      datasets.push({
-        label: 'Atenção',
-        data: destinationData.warningLine,
-        borderColor: '#fbbf24',
-        borderDash: [6, 6],
-        borderWidth: 1.5,
-        fill: false,
-        pointRadius: 0,
-        tension: 0,
-        spanGaps: true,
-        order: 5
-      })
-    }
-
-    if (destinationData.criticalLine) {
-      datasets.push({
-        label: 'Crítico',
-        data: destinationData.criticalLine,
-        borderColor: '#f87171',
-        borderDash: [6, 6],
-        borderWidth: 1.5,
-        fill: false,
-        pointRadius: 0,
-        tension: 0,
-        spanGaps: true,
-        order: 5
-      })
-    }
-
-    destinationChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: destinationData.labels,
-        datasets
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: true,
-            labels: {
-              color: '#94a3b8'
-            }
-          },
-          tooltip: {
-            mode: 'index',
-            intersect: false,
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            titleColor: '#fff',
-            bodyColor: '#fff',
-            borderColor: '#f59e0b',
-            borderWidth: 1
-          }
-        },
-        scales: {
-          x: {
-            grid: {
-              color: 'rgba(255, 255, 255, 0.1)'
-            },
-            ticks: {
-              color: '#94a3b8',
-              maxRotation: 45,
-              minRotation: 45
-            }
-          },
-          y: {
-            grid: {
-              color: 'rgba(255, 255, 255, 0.1)'
-            },
-            ticks: {
-              color: '#94a3b8',
-              callback: (value) => `${value} dBm`
-            }
-          }
-        }
-      }
-    })
-    
-    console.log('[FiberCableDetailModal] Gráfico destino criado com sucesso')
-  } catch (error) {
-    console.error('[FiberCableDetailModal] Erro ao criar gráfico destino:', error)
-  }
-}
-
-// Helper para formatar valores dBm
 const formatBps = (value) => {
   if (value === null || value === undefined) return 'N/A'
   const bps = Number(value)
@@ -2379,19 +1947,6 @@ const formatDbm = (value) => {
   if (value === null || value === undefined || isNaN(value)) return 'N/A'
   return `${value.toFixed(2)} dBm`
 }
-
-// Watch para recriar gráficos quando expandir/colapsar
-watch(expandedOrigin, async (isExpanded) => {
-  if (isExpanded && opticalData.value?.origin) {
-    await createOriginChart()
-  }
-})
-
-watch(expandedDestination, async (isExpanded) => {
-  if (isExpanded && opticalData.value?.destination) {
-    await createDestinationChart()
-  }
-})
 
 watch(departmentGroups, (groups) => {
   if (groups.length) {
@@ -2438,18 +1993,6 @@ watch(() => [props.show, props.cable], async ([show, cable]) => {
   }
 }, { immediate: true })
 
-// Watch para criar gráficos quando mudar para tab optical ou traffic
-watch(activeTab, async (newTab) => {
-  if (newTab === 'optical' && opticalData.value && props.show) {
-    await nextTick()
-    await createOpticalCharts()
-  }
-  if (newTab === 'traffic' && trafficData.value && props.show) {
-    await nextTick()
-    await createTrafficCharts()
-  }
-})
-
 // Watch para recriar gráficos quando mudar período
 watch(selectedPeriod, async () => {
   if (props.show) {
@@ -2461,27 +2004,10 @@ watch(selectedPeriod, async () => {
   }
 })
 
-watch(trafficExpandedOrigin, async (isExpanded) => {
-  if (isExpanded && trafficData.value?.origin?.history?.length) {
-    await createTrafficOriginChart()
-  }
-})
-
-watch(trafficExpandedDestination, async (isExpanded) => {
-  if (isExpanded && trafficData.value?.destination?.history?.length) {
-    await createTrafficDestinationChart()
-  }
-})
-
 const onDocumentClick = () => { exportMenuOpen.value = null; trafficExportMenuOpen.value = null }
 
 onMounted(() => {
   document.addEventListener('click', onDocumentClick)
-  if (props.show && activeTab.value === 'optical' && opticalData.value) {
-    nextTick(async () => {
-      await createOpticalCharts()
-    })
-  }
 })
 
 onUnmounted(() => {

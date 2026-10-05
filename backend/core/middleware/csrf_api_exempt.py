@@ -2,13 +2,12 @@
 Middleware que desativa CSRF para rotas de API que usam autenticação própria.
 Deve ser posicionado ANTES do CsrfViewMiddleware no settings.
 """
+
+from collections.abc import Callable
+
 from django.http import HttpRequest, HttpResponse
-from typing import Callable
 
-
-_EXEMPT_PREFIXES = (
-    '/setup/api/cron',
-)
+_EXEMPT_PREFIXES = ("/setup/api/cron",)
 
 
 class CsrfApiExemptMiddleware:

@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-from django.urls import path
-from django.core.exceptions import ImproperlyConfigured
 import logging
 
+from django.core.exceptions import ImproperlyConfigured
+from django.urls import path
+
+from .api.cable_attachment import CableAttachmentViewSet
 from .api.splice_matrix import (
-    SpliceBoxMatrixView,
+    BoxContextView,
     CreateFusionView,
     DeleteFusionView,
-    BoxContextView,
+    SpliceBoxMatrixView,
 )
-from .api.cable_attachment import CableAttachmentViewSet
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +20,12 @@ logger = logging.getLogger(__name__)
 # URL import.
 _GIS_ENDPOINTS_AVAILABLE = True
 try:
+    from .api.attach_loose_end import AttachLooseEndView
     from .api.cable_split import CableSplitViewSet
     from .api.cable_split_v2 import CableSplitV2View
-    from .api.attach_loose_end import AttachLooseEndView
     from .api.create_standalone_ceo import CreateStandaloneCEOView
-    from .api.list_standalone_ceos import ListStandaloneCEOsView
     from .api.list_loose_ends import ListLooseEndsView
+    from .api.list_standalone_ceos import ListStandaloneCEOsView
 except ImproperlyConfigured:  # pragma: no cover - depends on GDAL availability
     _GIS_ENDPOINTS_AVAILABLE = False
     CableSplitViewSet = None  # type: ignore[assignment]
@@ -35,51 +36,50 @@ except ImproperlyConfigured:  # pragma: no cover - depends on GDAL availability
     ListLooseEndsView = None  # type: ignore[assignment]
     logger.warning("GDAL not available; skipping GIS-dependent inventory APIs")
 
-from inventory.api import devices as device_api
-from inventory.api import fibers as fiber_api
-from inventory.api.fibers import api_fiber_audit_log
-from inventory.api.cable_photos import api_cable_photos, api_cable_photo_delete
-from inventory.api.search import api_global_search
-from inventory.api.cable_folders import (
-    api_list_cable_folders,
+from inventory.api import (  # noqa: E402
+    devices as device_api,
+    fibers as fiber_api,
+    routes as routes_api,
+    zabbix_lookup as zabbix_lookup_api,
+)
+from inventory.api.alarm_sources import api_alarm_config_sources  # noqa: E402
+from inventory.api.cable_folders import (  # noqa: E402
     api_create_cable_folder,
-    api_update_cable_folder,
     api_delete_cable_folder,
+    api_list_cable_folders,
     api_move_cable_to_folder,
+    api_update_cable_folder,
 )
-from inventory.api import routes as routes_api
-from inventory.api import zabbix_lookup as zabbix_lookup_api
-from inventory.api.cable_groups import (
-    api_list_cable_groups,
+from inventory.api.cable_groups import (  # noqa: E402
     api_create_cable_group,
-    api_update_cable_group,
     api_delete_cable_group,
+    api_list_cable_groups,
+    api_update_cable_group,
 )
-from inventory.api.cable_types import (
-    api_list_cable_types,
+from inventory.api.cable_photos import api_cable_photo_delete, api_cable_photos  # noqa: E402
+from inventory.api.cable_types import (  # noqa: E402
     api_create_cable_type,
-    api_update_cable_type,
     api_delete_cable_type,
+    api_list_cable_types,
+    api_update_cable_type,
 )
-from inventory.api.responsibles import (
-    api_list_responsibles,
-    api_create_responsible,
+from inventory.api.check_update import api_check_update  # noqa: E402
+from inventory.api.fibers import api_fiber_audit_log  # noqa: E402
+from inventory.api.infrastructure import (  # noqa: E402
+    api_create_infrastructure,
+    api_delete_infrastructure,
+    api_update_infrastructure,
 )
-from inventory.api.maintenance_alert import (
+from inventory.api.maintenance_alert import (  # noqa: E402
     api_maintenance_recipients,
     api_maintenance_send_alert,
 )
-from inventory.api.alarm_sources import api_alarm_config_sources
-from inventory.api.system_info import api_system_info
-from inventory.api.server_stats import api_server_stats
-from inventory.api.check_update import api_check_update
-from inventory.api.perform_update import api_perform_update
-from inventory.api.trace_route import trace_fiber_route
-from inventory.api.infrastructure import (
-    api_create_infrastructure,
-    api_update_infrastructure,
-    api_delete_infrastructure,
-)
+from inventory.api.perform_update import api_perform_update  # noqa: E402
+from inventory.api.responsibles import api_create_responsible, api_list_responsibles  # noqa: E402
+from inventory.api.search import api_global_search  # noqa: E402
+from inventory.api.server_stats import api_server_stats  # noqa: E402
+from inventory.api.system_info import api_system_info  # noqa: E402
+from inventory.api.trace_route import trace_fiber_route  # noqa: E402
 
 _SPATIAL_ENDPOINTS_AVAILABLE = True
 try:
@@ -103,7 +103,11 @@ urlpatterns = [
     path("cable-folders/", api_list_cable_folders, name="cable-folders-list"),
     path("cable-folders/create/", api_create_cable_folder, name="cable-folders-create"),
     path("cable-folders/<int:folder_id>/", api_update_cable_folder, name="cable-folders-update"),
-    path("cable-folders/<int:folder_id>/delete/", api_delete_cable_folder, name="cable-folders-delete"),
+    path(
+        "cable-folders/<int:folder_id>/delete/",
+        api_delete_cable_folder,
+        name="cable-folders-delete",
+    ),
     path("fibers/<int:cable_id>/move-folder/", api_move_cable_to_folder, name="fiber-move-folder"),
     # Cable Groups
     path(
@@ -135,19 +139,23 @@ urlpatterns = [
     path("responsibles/", api_list_responsibles, name="responsibles-list"),
     path("responsibles/create/", api_create_responsible, name="responsibles-create"),
     # Maintenance area notifications
-    path("maintenance-alert/recipients/", api_maintenance_recipients, name="maintenance-alert-recipients"),
+    path(
+        "maintenance-alert/recipients/",
+        api_maintenance_recipients,
+        name="maintenance-alert-recipients",
+    ),
     path("maintenance-alert/send/", api_maintenance_send_alert, name="maintenance-alert-send"),
     # Alarm configuration sources (users, groups, contacts)
     path("alarm-config-sources/", api_alarm_config_sources, name="alarm-config-sources"),
     # Cable Attachments
     path(
         "cable-attachments/attach/",
-        CableAttachmentViewSet.as_view({'post': 'attach'}),
+        CableAttachmentViewSet.as_view({"post": "attach"}),
         name="cable-attach",
     ),
     path(
         "cable-attachments/detach/",
-        CableAttachmentViewSet.as_view({'post': 'detach'}),
+        CableAttachmentViewSet.as_view({"post": "detach"}),
         name="cable-detach",
     ),
     path(
@@ -444,30 +452,30 @@ urlpatterns = [
         name="infrastructure-delete",
     ),
     path(
-        'splice-boxes/<int:id>/matrix/',
+        "splice-boxes/<int:id>/matrix/",
         SpliceBoxMatrixView.as_view(),
-        name='splice-box-matrix',
+        name="splice-box-matrix",
     ),
     path(
-        'splice-boxes/<int:id>/context/',
+        "splice-boxes/<int:id>/context/",
         BoxContextView.as_view(),
-        name='splice-box-context',
+        name="splice-box-context",
     ),
     path(
-        'fusions/',
+        "fusions/",
         CreateFusionView.as_view(),
-        name='create-fusion',
+        name="create-fusion",
     ),
     path(
-        'fusions/<int:fiber_id>/',
+        "fusions/<int:fiber_id>/",
         DeleteFusionView.as_view(),
-        name='delete-fusion',
+        name="delete-fusion",
     ),
     # Trace Route - Optical path tracing (Phase 11.5)
     path(
-        'trace-route/',
+        "trace-route/",
         trace_fiber_route,
-        name='trace-route',
+        name="trace-route",
     ),
 ]
 
@@ -476,7 +484,7 @@ if _GIS_ENDPOINTS_AVAILABLE:
         # Cable Split
         path(
             "cables/split-at-ceo/",
-            CableSplitViewSet.as_view({'post': 'split_at_ceo'}),
+            CableSplitViewSet.as_view({"post": "split_at_ceo"}),
             name="cable-split-ceo",
         ),
         # Cable Split V2 (usando CableSegments)

@@ -160,7 +160,7 @@ Desktop.ini
 
 # Node.js artifacts
 node_modules/
-package-lock.json
+# package-lock.json É versionado (EV-0007): `npm ci` no Dockerfile e no CI exige-o.
 
 # Project-specific generated artifacts (post folder-structure refactor)
 backend/logs/
@@ -194,13 +194,13 @@ database/runtime.env
 !.env.example
 
 # Debug / temp test scripts (não commitar)
+# Só na RAIZ do repositório e na raiz de backend/. O padrão global `test_*.py`
+# escondia testes legítimos em subpastas de backend/tests/ (git add ignorava-os).
 debug_*.js
 debug_*.py
-test_*.js
-test_*.py
-# Mas os diretórios de testes reais são rastreados
-!backend/**/tests/test_*.py
-!backend/tests/test_*.py
+/test_*.js
+/test_*.py
+/backend/test_*.py
 RELATORIO_TESTES_*.md
 
 # Frontend test artifacts (Playwright/Vitest)
@@ -213,16 +213,45 @@ frontend/coverage/
 SETUP_LOCKED
 backend/SETUP_LOCKED
 
-# Backups de arquivos (nunca commitar)
-*.bak
-*.backup
-*.broken_backup
-*.phase*
+# =============================================================================
+# Ecossistema de agente (Claude Code) — estado por programador, não do produto.
+# A fonte da verdade das skills é skills-lock.json (versionado); repor com
+# `make skills`. Ver CLAUDE.md e doc/ferramentas-agente.md.
+# =============================================================================
+.claude/
+.agents/
+skill-observations/
+*.local.md
+.code-review-graph/
+.superpowers/
+.playwright-mcp/
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/workspaces.json
+.obsidian/graph.json
+.obsidian/hotkeys.json
+.obsidian/plugins/
 
-# Arquivos temporários avulsos
+# ----------------------------------------------------
+# EV-0020 — ficheiros de backup nunca entram (CLAUDE.md §2.9: o Git é o backup)
+# ----------------------------------------------------
+*.backup
+*.bak
+*.old
+*.orig
+*.broken
+*.broken_backup
+*.working
+*_REFACTORED.vue
+*.phase*_step*
+# artefacto do pytest quando corre a partir da raiz (MEDIA_ROOT de settings.test)
+/test_media/
+
+# Arquivos temporários avulsos (main)
 temp_*.txt
 temp_*.json
 docker/temp_*.json
+*.phase*
 
 # Diretórios de backup de apps (gerados localmente)
 backend/setup_app_backup/
