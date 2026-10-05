@@ -12,10 +12,41 @@
  */
 
 /**
+ * @typedef {Object} MapControls
+ * @property {boolean} [mapType]     - seletor de tipo de mapa (só Google)
+ * @property {boolean} [streetView]  - Street View (só Google)
+ * @property {boolean} [fullscreen]  - botão de ecrã inteiro (só Google)
+ * @property {boolean} [traffic]     - camada de tráfego (só Google)
+ * @property {boolean} [scale]       - escala (Mapbox/Leaflet)
+ */
+
+/**
  * @typedef {Object} MapOptions
  * @property {LatLng} center
  * @property {number} zoom
- * @property {string} [mapTypeId]
+ * @property {string} [mapTypeId]    - 'roadmap' | 'terrain' | 'satellite' | 'hybrid' (Google); ignorado nos outros
+ * @property {'light'|'dark'} [theme] - estilização base (Google aplica `utils/mapStyles`; os outros seguem o estilo configurado)
+ * @property {MapControls} [controls]
+ * @property {number} [minZoom]
+ * @property {number} [maxZoom]
+ * @property {string} [style]        - estilo Mapbox (`mapbox://…` ou alias); por omissão vem de `/api/config/`
+ */
+
+/**
+ * @typedef {Object} PolygonOptions
+ * @property {LatLng[]} path
+ * @property {string} [strokeColor]
+ * @property {number} [strokeWeight]
+ * @property {number} [strokeOpacity]
+ * @property {string} [fillColor]
+ * @property {number} [fillOpacity]
+ * @property {boolean} [clickable]   - default false (overlay passivo)
+ */
+
+/**
+ * @typedef {Object} FitBoundsOptions
+ * @property {number} [padding]  - px à volta (default 50)
+ * @property {number} [maxZoom]  - não aproximar mais do que isto (um único ponto não vira zoom 20)
  */
 
 /**
@@ -33,7 +64,48 @@
  * @typedef {Object} MarkerOptions
  * @property {LatLng} position
  * @property {boolean} [draggable]
- * @property {string} [title]
+ * @property {string} [title]       - tooltip nativo
+ * @property {string} [label]       - texto curto dentro do marcador (quando não há `iconUrl`)
+ * @property {string} [markerType]  - 'origin' | 'destination' | 'intermediate' | 'preview' | 'default' (ver markerStyles.js)
+ * @property {string} [color]       - cor do círculo (ex.: cor do estado); sobrepõe-se à do `markerType`
+ * @property {number} [size]        - diâmetro do círculo em px; sobrepõe-se ao do `markerType`
+ * @property {string} [iconUrl]     - imagem do marcador (ícone do dispositivo); substitui o círculo
+ * @property {number} [iconSize]    - lado em px do ícone (default 24)
+ */
+
+/**
+ * @typedef {Object} MarkerStyle - o que `IMarker.setStyle` aceita mudar sem recriar o marcador
+ * @property {string} [color]
+ * @property {number} [size]
+ * @property {string} [label]
+ * @property {string} [iconUrl]
+ */
+
+/**
+ * @typedef {Object} LineStyle - o que `IPolyline.setStyle`/`IPolygon.setStyle` aceitam
+ * @property {string} [strokeColor]
+ * @property {number} [strokeWeight]
+ * @property {number} [strokeOpacity]
+ * @property {string} [fillColor]    - só polígonos
+ * @property {number} [fillOpacity]  - só polígonos
+ * @property {number} [zIndex]       - só Google (Mapbox/Leaflet desenham por ordem de criação)
+ */
+
+/**
+ * @typedef {Object} BBox - caixa envolvente no formato que a API `?bbox=` consome
+ * @property {number} lat_min
+ * @property {number} lng_min
+ * @property {number} lat_max
+ * @property {number} lng_max
+ */
+
+/**
+ * @typedef {Object} MapEvent - payload comum dos eventos (campos ausentes quando não se aplicam)
+ * @property {number} [lat]
+ * @property {number} [lng]
+ * @property {Event}  [originalEvent]
+ * @property {number} [clientX]
+ * @property {number} [clientY]
  */
 
 /**
@@ -113,12 +185,28 @@ export class IMap {
   }
 
   /**
-   * Ajusta o mapa para mostrar os bounds
+   * Ajusta o mapa para mostrar os pontos.
    * @param {LatLng[]} bounds
-   * @param {number|Object} padding
+   * @param {number|FitBoundsOptions} [options] - número = padding em px
    */
-  fitBounds(bounds, padding) {
+  fitBounds(bounds, options) {
     throw new Error('Method fitBounds() must be implemented');
+  }
+
+  /**
+   * Caixa envolvente visível, ou `null` enquanto o mapa não renderizou.
+   * @returns {BBox|null}
+   */
+  getBounds() {
+    throw new Error('Method getBounds() must be implemented');
+  }
+
+  /**
+   * Elemento DOM que contém o mapa (para posicionar overlays).
+   * @returns {HTMLElement}
+   */
+  getContainer() {
+    throw new Error('Method getContainer() must be implemented');
   }
 
   /**
@@ -140,9 +228,13 @@ export class IMap {
   }
 
   /**
-   * Adiciona listener de eventos
-   * @param {string} event - Nome do evento (click, rightclick, etc.)
-   * @param {Function} callback
+   * Adiciona listener de eventos.
+   * Eventos comuns aos três providers:
+   *  - `click`, `rightclick` → MapEvent com lat/lng e posição do rato
+   *  - `move`  → dispara continuamente enquanto o viewport muda (pan/zoom)
+   *  - `idle`  → dispara uma vez quando o viewport assenta (ler `getBounds()` aqui)
+   * @param {string} event
+   * @param {(e: MapEvent) => void} callback
    */
   on(event, callback) {
     throw new Error('Method on() must be implemented');
@@ -176,6 +268,38 @@ export class IMap {
   }
 
   /**
+   * Cria um polígono (ex.: área de manutenção)
+   * @param {PolygonOptions} options
+   * @returns {IPolygon}
+   */
+  createPolygon(options) {
+    throw new Error('Method createPolygon() must be implemented');
+  }
+
+  /**
+   * Cursor do rato sobre o mapa ('' repõe o padrão)
+   * @param {string} cursor
+   */
+  setCursor(cursor) {
+    throw new Error('Method setCursor() must be implemented');
+  }
+
+  /**
+   * Avisa o mapa de que o container mudou de tamanho (ResizeObserver, ecrã inteiro)
+   */
+  resize() {
+    throw new Error('Method resize() must be implemented');
+  }
+
+  /**
+   * Muda o tema base. Google re-estiliza; Mapbox/Leaflet mantêm o estilo configurado.
+   * @param {'light'|'dark'} theme
+   */
+  setTheme(theme) {
+    // Por omissão: nada a fazer
+  }
+
+  /**
    * Destrói o mapa e limpa recursos
    */
   destroy() {
@@ -183,9 +307,10 @@ export class IMap {
   }
 
   /**
-   * Conversão de coordenadas geográficas para pixels
+   * Conversão de coordenadas geográficas para pixels **relativos ao container
+   * do mapa** (o que um overlay posicionado com `position:absolute` precisa).
    * @param {LatLng} latLng
-   * @returns {{x: number, y: number}}
+   * @returns {{x: number, y: number}|null} - `null` enquanto o mapa não tem projeção
    */
   latLngToPixel(latLng) {
     throw new Error('Method latLngToPixel() must be implemented');
@@ -229,9 +354,19 @@ export class IPolyline {
   }
 
   /**
-   * Adiciona listener
+   * Muda cor/espessura sem recriar (o realce de hover passa a partir daqui)
+   * @param {LineStyle} style
+   */
+  setStyle(style) {
+    throw new Error('Method setStyle() must be implemented');
+  }
+
+  /**
+   * Adiciona listener. Eventos comuns: `click`, `rightclick`, `mouseover`,
+   * `mouseout`, `mousemove` — todos com MapEvent (lat/lng/clientX/clientY).
+   * O realce ao passar o rato é feito pelo próprio provider.
    * @param {string} event
-   * @param {Function} callback
+   * @param {(e: MapEvent) => void} callback
    */
   on(event, callback) {
     throw new Error('Method on() must be implemented');
@@ -240,6 +375,29 @@ export class IPolyline {
   /**
    * Remove da mapa
    */
+  remove() {
+    throw new Error('Method remove() must be implemented');
+  }
+}
+
+/**
+ * Interface para Polígono
+ */
+export class IPolygon {
+  /**
+   * @param {LatLng[]} path
+   */
+  setPath(path) {
+    throw new Error('Method setPath() must be implemented');
+  }
+
+  /**
+   * @param {LineStyle} style
+   */
+  setStyle(style) {
+    throw new Error('Method setStyle() must be implemented');
+  }
+
   remove() {
     throw new Error('Method remove() must be implemented');
   }
@@ -256,6 +414,19 @@ export class IMarker {
   setPosition(position) {
     throw new Error('Method setPosition() must be implemented');
   }
+
+  /**
+   * Muda a aparência (cor do estado, tamanho, label, ícone) sem recriar
+   * @param {MarkerStyle} style
+   */
+  setStyle(style) {
+    throw new Error('Method setStyle() must be implemented');
+  }
+
+  /**
+   * Eventos comuns: `click`, `rightclick` (MapEvent), `drag`, `dragend` (sem payload;
+   * ler `getPosition()`).
+   */
 
   /**
    * Retorna a posição

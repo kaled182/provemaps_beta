@@ -83,6 +83,7 @@ services:
       dockerfile: docker/dockerfile
       args:
         PYTHON_VERSION: "3.12"
+        GIT_SHA: "${GIT_SHA:-}"
     container_name: mapsprovefiber_web
     restart: unless-stopped
     command: >
@@ -203,6 +204,7 @@ services:
       dockerfile: docker/dockerfile
       args:
         PYTHON_VERSION: "3.12"
+        GIT_SHA: "${GIT_SHA:-}"
     container_name: mapsprovefiber_celery
     restart: unless-stopped
     command: >
@@ -284,6 +286,7 @@ services:
       dockerfile: docker/dockerfile
       args:
         PYTHON_VERSION: "3.12"
+        GIT_SHA: "${GIT_SHA:-}"
     container_name: mapsprovefiber_celery_beat
     restart: unless-stopped
     command: >

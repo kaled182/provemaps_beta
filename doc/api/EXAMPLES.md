@@ -1,7 +1,7 @@
 # API Examples - MapsProveFiber
 
-**Version**: v2.0.0  
-**Last Updated**: 2025-11-10  
+**Versão do produto**: ver [VERSION](../../VERSION)  
+**Last Updated**: 2026-10-04  
 **Target Audience**: Developers, Integrators
 
 ---
@@ -665,9 +665,9 @@ if site:
 - [API Endpoints Reference](ENDPOINTS.md)
 - [Authentication Guide](AUTHENTICATION.md)
 - [Development Guide](../guides/DEVELOPMENT.md)
-- [Troubleshooting Guide](../operations/TROUBLESHOOTING.md)
+- [Troubleshooting Guide](../troubleshooting/)
 
 ---
 
-**Last Updated**: 2025-11-10  
+**Last Updated**: 2026-10-04  
 **Maintainers**: API Team

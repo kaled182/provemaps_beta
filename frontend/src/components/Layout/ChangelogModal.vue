@@ -81,73 +81,22 @@
           </div>
         </div>
 
-        <!-- Tab: Sugestões -->
+        <!-- Tab: Sugestões & Bugs — vai para a Central de Evolução (EV-0036).
+             O formulário antigo só fingia enviar (setTimeout); nada chegava a ninguém. -->
         <div v-if="activeTab === 'suggestions'" class="cl-body">
-          <div v-if="submitted" class="cl-success">
-            <PhCheckCircle :size="48" weight="duotone" class="cl-success-icon" />
-            <h3>Obrigado pelo feedback!</h3>
-            <p>Sua sugestão foi registrada e será analisada pela equipe.</p>
-            <button class="cl-btn-primary" @click="resetForm">Enviar outra</button>
-          </div>
-
-          <form v-else class="cl-form" @submit.prevent="submitSuggestion">
-            <p class="cl-form-intro">
-              Encontrou um bug ou tem uma ideia para melhorar o sistema? Nos conte!
+          <div class="cl-central" data-testid="cl-central">
+            <PhMegaphone :size="44" weight="duotone" class="cl-central-icon" />
+            <h3>Relatos vão para a Central de Evolução</h3>
+            <p>
+              Encontrou um bug ou tem uma ideia? O relato entra na fila da Central com o seu
+              utilizador, a rota onde estava e o navegador — e você acompanha a triagem em
+              <RouterLink to="/system/evolucao" class="cl-link" @click="$emit('close')">System → Evolução</RouterLink>.
             </p>
-
-            <div class="cl-field">
-              <label class="cl-label">Tipo</label>
-              <div class="cl-type-group">
-                <button
-                  v-for="t in types"
-                  :key="t.id"
-                  type="button"
-                  class="cl-type-btn"
-                  :class="{ active: form.type === t.id }"
-                  @click="form.type = t.id"
-                >
-                  <component :is="t.icon" :size="15" weight="fill" />
-                  {{ t.label }}
-                </button>
-              </div>
-            </div>
-
-            <div class="cl-field">
-              <label class="cl-label">Título <span class="cl-required">*</span></label>
-              <input
-                v-model="form.title"
-                class="cl-input"
-                placeholder="Resumo em uma linha..."
-                maxlength="120"
-                required
-              />
-            </div>
-
-            <div class="cl-field">
-              <label class="cl-label">Descrição <span class="cl-required">*</span></label>
-              <textarea
-                v-model="form.description"
-                class="cl-textarea"
-                placeholder="Descreva com detalhes o que aconteceu ou o que gostaria de ver..."
-                rows="5"
-                required
-              ></textarea>
-              <span class="cl-char-count">{{ form.description.length }} / 1000</span>
-            </div>
-
-            <div class="cl-field">
-              <label class="cl-label">Seu nome (opcional)</label>
-              <input v-model="form.author" class="cl-input" placeholder="Ex: João Silva" maxlength="80" />
-            </div>
-
-            <div class="cl-form-footer">
-              <button type="submit" class="cl-btn-primary" :disabled="submitting">
-                <PhPaperPlaneTilt v-if="!submitting" :size="16" weight="fill" />
-                <span v-if="submitting" class="cl-spinner"></span>
-                {{ submitting ? 'Enviando…' : 'Enviar Feedback' }}
-              </button>
-            </div>
-          </form>
+            <button type="button" class="cl-btn-primary" data-testid="cl-reportar" @click="$emit('reportar')">
+              <PhMegaphone :size="16" weight="fill" />
+              Reportar problema ou ideia
+            </button>
+          </div>
         </div>
 
       </div>
@@ -157,13 +106,14 @@
 
 <script setup>
 import { ref, computed } from 'vue';
+import { RouterLink } from 'vue-router';
 import {
-  PhX, PhStar, PhBug, PhArrowsClockwise, PhCheckCircle,
-  PhPaperPlaneTilt, PhListBullets, PhChatText, PhWarning, PhLightbulb,
+  PhX, PhStar, PhBug, PhArrowsClockwise, PhListBullets, PhChatText, PhMegaphone,
 } from '@phosphor-icons/vue';
 
 defineProps({ show: Boolean });
-defineEmits(['close']);
+// `reportar`: quem nos monta abre o ReportarModal da Central (EV-0036).
+defineEmits(['close', 'reportar']);
 
 const activeTab = ref('changelog');
 
@@ -175,9 +125,516 @@ const tabs = [
 // ── Dados do changelog ──────────────────────────────────────────────────────
 const changelog = [
   {
+    version: '1.5.0',
+    date: '04 Out 2026',
+    latest: true,
+    features: [
+      'Central de Evolução (System → Evolução e botão 📣 Reportar na barra lateral): relatos de problemas e ideias com anexos, rota e navegador capturados; triagem pela equipe com prioridade, motivo de recusa e aviso automático do que está parado há 14 dias. A aba «Sugestões & Bugs» deste modal passa a abrir a Central — o formulário antigo não enviava nada.',
+      'Mapa com um só motor para os três provedores (Google, Mapbox, OpenStreetMap): NetworkDesign, editor de traçados, mini-mapas de site/dispositivo e o visualizador do backbone funcionam com qualquer um; janelas e tooltips passam a ser Vue.',
+      'Autenticação por token para integrações (Authorization: Bearer) com contas de serviço e registro do último uso; documentação OpenAPI/Swagger auto-hospedada em /api/schema/swagger/.',
+      'Importação KML completa: KMZ, MultiGeometry, gx:Track, qualquer namespace e um cabo por Placemark.',
+      'Proximidade geográfica no banco (PostGIS): regra dos 100 m e «cabos próximos» por ST_DWithin em vez de laços em Python.',
+    ],
+    improvements: [
+      'Gráficos unificados num componente único com eixo temporal real: RX/TX e IN/OUT alinhados por intervalo, buracos como buracos (sem preencher), séries longas sem cortar os pontos mais recentes.',
+      'Estado em tempo real do mapa só por WebSocket, com um único intérprete das mensagens; fim do polling de 30 s e dos sockets sem fecho.',
+      'Payload de cabos filtrado por área visível (bbox) e sem N+1; setup_app e inventário reorganizados em casos de uso finos com 190 testes novos.',
+      'Design system alinhado com o CRM: tokens de cor, Inter/JetBrains Mono/Outfit auto-hospedadas, tema teal/Slate; Tailwind e FontAwesome compilados no build (sem CDN); console.log removido do bundle de produção.',
+      'Build reprodutível (package-lock versionado), lint Python/ESLint no CI, cobertura medida em todas as apps (61 %), 1.300+ testes backend e 530 frontend.',
+    ],
+    fixes: [
+      'Gráfico óptico desenhava dados aleatórios quando o Zabbix não devolvia histórico — agora mostra «sem dados» ou «erro».',
+      'Histórico de tráfego pedia history=3 fixo e itens float vinham vazios; unidades (bps/Bps) lidas do item.',
+      '/api/config/ entregava as chaves Google/Mapbox/Esri a qualquer visitante; endpoints de tráfego sem login; segredo TOTP em texto puro e lockout por sessão (agora Fernet, pyotp, lockout por utilizador).',
+      'Colunas json das rotas rebentavam no psycopg 3 (migração para jsonb); ~61 testes nunca eram coletados; três configs de pytest divergentes.',
+      'Config default incoerente (DB_ENGINE=mysql sem driver, asgi.py apontando a módulo inexistente); ficheiros de backup, dumps e tokens versionados removidos.',
+    ],
+  },
+  {
+    version: '1.4.14.0',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [
+      'Fallback ICMP ping na detecção de status: se Zabbix marca um equipamento como Unavailable/Unknown mas o item icmpping responde com 1, promove para Available. Útil para equipamentos com SNMP fora mas alcançáveis na rede.',
+    ],
+    improvements: [
+      'Cliente Zabbix agora detecta a versão do servidor (apiinfo.version) automaticamente e usa Authorization: Bearer header quando >=7.0. Antes a versão 7+ rejeitava todas as chamadas autenticadas com erro "unexpected parameter auth", quebrando histórico de tráfego, óptico, métricas e alarmes silenciosamente.',
+    ],
+    fixes: [
+      'CRÍTICO: integração Zabbix 7+ destravada — item.get/history.get/trigger.get/etc voltam a funcionar em servidores que removeram o suporte ao campo auth no payload.',
+    ],
+  },
+  {
+    version: '1.4.13.3',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [
+      'Cores de RX/TX no popup óptico agora usam os MESMOS thresholds do backend (warning_threshold/critical_threshold vindos do payload). Antes o popup hardcodeava -20/-28 e o cabo usava -24/-27, causando inconsistências (popup amarelo + cabo verde). Tudo unificado.',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.13.2',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [],
+    fixes: [
+      'Botão "Atualizar agora" do popup óptico retornava HTTP 405. O handler de refresh chamava internamente a view de cached-status (que tem @require_GET), e esse decorator bloqueava o POST original. Refatorado extraindo o builder de payload em uma função pura que ambos endpoints reusam.',
+    ],
+  },
+  {
+    version: '1.4.13.1',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [
+      'Botão "Atualizar agora" no popup óptico do mapa: força leitura em tempo real do Zabbix (POST /api/v1/inventory/fibers/{id}/refresh-optical/) e atualiza o cache em uma única chamada batch — útil quando você quer ver IMEDIATAMENTE se um enlace voltou.',
+    ],
+    improvements: [
+      'Coleta de níveis ópticos refatorada para batch: agora é 1 chamada Zabbix por device em vez de 1 por porta. Intervalo da task reduzido de 5 min → 1 min sem aumentar carga no Zabbix.',
+      'Popup óptico mostra "Atualizado há Xs/min" para transparência da freshness dos dados.',
+    ],
+    fixes: [
+      'Delay perceptível na detecção de normalização: tráfego subia rápido mas níveis RX/TX demoravam até 5 min para refletir. Agora atualiza em até ~60s.',
+    ],
+  },
+  {
+    version: '1.4.13.0',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [
+      'Email automático no dispatcher: notificações de cabo agora vão também por e-mail (HTML formatado com tabela de Origem/Destino) quando o canal está habilitado na config.',
+      'Snooze por config: botão "Silenciar" 🔕 em cada card de alarme (1h/4h/24h/7d/personalizado). Badge "🔕 Silenciado até HH:MM" aparece no header e botão "Retomar" cancela. Útil para manutenção planejada — não inunda WhatsApp dos responsáveis.',
+      'Métricas Prometheus: novo counter provemaps_alarm_notifications_total{channel,status,alert_type} permite gráficos no Grafana de notificações enviadas/falhas por canal e tipo de evento.',
+    ],
+    improvements: [
+      'Retry inteligente: se o gateway WhatsApp/SMTP estiver offline temporariamente, o dispatcher tenta de novo automaticamente com backoff exponencial (1, 2, 4, 8, 16 min — máx 5 tentativas). Após sucesso de 1 destinatário, considera processado. Evita inundar logs e dá tempo ao gateway recuperar.',
+      'Janela de scan ampliada de 10 para 30 min para cobrir o pior caso de retry.',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.12.0',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [
+      'Histórico de Avisos no modal de alarmes (Fase C): nova seção colapsável mostra os últimos 50 envios para o cabo — automáticos do dispatcher e manuais (Enviar Teste). Cada item traz: ícone do tipo (🚨 rompimento / ⚠️ atenuação / ✅ normalização), timestamp, canal, destinatário, status (✓ enviado / ✗ falhou + mensagem de erro), tag TESTE quando manual. Atualização automática após enviar teste.',
+    ],
+    improvements: [],
+    fixes: [],
+  },
+  {
+    version: '1.4.11.0',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [
+      'Avisos automáticos de cabo (Fase A): Celery beat a cada 1 min lê FiberEvents novos, classifica a transição (up→down=rompimento, up→degraded=atenuação, down/degraded→up=normalização) e dispara WhatsApp para todos os FiberCableAlarmConfig que correspondem ao tipo de evento. Inclui dedupe via FiberAlarmNotificationLog (mesmo evento nunca é notificado 2x) e respeita persist_minutes (eventos curtos demais são ignorados). Agora quando o técnico restabelece o serviço, os responsáveis recebem aviso de normalização sem ação manual.',
+    ],
+    improvements: [],
+    fixes: [],
+  },
+  {
+    version: '1.4.10.3',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [
+      'Mensagem do alerta de manutenção é opcional: em branco, usa "ENLACE OFF." como default. O bloco de Cabos com Origem/Destino é sempre enviado, então o técnico já recebe tudo que precisa sem o operador digitar nada — basta selecionar destinatários e clicar Enviar.',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.10.2',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [
+      'Modal Notificar Responsáveis: nova aba "Contatos da agenda" — permite enviar avisos para contatos cadastrados em Setup > Contatos via WhatsApp/Email, sem precisar transformá-los em usuários do sistema. type_label mostra empresa ou primeiro grupo do contato.',
+    ],
+    improvements: [],
+    fixes: [],
+  },
+  {
+    version: '1.4.10.1',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [
+      'Alerta de Manutenção (WhatsApp + Email): cada cabo afetado agora vem com Origem/Destino completos — Device + Porta + Site. Substitui o "Equipamentos: —" pelo endpoint físico real (ex: "Huawei - Switch Vila Mandi / XGigabitEthernet0/0/1 (SITE - VILA MANDI)"). Técnico identifica onde verificar sem abrir o sistema.',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.10.0',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [
+      'Botão "Enviar Teste" nas configurações de alarme de cabo: dispara WhatsApp real para os destinatários (qualquer target — contato/grupo/usuário/departamento) sem precisar esperar um evento óptico. Mensagem com prefixo [TESTE] e detalhes da config. Resultado inline (sucesso/parcial/falha por destinatário).',
+    ],
+    improvements: [],
+    fixes: [],
+  },
+  {
+    version: '1.4.9.13',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [
+      'PortTrafficModal abre com seções "Tráfego" e "Óptico" colapsadas por padrão — modal aparece instantâneo. Dados pré-carregam em background; ao expandir uma seção, o gráfico renderiza com cache (sem nova requisição).',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.9.12',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [],
+    fixes: [
+      'Gráfico de tráfego não carregava após PortTrafficModal virar lazy-loaded — watcher de props.isOpen agora roda com immediate:true. Mesmo bug que tivemos com SiteDetailsModal (v-if + defineAsyncComponent monta o componente já com isOpen=true).',
+    ],
+  },
+  {
+    version: '1.4.9.11',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [
+      'PortTrafficModal abre instantâneo: Chart.js (430 KB) agora é chunk dinâmico — só baixa quando o gráfico vai renderizar pela primeira vez',
+      'AlarmConfigModal e PortTrafficModal viraram defineAsyncComponent — bundle do SiteDetailsModal caiu de 175 KB para 135 KB',
+      'Computeds duplicados de "última atividade" unificados em um — antes iteravam o histórico 2x a cada acesso reativo',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.9.10',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [
+      'Pin de device offline agora é amarelo (atenção) em vez de cinza — atende o pedido original. Cinza foi removido da paleta porque era pouco visível em mapas claros e não comunicava urgência.',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.9.9',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [],
+    fixes: [
+      'Backend: hosts_status promove availability=2→1 quando uptime via SNMP > 0. Resolve caso onde Zabbix marca o host como offline (ICMP/agent falham) mas o device responde via SNMP. Mapa e modal agora usam a mesma fonte de verdade.',
+    ],
+  },
+  {
+    version: '1.4.9.8',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [],
+    fixes: [
+      'Pin ficava cinza para devices online quando o Zabbix retornava availability inconclusiva (unknown). Agora unknown é presumido online (verde) — só fica cinza quando o Zabbix confirma offline (avail=2). Resolve divergência entre modal (mostrava ONLINE) e mapa (pin cinza).',
+    ],
+  },
+  {
+    version: '1.4.9.7',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [
+      'Pin do mapa reflete agregado do site: device offline com pelo menos um irmão online vira amarelo (atenção). Site totalmente offline mantém cinza.',
+    ],
+    improvements: [],
+    fixes: [],
+  },
+  {
+    version: '1.4.9.6',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [
+      'PortTrafficModal: indicador "Última atividade: há X tempo" no header (verde se recente, vermelho se >5 min) — facilita identificar quando um incidente aconteceu',
+    ],
+    improvements: [
+      'Tráfego e óptico desacoplados: porta offline com timeout no tráfego ainda mostra histórico óptico (RX/TX) para diagnosticar quando a luz caiu',
+      'Timeout de 20s no fetch de tráfego — sai do estado loading com mensagem clara em vez de ficar travado',
+      'Empty state quando o histórico está vazio (sugere tentar período maior)',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.9.5',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [
+      'PortTrafficModal abre instantâneo: decimação client-side limita Chart.js a 800 pontos (era até 2152) preservando forma do gráfico',
+      'Dedup de fetch óptico: watch(props.isOpen) e watch(opticalChartCanvas) compartilham a mesma promise — uma única requisição',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.9.4',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [],
+    fixes: [
+      'Gráfico óptico no PortTrafficModal não renderizava: canvas ficava indisponível na 1ª tentativa por delay de Transition+Teleport. Helper _waitForCanvas espera até 30 frames (≈500ms)',
+      'Cache de dados ópticos: se busca completa antes do canvas montar, o watcher re-renderiza sem nova requisição',
+      'Mesmo padrão aplicado ao gráfico de tráfego (substituiu setTimeout 200ms)',
+    ],
+  },
+  {
+    version: '1.4.9.3',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [],
+    fixes: [
+      'Mapa Mapbox era inicializado 2x em paralelo (watcher do provider + onMounted) — overlays não apareciam por race condition. Watcher agora ignora a primeira inicialização',
+      'renderOverlays usa listeners defensivos (load + idle + styledata) — cobre caso em que o evento load já foi emitido antes do listener ser registrado',
+    ],
+  },
+  {
+    version: '1.4.9.2',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [],
+    fixes: [
+      'Mapa carregava sem markers nem cabos: guard isMapReady evita que o polling do Zabbix dispare addSource/addLayer no Mapbox antes do evento load (exception silenciosa que deixava o mapa em branco)',
+    ],
+  },
+  {
+    version: '1.4.9.1',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [],
+    improvements: [],
+    fixes: [
+      'Modais (Site, Cabo, Tooltip Óptico, Notificação) abriam vazios após o lazy-load — watchers agora rodam com immediate:true',
+      'Mapa carregava em branco e exigia F5 — substituído setTimeout(500ms) pelo evento load do Mapbox (determinístico independente da latência)',
+    ],
+  },
+  {
+    version: '1.4.9.0',
+    date: '03 Mai 2026',
+    latest: false,
+    features: [
+      'Endpoint agregado /maps_view/api/backbone/init/: 6 requests do mapa viraram 1',
+      'Endpoint batch /api/v1/devices/metrics-batch/?ids=...: métricas de N devices em 1 chamada',
+    ],
+    improvements: [
+      'Mapa /monitoring/backbone/map carrega ~3x mais rápido — inventário, system-config e metadados disparados em paralelo',
+      'Bundle inicial reduzido em ~500 kB: SiteDetailsModal, FiberCableDetailModal, MapInventoryPanel viraram chunks lazy',
+      'Modais carregam só ao primeiro abrir; tabs do modal de cabo (Óptico/Tráfego/Alarmes/Histórico) montam só quando ativadas',
+      'WebSocket /ws/dashboard/status/ singleton: 1 conexão compartilhada em vez de uma por modal aberto',
+      'Polling Zabbix (10s) agora redesenha o mapa só quando algum status realmente muda',
+      'SiteDetailsModal filtra devices server-side (?site=ID) em vez de baixar todos',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.8.5',
+    date: '08 Abr 2026',
+    latest: false,
+    features: [
+      'Botão "Ver Detalhes do Cabo" abre diretamente o modal completo com abas (Nível Óptico, Tráfego, Alarmes, Histórico)',
+    ],
+    improvements: [],
+    fixes: [
+      'Modal pequeno intermediário não aparece mais ao clicar em Ver Detalhes',
+    ],
+  },
+  {
+    version: '1.4.8.4',
+    date: '08 Abr 2026',
+    latest: false,
+    features: [
+      'Painel óptico exibe botão "Ver Detalhes do Cabo" que abre o modal completo — sem precisar de duplo clique',
+    ],
+    improvements: [
+      'Interação com cabos simplificada: clique abre o painel óptico, botão dentro do painel abre os detalhes',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.8.3',
+    date: '08 Abr 2026',
+    latest: false,
+    features: [
+      'Clique simples no cabo abre o painel de sinal óptico — funciona em mobile (sem precisar de hover)',
+      'Painel óptico arrastável pelo cabeçalho, com botão Fechar — não fecha automaticamente ao mover o mouse',
+    ],
+    improvements: [
+      'Comportamento de interação com cabos unificado entre desktop (hover + clique) e mobile (apenas clique)',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.8.2',
+    date: '08 Abr 2026',
+    latest: false,
+    features: [
+      'Modal de cabo flutuante e arrastável: sem overlay que bloqueia o mapa — arraste pelo cabeçalho para reposicionar',
+      'Modal centralizado automaticamente no mapa ao abrir (mobile e desktop)',
+    ],
+    improvements: [
+      'Mapa permanece interativo com o modal aberto — sem backdrop escuro bloqueante',
+      'Grip visual (⠿) no header indica que o modal é arrastável',
+      'Responsivo em mobile: em telas ≤520px o modal ocupa toda a largura com layout de 2 colunas',
+      'Status DEGRADADO adicionado ao modal (além de ONLINE, INOPERANTE, CRÍTICO)',
+    ],
+    fixes: [
+      'Modal não respondia adequadamente a telas pequenas de celular/tablet',
+    ],
+  },
+  {
+    version: '1.4.8.1',
+    date: '08 Abr 2026',
+    latest: false,
+    features: [
+      'Limites de sinal óptico por categoria de distância: SFP LR (≤10km), ER (≤40km), ZR (≤80km) e DWDM/EZR (>80km)',
+      'Cabos coloridos no mapa conforme nível real de sinal: verde (ok), âmbar (atenção), vermelho (crítico)',
+      'Comprimento do cabo detectado automaticamente pelo traçado no mapa para identificar categoria SFP',
+    ],
+    improvements: [
+      'Configuração de limites ópticos expandida em Servidores de Monitoramento: tabela por distância com atenção e crítico individuais',
+      'Sinal nulo ou zero classificado como crítico automaticamente (sem sinal = fibra rompida ou SFP desconectado)',
+      'Versionamento intra-dia: 1.X.Y.Z para múltiplos ciclos no mesmo dia',
+    ],
+    fixes: [
+      'Cabos ficavam verdes mesmo com sinal degradado (limiar -50 dBm era permissivo demais — corrigido para padrões industriais)',
+      'Todos os cabos no mapa apareciam cinza (status up/down/degraded não mapeados para cores)',
+    ],
+  },
+  {
+    version: '1.4.8',
+    date: '08 Abr 2026',
+    latest: false,
+    features: [
+      'Backup inclui fernet_key no config.json — restore em qualquer ambiente descriptografa dados automaticamente',
+      'Suporte a backup sem senha: ZIP padrão quando nenhuma senha está configurada',
+      'Restore lê fernet_key do config.json e atualiza database/fernet.key antes de reiniciar',
+    ],
+    improvements: [
+      'pg_restore com --if-exists, --no-owner e --no-privileges — elimina falsos erros em banco limpo',
+      'Restore de ZIP sem criptografia usa zipfile nativo (sem dependência do pyzipper)',
+      'Resposta do backup inclui campo encrypted para indicar se o arquivo está protegido',
+      'Versionamento por dia: uma versão por dia de trabalho, não por alteração',
+    ],
+    fixes: [
+      'Restore retornava 500 mesmo quando pg_restore concluía com sucesso (exit status 1 era warnings, não erros)',
+      'Restore de ZIP falhava quando backup foi criado sem senha (tentava abrir com pyzipper AES)',
+      'Após restore em ambiente local, tokens Mapbox, Zabbix e demais campos criptografados ficavam ilegíveis',
+    ],
+  },
+  {
+    version: '1.4.7',
+    date: '07 Abr 2026',
+    latest: false,
+    features: [],
+    improvements: [],
+    fixes: [
+      'Botão "Atualizar agora" não reportava mais erros falsos: git pull dentro do container é não-crítico (código baked na imagem)',
+      'Avisos de arquivo duplicado do collectstatic tratados como warning, não como erro — progresso conclui com sucesso',
+      'Ícone âmbar (⚠) para etapas com aviso; apenas falhas reais marcam a atualização como erro',
+    ],
+  },
+  {
+    version: '1.4.6',
+    date: '07 Abr 2026',
+    latest: false,
+    features: [
+      'Script update.sh — atualização automática com 4 passos: git pull, npm build, rebuild dos containers e health check',
+    ],
+    improvements: [
+      'update.sh sempre reconstrói web + celery + beat, garantindo que backend Python e frontend estejam sempre sincronizados',
+      'Script segue o mesmo padrão visual do install_ubuntu.sh: spinner, cores, log em /var/log/provemaps_update.log',
+      'Exibe versão antes e depois da atualização',
+    ],
+    fixes: [],
+  },
+  {
+    version: '1.4.5',
+    date: '07 Abr 2026',
+    latest: false,
+    features: [
+      'Botão "Atualizar agora" no Painel do Sistema — com confirmação de comandos, barra de progresso e log em tempo real via SSE',
+    ],
+    improvements: [
+      'Bind mount de staticfiles no container web: builds do frontend refletidos imediatamente sem rebuild da imagem',
+      'Changelog e versão agora sempre atualizados após cada entrega',
+    ],
+    fixes: [
+      'Changelog exibia versão anterior porque o container web servia arquivos baked na imagem, não o build do host',
+    ],
+  },
+  {
+    version: '1.4.4',
+    date: '07 Abr 2026',
+    latest: false,
+    features: [],
+    improvements: [
+      'Menu lateral recolhido automaticamente ao acessar via dispositivo móvel',
+      'Botão hambúrguer fixo (canto superior esquerdo) para abrir o menu no mobile',
+      'Backdrop semitransparente ao abrir o menu no mobile — clique fora para fechar',
+      'Mapa ocupa 100% da tela em mobile (margin-left zerada via CSS e CSS variable)',
+      'Transição desktop ↔ mobile: estado do menu restaurado corretamente ao girar o dispositivo',
+    ],
+    fixes: [
+      'Serviços Celery e Beat em loop de restart — imagem Docker reconstruída com django-celery-beat instalado',
+      'CustomMapViewer aplicava margin-left de 72–280px no mobile mesmo com menu como overlay fixo',
+      'data-nav-menu-open e --nav-menu-width não eram zerados ao montar em mobile, causando deslocamento no mapa',
+    ],
+  },
+  {
+    version: '1.4.3',
+    date: '07 Abr 2026',
+    latest: false,
+    features: [
+      'Gerenciamento de Cron Jobs via UI em Configurações > Sistema > Cron — crie, edite, ative/desative e aplique tarefas agendadas no servidor sem editar arquivos manualmente',
+    ],
+    improvements: [
+      'Novo Cron Job "Limpeza Docker Semanal" pré-configurável para remover cache de build acumulado (docker builder prune)',
+      'Botão "Aplicar no Servidor" gera o arquivo crontab em /app/database/provemaps.crontab com instruções de ativação',
+      'Modal de criação de cron com presets de agendamento (A cada hora, Todo dia 3h, Semanal, Mensal, Seg-Sex)',
+    ],
+    fixes: [
+      'Modal de teste SMTP: ao clicar no ⚡ do gateway, abre modal pedindo destinatário e mensagem antes de enviar — mesmo padrão do teste SMS',
+      'Erro "int object has no attribute strip" nos endpoints de teste SMTP, DB e FTP — porta enviada como número inteiro pelo frontend agora convertida corretamente',
+      'Modal LocationPicker (seleção de ponto no mapa) não respeitava o modo escuro — reescrito com classes Tailwind dark:',
+      'SiteEditModal substituiu mapa inline por botão PIN que abre o LocationPickerModal — interface mais limpa e mapa maior',
+      'Geocode reverso automático ao digitar lat/lng manualmente no formulário de novo site',
+      'Bug crítico em _load_runtime_env(): Path("") é truthy em Python, impedindo leitura da senha real do banco em runtime',
+      'Opções inválidas read_timeout/write_timeout removidas do settings/prod.py — causavam ProgrammingError no psycopg',
+    ],
+  },
+  {
+    version: '1.4.2',
+    date: '06 Abr 2026',
+    latest: false,
+    features: [
+      'Seletor de localização com mapa e PIN arrastável em Setup > Mapas — clique ou arraste o marcador para definir as coordenadas iniciais',
+    ],
+    improvements: [
+      'Botão "Reenquadrar" no mapa do backbone para ajustar a visão a todos os itens visíveis',
+      '"Selecionar todos" no painel lateral reenquadra automaticamente o mapa',
+      'CSP ampliada para permitir verificação de atualizações via api.github.com',
+    ],
+    fixes: [
+      'Coordenadas padrão do mapa (lat/lng em Setup > Mapas) não persistiam após salvar — .env sobrescrevia o valor do banco',
+      'Mapa do Network Design agora respeita a localização inicial configurada em Setup > Mapas',
+      'Modal de localização do site (importação de dispositivos) usa o provider configurado (Mapbox/Google)',
+      'Importação de rotas KML bloqueada incorretamente quando diagnósticos estavam desabilitados',
+      'Network Design inicializa mapa com Mapbox sem aguardar Google Maps API',
+      'Botão "Verificar atualizações" chamava API do GitHub pelo servidor (sem internet no container) — movido para o browser',
+      'Mapa do backbone não reenquadrava automaticamente ao selecionar itens após carga inicial',
+    ],
+  },
+  {
     version: '1.4.1',
     date: '03 Abr 2026',
-    latest: true,
+    latest: false,
     features: [],
     improvements: [
       'Paleta de cores do menu unificada com as páginas — removido tom azul-escuro',
@@ -247,30 +704,6 @@ const changelog = [
 
 const latestVersion = computed(() => changelog[0].version);
 
-// ── Formulário de sugestões ─────────────────────────────────────────────────
-const types = [
-  { id: 'bug',         label: 'Bug',        icon: PhBug },
-  { id: 'feature',     label: 'Funcionalidade', icon: PhLightbulb },
-  { id: 'improvement', label: 'Melhoria',   icon: PhArrowsClockwise },
-  { id: 'other',       label: 'Outro',      icon: PhWarning },
-];
-
-const form = ref({ type: 'bug', title: '', description: '', author: '' });
-const submitting = ref(false);
-const submitted = ref(false);
-
-const submitSuggestion = async () => {
-  submitting.value = true;
-  // Simula envio (pode integrar com API real futuramente)
-  await new Promise(r => setTimeout(r, 800));
-  submitting.value = false;
-  submitted.value = true;
-};
-
-const resetForm = () => {
-  form.value = { type: 'bug', title: '', description: '', author: '' };
-  submitted.value = false;
-};
 </script>
 
 <style scoped>
@@ -447,93 +880,31 @@ const resetForm = () => {
 .cl-dot.fix        { background: #f87171; }
 
 /* Form */
-.cl-form-intro {
-  font-size: 13px;
-  color: var(--text-secondary, #cbd5e1);
-  margin: 0 0 16px;
-}
-.cl-form { display: flex; flex-direction: column; gap: 16px; }
-.cl-field { display: flex; flex-direction: column; gap: 6px; }
-.cl-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary, #cbd5e1);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.cl-required { color: #f87171; }
-
-.cl-type-group { display: flex; gap: 8px; flex-wrap: wrap; }
-.cl-type-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  border-radius: 20px;
-  border: 1px solid var(--border-primary, #2d3748);
-  background: transparent;
-  color: var(--text-secondary, #cbd5e1);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.cl-type-btn:hover { border-color: #6366f1; color: #818cf8; }
-.cl-type-btn.active { background: rgba(99,102,241,0.15); border-color: #6366f1; color: #818cf8; }
-
-.cl-input, .cl-textarea {
-  background: var(--surface-secondary, #161b27);
-  border: 1px solid var(--border-primary, #2d3748);
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 13px;
-  color: var(--text-primary, #f1f5f9);
-  outline: none;
-  transition: border-color 0.15s;
-  font-family: inherit;
-  resize: vertical;
-}
-.cl-input:focus, .cl-textarea:focus { border-color: #6366f1; }
-.cl-textarea { min-height: 100px; }
-.cl-char-count { font-size: 11px; color: var(--text-tertiary, #94a3b8); text-align: right; }
-
-.cl-form-footer { display: flex; justify-content: flex-end; }
-.cl-btn-primary {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 10px 20px;
-  background: #6366f1;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.cl-btn-primary:hover:not(:disabled) { background: #4f46e5; }
-.cl-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-
-.cl-spinner {
-  width: 14px; height: 14px;
-  border: 2px solid rgba(255,255,255,0.3);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* Success */
-.cl-success {
+.cl-central {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   gap: 12px;
-  padding: 32px 0;
+  padding: 28px 12px;
 }
-.cl-success-icon { color: #34d399; }
-.cl-success h3 { font-size: 18px; font-weight: 700; color: var(--text-primary, #f1f5f9); margin: 0; }
-.cl-success p  { font-size: 13px; color: var(--text-secondary, #cbd5e1); margin: 0; }
+.cl-central-icon { color: rgb(var(--primary-500, 66 180 184)); }
+.cl-central h3 { font-size: 18px; font-weight: 700; color: var(--text-primary, #f1f5f9); margin: 0; }
+.cl-central p  { font-size: 13px; line-height: 1.6; color: var(--text-secondary, #cbd5e1); margin: 0; max-width: 420px; }
+.cl-link { color: rgb(var(--primary-500, 66 180 184)); text-decoration: underline; }
+.cl-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 10px;
+  background: rgb(var(--primary-500, 66 180 184));
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.cl-btn-primary:hover { background: rgb(var(--primary-600, 56 152 156)); }
 </style>

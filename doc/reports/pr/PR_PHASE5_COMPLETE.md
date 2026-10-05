@@ -328,7 +328,7 @@ curl http://localhost:8000/api/v1/dashboard/status/
 
 ### Para Deploy em Produção
 
-Seguir **[Deployment Playbook](doc/developer/REFATORAR.md#playbook-de-deploy-em-producao--fase-5)** completo:
+Seguir **[Deployment Playbook](../../archive/2025-historico/REFATORAR.md#playbook-de-deploy-em-producao--fase-5)** completo:
 
 1. **Preparação (30 min antes)**
    - Backup de banco
@@ -483,6 +483,6 @@ Por favor, revisar especialmente:
 **Issues Relacionadas:** N/A (Refatoração planejada - Fases 0-5)
 
 **Referências:**
-- [REFATORAR.md](doc/developer/REFATORAR.md) - Estado atual
+- [REFATORAR.md](../../archive/2025-historico/REFATORAR.md) - Estado atual
 - [FUTURE_APPS.md](doc/developer/FUTURE_APPS.md) - Roadmap futuro
 - [README.md](README.md) - Documentação principal

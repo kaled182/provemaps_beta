@@ -170,8 +170,8 @@ provemaps_beta/
 
 ### Documentação Criada
 - [CHANGELOG_MODULARIZATION.md](./doc/releases/CHANGELOG_MODULARIZATION.md) — Changelog v2.0.0-alpha.1
-- [MIGRATION_PRODUCTION_GUIDE.md](./doc/operations/MIGRATION_PRODUCTION_GUIDE.md) — Guia de deploy
-- [REFATORAR.md](./doc/developer/REFATORAR.md) — Status completo da refatoração
+- [MIGRATION_PRODUCTION_GUIDE.md](../../archive/2025-historico/MIGRATION_PRODUCTION_GUIDE.md) — Guia de deploy
+- [REFATORAR.md](../../archive/2025-historico/REFATORAR.md) — Status completo da refatoração
 
 ### Scripts de Validação
 - `scripts/validate_migration_staging.py` — Validação de migrations

@@ -6,17 +6,50 @@
 """
 
 import os
-from urllib.parse import urlparse
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
+from urllib.parse import urlparse
 
 # -----------------------------------------------------
 # Paths / core
 # -----------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # backend/ -> project root
-BACKEND_DIR = BASE_DIR / 'backend'
-FRONTEND_DIR = BASE_DIR / 'frontend'
-DATABASE_DIR = BASE_DIR / 'database'
+BACKEND_DIR = BASE_DIR / "backend"
+FRONTEND_DIR = BASE_DIR / "frontend"
+DATABASE_DIR = BASE_DIR / "database"
+
+
+def _load_runtime_env() -> None:
+    """
+    Load DB credentials from /app/database/runtime.env (or DATABASE_DIR/runtime.env).
+
+    This runs before DATABASES is constructed so that os.getenv("DB_PASSWORD")
+    returns the value written by the setup wizard — even if the bash entrypoint
+    failed to export it correctly due to special characters in the password.
+    """
+    _runtime_env_path = os.environ.get("RUNTIME_ENV_PATH", "")
+    runtime_env = Path(_runtime_env_path) if _runtime_env_path else (DATABASE_DIR / "runtime.env")
+    if not runtime_env.exists():
+        return
+    try:
+        with open(runtime_env, encoding="utf-8") as fh:
+            for raw_line in fh:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip()
+                # Strip surrounding quotes added by env_manager._quote()
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                    value = value[1:-1]
+                if key in {"DB_USER", "DB_PASSWORD", "DB_NAME", "DB_HOST", "DB_PORT"}:
+                    os.environ[key] = value
+    except OSError:
+        pass  # File not readable — fall back to existing env vars
+
+
+_load_runtime_env()
 
 _secret_key = os.getenv("SECRET_KEY")
 
@@ -36,10 +69,12 @@ SECRET_KEY = _secret_key or ""
 
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 ALLOWED_HOSTS = [
-    host.strip()
-    for host in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
-    if host.strip()
-]
+    host.strip() for host in os.getenv("ALLOWED_HOSTS", "*").split(",") if host.strip()
+] or ["*"]
+print(
+    f"[settings.base] DJANGO_SETTINGS_MODULE={os.getenv('DJANGO_SETTINGS_MODULE')} "
+    f"ALLOWED_HOSTS={ALLOWED_HOSTS} DEBUG={DEBUG}"
+)
 
 # Telemetry — opt-out with TELEMETRY_ENABLED=false in .env
 # Set TELEMETRY_ENDPOINT to the URL where remote installations should send pings
@@ -51,9 +86,7 @@ ZABBIX_API_USER = os.getenv("ZABBIX_API_USER", "")
 ZABBIX_API_PASSWORD = os.getenv("ZABBIX_API_PASSWORD", "")
 ZABBIX_API_KEY = os.getenv("ZABBIX_API_KEY", "")
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
-ENABLE_DIAGNOSTIC_ENDPOINTS = (
-    os.getenv("ENABLE_DIAGNOSTIC_ENDPOINTS", "False").lower() == "true"
-)
+ENABLE_DIAGNOSTIC_ENDPOINTS = os.getenv("ENABLE_DIAGNOSTIC_ENDPOINTS", "False").lower() == "true"
 SERVICE_RESTART_COMMANDS = os.getenv(
     "SERVICE_RESTART_COMMANDS",
     "",
@@ -61,15 +94,9 @@ SERVICE_RESTART_COMMANDS = os.getenv(
 
 # Vue 3 Dashboard Feature Flag (Phase 11 - Sprint 3)
 USE_VUE_DASHBOARD = os.getenv("USE_VUE_DASHBOARD", "false").lower() == "true"
-VUE_DASHBOARD_ROLLOUT_PERCENTAGE = int(
-    os.getenv("VUE_DASHBOARD_ROLLOUT_PERCENTAGE", "0")
-)
+VUE_DASHBOARD_ROLLOUT_PERCENTAGE = int(os.getenv("VUE_DASHBOARD_ROLLOUT_PERCENTAGE", "0"))
 
-fernet_keys = [
-    key.strip()
-    for key in os.getenv("FERNET_KEYS", "").split(",")
-    if key.strip()
-]
+fernet_keys = [key.strip() for key in os.getenv("FERNET_KEYS", "").split(",") if key.strip()]
 if not fernet_keys:
     single_fernet = os.getenv("FERNET_KEY")
     if single_fernet:
@@ -84,26 +111,18 @@ SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 CSRF_TRUSTED_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
-    if origin.strip()
+    origin.strip() for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if origin.strip()
 ]
 
 # Extra security toggles when DEBUG is disabled
 if not DEBUG:
-    SECURE_SSL_REDIRECT = (
-        os.getenv("SECURE_SSL_REDIRECT", "True").lower() == "true"
-    )
-    SECURE_HSTS_SECONDS = int(
-        os.getenv("SECURE_HSTS_SECONDS", "31536000")
-    )  # 1 year
+    SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "True").lower() == "true"
+    SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "31536000"))  # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    SECURE_REFERRER_POLICY = os.getenv(
-        "SECURE_REFERRER_POLICY", "strict-origin"
-    )
+    SECURE_REFERRER_POLICY = os.getenv("SECURE_REFERRER_POLICY", "strict-origin")
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Content Security Policy (basic; override via env vars)
@@ -155,6 +174,7 @@ CSP_CONNECT_SRC = os.getenv(
     "https://events.mapbox.com "
     "https://*.tiles.mapbox.com "
     "https://nominatim.openstreetmap.org "
+    "https://api.github.com "
     "http://localhost:8082 "
     "http://video-hls:8080 "
     "http://localhost:8889",
@@ -165,8 +185,7 @@ CSP_MEDIA_SRC = os.getenv(
 ).split()
 CSP_FRAME_ANCESTORS = os.getenv("CSP_FRAME_ANCESTORS", "'none'").split()
 CSP_FRAME_SRC = os.getenv(
-    "CSP_FRAME_SRC",
-    "'self' http://localhost:8889 http://localhost:8888"
+    "CSP_FRAME_SRC", "'self' http://localhost:8889 http://localhost:8888"
 ).split()
 CSP_WORKER_SRC = os.getenv(
     "CSP_WORKER_SRC",
@@ -185,6 +204,7 @@ CONTENT_SECURITY_POLICY = {
     "frame-ancestors": CSP_FRAME_ANCESTORS,
 }
 
+
 # Dynamically allow video origins configured via environment variables.
 def _origin_from_env(env_name: str) -> str | None:
     raw = os.getenv(env_name, "").strip()
@@ -197,6 +217,7 @@ def _origin_from_env(env_name: str) -> str | None:
     except Exception:
         return None
     return None
+
 
 _extra_video_origins = set()
 for _env in ("VIDEO_HLS_PUBLIC_BASE_URL", "VIDEO_WEBRTC_PUBLIC_BASE_URL"):
@@ -221,7 +242,6 @@ INSTALLED_APPS = [
     "unfold",
     "unfold.contrib.filters",
     "unfold.contrib.forms",
-    
     # Django core
     "django.contrib.admin",
     "django.contrib.auth",
@@ -229,24 +249,21 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-
     # Geospatial support (Phase 10: PostGIS migration preparation)
     # Enables spatial fields and queries for PostgreSQL + PostGIS
     # NOTE: Works with MySQL but spatial features require PostGIS
     "django.contrib.gis",
-
     # Observability
     "django_prometheus",
-
     # Celery Beat — periodic task scheduler (DatabaseScheduler)
     "django_celery_beat",
-
     # Realtime / WebSockets
     "channels",
-
     # REST API
     "rest_framework",
-
+    # OpenAPI 3 (EV-0030): esquema em /api/schema/, Swagger UI auto-hospedado (sem CDN)
+    "drf_spectacular",
+    "drf_spectacular_sidecar",
     # Project apps
     "core.apps.CoreConfig",
     "maps_view",
@@ -260,6 +277,7 @@ INSTALLED_APPS = [
     "dwdm",
     # Telemetry — anonymous usage stats (opt-out via TELEMETRY_ENABLED=false)
     "telemetry",
+    "evolucao.apps.EvolucaoConfig",  # Central de Evolução (ADR 0006, EV-0027)
 ]
 
 try:  # Allow tests to run without native spatial libs (GDAL/GEOS)
@@ -272,9 +290,7 @@ else:
     GDAL_VERSION = getattr(_gdal, "GDAL_VERSION", "")
 
 if not SPATIAL_SUPPORT_ENABLED:
-    INSTALLED_APPS = [
-        app for app in INSTALLED_APPS if app != "django.contrib.gis"
-    ]
+    INSTALLED_APPS = [app for app in INSTALLED_APPS if app != "django.contrib.gis"]
 
 MIDDLEWARE = [
     "django_prometheus.middleware.PrometheusBeforeMiddleware",
@@ -282,6 +298,7 @@ MIDDLEWARE = [
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "core.middleware.csrf_api_exempt.CsrfApiExemptMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     # Force authentication on all routes
@@ -307,47 +324,30 @@ LOGIN_REDIRECT_URL = "/monitoring/monitoring-all/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
 
 # -----------------------------------------------------
-# Database (MySQL/MariaDB with fallbacks) - optimized
-# Phase 10: Support for PostgreSQL + PostGIS via DB_ENGINE env var
+# Database — PostgreSQL 16 + PostGIS é o ÚNICO banco suportado (EV-0025).
+# `DB_ENGINE` aceita postgis | postgresql | postgres (sinónimos). Qualquer outro
+# valor falha no arranque: o driver MySQL não está em requirements.txt e o
+# default antigo (`mysql`) fazia um ambiente sem `.env` arrancar contra um banco
+# que não existe. Os campos espaciais (GDAL/GEOS) exigem o backend postgis.
 # -----------------------------------------------------
-DB_ENGINE = os.getenv("DB_ENGINE", "mysql").lower()
+_POSTGIS_ENGINE_ALIASES = ("postgis", "postgresql", "postgres")
+DB_ENGINE = os.getenv("DB_ENGINE", "postgis").lower()
+if DB_ENGINE not in _POSTGIS_ENGINE_ALIASES:
+    from django.core.exceptions import ImproperlyConfigured
 
-# MySQL/MariaDB configuration (default, current production)
-DB_OPTIONS: Dict[str, Any] = {}
+    raise ImproperlyConfigured(
+        f"DB_ENGINE={DB_ENGINE!r} não é suportado. O ProVeMaps corre só em PostgreSQL + "
+        "PostGIS: use DB_ENGINE=postgis (ou postgresql/postgres)."
+    )
 
-if DB_ENGINE == "mysql":
-    DB_OPTIONS = {
-        "charset": "utf8mb4",
-        "init_command": "SET sql_mode='STRICT_ALL_TABLES'",
-        "connect_timeout": 10,
-    }
-    
-    # Optional pool settings when supported by the driver
-    if os.getenv("DB_USE_CONNECTION_POOL", "false").lower() == "true":
-        DB_OPTIONS.update(
-            {
-                "pool_size": int(os.getenv("DB_POOL_SIZE", "10")),
-                "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "20")),
-                "pool_pre_ping": True,
-                "pool_recycle": 300,
-            }
-        )
-elif DB_ENGINE in ("postgres", "postgresql", "postgis"):
-    # PostgreSQL + PostGIS configuration (Phase 10)
-    DB_OPTIONS = {
-        "connect_timeout": 10,
-        "options": "-c search_path=public,postgis",
-    }
+DB_BACKEND = "django.contrib.gis.db.backends.postgis"
+DEFAULT_PORT = "5432"
+DB_OPTIONS: dict[str, Any] = {
+    "connect_timeout": 10,
+    "options": "-c search_path=public,postgis",
+}
 
-# Database engine selection
-if DB_ENGINE in ("postgres", "postgresql", "postgis"):
-    DB_BACKEND = "django.contrib.gis.db.backends.postgis"
-    DEFAULT_PORT = "5432"
-else:
-    DB_BACKEND = "django.db.backends.mysql"
-    DEFAULT_PORT = "3306"
-
-DATABASES: Dict[str, Dict[str, Any]] = {
+DATABASES: dict[str, dict[str, Any]] = {
     "default": {
         "ENGINE": DB_BACKEND,
         "NAME": os.getenv("DB_NAME", "app"),
@@ -357,9 +357,7 @@ DATABASES: Dict[str, Dict[str, Any]] = {
         "PORT": os.getenv("DB_PORT", DEFAULT_PORT),
         "OPTIONS": DB_OPTIONS,
         "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "0")),
-        "ATOMIC_REQUESTS": (
-            os.getenv("DB_ATOMIC_REQUESTS", "false").lower() == "true"
-        ),
+        "ATOMIC_REQUESTS": (os.getenv("DB_ATOMIC_REQUESTS", "false").lower() == "true"),
     }
 }
 
@@ -369,7 +367,7 @@ DATABASES: Dict[str, Dict[str, Any]] = {
 REDIS_URL = os.getenv("REDIS_URL", "").strip()
 
 
-def get_cache_config() -> Dict[str, Dict[str, Any]]:
+def get_cache_config() -> dict[str, dict[str, Any]]:
     """Return cache settings based on Redis availability."""
     if REDIS_URL:
         return {
@@ -378,15 +376,11 @@ def get_cache_config() -> Dict[str, Dict[str, Any]]:
                 "LOCATION": REDIS_URL,
                 "OPTIONS": {
                     "CLIENT_CLASS": "django_redis.client.DefaultClient",
-                    "COMPRESSOR": (
-                        "django_redis.compressors.zlib.ZlibCompressor"
-                    ),
+                    "COMPRESSOR": ("django_redis.compressors.zlib.ZlibCompressor"),
                     "SOCKET_CONNECT_TIMEOUT": 5,
                     "SOCKET_TIMEOUT": 5,
                     "RETRY_ON_TIMEOUT": True,
-                    "MAX_CONNECTIONS": int(
-                        os.getenv("REDIS_MAX_CONNECTIONS", "100")
-                    ),
+                    "MAX_CONNECTIONS": int(os.getenv("REDIS_MAX_CONNECTIONS", "100")),
                 },
                 "KEY_PREFIX": "mapsprovefiber",
                 "VERSION": 1,
@@ -396,9 +390,7 @@ def get_cache_config() -> Dict[str, Dict[str, Any]]:
     if not DEBUG:
         return {
             "default": {
-                "BACKEND": (
-                    "django.core.cache.backends.filebased.FileBasedCache"
-                ),
+                "BACKEND": ("django.core.cache.backends.filebased.FileBasedCache"),
                 "LOCATION": "/tmp/django_cache",
                 "TIMEOUT": 300,
                 "OPTIONS": {"MAX_ENTRIES": 1000},
@@ -419,9 +411,7 @@ CACHES = get_cache_config()
 if REDIS_URL:
     session_engine = "django.contrib.sessions.backends.cache"
     SESSION_CACHE_ALIAS = "default"
-    SESSION_COOKIE_AGE = int(
-        os.getenv("SESSION_COOKIE_AGE", "1209600")
-    )  # 2 weeks
+    SESSION_COOKIE_AGE = int(os.getenv("SESSION_COOKIE_AGE", "1209600"))  # 2 weeks
 else:
     session_engine = "django.contrib.sessions.backends.db"
 
@@ -429,14 +419,14 @@ SESSION_ENGINE = session_engine
 
 # Session persistence settings
 SESSION_SAVE_EVERY_REQUEST = True  # Mantém a sessão ativa
-SESSION_COOKIE_NAME = 'mapsprovefiber_sessionid'
+SESSION_COOKIE_NAME = "mapsprovefiber_sessionid"
 SESSION_COOKIE_AGE = int(os.getenv("SESSION_COOKIE_AGE", "1209600"))  # 2 weeks
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Sessão persiste após fechar navegador
 
 # CSRF settings
-CSRF_COOKIE_NAME = 'mapsprovefiber_csrftoken'
+CSRF_COOKIE_NAME = "mapsprovefiber_csrftoken"
 CSRF_COOKIE_AGE = 31449600  # 1 year
 CSRF_COOKIE_HTTPONLY = False  # JS precisa ler o token
 CSRF_USE_SESSIONS = False  # Usa cookie separado, não sessão
@@ -451,13 +441,11 @@ SWR_STALE_TTL = max(SWR_FRESH_TTL, int(os.getenv("SWR_STALE_TTL", "60")))
 # -----------------------------------------------------
 # ASGI / Channels (WebSockets)
 # -----------------------------------------------------
-CHANNEL_LAYER_URL = os.getenv(
-    "CHANNEL_LAYER_URL", os.getenv("REDIS_URL", "")
-).strip()
+CHANNEL_LAYER_URL = os.getenv("CHANNEL_LAYER_URL", os.getenv("REDIS_URL", "")).strip()
 CHANNEL_PREFIX = os.getenv("CHANNEL_REDIS_PREFIX", "mapsprovefiber")
 
 if CHANNEL_LAYER_URL.startswith(("redis://", "rediss://")):
-    channel_layers: Dict[str, Dict[str, Any]] = {
+    channel_layers: dict[str, dict[str, Any]] = {
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",
             "CONFIG": {
@@ -506,10 +494,15 @@ FILE_UPLOAD_DIRECTORY_PERMISSIONS = None
 # Cache-busting version (overridden via STATIC_ASSET_VERSION in env)
 STATIC_ASSET_VERSION = os.getenv("STATIC_ASSET_VERSION", "20251113.2309")
 
+# EV-0027b / ADR 0006 §4.4: o commit cozido na imagem pelo build (`docker build --build-arg
+# GIT_SHA=…`, que o `scripts/deploy.sh` passa). Sai no `/healthz` para o fecho observado da
+# Central de Evolução saber o que está no ar. Vazio = imagem construída sem SHA.
+GIT_SHA = os.getenv("GIT_SHA", "")
+
 # -----------------------------------------------------
 # Templates (cache enabled in production)
 # -----------------------------------------------------
-TEMPLATES: list[Dict[str, Any]] = [
+TEMPLATES: list[dict[str, Any]] = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [BACKEND_DIR / "templates"],
@@ -535,17 +528,11 @@ if not DEBUG:
 # -----------------------------------------------------
 # Health check configuration
 # -----------------------------------------------------
-HEALTHCHECK_CONFIG: Dict[str, Any] = {
-    "DISK_THRESHOLD_GB": float(
-        os.getenv("HEALTHCHECK_DISK_THRESHOLD_GB", "1.0")
-    ),
+HEALTHCHECK_CONFIG: dict[str, Any] = {
+    "DISK_THRESHOLD_GB": float(os.getenv("HEALTHCHECK_DISK_THRESHOLD_GB", "1.0")),
     "DB_TIMEOUT": int(os.getenv("HEALTHCHECK_DB_TIMEOUT", "5")),
-    "ENABLE_STORAGE_CHECK": (
-        os.getenv("HEALTHCHECK_STORAGE", "true").lower() == "true"
-    ),
-    "ENABLE_SYSTEM_METRICS": (
-        os.getenv("HEALTHCHECK_SYSTEM_METRICS", "false").lower() == "true"
-    ),
+    "ENABLE_STORAGE_CHECK": (os.getenv("HEALTHCHECK_STORAGE", "true").lower() == "true"),
+    "ENABLE_SYSTEM_METRICS": (os.getenv("HEALTHCHECK_SYSTEM_METRICS", "false").lower() == "true"),
     "DEBUG": os.getenv("HEALTHCHECK_DEBUG", "false").lower() == "true",
 }
 
@@ -557,9 +544,7 @@ LOG_FORMAT = os.getenv("LOG_FORMAT", "verbose")  # "simple" or "verbose"
 
 FORMATTERS = {
     "verbose": {
-        "format": (
-            "{levelname} {asctime} {module} {process:d} {thread:d} {message}"
-        ),
+        "format": ("{levelname} {asctime} {module} {process:d} {thread:d} {message}"),
         "style": "{",
     },
     "simple": {
@@ -568,7 +553,7 @@ FORMATTERS = {
     },
 }
 
-HANDLERS: Dict[str, Dict[str, Any]] = {
+HANDLERS: dict[str, dict[str, Any]] = {
     "console": {
         "class": "logging.StreamHandler",
         "formatter": LOG_FORMAT,
@@ -585,7 +570,7 @@ if not DEBUG and os.getenv("ENABLE_FILE_LOGGING", "false").lower() == "true":
         "formatter": LOG_FORMAT,
     }
 
-LOGGING: Dict[str, Any] = {
+LOGGING: dict[str, Any] = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": FORMATTERS,
@@ -628,8 +613,8 @@ if SENTRY_DSN and not _PYTEST_ACTIVE:
         import sentry_sdk.integrations.celery as sentry_celery  # type: ignore
         import sentry_sdk.integrations.django as sentry_django  # type: ignore
 
-        django_integration_cls = getattr(sentry_django, "DjangoIntegration")
-        celery_integration_cls = getattr(sentry_celery, "CeleryIntegration")
+        django_integration_cls = sentry_django.DjangoIntegration
+        celery_integration_cls = sentry_celery.CeleryIntegration
 
         sentry_sdk.init(  # type: ignore[no-untyped-call]
             dsn=SENTRY_DSN,
@@ -637,12 +622,8 @@ if SENTRY_DSN and not _PYTEST_ACTIVE:
                 django_integration_cls(),
                 celery_integration_cls(),
             ],
-            traces_sample_rate=float(
-                os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")
-            ),
-            profiles_sample_rate=float(
-                os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.0")
-            ),
+            traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+            profiles_sample_rate=float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.0")),
             environment=os.getenv("SENTRY_ENVIRONMENT", "development"),
             debug=DEBUG,
         )
@@ -665,12 +646,48 @@ REST_FRAMEWORK: dict[str, object] = {
         "rest_framework.permissions.IsAuthenticated",
     ],
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        # EV-0023 / ADR 0008: contas de serviço autenticam por `Authorization: Bearer`.
+        # Vem antes da sessão para um cliente com token não cair no CSRF da sessão.
+        "service_accounts.authentication.ServiceAccountTokenAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
-    "DEFAULT_PAGINATION_CLASS": (
-        "rest_framework.pagination.PageNumberPagination"
-    ),
+    "DEFAULT_PAGINATION_CLASS": ("rest_framework.pagination.PageNumberPagination"),
     "PAGE_SIZE": 100,
+    # EV-0030: um só esquema de versionamento — o prefixo /api/v<N>/ do caminho;
+    # rotas legadas sem prefixo contam como v1. Só existe v1.
+    "DEFAULT_VERSIONING_CLASS": "core.api_versioning.PathPrefixVersioning",
+    "DEFAULT_VERSION": "v1",
+    "ALLOWED_VERSIONS": ["v1"],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# OpenAPI 3 — drf-spectacular (EV-0030). O esquema cobre as views DRF
+# (router /api/v1/ e @api_view); as function views Django (JsonResponse) não
+# são introspetadas e migram quando forem tocadas. Swagger UI vem do pacote
+# `drf-spectacular-sidecar` (ficheiros estáticos locais) — CLAUDE.md §2.8, sem CDN.
+SPECTACULAR_SETTINGS = {
+    "TITLE": "ProVeMaps API",
+    "DESCRIPTION": (
+        "Inventário físico de fibra (sites, dispositivos, portas, cabos, rotas), "
+        "estado via Zabbix, dashboard e configuração. Autenticação por sessão "
+        "(pessoas) ou `Authorization: Bearer <token>` (contas de serviço, ADR 0008)."
+    ),
+    # None: a versão do documento é a do pedido (PathPrefixVersioning → "v1"), sem sufixo.
+    "VERSION": None,
+    "SERVE_INCLUDE_SCHEMA": False,
+    "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAuthenticated"],
+    "SCHEMA_PATH_PREFIX": r"/api/v1",
+    "SWAGGER_UI_DIST": "SIDECAR",
+    "SWAGGER_UI_FAVICON_HREF": "SIDECAR",
+    "REDOC_DIST": "SIDECAR",
+    "COMPONENT_SPLIT_REQUEST": True,
+    "SECURITY": [{"cookieAuth": []}, {"bearerAuth": []}],
+    "APPEND_COMPONENTS": {
+        "securitySchemes": {
+            "cookieAuth": {"type": "apiKey", "in": "cookie", "name": "sessionid"},
+            "bearerAuth": {"type": "http", "scheme": "bearer"},
+        }
+    },
 }
 
 # ===========================
@@ -680,7 +697,7 @@ REST_FRAMEWORK: dict[str, object] = {
 UNFOLD = {
     "SITE_TITLE": "Maps Prove Fiber",
     "SITE_HEADER": "SIMPLES INTERNET",
-    "SITE_URL": "/maps_view/dashboard/",
+    "SITE_URL": "/",
     "SITE_ICON": {
         "light": lambda request: "admin/img/si-logo.svg",
         "dark": lambda request: "admin/img/si-logo.svg",
@@ -731,7 +748,7 @@ UNFOLD = {
                     {
                         "title": "Ver Dashboard",
                         "icon": "home",
-                        "link": "/maps_view/dashboard/",
+                        "link": "/",
                     },
                 ],
             },

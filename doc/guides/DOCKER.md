@@ -1,7 +1,7 @@
 # Docker Guide - MapsProveFiber
 
-**Version**: v2.0.0  
-**Last Updated**: 2025-11-10  
+**Versão do produto**: ver [VERSION](../../VERSION)  
+**Last Updated**: 2026-10-04  
 **Target Audience**: Developers, DevOps
 
 ---
@@ -9,6 +9,8 @@
 ## 📖 Overview
 
 This guide covers Docker-based development and deployment for MapsProveFiber, including Docker Compose orchestration, container management, and troubleshooting.
+
+> The development stack is `docker/docker-compose.yml` (PostgreSQL 16 + PostGIS; web published on host port **8100**). Commands below use `-f docker/docker-compose.yml` from the repo root; `make up`, `make down`, `make logs`, `make build` and `make restart` wrap the same file. Production uses `docker/docker-compose.prod.yml` (see [`DEPLOY.md`](../../DEPLOY.md)).
 
 ---
 
@@ -22,14 +24,14 @@ This guide covers Docker-based development and deployment for MapsProveFiber, in
 - 10GB free disk space
 
 Verify installation:
-```powershell
+```bash
 docker --version
 docker compose version
 ```
 
 ### First Run
 
-```powershell
+```bash
 # Clone repository
 git clone https://github.com/kaled182/provemaps_beta.git
 cd provemaps_beta
@@ -38,16 +40,16 @@ cd provemaps_beta
 cp .env.example .env
 
 # Start all services
-docker compose up -d --build
+docker compose -f docker/docker-compose.yml up -d --build
 
 # Check status
-docker compose ps
+docker compose -f docker/docker-compose.yml ps
 
 # View logs
-docker compose logs -f web
+docker compose -f docker/docker-compose.yml logs -f web
 ```
 
-Access at http://localhost:8000
+Access at http://localhost:8100
 
 ---
 
@@ -57,21 +59,23 @@ Access at http://localhost:8000
 
 ```yaml
 services:
-  web:        # Django application (port 8000)
-  celery:     # Async task worker
+  web:        # Django application (container port 8000, host port 8100)
+  celery:     # Async task worker (queues default, zabbix, maps)
   beat:       # Celery scheduler
   redis:      # Cache & message broker
-  db:         # MariaDB database
+  postgres:   # PostgreSQL 16 + PostGIS (host port 5433)
+  # plus prometheus, grafana, video-hls, video-transmuxer, mediamtx, whatsapp-qr
 ```
 
 ### Service Dependencies
 
 ```mermaid
 graph TD
-    web --> db
+    web --> postgres
     web --> redis
-    celery --> db
+    celery --> postgres
     celery --> redis
+    beat --> postgres
     beat --> redis
 ```
 
@@ -81,53 +85,53 @@ graph TD
 
 ### Start/Stop Services
 
-```powershell
+```bash
 # Start all services
-docker compose up -d
+docker compose -f docker/docker-compose.yml up -d
 
 # Start specific service
-docker compose up -d web
+docker compose -f docker/docker-compose.yml up -d web
 
 # Stop all services
-docker compose down
+docker compose -f docker/docker-compose.yml down
 
 # Stop and remove volumes (DANGER: deletes data)
-docker compose down -v
+docker compose -f docker/docker-compose.yml down -v
 
 # Restart service
-docker compose restart web
+docker compose -f docker/docker-compose.yml restart web
 
 # Stop single service
-docker compose stop celery
+docker compose -f docker/docker-compose.yml stop celery
 ```
 
 ### Build & Rebuild
 
-```powershell
+```bash
 # Build all images
-docker compose build
+docker compose -f docker/docker-compose.yml build
 
 # Build specific service
-docker compose build web
+docker compose -f docker/docker-compose.yml build web
 
 # Build with no cache
-docker compose build --no-cache
+docker compose -f docker/docker-compose.yml build --no-cache
 
 # Build and start
-docker compose up -d --build
+docker compose -f docker/docker-compose.yml up -d --build
 ```
 
 ### View Status
 
-```powershell
+```bash
 # List containers
-docker compose ps
+docker compose -f docker/docker-compose.yml ps
 
 # View resource usage
-docker compose stats
+docker stats
 
 # Inspect service
-docker compose config
+docker compose -f docker/docker-compose.yml config
 ```
 
 ---
@@ -136,49 +140,49 @@ docker compose config
 
 ### View Logs
 
-```powershell
+```bash
 # All services
-docker compose logs
+docker compose -f docker/docker-compose.yml logs
 
 # Specific service
-docker compose logs web
+docker compose -f docker/docker-compose.yml logs web
 
 # Follow logs (real-time)
-docker compose logs -f web
+docker compose -f docker/docker-compose.yml logs -f web
 
 # Last N lines
-docker compose logs --tail=50 web
+docker compose -f docker/docker-compose.yml logs --tail=50 web
 
 # Logs since timestamp
-docker compose logs --since 2025-11-10T10:00:00 web
+docker compose -f docker/docker-compose.yml logs --since 2025-11-10T10:00:00 web
 
 # Multiple services
-docker compose logs web celery
+docker compose -f docker/docker-compose.yml logs web celery
 ```
 
 ### Execute Commands
 
-```powershell
+```bash
 # Django shell
-docker compose exec web python manage.py shell
+docker compose -f docker/docker-compose.yml exec web python manage.py shell
 
 # Database migrations
-docker compose exec web python manage.py migrate
+docker compose -f docker/docker-compose.yml exec web python manage.py migrate
 
 # Create superuser
-docker compose exec web python manage.py createsuperuser
+docker compose -f docker/docker-compose.yml exec web python manage.py createsuperuser
 
 # Collect static files
-docker compose exec web python manage.py collectstatic --noinput
+docker compose -f docker/docker-compose.yml exec web python manage.py collectstatic --noinput
 
 # Run tests
-docker compose exec web pytest -q
+docker compose -f docker/docker-compose.yml exec web pytest -q
 
 # Bash shell
-docker compose exec web bash
+docker compose -f docker/docker-compose.yml exec web bash
 
 # Root shell
-docker compose exec -u root web bash
+docker compose -f docker/docker-compose.yml exec -u root web bash
 ```
 
 ---
@@ -187,51 +191,48 @@ docker compose exec -u root web bash
 
 ### Connect to Database
 
-```powershell
-# MySQL client
-docker compose exec db mysql -u app -p
-
-# Or with password inline
-docker compose exec db mysql -u app -papp mapsprovefiber
+```bash
+# psql client (service `postgres`, database `app`, user `app`)
+docker compose -f docker/docker-compose.yml exec postgres psql -U app -d app
 ```
 
 ### Backup & Restore
 
-```powershell
+```bash
 # Create backup
-docker compose exec db mysqldump -u app -papp mapsprovefiber > backup_$(date +%Y%m%d).sql
+docker compose -f docker/docker-compose.yml exec postgres pg_dump -U app app > backup_$(date +%Y%m%d).sql
 
 # Restore backup
-docker compose exec -T db mysql -u app -papp mapsprovefiber < backup_20251110.sql
+docker compose -f docker/docker-compose.yml exec -T postgres psql -U app -d app < backup_20251110.sql
 
-# Copy backup from container
-docker compose cp db:/backup.sql ./backup.sql
+# Copy a file from the container
+docker compose -f docker/docker-compose.yml cp postgres:/tmp/backup.sql ./backup.sql
 
 # Import SQL file to container
-docker compose cp init.sql db:/tmp/init.sql
-docker compose exec db mysql -u app -papp mapsprovefiber < /tmp/init.sql
+docker compose -f docker/docker-compose.yml cp init.sql postgres:/tmp/init.sql
+docker compose -f docker/docker-compose.yml exec postgres psql -U app -d app -f /tmp/init.sql
 ```
 
 ### Database Operations
 
 ```sql
--- Show databases
-SHOW DATABASES;
+-- Show databases (psql: \l)
+SELECT datname FROM pg_database;
 
--- Use database
-USE mapsprovefiber;
+-- Show tables (psql: \dt)
+SELECT tablename FROM pg_tables WHERE schemaname = 'public';
 
--- Show tables
-SHOW TABLES;
-
--- Describe table
-DESCRIBE inventory_site;
+-- Describe table (psql: \d zabbix_api_site)
+-- NB: `zabbix_api_site` is an inherited table name; the Site model lives in `inventory`
 
 -- Count records
-SELECT COUNT(*) FROM inventory_site;
+SELECT COUNT(*) FROM zabbix_api_site;
 
 -- View data
-SELECT * FROM inventory_site LIMIT 10;
+SELECT * FROM zabbix_api_site LIMIT 10;
+
+-- Check PostGIS
+SELECT PostGIS_Version();
 ```
 
 ---
@@ -240,40 +241,40 @@ SELECT * FROM inventory_site LIMIT 10;
 
 ### Connect to Redis
 
-```powershell
+```bash
 # Redis CLI
-docker compose exec redis redis-cli
+docker compose -f docker/docker-compose.yml exec redis redis-cli
 
 # Execute command
-docker compose exec redis redis-cli KEYS "*"
+docker compose -f docker/docker-compose.yml exec redis redis-cli KEYS "*"
 ```
 
 ### Common Operations
 
-```powershell
+```bash
 # Test connection
-docker compose exec redis redis-cli PING
+docker compose -f docker/docker-compose.yml exec redis redis-cli PING
 
 # View all keys
-docker compose exec redis redis-cli KEYS "*"
+docker compose -f docker/docker-compose.yml exec redis redis-cli KEYS "*"
 
 # Get key value
-docker compose exec redis redis-cli GET "cache_key"
+docker compose -f docker/docker-compose.yml exec redis redis-cli GET "cache_key"
 
 # Delete key
-docker compose exec redis redis-cli DEL "cache_key"
+docker compose -f docker/docker-compose.yml exec redis redis-cli DEL "cache_key"
 
 # Flush database
-docker compose exec redis redis-cli FLUSHDB
+docker compose -f docker/docker-compose.yml exec redis redis-cli FLUSHDB
 
 # Flush all databases
-docker compose exec redis redis-cli FLUSHALL
+docker compose -f docker/docker-compose.yml exec redis redis-cli FLUSHALL
 
 # Get database size
-docker compose exec redis redis-cli DBSIZE
+docker compose -f docker/docker-compose.yml exec redis redis-cli DBSIZE
 
 # Monitor commands
-docker compose exec redis redis-cli MONITOR
+docker compose -f docker/docker-compose.yml exec redis redis-cli MONITOR
 ```
 
 ---
@@ -282,30 +283,28 @@ docker compose exec redis redis-cli MONITOR
 
 ### Hot Reload Setup
 
-The web service has volume mounts for hot reload:
+The web service has volume mounts so code changes are visible without rebuilding the image:
 
 ```yaml
 volumes:
-  - .:/app                    # Source code
-  - ./logs:/app/logs          # Logs
+  - ../backend:/app/backend    # Source code
+  - ../frontend:/app/frontend
+  - ../logs:/app/backend/logs  # Logs
 ```
 
-Changes to Python files automatically reload the server.
+The web service runs Gunicorn without `--reload`: restart it (`docker compose -f docker/docker-compose.yml restart web`) to pick up Python changes. Rebuild the SPA with `cd frontend && npm run build`.
 
 ### Development Commands
 
-```powershell
+```bash
 # Watch logs while developing
-docker compose logs -f web
+docker compose -f docker/docker-compose.yml logs -f web
 
 # Run tests on code change
-docker compose exec web pytest -q
+docker compose -f docker/docker-compose.yml exec web pytest -q
 
-# Check code quality
-docker compose exec web make lint
-
-# Format code
-docker compose exec web make fmt
+# Check code quality (from the host, in the repo root; needs `make requirements-dev`)
+make lint
 ```
 
 ### Environment Variables
@@ -314,13 +313,13 @@ Edit `.env` file:
 ```env
 DEBUG=True
 DJANGO_SETTINGS_MODULE=settings.dev
-DB_HOST=db
+# DB_ENGINE=postgis and DB_HOST=postgres are already set in docker/docker-compose.yml
 REDIS_URL=redis://redis:6379/1
 ```
 
 Restart services to apply:
-```powershell
-docker compose restart web celery
+```bash
+docker compose -f docker/docker-compose.yml restart web celery
 ```
 
 ---
@@ -329,98 +328,96 @@ docker compose restart web celery
 
 ### Port Already in Use
 
-```powershell
+```bash
 # Find process using port
-netstat -ano | findstr :8000
+ss -ltnp | grep :8100
 
-# Kill process (Windows)
-taskkill /PID <PID> /F
+# Kill process (replace PID)
+kill <PID>
 
-# Change port in docker-compose.yml
+# Change port in docker/docker-compose.yml
 ports:
-  - "8001:8000"  # Use 8001 instead
+  - "8101:8000"  # Use 8101 instead
 ```
 
 ### Container Won't Start
 
-```powershell
+```bash
 # View error logs
-docker compose logs web
+docker compose -f docker/docker-compose.yml logs web
 
 # Check service health
-docker compose ps
+docker compose -f docker/docker-compose.yml ps
 
 # Recreate container
-docker compose up -d --force-recreate web
+docker compose -f docker/docker-compose.yml up -d --force-recreate web
 
 # Start in foreground (see errors immediately)
-docker compose up web
+docker compose -f docker/docker-compose.yml up web
 ```
 
 ### Database Connection Failed
 
-```powershell
+```bash
 # Check DB is running
-docker compose ps db
+docker compose -f docker/docker-compose.yml ps postgres
 
 # View DB logs
-docker compose logs db
+docker compose -f docker/docker-compose.yml logs postgres
 
 # Test connection
-docker compose exec web python manage.py check --database default
+docker compose -f docker/docker-compose.yml exec web python manage.py check --database default
 
-# Verify credentials in .env
-DB_HOST=db
+# Verify credentials (set in docker/docker-compose.yml; override in .env only if needed)
+DB_ENGINE=postgis
+DB_HOST=postgres
 DB_USER=app
 DB_PASSWORD=app
-DB_NAME=mapsprovefiber
+DB_NAME=app
 ```
 
 ### Redis Connection Failed
 
-```powershell
+```bash
 # Check Redis is running
-docker compose ps redis
+docker compose -f docker/docker-compose.yml ps redis
 
 # Test connection
-docker compose exec redis redis-cli PING
+docker compose -f docker/docker-compose.yml exec redis redis-cli PING
 
 # Check Redis logs
-docker compose logs redis
+docker compose -f docker/docker-compose.yml logs redis
 
 # Test from Django
-docker compose exec web python -c "from django.core.cache import cache; print(cache.get('test'))"
+docker compose -f docker/docker-compose.yml exec web python -c "from django.core.cache import cache; print(cache.get('test'))"
 ```
 
 ### Missing Static Files
 
-```powershell
+```bash
 # Collect static files
-docker compose exec web python manage.py collectstatic --noinput
+docker compose -f docker/docker-compose.yml exec web python manage.py collectstatic --noinput
 
 # Check static files path
-docker compose exec web ls -la staticfiles/
+docker compose -f docker/docker-compose.yml exec web ls -la staticfiles/
 
 # Verify STATIC_ROOT in settings
-docker compose exec web python manage.py diffsettings | grep STATIC
+docker compose -f docker/docker-compose.yml exec web python manage.py diffsettings | grep STATIC
 ```
 
 ### Volume Permission Issues
 
-```powershell
+```bash
 # Check volume permissions
-docker compose exec web ls -la /app
+docker compose -f docker/docker-compose.yml exec web ls -la /app
 
-# Fix permissions (Linux/Mac)
-docker compose exec -u root web chown -R app:app /app
-
-# On Windows, ensure Docker has access to drive
-# Docker Desktop -> Settings -> Resources -> File Sharing
+# Fix permissions (the image runs as `appuser`)
+docker compose -f docker/docker-compose.yml exec -u root web chown -R appuser:appuser /app
 ```
 
 ### Out of Disk Space
 
-```powershell
+```bash
 # Check Docker disk usage
 docker system df
 
@@ -443,46 +440,44 @@ docker system prune -a --volumes
 
 ### Health Checks
 
-Built-in health checks in `docker-compose.yml`:
+Built-in health checks in `docker/docker-compose.yml` (web probes `/ready`; postgres uses `pg_isready`; redis uses `redis-cli ping`):
 
 ```yaml
 healthcheck:
-  test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+  test: ["CMD-SHELL", "python -c \"import urllib.request; resp = urllib.request.urlopen('http://localhost:8000/ready', timeout=5); exit(0 if resp.getcode() == 200 else 1)\" || exit 1"]
   interval: 30s
-  timeout: 10s
+  timeout: 15s
   retries: 3
   start_period: 40s
 ```
 
 Check status:
-```powershell
-docker compose ps
+```bash
+docker compose -f docker/docker-compose.yml ps
 ```
 
 ### Resource Monitoring
 
-```powershell
+```bash
 # Real-time stats
-docker compose stats
+docker stats
 
 # Container inspect
-docker compose inspect web
+docker inspect <container>
 
 # View processes
-docker compose top web
+docker compose -f docker/docker-compose.yml top web
 ```
 
 ### Log Aggregation
 
-```powershell
+```bash
 # Export logs
-docker compose logs > all_logs.txt
+docker compose -f docker/docker-compose.yml logs > all_logs.txt
 
 # Filter logs
-docker compose logs | grep ERROR
+docker compose -f docker/docker-compose.yml logs | grep ERROR
 
-# JSON logs
-docker compose logs --json
 ```
 
 ---
@@ -499,12 +494,12 @@ ZABBIX_API_PASSWORD=<strong-password>
 ```
 
 Generate secure keys:
-```powershell
+```bash
 # Python
 python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
 
-# PowerShell
-[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
+# OpenSSL
+openssl rand -base64 50
 ```
 
 ### Network Isolation
@@ -522,7 +517,7 @@ services:
       - frontend
       - backend
   
-  db:
+  postgres:
     networks:
       - backend  # Not exposed to frontend
 ```
@@ -544,52 +539,33 @@ services:
 
 ### Production Configuration
 
-```yaml
-# docker-compose.prod.yml
-services:
-  web:
-    environment:
-      - DJANGO_SETTINGS_MODULE=settings.prod
-      - DEBUG=False
-    restart: always
-    
-  db:
-    volumes:
-      - db_data:/var/lib/mysql
-    restart: always
-    
-  redis:
-    restart: always
+Production is a standalone compose file, `docker/docker-compose.prod.yml` (nginx + certbot, web, celery, celery-beat, postgres, redis; optional profiles `monitoring`, `video`, `whatsapp`, `full`). It is **not** an overlay on the dev file. Configure `.env.production` and deploy with the script — full steps in [`DEPLOY.md`](../../DEPLOY.md):
 
-volumes:
-  db_data:
-```
-
-Run:
-```powershell
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```bash
+cp .env.production.example .env.production
+./scripts/deploy.sh --profile minimal --init-data
 ```
 
 ### Health Checks
 
-```powershell
-# Liveness
-curl http://localhost:8000/live
+```bash
+# Liveness (dev stack: port 8100; production: https://<DOMAIN_NAME>/...)
+curl http://localhost:8100/live
 
 # Readiness
-curl http://localhost:8000/ready
+curl http://localhost:8100/ready
 
 # Full health
-curl http://localhost:8000/healthz
+curl http://localhost:8100/healthz
 ```
 
 ### Backup Strategy
 
-```powershell
-# Automated backup script
-docker compose exec db mysqldump -u app -papp mapsprovefiber | gzip > backup_$(date +%Y%m%d_%H%M%S).sql.gz
+```bash
+# Manual backup (dev stack); `scripts/deploy.sh` takes a pre-deploy backup in production
+docker compose -f docker/docker-compose.yml exec -T postgres pg_dump -U app app | gzip > backup_$(date +%Y%m%d_%H%M%S).sql.gz
 
-# Schedule with cron (Linux) or Task Scheduler (Windows)
+# Schedule with cron
 ```
 
 ---
@@ -613,12 +589,12 @@ docker compose exec db mysqldump -u app -papp mapsprovefiber | gzip > backup_$(d
 
 ### Environment Files
 
-```powershell
+```bash
 # Use custom env file
-docker compose --env-file .env.prod up -d
+docker compose -f docker/docker-compose.prod.yml --env-file .env.production up -d
 
 # Override compose file
-docker compose -f docker-compose.yml -f docker-compose.override.yml up -d
+docker compose -f docker/docker-compose.yml -f docker-compose.override.yml up -d
 ```
 
 ---
@@ -628,10 +604,11 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml up -d
 - [Docker Documentation](https://docs.docker.com/)
 - [Docker Compose Documentation](https://docs.docker.com/compose/)
 - [Development Guide](DEVELOPMENT.md)
-- [Deployment Guide](../operations/DEPLOYMENT.md)
-- [Troubleshooting Guide](../operations/TROUBLESHOOTING.md)
+- [Deployment Guide](../../DEPLOY.md) (production compose: `docker/docker-compose.prod.yml`)
+- [Production Docker notes](../operations/DOCKER_PRODUCTION.md)
+- [Troubleshooting notes](../troubleshooting/)
 
 ---
 
-**Last Updated**: 2025-11-10  
+**Last Updated**: 2026-10-04  
 **Maintainers**: DevOps Team

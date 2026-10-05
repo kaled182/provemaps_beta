@@ -496,8 +496,8 @@ import ContactsTab from './ContactsTab.vue'
 ---
 
 **Documentos relacionados:**
-- [WHATSAPP_CONTACTS_AGENDA.md](WHATSAPP_CONTACTS_AGENDA.md) - Especificação técnica detalhada
-- [WHATSAPP_CONTACTS_STATUS.md](WHATSAPP_CONTACTS_STATUS.md) - Status de implementação (anterior)
+- [WHATSAPP_CONTACTS_AGENDA.md](../features/WHATSAPP_CONTACTS_AGENDA.md) - Especificação técnica detalhada
+- [WHATSAPP_CONTACTS_STATUS.md](../features/WHATSAPP_CONTACTS_STATUS.md) - Status de implementação (anterior)
 - [backend/setup_app/README_CONTACTS.md](../backend/setup_app/README_CONTACTS.md) - Docs do módulo (se existir)
 
 **Data de conclusão:** 27 de janeiro de 2026 ✅

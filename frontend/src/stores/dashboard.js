@@ -344,10 +344,52 @@ export const useDashboardStore = defineStore('dashboard', () => {
   /**
    * Generic update handler for WebSocket messages
    */
+  /**
+   * EV-0014: o backend publica `{ event: 'dashboard.status', data: { hosts } }`
+   * (mesma forma de `hosts_status` do REST) e `{ type: 'cable_status_update', cables }`.
+   * Até aqui o store só conhecia `host_update`/`dashboard_snapshot`, que nada envia:
+   * o tempo real nunca chegava ao dashboard.
+   */
+  function updateFromDashboardStatusEvent(message) {
+    const rawHosts = Array.isArray(message?.data?.hosts) ? message.data.hosts : [];
+    if (!rawHosts.length) return;
+    rawHosts.forEach(rawHost => {
+      const normalized = normalizeHost(rawHost);
+      if (normalized && normalized.id) {
+        hostMapSafe().set(normalized.id, normalized);
+      }
+    });
+    lastUpdate.value = message.timestamp || new Date().toISOString();
+  }
+
+  function updateCablesFromWebSocket(message) {
+    const updates = Array.isArray(message?.cables) ? message.cables : [];
+    if (!updates.length) return;
+    const current = fiberCables.value instanceof Map ? fiberCables.value : new Map();
+    const next = new Map(current);
+    updates.forEach(update => {
+      const id = update?.cable_id ?? update?.id;
+      if (id === undefined || id === null) return;
+      const existing = next.get(id);
+      if (existing) {
+        next.set(id, { ...existing, ...update, status: update.status ?? existing.status });
+      }
+    });
+    fiberCables.value = next;
+    lastUpdate.value = new Date().toISOString();
+  }
+
   function handleWebSocketMessage(message) {
     if (!message) return;
-    
-    switch (message.type) {
+
+    switch (message.event || message.type) {
+      case 'dashboard.status':
+        updateFromDashboardStatusEvent(message);
+        break;
+      case 'cable_status_update':
+      case 'cable.status':
+        updateCablesFromWebSocket(message);
+        break;
       case 'host_update':
         updateHostFromWebSocket(message);
         break;
@@ -355,7 +397,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
         updateDashboardSnapshot(message);
         break;
       default:
-        console.warn('[dashboardStore] Unknown message type:', message.type);
+        console.warn('[dashboardStore] Unknown message type:', message.type ?? message.event);
     }
   }
 

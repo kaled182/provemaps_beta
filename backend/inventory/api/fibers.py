@@ -5,31 +5,23 @@ import logging
 from typing import Any
 
 from django.contrib.auth.decorators import login_required
-from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.db import IntegrityError
 from django.db.models.deletion import ProtectedError
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
-from django.views.decorators.http import (
-    require_GET,
-    require_http_methods,
-    require_POST,
-)
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from integrations.zabbix.decorators import (
-    api_login_required,
-    handle_api_errors,
-)
+from integrations.zabbix.decorators import api_login_required, handle_api_errors
 from integrations.zabbix.guards import diagnostics_guard, staff_guard
-
+from inventory.cache.fibers import get_cached_fiber_list
 from inventory.models import Device, FiberCable, FiberCableAuditLog
 from inventory.usecases import fibers as fiber_uc
 from inventory.usecases.fibers import (
     FiberNotFound,
     FiberUseCaseError,
     FiberValidationError,
+    build_optical_summary,
 )
-from inventory.cache.fibers import get_cached_fiber_list
-from inventory.usecases.fibers import build_optical_summary
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +31,6 @@ logger = logging.getLogger(__name__)
 @handle_api_errors
 def api_import_fiber_kml(request: HttpRequest) -> JsonResponse:
     """Import a KML file and create a fiber route using extracted points."""
-    guard = diagnostics_guard(request)
-    if guard:
-        return guard
-
     name = (request.POST.get("name") or "").strip()
     origin_device_id = request.POST.get("origin_device_id")
     dest_device_id = request.POST.get("dest_device_id")
@@ -69,9 +57,7 @@ def api_import_fiber_kml(request: HttpRequest) -> JsonResponse:
     if not single_port and not (dest_device_id and dest_port_id):
         return JsonResponse(
             {
-                "error": (
-                    "Destination port required when single port mode is off"
-                ),
+                "error": ("Destination port required when single port mode is off"),
             },
             status=400,
         )
@@ -146,10 +132,20 @@ def import_kml_modal(request: HttpRequest) -> HttpResponse:
 @api_login_required
 @handle_api_errors
 def api_fiber_cables(request: HttpRequest) -> JsonResponse:
-    """List all fiber cables with detailed information (cached with SWR)."""
+    """List all fiber cables with detailed information (cached with SWR).
+
+    Query params:
+        bbox: ``minLng,minLat,maxLng,maxLat`` — devolve só os cabos cuja caixa
+              envolvente toca a área (EV-0013). Filtra o payload cacheado, sem
+              queries extra. Inválido → ignorado (lista completa).
+    """
     data, is_fresh = get_cached_fiber_list(fiber_uc.list_fiber_cables)
 
-    response = JsonResponse({"cables": data})
+    bbox = fiber_uc.parse_bbox(request.GET.get("bbox"))
+    if bbox is not None:
+        data = fiber_uc.filter_cables_by_bbox(data, bbox)
+
+    response = JsonResponse({"cables": data, "total": len(data)})
 
     # Force browsers to revalidate so new cables show up immediately after creation.
     response["Cache-Control"] = "no-store, no-cache, must-revalidate"
@@ -158,7 +154,7 @@ def api_fiber_cables(request: HttpRequest) -> JsonResponse:
     if not is_fresh:
         # Flag that the payload may be stale so clients can decide to refetch.
         response["X-Fiber-Data-Stale"] = "1"
-    
+
     return response
 
 
@@ -168,10 +164,10 @@ def api_fiber_cables(request: HttpRequest) -> JsonResponse:
 def api_fibers_oper_status(request: HttpRequest) -> JsonResponse:
     """
     Return operational status metadata for one or more cables.
-    
+
     OPTIMIZED: Reads from pre-calculated cache populated by Celery task
     instead of making synchronous Zabbix calls on every request.
-    
+
     This prevents the "hundreds of Zabbix queries" bottleneck that
     was causing 30+ second delays in the dashboard.
     """
@@ -200,11 +196,11 @@ def api_fibers_oper_status(request: HttpRequest) -> JsonResponse:
     # NEW: Read from cache instead of calling Zabbix
     results = []
     cache_misses = []
-    
+
     for cable_id in cable_ids:
         cache_key = f"cable:oper_status:{cable_id}"
         cached_data = cache.get(cache_key)
-        
+
         if cached_data:
             results.append(cached_data)
         else:
@@ -221,19 +217,16 @@ def api_fibers_oper_status(request: HttpRequest) -> JsonResponse:
         payload["missing_ids"] = missing_ids
     if cache_misses:
         payload["cache_misses"] = cache_misses  # For debugging
-    
+
     return JsonResponse(payload)
 
 
-@require_GET
-@api_login_required
-@handle_api_errors
-def api_fiber_cached_optical_status(request: HttpRequest, cable_id: int) -> JsonResponse:
-    """Return cached optical status for a single cable without Zabbix calls.
+def _build_cached_optical_payload(cable_id: int) -> JsonResponse:
+    """Constrói o payload de cached optical status — função pura (sem decorators).
 
-    Leitura direta dos campos persistidos (last_rx_power / last_tx_power) das
-    portas de origem e destino. Evita chamadas síncronas ao Zabbix durante a
-    requisição web.
+    Reusada por:
+      - GET  /cached-status/        (api_fiber_cached_optical_status)
+      - POST /refresh-optical/      (api_fiber_refresh_optical)
     """
     try:
         cable = FiberCable.objects.select_related(
@@ -245,15 +238,17 @@ def api_fiber_cached_optical_status(request: HttpRequest, cable_id: int) -> Json
     origin = cable.origin_port
     dest = cable.destination_port
 
-    # Verificar se portas existem
     if not origin or not dest:
-        return JsonResponse({
-            "cable_id": cable.id,
-            "status": cable.status,
-            "error": "Cable does not have origin/destination ports configured",
-            "origin_optical": None,
-            "destination_optical": None,
-        }, status=200)
+        return JsonResponse(
+            {
+                "cable_id": cable.id,
+                "status": cable.status,
+                "error": "Cable does not have origin/destination ports configured",
+                "origin_optical": None,
+                "destination_optical": None,
+            },
+            status=200,
+        )
 
     summary = build_optical_summary(cable)
     origin_summary = summary.get("origin", {}) if isinstance(summary, dict) else {}
@@ -270,7 +265,9 @@ def api_fiber_cached_optical_status(request: HttpRequest, cable_id: int) -> Json
             "device_name": origin.device.name if origin.device else "Dispositivo não identificado",
             "rx_dbm": origin.last_rx_power,
             "tx_dbm": origin.last_tx_power,
-            "last_check": origin.last_optical_check.isoformat() if origin.last_optical_check else None,
+            "last_check": (
+                origin.last_optical_check.isoformat() if origin.last_optical_check else None
+            ),
             "status": origin_summary.get("status"),
             "warning_threshold": origin_summary.get("warning_threshold"),
             "critical_threshold": origin_summary.get("critical_threshold"),
@@ -297,9 +294,76 @@ def api_fiber_cached_optical_status(request: HttpRequest, cable_id: int) -> Json
 @require_GET
 @api_login_required
 @handle_api_errors
+def api_fiber_cached_optical_status(request: HttpRequest, cable_id: int) -> JsonResponse:
+    """Return cached optical status for a single cable without Zabbix calls.
+
+    Leitura direta dos campos persistidos (last_rx_power / last_tx_power) das
+    portas de origem e destino. Evita chamadas síncronas ao Zabbix durante a
+    requisição web.
+    """
+    return _build_cached_optical_payload(cable_id)
+
+
+@require_POST
+@api_login_required
+@handle_api_errors
+def api_fiber_refresh_optical(request: HttpRequest, cable_id: int) -> JsonResponse:
+    """Força fetch fresh dos níveis ópticos (origem + destino) deste cabo.
+
+    Usado pelo botão "Atualizar agora" no popup óptico — quando o user
+    quer ver IMEDIATAMENTE o estado atual sem esperar o próximo ciclo da
+    task `update_all_port_optical_levels` (60s).
+
+    Faz UMA chamada batch ao Zabbix (1 por device) e atualiza os campos
+    last_rx_power / last_tx_power / last_optical_check no banco. Retorna
+    o mesmo formato do GET /cached-status/.
+    """
+    from django.utils import timezone
+
+    from inventory.domain.optical import fetch_ports_optical_snapshots
+
+    try:
+        cable = FiberCable.objects.select_related(
+            "origin_port__device", "destination_port__device"
+        ).get(id=cable_id)
+    except FiberCable.DoesNotExist:
+        return JsonResponse({"error": "FiberCable not found"}, status=404)
+
+    ports = [p for p in (cable.origin_port, cable.destination_port) if p is not None]
+    if not ports:
+        return JsonResponse({"error": "Cable has no ports configured"}, status=400)
+
+    try:
+        snapshots = fetch_ports_optical_snapshots(ports, persist_keys=False)
+    except Exception as exc:
+        logger.exception("refresh-optical: fetch failed for cable %s", cable_id)
+        return JsonResponse({"error": f"Falha ao consultar Zabbix: {exc}"}, status=502)
+
+    now = timezone.now()
+    for port in ports:
+        snap = snapshots.get(port.pk) or {}
+        update_fields: list[str] = []
+        if snap.get("rx_dbm") is not None:
+            port.last_rx_power = snap["rx_dbm"]
+            update_fields.append("last_rx_power")
+        if snap.get("tx_dbm") is not None:
+            port.last_tx_power = snap["tx_dbm"]
+            update_fields.append("last_tx_power")
+        if update_fields:
+            port.last_optical_check = now
+            update_fields.append("last_optical_check")
+            port.save(update_fields=update_fields)
+
+    # Reusa o builder do payload (sem decorators que rejeitariam o POST)
+    return _build_cached_optical_payload(cable_id)
+
+
+@require_GET
+@api_login_required
+@handle_api_errors
 def api_fiber_cached_live_status(request: HttpRequest, cable_id: int) -> JsonResponse:
     """Return cached live status for a cable without Zabbix calls (Phase 9.1).
-    
+
     Leitura direta dos campos FiberCable.last_live_* persistidos pela task
     refresh_fiber_live_status. Evita cálculo síncrono de status live durante
     requisições web.
@@ -308,7 +372,7 @@ def api_fiber_cached_live_status(request: HttpRequest, cable_id: int) -> JsonRes
         cable = FiberCable.objects.get(id=cable_id)
     except FiberCable.DoesNotExist:
         return JsonResponse({"error": "FiberCable not found"}, status=404)
-    
+
     payload: dict[str, Any] = {
         "cable_id": cable.id,
         "name": cable.name,
@@ -358,9 +422,7 @@ def api_fiber_detail(
         except IntegrityError as exc:
             return JsonResponse(
                 {
-                    "error": (
-                        "Integrity error while deleting cable"
-                    ),
+                    "error": ("Integrity error while deleting cable"),
                     "detail": str(exc),
                 },
                 status=409,
@@ -437,10 +499,7 @@ def api_fiber_live_status(
 @login_required
 @handle_api_errors
 def api_fibers_live_status_all(request: HttpRequest) -> JsonResponse:
-    cables = [
-        fiber_uc.get_fiber_cable(c.pk)
-        for c in FiberCable.objects.all()
-    ]
+    cables = [fiber_uc.get_fiber_cable(c.pk) for c in FiberCable.objects.all()]
     results, _ = fiber_uc.bulk_live_status(cables, persist=False)
     return JsonResponse({"results": results})
 
@@ -547,7 +606,7 @@ def api_force_delete_fiber(
 def api_validate_port(request: HttpRequest) -> JsonResponse:
     """
     Validate if a port is already in use by another cable.
-    
+
     POST body: {"port_id": 123, "cable_id": 456 (optional)}
     Returns: {"available": true/false, "used_by": cable_id, "cable_name": "..."}
     """
@@ -555,45 +614,46 @@ def api_validate_port(request: HttpRequest) -> JsonResponse:
         body = json.loads(request.body)
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({"error": "Invalid JSON"}, status=400)
-    
+
     port_id = body.get("port_id")
     cable_id = body.get("cable_id")  # Optional - for editing existing cable
-    
+
     if not port_id:
         return JsonResponse({"error": "port_id is required"}, status=400)
-    
+
     # Check if port exists
     from inventory.models import Port
+
     try:
         port = Port.objects.get(id=port_id)
     except Port.DoesNotExist:
         return JsonResponse({"error": "Port not found"}, status=404)
-    
+
     # Find cables using this port (origin or destination)
     from django.db.models import Q
+
     cables_using_port = FiberCable.objects.filter(
         Q(origin_port_id=port_id) | Q(destination_port_id=port_id)
     )
-    
+
     # Exclude current cable if editing
     if cable_id:
         cables_using_port = cables_using_port.exclude(id=cable_id)
-    
+
     if cables_using_port.exists():
         cable = cables_using_port.first()
-        return JsonResponse({
-            "available": False,
-            "used_by": cable.id,
-            "cable_name": cable.name,
-            "port_name": port.name
-        })
-    
-    return JsonResponse({
-        "available": True,
-        "used_by": None,
-        "cable_name": None,
-        "port_name": port.name
-    })
+        return JsonResponse(
+            {
+                "available": False,
+                "used_by": cable.id,
+                "cable_name": cable.name,
+                "port_name": port.name,
+            }
+        )
+
+    return JsonResponse(
+        {"available": True, "used_by": None, "cable_name": None, "port_name": port.name}
+    )
 
 
 @require_POST
@@ -602,7 +662,7 @@ def api_validate_port(request: HttpRequest) -> JsonResponse:
 def api_validate_cable_name(request: HttpRequest) -> JsonResponse:
     """
     Validate if a cable name is already in use.
-    
+
     POST body: {"name": "CABO-123", "cable_id": 456 (optional)}
     Returns: {"available": true/false, "cable_id": 123}
     """
@@ -610,35 +670,31 @@ def api_validate_cable_name(request: HttpRequest) -> JsonResponse:
         body = json.loads(request.body)
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({"error": "Invalid JSON"}, status=400)
-    
+
     name = body.get("name", "").strip()
     cable_id = body.get("cable_id")  # Optional - for editing
-    
+
     if not name:
-        return JsonResponse({
-            "available": False,
-            "error": "Name is required"
-        }, status=400)
-    
+        return JsonResponse({"available": False, "error": "Name is required"}, status=400)
+
     # Find cables with this name (case-insensitive)
     cables_with_name = FiberCable.objects.filter(name__iexact=name)
-    
+
     # Exclude current cable if editing
     if cable_id:
         cables_with_name = cables_with_name.exclude(id=cable_id)
-    
+
     if cables_with_name.exists():
         cable = cables_with_name.first()
-        return JsonResponse({
-            "available": False,
-            "cable_id": cable.id,
-            "message": f"Cable name '{name}' is already in use"
-        })
-    
-    return JsonResponse({
-        "available": True,
-        "cable_id": None
-    })
+        return JsonResponse(
+            {
+                "available": False,
+                "cable_id": cable.id,
+                "message": f"Cable name '{name}' is already in use",
+            }
+        )
+
+    return JsonResponse({"available": True, "cable_id": None})
 
 
 @require_POST
@@ -647,7 +703,7 @@ def api_validate_cable_name(request: HttpRequest) -> JsonResponse:
 def api_validate_device_coordinates(request: HttpRequest) -> JsonResponse:
     """
     Validate if devices have coordinates (latitude/longitude).
-    
+
     POST body: {"origin_device_id": 123, "dest_device_id": 456 (optional)}
     Returns: {
         "valid": true/false,
@@ -660,26 +716,26 @@ def api_validate_device_coordinates(request: HttpRequest) -> JsonResponse:
         body = json.loads(request.body)
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({"error": "Invalid JSON"}, status=400)
-    
+
     origin_device_id = body.get("origin_device_id")
     dest_device_id = body.get("dest_device_id")
-    
+
     if not origin_device_id:
         return JsonResponse({"error": "origin_device_id is required"}, status=400)
-    
+
     missing_devices = []
     origin_has_coords = False
     dest_has_coords = False
-    
+
     def device_has_coords(device):
-        site = getattr(device, 'site', None)
+        site = getattr(device, "site", None)
         if site and site.latitude is not None and site.longitude is not None:
             return True
         return False
 
     # Check origin device
     try:
-        origin_device = Device.objects.select_related('site').get(id=origin_device_id)
+        origin_device = Device.objects.select_related("site").get(id=origin_device_id)
         if device_has_coords(origin_device):
             origin_has_coords = True
         else:
@@ -690,7 +746,7 @@ def api_validate_device_coordinates(request: HttpRequest) -> JsonResponse:
     # Check destination device (if provided and different from origin)
     if dest_device_id and str(dest_device_id) != str(origin_device_id):
         try:
-            dest_device = Device.objects.select_related('site').get(id=dest_device_id)
+            dest_device = Device.objects.select_related("site").get(id=dest_device_id)
             if device_has_coords(dest_device):
                 dest_has_coords = True
             else:
@@ -700,16 +756,22 @@ def api_validate_device_coordinates(request: HttpRequest) -> JsonResponse:
     else:
         # Single port mode or same device
         dest_has_coords = True
-    
+
     is_valid = origin_has_coords and dest_has_coords
-    
-    return JsonResponse({
-        "valid": is_valid,
-        "origin_has_coords": origin_has_coords,
-        "dest_has_coords": dest_has_coords,
-        "missing_devices": missing_devices,
-        "message": f"Devices missing coordinates: {', '.join(missing_devices)}" if missing_devices else None
-    })
+
+    return JsonResponse(
+        {
+            "valid": is_valid,
+            "origin_has_coords": origin_has_coords,
+            "dest_has_coords": dest_has_coords,
+            "missing_devices": missing_devices,
+            "message": (
+                f"Devices missing coordinates: {', '.join(missing_devices)}"
+                if missing_devices
+                else None
+            ),
+        }
+    )
 
 
 @require_POST
@@ -718,7 +780,7 @@ def api_validate_device_coordinates(request: HttpRequest) -> JsonResponse:
 def api_validate_nearby_cables(request: HttpRequest) -> JsonResponse:
     """
     Detect cables very close to the planned path (< 50m).
-    
+
     POST body: {
         "path": [{"lat": -15.123, "lng": -47.456}, ...],
         "cable_id": 123 (optional - exclude this cable)
@@ -735,83 +797,31 @@ def api_validate_nearby_cables(request: HttpRequest) -> JsonResponse:
         body = json.loads(request.body)
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({"error": "Invalid JSON"}, status=400)
-    
+
     path = body.get("path", [])
     cable_id = body.get("cable_id")
-    
+
     if not path or len(path) < 2:
-        return JsonResponse({
-            "has_nearby": False,
-            "nearby_cables": [],
-            "message": "Path too short to analyze"
-        })
-    
-    # Get all cables except current one
-    all_cables = FiberCable.objects.exclude(id=cable_id) if cable_id else FiberCable.objects.all()
-    
-    nearby_cables = []
-    PROXIMITY_THRESHOLD_METERS = 50
-    
-    # Helper function to calculate distance between two points (Haversine)
-    from math import radians, sin, cos, sqrt, atan2
-    
-    def haversine_distance(lat1, lng1, lat2, lng2):
-        R = 6371000  # Earth radius in meters
-        
-        lat1_rad = radians(lat1)
-        lat2_rad = radians(lat2)
-        delta_lat = radians(lat2 - lat1)
-        delta_lng = radians(lng2 - lng1)
-        
-        a = sin(delta_lat / 2) ** 2 + cos(lat1_rad) * cos(lat2_rad) * sin(delta_lng / 2) ** 2
-        c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        
-        return R * c
-    
-    # Check each cable against the new path
-    for cable in all_cables:
-        if not hasattr(cable, 'path_data') or not cable.path_data:
-            continue
-        
-        cable_path = cable.path_data if isinstance(cable.path_data, list) else []
-        if len(cable_path) < 2:
-            continue
-        
-        # Find minimum distance between any two points
-        min_distance = float('inf')
-        
-        for new_point in path:
-            if 'lat' not in new_point or 'lng' not in new_point:
-                continue
-            
-            for cable_point in cable_path:
-                if 'lat' not in cable_point or 'lng' not in cable_point:
-                    continue
-                
-                distance = haversine_distance(
-                    new_point['lat'], new_point['lng'],
-                    cable_point['lat'], cable_point['lng']
-                )
-                
-                if distance < min_distance:
-                    min_distance = distance
-        
-        # If minimum distance is below threshold, consider it nearby
-        if min_distance < PROXIMITY_THRESHOLD_METERS:
-            nearby_cables.append({
-                "id": cable.id,
-                "name": cable.name,
-                "distance_meters": round(min_distance, 1)
-            })
-    
-    # Sort by distance (closest first)
-    nearby_cables.sort(key=lambda x: x['distance_meters'])
-    
-    return JsonResponse({
-        "has_nearby": len(nearby_cables) > 0,
-        "nearby_cables": nearby_cables[:5],  # Return top 5 closest
-        "threshold_meters": PROXIMITY_THRESHOLD_METERS
-    })
+        return JsonResponse(
+            {"has_nearby": False, "nearby_cables": [], "message": "Path too short to analyze"}
+        )
+
+    # EV-0024: ST_DWithin + distância geodésica no PostGIS, em vez do produto
+    # cartesiano ponto-a-ponto em Python sobre todos os cabos.
+    from inventory.usecases.spatial import CABLE_PROXIMITY_THRESHOLD_M, find_cables_near_path
+
+    PROXIMITY_THRESHOLD_METERS = CABLE_PROXIMITY_THRESHOLD_M
+    nearby_cables = find_cables_near_path(
+        path, threshold_m=PROXIMITY_THRESHOLD_METERS, exclude_id=cable_id, limit=5
+    )
+
+    return JsonResponse(
+        {
+            "has_nearby": len(nearby_cables) > 0,
+            "nearby_cables": nearby_cables,  # já ordenados, no máximo 5
+            "threshold_meters": PROXIMITY_THRESHOLD_METERS,
+        }
+    )
 
 
 @require_GET
@@ -820,23 +830,22 @@ def api_validate_nearby_cables(request: HttpRequest) -> JsonResponse:
 def api_fiber_audit_log(request: HttpRequest, cable_id: int) -> JsonResponse:
     """Return audit log entries for a specific cable (most recent first)."""
     limit = min(int(request.GET.get("limit", 50)), 200)
-    entries = (
-        FiberCableAuditLog.objects.filter(cable_id=cable_id)
-        .order_by("-timestamp")[:limit]
+    entries = FiberCableAuditLog.objects.filter(cable_id=cable_id).order_by("-timestamp")[:limit]
+    return JsonResponse(
+        {
+            "results": [
+                {
+                    "id": e.id,
+                    "action": e.action,
+                    "action_display": e.get_action_display(),
+                    "username": e.username or "—",
+                    "timestamp": e.timestamp.isoformat(),
+                    "changes": e.changes,
+                }
+                for e in entries
+            ]
+        }
     )
-    return JsonResponse({
-        "results": [
-            {
-                "id": e.id,
-                "action": e.action,
-                "action_display": e.get_action_display(),
-                "username": e.username or "—",
-                "timestamp": e.timestamp.isoformat(),
-                "changes": e.changes,
-            }
-            for e in entries
-        ]
-    })
 
 
 __all__ = [

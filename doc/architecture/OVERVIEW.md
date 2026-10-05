@@ -1,15 +1,15 @@
-# Architecture Documentation - v2.0.0 Modular Design
+# Architecture Documentation - Modular Design
 
 **Project**: MapsProveFiber  
-**Version**: v2.0.0  
+**Versão do produto**: ver [VERSION](../../VERSION)  
 **Architecture**: Modular Django Multi-App  
-**Last Updated**: 2025-01-07
+**Last Updated**: 2026-10-04
 
 ---
 
 ## 🎯 Overview
 
-MapsProveFiber v2.0.0 introduces a **modular architecture** that separates concerns into distinct Django apps, each with a well-defined responsibility. This design improves maintainability, testability, and scalability while enabling independent evolution of each module.
+The modular refactoring of 2025-01 introduced a **modular architecture** that separates concerns into distinct Django apps, each with a well-defined responsibility. This design improves maintainability, testability, and scalability while enabling independent evolution of each module.
 
 ### Design Principles
 
@@ -31,10 +31,10 @@ graph TD
     subgraph "External Systems"
         Z[Zabbix API]
         R[Redis Cache]
-        DB[(MySQL/MariaDB)]
+        DB[(PostgreSQL 16 + PostGIS)]
     end
     
-    subgraph "MapsProveFiber v2.0.0"
+    subgraph "MapsProveFiber"
         subgraph "Core Layer"
             C[core/]
             C --> S[settings]
@@ -91,9 +91,9 @@ graph TD
 | Module | Responsibility | Key Components | Status |
 |--------|---------------|----------------|--------|
 | **`core/`** | Django configuration, URL routing, metrics, health checks | settings, urls, ASGI, WSGI, Celery, middleware | ✅ Stable |
-| **`inventory/`** | Authoritative data for Sites, Devices, Ports, Routes | models, API, services, usecases, cache | ✅ v2.0.0 |
-| **`monitoring/`** | Health checks, combined Zabbix + inventory status | usecases, tasks, views | ✅ v2.0.0 |
-| **`integrations/zabbix/`** | Resilient Zabbix API client | client, zabbix_service, circuit breaker | ✅ v2.0.0 |
+| **`inventory/`** | Authoritative data for Sites, Devices, Ports, Routes | models, API, services, usecases, cache | ✅ Active |
+| **`monitoring/`** | Health checks, combined Zabbix + inventory status | usecases, tasks, views | ✅ Active |
+| **`integrations/zabbix/`** | Resilient Zabbix API client | client, zabbix_service, circuit breaker | ✅ Active |
 | **`maps_view/`** | Real-time dashboard, WebSocket publisher | views, realtime, cache_swr, tasks | ✅ Stable |
 | **~~`routes_builder/`~~** | ~~Fiber route calculation~~ (moved to `inventory`) | N/A | ❌ Archived (Nov 2025) |
 | **`setup_app/`** | Runtime settings, credential management | FirstTimeSetup, encryption | ✅ Stable |
@@ -110,33 +110,39 @@ graph TD
 
 ```
 inventory/
-├── models.py                    # Site, Device, Port, Route (Django ORM)
+├── models.py                    # Site, Device, Port, FiberCable, ... (Django ORM)
+├── models_routes.py             # Route, RouteSegment, RouteEvent
 ├── urls_api.py                  # URL routing for /api/v1/inventory/*
-├── api/
-│   ├── devices.py              # GET /api/v1/inventory/devices/
-│   ├── fibers.py               # GET /api/v1/inventory/fibers/
-│   └── routes.py               # Route CRUD endpoints
+├── urls_rest.py                 # DRF router (sites, devices, ports, fiber-cables, ...)
+├── viewsets.py                  # DRF viewsets
+├── serializers.py               # DRF serializers
+├── api/                         # Thin function views (devices.py, fibers.py, routes.py, ...)
 ├── cache/
-│   ├── fibers.py               # invalidate_fiber_cache, helpers
-│   └── device_status.py        # Status caching logic
+│   ├── fibers.py                # invalidate_fiber_cache, helpers
+│   └── radius_search.py         # Spatial search cache
 ├── domain/
-│   ├── geometry.py             # sanitize_path_points, calculate_length
-│   └── optical.py              # fetch_port_optical_snapshot
+│   ├── geometry.py              # sanitize_path_points, calculate_length
+│   ├── kml.py                   # KML/KMZ parsing
+│   ├── optical.py               # fetch_port_optical_snapshot
+│   └── zabbix_history.py        # history.get value_type/units resolution
 ├── services/
-│   ├── fiber_status.py         # get_oper_status_from_zabbix
-│   ├── site_service.py         # SiteService (future)
-│   └── device_service.py       # DeviceService (future)
+│   ├── fiber_status.py          # get_oper_status_from_zabbix
+│   ├── cable_segments.py        # Cable segment helpers
+│   ├── device_groups.py         # Device group helpers
+│   └── import_rules.py          # Import rules
 ├── usecases/
-│   ├── devices.py              # bulk_create_inventory, add_device_from_zabbix
-│   ├── fibers.py               # create_fiber_from_kml, live_status
-│   └── ports.py                # device_ports, optical_snapshots
+│   ├── devices.py               # bulk_create_inventory, add_device_from_zabbix
+│   ├── fibers.py                # create_fiber_from_kml, live_status
+│   ├── fiber_alarm_configs.py   # Alarm configuration use cases
+│   └── spatial.py               # Spatial queries
+├── routes/                      # Route build orchestration (services.py, tasks.py)
 └── tests/
-    ├── conftest.py             # Fixtures (create_test_site, etc.)
-    └── test_*.py               # Unit & integration tests
+    ├── conftest.py              # Fixtures (create_test_site, etc.)
+    └── test_*.py                # Unit & integration tests
 ```
 
 **Key Patterns**:
-- **Models**: Django ORM models (`Site`, `Device`, `Port`, `Route`)
+- **Models**: Django ORM models (`Site`, `Device`, `Port`, `FiberCable`, `Route`); some tables keep the legacy `zabbix_api_*` names (inherited table names; the models live in `inventory`)
 - **API**: Thin controllers → delegate to usecases
 - **Services**: Reusable helpers (fetch Zabbix data, compute status)
 - **Usecases**: Complex workflows (bulk import, KML parsing)
@@ -154,7 +160,7 @@ sequenceDiagram
     
     FE->>API: GET /api/v1/inventory/fibers/oper-status/
     API->>UC: get_fibers_operational_status()
-    UC->>DB: SELECT * FROM inventory_port
+    UC->>DB: SELECT * FROM zabbix_api_port
     DB-->>UC: ports data
     UC->>SRV: get_oper_status_from_zabbix(port)
     SRV->>ZAB: zabbix_request("item.get", {...})
@@ -174,7 +180,8 @@ sequenceDiagram
 monitoring/
 ├── usecases.py          # HostStatusProcessor (combine Zabbix + inventory)
 ├── tasks.py             # Celery tasks for periodic checks
-├── views.py             # Health endpoint views
+├── views.py             # Monitoring API views (hosts status, dashboard snapshot)
+├── urls.py / urls_api.py
 └── tests/
     └── test_*.py
 ```
@@ -182,7 +189,7 @@ monitoring/
 **Key Components**:
 - **`HostStatusProcessor`**: Combines Zabbix availability with inventory device data
 - **Tasks**: Periodic health checks, status aggregation (Celery beat)
-- **Views**: `/healthz/`, `/ready/`, `/live/` endpoints
+- **Views**: `/api/v1/monitoring/hosts/status/` and `/api/v1/monitoring/dashboard/snapshot/` (health probes live in `core/views_health.py`)
 
 **Integration Pattern**:
 ```python
@@ -217,8 +224,10 @@ class HostStatusProcessor:
 integrations/
 └── zabbix/
     ├── client.py              # ResilientZabbixClient (circuit breaker, retry)
-    ├── zabbix_service.py      # zabbix_request, safe_cache_* helpers
-    └── README.md              # Client usage documentation
+    ├── zabbix_client.py       # zabbix_request (low-level request helper)
+    ├── zabbix_service.py      # Gateway: re-exports zabbix_request, safe_cache_* helpers
+    ├── guards.py              # Guard helpers
+    └── decorators.py          # Decorators
 ```
 
 **Features**:
@@ -274,20 +283,21 @@ stateDiagram-v2
 
 ```
 core/
-├── settings/
-│   ├── base.py              # Common settings
-│   ├── development.py       # Dev overrides
-│   ├── production.py        # Prod overrides
-│   └── test.py              # Test settings
 ├── urls.py                  # Root URLConf
 ├── asgi.py                  # ASGI entry point
 ├── wsgi.py                  # WSGI entry point
-├── celery_app.py            # Celery configuration
+├── celery.py / celery_app.py  # Celery configuration and beat schedule
 ├── routing.py               # Channels WebSocket routing
 ├── metrics_*.py             # Prometheus metrics
-├── views_health.py          # /healthz/, /ready/, /live/
+├── views_health.py          # /healthz, /ready, /live
 └── middleware/
     └── request_id.py        # Request ID tracking
+
+settings/                    # backend/settings/ (top level, not inside core/)
+├── base.py                  # Common settings
+├── dev.py                   # Dev overrides
+├── prod.py                  # Prod overrides
+└── test.py                  # Test settings
 ```
 
 **URL Structure**:
@@ -295,11 +305,11 @@ core/
 # core/urls.py
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/v1/inventory/', include('inventory.urls_api')),  # ✅ v2.0.0
+    path('api/v1/inventory/', include('inventory.urls_api')),
     path('monitoring/', include('monitoring.urls')),
-    path('healthz/', health_check),
-    path('ready/', readiness_check),
-    path('live/', liveness_check),
+    path('healthz', health_views.healthz),
+    path('ready', health_views.healthz_ready),
+    path('live', health_views.healthz_live),
     path('metrics/', include('django_prometheus.urls')),
 ]
 ```
@@ -355,7 +365,7 @@ sequenceDiagram
 graph LR
     A[GET /api/v1/inventory/devices/] --> B[inventory/api/devices.py]
     B --> C[Django ORM Query]
-    C --> D[(MySQL)]
+    C --> D[(PostgreSQL)]
     D --> E[Serialize to JSON]
     E --> F[HTTP 200 Response]
 ```
@@ -384,7 +394,7 @@ graph LR
 graph TD
     A[POST /api/v1/inventory/routes/tasks/build/] --> B[Enqueue Celery Task]
     B --> C{Celery Worker}
-    C --> D[routes_builder/tasks.py]
+    C --> D[inventory/routes/tasks.py]
     D --> E[Parse KML geometry]
     E --> F[Calculate path length]
     F --> G[Compute optical power]
@@ -431,22 +441,22 @@ graph TD
 **Custom Metrics**:
 ```python
 # Zabbix Client
-zabbix_api_requests_total          # Counter: total requests
-zabbix_api_request_duration_seconds  # Histogram: latency
-zabbix_api_errors_total            # Counter: failures
+zabbix_requests_total              # Counter: total requests (labels: method, status)
+zabbix_request_duration_seconds    # Histogram: latency
+zabbix_retry_attempts_total        # Counter: retry attempts
 zabbix_circuit_breaker_state       # Gauge: 0=closed, 1=open, 2=half-open
 
 # Static Version
-mapsprovefib_static_version_info   # Info: git commit, build date
+static_asset_version_info          # Info: static asset version (cache busting)
 ```
 
 ### Health Checks
 
 | Endpoint | Purpose | Success Criteria |
 |----------|---------|------------------|
-| `/healthz/` | Full health check | DB + cache + storage all OK |
-| `/ready/` | Readiness probe | App can serve traffic |
-| `/live/` | Liveness probe | Process is alive |
+| `/healthz` | Full health check | DB + cache + storage all OK |
+| `/ready` | Readiness probe | App can serve traffic |
+| `/live` | Liveness probe | Process is alive |
 
 **Health Check Response**:
 ```json
@@ -454,7 +464,7 @@ mapsprovefib_static_version_info   # Info: git commit, build date
   "status": "ok",
   "timestamp": 1731109200.123,
   "checks": {
-    "db": {"ok": true, "type": "mysql", "latency_ms": 5.2},
+    "db": {"ok": true, "type": "postgresql", "latency_ms": 5.2},
     "cache": {"ok": true, "backend": "RedisCache", "latency_ms": 1.3},
     "storage": {"ok": true, "free_gb": 42.3}
   },
@@ -502,8 +512,8 @@ graph TD
     end
     
     subgraph "Data Tier"
-        DB[(MySQL/MariaDB<br/>Primary)]
-        DBS[(MySQL<br/>Replica)]
+        DB[(PostgreSQL + PostGIS<br/>Primary)]
+        DBS[(PostgreSQL<br/>Replica)]
         REDIS[(Redis)]
     end
     
@@ -547,12 +557,12 @@ graph TD
 |-----------|-------------------|------------------|-------|
 | **Django** | ✅ Yes | ✅ Yes | Stateless, add more Gunicorn workers |
 | **Celery Workers** | ✅ Yes | ✅ Yes | Task-specific queues (high/low priority) |
-| **MySQL** | ⚠️ Read replicas | ✅ Yes | Write bottleneck, consider sharding |
+| **PostgreSQL** | ⚠️ Read replicas | ✅ Yes | Write bottleneck, consider sharding |
 | **Redis** | ✅ Cluster mode | ✅ Yes | Optional for cache, mandatory for Channels |
 
 ---
 
-## 🔄 Migration Path (v1.x → v2.0.0)
+## 🔄 Migration Path (v1.x → modular architecture, 2025-01)
 
 ### Phase-by-Phase Evolution
 
@@ -567,7 +577,7 @@ graph TD
     P4[Phase 4: Legacy Removal<br/>Delete zabbix_api/]
     P5[Phase 5: Production Readiness<br/>Documentation + validation]
     
-    V2[v2.0.0 - Modular<br/>inventory + monitoring + integrations]
+    V2[Modular architecture (2025-01)<br/>inventory + monitoring + integrations]
     
     V1 --> P0
     P0 --> P1
@@ -598,15 +608,14 @@ graph TD
 
 ## 📚 Related Documentation
 
-- [BREAKING_CHANGES_v2.0.0.md](../releases/BREAKING_CHANGES_v2.0.0.md) — Migration guide
-- [DEPLOYMENT.md](../operations/DEPLOYMENT.md) — **Production deployment** (unificado: setup, checklist, rollback)
-- [MIGRATION_PRODUCTION_GUIDE.md](../operations/MIGRATION_PRODUCTION_GUIDE.md) — Database migration
-- [API_DOCUMENTATION.md](../reference-root/API_DOCUMENTATION.md) — REST API reference
-- [REFATORAR.md](../developer/REFATORAR.md) — Refactoring plan
+- [BREAKING_CHANGES.md](../releases/v2.0.0/BREAKING_CHANGES.md) — Migration guide for the 2025-01 refactoring
+- [DEPLOY.md](../../DEPLOY.md) and [docker-compose.prod.yml](../../docker/docker-compose.prod.yml) — **Production deployment** and database migration
+- [ENDPOINTS.md](../api/ENDPOINTS.md) — REST API reference
+- [REFATORAR.md](../archive/2025-historico/REFATORAR.md) — Refactoring plan (histórico)
 
 ---
 
-**Last Updated**: 2025-01-07  
-**Architecture Version**: v2.0.0  
+**Last Updated**: 2026-10-04  
+**Versão do produto**: ver [VERSION](../../VERSION)  
 **Author**: Don Jonhn  
 **Review Status**: ✅ Approved for Production

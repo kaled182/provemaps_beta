@@ -11,9 +11,9 @@
 - Custom metrics: asset versioning, worker status
 
 ## Logs
-- Structured logs at `logs/application.log`
+- Structured logs on the console (`docker compose logs -f web`); optional rotating file via `ENABLE_FILE_LOGGING=true` (non-debug only, path in `LOG_FILE`, default `/var/log/django/app.log`)
 - Slow query tracing
 
 ## Tips
-- Use Prometheus and Grafana for dashboards (see `doc/reference/grafana/README.md`)
-- Review [`../reference/prometheus_static_version.md`](../reference/prometheus_static_version.md) for the custom metrics exported by the app
+- Use Prometheus and Grafana for dashboards (see [`../operations/dashboards/README.md`](../operations/dashboards/README.md))
+- Review [`../operations/MONITORING.md`](../operations/MONITORING.md) for the custom metrics exported by the app (the older `prometheus_static_version.md` note is archived: [`../archive/2025-historico/prometheus_static_version.md`](../archive/2025-historico/prometheus_static_version.md), histórico)

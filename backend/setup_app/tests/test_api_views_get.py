@@ -1,8 +1,9 @@
-"""Integration tests for GET-style views in setup_app.api_views.
+"""Integration tests for GET-style views of setup_app (ex-api_views, now setup_app/api/*).
 
 Covers: get_configuration, get_company_profile, get_audit_history,
         monitoring_servers GET, messaging_gateways GET.
 """
+
 from __future__ import annotations
 
 import json
@@ -15,13 +16,16 @@ from django.test import TestCase
 class GetConfigurationViewTests(TestCase):
     def setUp(self):
         self.staff = User.objects.create_user(
-            username="cfg_staff", password="pass", email="cfg@test.com",
-            is_staff=True, is_active=True,
+            username="cfg_staff",
+            password="pass",
+            email="cfg@test.com",
+            is_staff=True,
+            is_active=True,
         )
         self.client.force_login(self.staff)
 
     def test_returns_200_with_configuration_dict(self):
-        with patch("setup_app.api_views.env_manager") as mock_em:
+        with patch("setup_app.usecases.config.env_manager") as mock_em:
             mock_em.read_values.return_value = {}
             resp = self.client.get("/setup_app/api/config/")
         self.assertEqual(resp.status_code, 200)
@@ -31,7 +35,7 @@ class GetConfigurationViewTests(TestCase):
         self.assertIsInstance(data["configuration"], dict)
 
     def test_returns_all_expected_keys(self):
-        with patch("setup_app.api_views.env_manager") as mock_em:
+        with patch("setup_app.usecases.config.env_manager") as mock_em:
             mock_em.read_values.return_value = {
                 "ZABBIX_API_URL": "http://zabbix.test",
                 "GOOGLE_MAPS_API_KEY": "AIza123",
@@ -57,7 +61,7 @@ class GetConfigurationViewTests(TestCase):
         self.assertIn(resp.status_code, (302, 403))
 
     def test_gdrive_oauth_connected_field_present(self):
-        with patch("setup_app.api_views.env_manager") as mock_em:
+        with patch("setup_app.usecases.config.env_manager") as mock_em:
             mock_em.read_values.return_value = {}
             resp = self.client.get("/setup_app/api/config/")
         data = json.loads(resp.content)
@@ -67,8 +71,11 @@ class GetConfigurationViewTests(TestCase):
 class GetCompanyProfileViewTests(TestCase):
     def setUp(self):
         self.staff = User.objects.create_user(
-            username="cp_staff", password="pass", email="cp@test.com",
-            is_staff=True, is_active=True,
+            username="cp_staff",
+            password="pass",
+            email="cp@test.com",
+            is_staff=True,
+            is_active=True,
         )
         self.client.force_login(self.staff)
 
@@ -91,8 +98,11 @@ class GetCompanyProfileViewTests(TestCase):
 class GetAuditHistoryViewTests(TestCase):
     def setUp(self):
         self.staff = User.objects.create_user(
-            username="ah_staff", password="pass", email="ah@test.com",
-            is_staff=True, is_active=True,
+            username="ah_staff",
+            password="pass",
+            email="ah@test.com",
+            is_staff=True,
+            is_active=True,
         )
         self.client.force_login(self.staff)
 
@@ -118,8 +128,11 @@ class GetAuditHistoryViewTests(TestCase):
 class MonitoringServersGetTests(TestCase):
     def setUp(self):
         self.staff = User.objects.create_user(
-            username="ms_staff", password="pass", email="ms@test.com",
-            is_staff=True, is_active=True,
+            username="ms_staff",
+            password="pass",
+            email="ms@test.com",
+            is_staff=True,
+            is_active=True,
         )
         self.client.force_login(self.staff)
 
@@ -160,7 +173,9 @@ class MonitoringServersGetTests(TestCase):
 class MessagingGatewaysGetTests(TestCase):
     def setUp(self):
         self.superuser = User.objects.create_superuser(
-            username="gw_super", password="pass", email="gw@test.com",
+            username="gw_super",
+            password="pass",
+            email="gw@test.com",
         )
         self.client.force_login(self.superuser)
 
@@ -178,7 +193,7 @@ class MessagingGatewaysGetTests(TestCase):
         return rt
 
     def test_superuser_get_returns_all_gateways(self):
-        with patch("setup_app.api_views.runtime_settings") as mock_rs:
+        with patch("setup_app.usecases.gateways.runtime_settings") as mock_rs:
             mock_rs.get_runtime_config.return_value = self._mock_runtime()
             resp = self.client.get("/setup_app/api/gateways/")
         self.assertEqual(resp.status_code, 200)
@@ -202,7 +217,7 @@ class MessagingGatewaysGetTests(TestCase):
         self.assertEqual(resp.status_code, 400)
 
     def test_post_creates_sms_gateway(self):
-        with patch("setup_app.api_views._sync_gateway_env"):
+        with patch("setup_app.usecases.gateways.sync_gateway_env"):
             resp = self.client.post(
                 "/setup_app/api/gateways/",
                 json.dumps({"gateway_type": "sms", "name": "SMS Test"}),

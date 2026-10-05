@@ -5,15 +5,20 @@ import shutil
 import threading
 import time
 from contextlib import contextmanager
-from typing import Any, Dict
+from typing import Any
 
 import django
+from django.conf import settings
 from django.core.cache import caches
 from django.db import connection
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.cache import cache_page
 
 logger = logging.getLogger(__name__)
+
+# EV-0027b: quando ESTE processo arrancou. Com o `git_sha`, diz à Central de Evolução o que
+# está no ar e desde quando (`scripts/evolucao_fechados.sh`).
+INICIADO_EM = time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
 
 
 class TimeoutException(Exception):
@@ -49,7 +54,7 @@ def timeout(seconds: int):
         signal.signal(signal.SIGALRM, previous_handler)
 
 
-def _storage_check(checks: Dict[str, Any]) -> None:
+def _storage_check(checks: dict[str, Any]) -> None:
     """Add disk usage information to the health payload."""
 
     try:
@@ -65,7 +70,7 @@ def _storage_check(checks: Dict[str, Any]) -> None:
         checks["storage"] = {"ok": False, "error": str(exc)[:200]}
 
 
-def _add_system_metrics(checks: Dict[str, Any]) -> None:
+def _add_system_metrics(checks: dict[str, Any]) -> None:
     """Collect lightweight system metrics without affecting the result."""
 
     try:
@@ -74,9 +79,7 @@ def _add_system_metrics(checks: Dict[str, Any]) -> None:
         checks["system"] = {
             "cpu_percent": psutil.cpu_percent(interval=0.1),
             "memory_percent": psutil.virtual_memory().percent,
-            "process_memory_mb": round(
-                psutil.Process().memory_info().rss / 1024 / 1024, 2
-            ),
+            "process_memory_mb": round(psutil.Process().memory_info().rss / 1024 / 1024, 2),
         }
     except ImportError:
         checks["system"] = {"error": "psutil not available"}
@@ -94,20 +97,16 @@ def healthz(request: HttpRequest):
     """
 
     started = time.time()
-    checks: Dict[str, Any] = {}
+    checks: dict[str, Any] = {}
     debug_mode = os.getenv("HEALTHCHECK_DEBUG", "false").lower() == "true"
     strict_mode = os.getenv("HEALTHCHECK_STRICT", "true").lower() == "true"
-    ignore_cache = os.getenv(
-        "HEALTHCHECK_IGNORE_CACHE", "false"
-    ).lower() == "true"
+    ignore_cache = os.getenv("HEALTHCHECK_IGNORE_CACHE", "false").lower() == "true"
 
     # Database connectivity check with optional timeout
     try:
         db_timeout = int(os.getenv("HEALTHCHECK_DB_TIMEOUT", "5"))
         is_main_thread = threading.current_thread() is threading.main_thread()
-        use_timeout = (
-            db_timeout > 0 and platform.system() != "Windows" and is_main_thread
-        )
+        use_timeout = db_timeout > 0 and platform.system() != "Windows" and is_main_thread
 
         with connection.cursor() as cursor:
             if use_timeout:
@@ -119,9 +118,7 @@ def healthz(request: HttpRequest):
                 row = cursor.fetchone()
 
             if not is_main_thread and db_timeout > 0:
-                logger.debug(
-                    "Health DB check running outside main thread; timeout skipped"
-                )
+                logger.debug("Health DB check running outside main thread; timeout skipped")
 
         checks["db"] = {
             "ok": bool(row and (row[0] == 1)),
@@ -176,18 +173,16 @@ def healthz(request: HttpRequest):
     latency_ms = round((time.time() - started) * 1000, 2)
 
     if not overall_ok or debug_mode:
-        message = (
-            "Health check degraded" if not overall_ok else "Health check debug"
-        )
-        logger.warning(
-            message, extra={"checks": checks, "latency_ms": latency_ms}
-        )
+        message = "Health check degraded" if not overall_ok else "Health check debug"
+        logger.warning(message, extra={"checks": checks, "latency_ms": latency_ms})
 
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "status": "ok" if overall_ok else "degraded",
         "timestamp": time.time(),
         "settings": os.getenv("DJANGO_SETTINGS_MODULE", ""),
         "version": os.getenv("APP_VERSION", "dev"),
+        "git_sha": getattr(settings, "GIT_SHA", "") or os.getenv("GIT_SHA", ""),
+        "iniciado_em": INICIADO_EM,
         "django": django.get_version(),
         "python": platform.python_version(),
         "checks": checks,
@@ -236,14 +231,10 @@ def healthz_ready(request: HttpRequest):
                 cursor.fetchone()
 
             if not is_main_thread and db_timeout > 0 and not force_no_timeout:
-                logger.debug(
-                    "Readiness DB check outside main thread; timeout skipped"
-                )
+                logger.debug("Readiness DB check outside main thread; timeout skipped")
     except TimeoutException:
         db_ok = False
-        logger.warning(
-            "Readiness DB check timeout", extra={"timeout_seconds": db_timeout}
-        )
+        logger.warning("Readiness DB check timeout", extra={"timeout_seconds": db_timeout})
     except Exception:  # pragma: no cover - defensive
         db_ok = False
         logger.exception("Readiness DB check failed")
@@ -283,7 +274,7 @@ def celery_status(request: HttpRequest):
     started = time.time()
     timeout_seconds = float(os.getenv("CELERY_STATUS_TIMEOUT", "3"))
     ping_timeout = float(os.getenv("CELERY_PING_TIMEOUT", "2"))
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "timestamp": time.time(),
         "latency_ms": None,
         "status": "degraded",  # assume degraded until proven otherwise

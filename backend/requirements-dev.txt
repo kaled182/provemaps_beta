@@ -1,0 +1,28 @@
+# Dependências de DESENVOLVIMENTO: runtime + testes, cobertura, lint, tipos.
+# É isto que o CI e quem desenvolve instalam (`make requirements-dev`).
+# A imagem de produção NÃO lê este ficheiro. EV-0018 (2026-10-04).
+-r requirements.txt
+
+# testes e cobertura (o CI mede todas as apps — EV-0006)
+pytest==8.3.3
+pytest-django==4.9.0
+pytest-cov==6.0.0
+coverage==7.6.1
+iniconfig==2.3.0
+pluggy==1.6.0
+
+# lint e formatação — versões iguais às do .pre-commit-config.yaml (`make precommit` instala os hooks)
+pre-commit==4.6.2
+black==24.8.0
+ruff==0.6.9
+isort==5.13.2
+
+# tipos (pyright/mypy) — stubs alinhados com Django 5.2 e DRF 3.15/3.16
+django-stubs==5.2.9
+django-stubs-ext==5.2.9
+djangorestframework-stubs==3.16.9
+types-PyYAML==6.0.12.20240917
+types-requests==2.32.0.20241016
+
+# só em settings.dev, carregado com guarda (import_module em try/except)
+django-debug-toolbar==6.1.0

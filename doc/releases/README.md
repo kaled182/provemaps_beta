@@ -8,6 +8,7 @@ Version history, changelogs, and migration guides.
 
 | Document | Description |
 |----------|-------------|
+| **[v2.1.0/CHANGELOG.md](v2.1.0/CHANGELOG.md)** | 2.1.0 changelog (2026-02, historical label) |
 | **[v2.0.1/CHANGELOG.md](v2.0.1/CHANGELOG.md)** | Version 2.0.1 changelog |
 | **[v2.0.0/CHANGELOG.md](v2.0.0/CHANGELOG.md)** | Version 2.0.0 changelog |
 | **[v2.0.0/BREAKING_CHANGES.md](v2.0.0/BREAKING_CHANGES.md)** | Breaking changes and migration guide |
@@ -17,9 +18,12 @@ Version history, changelogs, and migration guides.
 
 ## 🎯 Current Version
 
-**Version**: 2.0.1 (Fiber Route Builder stabilization)  
-**Release Date**: 2025-11-11  
-**Status**: Stable
+**Version**: see [`VERSION`](../../VERSION) (1.4.1 on 2026-10-04) and [`CHANGELOG.md`](../../CHANGELOG.md).
+
+> The "2.0.x" labels below belong to the 2025 modular refactor (`zabbix_api` →
+> `inventory` + `integrations/zabbix`). Versioning restarted at 1.2.0 in 2026-03
+> (see `CHANGELOG.md`), so 2.0.1 is **older** than 1.4.1. These pages are kept as
+> release history, not as the current version.
 
 ### What's New in v2.0.1
 
@@ -222,16 +226,16 @@ We follow [Semantic Versioning](https://semver.org/):
 ### By Version
 
 - **v2.0.0**: [v2.0.0/](v2.0.0/)
-- **v1.x**: [CHANGELOG.md](CHANGELOG.md#v1x) (legacy)
+- **v1.x**: [CHANGELOG.md](../../CHANGELOG.md#v1x) (legacy)
 
 ### By Topic
 
 | Topic | Document |
 |-------|----------|
-| **All changes** | [CHANGELOG.md](CHANGELOG.md) |
-| **Breaking changes** | [BREAKING_CHANGES.md](BREAKING_CHANGES.md) |
+| **All changes** | [CHANGELOG.md](../../CHANGELOG.md) |
+| **Breaking changes** | [BREAKING_CHANGES.md](v2.0.0/BREAKING_CHANGES.md) |
 | **Migration from v1.x** | [v2.0.0/BREAKING_CHANGES.md](v2.0.0/BREAKING_CHANGES.md) |
-| **Deployment** | [../operations/DEPLOYMENT.md](../operations/DEPLOYMENT.md) |
+| **Deployment** | [../operations/DEPLOYMENT.md](../../DEPLOY.md) |
 
 ---
 
@@ -264,7 +268,7 @@ git checkout v2.0.0
 
 ## 📖 Related Documentation
 
-- **[Deployment Guide](../operations/DEPLOYMENT.md)** — Production deployment
+- **[Deployment Guide](../../DEPLOY.md)** — Production deployment
 - **[Architecture](../architecture/)** — System design
 - **[API Reference](../api/)** — API documentation
 - **[Contributing](../contributing/)** — Development guidelines

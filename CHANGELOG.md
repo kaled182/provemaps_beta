@@ -77,6 +77,8 @@ Formato: **Funcionalidades** | **Melhorias** | **Correções**
 
 ## [2.0.0] — 2025-01-07  *(refatoração interna — sem impacto no usuário final)*
 
+> **Nota (2026-10-04, EV-0021):** o «2.0.0» foi o rótulo da refatoração modular de 2025; a numeração recomeçou em 1.2.0 (2026-03) e a versão corrente é a de [`VERSION`](VERSION). As notas das versões 2.0.x/2.1.0 estão em `doc/releases/`.
+
 ### Mudanças internas
 - Aplicação `zabbix_api/` completamente removida; funcionalidades migradas para `inventory/` e `integrations/zabbix/`
 - Endpoints legados `/zabbix/api/*` descontinuados

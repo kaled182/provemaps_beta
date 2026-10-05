@@ -11,7 +11,7 @@ This guide walks through the official Docker environment for MapsProveFiber, fro
 - Internet access to download base images
 
 Confirm the versions:
-```powershell
+```bash
 docker --version
 docker compose version
 ```
@@ -19,35 +19,34 @@ docker compose version
 ---
 
 ## 2. Clone the repository
-```powershell
+```bash
 git clone https://github.com/kaled182/provemaps_beta.git
 cd provemaps_beta
 ```
 
-Key services defined in `docker-compose.yml`:
-- **web** - Django with Gunicorn/Uvicorn (port 8000)
+Key services defined in `docker/docker-compose.yml` (all `docker compose` commands below use `-f docker/docker-compose.yml`, or the `make` shortcuts):
+- **web** - Django with Gunicorn/Uvicorn (container port 8000, published on host port **8100**)
 - **celery** - Asynchronous task worker
 - **beat** - Celery scheduler (periodic tasks)
 - **redis** - Broker and cache
-- **db** - MariaDB with a persistent volume
+- **postgres** - PostgreSQL 16 + PostGIS (`postgis/postgis:16-3.4`) with a persistent volume (host port 5433)
+- Observability and video extras: `prometheus`, `grafana`, `video-hls`, `video-transmuxer`, `mediamtx`, `whatsapp-qr`
 
 ---
 
 ## 3. Configure environment variables
 Create the `.env` file from the template and adjust the minimum values:
-```powershell
-Copy-Item .env.example .env
+```bash
+cp .env.example .env
 
 # Edit with your preferred editor
-notepad .env
+${EDITOR:-nano} .env
 ```
 
 Recommended values for the default Docker stack:
 ```env
 DJANGO_SETTINGS_MODULE=settings.dev
-DB_HOST=db
-DB_USER=app
-DB_PASSWORD=app
+# The compose file already sets DB_ENGINE=postgis, DB_HOST=postgres, DB_NAME/DB_USER/DB_PASSWORD=app
 REDIS_URL=redis://redis:6379/1
 # Dashboard refresh interval (seconds, default=60)
 DASHBOARD_CACHE_REFRESH_INTERVAL=60
@@ -69,29 +68,31 @@ service accounts. Adjust the timeout values to match the destination endpoint SL
 ---
 
 ## 4. First run
-```powershell
-docker compose up --build
+```bash
+make up                # docker compose -f docker/docker-compose.yml up -d
+# or, building images first:
+docker compose -f docker/docker-compose.yml up --build
 ```
 
 `docker-entrypoint.sh` automatically:
-1. Waits for Redis and MariaDB
+1. Waits for Redis and PostgreSQL
 2. Applies Django migrations
 3. Collects static files (`collectstatic`)
 4. Starts Gunicorn/Uvicorn
 
 After the stack is up:
-- Application: http://localhost:8000/
-- Admin: http://localhost:8000/admin/
-- General health check: http://localhost:8000/healthz
+- Application: http://localhost:8100/
+- Admin: http://localhost:8100/admin/
+- General health check: http://localhost:8100/healthz
 
 ---
 
 ## 5. Post-deploy tasks
 - Create a superuser (if missing):
-	```powershell
-	docker compose exec web python manage.py ensure_superuser
+	```bash
+	docker compose -f docker/docker-compose.yml exec web python manage.py ensure_superuser
 	```
-- Seed initial data (optional): run load scripts or fixtures via `docker compose exec web`.
+- Seed initial data (optional): run load scripts or fixtures via `docker compose -f docker/docker-compose.yml exec web`.
 - Validate Celery workers at `/celery/status`.
 
 ---
@@ -99,29 +100,29 @@ After the stack is up:
 ## 6. Essential commands
 | Action | Command |
 |------|---------|
-| Check container status | `docker compose ps` |
-| Tail logs | `docker compose logs -f web` |
-| Shell Django | `docker compose exec web python manage.py shell` |
-| Apply migrations | `docker compose exec web python manage.py migrate` |
-| Update Python dependencies | `docker compose exec web pip install -r requirements.txt` |
-| Restart only the Celery worker | `docker compose restart celery` |
+| Check container status | `docker compose -f docker/docker-compose.yml ps` |
+| Tail logs | `make logs` or `docker compose -f docker/docker-compose.yml logs -f web` |
+| Shell Django | `docker compose -f docker/docker-compose.yml exec web python manage.py shell` |
+| Apply migrations | `docker compose -f docker/docker-compose.yml exec web python manage.py migrate` |
+| Update Python dependencies | `docker compose -f docker/docker-compose.yml exec web pip install -r requirements.txt` |
+| Restart only the Celery worker | `docker compose -f docker/docker-compose.yml restart celery` |
 
 ---
 
 ## 7. Troubleshooting
-- **Container will not start:** review `.env`, occupied ports (`netstat -ano | findstr 8000`), and volume permissions.
-- **Database errors:** inspect `docker compose logs db` and the `DB_*` credentials.
-- **Redis unavailable:** inspect `docker compose logs redis`; on Windows hosts read [`doc/reference/SETUP_REDIS_WINDOWS.md`](../reference/SETUP_REDIS_WINDOWS.md).
-- **Missing assets:** run `docker compose exec web python manage.py collectstatic --noinput`.
+- **Container will not start:** review `.env`, occupied ports (`ss -ltnp | grep 8100`), and volume permissions.
+- **Database errors:** inspect `docker compose -f docker/docker-compose.yml logs postgres` and the `DB_*` credentials.
+- **Redis unavailable:** inspect `docker compose -f docker/docker-compose.yml logs redis`; on Windows hosts read [`doc/reference/SETUP_REDIS_WINDOWS.md`](../reference/SETUP_REDIS_WINDOWS.md).
+- **Missing assets:** run `docker compose -f docker/docker-compose.yml exec web python manage.py collectstatic --noinput`.
 - **Reset the stack:**
-	```powershell
-	docker compose down -v  # remove containers e volumes
-	docker compose up --build
+	```bash
+	docker compose -f docker/docker-compose.yml down -v  # remove containers and volumes
+	docker compose -f docker/docker-compose.yml up --build
 	```
 
 ---
 
 ## 8. Next steps
-- Adjust production settings using [`doc/operations/DEPLOYMENT.md`](../operations/DEPLOYMENT.md).
-- Set up observability and alerts: [`doc/reference/prometheus_static_version.md`](../reference/prometheus_static_version.md) and [`doc/reference/PROMETHEUS_ALERTS.md`](../reference/PROMETHEUS_ALERTS.md).
-- Review the Redis HA strategy before going live: [`doc/reference/REDIS_HIGH_AVAILABILITY.md`](../reference/REDIS_HIGH_AVAILABILITY.md).
+- Adjust production settings using [`DEPLOY.md`](../../DEPLOY.md) and [`docker/docker-compose.prod.yml`](../../docker/docker-compose.prod.yml).
+- Set up observability and alerts: [`doc/operations/MONITORING.md`](../operations/MONITORING.md) and [`doc/reference/PROMETHEUS_ALERTS.md`](../reference/PROMETHEUS_ALERTS.md).
+- Review the Redis HA strategy before going live: [`doc/reference/REDIS_HIGH_AVAILABILITY.md`](../operations/REDIS_HA.md).

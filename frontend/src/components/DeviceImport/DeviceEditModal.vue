@@ -844,8 +844,8 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed, watch, nextTick, onUnmounted } from 'vue';
-import { loadGoogleMaps } from '@/utils/googleMapsLoader';
+import { reactive, ref, computed, watch, nextTick, onUnmounted, shallowRef } from 'vue';
+import { createMap } from '@/providers/maps/MapProviderFactory.js';
 import { useApi } from '@/composables/useApi';
 import { useNotification } from '@/composables/useNotification';
 
@@ -903,8 +903,8 @@ const mapLng = ref(-46.6333);
 
 // Google Maps state
 const mapContainer = ref(null);
-const mapInstance = ref(null);
-const mapMarker = ref(null);
+const mapInstance = shallowRef(null); // IMap (providers/maps)
+const mapMarker = shallowRef(null);   // IMarker
 const mapLoading = ref(false);
 const mapError = ref(null);
 
@@ -1148,89 +1148,57 @@ const confirmLocation = () => {
   nextTick(() => newSiteInput.value?.focus());
 };
 
-// --- GOOGLE MAPS FUNCTIONS ---
+// --- MAPA DE POSIÇÃO (provider configurado, via factory — EV-0012c) ---
+
+const destroyMap = () => {
+  try { mapMarker.value?.remove(); } catch (_) { /* best-effort */ }
+  mapMarker.value = null;
+  try { mapInstance.value?.destroy(); } catch (_) { /* best-effort */ }
+  mapInstance.value = null;
+};
 
 const initializeMap = async () => {
   mapLoading.value = true;
   mapError.value = null;
 
   try {
-    console.log('[DeviceEditModal] Initializing Google Maps...');
-    
-    // Carrega API do Google Maps
-    await loadGoogleMaps();
-    
-    if (!window.google?.maps) {
-      throw new Error('Google Maps API not available');
-    }
-
     // Aguarda o container estar disponível no DOM
     await nextTick();
-    
     if (!mapContainer.value) {
       throw new Error('Map container not found');
     }
+    destroyMap();
 
-    console.log('[DeviceEditModal] Creating map instance...');
-
-    // Cria instância do mapa
-    mapInstance.value = new window.google.maps.Map(mapContainer.value, {
+    const map = await createMap(mapContainer.value, {
       center: { lat: mapLat.value, lng: mapLng.value },
       zoom: 15,
-      mapTypeControl: true,
-      streetViewControl: false,
-      fullscreenControl: true,
-      zoomControl: true,
       mapTypeId: 'roadmap',
-      styles: [
-        {
-          featureType: 'poi',
-          elementType: 'labels',
-          stylers: [{ visibility: 'off' }]
-        }
-      ]
+      controls: { mapType: true, streetView: false, fullscreen: true },
     });
+    mapInstance.value = map;
 
-    // Cria marcador
-    mapMarker.value = new window.google.maps.Marker({
+    mapMarker.value = map.createMarker({
       position: { lat: mapLat.value, lng: mapLng.value },
-      map: mapInstance.value,
       draggable: true,
-      animation: window.google.maps.Animation.DROP,
-      title: 'Posição do Site'
+      title: 'Posição do Site',
     });
 
     // Event: arrastar marcador
-    mapMarker.value.addListener('dragend', (event) => {
-      const newLat = event.latLng.lat();
-      const newLng = event.latLng.lng();
-      mapLat.value = newLat;
-      mapLng.value = newLng;
-      console.log('[DeviceEditModal] Marker dragged to:', newLat, newLng);
+    mapMarker.value.on('dragend', () => {
+      const pos = mapMarker.value.getPosition();
+      mapLat.value = pos.lat;
+      mapLng.value = pos.lng;
     });
 
-    // Event: clicar no mapa
-    mapInstance.value.addListener('click', (event) => {
-      const newLat = event.latLng.lat();
-      const newLng = event.latLng.lng();
-      mapLat.value = newLat;
-      mapLng.value = newLng;
-      
-      // Move o marcador
-      mapMarker.value.setPosition(event.latLng);
-      
-      // Anima marcador
-      mapMarker.value.setAnimation(window.google.maps.Animation.BOUNCE);
-      setTimeout(() => {
-        mapMarker.value.setAnimation(null);
-      }, 750);
-      
-      console.log('[DeviceEditModal] Map clicked:', newLat, newLng);
+    // Event: clicar no mapa move o marcador
+    map.on('click', (event) => {
+      if (!Number.isFinite(event?.lat) || !Number.isFinite(event?.lng)) return;
+      mapLat.value = event.lat;
+      mapLng.value = event.lng;
+      mapMarker.value?.setPosition({ lat: event.lat, lng: event.lng });
     });
 
-    console.log('[DeviceEditModal] ✅ Map initialized successfully');
     mapLoading.value = false;
-
   } catch (error) {
     console.error('[DeviceEditModal] Error initializing map:', error);
     mapError.value = error.message || 'Erro ao carregar o mapa';
@@ -1242,11 +1210,10 @@ const initializeMap = async () => {
 watch(showMapPicker, async (isOpen) => {
   if (isOpen) {
     // Sempre recria o mapa para usar as coordenadas atualizadas
-    if (mapInstance.value) {
-      mapInstance.value = null;
-    }
     await nextTick(); // Aguarda o DOM renderizar
     await initializeMap();
+  } else {
+    destroyMap();
   }
 });
 
@@ -1312,11 +1279,7 @@ watch(showInterfacesModal, async (isOpen) => {
 
 // Cleanup ao desmontar componente
 onUnmounted(() => {
-  if (mapMarker.value) {
-    mapMarker.value.setMap(null);
-    mapMarker.value = null;
-  }
-  mapInstance.value = null;
+  destroyMap();
 });
 
 // --- SALVAMENTO ---

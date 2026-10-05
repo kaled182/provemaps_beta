@@ -10,13 +10,13 @@ Allow the application to run **without Redis** in the development environment, g
 
 ### Symptom
 ```
-[ERROR] zabbix_api.views: Error in lookup_hosts endpoint: Error 10061 connecting to 127.0.0.1:6379
+[ERROR] inventory.api.zabbix_lookup: Error in lookup_hosts endpoint: Error 10061 connecting to 127.0.0.1:6379
 redis.exceptions.ConnectionError: Error 10061 connecting to 127.0.0.1:6379.
 No connection could be made because the target machine actively refused it.
-[ERROR] django.server: "GET /zabbix_api/lookup/hosts/?groupids=22 HTTP/1.1" 500 37
+[ERROR] django.server: "GET /api/v1/inventory/zabbix/lookup/hosts/?groupids=22 HTTP/1.1" 500 37
 ```
 
-> Observação: os endpoints de `lookup` ainda residem em `/zabbix_api/` até concluirmos a migração dos autocompletes; demais recursos já usam `/api/v1/inventory/`.
+> Observação: os endpoints de `lookup` vivem hoje em `/api/v1/inventory/zabbix/lookup/` (`backend/inventory/api/zabbix_lookup.py`); a antiga app `zabbix_api` foi removida em 2025-01.
 
 ### Root Cause
 The code invoked `cache.get()` and `cache.set()` without exception handling, which led to:
@@ -68,24 +68,24 @@ def safe_cache_delete(key):
 ### 2. Replacements applied
 
 #### integrations/zabbix/zabbix_service.py
-- ✅ `search_hosts()` – line ~585
-- ✅ `search_hosts()` cache set – line ~666
-- ✅ `get_host_interfaces()` – line ~677
-- ✅ `get_host_interfaces()` cache set – line ~705
-- ✅ `search_hosts_by_name_ip()` – line ~719
-- ✅ `search_hosts_by_name_ip()` cache set – line ~796
-- ✅ `get_host_interfaces_detailed()` – line ~806
-- ✅ `get_host_interfaces_detailed()` cache set – line ~836
-- ✅ `test_host_connectivity()` – line ~900
-- ✅ `test_host_connectivity()` cache set – line ~935
+- ✅ `search_hosts()` – line ~808
+- ✅ `search_hosts()` cache set – line ~893
+- ✅ `get_host_interfaces()` – line ~907
+- ✅ `get_host_interfaces()` cache set – line ~944
+- ✅ `search_hosts_by_name_ip()` – line ~962
+- ✅ `search_hosts_by_name_ip()` cache set – line ~1050
+- ✅ `get_host_interfaces_detailed()` – line ~1062
+- ✅ `get_host_interfaces_detailed()` cache set – line ~1102
+- ✅ `test_host_connectivity()` – line ~1182
+- ✅ `test_host_connectivity()` cache set – line ~1224
 
 Total: **10 replacements** in `zabbix_service.py`
 
-#### zabbix_api/inventory_cache.py
+#### inventory/cache/fibers.py
 - ✅ `invalidate_fiber_cache()` – wrapped with try/except
 
-#### routes_builder/views_tasks.py
-- ✅ `_check_rate_limit()` – wrapped with try/except (fail-open)
+#### inventory/api/_admin_tasks.py
+- ✅ `check_rate_limit()` – wrapped with try/except (fail-open)
 
 ---
 
@@ -118,8 +118,8 @@ Total: **10 replacements** in `zabbix_service.py`
 
 ### Files touched
 - `integrations/zabbix/zabbix_service.py` – 10 cache calls
-- `zabbix_api/inventory_cache.py` – 1 cache call
-- `routes_builder/views_tasks.py` – 1 rate-limiting hook
+- `inventory/cache/fibers.py` – 1 cache call
+- `inventory/api/_admin_tasks.py` – 1 rate-limiting hook
 
 ### Benefits
 - ✅ **Easier development:** no need to install/configure Redis locally
@@ -157,20 +157,20 @@ DEBUG=False
 
 ### Manual test
 1. **With Redis stopped:**
-   ```powershell
+   ```bash
     # Ensure Redis is NOT running
-   curl http://localhost:8000/zabbix_api/lookup/hosts/?groupids=22
+   curl http://localhost:8000/api/v1/inventory/zabbix/lookup/hosts/?groupids=22
    ```
     - ✅ Should return HTTP 200 (not 500)
     - ✅ Logs show [DEBUG], not [ERROR]
 
 2. **With Redis running:**
-   ```powershell
+   ```bash
     # Start Redis
    redis-server
    
     # Call the endpoint
-   curl http://localhost:8000/zabbix_api/lookup/hosts/?groupids=22
+   curl http://localhost:8000/api/v1/inventory/zabbix/lookup/hosts/?groupids=22
    ```
     - ✅ Should return HTTP 200
     - ✅ Second call should be faster (cache hit)
@@ -183,7 +183,7 @@ def test_zabbix_lookup_without_redis(mocker):
     # Mock cache.get to raise ConnectionError
     mocker.patch('django.core.cache.cache.get', side_effect=ConnectionError)
     
-    response = client.get('/zabbix_api/lookup/hosts/?groupids=22')
+    response = client.get('/api/v1/inventory/zabbix/lookup/hosts/?groupids=22')
     
     # Must not return an error
     assert response.status_code == 200

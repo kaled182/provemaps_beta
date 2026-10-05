@@ -52,12 +52,24 @@ shell:  ## Open Django shell
 	$(MANAGE) shell
 
 ### ---------------------------
+### Agent tooling (Claude Code)
+### ---------------------------
+
+.PHONY: skills
+skills:  ## Repõe as skills de agente (.claude/skills/) a partir do skills-lock.json
+	@./scripts/skills-install.sh
+
+### ---------------------------
 ### Dependencies & cleanup
 ### ---------------------------
 
 .PHONY: requirements
-requirements:  ## Install backend project dependencies
+requirements:  ## Install backend runtime dependencies (what the production image gets)
 	pip install -r $(BACKEND_DIR)/requirements.txt
+
+.PHONY: requirements-dev
+requirements-dev:  ## Install runtime + test/lint/type-check dependencies
+	pip install -r $(BACKEND_DIR)/requirements-dev.txt
 
 .PHONY: clean
 clean:  ## Remove caches and temporary artifacts
@@ -103,6 +115,14 @@ fmt:  ## Format code (ruff --fix / black / isort)
 	ruff check . --fix
 	black .
 	isort .
+
+.PHONY: lint-changed
+lint-changed:  ## Lint only the Python files changed vs BASE (default origin/main) — what CI enforces (EV-0022)
+	scripts/lint-changed.sh $(BASE)
+
+.PHONY: precommit
+precommit:  ## Install the pre-commit hooks (black/ruff/isort on staged files)
+	pre-commit install
 
 ### ---------------------------
 ### Docker Compose
@@ -157,5 +177,19 @@ prod-collectstatic:  ## Run collectstatic with production settings
 	DJANGO_SETTINGS_MODULE=settings.prod $(MANAGE) collectstatic --noinput
 
 .PHONY: deploy
-deploy:  ## Run deployment script (scripts/deploy.sh)
+deploy:  ## Run deployment script (scripts/deploy.sh) — recusa árvore suja e coze GIT_SHA na imagem
 	./scripts/deploy.sh
+
+# ---- Central de Evolução (ADR 0006 / EV-0027) ----
+EVOLUCAO_HEALTH_URL ?= $(HEALTH_URL)
+
+.PHONY: evolucao-fechar
+evolucao-fechar:  ## Fecha na Central os itens cujo commit `fecha EV-NNNN` já está no ar (lê git_sha do /healthz)
+	EVOLUCAO_HEALTH_URL=$(EVOLUCAO_HEALTH_URL) ./scripts/evolucao_fechados.sh | $(MANAGE) evolucao_fechar
+
+.PHONY: evolucao-quadro
+evolucao-quadro:  ## Regenera o bloco EVOLUCAO do CLAUDE.md a partir da Central
+	$(MANAGE) evolucao_quadro
+
+.PHONY: evolucao-sync
+evolucao-sync: evolucao-fechar evolucao-quadro  ## Fecha o que está no ar e regenera o quadro

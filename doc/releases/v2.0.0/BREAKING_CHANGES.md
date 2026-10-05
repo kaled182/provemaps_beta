@@ -273,7 +273,7 @@ python manage.py migrate inventory 0002
 python manage.py loaddata backup_pre_migration.json
 ```
 
-**Validation**: See [`doc/operations/MIGRATION_PRODUCTION_GUIDE.md`](../operations/MIGRATION_PRODUCTION_GUIDE.md) for full procedure.
+**Validation**: See [`doc/operations/MIGRATION_PRODUCTION_GUIDE.md`](../../archive/2025-historico/MIGRATION_PRODUCTION_GUIDE.md) for full procedure.
 
 ---
 
@@ -355,7 +355,7 @@ from inventory.tests.factories import SiteFactory  # if using factory_boy
 ## 📞 Support
 
 ### Documentation
-- [Migration Production Guide](../operations/MIGRATION_PRODUCTION_GUIDE.md)
+- [Migration Production Guide](../../archive/2025-historico/MIGRATION_PRODUCTION_GUIDE.md)
 - [Phase 4 Completion Report](./PHASE4_COMPLETION_REPORT.md)
 - [API Documentation](../reference-root/API_DOCUMENTATION.md)
 

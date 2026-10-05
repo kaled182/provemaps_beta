@@ -1,3 +1,8 @@
+> **Nota (2026-10-04):** o briefing canônico do projeto é o [`CLAUDE.md`](../CLAUDE.md)
+> na raiz. Em caso de divergência com este ficheiro, vale o `CLAUDE.md`. Partes
+> deste playbook estão desatualizadas (uso de `django-environ`, caminhos de testes,
+> `CELERYBEAT_SCHEDULE`, MariaDB/SQLite) — ver ADR 0005.
+
 # AI Agent Playbook — MapsProveFiber
 Django 5 platform for fiber optic network infrastructure with real-time Zabbix monitoring and geospatial route planning.
 
@@ -31,7 +36,7 @@ Available cache modules: [cache/fibers.py](backend/inventory/cache/fibers.py), [
 ## Workflows
 **Development setup** — Run `docker compose -f docker/docker-compose.yml up` or `make up` to start all services (web, postgres, redis, celery). For local Django dev without Docker: `python backend/manage.py runserver 0.0.0.0:8000` after setting `DJANGO_SETTINGS_MODULE=settings.dev`. Requires `.env` file with Zabbix credentials (see `.env.example`).
 
-**Testing** — Execute from **repo root** (not backend/): `pytest -q` (fast) or `pytest -v` (verbose). Config in [pytest.ini](pytest.ini) sets `pythonpath = . backend` and loads `settings.test` (SQLite default, set `TEST_DB_ENGINE=mysql` for MariaDB). Celery eager mode enabled in test settings—no broker needed. Run specific suites: `pytest backend/inventory/tests/test_usecases.py -v`. Use markers: `@pytest.mark.slow`, `@pytest.mark.integration`, `@pytest.mark.zabbix`, `@pytest.mark.api`, `@pytest.mark.celery`.
+**Testing** — Execute from **repo root** (not backend/): `pytest -q` (fast) or `pytest -v` (verbose). Config in [pytest.ini](pytest.ini) sets `pythonpath = . backend` and loads `settings.test` (SQLite default; set `TEST_DB_ENGINE=postgis` plus `DB_*` to run on PostGIS like the CI — MariaDB is not supported). Celery eager mode enabled in test settings—no broker needed. Run specific suites: `pytest backend/inventory/tests/test_usecases.py -v`. Use markers: `@pytest.mark.slow`, `@pytest.mark.integration`, `@pytest.mark.zabbix`, `@pytest.mark.api`, `@pytest.mark.celery`.
 
 **Test organization** — Focused suites in [backend/inventory/tests](backend/inventory/tests), integration tests at root like [test_fiber_modal_data_flow.py](test_fiber_modal_data_flow.py). Conftest at [backend/conftest.py](backend/conftest.py) provides fixtures. Coverage: `pytest --cov --cov-report=html` or `make test-coverage`.
 

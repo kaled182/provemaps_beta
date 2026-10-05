@@ -124,4 +124,31 @@ describe('dashboardStore', () => {
     expect(store.loading).toBe(false);
     expect(store.error).toBe(null);
   });
+
+  it('EV-0014: aceita o evento dashboard.status publicado pelo backend', () => {
+    const store = useDashboardStore();
+    store.handleWebSocketMessage({
+      event: 'dashboard.status',
+      version: 1,
+      timestamp: '2026-10-04T12:00:00+00:00',
+      data: {
+        summary: {},
+        hosts: [
+          { hostid: '10101', device_id: 7, name: 'SW-01', available: '1' },
+          { hostid: '10102', device_id: 8, name: 'SW-02', available: '2' },
+        ],
+      },
+    });
+    expect(store.totalHosts).toBe(2);
+    expect(store.onlineHosts).toBe(1);
+    expect(store.lastUpdate).toBe('2026-10-04T12:00:00+00:00');
+  });
+
+  it('EV-0014: cable_status_update atualiza o status de cabos já carregados', () => {
+    const store = useDashboardStore();
+    store.fiberCables = new Map([[3, { id: 3, name: 'CABO-3', status: 'online' }]]);
+    store.handleWebSocketMessage({ type: 'cable_status_update', cables: [{ cable_id: 3, status: 'critical' }, { cable_id: 99, status: 'online' }] });
+    expect(store.fiberCables.get(3).status).toBe('critical');
+    expect(store.fiberCables.has(99)).toBe(false);
+  });
 });

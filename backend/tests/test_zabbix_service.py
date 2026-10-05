@@ -1,13 +1,13 @@
+import subprocess
 from collections.abc import Iterator
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
 import requests
-import subprocess
-
 from django.test import SimpleTestCase, override_settings
 
+import integrations.zabbix.client as client_module
 from integrations.zabbix import zabbix_service
 
 
@@ -18,6 +18,13 @@ def enable_db_access_for_all_tests() -> Iterator[None]:
 
 
 class ZabbixServiceTests(SimpleTestCase):
+    def setUp(self) -> None:
+        # Fixa Zabbix 6.x: sem isto a sonda `apiinfo.version` do cliente consome os mocks
+        # de `requests.post` (ver test_resilient_zabbix_client).
+        self._version_patch = patch.object(client_module, "_zabbix_version_cache", (6, 0))
+        self._version_patch.start()
+        self.addCleanup(self._version_patch.stop)
+
     def tearDown(self) -> None:
         zabbix_service.clear_token_cache()
 

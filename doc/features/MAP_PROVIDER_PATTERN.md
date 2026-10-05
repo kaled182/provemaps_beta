@@ -55,6 +55,8 @@ frontend/src/
 ├── providers/maps/
 │   ├── IMapProvider.js              # Interface abstrata (270 linhas)
 │   ├── MapboxProvider.js            # Implementação Mapbox GL JS (425 linhas)
+│   ├── LeafletProvider.js           # Leaflet/OSM, provider `osm` (EV-0012a)
+│   ├── markerStyles.js              # tabela de marcadores partilhada pelos três providers
 │   ├── GoogleMapsProvider.js        # Implementação Google Maps API (340 linhas)
 │   └── MapProviderFactory.js        # Factory singleton (130 linhas)
 │
@@ -315,7 +317,8 @@ export const createMap = factory.createMap.bind(factory);
 const providers = {
   google: GoogleMapsProvider,
   mapbox: MapboxProvider,
-  // Extensível: osm, esri, leaflet, etc.
+  osm: LeafletProvider, // Leaflet + tiles do OpenStreetMap (EV-0012a)
+  // Extensível: esri, etc. — os nomes são os de `setup_app.FirstTimeSetup.map_provider`.
 };
 ```
 
@@ -363,7 +366,7 @@ export function calculatePathDistance(path) {
 
 ### 6. mapCore-refactored.js - Core Provider-Agnostic
 
-Substituiu o antigo `mapCore.js` com código refatorado:
+Substituiu o antigo `mapCore.js` (apagado em EV-0012a, não tinha importadores) com código refatorado:
 
 ```javascript
 import { createMap, getCurrentProviderName } from '@/providers/maps/MapProviderFactory.js';
@@ -674,10 +677,13 @@ describe('MapboxPolyline', () => {
 ### Curto Prazo (1-2 semanas)
 - [ ] Implementar **melhorias visuais** (marcadores origem/destino diferenciados)
 - [ ] Adicionar **validação em tempo real** (portas em uso, nomes duplicados)
-- [ ] **Testes unitários** para providers
+- [x] **Testes unitários** para providers — `tests/unit/providers/` cobre `LeafletProvider` e a factory (EV-0012a); Google e Mapbox ainda sem testes
 
 ### Médio Prazo (1 mês)
-- [ ] Suporte a **OpenStreetMap/Leaflet**
+- [x] Suporte a **OpenStreetMap/Leaflet** — `LeafletProvider.js`, provider `osm` (EV-0012a, 2026-10-04)
+- [x] `MapView.vue` (rota `/map` + Dashboard) migrado do `vue3-google-map` para a factory; `IMap` ganhou `getBounds`/`getContainer`/`idle`/`move`, `IMarker` ganhou `iconUrl`, `IPolyline` eventos de hover; janelas via `components/Map/MapPopup.vue` (EV-0012b, 2026-10-04)
+- [x] `CustomMapViewer.vue`, `SiteEditModal.vue` e `DeviceEditModal.vue` sem ramos por provider; `IMap` ganhou `createPolygon`/`setCursor`/`resize`/`setTheme`, `IMarker.setStyle`, `IPolyline.setStyle`; estilo Mapbox resolvido no provider com fallback (EV-0012c, 2026-10-04)
+- [x] Pilha `useMapService`/`UnifiedMapView` apagada; `components/Map/MapCanvas.vue` + `composables/useRouteDrawing.js` servem `CableMapModal` e `FiberRouteEditor`; `fiberRouteBuilder.js` sem `waitForGoogleMaps`; loaders `utils/{mapLoader,googleMapsLoader}.js` removidos (EV-0012d, 2026-10-04 — fecha EV-0012)
 - [ ] Suporte a **Esri ArcGIS**
 - [ ] **Edição interativa** de vértices (Mapbox GL Draw)
 - [ ] **Documentação** completa da API
@@ -699,9 +705,9 @@ describe('MapboxPolyline', () => {
 - [Design Patterns: Factory Pattern](https://refactoring.guru/design-patterns/factory-method)
 
 ### Código Interno
-- [IMapProvider.js](../frontend/src/providers/maps/IMapProvider.js)
-- [MapboxProvider.js](../frontend/src/providers/maps/MapboxProvider.js)
-- [MapProviderFactory.js](../frontend/src/providers/maps/MapProviderFactory.js)
+- [IMapProvider.js](../../frontend/src/providers/maps/IMapProvider.js)
+- [MapboxProvider.js](../../frontend/src/providers/maps/MapboxProvider.js)
+- [MapProviderFactory.js](../../frontend/src/providers/maps/MapProviderFactory.js)
 - [Roadmap de Melhorias](../roadmap/network-design-improvements.md)
 
 ### Issues & Pull Requests

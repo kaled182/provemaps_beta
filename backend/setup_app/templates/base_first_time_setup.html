@@ -18,27 +18,11 @@
 
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Theme CSS Variables -->
-  <link rel="stylesheet" href="{% static 'css/theme-variables.css' %}">
-  
   {% block extra_head %}{% endblock %}
 </head>
-<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col min-h-screen transition-colors duration-300">
+<body class="bg-gray-950 min-h-screen">
 
-  {% include 'partials/header_first_time_setup.html' %}
-
-  <main class="flex-1 container mx-auto p-6 py-12">
-    {% block content %}
-    <p>Content goes here.</p>
-    {% endblock %}
-  </main>
-
-  <footer class="bg-white-800 dark:bg-gray-950 text-gray-300 dark:text-gray-400 text-center p-6 border-gray-700 dark:border-gray-800">
-    <p class="text-sm text-gray-600">&copy; {% now "Y" %} MapsProveFiber</p>
-  </footer>
-
-  {% include 'partials/add_device.html' %}
-  {% include 'partials/import_kml.html' %}
+  {% block content %}{% endblock %}
 
   {% block extra_scripts %}{% endblock %}
 

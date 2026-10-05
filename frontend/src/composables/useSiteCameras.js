@@ -241,9 +241,9 @@ export function useSiteCameras() {
     if (!playbackUrl || typeof playbackUrl !== 'string') return null
     
     try {
-      const match = playbackUrl.match(/\/hls\/(live\/[^\/]+)/)
+      const match = playbackUrl.match(/\/hls\/(live\/[^/]+)/)
       if (match) {
-        return playbackUrl.replace(/\/hls\/(live\/[^\/]+).*/, '/whep/$1')
+        return playbackUrl.replace(/\/hls\/(live\/[^/]+).*/, '/whep/$1')
       }
     } catch (err) {
       console.warn('[useSiteCameras] Erro ao derivar WHEP URL:', err)

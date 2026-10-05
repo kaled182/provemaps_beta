@@ -16,62 +16,20 @@
 </template>
 
 <script setup>
-import { RouterView, useRouter } from 'vue-router';
-import { onMounted, nextTick } from 'vue';
+import { RouterView } from 'vue-router';
+import { onMounted } from 'vue';
 import TheNavMenu from '@/components/Layout/TheNavMenu.vue';
 import SiteDeviceModal from '@/components/Map/SiteDeviceModal.vue';
 import ToastContainer from '@/components/Notifications/ToastContainer.vue';
 import { useUiStore } from '@/stores/ui';
-import { loadGoogleMaps } from '@/utils/googleMapsLoader';
 
 const uiStore = useUiStore();
-const router = useRouter();
 
-// Rotas que REALMENTE precisam do Google Maps
-const ROUTES_WITH_MAPS = [
-  '/monitoring/backbone',
-  '/Network/NetworkDesign',
-  '/NetworkDesign', // Legacy support
-  '/dashboard'
-];
-
-// Verifica se a rota precisa de mapas
-function routeNeedsMaps(path) {
-  return ROUTES_WITH_MAPS.some(route => path.startsWith(route));
-}
-
-// Aplicar tema ao montar
+// Aplicar tema ao montar. Os SDKs de mapa são carregados pelo provider
+// configurado (providers/maps) quando um ecrã cria o mapa — não há
+// pré-carregamento do Google por rota (EV-0012c).
 onMounted(() => {
-  console.log('[App] Mounting application...');
   uiStore.applyTheme();
-  console.log('[App] Google Maps will be loaded on-demand for specific routes');
-});
-
-// Intercepta navegação e carrega Google Maps apenas quando necessário
-router.beforeEach(async (to, from, next) => {
-  const needsMaps = routeNeedsMaps(to.path);
-  
-  console.log(`[App] Navigation: ${from.path} → ${to.path}`);
-  console.log(`[App] Route needs maps: ${needsMaps}`);
-  
-  if (needsMaps) {
-    console.log('[App] Loading Google Maps for this route...');
-    
-    // IMPORTANTE: Aguarda o próximo tick para garantir que a meta tag foi renderizada
-    await nextTick();
-    
-    try {
-      await loadGoogleMaps();
-      console.log('[App] ✅ Google Maps loaded successfully');
-    } catch (err) {
-      console.error('[App] ❌ Failed to load Google Maps:', err.message);
-      // Continua navegação mesmo com erro - componente tentará novamente
-    }
-  } else {
-    console.log('[App] Skipping Google Maps load (not needed for this route)');
-  }
-  
-  next();
 });
 </script>
 

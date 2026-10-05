@@ -400,11 +400,11 @@ A **refatoração modular do MapsProveFiber** foi **concluída com sucesso** em 
 1. [`doc/releases/BREAKING_CHANGES_v2.0.0.md`](./BREAKING_CHANGES_v2.0.0.md)
 2. [`doc/releases/CHANGELOG_MODULARIZATION.md`](./CHANGELOG_MODULARIZATION.md)
 3. [`doc/releases/PHASE4_COMPLETION_REPORT.md`](./PHASE4_COMPLETION_REPORT.md)
-4. [`doc/operations/DEPLOYMENT_CHECKLIST_v2.0.0.md`](../operations/DEPLOYMENT_CHECKLIST_v2.0.0.md)
-5. [`doc/operations/MIGRATION_PRODUCTION_GUIDE.md`](../operations/MIGRATION_PRODUCTION_GUIDE.md)
+4. [`doc/operations/DEPLOYMENT_CHECKLIST_v2.0.0.md`](../../archive/2025-historico/DEPLOYMENT_CHECKLIST_v2.0.0.md)
+5. [`doc/operations/MIGRATION_PRODUCTION_GUIDE.md`](../../archive/2025-historico/MIGRATION_PRODUCTION_GUIDE.md)
 6. [`doc/reference/ARCHITECTURE_v2.0.0.md`](../reference/ARCHITECTURE_v2.0.0.md)
 7. [`doc/reference-root/API_DOCUMENTATION.md`](../reference-root/API_DOCUMENTATION.md) (atualizado)
-8. [`doc/developer/REFATORAR.md`](../developer/REFATORAR.md) (atualizado)
+8. [`doc/developer/REFATORAR.md`](../../archive/2025-historico/REFATORAR.md) (atualizado)
 
 ### Scripts de Validação
 

@@ -62,8 +62,8 @@
 
           <!-- Body -->
           <div class="modal-body">
-            <!-- Tab: Informações Gerais -->
-            <div v-show="activeTab === 'info'" class="tab-content">
+            <!-- Tab: Informações Gerais (v-if lazy: monta só quando ativa) -->
+            <div v-if="activeTab === 'info'" class="tab-content">
               <div class="info-grid">
                 <!-- Status e Info Básica -->
                 <div class="info-section">
@@ -199,8 +199,8 @@
               </div>
             </div>
 
-            <!-- Tab: Nível Óptico -->
-            <div v-show="activeTab === 'optical'" class="tab-content">
+            <!-- Tab: Nível Óptico (v-if lazy) -->
+            <div v-if="activeTab === 'optical'" class="tab-content">
               <div class="optical-section">
                 <div class="section-header">
                   <h3>Nível de Sinal Óptico</h3>
@@ -271,7 +271,7 @@
                     
                     <div class="panel-content" v-show="expandedOrigin">
                       <div class="optical-chart-container">
-                        <canvas ref="originChartCanvas"></canvas>
+                        <TimeSeriesChart ref="originChartRef" :series="opticalSeries('origin')" :thresholds="opticalThresholds('origin')" unit="dBm" :decimals="2" :height="260" />
                       </div>
                       <div class="optical-stats">
                         <div class="stat-box">
@@ -329,7 +329,7 @@
                     
                     <div class="panel-content" v-show="expandedDestination">
                       <div class="optical-chart-container">
-                        <canvas ref="destinationChartCanvas"></canvas>
+                        <TimeSeriesChart ref="destinationChartRef" :series="opticalSeries('destination')" :thresholds="opticalThresholds('destination')" unit="dBm" :decimals="2" :height="260" />
                       </div>
                       <div class="optical-stats">
                         <div class="stat-box">
@@ -355,8 +355,8 @@
               </div>
             </div>
 
-            <!-- Tab: Tráfego de Rede -->
-            <div v-show="activeTab === 'traffic'" class="tab-content">
+            <!-- Tab: Tráfego de Rede (v-if lazy) -->
+            <div v-if="activeTab === 'traffic'" class="tab-content">
               <div class="optical-section">
                 <div class="section-header">
                   <h3>Tráfego de Rede</h3>
@@ -422,7 +422,7 @@
                     </div>
                     <div class="panel-content" v-show="trafficExpandedOrigin">
                       <div v-if="trafficData.origin?.history?.length" class="optical-chart-container">
-                        <canvas ref="trafficOriginChartCanvas"></canvas>
+                        <TimeSeriesChart ref="trafficOriginChartRef" :series="trafficSeries('origin')" unit="Mbps" :begin-at-zero="true" :height="260" />
                       </div>
                       <div class="traffic-stats-grid">
                         <div class="traffic-stat-card">
@@ -488,7 +488,7 @@
                     </div>
                     <div class="panel-content" v-show="trafficExpandedDestination">
                       <div v-if="trafficData.destination?.history?.length" class="optical-chart-container">
-                        <canvas ref="trafficDestinationChartCanvas"></canvas>
+                        <TimeSeriesChart ref="trafficDestinationChartRef" :series="trafficSeries('destination')" unit="Mbps" :begin-at-zero="true" :height="260" />
                       </div>
                       <div class="traffic-stats-grid">
                         <div class="traffic-stat-card">
@@ -522,8 +522,8 @@
               </div>
             </div>
 
-            <!-- Tab: Alarmes -->
-            <div v-show="activeTab === 'alarms'" class="tab-content">
+            <!-- Tab: Alarmes (v-if lazy) -->
+            <div v-if="activeTab === 'alarms'" class="tab-content">
               <div class="alarms-section">
                 <div class="section-header">
                   <h3>Alarmes e Eventos</h3>
@@ -562,8 +562,8 @@
               </div>
             </div>
 
-            <!-- Tab: Histórico -->
-            <div v-show="activeTab === 'history'" class="tab-content">
+            <!-- Tab: Histórico (v-if lazy) -->
+            <div v-if="activeTab === 'history'" class="tab-content">
               <div class="history-section">
                 <h3>Histórico de Manutenção</h3>
                 <div class="timeline">
@@ -615,6 +615,9 @@
                       <div class="saved-config-header">
                         <span class="saved-config-target">{{ group.targetDisplay }}</span>
                         <div class="saved-config-badges">
+                          <span v-if="group.snoozeActive" class="saved-config-snooze" :title="`Silenciado até ${formatSnoozeUntil(group.snoozeUntil)}`">
+                            🔕 Silenciado até {{ formatSnoozeUntil(group.snoozeUntil) }}
+                          </span>
                           <span
                             v-for="(atype, i) in group.alertTypes"
                             :key="atype"
@@ -635,6 +638,44 @@
                       </div>
                       <p v-if="group.description" class="saved-config-notes">{{ group.description }}</p>
                       <div class="saved-config-actions">
+                        <button
+                          v-if="group.snoozeActive"
+                          class="btn-config-action btn-snooze-off"
+                          @click="snoozeAlarm(group, 0)"
+                          title="Retomar avisos automáticos imediatamente"
+                        >
+                          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                          </svg>
+                          Retomar
+                        </button>
+                        <button
+                          v-else
+                          class="btn-config-action btn-snooze"
+                          @click="askSnoozeDuration(group)"
+                          title="Pausar temporariamente avisos automáticos (manutenção planejada)"
+                        >
+                          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M9 17H4l1.405-1.405A2.032 2.032 0 006 14.158V11a6.002 6.002 0 014-5.659V5a2 2 0 114 0v.341C16.33 6.165 18 8.388 18 11v3.159c0 .538.214 1.055.595 1.436L20 17h-5M4 4l16 16" />
+                          </svg>
+                          Silenciar
+                        </button>
+                        <button
+                          class="btn-config-action btn-test"
+                          :disabled="testingAlarmIds.has(group.ids[0])"
+                          @click="sendTestAlarm(group)"
+                          title="Enviar mensagem de teste real para os destinatários"
+                        >
+                          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          {{ testingAlarmIds.has(group.ids[0]) ? 'Enviando…' : 'Enviar Teste' }}
+                        </button>
                         <button class="btn-config-action btn-edit" @click="startEditAlarm(group)" title="Editar">
                           <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -654,6 +695,70 @@
                   </div>
                   <div v-else class="saved-configs-empty">
                     Nenhuma configuração cadastrada para este cabo.
+                  </div>
+                </section>
+
+                <!-- ── Histórico de Avisos (Fase C) ────────────────────── -->
+                <section class="alarm-history-section">
+                  <button
+                    type="button"
+                    class="alarm-history-toggle"
+                    :aria-expanded="showAlarmHistory"
+                    @click="showAlarmHistory = !showAlarmHistory"
+                  >
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Histórico de Avisos</span>
+                    <span v-if="alarmNotifications.length" class="alarm-history-badge">{{ alarmNotifications.length }}</span>
+                    <span class="alarm-history-chevron">{{ showAlarmHistory ? '▴' : '▾' }}</span>
+                  </button>
+
+                  <div v-if="showAlarmHistory" class="alarm-history-body">
+                    <div v-if="isLoadingAlarmNotifications" class="alarm-history-loading">
+                      <span class="spinner small"></span>
+                      <span>Carregando histórico…</span>
+                    </div>
+
+                    <div v-else-if="alarmNotifications.length === 0" class="alarm-history-empty">
+                      Nenhum aviso enviado ainda. Quando o cabo cair (ou voltar), os
+                      destinatários cadastrados receberão notificação automática.
+                    </div>
+
+                    <ul v-else class="alarm-history-list">
+                      <li
+                        v-for="n in alarmNotifications"
+                        :key="n.id"
+                        class="alarm-history-item"
+                        :class="{ 'is-failed': !n.success, 'is-test': n.is_test }"
+                      >
+                        <span class="ah-icon">{{ ALERT_TYPE_ICONS[n.alert_type] || '🔔' }}</span>
+                        <div class="ah-content">
+                          <div class="ah-line-1">
+                            <span class="ah-type">{{ n.alert_type_label }}</span>
+                            <span v-if="n.is_test" class="ah-tag-test">TESTE</span>
+                            <span class="ah-time">{{ formatNotificationTime(n.sent_at) }}</span>
+                          </div>
+                          <div class="ah-line-2">
+                            <span class="ah-channel">{{ CHANNEL_LABELS[n.channel] || n.channel }}</span>
+                            <span class="ah-recipient">→ {{ n.recipient_label || n.recipient_phone || n.recipient_email || '—' }}</span>
+                            <span v-if="n.success" class="ah-status ah-status--ok">✓ Enviado</span>
+                            <span v-else class="ah-status ah-status--fail">✗ Falhou</span>
+                          </div>
+                          <div v-if="!n.success && n.error" class="ah-error">{{ n.error }}</div>
+                        </div>
+                      </li>
+                    </ul>
+
+                    <button
+                      v-if="alarmNotifications.length > 0"
+                      class="alarm-history-refresh"
+                      @click="loadAlarmNotifications(props.cable.id)"
+                      :disabled="isLoadingAlarmNotifications"
+                    >
+                      Atualizar
+                    </button>
                   </div>
                 </section>
 
@@ -810,8 +915,9 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useEscapeKey } from '@/composables/useEscapeKey'
-import Chart from 'chart.js/auto'
-import { getCableOpticalHistory, getCableTrafficHistory, getCableAlarms, createCableAlarm, deleteCableAlarm } from '@/services/fiberService'
+import TimeSeriesChart from './charts/TimeSeriesChart.vue'
+import { bpsToMbps } from '@/utils/opticalSeries'
+import { getCableOpticalHistory, getCableTrafficHistory, getCableAlarms, createCableAlarm, deleteCableAlarm, testCableAlarm, getCableAlarmNotifications, snoozeCableAlarm } from '@/services/fiberService'
 import { useAlertTemplatesStore } from '@/stores/alertTemplates'
 
 const props = defineProps({
@@ -835,8 +941,8 @@ const emit = defineEmits(['close', 'save'])
 const activeTab = ref('info')
 const isEditMode = ref(false)
 const isSaving = ref(false)
-const originChartCanvas = ref(null)
-const destinationChartCanvas = ref(null)
+const originChartRef = ref(null)
+const destinationChartRef = ref(null)
 const expandedOrigin = ref(true)
 const expandedDestination = ref(false)
 const showCableDetails = ref(true)
@@ -847,18 +953,11 @@ const trafficData = ref(null)
 const isLoadingTraffic = ref(false)
 const trafficExpandedOrigin = ref(true)
 const trafficExpandedDestination = ref(false)
-const trafficOriginChartCanvas = ref(null)
-const trafficDestinationChartCanvas = ref(null)
+const trafficOriginChartRef = ref(null)
+const trafficDestinationChartRef = ref(null)
 const trafficExportMenuOpen = ref(null)
-let originChart = null
-let destinationChart = null
-let trafficOriginChart = null
-let trafficDestinationChart = null
-let originChartRetry = 0
-let destinationChartRetry = 0
-let trafficOriginChartRetry = 0
-let trafficDestinationChartRetry = 0
-const MAX_CHART_RETRIES = 6
+// EV-0011: o ciclo de vida dos gráficos vive em TimeSeriesChart (uma instância por componente,
+// destruída ao desmontar); sem retries por setTimeout.
 
 const alertTemplatesStore = useAlertTemplatesStore()
 
@@ -878,21 +977,6 @@ const contactOptions = computed(() =>
     summary: c.summary || 'Sem detalhes',
   }))
 )
-
-// Aguarda canvas ficar disponível antes de criar o gráfico
-const waitForCanvas = async (canvasRef, retries = 6, delay = 80) => {
-  for (let attempt = 0; attempt < retries; attempt += 1) {
-    if (canvasRef.value) {
-      return canvasRef.value
-    }
-    await nextTick()
-    if (delay > 0) {
-      await new Promise(resolve => setTimeout(resolve, delay))
-    }
-  }
-
-  return null
-}
 
 // Tabs
 const tabs = [
@@ -942,6 +1026,12 @@ const isSavingAlarm = ref(false)
 const editingAlarmIds = ref([])
 const savedAlarmConfigs = ref([])
 const isLoadingAlarmConfigs = ref(false)
+// IDs de alarmes com teste em andamento (para desabilitar o botão e mostrar "Enviando…")
+const testingAlarmIds = ref(new Set())
+// Histórico de notificações enviadas (Fase C)
+const alarmNotifications = ref([])
+const isLoadingAlarmNotifications = ref(false)
+const showAlarmHistory = ref(false)
 
 const ALERT_TYPE_TO_CATEGORY = {
   break: 'cable_break',
@@ -1113,8 +1203,6 @@ const closeModal = () => {
     if (!confirm) return
     isEditMode.value = false
   }
-  originChartRetry = 0
-  destinationChartRetry = 0
   showAlarmModal.value = false
   emit('close')
 }
@@ -1127,32 +1215,36 @@ const toggleCableDetails = () => {
   showCableDetails.value = !showCableDetails.value
 }
 
+const escapeHtml = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
 const exportChart = (port, format) => {
   exportMenuOpen.value = null
-  const canvas = port === 'origin' ? originChartCanvas.value : destinationChartCanvas.value
-  if (!canvas) return
+  const chartRef = port === 'origin' ? originChartRef.value : destinationChartRef.value
+  const chartImage = chartRef?.toDataURL?.()
+  if (!chartImage) return
 
   const device = opticalData.value?.portInfo?.[port]?.device || port
   const portName = opticalData.value?.portInfo?.[port]?.port || ''
-  const filename = `nivel-optico_${device}_${portName}_${selectedPeriod.value}h`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '')
+  const filename = `nivel-optico_${device}_${portName}_${selectedPeriod.value}h`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '')
 
   if (format === 'png') {
     const link = document.createElement('a')
     link.download = `${filename}.png`
-    link.href = canvas.toDataURL('image/png')
+    link.href = chartImage
     link.click()
     return
   }
 
   // PDF: abre janela com a imagem em alta resolução e dispara impressão
-  const imgData = canvas.toDataURL('image/png')
+  const imgData = chartImage
   const win = window.open('', '_blank')
   if (!win) return
   win.document.write(`
     <!DOCTYPE html>
     <html>
     <head>
-      <title>${device} — ${portName}</title>
+      <title>${escapeHtml(device)} — ${escapeHtml(portName)}</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #fff; display: flex; flex-direction: column; align-items: center; padding: 24px; font-family: sans-serif; }
@@ -1162,10 +1254,10 @@ const exportChart = (port, format) => {
       </style>
     </head>
     <body>
-      <h2>${device}</h2>
-      <p>${portName} — Período: ${selectedPeriod.value}h</p>
+      <h2>${escapeHtml(device)}</h2>
+      <p>${escapeHtml(portName)} — Período: ${selectedPeriod.value}h</p>
       <img src="${imgData}" />
-      <script>window.onload = () => { window.print(); }<\/script>
+      <script>window.onload = () => { window.print(); }<${'/'}script>
     </body>
     </html>
   `)
@@ -1195,11 +1287,6 @@ const loadOpticalData = async () => {
       
       console.log('[FiberCableDetailModal] Dados formatados:', opticalData.value)
       
-      // Criar gráficos após carregar dados
-      await nextTick()
-      if (activeTab.value === 'optical') {
-        await createOpticalCharts()
-      }
     } else {
       console.warn('[FiberCableDetailModal] Sem dados ópticos disponíveis no histórico')
       opticalData.value = null
@@ -1218,10 +1305,6 @@ const loadTrafficData = async () => {
   try {
     const data = await getCableTrafficHistory(props.cable.id, selectedPeriod.value)
     trafficData.value = data
-    await nextTick()
-    if (activeTab.value === 'traffic') {
-      await createTrafficCharts()
-    }
   } catch (error) {
     console.error('[FiberCableDetailModal] Erro ao carregar tráfego:', error)
     trafficData.value = null
@@ -1233,143 +1316,36 @@ const loadTrafficData = async () => {
 /**
  * Formata array de histórico de tráfego em labels + inData + outData (com forward-fill)
  */
-const formatTrafficHistoryData = (historyArray) => {
-  if (!historyArray || historyArray.length === 0) return null
-  const sorted = [...historyArray].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
-  const labels = []
-  const inData = []
-  const outData = []
-  let lastIn = null
-  let lastOut = null
-  sorted.forEach(point => {
-    const date = new Date(point.timestamp)
-    labels.push(date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }))
-    const inVal = point.traffic_in
-    const outVal = point.traffic_out
-    if (inVal !== null && inVal !== undefined && !Number.isNaN(inVal)) { lastIn = inVal; inData.push(inVal) } else { inData.push(lastIn) }
-    if (outVal !== null && outVal !== undefined && !Number.isNaN(outVal)) { lastOut = outVal; outData.push(outVal) } else { outData.push(lastOut) }
-  })
-  return { labels, inData, outData }
-}
-
-const createTrafficCharts = async () => {
-  if (trafficExpandedOrigin.value && trafficData.value?.origin?.history?.length) {
-    await createTrafficOriginChart()
-  }
-  if (trafficExpandedDestination.value && trafficData.value?.destination?.history?.length) {
-    await createTrafficDestinationChart()
-  }
-}
-
-const createTrafficOriginChart = async () => {
-  const canvasEl = await waitForCanvas(trafficOriginChartCanvas)
-  if (!canvasEl || !trafficData.value?.origin?.history?.length) {
-    if (trafficOriginChartRetry < MAX_CHART_RETRIES) {
-      trafficOriginChartRetry += 1
-      setTimeout(() => createTrafficOriginChart(), 150)
-    } else {
-      trafficOriginChartRetry = 0
-    }
-    return
-  }
-  try {
-    trafficOriginChartRetry = 0
-    const ctx = canvasEl.getContext('2d')
-    if (trafficOriginChart) { trafficOriginChart.destroy() }
-    const formatted = formatTrafficHistoryData(trafficData.value.origin.history)
-    if (!formatted) return
-    trafficOriginChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: formatted.labels,
-        datasets: [
-          { label: 'Download (IN)', data: formatted.inData, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, spanGaps: true },
-          { label: 'Upload (OUT)', data: formatted.outData, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, spanGaps: true }
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { display: true, labels: { color: '#94a3b8' } },
-          tooltip: { mode: 'index', intersect: false, backgroundColor: 'rgba(0,0,0,0.8)', titleColor: '#fff', bodyColor: '#fff', borderColor: '#3b82f6', borderWidth: 1,
-            callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${formatBps(ctx.parsed.y)}` }
-          }
-        },
-        scales: {
-          x: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#94a3b8', maxRotation: 45, minRotation: 45 } },
-          y: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#94a3b8', callback: (v) => formatBps(v) } }
-        }
-      }
-    })
-  } catch (error) {
-    console.error('[FiberCableDetailModal] Erro ao criar gráfico tráfego origem:', error)
-  }
-}
-
-const createTrafficDestinationChart = async () => {
-  const canvasEl = await waitForCanvas(trafficDestinationChartCanvas)
-  if (!canvasEl || !trafficData.value?.destination?.history?.length) {
-    if (trafficDestinationChartRetry < MAX_CHART_RETRIES) {
-      trafficDestinationChartRetry += 1
-      setTimeout(() => createTrafficDestinationChart(), 150)
-    } else {
-      trafficDestinationChartRetry = 0
-    }
-    return
-  }
-  try {
-    trafficDestinationChartRetry = 0
-    const ctx = canvasEl.getContext('2d')
-    if (trafficDestinationChart) { trafficDestinationChart.destroy() }
-    const formatted = formatTrafficHistoryData(trafficData.value.destination.history)
-    if (!formatted) return
-    trafficDestinationChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: formatted.labels,
-        datasets: [
-          { label: 'Download (IN)', data: formatted.inData, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.08)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, spanGaps: true },
-          { label: 'Upload (OUT)', data: formatted.outData, borderColor: '#ec4899', backgroundColor: 'rgba(236,72,153,0.08)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, spanGaps: true }
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { display: true, labels: { color: '#94a3b8' } },
-          tooltip: { mode: 'index', intersect: false, backgroundColor: 'rgba(0,0,0,0.8)', titleColor: '#fff', bodyColor: '#fff', borderColor: '#f59e0b', borderWidth: 1,
-            callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${formatBps(ctx.parsed.y)}` }
-          }
-        },
-        scales: {
-          x: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#94a3b8', maxRotation: 45, minRotation: 45 } },
-          y: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#94a3b8', callback: (v) => formatBps(v) } }
-        }
-      }
-    })
-  } catch (error) {
-    console.error('[FiberCableDetailModal] Erro ao criar gráfico tráfego destino:', error)
-  }
+// EV-0011/EV-0026: séries para o TimeSeriesChart (x em epoch ms, y em Mbps, null = buraco).
+const trafficSeries = (side) => {
+  const history = trafficData.value?.[side]?.history || []
+  if (!history.length) return []
+  return [
+    { label: 'Download (IN)', data: history.map(p => ({ x: p.timestamp, y: bpsToMbps(p.traffic_in) })) },
+    { label: 'Upload (OUT)', data: history.map(p => ({ x: p.timestamp, y: bpsToMbps(p.traffic_out) })) },
+  ]
 }
 
 const exportTrafficChart = (port, format) => {
   trafficExportMenuOpen.value = null
-  const canvas = port === 'origin' ? trafficOriginChartCanvas.value : trafficDestinationChartCanvas.value
-  if (!canvas) return
+  const chartRef = port === 'origin' ? trafficOriginChartRef.value : trafficDestinationChartRef.value
+  const chartImage = chartRef?.toDataURL?.()
+  if (!chartImage) return
   const portData = port === 'origin' ? trafficData.value?.origin : trafficData.value?.destination
   const device = portData?.device || port
   const portName = portData?.port || ''
-  const filename = `trafego_${device}_${portName}_${selectedPeriod.value}h`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '')
+  const filename = `trafego_${device}_${portName}_${selectedPeriod.value}h`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '')
   if (format === 'png') {
     const link = document.createElement('a')
     link.download = `${filename}.png`
-    link.href = canvas.toDataURL('image/png')
+    link.href = chartImage
     link.click()
     return
   }
-  const imgData = canvas.toDataURL('image/png')
+  const imgData = chartImage
   const win = window.open('', '_blank')
   if (!win) return
-  win.document.write(`<!DOCTYPE html><html><head><title>${device} — ${portName}</title><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#fff;display:flex;flex-direction:column;align-items:center;padding:24px;font-family:sans-serif;}h2{font-size:14px;color:#334155;margin-bottom:4px;}p{font-size:12px;color:#64748b;margin-bottom:16px;}img{max-width:100%;border:1px solid #e2e8f0;border-radius:8px;}</style></head><body><h2>${device}</h2><p>${portName} — Período: ${selectedPeriod.value}h</p><img src="${imgData}"/><script>window.onload=()=>{window.print()}<\/script></body></html>`)
+  win.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(device)} — ${escapeHtml(portName)}</title><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#fff;display:flex;flex-direction:column;align-items:center;padding:24px;font-family:sans-serif;}h2{font-size:14px;color:#334155;margin-bottom:4px;}p{font-size:12px;color:#64748b;margin-bottom:16px;}img{max-width:100%;border:1px solid #e2e8f0;border-radius:8px;}</style></head><body><h2>${escapeHtml(device)}</h2><p>${escapeHtml(portName)} — Período: ${selectedPeriod.value}h</p><img src="${imgData}"/><script>window.onload=()=>{window.print()}<${'/'}script></body></html>`)
   win.document.close()
 }
 
@@ -1467,6 +1443,8 @@ const normalizeAlarmConfig = (config) => {
     alertType,
     alertTypeLabel: ALERT_TYPE_LABELS[alertType] || null,
     persistMinutes,
+    snoozeUntil: config.snooze_until || '',
+    snoozeActive: !!config.snooze_active,
     createdAt: config.created_at || config.updated_at || config.timestamp || null,
     description: config.description || config.notes || '',
     templates: templatesMeta,
@@ -1521,6 +1499,61 @@ const loadCableAlarmConfigs = async (cableId = props.cable?.id) => {
     isLoadingAlarmConfigs.value = false
   }
 }
+
+/**
+ * Carrega histórico de notificações de alarme do cabo (Fase C).
+ * Mostra automáticos (Celery dispatcher) + manuais (botão Enviar Teste).
+ */
+const loadAlarmNotifications = async (cableId = props.cable?.id) => {
+  if (!cableId) {
+    alarmNotifications.value = []
+    return
+  }
+  isLoadingAlarmNotifications.value = true
+  try {
+    const response = await getCableAlarmNotifications(cableId, 50)
+    alarmNotifications.value = Array.isArray(response?.results) ? response.results : []
+  } catch (error) {
+    console.error('[FiberCableDetailModal] Erro ao carregar histórico de notificações:', error)
+    alarmNotifications.value = []
+  } finally {
+    isLoadingAlarmNotifications.value = false
+  }
+}
+
+const formatNotificationTime = (iso) => {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    return d.toLocaleString('pt-BR', {
+      day: '2-digit', month: '2-digit', year: '2-digit',
+      hour: '2-digit', minute: '2-digit',
+    })
+  } catch {
+    return iso
+  }
+}
+
+const ALERT_TYPE_ICONS = {
+  break: '🚨',
+  attenuation: '⚠️',
+  normalization: '✅',
+}
+
+const CHANNEL_LABELS = {
+  whatsapp: 'WhatsApp',
+  email: 'E-mail',
+  sms: 'SMS',
+  telegram: 'Telegram',
+}
+
+// Quando o usuário expande a seção de histórico pela primeira vez, carrega
+// (lazy: evita request se ele nunca clicar)
+watch(showAlarmHistory, (open) => {
+  if (open && alarmNotifications.value.length === 0 && props.cable?.id) {
+    loadAlarmNotifications(props.cable.id)
+  }
+})
 
 const setDefaultTargetSelection = () => {
   const target = alarmForm.value.target
@@ -1592,6 +1625,115 @@ const deleteAlarm = async (group) => {
   } catch (error) {
     console.error('[FiberCableDetailModal] Erro ao excluir alarme:', error)
     window.alert(error?.message || 'Não foi possível excluir a configuração.')
+  }
+}
+
+/**
+ * Silencia (snooze) ou retoma todas as configs do grupo.
+ * Aplica o snooze a TODOS os ids do grupo (representa a mesma config
+ * de destinatário com vários alert_types) — assim um clique pausa o
+ * cabo inteiro para aquele responsável.
+ */
+const snoozeAlarm = async (group, hours) => {
+  const ids = group.ids || []
+  if (!ids.length) return
+  try {
+    await Promise.all(ids.map(id => snoozeCableAlarm(props.cable.id, id, hours)))
+    await loadCableAlarmConfigs(props.cable.id)
+    if (hours && hours > 0) {
+      const label = hours >= 24 ? `${(hours / 24).toFixed(0)} dia(s)` : `${hours} hora(s)`
+      window.alert(`🔕 Avisos silenciados por ${label} para "${group.targetDisplay}".`)
+    } else {
+      window.alert(`🔔 Snooze removido — avisos retomados para "${group.targetDisplay}".`)
+    }
+  } catch (error) {
+    console.error('[FiberCableDetailModal] Erro ao alterar snooze:', error)
+    window.alert(error?.response?.data?.error || error?.message || 'Falha ao alterar snooze.')
+  }
+}
+
+const askSnoozeDuration = (group) => {
+  const choice = window.prompt(
+    `Silenciar avisos automáticos para "${group.targetDisplay}".\n\n` +
+    `Digite um número:\n` +
+    `  1 = 1 hora\n` +
+    `  4 = 4 horas\n` +
+    `  24 = 24 horas\n` +
+    `  168 = 7 dias\n` +
+    `  0 = remover snooze (retomar avisos)\n` +
+    `\nValores em horas. Cancelar não altera.`,
+    '4'
+  )
+  if (choice === null || choice === '') return
+  const hours = parseFloat(choice)
+  if (!Number.isFinite(hours) || hours < 0) {
+    window.alert('Valor inválido.')
+    return
+  }
+  snoozeAlarm(group, hours)
+}
+
+const formatSnoozeUntil = (iso) => {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return iso
+  }
+}
+
+/**
+ * Envia mensagem de TESTE real para os destinatários da config.
+ * Usa o primeiro id do grupo (todas as variações de alert_type têm os
+ * mesmos destinatários — um teste cobre todos).
+ */
+const sendTestAlarm = async (group) => {
+  const ids = group.ids || []
+  const firstId = ids[0]
+  if (!firstId) return
+  if (testingAlarmIds.value.has(firstId)) return
+
+  testingAlarmIds.value = new Set([...testingAlarmIds.value, firstId])
+  try {
+    const result = await testCableAlarm(props.cable.id, firstId)
+    const sent = result?.sent || 0
+    const total = result?.total || 0
+
+    if (result?.error && total === 0) {
+      window.alert(`Nenhuma mensagem enviada — ${result.error}`)
+      return
+    }
+
+    if (sent > 0 && sent === total) {
+      window.alert(`✅ Teste enviado com sucesso para ${sent} destinatário(s).`)
+    } else if (sent > 0) {
+      // parcial
+      const failures = (result.results || [])
+        .filter(r => !r.success)
+        .map(r => `• ${r.recipient || '(sem nome)'}: ${r.error || 'falhou'}`)
+        .join('\n')
+      window.alert(
+        `⚠️ Teste parcial: ${sent}/${total} entregues.\n\nFalhas:\n${failures}`
+      )
+    } else {
+      const failures = (result.results || [])
+        .map(r => `• ${r.recipient || '(sem nome)'}: ${r.error || 'falhou'}`)
+        .join('\n') || 'Sem detalhes adicionais.'
+      window.alert(`❌ Nenhuma mensagem entregue.\n\n${failures}`)
+    }
+  } catch (error) {
+    console.error('[FiberCableDetailModal] Erro ao enviar teste:', error)
+    window.alert(error?.response?.data?.error || error?.message || 'Falha ao enviar mensagem de teste.')
+  } finally {
+    const next = new Set(testingAlarmIds.value)
+    next.delete(firstId)
+    testingAlarmIds.value = next
+    // Atualizar histórico se a seção estiver aberta — usuário vê o teste
+    // aparecer logo na lista (com tag TESTE) sem precisar atualizar manualmente.
+    if (showAlarmHistory.value) {
+      loadAlarmNotifications(props.cable.id)
+    }
   }
 }
 
@@ -1773,321 +1915,24 @@ const formatEventDate = (date) => {
 }
 
 // Criar/atualizar gráficos ópticos (dois gráficos separados)
-const createOpticalCharts = async () => {
-  console.log('[FiberCableDetailModal] createOpticalCharts chamado')
-  
-  if (expandedOrigin.value && opticalData.value?.origin) {
-    await createOriginChart()
-  }
-  
-  if (expandedDestination.value && opticalData.value?.destination) {
-    await createDestinationChart()
-  }
+// EV-0011/EV-0026: séries ópticas para o TimeSeriesChart.
+const opticalSeries = (side) => {
+  const data = opticalData.value?.[side]
+  if (!data?.timestamps?.length) return []
+  return [
+    { label: 'RX (dBm)', data: data.timestamps.map((t, i) => ({ x: t, y: data.rxData[i] })) },
+    { label: 'TX (dBm)', data: data.timestamps.map((t, i) => ({ x: t, y: data.txData[i] })) },
+  ]
 }
 
-const createOriginChart = async () => {
-  const canvasEl = await waitForCanvas(originChartCanvas)
-
-  if (!canvasEl || !opticalData.value?.origin) {
-    if (originChartRetry < MAX_CHART_RETRIES) {
-      originChartRetry += 1
-      console.warn('[FiberCableDetailModal] Canvas origem não encontrado, tentando novamente...', {
-        attempt: originChartRetry,
-        hasCanvas: !!canvasEl,
-        hasData: !!opticalData.value?.origin
-      })
-      setTimeout(() => {
-        createOriginChart()
-      }, 150)
-    } else {
-      console.error('[FiberCableDetailModal] Falha ao obter canvas origem após múltiplas tentativas', {
-        attempts: originChartRetry,
-        hasCanvas: !!canvasEl,
-        hasData: !!opticalData.value?.origin
-      })
-      originChartRetry = 0
-    }
-    return
-  }
-  
-  try {
-    originChartRetry = 0
-    const ctx = canvasEl.getContext('2d')
-    
-    if (originChart) {
-      originChart.destroy()
-    }
-    
-    const originData = opticalData.value.origin
-    console.log('[FiberCableDetailModal] Criando gráfico origem com', originData.labels.length, 'pontos')
-
-    const datasets = [
-      {
-        label: 'RX (dBm)',
-        data: originData.rxData,
-        borderColor: '#3b82f6',
-        backgroundColor: 'transparent',
-        borderWidth: 2,
-        fill: false,
-        tension: 0.4,
-        pointRadius: 0,
-        pointHoverRadius: 6,
-        spanGaps: true,
-        order: 1
-      },
-      {
-        label: 'TX (dBm)',
-        data: originData.txData,
-        borderColor: '#10b981',
-        backgroundColor: 'transparent',
-        borderWidth: 2,
-        fill: false,
-        tension: 0.4,
-        pointRadius: 0,
-        pointHoverRadius: 6,
-        spanGaps: true,
-        order: 1
-      }
-    ]
-
-    if (originData.warningLine) {
-      datasets.push({
-        label: 'Atenção',
-        data: originData.warningLine,
-        borderColor: '#fbbf24',
-        borderDash: [6, 6],
-        borderWidth: 1.5,
-        fill: false,
-        pointRadius: 0,
-        tension: 0,
-        spanGaps: true,
-        order: 5
-      })
-    }
-
-    if (originData.criticalLine) {
-      datasets.push({
-        label: 'Crítico',
-        data: originData.criticalLine,
-        borderColor: '#f87171',
-        borderDash: [6, 6],
-        borderWidth: 1.5,
-        fill: false,
-        pointRadius: 0,
-        tension: 0,
-        spanGaps: true,
-        order: 5
-      })
-    }
-
-    originChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: originData.labels,
-        datasets
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: true,
-            labels: {
-              color: '#94a3b8'
-            }
-          },
-          tooltip: {
-            mode: 'index',
-            intersect: false,
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            titleColor: '#fff',
-            bodyColor: '#fff',
-            borderColor: '#3b82f6',
-            borderWidth: 1
-          }
-        },
-        scales: {
-          x: {
-            grid: {
-              color: 'rgba(255, 255, 255, 0.1)'
-            },
-            ticks: {
-              color: '#94a3b8',
-              maxRotation: 45,
-              minRotation: 45
-            }
-          },
-          y: {
-            grid: {
-              color: 'rgba(255, 255, 255, 0.1)'
-            },
-            ticks: {
-              color: '#94a3b8',
-              callback: (value) => `${value} dBm`
-            }
-          }
-        }
-      }
-    })
-    
-    console.log('[FiberCableDetailModal] Gráfico origem criado com sucesso')
-  } catch (error) {
-    console.error('[FiberCableDetailModal] Erro ao criar gráfico origem:', error)
-  }
+const opticalThresholds = (side) => {
+  const t = opticalData.value?.thresholds?.[side]
+  const out = []
+  if (t?.warning !== null && t?.warning !== undefined) out.push({ value: t.warning, label: 'Atenção' })
+  if (t?.critical !== null && t?.critical !== undefined) out.push({ value: t.critical, label: 'Crítico', color: '#f87171' })
+  return out
 }
 
-const createDestinationChart = async () => {
-  const canvasEl = await waitForCanvas(destinationChartCanvas)
-
-  if (!canvasEl || !opticalData.value?.destination) {
-    if (destinationChartRetry < MAX_CHART_RETRIES) {
-      destinationChartRetry += 1
-      console.warn('[FiberCableDetailModal] Canvas destino não encontrado, tentando novamente...', {
-        attempt: destinationChartRetry,
-        hasCanvas: !!canvasEl,
-        hasData: !!opticalData.value?.destination
-      })
-      setTimeout(() => {
-        createDestinationChart()
-      }, 150)
-    } else {
-      console.error('[FiberCableDetailModal] Falha ao obter canvas destino após múltiplas tentativas', {
-        attempts: destinationChartRetry,
-        hasCanvas: !!canvasEl,
-        hasData: !!opticalData.value?.destination
-      })
-      destinationChartRetry = 0
-    }
-    return
-  }
-  
-  try {
-    destinationChartRetry = 0
-    const ctx = canvasEl.getContext('2d')
-    
-    if (destinationChart) {
-      destinationChart.destroy()
-    }
-    
-    const destinationData = opticalData.value.destination
-    console.log('[FiberCableDetailModal] Criando gráfico destino com', destinationData.labels.length, 'pontos')
-
-    const datasets = [
-      {
-        label: 'RX (dBm)',
-        data: destinationData.rxData,
-        borderColor: '#f59e0b',
-        backgroundColor: 'transparent',
-        borderWidth: 2,
-        fill: false,
-        tension: 0.4,
-        pointRadius: 0,
-        pointHoverRadius: 6,
-        spanGaps: true,
-        order: 1
-      },
-      {
-        label: 'TX (dBm)',
-        data: destinationData.txData,
-        borderColor: '#ec4899',
-        backgroundColor: 'transparent',
-        borderWidth: 2,
-        fill: false,
-        tension: 0.4,
-        pointRadius: 0,
-        pointHoverRadius: 6,
-        spanGaps: true,
-        order: 1
-      }
-    ]
-
-    if (destinationData.warningLine) {
-      datasets.push({
-        label: 'Atenção',
-        data: destinationData.warningLine,
-        borderColor: '#fbbf24',
-        borderDash: [6, 6],
-        borderWidth: 1.5,
-        fill: false,
-        pointRadius: 0,
-        tension: 0,
-        spanGaps: true,
-        order: 5
-      })
-    }
-
-    if (destinationData.criticalLine) {
-      datasets.push({
-        label: 'Crítico',
-        data: destinationData.criticalLine,
-        borderColor: '#f87171',
-        borderDash: [6, 6],
-        borderWidth: 1.5,
-        fill: false,
-        pointRadius: 0,
-        tension: 0,
-        spanGaps: true,
-        order: 5
-      })
-    }
-
-    destinationChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: destinationData.labels,
-        datasets
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: true,
-            labels: {
-              color: '#94a3b8'
-            }
-          },
-          tooltip: {
-            mode: 'index',
-            intersect: false,
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            titleColor: '#fff',
-            bodyColor: '#fff',
-            borderColor: '#f59e0b',
-            borderWidth: 1
-          }
-        },
-        scales: {
-          x: {
-            grid: {
-              color: 'rgba(255, 255, 255, 0.1)'
-            },
-            ticks: {
-              color: '#94a3b8',
-              maxRotation: 45,
-              minRotation: 45
-            }
-          },
-          y: {
-            grid: {
-              color: 'rgba(255, 255, 255, 0.1)'
-            },
-            ticks: {
-              color: '#94a3b8',
-              callback: (value) => `${value} dBm`
-            }
-          }
-        }
-      }
-    })
-    
-    console.log('[FiberCableDetailModal] Gráfico destino criado com sucesso')
-  } catch (error) {
-    console.error('[FiberCableDetailModal] Erro ao criar gráfico destino:', error)
-  }
-}
-
-// Helper para formatar valores dBm
 const formatBps = (value) => {
   if (value === null || value === undefined) return 'N/A'
   const bps = Number(value)
@@ -2102,19 +1947,6 @@ const formatDbm = (value) => {
   if (value === null || value === undefined || isNaN(value)) return 'N/A'
   return `${value.toFixed(2)} dBm`
 }
-
-// Watch para recriar gráficos quando expandir/colapsar
-watch(expandedOrigin, async (isExpanded) => {
-  if (isExpanded && opticalData.value?.origin) {
-    await createOriginChart()
-  }
-})
-
-watch(expandedDestination, async (isExpanded) => {
-  if (isExpanded && opticalData.value?.destination) {
-    await createDestinationChart()
-  }
-})
 
 watch(departmentGroups, (groups) => {
   if (groups.length) {
@@ -2144,9 +1976,12 @@ watch(() => props.cable?.id, (cableId) => {
   } else if (!cableId) {
     savedAlarmConfigs.value = []
   }
-})
+}, { immediate: true })
 
-// Watch para carregar dados quando modal abrir ou cabo mudar
+// Watch para carregar dados quando modal abrir ou cabo mudar.
+// `immediate: true` é crítico com lazy v-if no parent: o componente é
+// montado já com show=true — sem o flag, o watcher não dispara e o
+// modal abre vazio (sem dados ópticos/tráfego/alarmes).
 watch(() => [props.show, props.cable], async ([show, cable]) => {
   if (show && cable) {
     showCableDetails.value = true
@@ -2156,19 +1991,7 @@ watch(() => [props.show, props.cable], async ([show, cable]) => {
       loadCableAlarmConfigs(cable.id)
     ])
   }
-})
-
-// Watch para criar gráficos quando mudar para tab optical ou traffic
-watch(activeTab, async (newTab) => {
-  if (newTab === 'optical' && opticalData.value && props.show) {
-    await nextTick()
-    await createOpticalCharts()
-  }
-  if (newTab === 'traffic' && trafficData.value && props.show) {
-    await nextTick()
-    await createTrafficCharts()
-  }
-})
+}, { immediate: true })
 
 // Watch para recriar gráficos quando mudar período
 watch(selectedPeriod, async () => {
@@ -2181,27 +2004,10 @@ watch(selectedPeriod, async () => {
   }
 })
 
-watch(trafficExpandedOrigin, async (isExpanded) => {
-  if (isExpanded && trafficData.value?.origin?.history?.length) {
-    await createTrafficOriginChart()
-  }
-})
-
-watch(trafficExpandedDestination, async (isExpanded) => {
-  if (isExpanded && trafficData.value?.destination?.history?.length) {
-    await createTrafficDestinationChart()
-  }
-})
-
 const onDocumentClick = () => { exportMenuOpen.value = null; trafficExportMenuOpen.value = null }
 
 onMounted(() => {
   document.addEventListener('click', onDocumentClick)
-  if (props.show && activeTab.value === 'optical' && opticalData.value) {
-    nextTick(async () => {
-      await createOpticalCharts()
-    })
-  }
 })
 
 onUnmounted(() => {
@@ -3099,6 +2905,186 @@ onUnmounted(() => {
   background: rgba(15, 23, 42, 0.45);
 }
 
+/* ── Histórico de Avisos (Fase C) ──────────────────────────────── */
+.alarm-history-section {
+  margin-top: 16px;
+}
+
+.alarm-history-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 10px;
+  color: #c7d2fe;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.alarm-history-toggle:hover {
+  background: rgba(99, 102, 241, 0.14);
+  border-color: rgba(99, 102, 241, 0.45);
+}
+.alarm-history-toggle .icon {
+  width: 16px;
+  height: 16px;
+}
+.alarm-history-badge {
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: rgba(99, 102, 241, 0.25);
+  border-radius: 999px;
+  font-size: 11px;
+  color: #e0e7ff;
+}
+.alarm-history-chevron {
+  margin-left: auto;
+  font-size: 12px;
+  color: #a5b4fc;
+}
+
+.alarm-history-body {
+  margin-top: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.55);
+  padding: 10px;
+}
+
+.alarm-history-loading,
+.alarm-history-empty {
+  padding: 20px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.alarm-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.alarm-history-item {
+  display: flex;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(30, 41, 59, 0.5);
+  border-left: 3px solid #10b981;
+}
+.alarm-history-item.is-failed {
+  border-left-color: #ef4444;
+  background: rgba(127, 29, 29, 0.18);
+}
+.alarm-history-item.is-test {
+  border-left-color: #6366f1;
+}
+
+.ah-icon {
+  font-size: 18px;
+  line-height: 1.1;
+  flex-shrink: 0;
+}
+
+.ah-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.ah-line-1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #e2e8f0;
+  margin-bottom: 2px;
+}
+.ah-type {
+  font-weight: 600;
+}
+.ah-tag-test {
+  padding: 1px 6px;
+  background: rgba(99, 102, 241, 0.28);
+  color: #c7d2fe;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.ah-time {
+  margin-left: auto;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.ah-line-2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+.ah-channel {
+  padding: 1px 7px;
+  background: rgba(148, 163, 184, 0.15);
+  border-radius: 4px;
+  font-size: 11px;
+}
+.ah-recipient {
+  color: #cbd5e1;
+}
+.ah-status {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+}
+.ah-status--ok { color: #6ee7b7; }
+.ah-status--fail { color: #fca5a5; }
+
+.ah-error {
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: rgba(239, 68, 68, 0.12);
+  border-radius: 4px;
+  font-size: 11px;
+  color: #fca5a5;
+  font-family: monospace;
+}
+
+.alarm-history-refresh {
+  margin-top: 10px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 6px;
+  color: #cbd5e1;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.alarm-history-refresh:hover:not(:disabled) {
+  background: rgba(148, 163, 184, 0.1);
+}
+.alarm-history-refresh:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
 .saved-configs-list {
   display: flex;
   flex-direction: column;
@@ -3188,6 +3174,59 @@ onUnmounted(() => {
 .btn-config-action .icon {
   width: 14px;
   height: 14px;
+}
+
+.btn-test {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #6ee7b7;
+}
+
+.btn-test:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: rgba(16, 185, 129, 0.6);
+  color: #a7f3d0;
+}
+
+.btn-test:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.btn-snooze {
+  background: rgba(245, 158, 11, 0.10);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #fcd34d;
+}
+.btn-snooze:hover {
+  background: rgba(245, 158, 11, 0.22);
+  border-color: rgba(245, 158, 11, 0.6);
+  color: #fde68a;
+}
+.btn-snooze-off {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #86efac;
+}
+.btn-snooze-off:hover {
+  background: rgba(34, 197, 94, 0.22);
+  border-color: rgba(34, 197, 94, 0.65);
+  color: #bbf7d0;
+}
+
+/* Badge "🔕 Silenciado até HH:MM" no header do card */
+.saved-config-snooze {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  border-radius: 999px;
+  color: #fde68a;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .btn-edit {

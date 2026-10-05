@@ -50,7 +50,7 @@ Choose the best path for your needs:
 | Guide | Description | Audience |
 |-------|-------------|----------|
 | [QUICKSTART.md](QUICKSTART.md) | Unified local + Docker quickstart | Developers, DevOps |
-| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Common setup issues | Everyone |
+| [TROUBLESHOOTING.md](../troubleshooting/) | Common setup issues | Everyone |
 
 ---
 
@@ -99,8 +99,8 @@ After completing the quickstart:
 ## 🆘 Getting Help
 
 **Stuck during setup?**
-1. Check [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
-2. Review [../operations/TROUBLESHOOTING.md](../operations/TROUBLESHOOTING.md)
+1. Check [TROUBLESHOOTING.md](../troubleshooting/)
+2. Review [../operations/TROUBLESHOOTING.md](../troubleshooting/)
 3. Open a GitHub issue with error details
 
 ---

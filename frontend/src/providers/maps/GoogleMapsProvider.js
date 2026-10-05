@@ -3,10 +3,20 @@
  * Implementa IMapProvider para Google Maps JavaScript API
  */
 
-import { IMapProvider, IMap, IPolyline, IMarker } from './IMapProvider.js';
+import { IMapProvider, IMap, IPolyline, IMarker, IPolygon } from './IMapProvider.js';
+import { getMarkerConfig } from './markerStyles.js';
+import { getMapStyles } from '../../utils/mapStyles.js';
 
 let googleMapsLoaded = false;
 let loadingPromise = null;
+
+// Fundo do mapa enquanto os tiles carregam, por tema (era do CustomMapViewer)
+const BACKGROUND_BY_THEME = { dark: '#242f3e', light: '#F1F3F4' };
+
+function normalizeFitOptions(options) {
+  if (typeof options === 'number') return { padding: options, maxZoom: undefined };
+  return { padding: options?.padding ?? options?.top ?? 50, maxZoom: options?.maxZoom };
+}
 
 /**
  * Implementação Google Maps do IPolyline
@@ -31,10 +41,32 @@ class GooglePolyline extends IPolyline {
       clickable: options.clickable !== false,
       geodesic: true,
     });
+
+    this._base = {
+      strokeWeight: options.strokeWeight || 4,
+      strokeOpacity: options.strokeOpacity || 0.9,
+    };
+    if (options.clickable !== false) {
+      this.polyline.addListener('mouseover', () => {
+        this.polyline.setOptions({ strokeWeight: this._base.strokeWeight + 2, strokeOpacity: 1 });
+      });
+      this.polyline.addListener('mouseout', () => {
+        this.polyline.setOptions({ ...this._base });
+      });
+    }
   }
 
   setPath(path) {
     this.polyline.setPath(path);
+  }
+
+  setStyle(style) {
+    const next = {};
+    if (style.strokeColor !== undefined) next.strokeColor = style.strokeColor;
+    if (style.strokeWeight !== undefined) next.strokeWeight = this._base.strokeWeight = style.strokeWeight;
+    if (style.strokeOpacity !== undefined) next.strokeOpacity = this._base.strokeOpacity = style.strokeOpacity;
+    if (style.zIndex !== undefined) next.zIndex = style.zIndex;
+    this.polyline.setOptions(next);
   }
 
   getPath() {
@@ -99,7 +131,9 @@ class GooglePolyline extends IPolyline {
   }
 
   remove() {
+    google.maps.event.clearInstanceListeners(this.polyline);
     this.polyline.setMap(null);
+    this.listeners = {};
   }
 }
 
@@ -117,16 +151,42 @@ class GoogleMarkerClass extends IMarker {
     const markerType = options.markerType || 'default';
     const config = this._getMarkerConfig(markerType);
 
-    // Create SVG icon with label
-    const icon = this._createCustomIcon(config);
+    this._style = {
+      color: options.color ?? config.color,
+      size: options.size ?? config.size,
+      label: options.label ?? config.label,
+      iconUrl: options.iconUrl,
+      iconSize: options.iconSize || 24,
+    };
 
     this.marker = new google.maps.Marker({
       position: options.position,
       map: this.googleMap,
       draggable: options.draggable || false,
       title: options.title || '',
-      icon: icon,
+      icon: this._buildIcon(),
     });
+  }
+
+  /** Ícone por URL (ex.: ícone do dispositivo) ou o círculo SVG com a cor/tamanho atuais */
+  _buildIcon() {
+    const s = this._style;
+    return s.iconUrl
+      ? this._createUrlIcon(s.iconUrl, s.iconSize)
+      : this._createCustomIcon({ color: s.color, size: s.size, label: s.label });
+  }
+
+  setStyle(style) {
+    this._style = { ...this._style, ...style };
+    this.marker.setIcon(this._buildIcon());
+  }
+
+  _createUrlIcon(url, size) {
+    return {
+      url,
+      scaledSize: new google.maps.Size(size, size),
+      anchor: new google.maps.Point(size / 2, size / 2),
+    };
   }
 
   setPosition(position) {
@@ -162,44 +222,18 @@ class GoogleMarkerClass extends IMarker {
   }
 
   remove() {
+    google.maps.event.clearInstanceListeners(this.marker);
     this.marker.setMap(null);
+    this.listeners = {};
   }
 
   /**
-   * Get marker configuration based on type
+   * Estilo do marcador por tipo — tabela partilhada em `markerStyles.js`.
    * @param {string} type - 'origin', 'destination', 'intermediate', 'default', 'preview'
    * @returns {{color: string, size: number, label: string}}
    */
   _getMarkerConfig(type) {
-    const configs = {
-      origin: {
-        color: '#22c55e',
-        size: 32,
-        label: 'A'
-      },
-      destination: {
-        color: '#ef4444',
-        size: 32,
-        label: 'B'
-      },
-      intermediate: {
-        color: '#3b82f6',
-        size: 20,
-        label: ''
-      },
-      preview: {
-        color: '#f59e0b',
-        size: 20,
-        label: ''
-      },
-      default: {
-        color: '#dc2626',
-        size: 24,
-        label: ''
-      }
-    };
-
-    return configs[type] || configs.default;
+    return getMarkerConfig(type);
   }
 
   /**
@@ -232,6 +266,37 @@ class GoogleMarkerClass extends IMarker {
 }
 
 /**
+ * Implementação Google Maps do IPolygon
+ */
+class GooglePolygon extends IPolygon {
+  constructor(map, options) {
+    super();
+    this.polygon = new google.maps.Polygon({
+      paths: options.path || [],
+      map: map.googleMap,
+      strokeColor: options.strokeColor || '#f59e0b',
+      strokeOpacity: options.strokeOpacity ?? 0.9,
+      strokeWeight: options.strokeWeight || 2,
+      fillColor: options.fillColor || options.strokeColor || '#f59e0b',
+      fillOpacity: options.fillOpacity ?? 0.12,
+      clickable: options.clickable ?? false,
+    });
+  }
+
+  setPath(path) {
+    this.polygon.setPaths(path || []);
+  }
+
+  setStyle(style) {
+    this.polygon.setOptions(style);
+  }
+
+  remove() {
+    this.polygon.setMap(null);
+  }
+}
+
+/**
  * Implementação Google Maps do IMap
  */
 class GoogleMapClass extends IMap {
@@ -241,11 +306,41 @@ class GoogleMapClass extends IMap {
     this.options = options;
     this.listeners = {};
 
+    const controls = options.controls || {};
+    const theme = options.theme;
+
     this.googleMap = new google.maps.Map(container, {
       center: options.center,
       zoom: options.zoom || 10,
       mapTypeId: options.mapTypeId || 'terrain',
+      ...(theme ? { styles: getMapStyles(theme, theme), backgroundColor: BACKGROUND_BY_THEME[theme] } : {}),
+      mapTypeControl: controls.mapType ?? true,
+      streetViewControl: controls.streetView ?? true,
+      fullscreenControl: controls.fullscreen ?? true,
+      zoomControl: true,
+      gestureHandling: 'greedy',
+      tilt: 0,
+      ...(options.minZoom ? { minZoom: options.minZoom } : {}),
+      ...(options.maxZoom ? { maxZoom: options.maxZoom } : {}),
     });
+
+    if (controls.traffic) {
+      this.trafficLayer = new google.maps.TrafficLayer();
+      this.trafficLayer.setMap(this.googleMap);
+    }
+  }
+
+  setTheme(theme) {
+    if (!theme) return;
+    this.googleMap.setOptions({ styles: getMapStyles(theme, theme), backgroundColor: BACKGROUND_BY_THEME[theme] });
+  }
+
+  setCursor(cursor) {
+    this.googleMap.setOptions({ draggableCursor: cursor || '' });
+  }
+
+  resize() {
+    google.maps.event.trigger(this.googleMap, 'resize');
   }
 
   setCenter(latLng) {
@@ -265,17 +360,22 @@ class GoogleMapClass extends IMap {
     return this.googleMap.getZoom();
   }
 
-  fitBounds(bounds, padding) {
+  fitBounds(bounds, options) {
+    if (!bounds || bounds.length === 0) return;
+    const { padding, maxZoom } = normalizeFitOptions(options);
     const googleBounds = new google.maps.LatLngBounds();
     bounds.forEach(point => {
       googleBounds.extend(new google.maps.LatLng(point.lat, point.lng));
     });
 
-    const paddingValue = typeof padding === 'number' 
-      ? { top: padding, right: padding, bottom: padding, left: padding }
-      : padding;
+    this.googleMap.fitBounds(googleBounds, { top: padding, right: padding, bottom: padding, left: padding });
 
-    this.googleMap.fitBounds(googleBounds, paddingValue);
+    if (maxZoom) {
+      // O Google aproxima ao máximo num só ponto; corrige-se quando o viewport assentar
+      google.maps.event.addListenerOnce(this.googleMap, 'idle', () => {
+        if (this.googleMap.getZoom() > maxZoom) this.googleMap.setZoom(maxZoom);
+      });
+    }
   }
 
   panTo(latLng) {
@@ -291,28 +391,41 @@ class GoogleMapClass extends IMap {
     if (!this.listeners[event]) {
       this.listeners[event] = [];
     }
-    this.listeners[event].push(callback);
-
-    this.googleMap.addListener(event, (e) => {
-      const eventData = {
-        lat: e.latLng?.lat(),
-        lng: e.latLng?.lng(),
-        originalEvent: e.domEvent,
-        clientX: e.domEvent?.clientX,
-        clientY: e.domEvent?.clientY,
-      };
-      callback(eventData);
+    // `move` é contínuo (bounds_changed); `idle` e `click` existem com o mesmo nome.
+    // Eventos de viewport chegam sem argumento, daí os `?.`.
+    const nativeEvent = event === 'move' ? 'bounds_changed' : event;
+    const handle = this.googleMap.addListener(nativeEvent, (e) => {
+      callback({
+        lat: e?.latLng?.lat(),
+        lng: e?.latLng?.lng(),
+        originalEvent: e?.domEvent,
+        clientX: e?.domEvent?.clientX,
+        clientY: e?.domEvent?.clientY,
+      });
     });
+    this.listeners[event].push({ callback, handle });
   }
 
   off(event, callback) {
-    if (this.listeners[event]) {
-      const index = this.listeners[event].indexOf(callback);
-      if (index > -1) {
-        this.listeners[event].splice(index, 1);
-      }
+    const list = this.listeners[event];
+    if (!list) return;
+    const index = list.findIndex((entry) => entry.callback === callback);
+    if (index > -1) {
+      google.maps.event.removeListener(list[index].handle);
+      list.splice(index, 1);
     }
-    // Google Maps doesn't easily support removing specific listeners
+  }
+
+  getBounds() {
+    const b = this.googleMap.getBounds();
+    if (!b) return null;
+    const ne = b.getNorthEast();
+    const sw = b.getSouthWest();
+    return { lat_min: sw.lat(), lng_min: sw.lng(), lat_max: ne.lat(), lng_max: ne.lng() };
+  }
+
+  getContainer() {
+    return this.container;
   }
 
   createPolyline(options) {
@@ -323,22 +436,30 @@ class GoogleMapClass extends IMap {
     return new GoogleMarkerClass(this, options);
   }
 
+  createPolygon(options) {
+    return new GooglePolygon(this, options);
+  }
+
   destroy() {
     this.listeners = {};
+    if (this.trafficLayer) this.trafficLayer.setMap(null);
     google.maps.event.clearInstanceListeners(this.googleMap);
   }
 
   latLngToPixel(latLng) {
+    // Pixel relativo ao container: ponto-mundo do alvo menos o do canto
+    // noroeste visível, à escala do zoom (mapa sem rotação/inclinação).
     const projection = this.googleMap.getProjection();
-    if (!projection) return { x: 0, y: 0 };
+    const bounds = this.googleMap.getBounds();
+    if (!projection || !bounds) return null;
 
-    const worldPoint = projection.fromLatLngToPoint(
-      new google.maps.LatLng(latLng.lat, latLng.lng)
-    );
     const scale = Math.pow(2, this.googleMap.getZoom());
-    return { 
-      x: worldPoint.x * scale, 
-      y: worldPoint.y * scale 
+    const northWest = new google.maps.LatLng(bounds.getNorthEast().lat(), bounds.getSouthWest().lng());
+    const nwPoint = projection.fromLatLngToPoint(northWest);
+    const point = projection.fromLatLngToPoint(new google.maps.LatLng(latLng.lat, latLng.lng));
+    return {
+      x: (point.x - nwPoint.x) * scale,
+      y: (point.y - nwPoint.y) * scale,
     };
   }
 

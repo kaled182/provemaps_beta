@@ -1,8 +1,30 @@
 <template>
-  <aside 
+  <!-- Mobile backdrop -->
+  <div
+    v-if="isMobile && uiStore.isNavMenuOpen"
+    class="nav-backdrop"
+    @click="uiStore.setNavMenuOpen(false)"
+  ></div>
+
+  <!-- Mobile hamburger button -->
+  <button
+    v-if="isMobile && !uiStore.isNavMenuOpen"
+    class="mobile-hamburger"
+    @click="uiStore.setNavMenuOpen(true)"
+    title="Abrir menu"
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="22" height="22">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  </button>
+
+  <aside
     class="nav-menu"
-    :class="{ 'nav-menu-collapsed': !uiStore.isNavMenuOpen }"
-    :style="navMenuStyle"
+    :class="{
+      'nav-menu-collapsed': !isMobile && !uiStore.isNavMenuOpen,
+      'mobile-open': isMobile && uiStore.isNavMenuOpen
+    }"
+    :style="isMobile ? {} : navMenuStyle"
   >
     <!-- Header do Menu -->
     <div class="nav-menu-header">
@@ -122,7 +144,7 @@
         <button
           @click="toggleGroup('System')"
           class="nav-item nav-item-toggle"
-          :class="{ 'active': isPathActive('/setup/config') || isPathActive('/metrics/health') || isPathActive('/admin/') || isPathActive('/docs') }"
+          :class="{ 'active': isPathActive('/setup/config') || isPathActive('/metrics/health') || isPathActive('/admin/') || isPathActive('/docs') || isPathActive('/system/evolucao') }"
           :title="!uiStore.isNavMenuOpen ? 'System' : ''"
         >
           <span class="nav-icon">
@@ -176,6 +198,17 @@
                 <PhUsers :size="18" weight="regular" />
               </span>
               <span class="nav-label">Users</span>
+            </RouterLink>
+            <RouterLink
+              to="/system/evolucao"
+              class="nav-item nav-item-child"
+              :class="{ 'active': isPathActive('/system/evolucao') }"
+              title="Central de Evolução"
+            >
+              <span class="nav-icon child-icon">
+                <PhMegaphone :size="18" weight="regular" />
+              </span>
+              <span class="nav-label">Evolução</span>
             </RouterLink>
             <RouterLink
               to="/setup/config"
@@ -244,9 +277,18 @@
         </button>
 
         <button
+          @click="showReportar = true"
+          class="icon-btn"
+          title="Reportar problema ou ideia"
+          data-testid="nav-reportar"
+        >
+          <PhMegaphone :size="20" weight="regular" />
+        </button>
+
+        <button
           @click="showChangelog = true"
           class="icon-btn"
-          title="Changelog & Sugestões"
+          title="Changelog"
         >
           <PhInfo :size="20" weight="regular" />
         </button>
@@ -268,7 +310,12 @@
         </form>
       </div>
 
-      <ChangelogModal :show="showChangelog" @close="showChangelog = false" />
+      <ChangelogModal
+        :show="showChangelog"
+        @close="showChangelog = false"
+        @reportar="showChangelog = false; showReportar = true"
+      />
+      <ReportarModal :show="showReportar" @close="showReportar = false" />
       <SystemPanel :show="showSystemPanel" @close="showSystemPanel = false" />
     </div>
   </aside>
@@ -279,6 +326,7 @@ import { ref, computed, onBeforeMount, onMounted, onUnmounted, watch } from 'vue
 import { useRoute } from 'vue-router';
 import { useUiStore } from '@/stores/ui';
 import ChangelogModal from './ChangelogModal.vue';
+import ReportarModal from '@/components/Evolucao/ReportarModal.vue';
 import SystemPanel from './SystemPanel.vue';
 import {
   PhChartBar,
@@ -307,10 +355,12 @@ import {
   PhSquaresFour,
   PhInfo,
   PhHardDrives,
+  PhMegaphone,
 } from '@phosphor-icons/vue';
 
 const showChangelog = ref(false);
 const showSystemPanel = ref(false);
+const showReportar = ref(false);
 
 const uiStore = useUiStore();
 const route = useRoute();
@@ -318,7 +368,27 @@ const csrfToken = ref(window.CSRF_TOKEN || '');
 const wsConnected = ref(false);
 const wsConnecting = ref(false);
 let ws = null;
-const realtimePaths = ['/dashboard', '/monitoring'];
+
+// Mobile detection
+const isMobile = ref(window.innerWidth <= 768);
+function handleResize() {
+  const wasMobile = isMobile.value;
+  isMobile.value = window.innerWidth <= 768;
+
+  if (!wasMobile && isMobile.value) {
+    // Desktop → mobile: fechar menu e zerar CSS var
+    uiStore.isNavMenuOpen = false;
+    document.documentElement.setAttribute('data-nav-menu-open', 'false');
+    applyWidth('0px');
+  } else if (wasMobile && !isMobile.value) {
+    // Mobile → desktop: restaurar estado salvo
+    const storedValue = localStorage.getItem('ui.navMenuOpen');
+    const shouldBeOpen = storedValue === null ? true : storedValue === 'true';
+    uiStore.isNavMenuOpen = shouldBeOpen;
+    document.documentElement.setAttribute('data-nav-menu-open', String(shouldBeOpen));
+    applyWidth(shouldBeOpen ? '280px' : '60px');
+  }
+}
 
 // Estado de expansão dos grupos com submenu
 const expandedGroups = ref(new Set());
@@ -364,21 +434,22 @@ onBeforeMount(() => {
   // Força a leitura do localStorage ANTES do primeiro render
   const storedValue = localStorage.getItem('ui.navMenuOpen');
   const shouldBeOpen = storedValue === null ? true : storedValue === 'true';
-  
+
+  // No mobile, sempre fechar o menu ao montar (evita menu aberto sobrepondo conteúdo)
+  if (isMobile.value) {
+    uiStore.isNavMenuOpen = false;
+    document.documentElement.setAttribute('data-nav-menu-open', 'false');
+    applyWidth('0px');
+    return;
+  }
+
   // Se o store não está sincronizado, força a sincronização
   if (uiStore.isNavMenuOpen !== shouldBeOpen) {
-    console.warn('[NavMenu] Store dessincronizado, corrigindo:', {
-      stored: storedValue,
-      storeValue: uiStore.isNavMenuOpen,
-      correcting: shouldBeOpen
-    });
-    // Força o estado correto sem trigger de save (evita loop)
     uiStore.isNavMenuOpen = shouldBeOpen;
   }
-  
+
   // Define largura inicial baseada no estado final
   applyWidth(shouldBeOpen ? '280px' : '60px');
-  console.log('[NavMenu] onBeforeMount - menuWidth:', menuWidth.value, 'isOpen:', shouldBeOpen);
 });
 
 const connectionStatus = computed(() => {
@@ -460,6 +531,7 @@ function connectWebSocket() {
 }
 
 onMounted(() => {
+  window.addEventListener('resize', handleResize);
   applyWidth(menuWidth.value);
   // Debug helper to inspect sidebar dimensions and state after navigation / refresh
   window.__navMenuDebug = () => {
@@ -478,6 +550,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  window.removeEventListener('resize', handleResize);
   closeWebSocket();
 });
 
@@ -1149,15 +1222,50 @@ watch(() => uiStore.isNavMenuOpen, (newValue) => {
   color: var(--status-offline);
 }
 
-/* Responsivo */
+/* Responsivo mobile */
 @media (max-width: 768px) {
   .nav-menu {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    width: 280px !important;
+    min-width: 280px !important;
+    max-width: 280px !important;
+    height: 100dvh !important;
+    z-index: 1000;
     transform: translateX(-100%);
+    transition: transform 0.3s ease;
   }
-  
+
   .nav-menu.mobile-open {
     transform: translateX(0);
   }
+}
+
+.nav-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 999;
+  backdrop-filter: blur(2px);
+}
+
+.mobile-hamburger {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid var(--menu-border-primary);
+  background: var(--menu-bg);
+  color: var(--menu-text-primary);
+  cursor: pointer;
+  box-shadow: var(--shadow-accent);
 }
 
 /* Anima\u00e7\u00f5es de submenu */

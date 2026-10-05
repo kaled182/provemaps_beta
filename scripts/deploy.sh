@@ -23,6 +23,8 @@
 #   --no-build             Skip image build (deploy with current images)
 #   --no-certbot           Skip certbot SSL bootstrap/renewal
 #   --init-data            Run init_app_data management command
+#   --allow-dirty          Build even with uncommitted changes (the /healthz git_sha
+#                          would then lie about what is deployed — avoid)
 #   -h, --help             Show this message
 #
 # Environment variables (loaded from .env.production if present):
@@ -53,6 +55,7 @@ HEALTHCHECK_TIMEOUT="${HEALTHCHECK_TIMEOUT:-180}"
 DO_BUILD=true
 DO_CERTBOT=true
 DO_INIT_DATA=false
+ALLOW_DIRTY=false
 
 # ---- parse args ----
 while [[ $# -gt 0 ]]; do
@@ -64,6 +67,7 @@ while [[ $# -gt 0 ]]; do
     --no-build)   DO_BUILD=false; shift;;
     --no-certbot) DO_CERTBOT=false; shift;;
     --init-data)  DO_INIT_DATA=true; shift;;
+    --allow-dirty) ALLOW_DIRTY=true; shift;;
     -h|--help)
       sed -n '3,30p' "${BASH_SOURCE[0]}"
       exit 0;;
@@ -259,9 +263,16 @@ check_disk_space
 bootstrap_ssl
 pre_deploy_backup
 
-# Build
+# Build — com o commit cozido na imagem (EV-0027b / ADR 0006 §4.4 e §4.7).
+# O `/healthz` passa a dizer `git_sha`, e a Central de Evolução fecha itens só pelos commits
+# alcançáveis a partir dele; uma árvore suja faria esse SHA mentir, por isso recusa-se.
 if [[ "${DO_BUILD}" == "true" ]]; then
-  log_step "Building images"
+  if [[ -n "$(git -C "${REPO_ROOT}" status --porcelain 2>/dev/null)" && "${ALLOW_DIRTY}" != "true" ]]; then
+    die "Working tree has uncommitted changes; commit them (or pass --allow-dirty)."
+  fi
+  GIT_SHA="$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || true)"
+  export GIT_SHA
+  log_step "Building images (GIT_SHA=${GIT_SHA:-unknown})"
   compose build --pull
   log_end "Build done"
 fi

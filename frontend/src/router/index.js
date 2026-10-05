@@ -137,6 +137,12 @@ const routes = [
     component: () => import('@/views/UsersManagement.vue'),
   },
   {
+    path: '/system/evolucao',
+    name: 'evolucao',
+    component: () => import('@/views/EvolucaoView.vue'),
+    meta: { title: 'Central de Evolução' },
+  },
+  {
     path: '/profile',
     name: 'user-profile',
     component: () => import('@/views/UserProfile.vue'),

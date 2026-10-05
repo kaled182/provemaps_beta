@@ -258,7 +258,7 @@ SELECT *,
        ST_Distance(location::geography, 
                    ST_GeogFromText('POINT(-47.9292 -15.7801)', 4326))
        AS distance
-FROM zabbix_api_site
+FROM zabbix_api_site  -- inherited table name of inventory.Site
 WHERE ST_DWithin(location::geography,
                  ST_GeogFromText('POINT(-47.9292 -15.7801)', 4326),
                  10000.0)  -- Distance in METERS
@@ -328,6 +328,7 @@ def populate_location_from_lat_lng(apps, schema_editor):
             site.save(update_fields=['location'])
 
 # 0018_site_location_gist_index.py - Create GIST index
+# (`zabbix_api_site` is the inherited table name; the model is inventory.Site)
 migrations.RunSQL(
     sql='CREATE INDEX idx_site_location ON zabbix_api_site '
         'USING GIST (location);',
@@ -398,16 +399,18 @@ line_wgs84 = ensure_wgs84(line)
 
 ### Running Tests
 
-```powershell
-# Full test suite (uses PostgreSQL + PostGIS in Docker)
-cd docker
-docker compose exec web pytest tests/inventory/test_spatial_usecases.py -v
+```bash
+# Full test suite (PostgreSQL + PostGIS in Docker; the container workdir is /app/backend)
+docker compose -f docker/docker-compose.yml exec web pytest tests/inventory/test_spatial_usecases.py -v
 
 # Single test
-docker compose exec web pytest tests/inventory/test_spatial_usecases.py::TestSpatialUsecases::test_get_segments_in_bbox -v
+docker compose -f docker/docker-compose.yml exec web pytest tests/inventory/test_spatial_usecases.py::TestSpatialUsecases::test_get_segments_in_bbox -v
 
 # With coverage
-docker compose exec web pytest tests/inventory/test_spatial_usecases.py --cov=inventory.usecases.spatial
+docker compose -f docker/docker-compose.yml exec web pytest tests/inventory/test_spatial_usecases.py --cov=inventory.usecases.spatial
+
+# Outside Docker, from the repo root (needs GDAL/GEOS + PostGIS; TEST_DB_ENGINE=postgis)
+pytest -q backend/tests/inventory/test_spatial_usecases.py
 ```
 
 ### Test Fixtures
@@ -457,9 +460,9 @@ def sample_route(db):
 
 Location: `scripts/benchmark_postgis.py`
 
-```powershell
+```bash
 # Run benchmark (creates 1000 test segments)
-docker compose exec web python /app/scripts/benchmark_postgis.py
+docker compose -f docker/docker-compose.yml exec web python /app/scripts/benchmark_postgis.py
 ```
 
 ### Expected Output
@@ -527,7 +530,7 @@ print(segment_annotated.length_m.m)  # Accurate meters
 
 ```python
 # If queries are slow, verify indexes exist:
-docker compose exec postgres psql -U app -d app -c "\d inventory_routesegment"
+docker compose -f docker/docker-compose.yml exec postgres psql -U app -d app -c "\d inventory_routesegment"
 
 # Should show:
 #   "inventory_routesegment_path_gist" gist (path)
@@ -672,6 +675,7 @@ def get_cable_length_in_region(
 | 2025-11-18 | Phase 6 Team | Initial documentation created after Day 4 completion |
 | 2025-11-18 | Phase 6 Team | Added benchmark results (13.5x speedup confirmed) |
 | 2025-11-18 | Phase 6 Team | Documented all 6 spatial query functions with tests |
+| 2026-10-04 | EV-0021 | Compose commands point to `docker/docker-compose.yml`; note that `zabbix_api_*` are inherited table names (models live in `inventory`) |
 
 ---
 

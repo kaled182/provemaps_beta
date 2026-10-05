@@ -1,6 +1,9 @@
 # 🏗️ Architecture Documentation
 
-System design, module structure, and architecture decisions for MapsProveFiber v2.0.0.
+System design, module structure, and architecture decisions for MapsProveFiber (modular architecture).
+
+**Versão do produto**: ver [VERSION](../../VERSION)  
+**Last Updated**: 2026-10-04
 
 ---
 
@@ -8,9 +11,9 @@ System design, module structure, and architecture decisions for MapsProveFiber v
 
 | Document | Description | Status | Audience |
 |----------|-------------|--------|----------|
-| **[OVERVIEW.md](OVERVIEW.md)** | Complete architecture v2.0.0 | ✅ Ready | All developers |
-| **[MODULES.md](MODULES.md)** | ✅ **Django app structure** (updated 2025-11-07) | Ready | Backend developers |
-| **[DATA_FLOW.md](DATA_FLOW.md)** | ✅ **Request flows and data patterns** (updated 2025-11-07) | Ready | Backend developers |
+| **[OVERVIEW.md](OVERVIEW.md)** | Complete architecture overview | ✅ Ready | All developers |
+| **[MODULES.md](MODULES.md)** | ✅ **Django app structure** (updated 2026-10-04) | Ready | Backend developers |
+| **[DATA_FLOW.md](DATA_FLOW.md)** | ✅ **Request flows and data patterns** (updated 2026-10-04) | Ready | Backend developers |
 | **[ADR/](ADR/)** | Architecture Decision Records | Placeholder | Tech leads, architects |
 
 ### Recent Updates (2025-11-07)
@@ -18,7 +21,7 @@ System design, module structure, and architecture decisions for MapsProveFiber v
 - ✅ **MODULES.md** — Comprehensive documentation of all 10 Django apps:
   - Core infrastructure apps (core, inventory, maps_view, monitoring, setup_app)
   - Integration layer (integrations/zabbix with circuit breaker)
-   - Archived apps (routes_builder retired in Nov/2025)
+  - Archived apps (routes_builder retired in Nov/2025)
   - Future placeholders (dwdm, gpon, service_accounts)
   - Complete dependency graph and migration history
   
@@ -63,7 +66,7 @@ System design, module structure, and architecture decisions for MapsProveFiber v
 
 ## 🏛️ Architecture Principles
 
-MapsProveFiber v2.0.0 follows these core principles:
+MapsProveFiber follows these core principles:
 
 ### 1. **Modularity**
 - Each Django app has a single, clear responsibility
@@ -145,7 +148,7 @@ See [OVERVIEW.md](OVERVIEW.md) for detailed diagrams.
 | Module | Status | Migration Path |
 |--------|--------|----------------|
 | **`routes_builder/`** | ❌ Archived (Nov 2025) | Use `inventory/routes/` |
-| **`zabbix_api/`** | ❌ Removed (v2.0.0) | Use `integrations/zabbix/` |
+| **`zabbix_api/`** | ❌ Removed (2025-01 refactoring) | Models → `inventory/`; Zabbix client → `integrations/zabbix/` |
 
 See [MODULES.md](MODULES.md) for complete module reference.
 
@@ -156,7 +159,7 @@ See [MODULES.md](MODULES.md) for complete module reference.
 ### Pattern 1: Dashboard Status Update
 
 ```
-Browser ──websocket──> maps_view/consumers.py
+Browser ──websocket──> maps_view/realtime/consumers.py
                            │
                            ▼
                     monitoring/usecases.py
@@ -177,7 +180,7 @@ Browser ──websocket──> maps_view/consumers.py
 Client ──HTTP──> core/urls.py
                      │
                      ▼
-              inventory/api/views.py
+              inventory/api/ (+ viewsets.py)
                      │
                      ▼
               inventory/services/
@@ -290,7 +293,7 @@ See [ADR/](ADR/) for complete decision history.
 
 ## 🔧 Architecture Evolution
 
-### v1.x → v2.0.0 Migration
+### v1.x → Modular Architecture Migration (2025-01)
 
 **Key Changes**:
 - ❌ Removed `zabbix_api/` module
@@ -308,7 +311,7 @@ See [ADR/](ADR/) for complete decision history.
 - **[API Reference](../api/)** — REST API endpoints
 - **[Operations Guide](../operations/)** — Deployment and monitoring
 - **[Development Guide](../guides/DEVELOPMENT.md)** — Daily workflows
-- **[Breaking Changes](../releases/v2.0.0/BREAKING_CHANGES.md)** — v2.0.0 migration
+- **[Breaking Changes](../releases/v2.0.0/BREAKING_CHANGES.md)** — 2025-01 modular refactoring migration
 
 ---
 

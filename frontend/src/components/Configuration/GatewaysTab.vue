@@ -133,11 +133,19 @@
     />
 
     <!-- Test SMS Modal -->
-    <TestSMSModal 
+    <TestSMSModal
       v-if="showTestSMSModal && testingGateway"
       :gateway-config="buildTestConfig()"
       @close="closeTestSMSModal"
       @test="handleTestSMS"
+    />
+
+    <!-- Test SMTP Modal -->
+    <TestSMTPModal
+      v-if="showTestSMTPModal && testingGateway"
+      :gateway-config="buildSMTPTestConfig()"
+      @close="closeTestSMTPModal"
+      @test="handleTestSMTP"
     />
   </div>
 </template>
@@ -154,6 +162,7 @@ import WhatsAppGatewayList from './WhatsAppGatewayList.vue'
 import GatewayEditModal from './GatewayEditModal.vue'
 import WhatsAppQRModal from './WhatsAppQRModal.vue'
 import TestSMSModal from './TestSMSModal.vue'
+import TestSMTPModal from './TestSMTPModal.vue'
 import ContactsTab from './ContactsTab.vue'
 import AlertTemplatesTab from './AlertTemplatesTab.vue'
 
@@ -187,6 +196,7 @@ const qrGatewayId = ref(null)
 const qrCode = ref(null)
 const qrStatus = ref(null)
 const showTestSMSModal = ref(false)
+const showTestSMTPModal = ref(false)
 const testingGateway = ref(null)
 const templatesModalTrigger = ref(0)
 
@@ -240,9 +250,12 @@ const handleTest = async (gatewayId) => {
     return
   }
 
-  // For SMTP, test directly with current config
-  const config = gateway.config || {}
-  await testGateway(gateway.gateway_type, config)
+  // For SMTP, open test modal
+  if (gateway.gateway_type === 'smtp') {
+    testingGateway.value = gateway
+    showTestSMTPModal.value = true
+    return
+  }
 }
 
 // Handle SMS test from modal
@@ -258,6 +271,37 @@ const handleTestSMS = async (testConfig) => {
 const closeTestSMSModal = () => {
   showTestSMSModal.value = false
   testingGateway.value = null
+}
+
+// Handle SMTP test from modal
+const handleTestSMTP = async (testConfig) => {
+  try {
+    await testGateway('smtp', testConfig)
+  } catch (error) {
+    console.error('[GatewaysTab] Error testing SMTP:', error)
+  }
+}
+
+// Close test SMTP modal
+const closeTestSMTPModal = () => {
+  showTestSMTPModal.value = false
+  testingGateway.value = null
+}
+
+// Build SMTP test config
+const buildSMTPTestConfig = () => {
+  if (!testingGateway.value) return {}
+  const config = testingGateway.value.config || {}
+  return {
+    host: config.host || '',
+    port: config.port || 587,
+    security: config.security || '',
+    user: config.user || '',
+    password: config.password || '',
+    auth_mode: config.auth_mode || '',
+    from_email: config.from_email || '',
+    test_recipient: config.test_recipient || '',
+  }
 }
 
 // Build test config for SMS modal

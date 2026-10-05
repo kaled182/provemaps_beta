@@ -66,8 +66,7 @@ class Command(BaseCommand):
                     cmd,
                     env=env,
                     check=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    capture_output=True,
                     text=True,
                 )
             except FileNotFoundError as exc:
@@ -103,6 +102,16 @@ class Command(BaseCommand):
             if env_manager.ENV_PATH.exists():
                 env_payload = env_manager.ENV_PATH.read_text(encoding="utf-8")
 
+            # Include the Fernet key so the backup is self-contained.
+            # When restored in another environment, the correct key is available
+            # to decrypt EncryptedCharFields that were written with this key.
+            fernet_key_value = ""
+            fernet_key_file = Path(settings.BASE_DIR) / "database" / "fernet.key"
+            if fernet_key_file.exists():
+                fernet_key_value = fernet_key_file.read_text(encoding="utf-8").strip()
+            if not fernet_key_value:
+                fernet_key_value = os.getenv("FERNET_KEY", "").strip()
+
             metadata = {
                 "backup_file": filename,
                 "created_at": datetime.now().isoformat(),
@@ -110,15 +119,14 @@ class Command(BaseCommand):
                 "static_asset_version": getattr(settings, "STATIC_ASSET_VERSION", ""),
                 "env_file": env_payload,
                 "configuration": config_snapshot,
+                "fernet_key": fernet_key_value,
             }
             metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 
             values = env_manager.read_values(["BACKUP_ZIP_PASSWORD", "SECRET_KEY"])
             password = values.get("BACKUP_ZIP_PASSWORD", "").strip()
             if len(password) < 8:
-                raise RuntimeError(
-                    "A senha do backup precisa ter pelo menos 8 caracteres."
-                )
+                raise RuntimeError("A senha do backup precisa ter pelo menos 8 caracteres.")
 
             try:
                 import pyzipper
