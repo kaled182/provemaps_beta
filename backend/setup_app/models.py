@@ -5,6 +5,14 @@ from django.db import models
 
 from .fields import EncryptedCharField
 
+# Re-exports de propósito (F401): o Django só regista os modelos dos módulos importados
+# no arranque da app. Sem estas linhas, `Contact`/`ContactGroup`/`CronJob`/`ConfigurationAudit`
+# só existiam depois de alguém importar as views, e o `migrate` do CI rebentava em
+# `inventory.FiberCableAlarmConfig.contact` com fields.E307 (lazy reference por resolver).
+from .models_audit import ConfigurationAudit  # noqa: F401
+from .models_contacts import Contact, ContactGroup, ImportHistory  # noqa: F401
+from .models_cron import CronJob  # noqa: F401
+
 User = get_user_model()
 
 
