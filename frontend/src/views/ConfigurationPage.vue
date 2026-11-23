@@ -1,65 +1,48 @@
 <template>
-  <div class="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col h-[calc(100vh-64px)] overflow-hidden transition-colors duration-300">
+  <div class="h-full bg-neutral-50 text-neutral-900 flex flex-col overflow-hidden transition-colors duration-300">
     
-    <!-- Header -->
-    <div class="flex-none px-6 py-5 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-2">
-          <svg class="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-          </svg>
-          Configurações
-        </h1>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Gestão centralizada de serviços e dados.</p>
-      </div>
-      
+    <!-- Cabeçalho compacto numa linha (EV-0056): título · abas · ações -->
+    <div class="flex-none px-4 md:px-6 py-2 border-b border-neutral-200 bg-surface z-10 flex items-center gap-3 flex-wrap">
+      <h1 class="text-base font-semibold text-neutral-900 mr-2">Configurações</h1>
+      <nav class="flex items-center gap-1 overflow-x-auto custom-scrollbar flex-1 min-w-0" aria-label="Secções da configuração">
+        <button
+          v-for="item in navItems"
+          :key="item.id"
+          @click="activeTab = item.id"
+          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-sm font-medium transition-colors whitespace-nowrap"
+          :class="activeTab === item.id
+            ? 'bg-primary-500/10 text-primary-700 dark:text-primary-400'
+            : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'"
+          :data-testid="`config-tab-${item.id}`"
+        >
+          <component :is="item.icon" class="h-4 w-4" />
+          {{ item.label }}
+        </button>
+      </nav>
       <div class="flex items-center gap-2">
         <button @click="exportConfig" class="btn-white text-xs">
-          <svg class="w-4 h-4 mr-1.5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-4 h-4 mr-1.5 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
           </svg>
           Exportar JSON
         </button>
         <label class="btn-white text-xs cursor-pointer">
           <input type="file" class="hidden" @change="handleImportConfig" accept=".json" autocomplete="off">
-          <svg class="w-4 h-4 mr-1.5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-4 h-4 mr-1.5 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
           </svg>
           Importar
         </label>
         <button @click="openHistory" class="btn-white text-xs" title="Histórico de Auditoria">
-          <svg class="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-4 h-4 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
           </svg>
         </button>
       </div>
     </div>
 
-    <!-- Navigation Tabs -->
-    <div class="flex-none border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6">
-      <nav class="-mb-px flex space-x-6 overflow-x-auto custom-scrollbar" aria-label="Tabs">
-        <button 
-          v-for="item in navItems" 
-          :key="item.id"
-          @click="activeTab = item.id"
-          class="group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm transition-all whitespace-nowrap"
-          :class="activeTab === item.id 
-            ? 'border-primary-500 text-primary-600 dark:text-primary-400' 
-            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'"
-        >
-          <component 
-            :is="item.icon" 
-            class="mr-2 h-5 w-5 transition-colors"
-            :class="activeTab === item.id ? 'text-primary-500 dark:text-primary-400' : 'text-gray-400 group-hover:text-gray-500'"
-          />
-          {{ item.label }}
-        </button>
-      </nav>
-    </div>
-
     <!-- Tab Content -->
-    <div class="flex-1 overflow-y-auto custom-scrollbar p-6 bg-gray-50 dark:bg-gray-900">
+    <div class="flex-1 overflow-y-auto custom-scrollbar px-4 md:px-6 py-3 bg-neutral-50">
       <div class="max-w-6xl mx-auto animate-fade-in">
         
         <!-- System Parameters Tab -->
@@ -195,15 +178,15 @@ const openHistory = () => {
 
 <style scoped>
 .btn-white {
-  @apply inline-flex items-center justify-center rounded-md bg-white dark:bg-gray-800 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors;
+  @apply inline-flex items-center justify-center rounded-md bg-surface px-3 py-1.5 text-sm font-medium text-neutral-700 shadow-sm ring-1 ring-inset ring-neutral-300 hover:bg-neutral-50 transition-colors;
 }
 
 .label-custom {
-  @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5;
+  @apply block text-sm font-medium text-neutral-700 mb-1.5;
 }
 
 .input-custom {
-  @apply w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors;
+  @apply w-full rounded-md border border-neutral-300 bg-surface px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors;
 }
 
 .custom-scrollbar {

@@ -3,7 +3,7 @@
     <div 
       v-for="gateway in gateways" 
       :key="gateway.id"
-      class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5 hover:shadow-md transition-shadow"
+      class="bg-surface rounded-lg border border-neutral-200 p-5 hover:shadow-md transition-shadow"
     >
       <div class="flex items-start justify-between">
         <div class="flex-1">
@@ -11,8 +11,8 @@
             <div class="flex-shrink-0">
               <div class="w-10 h-10 rounded-full flex items-center justify-center"
                    :class="gateway.is_active 
-                     ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' 
-                     : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'">
+                     ? 'bg-success/15 text-success  ' 
+                     : 'bg-neutral-100 text-neutral-600  '">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path v-if="typeIcon === 'sms'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
                   <path v-else-if="typeIcon === 'smtp'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
@@ -24,10 +24,10 @@
             </div>
             
             <div>
-              <h4 class="text-base font-semibold text-gray-900 dark:text-white">
+              <h4 class="text-base font-semibold text-neutral-900">
                 {{ gateway.name }}
               </h4>
-              <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+              <p class="text-sm text-neutral-500 mt-0.5">
                 {{ gateway.provider || typeLabel }}
               </p>
             </div>
@@ -35,19 +35,19 @@
             <span 
               class="ml-2 px-2.5 py-0.5 rounded-full text-xs font-medium"
               :class="gateway.is_active 
-                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' 
-                : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'"
+                ? 'bg-success/15 text-success  ' 
+                : 'bg-neutral-100 text-neutral-600  '"
             >
               {{ gateway.is_active ? 'Ativo' : 'Inativo' }}
             </span>
           </div>
           
-          <div class="mt-3 space-y-1 text-sm text-gray-600 dark:text-gray-400">
+          <div class="mt-3 space-y-1 text-sm text-neutral-600">
             <p v-if="gateway.api_url"><span class="font-medium">URL:</span> {{ gateway.api_url }}</p>
             <p v-if="gateway.api_key"><span class="font-medium">API Key:</span> {{ maskApiKey(gateway.api_key) }}</p>
             <p v-if="gateway.username"><span class="font-medium">Usuário:</span> {{ gateway.username }}</p>
             <p v-if="gateway.sender_id"><span class="font-medium">Sender ID:</span> {{ gateway.sender_id }}</p>
-            <p v-if="gateway.description" class="text-gray-500 dark:text-gray-500">{{ gateway.description }}</p>
+            <p v-if="gateway.description" class="text-neutral-500">{{ gateway.description }}</p>
           </div>
         </div>
 
@@ -80,7 +80,7 @@
 
           <button 
             @click="$emit('delete', gateway.id)" 
-            class="btn-icon text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+            class="btn-icon text-danger hover:bg-danger/10"
             title="Excluir"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -93,11 +93,11 @@
   </div>
 
   <!-- Empty State -->
-  <div v-else class="text-center py-12 bg-gray-50 dark:bg-gray-800/50 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700">
-    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <div v-else class="text-center py-12 bg-neutral-50 rounded-lg border-2 border-dashed border-neutral-300">
+    <svg class="mx-auto h-12 w-12 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
     </svg>
-    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+    <p class="mt-2 text-sm text-neutral-600">
       Nenhum gateway {{ typeLabel }} configurado
     </p>
   </div>
@@ -153,6 +153,6 @@ const maskApiKey = (key) => {
 
 <style scoped>
 .btn-icon {
-  @apply p-2 rounded-md text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  @apply p-2 rounded-md text-neutral-600 hover:bg-neutral-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
 }
 </style>

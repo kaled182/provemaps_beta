@@ -1,8 +1,8 @@
 <template>
   <div class="space-y-6">
     <!-- Camera Settings Form -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Configuração Global de Câmeras</h3>
+    <div class="bg-surface rounded-lg border border-neutral-200 p-6">
+      <h3 class="text-lg font-semibold text-neutral-900 mb-4">Configuração Global de Câmeras</h3>
       
       <div class="space-y-4">
         <!-- Stream Protocol -->
@@ -15,7 +15,7 @@
             <option value="http">HTTP/MJPEG</option>
             <option value="webrtc">WebRTC</option>
           </select>
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          <p class="mt-1 text-xs text-neutral-500">
             Protocolo usado por padrão ao adicionar novas câmeras
           </p>
         </div>
@@ -42,7 +42,7 @@
             class="input-custom font-mono text-xs" 
             placeholder="rtsp://{username}:{password}@{host}:{port}/Streaming/Channels/101"
           />
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          <p class="mt-1 text-xs text-neutral-500">
             Variáveis disponíveis: {username}, {password}, {host}, {port}, {channel}
           </p>
         </div>
@@ -144,9 +144,9 @@
               v-model="cameraConfig.verify_ssl" 
               type="checkbox" 
               id="verify-ssl"
-              class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+              class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300 rounded"
             />
-            <label for="verify-ssl" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+            <label for="verify-ssl" class="ml-2 text-sm text-neutral-700">
               Verificar certificados SSL/TLS
             </label>
           </div>
@@ -156,9 +156,9 @@
               v-model="cameraConfig.auto_reconnect" 
               type="checkbox" 
               id="auto-reconnect"
-              class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+              class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300 rounded"
             />
-            <label for="auto-reconnect" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+            <label for="auto-reconnect" class="ml-2 text-sm text-neutral-700">
               Reconectar automaticamente em caso de falha
             </label>
           </div>
@@ -168,9 +168,9 @@
               v-model="cameraConfig.enable_recording" 
               type="checkbox" 
               id="enable-recording"
-              class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+              class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300 rounded"
             />
-            <label for="enable-recording" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+            <label for="enable-recording" class="ml-2 text-sm text-neutral-700">
               Habilitar gravação local (DVR/NVR)
             </label>
           </div>
@@ -179,8 +179,8 @@
     </div>
 
     <!-- Stream URL Tester -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Testar URL de Streaming</h3>
+    <div class="bg-surface rounded-lg border border-neutral-200 p-6">
+      <h3 class="text-lg font-semibold text-neutral-900 mb-4">Testar URL de Streaming</h3>
       
       <div class="space-y-4">
         <div>
@@ -222,8 +222,8 @@
         <!-- Test Results -->
         <div v-if="urlValidation" class="p-3 rounded-md text-sm"
              :class="urlValidation.valid 
-               ? 'bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-400' 
-               : 'bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-400'">
+               ? 'bg-success/10 text-success  ' 
+               : 'bg-danger/10 text-danger  '">
           <p class="font-medium">{{ urlValidation.message }}</p>
           <ul v-if="urlValidation.details" class="mt-2 space-y-1 text-xs">
             <li v-for="(value, key) in urlValidation.details" :key="key">
@@ -234,8 +234,8 @@
 
         <div v-if="connectionTest" class="p-3 rounded-md text-sm"
              :class="connectionTest.success 
-               ? 'bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-400' 
-               : 'bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-400'">
+               ? 'bg-success/10 text-success  ' 
+               : 'bg-danger/10 text-danger  '">
           <p class="font-medium">{{ connectionTest.message }}</p>
           <p v-if="connectionTest.latency" class="text-xs mt-1">
             Latência: {{ connectionTest.latency }}ms
@@ -245,9 +245,9 @@
     </div>
 
     <!-- Preset Information -->
-    <div class="bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 p-4">
-      <h4 class="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-2">ℹ️ Informações sobre Presets</h4>
-      <div class="text-xs text-blue-700 dark:text-blue-400 space-y-1">
+    <div class="bg-info/10 rounded-lg border border-info/40 p-4">
+      <h4 class="text-sm font-semibold text-info mb-2">ℹ️ Informações sobre Presets</h4>
+      <div class="text-xs text-info space-y-1">
         <p><strong>Hikvision:</strong> rtsp://{username}:{password}@{host}:554/Streaming/Channels/{channel}01</p>
         <p><strong>Dahua:</strong> rtsp://{username}:{password}@{host}:554/cam/realmonitor?channel={channel}&subtype=0</p>
         <p><strong>Intelbras:</strong> rtsp://{username}:{password}@{host}:554/cam/realmonitor?channel=1&subtype=0</p>
@@ -380,11 +380,11 @@ onMounted(async () => {
 
 <style scoped>
 .label-custom {
-  @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5;
+  @apply block text-sm font-medium text-neutral-700 mb-1.5;
 }
 
 .input-custom {
-  @apply w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors;
+  @apply w-full rounded-md border border-neutral-300 bg-surface px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors;
 }
 
 .btn-primary {
@@ -392,6 +392,6 @@ onMounted(async () => {
 }
 
 .btn-secondary {
-  @apply inline-flex items-center justify-center rounded-md bg-white dark:bg-gray-800 px-4 py-2 text-sm font-semibold text-gray-900 dark:text-gray-200 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200;
+  @apply inline-flex items-center justify-center rounded-md bg-surface px-4 py-2 text-sm font-semibold text-neutral-900 shadow-sm ring-1 ring-inset ring-neutral-300 hover:bg-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200;
 }
 </style>

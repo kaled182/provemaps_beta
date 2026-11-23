@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Converte classes Tailwind literais de um SFC Vue para os tokens do ADR 0007.
 
-Uso: python3 scripts/tw-tokens.py <ficheiro.vue> [...]   (escreve no lugar; imprime contagens)
+Uso: python3 scripts/tw-tokens.py <ficheiro.vue|.css> [...]   (escreve no lugar; imprime contagens)
 
 Só mexe no <template> e nas linhas `@apply` do <style> — nunca no <script>.
 Regras (os tokens invertem sozinhos no escuro, por isso os pares `dark:` saem):
@@ -12,7 +12,7 @@ Regras (os tokens invertem sozinhos no escuro, por isso os pares `dark:` saem):
   indigo|violet|purple-N      → primary-N
   qualquer outro dark:*       → removido
   bg-{verde|vermelho|azul|âmbar}-50/100 → bg-{success|danger|info|warning}/10|15
-  text|border-{…}-400…800     → text|border-{success|danger|info|warning}
+  text|border-{…}-400…900     → text|border-{success|danger|info|warning}
   border-{…}-200/300          → border-{…}/40
 Ver EV-0054 (primeira utilização) e CLAUDE.md §6.
 """
@@ -83,7 +83,7 @@ def convert_token(m, counts, dark_utils=frozenset()):
         if util == "bg" and n <= 100 and not alpha:
             counts["semantic"] += 1
             return f"{variants}bg-{sem}/{10 if n == 50 else 15}"
-        if util in ("text", "border") and 400 <= n <= 800:
+        if util in ("text", "border") and 400 <= n <= 900:
             counts["semantic"] += 1
             return f"{variants}{util}-{sem}{alpha}"
         if util == "border" and 200 <= n <= 300 and not alpha:
@@ -109,6 +109,13 @@ def convert_classes(text, counts):
     return out
 
 
+APPLY_RE = re.compile(r"(@apply\s+)([^;]+);")
+
+
+def _fix_apply(m, counts):
+    return m.group(1) + re.sub(r"\s{2,}", " ", convert_classes(m.group(2), counts)).strip() + ";"
+
+
 def process(path):
     src = open(path, encoding="utf-8").read()
     counts = {
@@ -119,6 +126,11 @@ def process(path):
         "primary": 0,
         "semantic": 0,
     }
+    if path.endswith(".css"):
+        # CSS solto: só as linhas @apply.
+        out = APPLY_RE.sub(lambda m: _fix_apply(m, counts), src)
+        open(path, "w", encoding="utf-8").write(out)
+        return counts
     t_start = src.find("<template>")
     t_end = src.rfind("</template>")
     s_start = src.find("<script")
@@ -143,13 +155,7 @@ def process(path):
     if st_start != -1 and st_start > s_start:
         st_start = out.find("<style")
         head, style = out[:st_start], out[st_start:]
-        style = re.sub(
-            r"(@apply\s+)([^;]+);",
-            lambda m: m.group(1)
-            + re.sub(r"\s{2,}", " ", convert_classes(m.group(2), counts)).strip()
-            + ";",
-            style,
-        )
+        style = APPLY_RE.sub(lambda m: _fix_apply(m, counts), style)
         out = head + style
     open(path, "w", encoding="utf-8").write(out)
     return counts

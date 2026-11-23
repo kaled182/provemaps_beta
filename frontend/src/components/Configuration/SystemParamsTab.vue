@@ -2,7 +2,7 @@
   <div class="space-y-0">
 
     <!-- Sub-tab navigation -->
-    <div class="border-b border-gray-200 dark:border-gray-700 mb-6">
+    <div class="border-b border-neutral-200 mb-6">
       <nav class="-mb-px flex space-x-8">
         <button
           v-for="tab in subTabs"
@@ -10,8 +10,8 @@
           @click="activeSubTab = tab.id"
           class="whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors"
           :class="activeSubTab === tab.id
-            ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'"
+            ? 'border-primary-500 text-primary-600 '
+            : 'border-transparent text-neutral-500 hover:text-neutral-700 hover:border-neutral-300  '"
         >
           {{ tab.label }}
         </button>
@@ -152,7 +152,7 @@
               </svg>
             </button>
           </div>
-          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          <p class="text-xs text-neutral-500 mt-1">
             Alterar a chave invalida todas as sessões ativas e tokens CSRF.
           </p>
         </div>
@@ -164,17 +164,17 @@
 
         <div class="flex items-center">
           <input v-model="config.DEBUG" type="checkbox" id="debug-mode"
-            class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded" />
-          <label for="debug-mode" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+            class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300 rounded" />
+          <label for="debug-mode" class="ml-2 text-sm text-neutral-700">
             Modo Debug (verbose logging)
           </label>
         </div>
 
         <div class="flex items-center">
           <input v-model="config.ENABLE_DIAGNOSTIC_ENDPOINTS" type="checkbox" id="diag-endpoints"
-            class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded" />
-          <label for="diag-endpoints" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
-            Habilitar endpoints de diagnóstico (<code class="text-xs bg-gray-100 dark:bg-gray-700 px-1 rounded">/api/v1/diagnostics/</code>)
+            class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300 rounded" />
+          <label for="diag-endpoints" class="ml-2 text-sm text-neutral-700">
+            Habilitar endpoints de diagnóstico (<code class="text-xs bg-neutral-100 px-1 rounded">/api/v1/diagnostics/</code>)
           </label>
         </div>
 
@@ -182,14 +182,14 @@
           <label class="label-custom">Allowed Hosts</label>
           <input v-model="config.ALLOWED_HOSTS" type="text" class="input-custom"
             placeholder="localhost,127.0.0.1,app.example.com" autocomplete="off" />
-          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Separados por vírgula.</p>
+          <p class="text-xs text-neutral-500 mt-1">Separados por vírgula.</p>
         </div>
 
         <div>
           <label class="label-custom">CSRF Trusted Origins</label>
           <input v-model="config.CSRF_TRUSTED_ORIGINS" type="text" class="input-custom"
             placeholder="https://app.example.com,https://api.example.com" autocomplete="off" />
-          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          <p class="text-xs text-neutral-500 mt-1">
             URLs completas com protocolo. Exigido para POST via domínio diferente do servidor.
           </p>
         </div>
@@ -219,10 +219,9 @@
       <div class="card-section">
         <h3 class="section-title mb-4">Logotipo</h3>
         <div class="flex items-center gap-6">
-          <div class="w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600
-                      flex items-center justify-center overflow-hidden bg-gray-50 dark:bg-gray-800 flex-none">
+          <div class="w-24 h-24 rounded-lg border-2 border-dashed border-neutral-300 flex items-center justify-center overflow-hidden bg-neutral-50 flex-none">
             <img v-if="logoPreview" :src="logoPreview" alt="Logo" class="w-full h-full object-contain" />
-            <svg v-else class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg v-else class="w-8 h-8 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                 d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
             </svg>
@@ -233,10 +232,10 @@
               Selecionar imagem
             </label>
             <button v-if="logoPreview" @click="removeLogo" type="button"
-              class="block text-xs text-red-500 hover:text-red-700 dark:text-red-400">
+              class="block text-xs text-danger hover:text-danger">
               Remover logo
             </button>
-            <p class="text-xs text-gray-500 dark:text-gray-400">PNG, JPG ou SVG. Máx. 2 MB.</p>
+            <p class="text-xs text-neutral-500">PNG, JPG ou SVG. Máx. 2 MB.</p>
           </div>
         </div>
       </div>
@@ -283,14 +282,14 @@
         </div>
 
         <div class="flex items-center gap-6 mt-4">
-          <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+          <label class="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
             <input v-model="profile.company_active" type="checkbox"
-              class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded" />
+              class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300 rounded" />
             Empresa ativa
           </label>
-          <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+          <label class="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
             <input v-model="profile.company_reports_active" type="checkbox"
-              class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded" />
+              class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300 rounded" />
             Emitir relatórios
           </label>
         </div>
@@ -327,12 +326,12 @@
               <input type="file" class="hidden" accept=".pfx,.p12,.pem,.cer,.crt" @change="onCertChange" />
               Selecionar certificado
             </label>
-            <span v-if="certFile" class="text-sm text-gray-700 dark:text-gray-300 truncate max-w-xs">
+            <span v-if="certFile" class="text-sm text-neutral-700 truncate max-w-xs">
               {{ certFile.name }}
             </span>
-            <span v-else class="text-sm text-gray-400 dark:text-gray-500">Nenhum arquivo selecionado</span>
+            <span v-else class="text-sm text-neutral-400">Nenhum arquivo selecionado</span>
             <button v-if="certFile" @click="removeCert" type="button"
-              class="text-xs text-red-500 hover:text-red-700 dark:text-red-400 flex-none">
+              class="text-xs text-danger hover:text-danger flex-none">
               Remover
             </button>
           </div>
@@ -341,7 +340,7 @@
             <input v-model="profile.assets_cert_password" type="password" class="input-custom"
               placeholder="Senha do arquivo .pfx / .p12" autocomplete="off" />
           </div>
-          <p class="text-xs text-gray-500 dark:text-gray-400">
+          <p class="text-xs text-neutral-500">
             Usado para emissão de NF-e / NFS-e. Formatos aceitos: .pfx, .p12, .pem.
           </p>
         </div>
@@ -419,7 +418,7 @@
       <div class="card-section">
         <div class="mb-4">
           <h3 class="section-title">SSL / Domínio</h3>
-          <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          <p class="text-sm text-neutral-600 mt-1">
             Domínio público e e-mail para emissão automática de certificado Let's Encrypt via Certbot.
           </p>
         </div>
@@ -441,7 +440,7 @@
       <div class="card-section">
         <div class="mb-4">
           <h3 class="section-title">Observabilidade</h3>
-          <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          <p class="text-sm text-neutral-600 mt-1">
             Integração com Sentry para rastreamento de erros em produção.
           </p>
         </div>
@@ -449,7 +448,7 @@
           <label class="label-custom">Sentry DSN</label>
           <input v-model="config.SENTRY_DSN" type="text" class="input-custom"
             placeholder="https://xxxx@oXXX.ingest.sentry.io/YYYY" autocomplete="off" />
-          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          <p class="text-xs text-neutral-500 mt-1">
             Deixe em branco para desativar o Sentry.
           </p>
         </div>
@@ -459,12 +458,12 @@
       <div class="card-section">
         <div class="mb-4">
           <h3 class="section-title">Reinício Automático</h3>
-          <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          <p class="text-sm text-neutral-600 mt-1">
             Comandos executados em background após salvar as configurações do sistema.
           </p>
         </div>
         <div>
-          <label class="label-custom">Comandos (separados por <code class="text-xs bg-gray-100 dark:bg-gray-700 px-1 rounded">;</code>)</label>
+          <label class="label-custom">Comandos (separados por <code class="text-xs bg-neutral-100 px-1 rounded">;</code>)</label>
           <textarea v-model="config.SERVICE_RESTART_COMMANDS" rows="4" class="input-custom resize-y"
             placeholder="docker compose restart web; docker compose restart celery"></textarea>
         </div>
@@ -474,7 +473,7 @@
       <div class="card-section">
         <div class="mb-4">
           <h3 class="section-title">Limiares de Potência Óptica (RX)</h3>
-          <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          <p class="text-sm text-neutral-600 mt-1">
             Valores de referência para alertas de sinal óptico recebido (dBm).
           </p>
         </div>
@@ -487,9 +486,9 @@
             <div class="flex items-center gap-2">
               <input v-model="config.OPTICAL_RX_WARNING_THRESHOLD" type="number" step="0.5"
                 class="input-custom" placeholder="-24" autocomplete="off" />
-              <span class="text-sm text-gray-500 dark:text-gray-400 flex-none">dBm</span>
+              <span class="text-sm text-neutral-500 flex-none">dBm</span>
             </div>
-            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Padrão: -24 dBm</p>
+            <p class="text-xs text-neutral-500 mt-1">Padrão: -24 dBm</p>
           </div>
           <div>
             <label class="label-custom flex items-center gap-2">
@@ -499,9 +498,9 @@
             <div class="flex items-center gap-2">
               <input v-model="config.OPTICAL_RX_CRITICAL_THRESHOLD" type="number" step="0.5"
                 class="input-custom" placeholder="-27" autocomplete="off" />
-              <span class="text-sm text-gray-500 dark:text-gray-400 flex-none">dBm</span>
+              <span class="text-sm text-neutral-500 flex-none">dBm</span>
             </div>
-            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Padrão: -27 dBm</p>
+            <p class="text-xs text-neutral-500 mt-1">Padrão: -27 dBm</p>
           </div>
         </div>
       </div>

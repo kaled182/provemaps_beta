@@ -8,8 +8,8 @@
     <!-- Servidores Header -->
     <div class="flex items-start justify-between">
       <div>
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Servidores de Monitoramento</h3>
-        <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+        <h3 class="text-lg font-semibold text-neutral-900">Servidores de Monitoramento</h3>
+        <p class="text-sm text-neutral-600 mt-1">
           {{ serverCount?.total || 0 }} {{ (serverCount?.total || 0) === 1 ? 'servidor' : 'servidores' }} configurado{{ (serverCount?.total || 0) !== 1 ? 's' : '' }}
         </p>
       </div>
@@ -39,43 +39,43 @@
           <transition name="fade-scale">
             <div
               v-if="showConfigMenu"
-              class="absolute right-0 mt-2 w-[600px] max-w-[calc(100vw-32px)] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl z-50"
+              class="absolute right-0 mt-2 w-[600px] max-w-[calc(100vw-32px)] rounded-lg border border-neutral-200 bg-surface shadow-xl z-50"
             >
               <div class="p-5 space-y-4">
                 <div>
-                  <h4 class="text-base font-semibold text-gray-900 dark:text-white">
+                  <h4 class="text-base font-semibold text-neutral-900">
                     Limites de Sinal Óptico por Distância
                   </h4>
-                  <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  <p class="text-sm text-neutral-600 mt-1">
                     O sistema detecta a categoria do enlace pelo comprimento do cabo no mapa e aplica os limites correspondentes. Valores em dBm (negativos).
                   </p>
                 </div>
 
                 <form @submit.prevent="saveOpticalThresholds">
                   <!-- Per-distance table -->
-                  <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div class="overflow-x-auto rounded-lg border border-neutral-200">
                     <table class="w-full text-sm">
                       <thead>
-                        <tr class="bg-gray-50 dark:bg-gray-700/50">
-                          <th class="text-left px-3 py-2 text-xs font-semibold text-gray-600 dark:text-gray-400 w-36">
+                        <tr class="bg-neutral-50">
+                          <th class="text-left px-3 py-2 text-xs font-semibold text-neutral-600 w-36">
                             Categoria SFP
                           </th>
-                          <th class="text-center px-3 py-2 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                          <th class="text-center px-3 py-2 text-xs font-semibold text-warning">
                             Atenção (dBm)
                           </th>
-                          <th class="text-center px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400">
+                          <th class="text-center px-3 py-2 text-xs font-semibold text-danger">
                             Crítico (dBm)
                           </th>
-                          <th class="text-left px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-500">
+                          <th class="text-left px-3 py-2 text-xs font-semibold text-neutral-500">
                             Cor no mapa
                           </th>
                         </tr>
                       </thead>
-                      <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-                        <tr v-for="cat in distanceCategories" :key="cat.key" class="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                      <tbody class="divide-y divide-neutral-100">
+                        <tr v-for="cat in distanceCategories" :key="cat.key" class="hover:bg-neutral-50">
                           <td class="px-3 py-2">
-                            <div class="font-medium text-gray-900 dark:text-white text-xs">{{ cat.label }}</div>
-                            <div class="text-xs text-gray-500 dark:text-gray-500">{{ cat.description }}</div>
+                            <div class="font-medium text-neutral-900 text-xs">{{ cat.label }}</div>
+                            <div class="text-xs text-neutral-500">{{ cat.description }}</div>
                           </td>
                           <td class="px-3 py-2">
                             <div class="relative">
@@ -83,10 +83,10 @@
                                 v-model="distanceThresholds[cat.key].warning"
                                 type="number"
                                 step="0.1"
-                                class="input-custom pr-10 text-center text-sm py-1.5"
+                                class="input-custom pr-10 text-center text-sm py-1 font-mono tabular-nums"
                                 autocomplete="off"
                               />
-                              <span class="absolute inset-y-0 right-2 flex items-center text-xs text-gray-400">dBm</span>
+                              <span class="absolute inset-y-0 right-2 flex items-center text-xs text-neutral-400">dBm</span>
                             </div>
                           </td>
                           <td class="px-3 py-2">
@@ -95,24 +95,24 @@
                                 v-model="distanceThresholds[cat.key].critical"
                                 type="number"
                                 step="0.1"
-                                class="input-custom pr-10 text-center text-sm py-1.5"
+                                class="input-custom pr-10 text-center text-sm py-1 font-mono tabular-nums"
                                 autocomplete="off"
                               />
-                              <span class="absolute inset-y-0 right-2 flex items-center text-xs text-gray-400">dBm</span>
+                              <span class="absolute inset-y-0 right-2 flex items-center text-xs text-neutral-400">dBm</span>
                             </div>
                           </td>
                           <td class="px-3 py-2">
                             <div class="flex items-center gap-1.5 text-xs">
                               <span class="inline-block w-3 h-3 rounded-full bg-green-500 flex-shrink-0"></span>
-                              <span class="text-gray-500 dark:text-gray-400">&gt; {{ distanceThresholds[cat.key].warning }} verde</span>
+                              <span class="text-neutral-500">&gt; {{ distanceThresholds[cat.key].warning }} verde</span>
                             </div>
                             <div class="flex items-center gap-1.5 text-xs mt-0.5">
                               <span class="inline-block w-3 h-3 rounded-full bg-amber-400 flex-shrink-0"></span>
-                              <span class="text-gray-500 dark:text-gray-400">{{ distanceThresholds[cat.key].critical }} … {{ distanceThresholds[cat.key].warning }} âmbar</span>
+                              <span class="text-neutral-500">{{ distanceThresholds[cat.key].critical }} … {{ distanceThresholds[cat.key].warning }} âmbar</span>
                             </div>
                             <div class="flex items-center gap-1.5 text-xs mt-0.5">
                               <span class="inline-block w-3 h-3 rounded-full bg-red-500 flex-shrink-0"></span>
-                              <span class="text-gray-500 dark:text-gray-400">&lt; {{ distanceThresholds[cat.key].critical }} vermelho</span>
+                              <span class="text-neutral-500">&lt; {{ distanceThresholds[cat.key].critical }} vermelho</span>
                             </div>
                           </td>
                         </tr>
@@ -120,7 +120,7 @@
                     </table>
                   </div>
 
-                  <p class="text-xs text-gray-500 dark:text-gray-500 mt-2">
+                  <p class="text-xs text-neutral-500 mt-2">
                     Sinal nulo ou zero é sempre classificado como crítico (vermelho), independente da distância.
                   </p>
 
@@ -167,7 +167,7 @@
     </div>
 
     <!-- Filter Tabs -->
-    <div class="border-b border-gray-200 dark:border-gray-700">
+    <div class="border-b border-neutral-200">
       <nav class="-mb-px flex space-x-8">
         <button 
           v-for="filter in filters" 
@@ -175,14 +175,14 @@
           @click="activeFilter = filter.key"
           class="whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors"
           :class="activeFilter === filter.key 
-            ? 'border-primary-500 text-primary-600 dark:text-primary-400' 
-            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'"
+            ? 'border-primary-500 text-primary-600 ' 
+            : 'border-transparent text-neutral-500 hover:text-neutral-700 hover:border-neutral-300  '"
         >
           {{ filter.label }}
           <span class="ml-2 px-2 py-0.5 rounded-full text-xs" 
                 :class="activeFilter === filter.key 
-                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400' 
-                  : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'">
+                  ? 'bg-primary-100 text-primary-700  ' 
+                  : 'bg-neutral-100 text-neutral-600  '">
             {{ filter.count }}
           </span>
         </button>
@@ -194,28 +194,28 @@
       <!-- Zabbix Principal Card -->
       <div 
         v-if="showZabbixCard"
-        class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5 hover:shadow-md transition-shadow"
+        class="bg-surface rounded-lg border border-neutral-200 p-5 hover:shadow-md transition-shadow"
       >
         <div class="flex items-start justify-between">
           <div class="flex-1">
             <div class="flex items-center gap-3">
-              <h4 class="text-base font-semibold text-gray-900 dark:text-white">
+              <h4 class="text-base font-semibold text-neutral-900">
                 Zabbix Principal
               </h4>
               <span 
                 class="px-2.5 py-0.5 rounded-full text-xs font-medium"
                 :class="zabbixUrl 
-                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' 
-                  : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'"
+                  ? 'bg-success/15 text-success  ' 
+                  : 'bg-neutral-100 text-neutral-600  '"
               >
                 {{ zabbixUrl ? 'Configurado' : 'Não configurado' }}
               </span>
-              <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-info/15 text-info">
                 Zabbix (Principal)
               </span>
             </div>
             
-            <div class="mt-2 space-y-1 text-sm text-gray-600 dark:text-gray-400">
+            <div class="mt-2 space-y-1 text-sm text-neutral-600">
               <p><span class="font-medium">URL:</span> {{ zabbixUrl || 'Não configurado' }}</p>
               <p v-if="zabbixUser"><span class="font-medium">Usuário:</span> {{ zabbixUser }}</p>
             </div>
@@ -251,8 +251,8 @@
 
         <div v-if="zabbixTestResult" class="mt-3 p-3 rounded-md text-sm"
              :class="zabbixTestResult.success 
-               ? 'bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-400' 
-               : 'bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-400'">
+               ? 'bg-success/10 text-success  ' 
+               : 'bg-danger/10 text-danger  '">
           {{ zabbixTestResult.message }}
           <span v-if="zabbixTestResult.version" class="ml-2 text-xs opacity-80">(v{{ zabbixTestResult.version }})</span>
         </div>
@@ -262,30 +262,30 @@
       <div 
         v-for="server in filteredServers" 
         :key="server.id"
-        class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5 hover:shadow-md transition-shadow"
+        class="bg-surface rounded-lg border border-neutral-200 p-5 hover:shadow-md transition-shadow"
       >
         <div class="flex items-start justify-between">
           <div class="flex-1">
             <div class="flex items-center gap-3">
-              <h4 class="text-base font-semibold text-gray-900 dark:text-white">
+              <h4 class="text-base font-semibold text-neutral-900">
                 {{ server.name }}
               </h4>
               <span 
                 class="px-2.5 py-0.5 rounded-full text-xs font-medium"
                 :class="server.is_active 
-                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' 
-                  : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'"
+                  ? 'bg-success/15 text-success  ' 
+                  : 'bg-neutral-100 text-neutral-600  '"
               >
                 {{ server.is_active ? 'Ativo' : 'Inativo' }}
               </span>
-              <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-info/15 text-info">
                 {{ serverTypeLabel(server.server_type) }}
               </span>
             </div>
             
-            <div class="mt-2 space-y-1 text-sm text-gray-600 dark:text-gray-400">
+            <div class="mt-2 space-y-1 text-sm text-neutral-600">
               <p><span class="font-medium">URL:</span> {{ server.url }}</p>
-              <p v-if="server.description" class="text-gray-500 dark:text-gray-500">{{ server.description }}</p>
+              <p v-if="server.description" class="text-neutral-500">{{ server.description }}</p>
             </div>
           </div>
 
@@ -327,7 +327,7 @@
 
             <button 
               @click="handleDeleteServer(server)" 
-              class="btn-icon text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+              class="btn-icon text-danger hover:bg-danger/10"
               title="Excluir"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -340,19 +340,19 @@
         <!-- Connection Test Result -->
         <div v-if="serverTestResults[server.id]" class="mt-3 p-3 rounded-md text-sm"
              :class="serverTestResults[server.id].success 
-               ? 'bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-400' 
-               : 'bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-400'">
+               ? 'bg-success/10 text-success  ' 
+               : 'bg-danger/10 text-danger  '">
           {{ serverTestResults[server.id].message }}
         </div>
       </div>
     </div>
 
     <!-- Empty State -->
-    <div v-else class="text-center py-12 bg-gray-50 dark:bg-gray-800/50 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700">
-      <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <div v-else class="text-center py-12 bg-neutral-50 rounded-lg border-2 border-dashed border-neutral-300">
+      <svg class="mx-auto h-12 w-12 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
       </svg>
-      <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">Nenhum servidor configurado</p>
+      <p class="mt-2 text-sm text-neutral-600">Nenhum servidor configurado</p>
       <button @click="handleAddServer" class="mt-4 btn-primary">
         Adicionar Primeiro Servidor
       </button>
@@ -371,15 +371,15 @@
       <div v-if="showZabbixModal" class="fixed inset-0 z-50 overflow-y-auto">
         <div class="flex min-h-screen items-center justify-center p-4">
           <!-- Backdrop -->
-          <div class="fixed inset-0 bg-black/50 dark:bg-black/70 transition-opacity" @click="showZabbixModal = false"></div>
+          <div class="fixed inset-0 bg-black/50 transition-opacity" @click="showZabbixModal = false"></div>
 
           <!-- Modal -->
-          <div class="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full p-6">
+          <div class="relative bg-surface rounded-lg shadow-xl max-w-2xl w-full p-6">
             <div class="flex items-center justify-between mb-4">
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+              <h3 class="text-lg font-semibold text-neutral-900">
                 Configurar Zabbix Principal
               </h3>
-              <button @click="showZabbixModal = false" class="text-gray-400 hover:text-gray-500">
+              <button @click="showZabbixModal = false" class="text-neutral-400 hover:text-neutral-500">
                 <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
                 </svg>
@@ -452,7 +452,7 @@
                   placeholder="Token de API (opcional)"
                   autocomplete="off"
                 />
-                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                <p class="mt-1 text-xs text-neutral-500">
                   Use API Key ou Usuário/Senha, não ambos
                 </p>
               </div>
@@ -479,8 +479,8 @@
 
               <div v-if="zabbixTestResult" class="p-3 rounded-md text-sm"
                    :class="zabbixTestResult.success 
-                     ? 'bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-400' 
-                     : 'bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-400'">
+                     ? 'bg-success/10 text-success  ' 
+                     : 'bg-danger/10 text-danger  '">
                 {{ zabbixTestResult.message }}
                 <span v-if="zabbixTestResult.version" class="ml-2 text-xs opacity-80">(v{{ zabbixTestResult.version }})</span>
               </div>
@@ -490,15 +490,15 @@
                   v-model="zabbixForm.is_active" 
                   type="checkbox" 
                   id="zabbix-active"
-                  class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                  class="w-4 h-4 text-info bg-neutral-100 border-neutral-300 rounded focus:ring-blue-500 focus:ring-2"
                 />
-                <label for="zabbix-active" class="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label for="zabbix-active" class="ml-2 text-sm font-medium text-neutral-700">
                   Servidor ativo
                 </label>
               </div>
 
-              <div class="flex justify-between gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <button type="button" @click="clearZabbixForm" class="btn-secondary text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
+              <div class="flex justify-between gap-3 pt-4 border-t border-neutral-200">
+                <button type="button" @click="clearZabbixForm" class="btn-secondary text-danger hover:bg-danger/10">
                   Limpar Dados
                 </button>
                 <div class="flex gap-3">
@@ -935,7 +935,7 @@ onMounted(async () => {
 }
 
 .btn-icon {
-  @apply p-2 rounded-md text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  @apply p-2 rounded-md text-neutral-600 hover:bg-neutral-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
 .loading-overlay {
