@@ -10,14 +10,21 @@ import logging
 from typing import Any, cast
 
 from celery import shared_task  # type: ignore[import-not-found]
+from django.core.cache import cache
 from django.core.management import call_command
 from django.db import models
 from django.utils import timezone
 
 from inventory.domain import optical as optical_domain
+from inventory.domain.optical import is_plausible_dbm
 from inventory.models import Port
 
 logger = logging.getLogger(__name__)
+
+# EV-0063: uma coleta óptica de cada vez (a coleta mede-se em segundos; o lock
+# expira sozinho se o worker morrer a meio).
+OPTICAL_LOCK_KEY = "inventory:optical-levels:lock"
+OPTICAL_LOCK_SECONDS = 300
 
 fetch_port_optical_snapshot = optical_domain.fetch_port_optical_snapshot
 
@@ -228,10 +235,20 @@ def update_all_port_optical_levels() -> dict[str, Any]:
     errors: list[str] = []
     now = timezone.now()
 
+    # EV-0063: uma coleta de cada vez — sem isto as execuções de 60 s sobrepunham-se
+    # (cada uma levava ~190 s) e ocupavam os workers da fila zabbix.
+    if not cache.add(OPTICAL_LOCK_KEY, now.isoformat(), OPTICAL_LOCK_SECONDS):
+        logger.info("[Optical Levels Task] Coleta anterior ainda a correr — ignorada")
+        return {"success": True, "skipped": "lock", "total": total, "updated": 0, "errors": 0}
+
     try:
-        # Batch: 1 chamada Zabbix por device, não por porta
-        snapshots_map = fetch_ports_optical_snapshots(ports, persist_keys=False)
+        # Batch: 1 item.get por device. Sem metadados de estado da interface: a tarefa
+        # não os usa e custavam ~5 chamadas por porta (EV-0063: 1233 → ~14 chamadas).
+        snapshots_map = fetch_ports_optical_snapshots(
+            ports, persist_keys=False, include_status_meta=False
+        )
     except Exception as exc:
+        cache.delete(OPTICAL_LOCK_KEY)
         logger.error("[Optical Levels Task] Batch fetch falhou: %s", exc, exc_info=True)
         return {"success": False, "total": total, "updated": 0, "errors": 1, "error": str(exc)}
 
@@ -241,6 +258,19 @@ def update_all_port_optical_levels() -> dict[str, Any]:
             snapshot = snapshots_map.get(port.pk) or {}
             rx_dbm = snapshot.get("rx_dbm")
             tx_dbm = snapshot.get("tx_dbm")
+            # EV-0063: fora da gama de potência óptica não é dBm (ex.: contador de
+            # octetos configurado como chave de RX) — não se grava; regista-se.
+            bad = [
+                f"{label}={value:g} ({snapshot.get(label.lower() + '_key')})"
+                for label, value in (("RX", rx_dbm), ("TX", tx_dbm))
+                if value is not None and not is_plausible_dbm(value)
+            ]
+            if bad:
+                msg = f"Port {port.id} ({port.name}) chave não devolve dBm: {', '.join(bad)}"
+                logger.warning("[Optical Levels Task] %s", msg)
+                errors.append(msg)
+                rx_dbm = rx_dbm if rx_dbm is None or is_plausible_dbm(rx_dbm) else None
+                tx_dbm = tx_dbm if tx_dbm is None or is_plausible_dbm(tx_dbm) else None
 
             update_fields: list[str] = []
             if rx_dbm is not None:
@@ -259,6 +289,7 @@ def update_all_port_optical_levels() -> dict[str, Any]:
             logger.warning("[Optical Levels Task] %s", msg)
             errors.append(msg)
 
+    cache.delete(OPTICAL_LOCK_KEY)
     result = {
         "success": True,
         "total": total,

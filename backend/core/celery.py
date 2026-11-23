@@ -143,7 +143,9 @@ app.conf.update(
             # delay perceptível de até 5 min para o painel óptico refletir
             # mudanças de estado (ex.: cabo voltando ao normal).
             "schedule": 60.0,
-            "options": {"queue": "zabbix"},
+            # EV-0063: uma execução que não começou em 55 s já foi ultrapassada
+            # pela seguinte — expira em vez de se acumular na fila.
+            "options": {"queue": "zabbix", "expires": 55},
         },
         # Dispatch de alarmes de fibra (Fase A): a cada 1 min lê FiberEvent novos
         # e envia notificação WhatsApp/Email para configs aplicáveis.
