@@ -1,415 +1,105 @@
-# 🔌 API Documentation
+# API - ProVeMaps
 
-Complete REST API reference for MapsProveFiber.
+Referência da API HTTP do ProVeMaps.
 
-**Versão do produto**: ver [VERSION](../../VERSION)  
-**Last Updated**: 2026-10-04
-
----
-
-## 📚 API Documents
-
-| Document | Description | Status | Audience |
-|----------|-------------|--------|----------|
-| **[ENDPOINTS.md](ENDPOINTS.md)** | ✅ **Complete endpoint reference** (updated 2026-10-04) | Ready | All developers |
-| **[AUTHENTICATION.md](AUTHENTICATION.md)** | Auth, permissions, RBAC | Placeholder | Backend, security |
-| **[EXAMPLES.md](EXAMPLES.md)** | Usage examples (cURL, Python, JS) | Placeholder | Frontend, integration |
-
-### Recent Updates (2025-11-07)
-- ✅ **ENDPOINTS.md** completely rewritten with:
-  - All inventory API endpoints (sites, devices, ports, fibers, routes)
-  - Monitoring API (hosts status, dashboard snapshot)
-  - Health checks and Prometheus metrics
-  - Diagnostic endpoints (testing only)
-  - Maps View and Setup App endpoints
-  - Request/response examples for major endpoints
+**Versão do produto**: ver [VERSION](../../VERSION)
+**Última atualização**: 2026-11-23 (EV-0033: reescrito a partir do código)
 
 ---
 
-## 🎯 Quick Start
+## Documentos
 
-### Base URL
+| Documento | Conteúdo |
+|-----------|----------|
+| [AUTHENTICATION.md](AUTHENTICATION.md) | Sessão + CSRF (pessoas), Bearer de conta de serviço (integrações), o que não existe |
+| [EXAMPLES.md](EXAMPLES.md) | Exemplos `curl`, Python e `fetch` que funcionam contra este código |
+| [ENDPOINTS.md](ENDPOINTS.md) | Referência de rotas (confirmar caminhos no Swagger em caso de dúvida) |
 
-**Development**: `http://localhost:8000`  
-**Production**: `https://your-domain.com`
+A referência viva e autoritativa é o esquema OpenAPI 3, **só para autenticados**:
 
-### Authentication
+- `GET /api/schema/` - esquema (drf-spectacular)
+- `GET /api/schema/swagger/` - Swagger UI auto-hospedado
+
+Cobre as views DRF. As function views Django (`/api/v1/inventory/*`,
+`/api/users/*`, `/setup_app/api/*`) ainda não aparecem nele (EV-0030).
+
+---
+
+## Início rápido
 
 ```bash
-# Get token (if using token auth)
-curl -X POST http://localhost:8000/api/token/ \
-  -d "username=admin&password=yourpassword"
+export BASE=https://SEU_HOST
+export PROVEMAPS_TOKEN='...'   # token de conta de serviço (admin, mostrado uma vez)
 
-# Use token in requests
-curl -H "Authorization: Token YOUR_TOKEN" \
-  http://localhost:8000/api/v1/inventory/sites/
+curl -s -H "Authorization: Bearer $PROVEMAPS_TOKEN" "$BASE/api/v1/sites/"
 ```
 
-See [AUTHENTICATION.md](AUTHENTICATION.md) for details.
+Pessoas autenticam por sessão (login em dois passos, `/accounts/login/` e, com
+TOTP, `/accounts/otp/`) e enviam `X-CSRFToken` nas mutações. Detalhes e exemplos
+em [AUTHENTICATION.md](AUTHENTICATION.md) e [EXAMPLES.md](EXAMPLES.md).
 
 ---
 
-## 🗺️ API Structure
+## Autenticação em resumo
 
-### v1 Endpoints
+| Quem | Como | CSRF |
+|------|------|------|
+| Pessoa | Cookie `mapsprovefiber_sessionid` após login + TOTP | `X-CSRFToken` em POST/PUT/PATCH/DELETE |
+| Integração | `Authorization: Bearer <token>` (ADR 0008) | Não |
 
-All endpoints are under `/api/v1/`:
-
-```
-/api/v1/
-├── inventory/
-│   ├── sites/              # GET, POST, PUT, DELETE
-│   ├── devices/            # GET, POST, PUT, DELETE
-│   ├── ports/              # GET, POST, PUT, DELETE
-│   └── routes/             # GET, POST, PUT, DELETE
-├── monitoring/
-│   ├── hosts/status/       # GET (combined inventory + Zabbix)
-│   └── dashboard/snapshot/ # GET (cached dashboard payload)
-└── maps/
-    └── dashboard/          # GET (dashboard data)
-```
-
-See [ENDPOINTS.md](ENDPOINTS.md) for complete reference.
+- Tudo exige autenticação (`IsAuthenticated` por omissão).
+- Sem credenciais: `/api/v1/` responde 401 com `WWW-Authenticate: Bearer`;
+  outras `/api/*` respondem 401 `{"detail": "Authentication required."}`.
+- Contas de serviço não são `User`: sem `is_staff` nem permissões de modelo.
+- Não existem `Authorization: Token`, `/api/token/`, Basic Auth, JWT, CORS nem
+  throttling.
 
 ---
 
-## 📖 Common Operations
+## Versionamento
 
-### List Sites
+Só `v1`, lido do prefixo `/api/v1/` (`core/api_versioning.py`). Rotas legadas
+sem prefixo contam como `v1`; outra versão devolve 404.
 
-```bash
-GET /api/v1/inventory/sites/
-```
+## Estrutura das rotas (confirmada em `backend/core/urls.py`)
 
-**Response**:
-```json
-{
-  "count": 42,
-  "next": null,
-  "previous": null,
-  "results": [
-    {
-      "id": 1,
-      "name": "Site A",
-      "latitude": -23.5505,
-      "longitude": -46.6333,
-      "created_at": "2025-01-01T00:00:00Z"
-    }
-  ]
-}
-```
+| Prefixo | Conteúdo |
+|---------|----------|
+| `/api/v1/` | Router DRF do inventário (`inventory/urls_rest.py`): `sites`, `devices`, `device-groups`, `ports`, `fiber-cables`, `import-rules` |
+| `/api/v1/inventory/` | Function views de inventário (`inventory/urls_api.py`): busca, sistema, pastas de cabos, tipos de cabo, etc. |
+| `/api/v1/monitoring/` | Estado agregado Zabbix + inventário |
+| `/api/v1/evolucao/` | Central de Evolução (ADR 0006) |
+| `/api/v1/telemetry/` | Telemetria |
+| `/api/v1/cameras/` | Lista de câmeras |
+| `/api/users/`, `/api/groups/`, `/api/departments/`, `/api/config/` | Rotas legadas (sem prefixo de versão) |
+| `/api/schema/`, `/api/schema/swagger/` | OpenAPI |
+| `/healthz`, `/ready`, `/live` | Saúde, sem autenticação, **sem barra final** |
 
----
+Atenção: o router DRF fica em `/api/v1/sites/`, **não** em
+`/api/v1/inventory/sites/`.
 
-### Get Site Details
+## Paginação
 
-```bash
-GET /api/v1/inventory/sites/{id}/
-```
+`PageNumberPagination` com `PAGE_SIZE = 100` (`settings/base.py`). Parâmetro
+`?page=N`; resposta com `count`, `next`, `previous`, `results`. O cliente não
+escolhe o tamanho da página. `fiber-cables` também envia `ETag` e responde 304
+a `If-None-Match`.
 
-**Response**:
-```json
-{
-  "id": 1,
-  "name": "Site A",
-  "latitude": -23.5505,
-  "longitude": -46.6333,
-  "devices": [
-    {"id": 1, "name": "Device 1", "type": "OLT"}
-  ],
-  "created_at": "2025-01-01T00:00:00Z",
-  "updated_at": "2025-01-07T00:00:00Z"
-}
-```
+## Erros
 
----
+DRF devolve `{"detail": "..."}` (401/403/404) e, em validação, 400 com campo ->
+lista de mensagens. 403 em mutação com sessão e sem `X-CSRFToken` válido.
 
-### Create Site
+## Limites conhecidos
 
-```bash
-POST /api/v1/inventory/sites/
-Content-Type: application/json
+- Os viewsets de inventário só pedem `IsAuthenticated`: qualquer principal
+  autenticado, inclusive um token de serviço, pode escrever.
+- Sem rate limiting.
+- Mutar cabos/portas/rotas fora dos usecases não invalida as caches do mapa
+  (CLAUDE.md §2.4).
 
-{
-  "name": "New Site",
-  "latitude": -23.5505,
-  "longitude": -46.6333
-}
-```
+## Documentação relacionada
 
-**Response** (201 Created):
-```json
-{
-  "id": 43,
-  "name": "New Site",
-  "latitude": -23.5505,
-  "longitude": -46.6333,
-  "created_at": "2025-01-07T10:30:00Z"
-}
-```
-
----
-
-### Update Site
-
-```bash
-PUT /api/v1/inventory/sites/43/
-Content-Type: application/json
-
-{
-  "name": "Updated Site Name",
-  "latitude": -23.5505,
-  "longitude": -46.6333
-}
-```
-
----
-
-### Delete Site
-
-```bash
-DELETE /api/v1/inventory/sites/43/
-```
-
-**Response** (204 No Content)
-
----
-
-## 🔍 Filtering & Pagination
-
-### Filtering
-
-```bash
-# Filter sites by name
-GET /api/v1/inventory/sites/?name__icontains=central
-
-# Filter devices by type
-GET /api/v1/inventory/devices/?type=OLT
-```
-
-### Pagination
-
-```bash
-# Page 1 (default: 20 items)
-GET /api/v1/inventory/sites/?page=1
-
-# Custom page size
-GET /api/v1/inventory/sites/?page=1&page_size=50
-```
-
----
-
-## 📊 Monitoring Endpoints
-
-### Get Combined Status
-
-```bash
-GET /api/v1/monitoring/hosts/status/
-```
-
-**Response**:
-```json
-{
-  "sites": [
-    {
-      "id": 1,
-      "name": "Site A",
-      "inventory_status": "active",
-      "zabbix_status": "ok",
-      "devices": [
-        {
-          "id": 1,
-          "name": "Device 1",
-          "zabbix_status": "ok",
-          "last_seen": "2025-01-07T10:00:00Z"
-        }
-      ]
-    }
-  ],
-  "summary": {
-    "total_sites": 42,
-    "healthy_sites": 40,
-    "warning_sites": 2,
-    "error_sites": 0
-  }
-}
-```
-
----
-
-### Health Checks
-
-```bash
-# Full health check
-GET /healthz
-
-# Readiness probe
-GET /ready
-
-# Liveness probe
-GET /live
-```
-
-See [../guides/OBSERVABILITY.md](../guides/OBSERVABILITY.md) for health check details.
-
----
-
-## 🚨 Error Handling
-
-### Standard Error Response
-
-```json
-{
-  "error": "ValidationError",
-  "message": "Invalid latitude value",
-  "details": {
-    "latitude": ["Ensure this value is less than or equal to 90."]
-  }
-}
-```
-
-### HTTP Status Codes
-
-| Code | Meaning | When |
-|------|---------|------|
-| `200` | OK | Successful GET/PUT |
-| `201` | Created | Successful POST |
-| `204` | No Content | Successful DELETE |
-| `400` | Bad Request | Validation error |
-| `401` | Unauthorized | Missing/invalid auth |
-| `403` | Forbidden | No permission |
-| `404` | Not Found | Resource doesn't exist |
-| `500` | Internal Server Error | Server error |
-| `503` | Service Unavailable | Dependency down |
-
----
-
-## 🔐 Authentication & Permissions
-
-### Authentication Methods
-
-1. **Session Authentication** (Django default)
-   - Used by web UI
-   - CSRF token required
-
-2. **Token Authentication** (optional)
-   - REST API clients
-   - `Authorization: Token YOUR_TOKEN`
-
-3. **Basic Authentication** (development only)
-   - `Authorization: Basic base64(username:password)`
-
-See [AUTHENTICATION.md](AUTHENTICATION.md) for setup.
-
----
-
-### Permissions
-
-| Endpoint | Required Permission |
-|----------|---------------------|
-| `GET /api/v1/inventory/*` | `view_site`, `view_device`, etc. |
-| `POST /api/v1/inventory/*` | `add_site`, `add_device`, etc. |
-| `PUT /api/v1/inventory/*` | `change_site`, `change_device`, etc. |
-| `DELETE /api/v1/inventory/*` | `delete_site`, `delete_device`, etc. |
-
----
-
-## 💡 Usage Examples
-
-### Python (requests)
-
-```python
-import requests
-
-BASE_URL = "http://localhost:8000"
-TOKEN = "your-token-here"
-
-headers = {
-    "Authorization": f"Token {TOKEN}",
-    "Content-Type": "application/json"
-}
-
-# List sites
-response = requests.get(f"{BASE_URL}/api/v1/inventory/sites/", headers=headers)
-sites = response.json()
-
-# Create site
-new_site = {
-    "name": "New Site",
-    "latitude": -23.5505,
-    "longitude": -46.6333
-}
-response = requests.post(
-    f"{BASE_URL}/api/v1/inventory/sites/",
-    json=new_site,
-    headers=headers
-)
-```
-
----
-
-### JavaScript (fetch)
-
-```javascript
-const BASE_URL = "http://localhost:8000";
-const TOKEN = "your-token-here";
-
-// List sites
-fetch(`${BASE_URL}/api/v1/inventory/sites/`, {
-  headers: {
-    "Authorization": `Token ${TOKEN}`,
-    "Content-Type": "application/json"
-  }
-})
-  .then(res => res.json())
-  .then(data => console.log(data));
-
-// Create site
-fetch(`${BASE_URL}/api/v1/inventory/sites/`, {
-  method: "POST",
-  headers: {
-    "Authorization": `Token ${TOKEN}`,
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    name: "New Site",
-    latitude: -23.5505,
-    longitude: -46.6333
-  })
-})
-  .then(res => res.json())
-  .then(data => console.log(data));
-```
-
-See [EXAMPLES.md](EXAMPLES.md) for more examples.
-
----
-
-## 🔄 Migrating from v1.x
-
-### Removed Endpoints (2025-01 refactoring)
-
-❌ All `/zabbix_api/*` endpoints removed.
-
-**Migration map**:
-
-| Old Endpoint (v1.x) | New Endpoint |
-|---------------------|--------------|
-| `GET /zabbix_api/sites/` | `GET /api/v1/inventory/sites/` |
-| `GET /zabbix_api/devices/` | `GET /api/v1/inventory/devices/` |
-| `GET /zabbix_api/status/` | `GET /api/v1/monitoring/hosts/status/` |
-
-See [../releases/v2.0.0/BREAKING_CHANGES.md](../releases/v2.0.0/BREAKING_CHANGES.md) for complete migration guide.
-
----
-
-## 📖 Related Documentation
-
-- **[Architecture](../architecture/)** — System design
-- **[Development Guide](../guides/DEVELOPMENT.md)** — Local setup
-- **[Operations Guide](../operations/)** — Deployment
-- **[Breaking Changes](../releases/v2.0.0/BREAKING_CHANGES.md)** — 2025-01 modular refactoring migration
-
----
-
-**Need help?** Check [EXAMPLES.md](EXAMPLES.md) or open an issue.
+- [ADR 0008 - tokens Bearer de contas de serviço](../adr/0008-autenticacao-de-contas-de-servico-por-token-bearer.md)
+- [Arquitetura](../architecture/)
+- [Guia de desenvolvimento](../guides/DEVELOPMENT.md)
