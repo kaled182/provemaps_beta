@@ -2,28 +2,20 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, Optional, Tuple, cast
+from typing import Any, cast
 
 import requests
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import (
-    ServiceAccount,
-    ServiceAccountAuditLog,
-    ServiceAccountToken,
-)
+from .models import ServiceAccount, ServiceAccountAuditLog, ServiceAccountToken
 
 logger = logging.getLogger(__name__)
 
-_WEBHOOK_CONNECT_TIMEOUT = float(
-    os.getenv("SERVICE_ACCOUNT_WEBHOOK_CONNECT_TIMEOUT", "3")
-)
-_WEBHOOK_READ_TIMEOUT = float(
-    os.getenv("SERVICE_ACCOUNT_WEBHOOK_READ_TIMEOUT", "5")
-)
-_WEBHOOK_TIMEOUT: Tuple[float, float] = (
+_WEBHOOK_CONNECT_TIMEOUT = float(os.getenv("SERVICE_ACCOUNT_WEBHOOK_CONNECT_TIMEOUT", "3"))
+_WEBHOOK_READ_TIMEOUT = float(os.getenv("SERVICE_ACCOUNT_WEBHOOK_READ_TIMEOUT", "5"))
+_WEBHOOK_TIMEOUT: tuple[float, float] = (
     _WEBHOOK_CONNECT_TIMEOUT,
     _WEBHOOK_READ_TIMEOUT,
 )
@@ -32,21 +24,18 @@ _WEBHOOK_USER_AGENT = "mapsprovefiber-service-account-rotation/1.0"
 
 def enforce_rotation_policies(
     *,
-    reference: Optional[timezone.datetime] = None,
-) -> Dict[str, Any]:
+    reference: timezone.datetime | None = None,
+) -> dict[str, Any]:
     """Evaluate auto-rotation and notification rules for service accounts."""
 
     now = reference or timezone.now()
-    summary: Dict[str, Any] = {"rotations": 0, "notices": 0, "errors": []}
+    summary: dict[str, Any] = {"rotations": 0, "notices": 0, "errors": []}
 
     candidate_accounts = (
         ServiceAccount.objects.filter(is_active=True)
         .filter(
             Q(auto_rotate_days__isnull=False)
-            | (
-                Q(notify_before_days__isnull=False)
-                & ~Q(notification_webhook_url="")
-            )
+            | (Q(notify_before_days__isnull=False) & ~Q(notification_webhook_url=""))
         )
         .prefetch_related("tokens")
     )
@@ -106,8 +95,8 @@ def rotate_account_token(
     *,
     account: ServiceAccount,
     token: ServiceAccountToken,
-    now: Optional[timezone.datetime] = None,
-) -> Optional[ServiceAccountToken]:
+    now: timezone.datetime | None = None,
+) -> ServiceAccountToken | None:
     """Rotate the current token, optionally notifying webhook subscribers."""
 
     timestamp = now or timezone.now()
@@ -149,19 +138,61 @@ def rotate_account_token(
     return new_token
 
 
+def revoke_tokens(
+    *,
+    token_ids: Any,
+    actor: Any = None,
+    reason: str | None = None,
+    remote_addr: str | None = None,
+) -> dict[str, int]:
+    """Revoke the given tokens by hand (EV-0073); already revoked ones are skipped.
+
+    Rows are locked and re-read inside the transaction, so a token revoked
+    concurrently (e.g. by the rotation task) is counted as already revoked and
+    its original ``revoked_at`` is kept. Each revocation goes through
+    ``ServiceAccountToken.revoke`` and therefore writes a ``token_revoked``
+    entry in ``ServiceAccountAuditLog``. Returns ``{"revoked", "already_revoked"}``.
+    """
+
+    revoked = 0
+    already_revoked = 0
+    with transaction.atomic():
+        tokens = (
+            ServiceAccountToken.objects.select_for_update(of=("self",))
+            .select_related("account")
+            .filter(pk__in=list(token_ids))
+            .order_by("pk")
+        )
+        for token in tokens:
+            if token.revoked_at is not None:
+                already_revoked += 1
+                continue
+            token.revoke(
+                actor=actor,
+                reason=reason or "Token revoked manually via admin",
+                remote_addr=remote_addr,
+            )
+            revoked += 1
+    logger.info(
+        "service_account.tokens_revoked",
+        extra={
+            "revoked": revoked,
+            "already_revoked": already_revoked,
+            "actor_id": getattr(actor, "pk", None),
+        },
+    )
+    return {"revoked": revoked, "already_revoked": already_revoked}
+
+
 def _should_dispatch_notice(
     *,
     account: ServiceAccount,
     token: ServiceAccountToken,
-    notice_deadline: Optional[timezone.datetime],
-    rotation_deadline: Optional[timezone.datetime],
+    notice_deadline: timezone.datetime | None,
+    rotation_deadline: timezone.datetime | None,
     now: timezone.datetime,
 ) -> bool:
-    if not (
-        account.notification_webhook_url
-        and notice_deadline
-        and notice_deadline <= now
-    ):
+    if not (account.notification_webhook_url and notice_deadline and notice_deadline <= now):
         return False
     if rotation_deadline and now >= rotation_deadline:
         return False
@@ -174,10 +205,10 @@ def _send_rotation_notice(
     *,
     account: ServiceAccount,
     token: ServiceAccountToken,
-    deadline: Optional[timezone.datetime],
+    deadline: timezone.datetime | None,
     now: timezone.datetime,
 ) -> None:
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "event": "service_account.rotation_warning",
         "timestamp": now.isoformat(),
         "account": {"id": account.pk, "name": account.name},
@@ -210,7 +241,7 @@ def _send_rotation_completion(
     plain_token: str,
     timestamp: timezone.datetime,
 ) -> None:
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "event": "service_account.token_rotated",
         "timestamp": timestamp.isoformat(),
         "account": {"id": account.pk, "name": account.name},
@@ -224,7 +255,7 @@ def _send_rotation_completion(
     _dispatch_webhook(account.notification_webhook_url, payload)
 
 
-def _dispatch_webhook(url: str, payload: Dict[str, Any]) -> None:
+def _dispatch_webhook(url: str, payload: dict[str, Any]) -> None:
     headers = {
         "Content-Type": "application/json",
         "User-Agent": _WEBHOOK_USER_AGENT,
@@ -238,7 +269,7 @@ def _dispatch_webhook(url: str, payload: Dict[str, Any]) -> None:
     response.raise_for_status()
 
 
-def _action(name: str) -> "ServiceAccountAuditLog.Action":
+def _action(name: str) -> ServiceAccountAuditLog.Action:
     return cast(
         "ServiceAccountAuditLog.Action",
         getattr(ServiceAccountAuditLog.Action, name),
