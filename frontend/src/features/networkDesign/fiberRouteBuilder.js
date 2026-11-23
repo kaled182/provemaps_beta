@@ -49,6 +49,8 @@ let manualSinglePortCheckbox;
 let appInitialized = false;
 let domBindingsInitialized = false;
 let mapsInitStarted = false;
+// Promessa do arranque do mapa: quem precisa do mapa pronto espera por ela (EV-0044).
+let mapInitPromise = null;
 let deviceOptionsCache = null;
 let deviceOptionsPromise = null;
 let deviceOptionsDispatched = false;
@@ -274,6 +276,7 @@ function resetNetworkDesignState() {
     manualSinglePortCheckbox = null;
     domBindingsInitialized = false;
     mapsInitStarted = false;
+    mapInitPromise = null;
     activeEndpoint = 'end';
     modalDefaultParent.current = null;
 }
@@ -913,10 +916,19 @@ function startMapInit() {
         return;
     }
     mapsInitStarted = true;
-    initMap().catch((e) => {
+    mapInitPromise = initMap().catch((e) => {
         console.error('[startMapInit] Error initializing map:', e);
         showErrorMessage('Could not load the map.');
     });
+}
+
+/**
+ * Resolve quando o arranque do mapa terminou (com sucesso ou não). Usado pela
+ * NetworkDesignView para centrar num resultado da busca rápida (`?foco=`).
+ * @returns {Promise<void>}
+ */
+export function whenNetworkDesignMapReady() {
+    return mapInitPromise || Promise.resolve();
 }
 
 async function loadFibers() {

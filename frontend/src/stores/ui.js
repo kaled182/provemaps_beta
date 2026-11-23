@@ -7,7 +7,6 @@ import { ref, computed } from 'vue';
  */
 const STORAGE_KEYS = {
   theme: 'ui.theme',
-  navMenuOpen: 'ui.navMenuOpen',
   sidebarOpen: 'ui.sidebarOpen',
   headerOpen: 'ui.headerOpen',
   sidebarPosition: 'ui.sidebarPosition',
@@ -26,9 +25,6 @@ export const useUiStore = defineStore('ui', () => {
   const theme = ref(
     localStorage.getItem(STORAGE_KEYS.theme) || 'dark'
   );
-  
-  // Estado do menu lateral de navegação (esquerda)
-  const isNavMenuOpen = ref(getBool(STORAGE_KEYS.navMenuOpen, true));
   
   // Estado do sidebar (painel lateral "Status dos Hosts" - direita)
   const isSidebarOpen = ref(getBool(STORAGE_KEYS.sidebarOpen, true));
@@ -70,29 +66,10 @@ export const useUiStore = defineStore('ui', () => {
       document.documentElement.classList.remove('dark');
     }
     
-    console.log('[UI Store] Theme applied:', theme.value);
   }
   
-  // Actions - Nav Menu
-  function toggleNavMenu() {
-    isNavMenuOpen.value = !isNavMenuOpen.value;
-    localStorage.setItem(STORAGE_KEYS.navMenuOpen, isNavMenuOpen.value);
-    applyNavMenuState();
-  }
-  
-  function setNavMenuOpen(value) {
-    isNavMenuOpen.value = value;
-    localStorage.setItem(STORAGE_KEYS.navMenuOpen, value);
-    applyNavMenuState();
-  }
-  
-  function applyNavMenuState() {
-    document.documentElement.setAttribute('data-nav-menu-open', isNavMenuOpen.value);
-  }
-  
-  // Aplicar estados imediatamente ao carregar a store
+  // Aplicar o tema imediatamente ao carregar a store
   applyTheme();
-  applyNavMenuState();
   
   // Actions - Sidebar
   function toggleSidebar() {
@@ -140,14 +117,12 @@ export const useUiStore = defineStore('ui', () => {
   }
   
   // Computed properties
-  const navMenuWidth = computed(() => isNavMenuOpen.value ? 280 : 60);
   const sidebarWidth = computed(() => isSidebarOpen.value ? 350 : 15);
   const headerHeight = computed(() => isHeaderOpen.value ? 60 : 0);
   
   return {
     // State
     theme,
-    isNavMenuOpen,
     isSidebarOpen,
     isHeaderOpen,
     sidebarPosition,
@@ -158,11 +133,6 @@ export const useUiStore = defineStore('ui', () => {
     toggleTheme,
     setTheme,
     applyTheme,
-    
-    // Actions - Nav Menu
-    toggleNavMenu,
-    setNavMenuOpen,
-    applyNavMenuState,
     
     // Actions - Sidebar
     toggleSidebar,
@@ -179,7 +149,6 @@ export const useUiStore = defineStore('ui', () => {
     toggleLegendCollapse,
     
     // Computed
-    navMenuWidth,
     sidebarWidth,
     headerHeight,
   };

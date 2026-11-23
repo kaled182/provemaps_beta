@@ -1154,35 +1154,15 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .custom-map-viewer {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  /* Ocupa a área de conteúdo do App (main relative), abaixo do AppHeader (EV-0044) */
+  position: absolute;
+  inset: 0;
   background: var(--bg-primary);
   display: flex;
   flex-direction: column;
-  /* Ajustar margem baseado no estado do menu */
-  margin-left: var(--nav-menu-width, 72px);
-  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;
+  transition: background-color 0.3s ease;
 }
 
-/* Quando o menu está expandido */
-:root[data-nav-menu-open="true"] .custom-map-viewer {
-  margin-left: 280px;
-}
-
-/* Quando o menu está colapsado */
-:root[data-nav-menu-open="false"] .custom-map-viewer {
-  margin-left: 72px;
-}
-
-/* Mobile: menu é overlay fixo, mapa ocupa tela toda */
-@media (max-width: 768px) {
-  .custom-map-viewer {
-    margin-left: 0 !important;
-  }
-}
 
 .map-content {
   flex: 1;

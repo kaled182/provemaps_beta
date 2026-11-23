@@ -312,19 +312,16 @@ const nativeMapRef = computed(() => ({ map: map.value?.getNativeMap?.() || null 
 
 // Legend position based on sidebar state
 const legendLeftPosition = computed(() => {
-  // Menu lateral esquerdo
-  const navMenuWidth = props.uiStore?.isNavMenuOpen ? 280 : 60;
-
   // Se sidebar (Status dos Hosts) está à esquerda
   if (props.sidebarPosition === 'left') {
     if (props.sidebarCollapsed) {
-      return `${navMenuWidth + 35}px`; // nav + 15px sidebar colapsado + 20px margin
+      return '35px'; // 15px sidebar colapsado + 20px margem
     }
-    return `${navMenuWidth + 370}px`; // nav + 350px sidebar + 20px margin
+    return '370px'; // 350px sidebar + 20px margem
   }
 
-  // Sidebar à direita, legenda só respeita menu esquerdo
-  return `${navMenuWidth + 20}px`;
+  // Sidebar à direita: margem fixa (sem menu lateral desde EV-0044)
+  return '20px';
 });
 
 const legendItems = computed(() => ({

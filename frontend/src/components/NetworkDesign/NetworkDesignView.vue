@@ -969,12 +969,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, onUnmounted } from 'vue';
-import { initializeNetworkDesignApp, flyToLocation, highlightSearchResult, cancelNetworkDesignEditing, saveNetworkDesignRoute } from '@/features/networkDesign/fiberRouteBuilder.js';
+import { ref, computed, onMounted, nextTick, onUnmounted, watch } from 'vue';
+import { useRoute } from 'vue-router';
+import { parseFocusQuery } from '@/utils/mapFocus';
+import { initializeNetworkDesignApp, whenNetworkDesignMapReady, flyToLocation, highlightSearchResult, cancelNetworkDesignEditing, saveNetworkDesignRoute } from '@/features/networkDesign/fiberRouteBuilder.js';
 import { getLoadedGroups, setGroupLayerVisible, setFolderFilter, getFallbackCables, setApiGroups, getGroupCounts, getTypeCounts, setTypeFilter } from '@/features/networkDesign/modules/cableService.js';
 import { request as apiRequest } from '@/features/networkDesign/modules/apiClient.js';
 import { initializeKmlModal, cleanupKmlModal } from '@/features/networkDesign/partials/import_kml.js';
 
+const route = useRoute();
 const csrfToken = ref(window.CSRF_TOKEN || '');
 const helpOpen = ref(false);
 const closeHelpPopover = () => { helpOpen.value = false; };
@@ -1202,6 +1205,16 @@ function selectSearchResult(item) {
   searchQuery.value = item.name;
   closeSearch();
 }
+
+// Foco vindo da busca rápida (Ctrl K): ?foco=<site|cable|device>&id=&lat=&lng=&nome=
+async function focusFromQuery() {
+  const item = parseFocusQuery(route.query);
+  if (!item) return;
+  await whenNetworkDesignMapReady();
+  selectSearchResult(item);
+}
+// Já no Projeto de rede, um novo resultado do Ctrl K só muda a query.
+watch(() => route.fullPath, () => focusFromQuery());
 
 // ── Layer control state ──────────────────────────────────────────────────
 const LAYER_STORAGE_KEY = 'nd_layer_visibility';
@@ -1775,6 +1788,7 @@ onMounted(async () => {
   initializeNetworkDesignApp({ force: true });
   loadFolderTree();
   loadCableGroupsFromApi();
+  focusFromQuery();
 
   if (!csrfToken.value && window.CSRF_TOKEN) {
     csrfToken.value = window.CSRF_TOKEN;

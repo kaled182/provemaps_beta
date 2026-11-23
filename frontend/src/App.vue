@@ -1,10 +1,10 @@
 <template>
-  <div class="flex h-screen overflow-hidden">
-    <!-- Menu Lateral Esquerdo -->
-    <TheNavMenu />
-    
-    <!-- Área de Conteúdo Principal (Dashboard com sidebar + mapa) -->
-    <main class="flex-1 relative overflow-y-auto min-w-0">
+  <div class="flex h-screen flex-col overflow-hidden">
+    <!-- Shell: cabeçalho de duas linhas, sem menu lateral (ADR 0007 Fase 2) -->
+    <AppHeader />
+
+    <!-- Conteúdo: as páginas posicionam-se aqui (relative), abaixo do cabeçalho -->
+    <main class="relative min-h-0 min-w-0 flex-1 overflow-y-auto">
       <router-view />
     </main>
 
@@ -18,7 +18,7 @@
 <script setup>
 import { RouterView } from 'vue-router';
 import { onMounted } from 'vue';
-import TheNavMenu from '@/components/Layout/TheNavMenu.vue';
+import AppHeader from '@/components/Layout/AppHeader.vue';
 import SiteDeviceModal from '@/components/Map/SiteDeviceModal.vue';
 import ToastContainer from '@/components/Notifications/ToastContainer.vue';
 import { useUiStore } from '@/stores/ui';
@@ -55,22 +55,8 @@ html, body, #app {
   box-sizing: border-box;
 }
 
-.app-container {
-  display: flex;
-  height: 100vh;
-  overflow: hidden;
-}
-
-.app-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  transition: margin-left 0.3s ease;
-  overflow: hidden;
-}
-
-.main-content {
-  flex: 1;
-  overflow: hidden;
+/* Altura do AppHeader (48 + 40): para o pouco que ainda se posiciona contra a janela */
+:root {
+  --app-header-height: 88px;
 }
 </style>
