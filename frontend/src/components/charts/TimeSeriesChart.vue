@@ -14,10 +14,12 @@
  * - `null` é buraco, nunca zero nem valor anterior (`spanGaps` desligado por omissão);
  * - cores vêm de variáveis de tema, nunca hex fixo;
  * - uma instância Chart.js por componente, destruída em `onBeforeUnmount`;
- * - sem `setTimeout`: o gráfico nasce quando o canvas existe (watch no ref).
+ * - sem `setTimeout`: o gráfico nasce quando o canvas existe (watch no ref);
+ * - cores de texto/grade relidas quando o tema muda (EV-0051), sem recriar a instância.
  */
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import Chart from 'chart.js/auto'
+import { followDocumentTheme } from '@/providers/maps/mapTheme.js'
 
 const props = defineProps({
   /** [{ label, color?, data: [{ x: epoch ms | ISO string, y: number|null }] }] */
@@ -198,7 +200,17 @@ watch(canvasRef, (el) => {
 })
 watch(() => [props.series, props.thresholds, props.unit, props.spanGaps, props.beginAtZero], refresh, { deep: true })
 
-onBeforeUnmount(destroyChart)
+// Tema claro/escuro: as variáveis CSS mudam, a instância Chart.js não sabe — reaplica
+// as opções (cores) quando a classe/data-theme do <html> muda.
+let stopTheme = () => {}
+onMounted(() => {
+  stopTheme = followDocumentTheme({ setTheme: () => refresh() })
+})
+
+onBeforeUnmount(() => {
+  stopTheme()
+  destroyChart()
+})
 
 defineExpose({
   /** PNG do gráfico atual (ou null sem gráfico) — usado pelos exports dos modais. */

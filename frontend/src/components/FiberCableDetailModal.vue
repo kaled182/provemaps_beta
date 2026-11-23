@@ -270,10 +270,7 @@
                     </div>
                     
                     <div class="panel-content" v-show="expandedOrigin">
-                      <div class="optical-chart-container">
-                        <TimeSeriesChart ref="originChartRef" :series="opticalSeries('origin')" :thresholds="opticalThresholds('origin')" unit="dBm" :decimals="2" :height="260" />
-                      </div>
-                      <div class="optical-stats">
+                      <div class="optical-stats" data-testid="optical-stats-origin">
                         <div class="stat-box">
                           <div class="stat-icon good">RX</div>
                           <div class="stat-info">
@@ -288,6 +285,9 @@
                             <div class="stat-value">{{ formatDbm(opticalData?.stats?.origin?.avgTx) }}</div>
                           </div>
                         </div>
+                      </div>
+                      <div class="optical-chart-container">
+                        <TimeSeriesChart ref="originChartRef" :series="opticalSeries('origin')" :thresholds="opticalThresholds('origin')" unit="dBm" :decimals="2" :height="220" />
                       </div>
                     </div>
                   </div>
@@ -328,10 +328,7 @@
                     </div>
                     
                     <div class="panel-content" v-show="expandedDestination">
-                      <div class="optical-chart-container">
-                        <TimeSeriesChart ref="destinationChartRef" :series="opticalSeries('destination')" :thresholds="opticalThresholds('destination')" unit="dBm" :decimals="2" :height="260" />
-                      </div>
-                      <div class="optical-stats">
+                      <div class="optical-stats" data-testid="optical-stats-destination">
                         <div class="stat-box">
                           <div class="stat-icon good">RX</div>
                           <div class="stat-info">
@@ -346,6 +343,9 @@
                             <div class="stat-value">{{ formatDbm(opticalData?.stats?.destination?.avgTx) }}</div>
                           </div>
                         </div>
+                      </div>
+                      <div class="optical-chart-container">
+                        <TimeSeriesChart ref="destinationChartRef" :series="opticalSeries('destination')" :thresholds="opticalThresholds('destination')" unit="dBm" :decimals="2" :height="220" />
                       </div>
                     </div>
                   </div>
@@ -422,7 +422,7 @@
                     </div>
                     <div class="panel-content" v-show="trafficExpandedOrigin">
                       <div v-if="trafficData.origin?.history?.length" class="optical-chart-container">
-                        <TimeSeriesChart ref="trafficOriginChartRef" :series="trafficSeries('origin')" unit="Mbps" :begin-at-zero="true" :height="260" />
+                        <TimeSeriesChart ref="trafficOriginChartRef" :series="trafficSeries('origin')" unit="Mbps" :begin-at-zero="true" :height="220" />
                       </div>
                       <div class="traffic-stats-grid">
                         <div class="traffic-stat-card">
@@ -488,7 +488,7 @@
                     </div>
                     <div class="panel-content" v-show="trafficExpandedDestination">
                       <div v-if="trafficData.destination?.history?.length" class="optical-chart-container">
-                        <TimeSeriesChart ref="trafficDestinationChartRef" :series="trafficSeries('destination')" unit="Mbps" :begin-at-zero="true" :height="260" />
+                        <TimeSeriesChart ref="trafficDestinationChartRef" :series="trafficSeries('destination')" unit="Mbps" :begin-at-zero="true" :height="220" />
                       </div>
                       <div class="traffic-stats-grid">
                         <div class="traffic-stat-card">
@@ -2449,11 +2449,12 @@ onUnmounted(() => {
 }
 
 .optical-chart-container {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  /* EV-0051: sem altura fixa — a caixa tinha 175px e o gráfico 260px, que
+     transbordava por baixo da faixa de resumos (tapava os ticks do eixo Y) */
+  background: rgb(var(--n-50));
+  border: 1px solid rgb(var(--n-200));
   border-radius: 8px;
   padding: 10px;
-  height: 175px;
 }
 
 .port-charts-container {
@@ -2632,18 +2633,19 @@ onUnmounted(() => {
 }
 
 .optical-stats {
+  /* Faixa de resumos ACIMA do gráfico (EV-0051) */
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 6px;
-  margin-top: 6px;
+  margin-bottom: 6px;
 }
 
 .stat-box {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgb(var(--n-50));
+  border: 1px solid rgb(var(--n-200));
   border-radius: 6px;
   padding: 6px 10px;
 }
@@ -2686,14 +2688,16 @@ onUnmounted(() => {
 }
 
 .stat-info .stat-label {
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   font-size: 12px;
   font-weight: 500;
   margin-bottom: 4px;
 }
 
 .stat-info .stat-value {
-  color: white;
+  color: rgb(var(--n-900));
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 13px;
   font-weight: 700;
   line-height: 1.2;
