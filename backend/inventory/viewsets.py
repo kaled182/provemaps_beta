@@ -1300,6 +1300,25 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         return Response(serializer.data)
 
     @extend_schema(
+        summary="Topologia esquemática: POPs (nós) e enlaces (arestas) com estado e capacidade",
+        description=(
+            "Site de cada ponta pelo equipamento da porta; ocupação só com fibras "
+            "cadastradas, senão null (EV-0060, ADR 0009)."
+        ),
+        responses={200: OpenApiTypes.OBJECT},
+    )
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="topology",
+        permission_classes=[IsAuthenticated],
+    )
+    def topology(self, request):
+        from inventory.usecases.topology import build_topology
+
+        return Response(build_topology())
+
+    @extend_schema(
         summary="Quadro de alarmes de fibra: ativos, resolvidos 24 h e MTTR",
         description=(
             "Derivado do histórico FiberEvent; `unknown` não abre nem fecha incidente "

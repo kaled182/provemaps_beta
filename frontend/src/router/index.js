@@ -92,6 +92,12 @@ const routes = [
     component: () => import('@/views/AlarmsView.vue'),
   },
   {
+    // EV-0060 / ADR 0009: POPs e enlaces em SVG
+    path: '/topologia',
+    name: 'topology',
+    component: () => import('@/views/TopologyView.vue'),
+  },
+  {
     path: '/network/inventory',
     name: 'inventory',
     component: () => import('@/components/Inventory/InventoryView.vue'),
