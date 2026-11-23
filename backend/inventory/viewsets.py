@@ -13,6 +13,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from inventory.cache.fibers import invalidate_fiber_cache
+from inventory.domain.port_cable import annotate_connected_cable
 from inventory.domain.strands import OCCUPANCY_ANNOTATIONS
 from inventory.domain.zabbix_history import (
     fetch_aligned_series,
@@ -711,7 +712,8 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
 
     def get_queryset(self):
         """Filter ports by device if device query param is provided"""
-        queryset = super().get_queryset()
+        # EV-0071: cabo ligado à porta (origem ou destino), numa subconsulta
+        queryset = annotate_connected_cable(super().get_queryset())
         device_id = self.request.query_params.get("device")
 
         if device_id:

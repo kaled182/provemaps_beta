@@ -13,6 +13,9 @@
         <i class="fas fa-spinner fa-spin"></i>
         <span>Carregando conectividade...</span>
       </div>
+      <p v-else-if="loadError" class="load-error" role="alert" data-testid="connectivity-error">
+        Erro ao carregar a conectividade: {{ loadError }}
+      </p>
 
       <div v-else class="connectivity-map">
         <!-- Source Device/Port -->
@@ -45,16 +48,11 @@
             <h4>{{ connectivity.cable.name || `Cabo #${connectivity.cable.id}` }}</h4>
             <p class="node-detail">
               <i class="fas fa-ruler"></i>
-              {{ connectivity.cable.length || 'N/A' }}m
+              {{ connectivity.cable.lengthMeters === null ? 'extensão não cadastrada' : `${connectivity.cable.lengthMeters} m` }}
             </p>
             <p v-if="connectivity.cable.fiber_count" class="node-detail">
               <i class="fas fa-network-wired"></i>
               {{ connectivity.cable.fiber_count }} fibras
-            </p>
-            <p v-if="connectivity.fiber" class="node-detail fiber">
-              <i class="fas fa-circle"></i>
-              Fibra {{ connectivity.fiber.number || connectivity.fiber.id }}
-              <span v-if="connectivity.fiber.color" class="fiber-color" :style="{ backgroundColor: connectivity.fiber.color }"></span>
             </p>
           </div>
         </div>
@@ -116,13 +114,6 @@
             <span class="detail-value">{{ connectivity.cable.route.name }}</span>
           </div>
 
-          <div v-if="connectivity.fiber" class="detail-item">
-            <span class="detail-label">Fibra:</span>
-            <span class="detail-value">
-              #{{ connectivity.fiber.number || connectivity.fiber.id }}
-              {{ connectivity.fiber.color ? `(${connectivity.fiber.color})` : '' }}
-            </span>
-          </div>
 
           <div v-if="connectivity.cable?.installation_date" class="detail-item">
             <span class="detail-label">Instalação:</span>
@@ -146,6 +137,7 @@ import { ref, computed, watch } from 'vue'
 import { useApi } from '@/composables/useApi'
 import { PhGraph } from '@phosphor-icons/vue'
 import BaseModal from '@/components/Common/BaseModal.vue'
+import { otherEnd, cableLengthMeters, linkLossDb } from '@/utils/portConnectivity'
 
 const props = defineProps({
   isOpen: {
@@ -197,49 +189,42 @@ const close = () => {
   emit('close')
 }
 
+// EV-0071: o cabo vem de /api/v1/fiber-cables/ (a rota antiga /api/v1/cables/ não existe) e
+// o destino é a outra ponta real do cabo. Sem «fibra» inventada (antes punha a 1.ª fibra
+// do cabo como se fosse a da porta).
+const loadError = ref('')
 const loadConnectivity = async () => {
   if (!props.port?.id) return
-  
   loading.value = true
+  loadError.value = ''
+  connectivity.value = { cable: null, fiber: null, destinationPort: null, destinationDevice: null }
   try {
-    console.log('[ConnectivityMapModal] Loading connectivity for port:', props.port.id)
-    
-    // Get cable info
-    if (props.port.connected_cable) {
-      const cableId = typeof props.port.connected_cable === 'object' 
-        ? props.port.connected_cable.id 
-        : props.port.connected_cable
-      
-      const cable = await get(`/api/v1/cables/${cableId}/`)
-      connectivity.value.cable = cable
-      
-      // Try to find fiber and destination port
-      // This would require a specific endpoint or logic to trace the connection
-      // For now, we'll use mock data structure
-      
-      // TODO: Implement proper fiber tracing endpoint
-      // const trace = await get(`/api/v1/ports/${props.port.id}/trace/`)
-      
-      // Mock fiber info (would come from backend)
-      if (cable.fibers && cable.fibers.length > 0) {
-        connectivity.value.fiber = cable.fibers[0]
-      }
+    const cableId = props.port.connected_cable?.id ?? props.port.cable_id
+    if (!cableId) return
+    const cable = await get(`/api/v1/fiber-cables/${encodeURIComponent(cableId)}/`)
+    connectivity.value.cable = { ...cable, lengthMeters: cableLengthMeters(cable) }
+    const end = otherEnd(cable, props.port.id)
+    if (!end) return
+    const other = await get(`/api/v1/ports/${encodeURIComponent(end.portId)}/`).catch(() => null)
+    const toNum = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v))
+    connectivity.value.destinationPort = {
+      id: end.portId,
+      name: other?.name || end.portName || `Porta #${end.portId}`,
+      optical_rx_power: toNum(other?.last_rx_power),
     }
-    
+    connectivity.value.destinationDevice = { name: other?.device_name || end.deviceName || null }
   } catch (error) {
-    console.error('[ConnectivityMapModal] Error loading connectivity:', error)
+    console.error('[ConnectivityMapModal] Erro ao carregar a conectividade:', error)
+    loadError.value = error?.message || 'erro desconhecido'
   } finally {
     loading.value = false
   }
 }
 
 const calculateAttenuation = () => {
-  if (!props.port?.optical_tx_power || !connectivity.value.destinationPort?.optical_rx_power) {
-    return 'N/A'
-  }
-  
-  const attenuation = props.port.optical_tx_power - connectivity.value.destinationPort.optical_rx_power
-  return Math.abs(attenuation).toFixed(2)
+  // 0 dBm é leitura válida: só «N/A» quando falta a leitura (antes `!valor` tratava 0 como falta)
+  const loss = linkLossDb(props.port?.optical_tx_power, connectivity.value.destinationPort?.optical_rx_power)
+  return loss === null ? 'N/A' : loss.toFixed(2)
 }
 
 const getConnectionStatus = () => {
@@ -285,6 +270,16 @@ watch(() => props.isOpen, (newVal) => {
   flex: 1;
   overflow-y: auto;
   padding: 32px;
+}
+
+.load-error {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid rgb(var(--danger) / 0.4);
+  border-radius: 6px;
+  background: rgb(var(--danger) / 0.1);
+  color: rgb(var(--danger));
+  font-size: 13px;
 }
 
 .loading-state {
@@ -387,19 +382,6 @@ watch(() => props.isOpen, (newVal) => {
   align-items: center;
   justify-content: center;
   gap: 6px;
-}
-
-.node-detail.fiber {
-  font-weight: 600;
-  color: rgb(var(--primary-500));
-}
-
-.fiber-color {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 1px solid rgb(var(--n-400));
 }
 
 .signal-badge {

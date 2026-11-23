@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from inventory.models import (
@@ -300,6 +302,18 @@ class PortSerializer(serializers.ModelSerializer[Port]):
     device_id = serializers.IntegerField(source="device.id", read_only=True)
     site_name = serializers.CharField(source="device.site.display_name", read_only=True)
     site_id = serializers.IntegerField(source="device.site.id", read_only=True)
+    # EV-0071: cabo ligado (origem ou destino), anotado no PortViewSet.get_queryset;
+    # None numa instância não anotada (ex.: logo a seguir a um create).
+    cable_id = serializers.SerializerMethodField()
+    cable_name = serializers.SerializerMethodField()
+
+    @extend_schema_field(OpenApiTypes.INT)
+    def get_cable_id(self, obj: Port) -> int | None:
+        return getattr(obj, "connected_cable_id", None)
+
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_cable_name(self, obj: Port) -> str | None:
+        return getattr(obj, "connected_cable_name", None)
 
     class Meta:
         model = Port
@@ -326,6 +340,9 @@ class PortSerializer(serializers.ModelSerializer[Port]):
             "alarm_warning_threshold",
             "alarm_critical_threshold",
             "alarm_notifications",
+            # EV-0071: sempre as últimas chaves (há testes sensíveis à ordem)
+            "cable_id",
+            "cable_name",
         ]
         read_only_fields = ["id", "device_id", "site_id"]
 
