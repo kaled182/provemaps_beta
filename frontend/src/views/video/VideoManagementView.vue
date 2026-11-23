@@ -1,35 +1,27 @@
 <template>
   <div class="h-full flex flex-col app-page app-page-muted">
-    <header class="app-surface shadow-sm border-b app-divider py-3 px-4 md:px-6 z-10">
-      <div class="flex flex-col gap-3">
-        <div class="flex items-start gap-3 justify-between">
-          <div class="leading-tight">
-            <h1 class="text-xl font-bold app-text-primary">Monitoramento Visual</h1>
-            <p class="text-xs app-text-tertiary mt-0.5">
-              Câmeras e mosaicos de vídeo
-            </p>
-          </div>
-        </div>
-
-        <div class="app-surface rounded-xl p-2 flex items-center gap-2 justify-between">
-          <div class="flex items-center gap-2 flex-wrap">
-            <button
-              v-for="tab in tabs"
-              :key="tab.id"
-              @click="activeTab = tab.id"
-              :class="[
-                'px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors app-tab',
-                activeTab === tab.id ? 'is-active' : ''
-              ]"
-            >
-              {{ tab.label }}
-            </button>
-          </div>
-        </div>
+    <!-- Cabeçalho compacto numa linha (EV-0055): título · abas -->
+    <header class="app-surface border-b app-divider px-4 md:px-6 py-2 z-10">
+      <div class="flex items-center gap-3 flex-wrap">
+        <h1 class="text-base font-semibold app-text-primary mr-2">Monitoramento visual</h1>
+        <nav class="flex items-center gap-1" aria-label="Secções de vídeo">
+          <button
+            v-for="tab in tabs"
+            :key="tab.id"
+            @click="activeTab = tab.id"
+            :class="[
+              'px-2.5 py-1 rounded-md text-sm font-medium transition-colors app-tab',
+              activeTab === tab.id ? 'is-active' : ''
+            ]"
+            :data-testid="`video-tab-${tab.id}`"
+          >
+            {{ tab.label }}
+          </button>
+        </nav>
       </div>
     </header>
 
-    <main class="flex-1 overflow-auto px-4 md:px-6 py-3 flex flex-col gap-3">
+    <main class="flex-1 overflow-auto px-4 md:px-6 py-2 flex flex-col gap-2">
       <!-- Cameras Tab -->
       <div v-show="activeTab === 'cameras'" class="flex-1">
         <VideoCamerasView :embedded="true" />

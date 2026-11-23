@@ -1,16 +1,15 @@
 <template>
-  <div :class="embedded ? '' : 'min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col h-[calc(100vh-64px)] overflow-hidden transition-colors duration-300'">
+  <div :class="embedded ? '' : 'h-full bg-neutral-50 text-neutral-900 flex flex-col overflow-hidden transition-colors duration-300'">
     
-    <div v-if="!embedded" class="flex-none px-6 py-5 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 z-10">
+    <div v-if="!embedded" class="flex-none px-4 md:px-6 py-2 border-b border-neutral-200 bg-surface z-10">
       <div class="flex justify-between items-center">
         <div>
-          <h1 class="text-xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-2">
-            <svg class="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <h1 class="text-base font-semibold text-neutral-900 flex items-center gap-2">
+            <svg class="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
             Câmeras
           </h1>
-          <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Gestão de câmeras e streaming de vídeo.</p>
         </div>
         
         <button @click="openVideoGatewayModal()" class="btn-primary">
@@ -20,37 +19,37 @@
       </div>
     </div>
 
-    <div :class="embedded ? '' : 'flex-1 overflow-y-auto custom-scrollbar bg-gray-50 dark:bg-gray-900'">
+    <div :class="embedded ? '' : 'flex-1 overflow-y-auto custom-scrollbar bg-neutral-50 '">
       <div :class="embedded ? '' : ''">
         
         <!-- Campo de Busca -->
-        <div class="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900 px-6 pt-4 pb-3">
+        <div class="sticky top-0 z-10 bg-neutral-50 px-6 pt-4 pb-3">
           <div class="relative">
-            <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
             </svg>
             <input 
               v-model="searchQuery" 
               type="text" 
               placeholder="Filtrar câmeras ou sites..." 
-              class="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
+              class="w-full pl-10 pr-4 py-2.5 bg-surface border border-neutral-200 rounded-lg text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
             />
           </div>
         </div>
 
         <div v-if="gatewayLoading" class="text-center py-12">
-          <svg class="animate-spin h-8 w-8 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24">
+          <svg class="animate-spin h-8 w-8 mx-auto text-neutral-400" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
-          <p class="text-sm text-gray-500 mt-2">Carregando...</p>
+          <p class="text-sm text-neutral-500 mt-2">Carregando...</p>
         </div>
 
-        <div v-else-if="videoGateways.length === 0" class="text-center py-12 mx-6 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
-          <svg class="w-12 h-12 mx-auto text-gray-400 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div v-else-if="videoGateways.length === 0" class="text-center py-12 mx-6 border-2 border-dashed border-neutral-200 rounded-lg">
+          <svg class="w-12 h-12 mx-auto text-neutral-400 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
           </svg>
-          <p class="text-sm text-gray-500 mt-2">Nenhuma câmera configurada</p>
+          <p class="text-sm text-neutral-500 mt-2">Nenhuma câmera configurada</p>
           <button @click="openVideoGatewayModal()" class="btn-primary mt-4">
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
             Adicionar Primeira Câmera
@@ -62,16 +61,16 @@
           <div 
             v-for="(cameras, siteName) in camerasBySite" 
             :key="siteName"
-            class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800"
+            class="border border-neutral-200 rounded-lg overflow-hidden bg-surface"
           >
             <!-- Header do Grupo (colapsável) -->
             <button
               @click="toggleSiteGroup(siteName)"
-              class="w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
+              class="w-full px-4 py-3 flex items-center justify-between bg-neutral-50 hover:bg-neutral-100 transition-colors"
             >
               <div class="flex items-center gap-3">
                 <svg 
-                  class="w-4 h-4 text-gray-400 transition-transform"
+                  class="w-4 h-4 text-neutral-400 transition-transform"
                   :class="{ 'rotate-90': expandedSites[siteName] }"
                   fill="none" 
                   stroke="currentColor" 
@@ -79,13 +78,13 @@
                 >
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                 </svg>
-                <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ siteName }}</span>
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                <span class="text-sm font-semibold text-neutral-900">{{ siteName }}</span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-neutral-200 text-neutral-700">
                   {{ cameras.length }}
                 </span>
               </div>
               <svg 
-                class="w-5 h-5 text-gray-400"
+                class="w-5 h-5 text-neutral-400"
                 :class="{ 'rotate-180': expandedSites[siteName] }"
                 fill="none" 
                 stroke="currentColor" 
@@ -98,22 +97,22 @@
             <!-- Tabela de Câmeras -->
             <div v-show="expandedSites[siteName]" class="overflow-x-auto">
               <table class="w-full text-sm">
-                <thead class="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/30">
+                <thead class="border-b border-neutral-200 bg-neutral-50">
                   <tr>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-16">Status</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Nome / Endereço</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tipo</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-48">Ações</th>
+                    <th class="px-3 py-2 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider w-16">Status</th>
+                    <th class="px-3 py-2 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Nome / Endereço</th>
+                    <th class="px-3 py-2 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">Tipo</th>
+                    <th class="px-3 py-2 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wider w-48">Ações</th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody class="divide-y divide-neutral-200">
                   <tr 
                     v-for="camera in cameras" 
                     :key="camera.id"
-                    class="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
+                    class="hover:bg-neutral-50 transition-colors"
                   >
                     <!-- Status -->
-                    <td class="px-4 py-3">
+                    <td class="px-3 py-1.5">
                       <span class="flex h-2.5 w-2.5 relative">
                         <span 
                           v-if="getVideoGatewayStatusColor(camera) === 'bg-emerald-400'" 
@@ -127,28 +126,28 @@
                     </td>
 
                     <!-- Nome / IP -->
-                    <td class="px-4 py-3">
-                      <div class="flex flex-col">
-                        <span class="font-semibold text-gray-900 dark:text-gray-100">{{ camera.name }}</span>
-                        <span class="text-xs text-gray-500 dark:text-gray-400 font-mono truncate max-w-md">
+                    <td class="px-3 py-1.5">
+                      <div class="flex items-baseline gap-2 min-w-0">
+                        <span class="font-semibold text-neutral-900 whitespace-nowrap">{{ camera.name }}</span>
+                        <span class="text-xs text-neutral-500 font-mono truncate max-w-md" :title="camera.config?.stream_url">
                           {{ camera.config?.stream_url || 'Sem URL configurada' }}
                         </span>
                       </div>
                     </td>
 
                     <!-- Tipo -->
-                    <td class="px-4 py-3">
-                      <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                    <td class="px-3 py-1.5">
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-warning/15 text-warning border border-warning/40">
                         {{ camera.provider || 'RTMP' }}
                       </span>
                     </td>
 
                     <!-- Ações -->
-                    <td class="px-4 py-3">
+                    <td class="px-3 py-1.5">
                       <div class="flex items-center justify-end gap-2">
                         <button 
                           @click="openVideoGatewayModal(camera)" 
-                          class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                          class="inline-flex items-center px-2 py-1 text-xs font-medium text-info bg-info/10 border border-info/40 rounded hover:bg-info/15 transition-colors"
                           title="Configurar"
                         >
                           <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -159,7 +158,7 @@
                         </button>
                         <button 
                           @click="confirmDeleteGateway(camera)" 
-                          class="p-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                          class="p-1.5 text-danger hover:bg-danger/10 rounded transition-colors"
                           title="Excluir"
                         >
                           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -183,13 +182,13 @@
       <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity" @click="closeGatewayModal"></div>
       <div class="fixed inset-0 z-10 overflow-y-auto">
         <div class="flex min-h-full items-center justify-center p-4 text-center">
-          <div class="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-2xl border border-gray-200 dark:border-gray-700 animate-fade-in">
-            <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+          <div class="relative transform overflow-hidden rounded-lg bg-surface text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-2xl border border-neutral-200 animate-fade-in">
+            <div class="px-6 py-4 border-b border-neutral-100 flex justify-between items-center">
               <div>
-                <h3 class="text-base font-bold leading-6 text-gray-900 dark:text-white" id="gateway-config-title">{{ videoGatewayForm.id ? 'Editar Gateway de Vídeo' : 'Novo Gateway de Vídeo' }}</h3>
-                <p class="text-xs text-gray-500">Transcodificação e streaming HLS com pré-visualização.</p>
+                <h3 class="text-base font-bold leading-6 text-neutral-900" id="gateway-config-title">{{ videoGatewayForm.id ? 'Editar Gateway de Vídeo' : 'Novo Gateway de Vídeo' }}</h3>
+                <p class="text-xs text-neutral-500">Transcodificação e streaming HLS com pré-visualização.</p>
               </div>
-              <button @click="closeGatewayModal" class="text-gray-400 hover:text-gray-600">✕</button>
+              <button @click="closeGatewayModal" class="text-neutral-400 hover:text-neutral-600">✕</button>
             </div>
             <form class="p-6 space-y-4" autocomplete="off" @submit.prevent>
               <div v-if="activeGateway === 'video'" class="space-y-4">
@@ -217,7 +216,7 @@
                   <datalist id="site-suggestions">
                     <option v-for="site in availableSites" :key="site" :value="site"></option>
                   </datalist>
-                  <p class="text-xs text-gray-400 mt-2">Local físico onde a câmera está instalada. As câmeras serão agrupadas por site.</p>
+                  <p class="text-xs text-neutral-400 mt-2">Local físico onde a câmera está instalada. As câmeras serão agrupadas por site.</p>
                 </div>
 
                 <div class="grid gap-4 md:grid-cols-2">
@@ -228,19 +227,19 @@
                       <option value="rtsp">RTSP</option>
                       <option value="hls">HLS</option>
                     </select>
-                    <p class="text-xs text-gray-400 mt-2">Selecione o protocolo utilizado pela câmera ou encoder.</p>
+                    <p class="text-xs text-neutral-400 mt-2">Selecione o protocolo utilizado pela câmera ou encoder.</p>
                   </div>
                   <div>
                     <label class="label-custom">Chave de Restream (opcional)</label>
                     <input v-model="videoGatewayForm.config.restream_key" type="text" class="input-custom font-mono" placeholder="gateway_{{ videoGatewayForm.id || 'novo' }}" autocomplete="off">
-                    <p class="text-xs text-gray-400 mt-2">Se vazio, a chave é gerada automaticamente.</p>
+                    <p class="text-xs text-neutral-400 mt-2">Se vazio, a chave é gerada automaticamente.</p>
                   </div>
                 </div>
 
                 <div>
                   <label class="label-custom">URL do Stream</label>
                   <input v-model="videoGatewayForm.config.stream_url" type="text" class="input-custom font-mono" placeholder="rtsp://camera.local/stream" autocomplete="off">
-                  <p class="text-xs text-gray-400 mt-2">Use RTSP, RTMP ou HLS conforme selecionado acima.</p>
+                  <p class="text-xs text-neutral-400 mt-2">Use RTSP, RTMP ou HLS conforme selecionado acima.</p>
                 </div>
 
                 <div class="grid gap-4 md:grid-cols-2">
@@ -251,17 +250,17 @@
                   <div>
                     <label class="label-custom">Base pública HLS (opcional)</label>
                     <input v-model="videoGatewayForm.config.hls_public_base_url" type="text" class="input-custom font-mono" placeholder="https://videos.seudominio.com/hls" autocomplete="off">
-                    <p class="text-xs text-gray-400 mt-2">Sobrescreve a URL padrão exposta pelo Docker.</p>
+                    <p class="text-xs text-neutral-400 mt-2">Sobrescreve a URL padrão exposta pelo Docker.</p>
                   </div>
                 </div>
 
-                <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-900/40 p-4 space-y-4">
+                <div class="rounded-lg border border-neutral-200 bg-gray-900/40 p-4 space-y-4">
                 <div class="flex items-center justify-between gap-3">
                   <div>
                     <p class="text-sm font-semibold text-gray-200">Pré-visualização</p>
-                    <p class="text-xs text-gray-400">Gera uma saída HLS temporária para validar a entrada.</p>
+                    <p class="text-xs text-neutral-400">Gera uma saída HLS temporária para validar a entrada.</p>
                   </div>
-                  <div class="flex items-center gap-3 text-xs text-gray-400">
+                  <div class="flex items-center gap-3 text-xs text-neutral-400">
                     <button
                       v-if="!videoPreview.url && videoGatewayForm.id && videoGatewayForm.config.stream_url"
                       class="btn-primary text-xs h-8 px-4"
@@ -275,7 +274,7 @@
                     <span v-else class="flex items-center gap-2">
                       <span
                         v-if="isVideoPreviewLoading"
-                        class="inline-flex h-3 w-3 border border-gray-300 border-t-transparent rounded-full animate-spin"
+                        class="inline-flex h-3 w-3 border border-neutral-300 border-t-transparent rounded-full animate-spin"
                       ></span>
                       {{ videoPreview.url ? 'Transmissão ativa' : 'Aguardando stream URL...' }}
                     </span>
@@ -306,7 +305,7 @@
                     class="absolute inset-0 bg-gray-900/90 flex flex-col items-center justify-center text-sm text-gray-200 gap-3"
                   >
                     <div class="flex items-center gap-3">
-                      <svg class="animate-spin h-6 w-6 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <svg class="animate-spin h-6 w-6 text-info" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
@@ -323,41 +322,41 @@
                     v-else-if="videoPreview.error"
                     class="absolute inset-0 bg-gray-900/80 flex flex-col items-center justify-center text-center px-6 py-4 gap-3"
                   >
-                    <svg class="h-10 w-10 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg class="h-10 w-10 text-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
                     <p class="text-sm text-red-300 font-medium">Erro ao carregar vídeo</p>
-                    <p class="text-xs text-gray-400">{{ videoPreview.error }}</p>
+                    <p class="text-xs text-neutral-400">{{ videoPreview.error }}</p>
                   </div>
                   <div
                     v-else-if="!videoPreview.url && !isVideoPreviewActive"
-                    class="absolute inset-0 flex items-center justify-center text-xs text-gray-500 text-center px-4"
+                    class="absolute inset-0 flex items-center justify-center text-xs text-neutral-500 text-center px-4"
                   >
                     Preparando prévia automática...
                   </div>
                 </div>
-                <div class="flex items-center justify-between gap-4 text-[11px] text-gray-400">
+                <div class="flex items-center justify-between gap-4 text-[11px] text-neutral-400">
                   <span v-if="previewUrlDisplay" class="truncate" :title="previewUrlDisplay">URL: {{ previewUrlDisplay }}</span>
-                  <span v-else class="text-gray-500">URL ainda não gerada.</span>
+                  <span v-else class="text-neutral-500">URL ainda não gerada.</span>
                   <span
                     v-if="videoGatewayForm.config.preview_url && !videoPreview.url"
-                    class="text-gray-500"
+                    class="text-neutral-500"
                   >Prévia anterior disponível.</span>
                 </div>
               </div>
             </div>
             </form>
-            <div class="bg-gray-50 dark:bg-gray-800/50 px-6 py-3 flex justify-between gap-3 border-t border-gray-100 dark:border-gray-700">
+            <div class="bg-neutral-50 px-6 py-3 flex justify-between gap-3 border-t border-neutral-100">
             <div class="flex items-center gap-4">
               <button
                 v-if="videoGatewayForm.id"
                 @click="deleteGateway"
-                class="btn-secondary text-red-500 border-red-500/40 hover:border-red-400 hover:text-red-400"
+                class="btn-secondary text-danger border-danger/40 hover:border-danger hover:text-danger"
               >
                 Remover
               </button>
-              <label class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
-                <input v-model="videoGatewayForm.enabled" type="checkbox" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500 h-4 w-4" autocomplete="off">
+              <label class="flex items-center gap-2 text-xs text-neutral-600">
+                <input v-model="videoGatewayForm.enabled" type="checkbox" class="rounded border-neutral-300 text-primary-600 focus:ring-primary-500 h-4 w-4" autocomplete="off">
                 Ativar vídeo
               </label>
             </div>
@@ -375,9 +374,9 @@
     <div v-if="showDeleteConfirm" class="fixed inset-0 z-50 overflow-y-auto" @click.self="showDeleteConfirm = false">
       <div class="flex min-h-screen items-center justify-center p-4">
         <div class="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"></div>
-        <div class="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
-          <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">Remover câmera</h3>
-          <p class="text-sm text-gray-500 mb-6">{{ deleteMessage }}</p>
+        <div class="relative bg-surface rounded-lg shadow-xl max-w-md w-full p-6">
+          <h3 class="text-lg font-bold text-neutral-900 mb-2">Remover câmera</h3>
+          <p class="text-sm text-neutral-500 mb-6">{{ deleteMessage }}</p>
           <div class="flex justify-end gap-3">
             <button @click="showDeleteConfirm = false" class="btn-secondary">Cancelar</button>
             <button @click="confirmDelete" class="btn-primary bg-red-600 hover:bg-red-700">Remover</button>
@@ -1248,7 +1247,7 @@ onUnmounted(() => {
 /* ESTILO PADRÃO (Clean Form) */
 
 .label-custom {
-  @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5;
+  @apply block text-sm font-medium text-neutral-700 mb-1.5;
 }
 
 /* Input Branco Puro no Light Mode, Cinza Escuro no Dark Mode */
@@ -1317,19 +1316,19 @@ html:not(.dark)[data-theme="light"] .input-custom {
 }
 
 .btn-secondary {
-  @apply inline-flex items-center justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-600 dark:hover:bg-gray-700 transition-all duration-200;
+  @apply inline-flex items-center justify-center rounded-md bg-surface px-3 py-2 text-sm font-semibold text-neutral-900 shadow-sm ring-1 ring-inset ring-neutral-300 hover:bg-neutral-50 transition-all duration-200;
 }
 
 .btn-white {
-  @apply inline-flex items-center rounded-md bg-white px-2.5 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-600 dark:hover:bg-gray-700 transition-all;
+  @apply inline-flex items-center rounded-md bg-surface px-2.5 py-1.5 text-sm font-semibold text-neutral-900 shadow-sm ring-1 ring-inset ring-neutral-300 hover:bg-neutral-50 transition-all;
 }
 
 /* Cards de Resumo */
 .stat-card {
-  @apply p-4 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col;
+  @apply p-4 rounded-lg bg-surface border border-neutral-200 shadow-sm flex flex-col;
 }
 .stat-label {
-  @apply text-xs font-semibold text-gray-500 uppercase tracking-wide;
+  @apply text-xs font-semibold text-neutral-500 uppercase tracking-wide;
 }
 .stat-value {
   @apply text-lg font-bold;
@@ -1344,10 +1343,10 @@ html:not(.dark)[data-theme="light"] .input-custom {
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 dark:bg-gray-600 rounded-full;
+  @apply bg-neutral-300 rounded-full;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-400 dark:bg-gray-500;
+  @apply bg-neutral-400;
 }
 
 /* Animations */
