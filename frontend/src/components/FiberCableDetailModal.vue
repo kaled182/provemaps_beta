@@ -235,7 +235,7 @@
                 <div v-else class="port-charts-container">
                   
                   <!-- Porta de Origem -->
-                  <div class="port-chart-panel" :class="{ collapsed: !expandedOrigin }">
+                  <div class="port-chart-panel" :class="{ collapsed: !expandedOrigin, 'port-los': portLos('origin') }" data-testid="optical-panel-origin">
                     <div class="panel-header" @click="expandedOrigin = !expandedOrigin">
                       <div class="port-info">
                         <div class="port-icon origin">
@@ -248,6 +248,12 @@
                           <h4>{{ opticalData?.portInfo?.origin?.device || 'Dispositivo Origem' }}</h4>
                           <p>{{ opticalData?.portInfo?.origin?.port || 'Porta não identificada' }}</p>
                         </div>
+                        <span
+                          v-if="portLos('origin')"
+                          class="los-badge"
+                          :title="`Último RX ${formatDbm(opticalData?.stats?.origin?.lastRx)} ≤ limiar crítico ${formatDbm(opticalData?.thresholds?.origin?.critical)}`"
+                          data-testid="los-badge-origin"
+                        >Perda de sinal · {{ formatDbm(opticalData?.stats?.origin?.lastRx) }}</span>
                       </div>
                       <div class="panel-actions" @click.stop>
                         <div class="export-menu" :class="{ open: exportMenuOpen === 'origin' }">
@@ -293,7 +299,7 @@
                   </div>
 
                   <!-- Porta de Destino -->
-                  <div class="port-chart-panel" :class="{ collapsed: !expandedDestination }">
+                  <div class="port-chart-panel" :class="{ collapsed: !expandedDestination, 'port-los': portLos('destination') }" data-testid="optical-panel-destination">
                     <div class="panel-header" @click="expandedDestination = !expandedDestination">
                       <div class="port-info">
                         <div class="port-icon destination">
@@ -306,6 +312,12 @@
                           <h4>{{ opticalData?.portInfo?.destination?.device || 'Dispositivo Destino' }}</h4>
                           <p>{{ opticalData?.portInfo?.destination?.port || 'Porta não identificada' }}</p>
                         </div>
+                        <span
+                          v-if="portLos('destination')"
+                          class="los-badge"
+                          :title="`Último RX ${formatDbm(opticalData?.stats?.destination?.lastRx)} ≤ limiar crítico ${formatDbm(opticalData?.thresholds?.destination?.critical)}`"
+                          data-testid="los-badge-destination"
+                        >Perda de sinal · {{ formatDbm(opticalData?.stats?.destination?.lastRx) }}</span>
                       </div>
                       <div class="panel-actions" @click.stop>
                         <div class="export-menu" :class="{ open: exportMenuOpen === 'destination' }">
@@ -916,7 +928,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useEscapeKey } from '@/composables/useEscapeKey'
 import TimeSeriesChart from './charts/TimeSeriesChart.vue'
-import { bpsToMbps } from '@/utils/opticalSeries'
+import { bpsToMbps, isRxCritical } from '@/utils/opticalSeries'
 import { getCableOpticalHistory, getCableTrafficHistory, getCableAlarms, createCableAlarm, deleteCableAlarm, testCableAlarm, getCableAlarmNotifications, snoozeCableAlarm } from '@/services/fiberService'
 import { useAlertTemplatesStore } from '@/stores/alertTemplates'
 
@@ -1249,7 +1261,7 @@ const exportChart = (port, format) => {
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #fff; display: flex; flex-direction: column; align-items: center; padding: 24px; font-family: sans-serif; }
         h2 { font-size: 14px; color: #334155; margin-bottom: 4px; }
-        p  { font-size: 12px; color: #64748b; margin-bottom: 16px; }
+        p  { font-size: 12px; color: rgb(var(--n-500)); margin-bottom: 16px; }
         img { max-width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; }
       </style>
     </head>
@@ -1345,7 +1357,7 @@ const exportTrafficChart = (port, format) => {
   const imgData = chartImage
   const win = window.open('', '_blank')
   if (!win) return
-  win.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(device)} — ${escapeHtml(portName)}</title><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#fff;display:flex;flex-direction:column;align-items:center;padding:24px;font-family:sans-serif;}h2{font-size:14px;color:#334155;margin-bottom:4px;}p{font-size:12px;color:#64748b;margin-bottom:16px;}img{max-width:100%;border:1px solid #e2e8f0;border-radius:8px;}</style></head><body><h2>${escapeHtml(device)}</h2><p>${escapeHtml(portName)} — Período: ${selectedPeriod.value}h</p><img src="${imgData}"/><script>window.onload=()=>{window.print()}<${'/'}script></body></html>`)
+  win.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(device)} — ${escapeHtml(portName)}</title><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#fff;display:flex;flex-direction:column;align-items:center;padding:24px;font-family:sans-serif;}h2{font-size:14px;color:#334155;margin-bottom:4px;}p{font-size:12px;color: rgb(var(--n-500));margin-bottom:16px;}img{max-width:100%;border:1px solid #e2e8f0;border-radius:8px;}</style></head><body><h2>${escapeHtml(device)}</h2><p>${escapeHtml(portName)} — Período: ${selectedPeriod.value}h</p><img src="${imgData}"/><script>window.onload=()=>{window.print()}<${'/'}script></body></html>`)
   win.document.close()
 }
 
@@ -1925,11 +1937,21 @@ const opticalSeries = (side) => {
   ]
 }
 
+// Cor de um token RGB («r g b») como `rgb(...)`, para o Chart.js
+const cssToken = (name, fallback) => {
+  const v = typeof window !== 'undefined' ? getComputedStyle(document.documentElement).getPropertyValue(name).trim() : ''
+  return v ? `rgb(${v.split(/\s+/).join(', ')})` : fallback
+}
+
+// EV-0053: ponta em perda de sinal = último RX real ≤ limiar crítico da configuração
+const portLos = (side) =>
+  isRxCritical(opticalData.value?.stats?.[side]?.lastRx, opticalData.value?.thresholds?.[side]?.critical)
+
 const opticalThresholds = (side) => {
   const t = opticalData.value?.thresholds?.[side]
   const out = []
   if (t?.warning !== null && t?.warning !== undefined) out.push({ value: t.warning, label: 'Atenção' })
-  if (t?.critical !== null && t?.critical !== undefined) out.push({ value: t.critical, label: 'Crítico', color: '#f87171' })
+  if (t?.critical !== null && t?.critical !== undefined) out.push({ value: t.critical, label: 'Crítico', color: cssToken('--danger', '#dc2626') })
   return out
 }
 
@@ -2038,7 +2060,7 @@ onUnmounted(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgb(var(--n-200));
 }
 
 /* Header */
@@ -2047,7 +2069,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgb(var(--n-200));
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, transparent 100%);
 }
 
@@ -2088,12 +2110,12 @@ onUnmounted(() => {
 .cable-icon .icon {
   width: 22px;
   height: 22px;
-  color: white;
+  color: rgb(var(--n-900));
 }
 
 .cable-title h2 {
   margin: 0;
-  color: white;
+  color: rgb(var(--n-900));
   font-size: 17px;
   font-weight: 700;
   line-height: 1.3;
@@ -2101,7 +2123,7 @@ onUnmounted(() => {
 
 .cable-route {
   margin: 6px 0 0 0;
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   font-size: 14px;
   line-height: 1.3;
   display: flex;
@@ -2112,7 +2134,7 @@ onUnmounted(() => {
 .arrow-icon {
   width: 16px;
   height: 16px;
-  color: #64748b;
+  color: rgb(var(--n-500));
 }
 
 .header-actions {
@@ -2124,9 +2146,9 @@ onUnmounted(() => {
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #cbd5e1;
+  background: rgb(var(--n-100));
+  border: 1px solid rgb(var(--n-200));
+  color: rgb(var(--n-700));
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -2137,13 +2159,13 @@ onUnmounted(() => {
 .btn-icon:hover {
   background: rgba(59, 130, 246, 0.2);
   border-color: rgba(59, 130, 246, 0.3);
-  color: #60a5fa;
+  color: rgb(var(--info-strong));
 }
 
 .btn-icon.close-btn:hover {
   background: rgba(239, 68, 68, 0.2);
   border-color: rgba(239, 68, 68, 0.3);
-  color: #fca5a5;
+  color: rgb(var(--danger));
 }
 
 .btn-icon .icon {
@@ -2154,8 +2176,8 @@ onUnmounted(() => {
 /* Tabs */
 .tabs-header {
   display: flex;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid rgb(var(--n-200));
+  background: rgb(var(--n-100));
   padding: 0 24px;
   overflow-x: auto;
 }
@@ -2164,7 +2186,7 @@ onUnmounted(() => {
   padding: 16px 20px;
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -2182,12 +2204,12 @@ onUnmounted(() => {
 }
 
 .tab-button:hover {
-  color: #cbd5e1;
-  background: rgba(255, 255, 255, 0.05);
+  color: rgb(var(--n-700));
+  background: rgb(var(--n-50));
 }
 
 .tab-button.active {
-  color: #60a5fa;
+  color: rgb(var(--info-strong));
   border-bottom-color: #3b82f6;
 }
 
@@ -2220,8 +2242,8 @@ onUnmounted(() => {
 }
 
 .info-section {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgb(var(--n-50));
+  border: 1px solid rgb(var(--n-200));
   border-radius: 10px;
   padding: 14px;
 }
@@ -2232,12 +2254,12 @@ onUnmounted(() => {
 
 .info-section h3 {
   margin: 0 0 10px 0;
-  color: white;
+  color: rgb(var(--n-900));
   font-size: 13px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.4px;
-  color: #94a3b8;
+  color: rgb(var(--n-500));
 }
 
 .info-section.collapsible {
@@ -2267,7 +2289,7 @@ onUnmounted(() => {
 }
 
 .collapsible-trigger:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgb(var(--n-50));
 }
 
 .collapsible-trigger .icon {
@@ -2282,7 +2304,7 @@ onUnmounted(() => {
 
 .collapsible-content {
   padding: 0 20px 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgb(var(--n-200));
   border-radius: 0 0 12px 12px;
   overflow: hidden;
 }
@@ -2306,8 +2328,8 @@ onUnmounted(() => {
 }
 
 .stat-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgb(var(--n-50));
+  border: 1px solid rgb(var(--n-200));
   border-radius: 8px;
   padding: 12px 10px;
   text-align: center;
@@ -2324,7 +2346,7 @@ onUnmounted(() => {
 }
 
 .stat-label {
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
@@ -2333,7 +2355,7 @@ onUnmounted(() => {
 }
 
 .stat-value {
-  color: white;
+  color: rgb(var(--n-900));
   font-size: 17px;
   font-weight: 700;
   margin-bottom: 3px;
@@ -2353,7 +2375,7 @@ onUnmounted(() => {
 }
 
 .stat-detail {
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   font-size: 12px;
 }
 
@@ -2369,29 +2391,29 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgb(var(--n-50));
   border-radius: 6px;
 }
 
 .detail-label {
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   font-size: 13px;
   font-weight: 500;
 }
 
 .detail-value {
-  color: white;
+  color: rgb(var(--n-900));
   font-size: 14px;
   font-weight: 600;
 }
 
 /* Notes */
 .notes-box {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgb(var(--n-50));
+  border: 1px solid rgb(var(--n-200));
   border-radius: 8px;
   padding: 16px;
-  color: #cbd5e1;
+  color: rgb(var(--n-700));
   font-size: 14px;
   line-height: 1.6;
 }
@@ -2413,7 +2435,7 @@ onUnmounted(() => {
 
 .section-header h3 {
   margin: 0;
-  color: white;
+  color: rgb(var(--n-900));
   font-size: 14px;
   font-weight: 700;
 }
@@ -2421,7 +2443,7 @@ onUnmounted(() => {
 .period-selector {
   display: flex;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgb(var(--n-50));
   border-radius: 8px;
   padding: 4px;
 }
@@ -2430,7 +2452,7 @@ onUnmounted(() => {
   padding: 5px 11px;
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -2439,13 +2461,30 @@ onUnmounted(() => {
 }
 
 .period-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #cbd5e1;
+  background: rgb(var(--n-100));
+  color: rgb(var(--n-700));
 }
 
 .period-btn.active {
   background: #3b82f6;
   color: white;
+}
+
+.port-chart-panel.port-los {
+  border-color: rgb(var(--danger));
+  box-shadow: 0 0 0 1px rgb(var(--danger));
+}
+.los-badge {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgb(var(--danger));
+  background: rgb(var(--danger) / 0.12);
+  color: rgb(var(--danger));
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .optical-chart-container {
@@ -2464,15 +2503,15 @@ onUnmounted(() => {
 }
 
 .port-chart-panel {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgb(var(--n-50));
+  border: 1px solid rgb(var(--n-200));
   border-radius: 12px;
   overflow: hidden;
   transition: all 0.3s ease;
 }
 
 .port-chart-panel.collapsed {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgb(var(--n-50));
 }
 
 .panel-header {
@@ -2486,7 +2525,7 @@ onUnmounted(() => {
 }
 
 .panel-header:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgb(var(--n-50));
 }
 
 .port-info {
@@ -2516,20 +2555,20 @@ onUnmounted(() => {
 .port-icon .icon {
   width: 20px;
   height: 20px;
-  color: white;
+  color: rgb(var(--n-900));
 }
 
 .port-details h4 {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: rgb(var(--n-800));
 }
 
 .port-details p {
   margin: 2px 0 0 0;
   font-size: 12px;
-  color: #94a3b8;
+  color: rgb(var(--n-500));
 }
 
 .panel-actions {
@@ -2546,7 +2585,7 @@ onUnmounted(() => {
 .export-btn {
   background: transparent;
   border: none;
-  color: #64748b;
+  color: rgb(var(--n-500));
   cursor: pointer;
   padding: 6px;
   display: flex;
@@ -2557,8 +2596,8 @@ onUnmounted(() => {
 }
 
 .export-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #94a3b8;
+  background: rgb(var(--n-100));
+  color: rgb(var(--n-500));
 }
 
 .export-btn .icon {
@@ -2585,7 +2624,7 @@ onUnmounted(() => {
 .export-dropdown button {
   background: transparent;
   border: none;
-  color: #cbd5e1;
+  color: rgb(var(--n-700));
   cursor: pointer;
   padding: 7px 12px;
   font-size: 13px;
@@ -2596,14 +2635,14 @@ onUnmounted(() => {
 }
 
 .export-dropdown button:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #f1f5f9;
+  background: rgb(var(--n-100));
+  color: rgb(var(--n-900));
 }
 
 .collapse-btn {
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   cursor: pointer;
   padding: 8px;
   display: flex;
@@ -2614,8 +2653,8 @@ onUnmounted(() => {
 }
 
 .collapse-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #e2e8f0;
+  background: rgb(var(--n-100));
+  color: rgb(var(--n-800));
 }
 
 .collapse-btn .icon {
@@ -2680,7 +2719,7 @@ onUnmounted(() => {
 .stat-icon .icon {
   width: 24px;
   height: 24px;
-  color: white;
+  color: rgb(var(--n-900));
 }
 
 .stat-info {
@@ -2710,10 +2749,10 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   padding: 48px 24px;
-  color: #64748b;
+  color: rgb(var(--n-500));
   text-align: center;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px dashed rgba(255, 255, 255, 0.1);
+  background: rgb(var(--n-50));
+  border: 1px dashed rgb(var(--n-200));
   border-radius: 12px;
   min-height: 300px;
 }
@@ -2722,12 +2761,12 @@ onUnmounted(() => {
   width: 64px;
   height: 64px;
   margin-bottom: 16px;
-  color: #475569;
+  color: rgb(var(--n-600));
 }
 
 .empty-state p {
   margin: 0;
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   font-size: 16px;
   font-weight: 600;
 }
@@ -2735,7 +2774,7 @@ onUnmounted(() => {
 .empty-state small {
   display: block;
   margin-top: 8px;
-  color: #64748b;
+  color: rgb(var(--n-500));
   font-size: 13px;
 }
 
@@ -2745,14 +2784,14 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   padding: 48px 24px;
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   text-align: center;
   min-height: 300px;
 }
 
 .loading-state p {
   margin: 16px 0 0 0;
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   font-size: 14px;
 }
 
@@ -2844,7 +2883,7 @@ onUnmounted(() => {
 
 .alarm-modal-header h3 {
   margin: 0;
-  color: #e2e8f0;
+  color: rgb(var(--n-800));
   font-size: 18px;
   font-weight: 600;
 }
@@ -2855,7 +2894,7 @@ onUnmounted(() => {
   border-radius: 10px;
   border: 1px solid rgba(148, 163, 184, 0.25);
   background: rgba(148, 163, 184, 0.1);
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2866,7 +2905,7 @@ onUnmounted(() => {
 .alarm-modal-header .close-btn:hover {
   background: rgba(248, 113, 113, 0.15);
   border-color: rgba(248, 113, 113, 0.4);
-  color: #fca5a5;
+  color: rgb(var(--danger));
 }
 
 .alarm-modal-content {
@@ -2874,12 +2913,12 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  color: #cbd5f5;
+  color: rgb(var(--n-700));
   overflow-y: auto;
 }
 
 .alarm-modal-content section {
-  background: rgba(30, 41, 59, 0.6);
+  background: rgb(var(--n-100));
   border: 1px solid rgba(148, 163, 184, 0.12);
   border-radius: 12px;
   padding: 18px 20px;
@@ -2895,7 +2934,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #cbd5f5;
+  color: rgb(var(--n-700));
   font-size: 13px;
 }
 
@@ -2904,7 +2943,7 @@ onUnmounted(() => {
   border-radius: 12px;
   padding: 16px;
   text-align: center;
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   font-size: 13px;
   background: rgba(15, 23, 42, 0.45);
 }
@@ -2923,7 +2962,7 @@ onUnmounted(() => {
   background: rgba(99, 102, 241, 0.08);
   border: 1px solid rgba(99, 102, 241, 0.25);
   border-radius: 10px;
-  color: #c7d2fe;
+  color: rgb(var(--info-strong));
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -2943,19 +2982,19 @@ onUnmounted(() => {
   background: rgba(99, 102, 241, 0.25);
   border-radius: 999px;
   font-size: 11px;
-  color: #e0e7ff;
+  color: rgb(var(--info-strong));
 }
 .alarm-history-chevron {
   margin-left: auto;
   font-size: 12px;
-  color: #a5b4fc;
+  color: rgb(var(--info-strong));
 }
 
 .alarm-history-body {
   margin-top: 10px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 10px;
-  background: rgba(15, 23, 42, 0.55);
+  background: rgb(var(--n-100));
   padding: 10px;
 }
 
@@ -2963,7 +3002,7 @@ onUnmounted(() => {
 .alarm-history-empty {
   padding: 20px;
   text-align: center;
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   font-size: 13px;
   display: flex;
   align-items: center;
@@ -3014,7 +3053,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: #e2e8f0;
+  color: rgb(var(--n-800));
   margin-bottom: 2px;
 }
 .ah-type {
@@ -3023,7 +3062,7 @@ onUnmounted(() => {
 .ah-tag-test {
   padding: 1px 6px;
   background: rgba(99, 102, 241, 0.28);
-  color: #c7d2fe;
+  color: rgb(var(--info-strong));
   border-radius: 4px;
   font-size: 10px;
   font-weight: 600;
@@ -3031,7 +3070,7 @@ onUnmounted(() => {
 }
 .ah-time {
   margin-left: auto;
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   font-size: 11px;
 }
 
@@ -3041,7 +3080,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #cbd5e1;
+  color: rgb(var(--n-700));
 }
 .ah-channel {
   padding: 1px 7px;
@@ -3050,15 +3089,15 @@ onUnmounted(() => {
   font-size: 11px;
 }
 .ah-recipient {
-  color: #cbd5e1;
+  color: rgb(var(--n-700));
 }
 .ah-status {
   margin-left: auto;
   font-size: 11px;
   font-weight: 600;
 }
-.ah-status--ok { color: #6ee7b7; }
-.ah-status--fail { color: #fca5a5; }
+.ah-status--ok { color: rgb(var(--success)); }
+.ah-status--fail { color: rgb(var(--danger)); }
 
 .ah-error {
   margin-top: 4px;
@@ -3066,7 +3105,7 @@ onUnmounted(() => {
   background: rgba(239, 68, 68, 0.12);
   border-radius: 4px;
   font-size: 11px;
-  color: #fca5a5;
+  color: rgb(var(--danger));
   font-family: monospace;
 }
 
@@ -3076,7 +3115,7 @@ onUnmounted(() => {
   background: transparent;
   border: 1px solid rgba(148, 163, 184, 0.3);
   border-radius: 6px;
-  color: #cbd5e1;
+  color: rgb(var(--n-700));
   font-size: 12px;
   cursor: pointer;
   transition: background 0.15s;
@@ -3102,7 +3141,7 @@ onUnmounted(() => {
   padding: 16px;
   border-radius: 12px;
   border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(15, 23, 42, 0.55);
+  background: rgb(var(--n-100));
 }
 
 .saved-config-header {
@@ -3113,7 +3152,7 @@ onUnmounted(() => {
 }
 
 .saved-config-target {
-  color: #e2e8f0;
+  color: rgb(var(--n-800));
   font-weight: 600;
   font-size: 14px;
 }
@@ -3133,25 +3172,25 @@ onUnmounted(() => {
   border-radius: 999px;
   background: rgba(100, 116, 139, 0.18);
   border: 1px solid rgba(100, 116, 139, 0.35);
-  color: #94a3b8;
+  color: rgb(var(--n-500));
 }
 
 .saved-config-atype.atype-break {
   background: rgba(239, 68, 68, 0.12);
   border-color: rgba(239, 68, 68, 0.35);
-  color: #fca5a5;
+  color: rgb(var(--danger));
 }
 
 .saved-config-atype.atype-attenuation {
   background: rgba(245, 158, 11, 0.12);
   border-color: rgba(245, 158, 11, 0.35);
-  color: #fcd34d;
+  color: rgb(var(--warning));
 }
 
 .saved-config-atype.atype-normalization {
   background: rgba(16, 185, 129, 0.12);
   border-color: rgba(16, 185, 129, 0.35);
-  color: #6ee7b7;
+  color: rgb(var(--success));
 }
 
 /* ── Saved config actions ─────────────────────────────────── */
@@ -3183,7 +3222,7 @@ onUnmounted(() => {
 .btn-test {
   background: rgba(16, 185, 129, 0.12);
   border-color: rgba(16, 185, 129, 0.35);
-  color: #6ee7b7;
+  color: rgb(var(--success));
 }
 
 .btn-test:hover:not(:disabled) {
@@ -3200,12 +3239,12 @@ onUnmounted(() => {
 .btn-snooze {
   background: rgba(245, 158, 11, 0.10);
   border-color: rgba(245, 158, 11, 0.35);
-  color: #fcd34d;
+  color: rgb(var(--warning));
 }
 .btn-snooze:hover {
   background: rgba(245, 158, 11, 0.22);
   border-color: rgba(245, 158, 11, 0.6);
-  color: #fde68a;
+  color: rgb(var(--warning));
 }
 .btn-snooze-off {
   background: rgba(34, 197, 94, 0.12);
@@ -3227,7 +3266,7 @@ onUnmounted(() => {
   background: rgba(245, 158, 11, 0.18);
   border: 1px solid rgba(245, 158, 11, 0.45);
   border-radius: 999px;
-  color: #fde68a;
+  color: rgb(var(--warning));
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
@@ -3236,25 +3275,25 @@ onUnmounted(() => {
 .btn-edit {
   background: rgba(99, 102, 241, 0.12);
   border-color: rgba(99, 102, 241, 0.35);
-  color: #a5b4fc;
+  color: rgb(var(--info-strong));
 }
 
 .btn-edit:hover {
   background: rgba(99, 102, 241, 0.22);
   border-color: rgba(99, 102, 241, 0.6);
-  color: #c7d2fe;
+  color: rgb(var(--info-strong));
 }
 
 .btn-delete {
   background: rgba(239, 68, 68, 0.08);
   border-color: rgba(239, 68, 68, 0.25);
-  color: #fca5a5;
+  color: rgb(var(--danger));
 }
 
 .btn-delete:hover {
   background: rgba(239, 68, 68, 0.18);
   border-color: rgba(239, 68, 68, 0.5);
-  color: #fecaca;
+  color: rgb(var(--danger));
 }
 
 /* ── Alert type selector ──────────────────────────────────── */
@@ -3281,7 +3320,7 @@ onUnmounted(() => {
 
 .alert-type-card:hover {
   border-color: rgba(148, 163, 184, 0.35);
-  background: rgba(30, 41, 59, 0.6);
+  background: rgb(var(--n-100));
 }
 
 .alert-type-card.selected {
@@ -3309,12 +3348,12 @@ onUnmounted(() => {
 .atype-name {
   font-size: 13px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: rgb(var(--n-800));
 }
 
 .atype-desc {
   font-size: 11px;
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   line-height: 1.4;
 }
 
@@ -3332,19 +3371,19 @@ onUnmounted(() => {
   border-radius: 999px;
   background: rgba(59, 130, 246, 0.18);
   border: 1px solid rgba(59, 130, 246, 0.4);
-  color: #bfdbfe;
+  color: rgb(var(--info-strong));
 }
 
 .saved-config-level.level-warning {
   background: rgba(245, 158, 11, 0.18);
   border-color: rgba(245, 158, 11, 0.4);
-  color: #fbbf24;
+  color: rgb(var(--warning));
 }
 
 .saved-config-level.level-critical {
   background: rgba(239, 68, 68, 0.22);
   border-color: rgba(239, 68, 68, 0.45);
-  color: #f87171;
+  color: rgb(var(--danger));
 }
 
 .saved-config-channels {
@@ -3358,7 +3397,7 @@ onUnmounted(() => {
   border-radius: 999px;
   background: rgba(59, 130, 246, 0.12);
   border: 1px solid rgba(59, 130, 246, 0.3);
-  color: #bfdbfe;
+  color: rgb(var(--info-strong));
   font-size: 12px;
   font-weight: 500;
 }
@@ -3367,13 +3406,13 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   font-size: 12px;
 }
 
 .saved-config-notes {
   margin: 0;
-  color: #cbd5f5;
+  color: rgb(var(--n-700));
   font-size: 13px;
   line-height: 1.4;
 }
@@ -3382,7 +3421,7 @@ onUnmounted(() => {
   margin: 0 0 12px 0;
   font-size: 15px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: rgb(var(--n-800));
 }
 
 .target-options {
@@ -3401,7 +3440,7 @@ onUnmounted(() => {
   border: 1px solid rgba(148, 163, 184, 0.18);
   cursor: pointer;
   transition: all 0.2s;
-  color: #cbd5f5;
+  color: rgb(var(--n-700));
   font-size: 13px;
 }
 
@@ -3422,11 +3461,11 @@ onUnmounted(() => {
 }
 
 .target-selector select {
-  background: rgba(15, 23, 42, 0.6);
+  background: rgb(var(--n-100));
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 10px;
   padding: 10px 12px;
-  color: #e2e8f0;
+  color: rgb(var(--n-800));
 }
 
 .channel-grid {
@@ -3441,9 +3480,9 @@ onUnmounted(() => {
   gap: 10px;
   padding: 12px 14px;
   border-radius: 10px;
-  background: rgba(15, 23, 42, 0.6);
+  background: rgb(var(--n-100));
   border: 1px solid rgba(148, 163, 184, 0.18);
-  color: #cbd5f5;
+  color: rgb(var(--n-700));
   font-size: 13px;
 }
 
@@ -3490,20 +3529,20 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 6px;
   font-size: 13px;
-  color: #cbd5f5;
+  color: rgb(var(--n-700));
 }
 
 .conditions-grid select,
 .conditions-grid input {
-  background: rgba(15, 23, 42, 0.6);
+  background: rgb(var(--n-100));
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 10px;
   padding: 10px 12px;
-  color: #e2e8f0;
+  color: rgb(var(--n-800));
 }
 
 .conditions-grid small {
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   font-size: 12px;
 }
 
@@ -3526,8 +3565,8 @@ onUnmounted(() => {
   display: flex;
   gap: 16px;
   padding: 16px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgb(var(--n-50));
+  border: 1px solid rgb(var(--n-200));
   border-left: 3px solid;
   border-radius: 8px;
 }
@@ -3564,28 +3603,28 @@ onUnmounted(() => {
 }
 
 .alarm-title {
-  color: white;
+  color: rgb(var(--n-900));
   font-size: 14px;
   font-weight: 600;
   margin-bottom: 4px;
 }
 
 .alarm-description {
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   font-size: 13px;
   line-height: 1.5;
   margin-bottom: 8px;
 }
 
 .alarm-time {
-  color: #64748b;
+  color: rgb(var(--n-500));
   font-size: 12px;
 }
 
 /* History Section */
 .history-section h3 {
   margin: 0 0 24px 0;
-  color: white;
+  color: rgb(var(--n-900));
   font-size: 18px;
   font-weight: 700;
 }
@@ -3600,7 +3639,7 @@ onUnmounted(() => {
   display: flex;
   gap: 16px;
   padding: 20px 0;
-  border-left: 2px solid rgba(255, 255, 255, 0.1);
+  border-left: 2px solid rgb(var(--n-200));
   margin-left: 8px;
   position: relative;
 }
@@ -3648,25 +3687,25 @@ onUnmounted(() => {
 }
 
 .event-title {
-  color: white;
+  color: rgb(var(--n-900));
   font-size: 15px;
   font-weight: 600;
 }
 
 .event-date {
-  color: #64748b;
+  color: rgb(var(--n-500));
   font-size: 13px;
 }
 
 .event-description {
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   font-size: 13px;
   line-height: 1.5;
   margin-bottom: 8px;
 }
 
 .event-user {
-  color: #64748b;
+  color: rgb(var(--n-500));
   font-size: 12px;
   font-style: italic;
 }
@@ -3675,7 +3714,7 @@ onUnmounted(() => {
 .empty-state {
   text-align: center;
   padding: 48px 20px;
-  color: #64748b;
+  color: rgb(var(--n-500));
 }
 
 .empty-state .icon {
@@ -3693,8 +3732,8 @@ onUnmounted(() => {
 /* Footer */
 .modal-footer {
   padding: 10px 18px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid rgb(var(--n-200));
+  background: rgb(var(--n-100));
   display: flex;
   gap: 10px;
   justify-content: flex-end;
@@ -3715,14 +3754,14 @@ onUnmounted(() => {
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.1);
-  color: #cbd5e1;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgb(var(--n-100));
+  color: rgb(var(--n-700));
+  border: 1px solid rgb(var(--n-200));
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: rgb(var(--n-200));
+  border-color: rgb(var(--n-300));
 }
 
 .btn-primary {
@@ -3790,17 +3829,17 @@ onUnmounted(() => {
 }
 
 .modal-body::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgb(var(--n-50));
   border-radius: 4px;
 }
 
 .modal-body::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgb(var(--n-300));
   border-radius: 4px;
 }
 
 .modal-body::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgb(var(--n-400));
 }
 
 /* Responsivo */
@@ -3851,8 +3890,8 @@ onUnmounted(() => {
 }
 
 .traffic-stat-card {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgb(var(--n-50));
+  border: 1px solid rgb(var(--n-200));
   border-radius: 10px;
   padding: 12px 14px;
   display: flex;
@@ -3867,7 +3906,7 @@ onUnmounted(() => {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.6px;
-  color: #64748b;
+  color: rgb(var(--n-500));
   text-transform: uppercase;
   margin-bottom: 2px;
 }
@@ -3876,7 +3915,7 @@ onUnmounted(() => {
   width: 13px;
   height: 13px;
   flex-shrink: 0;
-  color: #475569;
+  color: rgb(var(--n-600));
 }
 
 .traffic-stat-row {
@@ -3884,7 +3923,7 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: baseline;
   font-size: 12px;
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   gap: 8px;
 }
 
@@ -3894,7 +3933,7 @@ onUnmounted(() => {
 }
 
 .traffic-stat-row strong {
-  color: #e2e8f0;
+  color: rgb(var(--n-800));
   font-weight: 700;
   font-size: 13px;
   white-space: nowrap;
