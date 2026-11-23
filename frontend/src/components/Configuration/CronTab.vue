@@ -229,6 +229,7 @@
 </template>
 
 <script setup>
+import { getCsrfToken } from '@/composables/useApi'
 import { ref, computed, onMounted } from 'vue'
 
 const jobs      = ref([])
@@ -347,9 +348,9 @@ async function applyToServer() {
   }
 }
 
-function getCsrf() {
-  return document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('csrftoken='))?.split('=')[1] || ''
-}
+// EV-0072: lia o cookie com o nome errado (o real é `mapsprovefiber_csrftoken`) e não usava o
+// window.CSRF_TOKEN — mandava o cabeçalho vazio e o DRF respondia 403 a todas as gravações.
+const getCsrf = () => getCsrfToken()
 
 onMounted(fetchJobs)
 </script>

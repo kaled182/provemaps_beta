@@ -3,24 +3,28 @@
  * @module useApi
  */
 
-/**
- * Obtém o CSRF token do cookie ou do meta tag
- * @returns {string} CSRF token
- */
+// EV-0072: o Django chama o cookie `mapsprovefiber_csrftoken` (settings/base.py,
+// CSRF_COOKIE_NAME). Antes procurava-se `csrftoken=` no início do cookie — nunca
+// encontrava, e quem não tinha o window.CSRF_TOKEN (CronTab) mandava o cabeçalho vazio → 403.
+export const CSRF_COOKIE_NAMES = ['mapsprovefiber_csrftoken', 'csrftoken']
+
+export function readCookie(name, cookieString = typeof document === 'undefined' ? '' : document.cookie) {
+  const row = cookieString
+    .split(';')
+    .map((c) => c.trim())
+    .find((c) => c.startsWith(`${name}=`))
+  return row ? decodeURIComponent(row.slice(name.length + 1)) : ''
+}
+
+/** Token CSRF: o injetado pelo base_spa.html; senão o cookie pelo nome real. Único ponto de leitura. */
 export function getCsrfToken() {
-  // Tenta pegar do window (definido no base_spa.html)
-  if (window.CSRF_TOKEN) {
-    return window.CSRF_TOKEN;
+  if (typeof window !== 'undefined' && window.CSRF_TOKEN) return window.CSRF_TOKEN
+  for (const name of CSRF_COOKIE_NAMES) {
+    const value = readCookie(name)
+    if (value) return value
   }
-
-  // Fallback: busca no cookie
-  const name = 'csrftoken';
-  const cookieValue = document.cookie
-    .split('; ')
-    .find(row => row.startsWith(`${name}=`))
-    ?.split('=')[1];
-
-  return cookieValue || '';
+  console.warn('[useApi] CSRF token não encontrado (window.CSRF_TOKEN nem cookie)')
+  return ''
 }
 
 /**
