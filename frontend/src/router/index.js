@@ -86,6 +86,12 @@ const routes = [
     component: () => import('@/views/AssetsView.vue'),
   },
   {
+    // EV-0059: incidentes de fibra + equipamentos offline
+    path: '/alarmes',
+    name: 'alarms',
+    component: () => import('@/views/AlarmsView.vue'),
+  },
+  {
     path: '/network/inventory',
     name: 'inventory',
     component: () => import('@/components/Inventory/InventoryView.vue'),

@@ -129,6 +129,7 @@ import {
 } from '@/utils/assetsTable'
 import { buildFocusLocation } from '@/utils/mapFocus'
 import { formatAgo } from '@/utils/mapKpis'
+import { fetchAllPages } from '@/utils/paginate'
 
 const STATUS_LABEL = { online: 'Online', offline: 'Offline', unknown: 'Sem estado', disabled: 'Desativado no Zabbix' }
 
@@ -144,23 +145,11 @@ const query = ref('')
 const kpis = computed(() => computeAssetKpis(rows.value))
 const visible = computed(() => filterAndSortAssets(rows.value, { filter: filter.value, query: query.value }))
 
-async function getAllPages(url) {
-  const out = []
-  let next = url
-  while (next) {
-    const data = await api.get(next)
-    if (Array.isArray(data)) return data
-    out.push(...(data.results || []))
-    next = data.next ? new URL(data.next, window.location.origin).pathname + new URL(data.next, window.location.origin).search : null
-  }
-  return out
-}
-
 async function load() {
   loading.value = true
   error.value = ''
   try {
-    const [devices, sites] = await Promise.all([getAllPages('/api/v1/devices/'), getAllPages('/api/v1/sites/')])
+    const [devices, sites] = await Promise.all([fetchAllPages(api, '/api/v1/devices/'), fetchAllPages(api, '/api/v1/sites/')])
     const ids = devices.map((d) => d.id).join(',')
     const [status, metrics, optical] = await Promise.all([
       ids ? api.get('/api/v1/inventory/devices/zabbix-status/', { device_ids: ids }).catch(() => ({ statuses: {}, zabbix_error: true })) : { statuses: {} },

@@ -1300,6 +1300,30 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         return Response(serializer.data)
 
     @extend_schema(
+        summary="Quadro de alarmes de fibra: ativos, resolvidos 24 h e MTTR",
+        description=(
+            "Derivado do histórico FiberEvent; `unknown` não abre nem fecha incidente "
+            "(EV-0059). `?dias=` ajusta a janela do MTTR (1 a 90, padrão 30)."
+        ),
+        responses={200: OpenApiTypes.OBJECT},
+    )
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="alarm-board",
+        permission_classes=[IsAuthenticated],
+    )
+    def alarm_board(self, request):
+        from inventory.usecases.alarms import DEFAULT_WINDOW_DAYS, build_alarm_board
+
+        try:
+            days = int(request.query_params.get("dias", DEFAULT_WINDOW_DAYS))
+        except (TypeError, ValueError):
+            return Response({"error": "dias inválido"}, status=400)
+        days = max(1, min(days, 90))
+        return Response(build_alarm_board(window_days=days))
+
+    @extend_schema(
         summary="Níveis ópticos de todos os cabos (RX/TX por ponta, perda, estado)",
         description=(
             "Lido do banco (Port.last_*), sem chamar o Zabbix. `totals` por saúde, "
