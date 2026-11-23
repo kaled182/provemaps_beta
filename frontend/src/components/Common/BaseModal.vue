@@ -4,6 +4,7 @@
       <div
         v-if="show"
         class="bm-backdrop"
+        :style="{ zIndex }"
         data-testid="base-modal"
         @mousedown.self="requestClose"
       >
@@ -85,6 +86,8 @@ const props = defineProps({
   dirty: { type: Boolean, default: false },
   /** corpo sem padding (quando o conteúdo tem abas/grelhas próprias) */
   flush: { type: Boolean, default: false },
+  /** camada; um modal aberto por cima de outro BaseModal passa um valor maior */
+  zIndex: { type: Number, default: 3000 },
 })
 const emit = defineEmits(['close'])
 
