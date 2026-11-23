@@ -183,9 +183,13 @@ def fechar_por_commit(
 ) -> EvolucaoItem | None:
     """Fecha porque o commit que o resolve JÁ ESTÁ em produção (ADR 0006 §3). Devolve `None`,
     sem rebentar, quando não há nada a fazer: código inexistente, já fechado. A primeira
-    observação ganha — reescrever `fechado_por` faria o `deploy_em` andar a cada reinício."""
+    observação ganha — reescrever `fechado_por` faria o `deploy_em` andar a cada reinício.
+
+    Um item já `feito` SEM `fechado_por` (semeado do quadro manual, ou fechado à mão) recebe a
+    observação: senão ficava para sempre em «Feito — aguarda deploy» no quadro gerado. Um item
+    recusado não é reaberto."""
     item = EvolucaoItem.objects.filter(codigo=codigo).first()
-    if item is None or item.estado == "feito" or item.fechado_por is not None:
+    if item is None or item.estado == "recusado" or item.fechado_por is not None:
         return None
     item.estado = "feito"
     item.fechado_por = {

@@ -51,6 +51,43 @@ class ComandoFecharTests(TestCase):
         out, _ = self._run(entradas)
         self.assertIn("0 item(ns) fechado(s)", out)
 
+    def test_item_ja_feito_sem_observacao_recebe_o_deploy(self):
+        """Semeado do quadro como `feito`, sem `fechado_por`: senão ficava para sempre em
+        «aguarda deploy» no quadro gerado."""
+        EvolucaoItem.objects.filter(pk=self.item.pk).update(estado="feito")
+        out, _ = self._run(
+            [
+                {
+                    "codigo": "EV-0001",
+                    "commit": "abc1234",
+                    "mensagem": "m",
+                    "deploy_em": "2026-11-23T22:00:00+00:00",
+                }
+            ]
+        )
+        self.assertIn("1 item(ns) fechado(s)", out)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.fechado_por["deploy_em"], "2026-11-23T22:00:00+00:00")
+
+    def test_item_recusado_nao_e_reaberto(self):
+        EvolucaoItem.objects.filter(pk=self.item.pk).update(
+            estado="recusado", recusa_motivo="duplicado"
+        )
+        out, _ = self._run(
+            [
+                {
+                    "codigo": "EV-0001",
+                    "commit": "abc1234",
+                    "mensagem": "m",
+                    "deploy_em": "2026-11-23T22:00:00+00:00",
+                }
+            ]
+        )
+        self.assertIn("0 item(ns) fechado(s)", out)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.estado, "recusado")
+        self.assertIsNone(self.item.fechado_por)
+
     def test_deploy_em_invalido_usa_agora(self):
         out, _ = self._run(
             [{"codigo": "EV-0001", "commit": "a", "mensagem": "m", "deploy_em": "ontem"}]
