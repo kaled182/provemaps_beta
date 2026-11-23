@@ -46,7 +46,7 @@ log "Domínio: ${DOMAIN} — configurando HTTPS"
 
 # ── Inicia nginx temporariamente com HTTP para o desafio ACME ─────────────────
 cp "${SETUP_DIR}/http.conf" "${CONF_DIR}/default.conf"
-nginx &
+nginx -g "daemon off;" &   # em 1.º plano: $! é o master e o kill abaixo liberta a porta 80
 NGINX_BG=$!
 sleep 2   # aguarda nginx aceitar conexões
 
