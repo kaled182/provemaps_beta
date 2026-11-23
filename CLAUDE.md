@@ -117,16 +117,12 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**A fazer (1)**
+**A fazer (3)**
 
 🐛 Problemas
+- `EV-0082` **Itens Zabbix nunca coletados ou «unsupported» ficam gravados como 0,00 dBm — leitura inventada (ex.: ponta B do cabo ELAGRO-SANTA TEREZINHA)** · P1 · admin · há 0 dias
+- `EV-0083` **Produção aceita qualquer cabeçalho Host: o docker-compose.yml força ALLOWED_HOSTS="*" e ignora a lista do .env (envenenamento de links, ex.: recuperação de senha)** · P1 · admin · há 0 dias
 - `EV-0081` **129 portas com chaves Zabbix que não existem em nenhum host; portas 334/514 com TX 32,2471 constante** · por triar · admin · há 0 dias
-
-**Entrada, por triar (2)**
-
-🐛 Problemas
-- `EV-0082` **Itens Zabbix nunca coletados ou «unsupported» ficam gravados como 0,00 dBm — leitura inventada (ex.: ponta B do cabo ELAGRO-SANTA TEREZINHA)** · por triar · admin · há 0 dias
-- `EV-0083` **Produção aceita qualquer cabeçalho Host: o docker-compose.yml força ALLOWED_HOSTS="*" e ignora a lista do .env (envenenamento de links, ex.: recuperação de senha)** · por triar · admin · há 0 dias
 
 <!-- EVOLUCAO:FIM -->
 
