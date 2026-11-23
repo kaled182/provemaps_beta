@@ -1,932 +1,886 @@
 <template>
-  <Teleport to="body">
-    <div
-      v-if="show && cable"
-      class="modal-overlay"
-      @click.self="closeModal"
-    >
-      <div class="detail-modal-container" @click.stop>
-          <!-- Header -->
-          <div class="modal-header">
-            <div class="header-content">
-              <div class="cable-icon" :class="`status-${cableStatus}`">
-                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                    d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                </svg>
+  <BaseModal
+    :show="show && !!cable"
+    :title="cable?.name || 'Sem nome'"
+    :subtitle="routeSubtitle"
+    :icon="PhLinkSimple"
+    :status="headerStatus"
+    :z-index="10000"
+    size="detail"
+    flush
+    @close="requestClose"
+  >
+    <!-- Tabs -->
+    <div class="tabs-header">
+      <button
+        v-for="tab in tabs"
+        :key="tab.id"
+        class="tab-button"
+        :class="{ active: activeTab === tab.id }"
+        @click="activeTab = tab.id"
+      >
+        <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="tab.icon" />
+        </svg>
+        {{ tab.label }}
+      </button>
+    </div>
+
+    <!-- Body -->
+    <div class="modal-body">
+      <!-- Tab: Informações Gerais (v-if lazy: monta só quando ativa) -->
+      <div v-if="activeTab === 'info'" class="tab-content">
+        <div class="info-grid">
+          <!-- Status e Info Básica -->
+          <div class="info-section">
+            <h3>Status e Informações</h3>
+            <div class="info-cards">
+              <div class="stat-card" :class="`status-${cableStatus}`">
+                <div class="stat-label">Status</div>
+                <div class="stat-value">{{ getStatusLabel(cableStatus) }}</div>
+                <div class="stat-detail">{{ cable?.original_status || 'N/A' }}</div>
               </div>
-              <div class="cable-title">
-                <h2>{{ cable?.name || 'Sem nome' }}</h2>
-                <p class="cable-route">
-                  {{ cable?.site_a_name || 'Site A' }} 
-                  <svg class="arrow-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                  </svg>
-                  {{ cable?.site_b_name || 'Site B' }}
-                </p>
+              <div class="stat-card">
+                <div class="stat-label">Distância</div>
+                <div class="stat-value">{{ formatDistance() }}</div>
+                <div class="stat-detail">{{ cable?.path_coordinates?.length || 0 }} pontos</div>
               </div>
-            </div>
-            <div class="header-actions">
-              <button v-if="canEdit" class="btn-icon" @click="toggleEditMode" :title="isEditMode ? 'Cancelar Edição' : 'Editar Cabo'">
-                <svg v-if="!isEditMode" class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                <svg v-else class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-              <button class="btn-icon close-btn" @click="closeModal" title="Fechar (ESC)">
-                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <div class="stat-card">
+                <div class="stat-label">Fibras</div>
+                <div class="stat-value">{{ cable?.fiber_count ?? 'N/A' }}</div>
+                <div class="stat-detail">{{ cable?.cable_type_name || 'Tipo não especificado' }}</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">Atenuação</div>
+                <div class="stat-value" :class="getAttenuationClass()">{{ formatAttenuation() }}</div>
+                <div class="stat-detail">{{ getAttenuationQuality() }}</div>
+              </div>
             </div>
           </div>
 
-          <!-- Tabs -->
-          <div class="tabs-header">
+          <!-- Detalhes do Cabo -->
+          <div
+            class="info-section collapsible"
+            :class="{ 'is-collapsed': !showCableDetails }"
+          >
             <button
-              v-for="tab in tabs"
-              :key="tab.id"
-              class="tab-button"
-              :class="{ active: activeTab === tab.id }"
-              @click="activeTab = tab.id"
+              type="button"
+              class="collapsible-trigger"
+              @click="toggleCableDetails"
             >
-              <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="tab.icon" />
+              <h3>Detalhes do Cabo</h3>
+              <svg
+                class="icon"
+                :class="{ rotated: showCableDetails }"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M19 9l-7 7-7-7"
+                />
               </svg>
-              {{ tab.label }}
             </button>
+            <transition name="collapse">
+              <div
+                v-show="showCableDetails"
+                class="collapsible-content"
+              >
+                <div class="detail-list">
+                  <div class="detail-item">
+                    <span class="detail-label">ID</span>
+                    <span class="detail-value">{{ cable.id }}</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label">Nome</span>
+                    <span class="detail-value">{{ cable.name }}</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label">Site A</span>
+                    <span class="detail-value">{{ cable.site_a_name || 'N/A' }}</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label">Site B</span>
+                    <span class="detail-value">{{ cable.site_b_name || 'N/A' }}</span>
+                  </div>
+                  <div v-if="cable.origin_device_name" class="detail-item">
+                    <span class="detail-label">Dispositivo Origem</span>
+                    <span class="detail-value">{{ cable.origin_device_name }}</span>
+                  </div>
+                  <div v-if="cable.origin_port_name" class="detail-item">
+                    <span class="detail-label">Porta Origem</span>
+                    <span class="detail-value">{{ cable.origin_port_name }}</span>
+                  </div>
+                  <div v-if="cable.destination_device_name" class="detail-item">
+                    <span class="detail-label">Dispositivo Destino</span>
+                    <span class="detail-value">{{ cable.destination_device_name }}</span>
+                  </div>
+                  <div v-if="cable.destination_port_name" class="detail-item">
+                    <span class="detail-label">Porta Destino</span>
+                    <span class="detail-value">{{ cable.destination_port_name }}</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label">Tipo de Cabo</span>
+                    <span class="detail-value">{{ cable.cable_type_name || 'N/A' }}</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label">Grupo de Cabo</span>
+                    <span class="detail-value">{{ cable.cable_group_name || 'N/A' }}</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label">Quantidade de Fibras</span>
+                    <span class="detail-value">{{ cable.fiber_count ?? 'N/A' }}</span>
+                  </div>
+                  <div v-if="cable.folder_name" class="detail-item">
+                    <span class="detail-label">Pasta</span>
+                    <span class="detail-value">{{ cable.folder_name }}</span>
+                  </div>
+                  <div v-if="cable.responsible_name" class="detail-item">
+                    <span class="detail-label">Responsável</span>
+                    <span class="detail-value">{{ cable.responsible_name }}</span>
+                  </div>
+                  <div v-if="cable.responsible_user_name" class="detail-item">
+                    <span class="detail-label">Resp. (Usuário)</span>
+                    <span class="detail-value">{{ cable.responsible_user_name }}</span>
+                  </div>
+                  <div v-if="cable.last_status_update" class="detail-item">
+                    <span class="detail-label">Última Atualização</span>
+                    <span class="detail-value">{{ new Date(cable.last_status_update).toLocaleString('pt-BR') }}</span>
+                  </div>
+                </div>
+              </div>
+            </transition>
           </div>
 
-          <!-- Body -->
-          <div class="modal-body">
-            <!-- Tab: Informações Gerais (v-if lazy: monta só quando ativa) -->
-            <div v-if="activeTab === 'info'" class="tab-content">
-              <div class="info-grid">
-                <!-- Status e Info Básica -->
-                <div class="info-section">
-                  <h3>Status e Informações</h3>
-                  <div class="info-cards">
-                    <div class="stat-card" :class="`status-${cableStatus}`">
-                      <div class="stat-label">Status</div>
-                      <div class="stat-value">{{ getStatusLabel(cableStatus) }}</div>
-                      <div class="stat-detail">{{ cable?.original_status || 'N/A' }}</div>
-                    </div>
-                    <div class="stat-card">
-                      <div class="stat-label">Distância</div>
-                      <div class="stat-value">{{ formatDistance() }}</div>
-                      <div class="stat-detail">{{ cable?.path_coordinates?.length || 0 }} pontos</div>
-                    </div>
-                    <div class="stat-card">
-                      <div class="stat-label">Fibras</div>
-                      <div class="stat-value">{{ cable?.fiber_count ?? 'N/A' }}</div>
-                      <div class="stat-detail">{{ cable?.cable_type_name || 'Tipo não especificado' }}</div>
-                    </div>
-                    <div class="stat-card">
-                      <div class="stat-label">Atenuação</div>
-                      <div class="stat-value" :class="getAttenuationClass()">{{ formatAttenuation() }}</div>
-                      <div class="stat-detail">{{ getAttenuationQuality() }}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Detalhes do Cabo -->
-                <div
-                  class="info-section collapsible"
-                  :class="{ 'is-collapsed': !showCableDetails }"
-                >
-                  <button
-                    type="button"
-                    class="collapsible-trigger"
-                    @click="toggleCableDetails"
-                  >
-                    <h3>Detalhes do Cabo</h3>
-                    <svg
-                      class="icon"
-                      :class="{ rotated: showCableDetails }"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M19 9l-7 7-7-7"
-                      />
-                    </svg>
-                  </button>
-                  <transition name="collapse">
-                    <div
-                      v-show="showCableDetails"
-                      class="collapsible-content"
-                    >
-                      <div class="detail-list">
-                        <div class="detail-item">
-                          <span class="detail-label">ID</span>
-                          <span class="detail-value">{{ cable.id }}</span>
-                        </div>
-                        <div class="detail-item">
-                          <span class="detail-label">Nome</span>
-                          <span class="detail-value">{{ cable.name }}</span>
-                        </div>
-                        <div class="detail-item">
-                          <span class="detail-label">Site A</span>
-                          <span class="detail-value">{{ cable.site_a_name || 'N/A' }}</span>
-                        </div>
-                        <div class="detail-item">
-                          <span class="detail-label">Site B</span>
-                          <span class="detail-value">{{ cable.site_b_name || 'N/A' }}</span>
-                        </div>
-                        <div v-if="cable.origin_device_name" class="detail-item">
-                          <span class="detail-label">Dispositivo Origem</span>
-                          <span class="detail-value">{{ cable.origin_device_name }}</span>
-                        </div>
-                        <div v-if="cable.origin_port_name" class="detail-item">
-                          <span class="detail-label">Porta Origem</span>
-                          <span class="detail-value">{{ cable.origin_port_name }}</span>
-                        </div>
-                        <div v-if="cable.destination_device_name" class="detail-item">
-                          <span class="detail-label">Dispositivo Destino</span>
-                          <span class="detail-value">{{ cable.destination_device_name }}</span>
-                        </div>
-                        <div v-if="cable.destination_port_name" class="detail-item">
-                          <span class="detail-label">Porta Destino</span>
-                          <span class="detail-value">{{ cable.destination_port_name }}</span>
-                        </div>
-                        <div class="detail-item">
-                          <span class="detail-label">Tipo de Cabo</span>
-                          <span class="detail-value">{{ cable.cable_type_name || 'N/A' }}</span>
-                        </div>
-                        <div class="detail-item">
-                          <span class="detail-label">Grupo de Cabo</span>
-                          <span class="detail-value">{{ cable.cable_group_name || 'N/A' }}</span>
-                        </div>
-                        <div class="detail-item">
-                          <span class="detail-label">Quantidade de Fibras</span>
-                          <span class="detail-value">{{ cable.fiber_count ?? 'N/A' }}</span>
-                        </div>
-                        <div v-if="cable.folder_name" class="detail-item">
-                          <span class="detail-label">Pasta</span>
-                          <span class="detail-value">{{ cable.folder_name }}</span>
-                        </div>
-                        <div v-if="cable.responsible_name" class="detail-item">
-                          <span class="detail-label">Responsável</span>
-                          <span class="detail-value">{{ cable.responsible_name }}</span>
-                        </div>
-                        <div v-if="cable.responsible_user_name" class="detail-item">
-                          <span class="detail-label">Resp. (Usuário)</span>
-                          <span class="detail-value">{{ cable.responsible_user_name }}</span>
-                        </div>
-                        <div v-if="cable.last_status_update" class="detail-item">
-                          <span class="detail-label">Última Atualização</span>
-                          <span class="detail-value">{{ new Date(cable.last_status_update).toLocaleString('pt-BR') }}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </transition>
-                </div>
-
-                <!-- Observações -->
-                <div v-if="cable.notes || cable.description" class="info-section full-width">
-                  <h3>Observações</h3>
-                  <div class="notes-box">
-                    {{ cable?.notes || cable?.description || 'Sem notas' }}
-                  </div>
-                </div>
-              </div>
+          <!-- Observações -->
+          <div v-if="cable.notes || cable.description" class="info-section full-width">
+            <h3>Observações</h3>
+            <div class="notes-box">
+              {{ cable?.notes || cable?.description || 'Sem notas' }}
             </div>
-
-            <!-- Tab: Nível Óptico (v-if lazy) -->
-            <div v-if="activeTab === 'optical'" class="tab-content">
-              <div class="optical-section">
-                <div class="section-header">
-                  <h3>Nível de Sinal Óptico</h3>
-                  <div class="period-selector">
-                    <button
-                      v-for="period in opticalPeriods"
-                      :key="period.value"
-                      class="period-btn"
-                      :class="{ active: selectedPeriod === period.value }"
-                      @click="selectedPeriod = period.value"
-                    >
-                      {{ period.label }}
-                    </button>
-                  </div>
-                </div>
-
-                <div class="loading-state" v-if="isLoadingOptical">
-                  <div class="spinner"></div>
-                  <p>Carregando dados ópticos...</p>
-                </div>
-
-                <div class="empty-state" v-else-if="!opticalData || (!opticalData.origin && !opticalData.destination)">
-                  <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <p>Nenhum dado óptico disponível</p>
-                  <small>Verifique se a porta possui medição configurada</small>
-                </div>
-
-                <!-- Gráficos separados por porta -->
-                <div v-else class="port-charts-container">
-                  
-                  <!-- Porta de Origem -->
-                  <div class="port-chart-panel" :class="{ collapsed: !expandedOrigin, 'port-los': portLos('origin') }" data-testid="optical-panel-origin">
-                    <div class="panel-header" @click="expandedOrigin = !expandedOrigin">
-                      <div class="port-info">
-                        <div class="port-icon origin">
-                          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M5 12h14M5 12l4-4m-4 4l4 4" />
-                          </svg>
-                        </div>
-                        <div class="port-details">
-                          <h4>{{ opticalData?.portInfo?.origin?.device || 'Dispositivo Origem' }}</h4>
-                          <p>{{ opticalData?.portInfo?.origin?.port || 'Porta não identificada' }}</p>
-                        </div>
-                        <span
-                          v-if="portLos('origin')"
-                          class="los-badge"
-                          :title="`Último RX ${formatDbm(opticalData?.stats?.origin?.lastRx)} ≤ limiar crítico ${formatDbm(opticalData?.thresholds?.origin?.critical)}`"
-                          data-testid="los-badge-origin"
-                        >Perda de sinal · {{ formatDbm(opticalData?.stats?.origin?.lastRx) }}</span>
-                      </div>
-                      <div class="panel-actions" @click.stop>
-                        <div class="export-menu" :class="{ open: exportMenuOpen === 'origin' }">
-                          <button class="export-btn" @click="exportMenuOpen = exportMenuOpen === 'origin' ? null : 'origin'" title="Exportar gráfico">
-                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                            </svg>
-                          </button>
-                          <div v-if="exportMenuOpen === 'origin'" class="export-dropdown">
-                            <button @click="exportChart('origin', 'png')">PNG</button>
-                            <button @click="exportChart('origin', 'pdf')">PDF</button>
-                          </div>
-                        </div>
-                      </div>
-                      <button class="collapse-btn">
-                        <svg class="icon" :class="{ rotated: expandedOrigin }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-                    </div>
-                    
-                    <div class="panel-content" v-show="expandedOrigin">
-                      <div class="optical-stats" data-testid="optical-stats-origin">
-                        <div class="stat-box">
-                          <div class="stat-icon good">RX</div>
-                          <div class="stat-info">
-                            <div class="stat-label">Médio</div>
-                            <div class="stat-value">{{ formatDbm(opticalData?.stats?.origin?.avgRx) }}</div>
-                          </div>
-                        </div>
-                        <div class="stat-box">
-                          <div class="stat-icon info">TX</div>
-                          <div class="stat-info">
-                            <div class="stat-label">Médio</div>
-                            <div class="stat-value">{{ formatDbm(opticalData?.stats?.origin?.avgTx) }}</div>
-                          </div>
-                        </div>
-                      </div>
-                      <div class="optical-chart-container">
-                        <TimeSeriesChart ref="originChartRef" :series="opticalSeries('origin')" :thresholds="opticalThresholds('origin')" unit="dBm" :decimals="2" :height="220" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Porta de Destino -->
-                  <div class="port-chart-panel" :class="{ collapsed: !expandedDestination, 'port-los': portLos('destination') }" data-testid="optical-panel-destination">
-                    <div class="panel-header" @click="expandedDestination = !expandedDestination">
-                      <div class="port-info">
-                        <div class="port-icon destination">
-                          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M19 12H5m14 0l-4 4m4-4l-4-4" />
-                          </svg>
-                        </div>
-                        <div class="port-details">
-                          <h4>{{ opticalData?.portInfo?.destination?.device || 'Dispositivo Destino' }}</h4>
-                          <p>{{ opticalData?.portInfo?.destination?.port || 'Porta não identificada' }}</p>
-                        </div>
-                        <span
-                          v-if="portLos('destination')"
-                          class="los-badge"
-                          :title="`Último RX ${formatDbm(opticalData?.stats?.destination?.lastRx)} ≤ limiar crítico ${formatDbm(opticalData?.thresholds?.destination?.critical)}`"
-                          data-testid="los-badge-destination"
-                        >Perda de sinal · {{ formatDbm(opticalData?.stats?.destination?.lastRx) }}</span>
-                      </div>
-                      <div class="panel-actions" @click.stop>
-                        <div class="export-menu" :class="{ open: exportMenuOpen === 'destination' }">
-                          <button class="export-btn" @click="exportMenuOpen = exportMenuOpen === 'destination' ? null : 'destination'" title="Exportar gráfico">
-                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                            </svg>
-                          </button>
-                          <div v-if="exportMenuOpen === 'destination'" class="export-dropdown">
-                            <button @click="exportChart('destination', 'png')">PNG</button>
-                            <button @click="exportChart('destination', 'pdf')">PDF</button>
-                          </div>
-                        </div>
-                      </div>
-                      <button class="collapse-btn">
-                        <svg class="icon" :class="{ rotated: expandedDestination }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-                    </div>
-                    
-                    <div class="panel-content" v-show="expandedDestination">
-                      <div class="optical-stats" data-testid="optical-stats-destination">
-                        <div class="stat-box">
-                          <div class="stat-icon good">RX</div>
-                          <div class="stat-info">
-                            <div class="stat-label">Médio</div>
-                            <div class="stat-value">{{ formatDbm(opticalData?.stats?.destination?.avgRx) }}</div>
-                          </div>
-                        </div>
-                        <div class="stat-box">
-                          <div class="stat-icon info">TX</div>
-                          <div class="stat-info">
-                            <div class="stat-label">Médio</div>
-                            <div class="stat-value">{{ formatDbm(opticalData?.stats?.destination?.avgTx) }}</div>
-                          </div>
-                        </div>
-                      </div>
-                      <div class="optical-chart-container">
-                        <TimeSeriesChart ref="destinationChartRef" :series="opticalSeries('destination')" :thresholds="opticalThresholds('destination')" unit="dBm" :decimals="2" :height="220" />
-                      </div>
-                    </div>
-                  </div>
-
-                </div>
-
-              </div>
-            </div>
-
-            <!-- Tab: Tráfego de Rede (v-if lazy) -->
-            <div v-if="activeTab === 'traffic'" class="tab-content">
-              <div class="optical-section">
-                <div class="section-header">
-                  <h3>Tráfego de Rede</h3>
-                  <div class="period-selector">
-                    <button
-                      v-for="period in opticalPeriods"
-                      :key="period.value"
-                      class="period-btn"
-                      :class="{ active: selectedPeriod === period.value }"
-                      @click="selectedPeriod = period.value"
-                    >
-                      {{ period.label }}
-                    </button>
-                  </div>
-                </div>
-
-                <div class="loading-state" v-if="isLoadingTraffic">
-                  <div class="spinner"></div>
-                  <p>Carregando dados de tráfego...</p>
-                </div>
-
-                <div v-else-if="!trafficData || (!trafficData.origin?.statistics && !trafficData.destination?.statistics)" class="empty-state">
-                  <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <p>Nenhum dado de tráfego disponível</p>
-                  <small>Verifique se a porta possui items de tráfego configurados</small>
-                </div>
-
-                <div v-else class="traffic-ports-container">
-                  <!-- Porta de Origem -->
-                  <div v-if="trafficData.origin?.statistics" class="port-chart-panel" :class="{ collapsed: !trafficExpandedOrigin }">
-                    <div class="panel-header" @click="trafficExpandedOrigin = !trafficExpandedOrigin">
-                      <div class="port-info">
-                        <div class="port-icon origin">
-                          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12l4-4m-4 4l4 4" />
-                          </svg>
-                        </div>
-                        <div class="port-details">
-                          <h4>{{ trafficData.origin.device || 'Dispositivo Origem' }}</h4>
-                          <p>{{ trafficData.origin.port || 'Porta não identificada' }}</p>
-                        </div>
-                      </div>
-                      <div class="panel-actions" @click.stop>
-                        <div class="export-menu" :class="{ open: trafficExportMenuOpen === 'origin' }">
-                          <button class="export-btn" @click="trafficExportMenuOpen = trafficExportMenuOpen === 'origin' ? null : 'origin'" title="Exportar gráfico">
-                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                            </svg>
-                          </button>
-                          <div v-if="trafficExportMenuOpen === 'origin'" class="export-dropdown">
-                            <button @click="exportTrafficChart('origin', 'png')">PNG</button>
-                            <button @click="exportTrafficChart('origin', 'pdf')">PDF</button>
-                          </div>
-                        </div>
-                      </div>
-                      <button class="collapse-btn">
-                        <svg class="icon" :class="{ rotated: trafficExpandedOrigin }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-                    </div>
-                    <div class="panel-content" v-show="trafficExpandedOrigin">
-                      <div v-if="trafficData.origin?.history?.length" class="optical-chart-container">
-                        <TimeSeriesChart ref="trafficOriginChartRef" :series="trafficSeries('origin')" unit="Mbps" :begin-at-zero="true" :height="220" />
-                      </div>
-                      <div class="traffic-stats-grid">
-                        <div class="traffic-stat-card">
-                          <div class="traffic-stat-title">
-                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-                            95º PERCENTIL
-                          </div>
-                          <div class="traffic-stat-row"><span>Download:</span><strong>{{ formatBps(trafficData.origin.statistics.percentile_95_in) }}</strong></div>
-                          <div class="traffic-stat-row"><span>Upload:</span><strong>{{ formatBps(trafficData.origin.statistics.percentile_95_out) }}</strong></div>
-                        </div>
-                        <div class="traffic-stat-card">
-                          <div class="traffic-stat-title">
-                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" /></svg>
-                            MÉDIA
-                          </div>
-                          <div class="traffic-stat-row"><span>Download:</span><strong>{{ formatBps(trafficData.origin.statistics.avg_in) }}</strong></div>
-                          <div class="traffic-stat-row"><span>Upload:</span><strong>{{ formatBps(trafficData.origin.statistics.avg_out) }}</strong></div>
-                        </div>
-                        <div class="traffic-stat-card">
-                          <div class="traffic-stat-title">
-                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
-                            PICO
-                          </div>
-                          <div class="traffic-stat-row"><span>Download:</span><strong>{{ formatBps(trafficData.origin.statistics.max_in) }}</strong></div>
-                          <div class="traffic-stat-row"><span>Upload:</span><strong>{{ formatBps(trafficData.origin.statistics.max_out) }}</strong></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Porta de Destino -->
-                  <div v-if="trafficData.destination?.statistics" class="port-chart-panel" :class="{ collapsed: !trafficExpandedDestination }">
-                    <div class="panel-header" @click="trafficExpandedDestination = !trafficExpandedDestination">
-                      <div class="port-info">
-                        <div class="port-icon destination">
-                          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 12H5m14 0l-4 4m4-4l-4-4" />
-                          </svg>
-                        </div>
-                        <div class="port-details">
-                          <h4>{{ trafficData.destination.device || 'Dispositivo Destino' }}</h4>
-                          <p>{{ trafficData.destination.port || 'Porta não identificada' }}</p>
-                        </div>
-                      </div>
-                      <div class="panel-actions" @click.stop>
-                        <div class="export-menu" :class="{ open: trafficExportMenuOpen === 'destination' }">
-                          <button class="export-btn" @click="trafficExportMenuOpen = trafficExportMenuOpen === 'destination' ? null : 'destination'" title="Exportar gráfico">
-                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                            </svg>
-                          </button>
-                          <div v-if="trafficExportMenuOpen === 'destination'" class="export-dropdown">
-                            <button @click="exportTrafficChart('destination', 'png')">PNG</button>
-                            <button @click="exportTrafficChart('destination', 'pdf')">PDF</button>
-                          </div>
-                        </div>
-                      </div>
-                      <button class="collapse-btn">
-                        <svg class="icon" :class="{ rotated: trafficExpandedDestination }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-                    </div>
-                    <div class="panel-content" v-show="trafficExpandedDestination">
-                      <div v-if="trafficData.destination?.history?.length" class="optical-chart-container">
-                        <TimeSeriesChart ref="trafficDestinationChartRef" :series="trafficSeries('destination')" unit="Mbps" :begin-at-zero="true" :height="220" />
-                      </div>
-                      <div class="traffic-stats-grid">
-                        <div class="traffic-stat-card">
-                          <div class="traffic-stat-title">
-                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-                            95º PERCENTIL
-                          </div>
-                          <div class="traffic-stat-row"><span>Download:</span><strong>{{ formatBps(trafficData.destination.statistics.percentile_95_in) }}</strong></div>
-                          <div class="traffic-stat-row"><span>Upload:</span><strong>{{ formatBps(trafficData.destination.statistics.percentile_95_out) }}</strong></div>
-                        </div>
-                        <div class="traffic-stat-card">
-                          <div class="traffic-stat-title">
-                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" /></svg>
-                            MÉDIA
-                          </div>
-                          <div class="traffic-stat-row"><span>Download:</span><strong>{{ formatBps(trafficData.destination.statistics.avg_in) }}</strong></div>
-                          <div class="traffic-stat-row"><span>Upload:</span><strong>{{ formatBps(trafficData.destination.statistics.avg_out) }}</strong></div>
-                        </div>
-                        <div class="traffic-stat-card">
-                          <div class="traffic-stat-title">
-                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
-                            PICO
-                          </div>
-                          <div class="traffic-stat-row"><span>Download:</span><strong>{{ formatBps(trafficData.destination.statistics.max_in) }}</strong></div>
-                          <div class="traffic-stat-row"><span>Upload:</span><strong>{{ formatBps(trafficData.destination.statistics.max_out) }}</strong></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Tab: Alarmes (v-if lazy) -->
-            <div v-if="activeTab === 'alarms'" class="tab-content">
-              <div class="alarms-section">
-                <div class="section-header">
-                  <h3>Alarmes e Eventos</h3>
-                  <button class="btn-primary-small" @click="configureAlarms">
-                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    Configurar Alarmes
-                  </button>
-                </div>
-
-                <div class="alarms-list">
-                  <div v-if="!alarms.length" class="empty-state">
-                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <p>Nenhum alarme ativo</p>
-                  </div>
-                  <div v-for="alarm in alarms" :key="alarm.id" class="alarm-item" :class="`severity-${alarm.severity}`">
-                    <div class="alarm-icon">
-                      <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
-                    </div>
-                    <div class="alarm-content">
-                      <div class="alarm-title">{{ alarm.title }}</div>
-                      <div class="alarm-description">{{ alarm.description }}</div>
-                      <div class="alarm-time">{{ formatAlarmTime(alarm.timestamp) }}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Tab: Histórico (v-if lazy) -->
-            <div v-if="activeTab === 'history'" class="tab-content">
-              <div class="history-section">
-                <h3>Histórico de Manutenção</h3>
-                <div class="timeline">
-                  <div v-if="!historyEvents.length" class="empty-state">
-                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
-                    <p>Nenhum evento registrado</p>
-                  </div>
-                  <div v-for="event in historyEvents" :key="event.id" class="timeline-item">
-                    <div class="timeline-marker" :class="`type-${event.type}`"></div>
-                    <div class="timeline-content">
-                      <div class="event-header">
-                        <span class="event-title">{{ event.title }}</span>
-                        <span class="event-date">{{ formatEventDate(event.date) }}</span>
-                      </div>
-                      <div class="event-description">{{ event.description }}</div>
-                      <div v-if="event.user" class="event-user">Por: {{ event.user }}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Configure Alarms Modal -->
-          <div v-if="showAlarmModal" class="alarm-modal-backdrop" @click.self="closeAlarmModal">
-            <div class="alarm-modal">
-              <div class="alarm-modal-header">
-                <h3>{{ editingAlarmIds.length ? 'Editar Configuração' : 'Nova Configuração' }}</h3>
-                <button class="close-btn" @click="closeAlarmModal">
-                  <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <div class="alarm-modal-content">
-                <!-- ── Saved configs ────────────────────────────────────── -->
-                <section class="saved-configs-section">
-                  <h4>Configurações existentes</h4>
-                  <div v-if="isLoadingAlarmConfigs" class="saved-configs-loading">
-                    <span class="spinner small"></span>
-                    <span>Carregando configurações...</span>
-                  </div>
-                  <div v-else-if="groupedAlarmConfigs.length" class="saved-configs-list">
-                    <div v-for="group in groupedAlarmConfigs" :key="group.ids.join(',')" class="saved-config-card">
-                      <div class="saved-config-header">
-                        <span class="saved-config-target">{{ group.targetDisplay }}</span>
-                        <div class="saved-config-badges">
-                          <span v-if="group.snoozeActive" class="saved-config-snooze" :title="`Silenciado até ${formatSnoozeUntil(group.snoozeUntil)}`">
-                            🔕 Silenciado até {{ formatSnoozeUntil(group.snoozeUntil) }}
-                          </span>
-                          <span
-                            v-for="(atype, i) in group.alertTypes"
-                            :key="atype"
-                            class="saved-config-atype"
-                            :class="`atype-${atype}`"
-                          >{{ group.alertTypeLabels[i] || atype }}</span>
-                          <span class="saved-config-level" :class="`level-${group.triggerLevel}`">{{ group.triggerLabel }}</span>
-                        </div>
-                      </div>
-                      <div class="saved-config-channels">
-                        <span v-for="channel in group.channels" :key="channel" class="saved-config-channel">
-                          {{ channelLabelDictionary[channel] || channel }}
-                        </span>
-                      </div>
-                      <div class="saved-config-meta">
-                        <span>{{ formatPersistLabel(group.persistMinutes) }}</span>
-                        <span v-if="group.createdAt">Atualizado {{ formatAlarmTime(group.createdAt) }}</span>
-                      </div>
-                      <p v-if="group.description" class="saved-config-notes">{{ group.description }}</p>
-                      <div class="saved-config-actions">
-                        <button
-                          v-if="group.snoozeActive"
-                          class="btn-config-action btn-snooze-off"
-                          @click="snoozeAlarm(group, 0)"
-                          title="Retomar avisos automáticos imediatamente"
-                        >
-                          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                          </svg>
-                          Retomar
-                        </button>
-                        <button
-                          v-else
-                          class="btn-config-action btn-snooze"
-                          @click="askSnoozeDuration(group)"
-                          title="Pausar temporariamente avisos automáticos (manutenção planejada)"
-                        >
-                          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M9 17H4l1.405-1.405A2.032 2.032 0 006 14.158V11a6.002 6.002 0 014-5.659V5a2 2 0 114 0v.341C16.33 6.165 18 8.388 18 11v3.159c0 .538.214 1.055.595 1.436L20 17h-5M4 4l16 16" />
-                          </svg>
-                          Silenciar
-                        </button>
-                        <button
-                          class="btn-config-action btn-test"
-                          :disabled="testingAlarmIds.has(group.ids[0])"
-                          @click="sendTestAlarm(group)"
-                          title="Enviar mensagem de teste real para os destinatários"
-                        >
-                          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          {{ testingAlarmIds.has(group.ids[0]) ? 'Enviando…' : 'Enviar Teste' }}
-                        </button>
-                        <button class="btn-config-action btn-edit" @click="startEditAlarm(group)" title="Editar">
-                          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                          Editar
-                        </button>
-                        <button class="btn-config-action btn-delete" @click="deleteAlarm(group)" title="Excluir">
-                          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                          Excluir
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  <div v-else class="saved-configs-empty">
-                    Nenhuma configuração cadastrada para este cabo.
-                  </div>
-                </section>
-
-                <!-- ── Histórico de Avisos (Fase C) ────────────────────── -->
-                <section class="alarm-history-section">
-                  <button
-                    type="button"
-                    class="alarm-history-toggle"
-                    :aria-expanded="showAlarmHistory"
-                    @click="showAlarmHistory = !showAlarmHistory"
-                  >
-                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span>Histórico de Avisos</span>
-                    <span v-if="alarmNotifications.length" class="alarm-history-badge">{{ alarmNotifications.length }}</span>
-                    <span class="alarm-history-chevron">{{ showAlarmHistory ? '▴' : '▾' }}</span>
-                  </button>
-
-                  <div v-if="showAlarmHistory" class="alarm-history-body">
-                    <div v-if="isLoadingAlarmNotifications" class="alarm-history-loading">
-                      <span class="spinner small"></span>
-                      <span>Carregando histórico…</span>
-                    </div>
-
-                    <div v-else-if="alarmNotifications.length === 0" class="alarm-history-empty">
-                      Nenhum aviso enviado ainda. Quando o cabo cair (ou voltar), os
-                      destinatários cadastrados receberão notificação automática.
-                    </div>
-
-                    <ul v-else class="alarm-history-list">
-                      <li
-                        v-for="n in alarmNotifications"
-                        :key="n.id"
-                        class="alarm-history-item"
-                        :class="{ 'is-failed': !n.success, 'is-test': n.is_test }"
-                      >
-                        <span class="ah-icon">{{ ALERT_TYPE_ICONS[n.alert_type] || '🔔' }}</span>
-                        <div class="ah-content">
-                          <div class="ah-line-1">
-                            <span class="ah-type">{{ n.alert_type_label }}</span>
-                            <span v-if="n.is_test" class="ah-tag-test">TESTE</span>
-                            <span class="ah-time">{{ formatNotificationTime(n.sent_at) }}</span>
-                          </div>
-                          <div class="ah-line-2">
-                            <span class="ah-channel">{{ CHANNEL_LABELS[n.channel] || n.channel }}</span>
-                            <span class="ah-recipient">→ {{ n.recipient_label || n.recipient_phone || n.recipient_email || '—' }}</span>
-                            <span v-if="n.success" class="ah-status ah-status--ok">✓ Enviado</span>
-                            <span v-else class="ah-status ah-status--fail">✗ Falhou</span>
-                          </div>
-                          <div v-if="!n.success && n.error" class="ah-error">{{ n.error }}</div>
-                        </div>
-                      </li>
-                    </ul>
-
-                    <button
-                      v-if="alarmNotifications.length > 0"
-                      class="alarm-history-refresh"
-                      @click="loadAlarmNotifications(props.cable.id)"
-                      :disabled="isLoadingAlarmNotifications"
-                    >
-                      Atualizar
-                    </button>
-                  </div>
-                </section>
-
-                <!-- ── Alert type ───────────────────────────────────────── -->
-                <section>
-                  <h4>Tipo de Aviso</h4>
-                  <div class="alert-type-grid">
-                    <label
-                      v-for="atype in alertTypeOptions"
-                      :key="atype.id"
-                      class="alert-type-card"
-                      :class="{ selected: alarmForm.alertTypes.includes(atype.id) }"
-                    >
-                      <input type="checkbox" :value="atype.id" v-model="alarmForm.alertTypes" class="sr-only" />
-                      <div class="atype-icon" :class="`atype-${atype.id}`">{{ atype.icon }}</div>
-                      <div class="atype-name">{{ atype.label }}</div>
-                      <div class="atype-desc">{{ atype.description }}</div>
-                    </label>
-                  </div>
-                </section>
-
-                <!-- ── Target ───────────────────────────────────────────── -->
-                <section>
-                  <h4>Alvo do Alarme</h4>
-                  <div class="target-options">
-                    <label class="target-option">
-                      <input type="radio" value="department_group" v-model="alarmForm.target"
-                        @change="resetTargetDetails" />
-                      <span>Grupo de Departamento</span>
-                    </label>
-                    <label class="target-option">
-                      <input type="radio" value="system_user" v-model="alarmForm.target"
-                        @change="resetTargetDetails" />
-                      <span>Usuário do Sistema</span>
-                    </label>
-                    <label class="target-option">
-                      <input type="radio" value="contact" v-model="alarmForm.target"
-                        @change="resetTargetDetails" />
-                      <span>Contato Cadastrado</span>
-                    </label>
-                    <label class="target-option">
-                      <input type="radio" value="department" v-model="alarmForm.target"
-                        @change="resetTargetDetails" />
-                      <span>Departamento</span>
-                    </label>
-                  </div>
-
-                  <div class="target-selector" v-if="alarmForm.target === 'department_group'">
-                    <label>Selecionar Grupo</label>
-                    <select v-model="alarmForm.departmentGroup" :disabled="isContactsLoading && !departmentGroups.length">
-                      <option disabled value="">{{ isContactsLoading && !departmentGroups.length ? 'Carregando grupos...' : 'Selecione um grupo' }}</option>
-                      <option v-for="group in departmentGroups" :key="group.id" :value="group.id">
-                        {{ group.name }} ({{ group.contact_count ?? 0 }} contatos)
-                      </option>
-                    </select>
-                  </div>
-
-                  <div class="target-selector" v-else-if="alarmForm.target === 'system_user'">
-                    <label>Selecionar Usuário</label>
-                    <select v-model="alarmForm.systemUser" :disabled="isContactsLoading && !systemUsers.length">
-                      <option disabled value="">{{ isContactsLoading && !systemUsers.length ? 'Carregando usuários...' : 'Selecione um usuário' }}</option>
-                      <option v-for="user in systemUsers" :key="user.id" :value="user.id">
-                        {{ user.name }}<span v-if="user.email"> ({{ user.email }})</span>
-                      </option>
-                    </select>
-                  </div>
-
-                  <div class="target-selector" v-else-if="alarmForm.target === 'contact'">
-                    <label>Selecionar Contato</label>
-                    <select v-model="alarmForm.contact" :disabled="isContactsLoading && !contactOptions.length">
-                      <option disabled value="">{{ isContactsLoading && !contactOptions.length ? 'Carregando contatos...' : 'Selecione um contato' }}</option>
-                      <option v-for="contact in contactOptions" :key="contact.id" :value="contact.id">
-                        {{ contact.name }} ({{ contact.summary }})
-                      </option>
-                    </select>
-                  </div>
-
-                  <div class="target-selector" v-else-if="alarmForm.target === 'department'">
-                    <label>Selecionar Departamento</label>
-                    <select v-model="alarmForm.department" :disabled="isContactsLoading && !departments.length">
-                      <option disabled value="">{{ isContactsLoading && !departments.length ? 'Carregando departamentos...' : 'Selecione um departamento' }}</option>
-                      <option v-for="dept in departments" :key="dept.id" :value="dept.id">
-                        {{ dept.name }} ({{ dept.member_count ?? 0 }} membros)
-                      </option>
-                    </select>
-                  </div>
-                </section>
-
-                <!-- ── Channels ─────────────────────────────────────────── -->
-                <section>
-                  <h4>Canais de Notificação</h4>
-                  <div class="channel-grid">
-                    <label v-for="channel in availableChannels" :key="channel.id" class="channel-option">
-                      <input type="checkbox" :value="channel.id" v-model="alarmForm.channels" />
-                      <span class="channel-icon" :class="channel.id">{{ channel.label }}</span>
-                    </label>
-                  </div>
-                </section>
-
-                <!-- ── Conditions ───────────────────────────────────────── -->
-                <section>
-                  <h4>Condições</h4>
-                  <div class="conditions-grid">
-                    <label v-if="alarmForm.alertTypes.includes('attenuation')">
-                      <span>Acionar em nível</span>
-                      <select v-model="alarmForm.triggerLevel">
-                        <option value="warning">Atenção</option>
-                        <option value="critical">Crítico</option>
-                      </select>
-                    </label>
-                    <label>
-                      <span>Persistência mínima</span>
-                      <input type="number" min="0" step="1" v-model.number="alarmForm.persistMinutes" />
-                      <small>Minutos de duração antes do disparo</small>
-                    </label>
-                  </div>
-                </section>
-              </div>
-
-              <div class="alarm-modal-footer">
-                <button class="btn-secondary" @click="closeAlarmModal">Cancelar</button>
-                <button class="btn-primary" :disabled="!canSaveAlarm" @click="saveAlarmConfig">
-                  <svg v-if="isSavingAlarm" class="icon spinning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  <span v-else>{{ editingAlarmIds.length ? 'Salvar alterações' : 'Salvar configuração' }}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Footer -->
-          <div class="modal-footer">
-            <button class="btn-secondary" @click="closeModal">
-              Fechar
-            </button>
-            <button v-if="isEditMode" class="btn-primary" @click="saveChanges" :disabled="isSaving">
-              <svg v-if="!isSaving" class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-              </svg>
-              <svg v-else class="icon spinning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              {{ isSaving ? 'Salvando...' : 'Salvar Alterações' }}
-            </button>
           </div>
         </div>
       </div>
+
+      <!-- Tab: Nível Óptico (v-if lazy) -->
+      <div v-if="activeTab === 'optical'" class="tab-content">
+        <div class="optical-section">
+          <div class="section-header">
+            <h3>Nível de Sinal Óptico</h3>
+            <div class="period-selector">
+              <button
+                v-for="period in opticalPeriods"
+                :key="period.value"
+                class="period-btn"
+                :class="{ active: selectedPeriod === period.value }"
+                @click="selectedPeriod = period.value"
+              >
+                {{ period.label }}
+              </button>
+            </div>
+          </div>
+
+          <div class="loading-state" v-if="isLoadingOptical">
+            <div class="spinner"></div>
+            <p>Carregando dados ópticos...</p>
+          </div>
+
+          <div class="empty-state" v-else-if="!opticalData || (!opticalData.origin && !opticalData.destination)">
+            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p>Nenhum dado óptico disponível</p>
+            <small>Verifique se a porta possui medição configurada</small>
+          </div>
+
+          <!-- Gráficos separados por porta -->
+          <div v-else class="port-charts-container">
+            
+            <!-- Porta de Origem -->
+            <div class="port-chart-panel" :class="{ collapsed: !expandedOrigin, 'port-los': portLos('origin') }" data-testid="optical-panel-origin">
+              <div class="panel-header" @click="expandedOrigin = !expandedOrigin">
+                <div class="port-info">
+                  <div class="port-icon origin">
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M5 12h14M5 12l4-4m-4 4l4 4" />
+                    </svg>
+                  </div>
+                  <div class="port-details">
+                    <h4>{{ opticalData?.portInfo?.origin?.device || 'Dispositivo Origem' }}</h4>
+                    <p>{{ opticalData?.portInfo?.origin?.port || 'Porta não identificada' }}</p>
+                  </div>
+                  <span
+                    v-if="portLos('origin')"
+                    class="los-badge"
+                    :title="`Último RX ${formatDbm(opticalData?.stats?.origin?.lastRx)} ≤ limiar crítico ${formatDbm(opticalData?.thresholds?.origin?.critical)}`"
+                    data-testid="los-badge-origin"
+                  >Perda de sinal · {{ formatDbm(opticalData?.stats?.origin?.lastRx) }}</span>
+                </div>
+                <div class="panel-actions" @click.stop>
+                  <div class="export-menu" :class="{ open: exportMenuOpen === 'origin' }">
+                    <button class="export-btn" @click="exportMenuOpen = exportMenuOpen === 'origin' ? null : 'origin'" title="Exportar gráfico">
+                      <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                    </button>
+                    <div v-if="exportMenuOpen === 'origin'" class="export-dropdown">
+                      <button @click="exportChart('origin', 'png')">PNG</button>
+                      <button @click="exportChart('origin', 'pdf')">PDF</button>
+                    </div>
+                  </div>
+                </div>
+                <button class="collapse-btn">
+                  <svg class="icon" :class="{ rotated: expandedOrigin }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div class="panel-content" v-show="expandedOrigin">
+                <div class="optical-stats" data-testid="optical-stats-origin">
+                  <div class="stat-box">
+                    <div class="stat-icon good">RX</div>
+                    <div class="stat-info">
+                      <div class="stat-label">Médio</div>
+                      <div class="stat-value">{{ formatDbm(opticalData?.stats?.origin?.avgRx) }}</div>
+                    </div>
+                  </div>
+                  <div class="stat-box">
+                    <div class="stat-icon info">TX</div>
+                    <div class="stat-info">
+                      <div class="stat-label">Médio</div>
+                      <div class="stat-value">{{ formatDbm(opticalData?.stats?.origin?.avgTx) }}</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="optical-chart-container">
+                  <TimeSeriesChart ref="originChartRef" :series="opticalSeries('origin')" :thresholds="opticalThresholds('origin')" unit="dBm" :decimals="2" :height="220" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Porta de Destino -->
+            <div class="port-chart-panel" :class="{ collapsed: !expandedDestination, 'port-los': portLos('destination') }" data-testid="optical-panel-destination">
+              <div class="panel-header" @click="expandedDestination = !expandedDestination">
+                <div class="port-info">
+                  <div class="port-icon destination">
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 12H5m14 0l-4 4m4-4l-4-4" />
+                    </svg>
+                  </div>
+                  <div class="port-details">
+                    <h4>{{ opticalData?.portInfo?.destination?.device || 'Dispositivo Destino' }}</h4>
+                    <p>{{ opticalData?.portInfo?.destination?.port || 'Porta não identificada' }}</p>
+                  </div>
+                  <span
+                    v-if="portLos('destination')"
+                    class="los-badge"
+                    :title="`Último RX ${formatDbm(opticalData?.stats?.destination?.lastRx)} ≤ limiar crítico ${formatDbm(opticalData?.thresholds?.destination?.critical)}`"
+                    data-testid="los-badge-destination"
+                  >Perda de sinal · {{ formatDbm(opticalData?.stats?.destination?.lastRx) }}</span>
+                </div>
+                <div class="panel-actions" @click.stop>
+                  <div class="export-menu" :class="{ open: exportMenuOpen === 'destination' }">
+                    <button class="export-btn" @click="exportMenuOpen = exportMenuOpen === 'destination' ? null : 'destination'" title="Exportar gráfico">
+                      <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                    </button>
+                    <div v-if="exportMenuOpen === 'destination'" class="export-dropdown">
+                      <button @click="exportChart('destination', 'png')">PNG</button>
+                      <button @click="exportChart('destination', 'pdf')">PDF</button>
+                    </div>
+                  </div>
+                </div>
+                <button class="collapse-btn">
+                  <svg class="icon" :class="{ rotated: expandedDestination }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div class="panel-content" v-show="expandedDestination">
+                <div class="optical-stats" data-testid="optical-stats-destination">
+                  <div class="stat-box">
+                    <div class="stat-icon good">RX</div>
+                    <div class="stat-info">
+                      <div class="stat-label">Médio</div>
+                      <div class="stat-value">{{ formatDbm(opticalData?.stats?.destination?.avgRx) }}</div>
+                    </div>
+                  </div>
+                  <div class="stat-box">
+                    <div class="stat-icon info">TX</div>
+                    <div class="stat-info">
+                      <div class="stat-label">Médio</div>
+                      <div class="stat-value">{{ formatDbm(opticalData?.stats?.destination?.avgTx) }}</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="optical-chart-container">
+                  <TimeSeriesChart ref="destinationChartRef" :series="opticalSeries('destination')" :thresholds="opticalThresholds('destination')" unit="dBm" :decimals="2" :height="220" />
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Tab: Tráfego de Rede (v-if lazy) -->
+      <div v-if="activeTab === 'traffic'" class="tab-content">
+        <div class="optical-section">
+          <div class="section-header">
+            <h3>Tráfego de Rede</h3>
+            <div class="period-selector">
+              <button
+                v-for="period in opticalPeriods"
+                :key="period.value"
+                class="period-btn"
+                :class="{ active: selectedPeriod === period.value }"
+                @click="selectedPeriod = period.value"
+              >
+                {{ period.label }}
+              </button>
+            </div>
+          </div>
+
+          <div class="loading-state" v-if="isLoadingTraffic">
+            <div class="spinner"></div>
+            <p>Carregando dados de tráfego...</p>
+          </div>
+
+          <div v-else-if="!trafficData || (!trafficData.origin?.statistics && !trafficData.destination?.statistics)" class="empty-state">
+            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p>Nenhum dado de tráfego disponível</p>
+            <small>Verifique se a porta possui items de tráfego configurados</small>
+          </div>
+
+          <div v-else class="traffic-ports-container">
+            <!-- Porta de Origem -->
+            <div v-if="trafficData.origin?.statistics" class="port-chart-panel" :class="{ collapsed: !trafficExpandedOrigin }">
+              <div class="panel-header" @click="trafficExpandedOrigin = !trafficExpandedOrigin">
+                <div class="port-info">
+                  <div class="port-icon origin">
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12l4-4m-4 4l4 4" />
+                    </svg>
+                  </div>
+                  <div class="port-details">
+                    <h4>{{ trafficData.origin.device || 'Dispositivo Origem' }}</h4>
+                    <p>{{ trafficData.origin.port || 'Porta não identificada' }}</p>
+                  </div>
+                </div>
+                <div class="panel-actions" @click.stop>
+                  <div class="export-menu" :class="{ open: trafficExportMenuOpen === 'origin' }">
+                    <button class="export-btn" @click="trafficExportMenuOpen = trafficExportMenuOpen === 'origin' ? null : 'origin'" title="Exportar gráfico">
+                      <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                    </button>
+                    <div v-if="trafficExportMenuOpen === 'origin'" class="export-dropdown">
+                      <button @click="exportTrafficChart('origin', 'png')">PNG</button>
+                      <button @click="exportTrafficChart('origin', 'pdf')">PDF</button>
+                    </div>
+                  </div>
+                </div>
+                <button class="collapse-btn">
+                  <svg class="icon" :class="{ rotated: trafficExpandedOrigin }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              </div>
+              <div class="panel-content" v-show="trafficExpandedOrigin">
+                <div class="traffic-stats-grid">
+                  <div class="traffic-stat-card">
+                    <div class="traffic-stat-title">
+                      <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                      95º PERCENTIL
+                    </div>
+                    <div class="traffic-stat-row"><span>Download:</span><strong>{{ formatBps(trafficData.origin.statistics.percentile_95_in) }}</strong></div>
+                    <div class="traffic-stat-row"><span>Upload:</span><strong>{{ formatBps(trafficData.origin.statistics.percentile_95_out) }}</strong></div>
+                  </div>
+                  <div class="traffic-stat-card">
+                    <div class="traffic-stat-title">
+                      <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" /></svg>
+                      MÉDIA
+                    </div>
+                    <div class="traffic-stat-row"><span>Download:</span><strong>{{ formatBps(trafficData.origin.statistics.avg_in) }}</strong></div>
+                    <div class="traffic-stat-row"><span>Upload:</span><strong>{{ formatBps(trafficData.origin.statistics.avg_out) }}</strong></div>
+                  </div>
+                  <div class="traffic-stat-card">
+                    <div class="traffic-stat-title">
+                      <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                      PICO
+                    </div>
+                    <div class="traffic-stat-row"><span>Download:</span><strong>{{ formatBps(trafficData.origin.statistics.max_in) }}</strong></div>
+                    <div class="traffic-stat-row"><span>Upload:</span><strong>{{ formatBps(trafficData.origin.statistics.max_out) }}</strong></div>
+                  </div>
+                </div>
+                <div v-if="trafficData.origin?.history?.length" class="optical-chart-container">
+                  <TimeSeriesChart ref="trafficOriginChartRef" :series="trafficSeries('origin')" unit="Mbps" :begin-at-zero="true" :height="220" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Porta de Destino -->
+            <div v-if="trafficData.destination?.statistics" class="port-chart-panel" :class="{ collapsed: !trafficExpandedDestination }">
+              <div class="panel-header" @click="trafficExpandedDestination = !trafficExpandedDestination">
+                <div class="port-info">
+                  <div class="port-icon destination">
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 12H5m14 0l-4 4m4-4l-4-4" />
+                    </svg>
+                  </div>
+                  <div class="port-details">
+                    <h4>{{ trafficData.destination.device || 'Dispositivo Destino' }}</h4>
+                    <p>{{ trafficData.destination.port || 'Porta não identificada' }}</p>
+                  </div>
+                </div>
+                <div class="panel-actions" @click.stop>
+                  <div class="export-menu" :class="{ open: trafficExportMenuOpen === 'destination' }">
+                    <button class="export-btn" @click="trafficExportMenuOpen = trafficExportMenuOpen === 'destination' ? null : 'destination'" title="Exportar gráfico">
+                      <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                    </button>
+                    <div v-if="trafficExportMenuOpen === 'destination'" class="export-dropdown">
+                      <button @click="exportTrafficChart('destination', 'png')">PNG</button>
+                      <button @click="exportTrafficChart('destination', 'pdf')">PDF</button>
+                    </div>
+                  </div>
+                </div>
+                <button class="collapse-btn">
+                  <svg class="icon" :class="{ rotated: trafficExpandedDestination }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              </div>
+              <div class="panel-content" v-show="trafficExpandedDestination">
+                <div class="traffic-stats-grid">
+                  <div class="traffic-stat-card">
+                    <div class="traffic-stat-title">
+                      <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                      95º PERCENTIL
+                    </div>
+                    <div class="traffic-stat-row"><span>Download:</span><strong>{{ formatBps(trafficData.destination.statistics.percentile_95_in) }}</strong></div>
+                    <div class="traffic-stat-row"><span>Upload:</span><strong>{{ formatBps(trafficData.destination.statistics.percentile_95_out) }}</strong></div>
+                  </div>
+                  <div class="traffic-stat-card">
+                    <div class="traffic-stat-title">
+                      <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" /></svg>
+                      MÉDIA
+                    </div>
+                    <div class="traffic-stat-row"><span>Download:</span><strong>{{ formatBps(trafficData.destination.statistics.avg_in) }}</strong></div>
+                    <div class="traffic-stat-row"><span>Upload:</span><strong>{{ formatBps(trafficData.destination.statistics.avg_out) }}</strong></div>
+                  </div>
+                  <div class="traffic-stat-card">
+                    <div class="traffic-stat-title">
+                      <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                      PICO
+                    </div>
+                    <div class="traffic-stat-row"><span>Download:</span><strong>{{ formatBps(trafficData.destination.statistics.max_in) }}</strong></div>
+                    <div class="traffic-stat-row"><span>Upload:</span><strong>{{ formatBps(trafficData.destination.statistics.max_out) }}</strong></div>
+                  </div>
+                </div>
+                <div v-if="trafficData.destination?.history?.length" class="optical-chart-container">
+                  <TimeSeriesChart ref="trafficDestinationChartRef" :series="trafficSeries('destination')" unit="Mbps" :begin-at-zero="true" :height="220" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Alarmes (v-if lazy) -->
+      <div v-if="activeTab === 'alarms'" class="tab-content">
+        <div class="alarms-section">
+          <div class="section-header">
+            <h3>Alarmes e Eventos</h3>
+            <button class="btn-primary-small" @click="configureAlarms">
+              <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              Configurar Alarmes
+            </button>
+          </div>
+
+          <div class="alarms-list">
+            <div v-if="!alarms.length" class="empty-state">
+              <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p>Nenhum alarme ativo</p>
+            </div>
+            <div v-for="alarm in alarms" :key="alarm.id" class="alarm-item" :class="`severity-${alarm.severity}`">
+              <div class="alarm-icon">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div class="alarm-content">
+                <div class="alarm-title">{{ alarm.title }}</div>
+                <div class="alarm-description">{{ alarm.description }}</div>
+                <div class="alarm-time">{{ formatAlarmTime(alarm.timestamp) }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Histórico (v-if lazy) -->
+      <div v-if="activeTab === 'history'" class="tab-content">
+        <div class="history-section">
+          <h3>Histórico de Manutenção</h3>
+          <div class="timeline">
+            <div v-if="!historyEvents.length" class="empty-state">
+              <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              <p>Nenhum evento registrado</p>
+            </div>
+            <div v-for="event in historyEvents" :key="event.id" class="timeline-item">
+              <div class="timeline-marker" :class="`type-${event.type}`"></div>
+              <div class="timeline-content">
+                <div class="event-header">
+                  <span class="event-title">{{ event.title }}</span>
+                  <span class="event-date">{{ formatEventDate(event.date) }}</span>
+                </div>
+                <div class="event-description">{{ event.description }}</div>
+                <div v-if="event.user" class="event-user">Por: {{ event.user }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </BaseModal>
+
+  <!-- Configuração de alarmes: fora do BaseModal (o backdrop dele tem backdrop-filter) -->
+  <Teleport to="body">
+    <!-- Configure Alarms Modal -->
+    <div v-if="showAlarmModal" class="alarm-modal-backdrop" @click.self="closeAlarmModal">
+      <div class="alarm-modal">
+        <div class="alarm-modal-header">
+          <h3>{{ editingAlarmIds.length ? 'Editar Configuração' : 'Nova Configuração' }}</h3>
+          <button class="close-btn" @click="closeAlarmModal">
+            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="alarm-modal-content">
+          <!-- ── Saved configs ────────────────────────────────────── -->
+          <section class="saved-configs-section">
+            <h4>Configurações existentes</h4>
+            <div v-if="isLoadingAlarmConfigs" class="saved-configs-loading">
+              <span class="spinner small"></span>
+              <span>Carregando configurações...</span>
+            </div>
+            <div v-else-if="groupedAlarmConfigs.length" class="saved-configs-list">
+              <div v-for="group in groupedAlarmConfigs" :key="group.ids.join(',')" class="saved-config-card">
+                <div class="saved-config-header">
+                  <span class="saved-config-target">{{ group.targetDisplay }}</span>
+                  <div class="saved-config-badges">
+                    <span v-if="group.snoozeActive" class="saved-config-snooze" :title="`Silenciado até ${formatSnoozeUntil(group.snoozeUntil)}`">
+                      🔕 Silenciado até {{ formatSnoozeUntil(group.snoozeUntil) }}
+                    </span>
+                    <span
+                      v-for="(atype, i) in group.alertTypes"
+                      :key="atype"
+                      class="saved-config-atype"
+                      :class="`atype-${atype}`"
+                    >{{ group.alertTypeLabels[i] || atype }}</span>
+                    <span class="saved-config-level" :class="`level-${group.triggerLevel}`">{{ group.triggerLabel }}</span>
+                  </div>
+                </div>
+                <div class="saved-config-channels">
+                  <span v-for="channel in group.channels" :key="channel" class="saved-config-channel">
+                    {{ channelLabelDictionary[channel] || channel }}
+                  </span>
+                </div>
+                <div class="saved-config-meta">
+                  <span>{{ formatPersistLabel(group.persistMinutes) }}</span>
+                  <span v-if="group.createdAt">Atualizado {{ formatAlarmTime(group.createdAt) }}</span>
+                </div>
+                <p v-if="group.description" class="saved-config-notes">{{ group.description }}</p>
+                <div class="saved-config-actions">
+                  <button
+                    v-if="group.snoozeActive"
+                    class="btn-config-action btn-snooze-off"
+                    @click="snoozeAlarm(group, 0)"
+                    title="Retomar avisos automáticos imediatamente"
+                  >
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                    Retomar
+                  </button>
+                  <button
+                    v-else
+                    class="btn-config-action btn-snooze"
+                    @click="askSnoozeDuration(group)"
+                    title="Pausar temporariamente avisos automáticos (manutenção planejada)"
+                  >
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 17H4l1.405-1.405A2.032 2.032 0 006 14.158V11a6.002 6.002 0 014-5.659V5a2 2 0 114 0v.341C16.33 6.165 18 8.388 18 11v3.159c0 .538.214 1.055.595 1.436L20 17h-5M4 4l16 16" />
+                    </svg>
+                    Silenciar
+                  </button>
+                  <button
+                    class="btn-config-action btn-test"
+                    :disabled="testingAlarmIds.has(group.ids[0])"
+                    @click="sendTestAlarm(group)"
+                    title="Enviar mensagem de teste real para os destinatários"
+                  >
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {{ testingAlarmIds.has(group.ids[0]) ? 'Enviando…' : 'Enviar Teste' }}
+                  </button>
+                  <button class="btn-config-action btn-edit" @click="startEditAlarm(group)" title="Editar">
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Editar
+                  </button>
+                  <template v-if="pendingDeleteKey === group.ids.join(',')">
+                    <button class="btn-config-action btn-delete" data-testid="alarm-delete-confirm" @click="deleteAlarm(group)">Confirmar exclusão</button>
+                    <button class="btn-config-action" @click="pendingDeleteKey = null">Cancelar</button>
+                  </template>
+                  <button v-else class="btn-config-action btn-delete" title="Excluir" data-testid="alarm-delete" @click="pendingDeleteKey = group.ids.join(',')">
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Excluir
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div v-else class="saved-configs-empty">
+              Nenhuma configuração cadastrada para este cabo.
+            </div>
+          </section>
+
+          <!-- ── Histórico de Avisos (Fase C) ────────────────────── -->
+          <section class="alarm-history-section">
+            <button
+              type="button"
+              class="alarm-history-toggle"
+              :aria-expanded="showAlarmHistory"
+              @click="showAlarmHistory = !showAlarmHistory"
+            >
+              <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>Histórico de Avisos</span>
+              <span v-if="alarmNotifications.length" class="alarm-history-badge">{{ alarmNotifications.length }}</span>
+              <span class="alarm-history-chevron">{{ showAlarmHistory ? '▴' : '▾' }}</span>
+            </button>
+
+            <div v-if="showAlarmHistory" class="alarm-history-body">
+              <div v-if="isLoadingAlarmNotifications" class="alarm-history-loading">
+                <span class="spinner small"></span>
+                <span>Carregando histórico…</span>
+              </div>
+
+              <div v-else-if="alarmNotifications.length === 0" class="alarm-history-empty">
+                Nenhum aviso enviado ainda. Quando o cabo cair (ou voltar), os
+                destinatários cadastrados receberão notificação automática.
+              </div>
+
+              <ul v-else class="alarm-history-list">
+                <li
+                  v-for="n in alarmNotifications"
+                  :key="n.id"
+                  class="alarm-history-item"
+                  :class="{ 'is-failed': !n.success, 'is-test': n.is_test }"
+                >
+                  <span class="ah-icon">{{ ALERT_TYPE_ICONS[n.alert_type] || '🔔' }}</span>
+                  <div class="ah-content">
+                    <div class="ah-line-1">
+                      <span class="ah-type">{{ n.alert_type_label }}</span>
+                      <span v-if="n.is_test" class="ah-tag-test">TESTE</span>
+                      <span class="ah-time">{{ formatNotificationTime(n.sent_at) }}</span>
+                    </div>
+                    <div class="ah-line-2">
+                      <span class="ah-channel">{{ CHANNEL_LABELS[n.channel] || n.channel }}</span>
+                      <span class="ah-recipient">→ {{ n.recipient_label || n.recipient_phone || n.recipient_email || '—' }}</span>
+                      <span v-if="n.success" class="ah-status ah-status--ok">✓ Enviado</span>
+                      <span v-else class="ah-status ah-status--fail">✗ Falhou</span>
+                    </div>
+                    <div v-if="!n.success && n.error" class="ah-error">{{ n.error }}</div>
+                  </div>
+                </li>
+              </ul>
+
+              <button
+                v-if="alarmNotifications.length > 0"
+                class="alarm-history-refresh"
+                @click="loadAlarmNotifications(props.cable.id)"
+                :disabled="isLoadingAlarmNotifications"
+              >
+                Atualizar
+              </button>
+            </div>
+          </section>
+
+          <!-- ── Alert type ───────────────────────────────────────── -->
+          <section>
+            <h4>Tipo de Aviso</h4>
+            <div class="alert-type-grid">
+              <label
+                v-for="atype in alertTypeOptions"
+                :key="atype.id"
+                class="alert-type-card"
+                :class="{ selected: alarmForm.alertTypes.includes(atype.id) }"
+              >
+                <input type="checkbox" :value="atype.id" v-model="alarmForm.alertTypes" class="sr-only" />
+                <div class="atype-icon" :class="`atype-${atype.id}`">{{ atype.icon }}</div>
+                <div class="atype-name">{{ atype.label }}</div>
+                <div class="atype-desc">{{ atype.description }}</div>
+              </label>
+            </div>
+          </section>
+
+          <!-- ── Target ───────────────────────────────────────────── -->
+          <section>
+            <h4>Alvo do Alarme</h4>
+            <div class="target-options">
+              <label class="target-option">
+                <input type="radio" value="department_group" v-model="alarmForm.target"
+                  @change="resetTargetDetails" />
+                <span>Grupo de Departamento</span>
+              </label>
+              <label class="target-option">
+                <input type="radio" value="system_user" v-model="alarmForm.target"
+                  @change="resetTargetDetails" />
+                <span>Usuário do Sistema</span>
+              </label>
+              <label class="target-option">
+                <input type="radio" value="contact" v-model="alarmForm.target"
+                  @change="resetTargetDetails" />
+                <span>Contato Cadastrado</span>
+              </label>
+              <label class="target-option">
+                <input type="radio" value="department" v-model="alarmForm.target"
+                  @change="resetTargetDetails" />
+                <span>Departamento</span>
+              </label>
+            </div>
+
+            <div class="target-selector" v-if="alarmForm.target === 'department_group'">
+              <label>Selecionar Grupo</label>
+              <select v-model="alarmForm.departmentGroup" :disabled="isContactsLoading && !departmentGroups.length">
+                <option disabled value="">{{ isContactsLoading && !departmentGroups.length ? 'Carregando grupos...' : 'Selecione um grupo' }}</option>
+                <option v-for="group in departmentGroups" :key="group.id" :value="group.id">
+                  {{ group.name }} ({{ group.contact_count ?? 0 }} contatos)
+                </option>
+              </select>
+            </div>
+
+            <div class="target-selector" v-else-if="alarmForm.target === 'system_user'">
+              <label>Selecionar Usuário</label>
+              <select v-model="alarmForm.systemUser" :disabled="isContactsLoading && !systemUsers.length">
+                <option disabled value="">{{ isContactsLoading && !systemUsers.length ? 'Carregando usuários...' : 'Selecione um usuário' }}</option>
+                <option v-for="user in systemUsers" :key="user.id" :value="user.id">
+                  {{ user.name }}<span v-if="user.email"> ({{ user.email }})</span>
+                </option>
+              </select>
+            </div>
+
+            <div class="target-selector" v-else-if="alarmForm.target === 'contact'">
+              <label>Selecionar Contato</label>
+              <select v-model="alarmForm.contact" :disabled="isContactsLoading && !contactOptions.length">
+                <option disabled value="">{{ isContactsLoading && !contactOptions.length ? 'Carregando contatos...' : 'Selecione um contato' }}</option>
+                <option v-for="contact in contactOptions" :key="contact.id" :value="contact.id">
+                  {{ contact.name }} ({{ contact.summary }})
+                </option>
+              </select>
+            </div>
+
+            <div class="target-selector" v-else-if="alarmForm.target === 'department'">
+              <label>Selecionar Departamento</label>
+              <select v-model="alarmForm.department" :disabled="isContactsLoading && !departments.length">
+                <option disabled value="">{{ isContactsLoading && !departments.length ? 'Carregando departamentos...' : 'Selecione um departamento' }}</option>
+                <option v-for="dept in departments" :key="dept.id" :value="dept.id">
+                  {{ dept.name }} ({{ dept.member_count ?? 0 }} membros)
+                </option>
+              </select>
+            </div>
+          </section>
+
+          <!-- ── Channels ─────────────────────────────────────────── -->
+          <section>
+            <h4>Canais de Notificação</h4>
+            <div class="channel-grid">
+              <label v-for="channel in availableChannels" :key="channel.id" class="channel-option">
+                <input type="checkbox" :value="channel.id" v-model="alarmForm.channels" />
+                <span class="channel-icon" :class="channel.id">{{ channel.label }}</span>
+              </label>
+            </div>
+          </section>
+
+          <!-- ── Conditions ───────────────────────────────────────── -->
+          <section>
+            <h4>Condições</h4>
+            <div class="conditions-grid">
+              <label v-if="alarmForm.alertTypes.includes('attenuation')">
+                <span>Acionar em nível</span>
+                <select v-model="alarmForm.triggerLevel">
+                  <option value="warning">Atenção</option>
+                  <option value="critical">Crítico</option>
+                </select>
+              </label>
+              <label>
+                <span>Persistência mínima</span>
+                <input type="number" min="0" step="1" v-model.number="alarmForm.persistMinutes" />
+                <small>Minutos de duração antes do disparo</small>
+              </label>
+            </div>
+          </section>
+        </div>
+
+        <div class="alarm-modal-footer">
+          <button class="btn-secondary" @click="closeAlarmModal">Cancelar</button>
+          <button class="btn-primary" :disabled="!canSaveAlarm" @click="saveAlarmConfig">
+            <svg v-if="isSavingAlarm" class="icon spinning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span v-else>{{ editingAlarmIds.length ? 'Salvar alterações' : 'Salvar configuração' }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
   </Teleport>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useEscapeKey } from '@/composables/useEscapeKey'
+import { PhLinkSimple } from '@phosphor-icons/vue'
+import BaseModal from '@/components/Common/BaseModal.vue'
 import TimeSeriesChart from './charts/TimeSeriesChart.vue'
 import { bpsToMbps, isRxCritical } from '@/utils/opticalSeries'
 import { getCableOpticalHistory, getCableTrafficHistory, getCableAlarms, createCableAlarm, deleteCableAlarm, testCableAlarm, getCableAlarmNotifications, snoozeCableAlarm } from '@/services/fiberService'
@@ -940,23 +894,19 @@ const props = defineProps({
   cable: {
     type: Object,
     default: null
-  },
-  canEdit: {
-    type: Boolean,
-    default: false
   }
 })
 
-const emit = defineEmits(['close', 'save'])
+// EV-0067: o «modo de edição» saiu — não havia campo editável e o «Salvar» era um
+// setTimeout com TODO (dado inventado, CLAUDE.md §2.1). Edita-se em Inventário › Cabos.
+const emit = defineEmits(['close'])
 
 // Estado
 const activeTab = ref('info')
-const isEditMode = ref(false)
-const isSaving = ref(false)
 const originChartRef = ref(null)
 const destinationChartRef = ref(null)
 const expandedOrigin = ref(true)
-const expandedDestination = ref(false)
+const expandedDestination = ref(true)
 const showCableDetails = ref(true)
 const exportMenuOpen = ref(null)
 
@@ -964,7 +914,7 @@ const exportMenuOpen = ref(null)
 const trafficData = ref(null)
 const isLoadingTraffic = ref(false)
 const trafficExpandedOrigin = ref(true)
-const trafficExpandedDestination = ref(false)
+const trafficExpandedDestination = ref(true)
 const trafficOriginChartRef = ref(null)
 const trafficDestinationChartRef = ref(null)
 const trafficExportMenuOpen = ref(null)
@@ -1202,26 +1152,23 @@ watch(
   { deep: true }
 )
 
-// Fechar modal com ESC
-useEscapeKey(() => {
-  if (props.show && !isEditMode.value) {
-    closeModal()
-  }
-})
-
 const closeModal = () => {
-  if (isEditMode.value) {
-    const confirm = window.confirm('Deseja descartar as alterações?')
-    if (!confirm) return
-    isEditMode.value = false
-  }
   showAlarmModal.value = false
+  pendingDeleteKey.value = null
   emit('close')
 }
 
-const toggleEditMode = () => {
-  isEditMode.value = !isEditMode.value
+// Esc / clique fora / X chegam pelo BaseModal; com a configuração de alarmes aberta, fecha-se só ela.
+const requestClose = () => {
+  if (showAlarmModal.value) closeAlarmModal()
+  else closeModal()
 }
+
+const routeSubtitle = computed(() =>
+  props.cable ? `${props.cable.site_a_name || 'Site A'} → ${props.cable.site_b_name || 'Site B'}` : '',
+)
+const HEADER_STATUS = { online: 'online', up: 'online', warning: 'attention', degraded: 'attention', critical: 'critical', offline: 'critical', down: 'critical' }
+const headerStatus = computed(() => HEADER_STATUS[cableStatus.value] || 'neutral')
 
 const toggleCableDetails = () => {
   showCableDetails.value = !showCableDetails.value
@@ -1359,21 +1306,6 @@ const exportTrafficChart = (port, format) => {
   if (!win) return
   win.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(device)} — ${escapeHtml(portName)}</title><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#fff;display:flex;flex-direction:column;align-items:center;padding:24px;font-family:sans-serif;}h2{font-size:14px;color:#334155;margin-bottom:4px;}p{font-size:12px;color: rgb(var(--n-500));margin-bottom:16px;}img{max-width:100%;border:1px solid #e2e8f0;border-radius:8px;}</style></head><body><h2>${escapeHtml(device)}</h2><p>${escapeHtml(portName)} — Período: ${selectedPeriod.value}h</p><img src="${imgData}"/><script>window.onload=()=>{window.print()}<${'/'}script></body></html>`)
   win.document.close()
-}
-
-const saveChanges = async () => {
-  isSaving.value = true
-  try {
-    // TODO: Implementar salvamento no backend
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    emit('save', props.cable)
-    isEditMode.value = false
-  } catch (error) {
-    console.error('Erro ao salvar:', error)
-    alert('Erro ao salvar alterações')
-  } finally {
-    isSaving.value = false
-  }
 }
 
 const resetAlarmForm = () => {
@@ -1626,11 +1558,12 @@ const startEditAlarm = async (group) => {
   showAlarmModal.value = true
 }
 
+// Exclusão em dois cliques na própria linha (sem diálogo do navegador).
+const pendingDeleteKey = ref(null)
+
 const deleteAlarm = async (group) => {
   const ids = group.ids || []
-  if (!window.confirm(`Excluir configuração de alarme para "${group.targetDisplay}"?`)) {
-    return
-  }
+  pendingDeleteKey.value = null
   try {
     await Promise.all(ids.map(id => deleteCableAlarm(props.cable.id, id)))
     await loadCableAlarmConfigs(props.cable.id)
@@ -2038,143 +1971,12 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
-  padding: 20px;
-}
-
-.detail-modal-container {
-  background: linear-gradient(135deg, var(--surface-card) 0%, var(--bg-secondary) 100%);
-  border-radius: 14px;
-  box-shadow: 0 20px 40px -8px rgba(0, 0, 0, 0.55);
-  max-width: 780px;
-  width: calc(100vw - 40px);
-  max-height: 95vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid rgb(var(--n-200));
-}
-
-/* Header */
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px;
-  border-bottom: 1px solid rgb(var(--n-200));
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, transparent 100%);
-}
-
-.header-content {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex: 1;
-}
-
-.cable-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  box-shadow: 0 3px 8px rgba(59, 130, 246, 0.3);
-}
-
-.cable-icon.status-online {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-}
-
-.cable-icon.status-offline {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
-}
-
-.cable-icon.status-warning {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
-}
-
-.cable-icon .icon {
-  width: 22px;
-  height: 22px;
-  color: rgb(var(--n-900));
-}
-
-.cable-title h2 {
-  margin: 0;
-  color: rgb(var(--n-900));
-  font-size: 17px;
-  font-weight: 700;
-  line-height: 1.3;
-}
-
-.cable-route {
-  margin: 6px 0 0 0;
-  color: rgb(var(--n-500));
-  font-size: 14px;
-  line-height: 1.3;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.arrow-icon {
-  width: 16px;
-  height: 16px;
-  color: rgb(var(--n-500));
-}
-
-.header-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.btn-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: rgb(var(--n-100));
-  border: 1px solid rgb(var(--n-200));
-  color: rgb(var(--n-700));
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.btn-icon:hover {
-  background: rgba(59, 130, 246, 0.2);
-  border-color: rgba(59, 130, 246, 0.3);
-  color: rgb(var(--info-strong));
-}
-
-.btn-icon.close-btn:hover {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.3);
-  color: rgb(var(--danger));
-}
-
-.btn-icon .icon {
-  width: 20px;
-  height: 20px;
-}
 
 /* Tabs */
 .tabs-header {
+  position: sticky; /* o scroll é do corpo do BaseModal */
+  top: 0;
+  z-index: 2;
   display: flex;
   border-bottom: 1px solid rgb(var(--n-200));
   background: rgb(var(--n-100));
@@ -2215,8 +2017,6 @@ onUnmounted(() => {
 
 /* Body */
 .modal-body {
-  flex: 1;
-  overflow-y: auto;
   padding: 16px 18px;
 }
 
@@ -2239,6 +2039,21 @@ onUnmounted(() => {
 .info-grid {
   display: grid;
   gap: 12px;
+}
+
+/* EV-0067: detalhes em duas colunas; pontas A e B lado a lado */
+@media (min-width: 768px) {
+  .info-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1024px) {
+  .port-charts-container,
+  .traffic-ports-container {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
 }
 
 .info-section {
@@ -2323,7 +2138,7 @@ onUnmounted(() => {
 
 .info-cards {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr)); /* 2×2 numa coluna de meia largura */
   gap: 10px;
 }
 
@@ -3729,16 +3544,6 @@ onUnmounted(() => {
   font-size: 14px;
 }
 
-/* Footer */
-.modal-footer {
-  padding: 10px 18px;
-  border-top: 1px solid rgb(var(--n-200));
-  background: rgb(var(--n-100));
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-}
-
 .btn-secondary,
 .btn-primary {
   padding: 9px 20px;
@@ -3806,49 +3611,15 @@ onUnmounted(() => {
   transition: opacity 0.3s;
 }
 
-.modal-enter-active .detail-modal-container,
-.modal-leave-active .detail-modal-container {
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
 .modal-enter-from,
 .modal-leave-to {
-  opacity: 0;
-}
-
-.modal-enter-from .detail-modal-container,
-.modal-leave-to .detail-modal-container {
-  transform: scale(0.95) translateY(20px);
   opacity: 0;
 }
 */
 
 /* Scrollbar */
-.modal-body::-webkit-scrollbar {
-  width: 8px;
-}
-
-.modal-body::-webkit-scrollbar-track {
-  background: rgb(var(--n-50));
-  border-radius: 4px;
-}
-
-.modal-body::-webkit-scrollbar-thumb {
-  background: rgb(var(--n-300));
-  border-radius: 4px;
-}
-
-.modal-body::-webkit-scrollbar-thumb:hover {
-  background: rgb(var(--n-400));
-}
-
 /* Responsivo */
 @media (max-width: 768px) {
-  .detail-modal-container {
-    max-width: 100%;
-    max-height: 100vh;
-    border-radius: 0;
-  }
   
   .info-cards {
     grid-template-columns: 1fr;
@@ -3861,11 +3632,6 @@ onUnmounted(() => {
   .tab-button {
     padding: 14px 16px;
     font-size: 13px;
-  }
-  
-  .header-content {
-    flex-direction: column;
-    align-items: flex-start;
   }
 }
 

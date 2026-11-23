@@ -133,9 +133,7 @@
       v-if="showCableDetailModal"
       :show="showCableDetailModal"
       :cable="selectedCable"
-      :can-edit="true"
       @close="showCableDetailModal = false"
-      @save="handleCableSave"
     />
 
     <!-- Cable Optical Tooltip (lazy) -->
@@ -1150,13 +1148,6 @@ const openCableFullDetails = (cable) => {
 }
 
 // Função para salvar alterações do cabo
-const handleCableSave = async () => {
-  // TODO(EV-0012d): persistir no backend; hoje só recarrega o inventário
-  showCableDetailModal.value = false
-  await loadInventoryItems()
-  updateMap()
-}
-
 onMounted(async () => {
   document.addEventListener('click', _hideCtxMenu)
   document.addEventListener('keydown', _globalKeydown)
