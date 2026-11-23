@@ -92,10 +92,6 @@ SERVICE_RESTART_COMMANDS = os.getenv(
     "",
 )
 
-# Vue 3 Dashboard Feature Flag (Phase 11 - Sprint 3)
-USE_VUE_DASHBOARD = os.getenv("USE_VUE_DASHBOARD", "false").lower() == "true"
-VUE_DASHBOARD_ROLLOUT_PERCENTAGE = int(os.getenv("VUE_DASHBOARD_ROLLOUT_PERCENTAGE", "0"))
-
 fernet_keys = [key.strip() for key in os.getenv("FERNET_KEYS", "").split(",") if key.strip()]
 if not fernet_keys:
     single_fernet = os.getenv("FERNET_KEY")
@@ -134,8 +130,7 @@ if not DEBUG:
 # Content Security Policy (basic; override via env vars)
 # EV-0031: sem Tailwind Play CDN (compilador em runtime) em nenhum template — o
 # `'unsafe-eval'` e os hosts cdn.tailwindcss.com / cdnjs.cloudflare.com saíram.
-# EV-0075: sem cdn.jsdelivr.net — o Chart.js do dashboard legado (`dashboard.html`,
-# `traffic_chart.js`) é servido de `static/vendor/chartjs/`.
+# EV-0075/EV-0079: sem cdn.jsdelivr.net (o dashboard legado, que usava o Chart.js, saiu).
 # Ficam: fonts.googleapis.com/fonts.gstatic.com (o SDK do Google Maps carrega
 # Roboto/Google Sans de lá) e os hosts do Google Maps/Mapbox.
 CSP_DEFAULT_SRC = os.getenv("CSP_DEFAULT_SRC", "'self'").split()

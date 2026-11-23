@@ -30,8 +30,6 @@ def test_prod_profile_matches_current_behaviour():
     assert prod.DEBUG is False
     assert prod.ALLOWED_HOSTS == ["provemaps.example.org", "localhost"]
     assert prod.CSRF_COOKIE_HTTPONLY is False  # o frontend lê o cookie csrftoken
-    assert prod.USE_VUE_DASHBOARD is True
-    assert prod.VUE_DASHBOARD_ROLLOUT_PERCENTAGE == 100
     assert prod.DATABASES["default"]["CONN_MAX_AGE"] == 0
     # cache do base, não a configuração com HiredisParser (não existe no redis-py 7)
     assert "PARSER_CLASS" not in str(prod.CACHES)

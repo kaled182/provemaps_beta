@@ -18,9 +18,6 @@ export default {
     '../backend/*/templates/**/*.html',
     '../backend/static/js/**/*.js',
     '../backend/setup_app/static/js/**/*.js',
-    '../backend/maps_view/static/js/*.js',
-    // Classes de estado do dashboard legado (`host.status_class`).
-    '../backend/monitoring/usecases.py',
     // form_first_time_setup.js monta `border-${cor}-500` / `bg-${cor}-500/10`.
     { raw: 'border-green-500 bg-green-500/10 bg-green-500 border-blue-500 bg-blue-500/10 bg-blue-500' },
   ],

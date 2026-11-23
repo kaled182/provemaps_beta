@@ -48,12 +48,6 @@
       ENABLE_URL_PERSISTENCE: "True"
       # Disable Debug Toolbar in Docker (prevents redirect interception)
       ENABLE_DEBUG_TOOLBAR: "False"
-      # Dashboard Vue 3 (Phase 11). EV-0077: a omissão era 0 % — com USE_VUE_DASHBOARD ligado,
-      # toda a gente recebia o dashboard LEGADO depois do login (LOGIN_REDIRECT_URL aponta para
-      # /monitoring/monitoring-all/). 100 % = igual ao settings.prod. Rollback sem rebuild:
-      # VUE_DASHBOARD_ROLLOUT_PERCENTAGE=0 no docker/.env e `up -d web`.
-      USE_VUE_DASHBOARD: "${USE_VUE_DASHBOARD:-true}"
-      VUE_DASHBOARD_ROLLOUT_PERCENTAGE: "${VUE_DASHBOARD_ROLLOUT_PERCENTAGE:-100}"
       # Sentry APM (Phase 12 - Error Tracking & Performance Monitoring)
       SENTRY_DSN: "https://2b2a767ff10ec5ce098ba093c054a300@o4510353484742656.ingest.us.sentry.io/4510353502371840"
       SENTRY_ENVIRONMENT: "development"

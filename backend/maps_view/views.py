@@ -12,12 +12,12 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import render
 from prometheus_client import REGISTRY, generate_latest
+
+from monitoring.usecases import get_sites_with_devices_data
 from setup_app.services import runtime_settings
 
-from .services import get_hosts_status_data
 from .realtime.events import build_dashboard_payload
-from monitoring.usecases import get_sites_with_devices_data
-
+from .services import get_hosts_status_data
 
 logger = logging.getLogger(__name__)
 
@@ -29,63 +29,18 @@ def build_dashboard_event_payload():
 
 # ----------------------------- Views -----------------------------
 
+
 def dashboard_view(request):
-    """Dashboard entrypoint.
+    """Dashboard entrypoint: serve sempre o SPA Vue 3.
 
-    When feature flag ``USE_VUE_DASHBOARD`` is enabled this serves the Vue 3
-    SPA (static HTML from ``staticfiles/vue-spa/index.html``).
-    Otherwise it falls back to the legacy Django template ``dashboard.html``.
-
-    Canary rollout: If ``VUE_DASHBOARD_ROLLOUT_PERCENTAGE`` is set (0-100),
-    only that percentage of users will see the Vue dashboard.
-    User assignment is based on session ID hash for consistency.
+    EV-0079: o dashboard legado (``dashboard.html``, ``js/dashboard.js``, ``js/traffic_chart.js``)
+    e o canário por ``USE_VUE_DASHBOARD``/``VUE_DASHBOARD_ROLLOUT_PERCENTAGE`` saíram — desde o
+    EV-0077 o rollout estava a 100 % e ninguém recebia o legado.
     """
-    import hashlib
-
-    google_maps_key = (
-        runtime_settings.get_runtime_config().google_maps_api_key
-        or getattr(settings, 'GOOGLE_MAPS_API_KEY', '')
+    google_maps_key = runtime_settings.get_runtime_config().google_maps_api_key or getattr(
+        settings, "GOOGLE_MAPS_API_KEY", ""
     )
-
-    template_name = 'dashboard.html'
-    use_vue = getattr(settings, 'USE_VUE_DASHBOARD', False)
-
-    if use_vue:
-        # Canary rollout logic
-        rollout_pct = getattr(
-            settings, 'VUE_DASHBOARD_ROLLOUT_PERCENTAGE', 100
-        )
-
-        if rollout_pct < 100:
-            # Ensure session exists
-            if not request.session.session_key:
-                request.session.create()
-
-            # Hash session ID to get consistent user assignment
-            session_key = request.session.session_key or ""
-            session_hash = hashlib.md5(
-                session_key.encode()
-            ).hexdigest()
-            user_bucket = int(session_hash[:8], 16) % 100
-
-            # Serve Vue to users in rollout bucket
-            if user_bucket < rollout_pct:
-                template_name = 'spa.html'
-        else:
-            # 100% rollout - serve Vue to everyone
-            template_name = 'spa.html'
-
-    context = {
-            'GOOGLE_MAPS_API_KEY': google_maps_key,
-            'USE_VUE_DASHBOARD': getattr(
-                settings, 'USE_VUE_DASHBOARD', False
-            ),
-            'VUE_DASHBOARD_ROLLOUT_PERCENTAGE': getattr(
-                settings, 'VUE_DASHBOARD_ROLLOUT_PERCENTAGE', 0
-            ),
-        }
-
-    return render(request, template_name, context)
+    return render(request, "spa.html", {"GOOGLE_MAPS_API_KEY": google_maps_key})
 
 
 @login_required

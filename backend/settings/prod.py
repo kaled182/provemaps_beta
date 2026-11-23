@@ -200,8 +200,6 @@ if REDIS_USE_SENTINEL:
 # -----------------------------------------------------
 # Frontend / versão (iguais ao que a produção corria em settings.dev — EV-0037)
 # -----------------------------------------------------
-USE_VUE_DASHBOARD = os.getenv("USE_VUE_DASHBOARD", "true").lower() == "true"
-VUE_DASHBOARD_ROLLOUT_PERCENTAGE = int(os.getenv("VUE_DASHBOARD_ROLLOUT_PERCENTAGE", "100"))
 GIT_SHA = os.getenv("GIT_SHA", "")  # cozido na imagem quando o deploy o passa (EV-0039)
 
 # -----------------------------------------------------

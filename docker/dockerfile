@@ -64,8 +64,6 @@ COPY backend/inventory/templates/ /app/backend/inventory/templates/
 COPY backend/service_accounts/templates/ /app/backend/service_accounts/templates/
 COPY backend/static/js/ /app/backend/static/js/
 COPY backend/setup_app/static/js/ /app/backend/setup_app/static/js/
-COPY backend/maps_view/static/js/ /app/backend/maps_view/static/js/
-COPY backend/monitoring/usecases.py /app/backend/monitoring/usecases.py
 RUN npm run build
 
 RUN ls -lah /app/backend/staticfiles/vue-spa/ && \

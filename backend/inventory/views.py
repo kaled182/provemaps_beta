@@ -10,15 +10,11 @@ from setup_app.services.runtime_settings import get_runtime_config
 @login_required
 def fiber_route_builder(request: HttpRequest) -> HttpResponse:
     config = get_runtime_config()
-    google_maps_key = (
-        config.google_maps_api_key
-        or getattr(settings, "GOOGLE_MAPS_API_KEY", "")
-    )
+    google_maps_key = config.google_maps_api_key or getattr(settings, "GOOGLE_MAPS_API_KEY", "")
 
-    use_vue = getattr(settings, "USE_VUE_DASHBOARD", False)
-    force_legacy = request.GET.get("legacy") == "1"
-
-    if use_vue and not force_legacy:
+    # EV-0079: a flag USE_VUE_DASHBOARD saiu; o SPA é o padrão (como já era em produção).
+    # O construtor legado ainda responde a `?legacy=1` — apagá-lo é outro item.
+    if request.GET.get("legacy") != "1":
         return render(
             request,
             "spa.html",
