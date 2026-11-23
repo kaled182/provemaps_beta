@@ -117,15 +117,15 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**A fazer (4)**
+**A fazer (1)**
 
 🐛 Problemas
-- `EV-0032` **Healthcheck de produção bate em `/healthz/` com barra e recebe 302 para o login; o nginx responde «healthy» estático sem consultar o backend** · por triar · agente · há 49 dias
-- `EV-0080` **Apagar uma conta de serviço apaga em cascata os tokens e a auditoria dela** · por triar · admin · há 0 dias
 - `EV-0081` **129 portas com chaves Zabbix que não existem em nenhum host; portas 334/514 com TX 32,2471 constante** · por triar · admin · há 0 dias
 
-💡 Ideias
-- `EV-0079` **Apagar o dashboard legado (dashboard.html, traffic_chart.js, Chart.js vendor) — ninguém o recebe desde o EV-0077** · por triar · admin · há 0 dias
+**Entrada, por triar (1)**
+
+🐛 Problemas
+- `EV-0082` **Itens Zabbix nunca coletados ou «unsupported» ficam gravados como 0,00 dBm — leitura inventada (ex.: ponta B do cabo ELAGRO-SANTA TEREZINHA)** · por triar · admin · há 0 dias
 
 <!-- EVOLUCAO:FIM -->
 
