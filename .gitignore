@@ -263,5 +263,6 @@ backend/nul
 backups/*.md
 backups/*.txt
 
-# Chave Fernet local (segredo; nunca versionar)
+# Ficheiros locais de database/ (segredo ou gerados; nunca versionar)
 database/fernet.key
+database/provemaps.crontab
