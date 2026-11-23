@@ -62,7 +62,7 @@
         <!-- Device Edit Modal -->
         <Teleport to="body">
           <Transition name="modal">
-            <div v-if="showEditModal" class="modal-overlay" @click.self="closeEditModal">
+            <div v-if="showEditModal" class="modal-overlay site-edit-overlay" @click.self="closeEditModal">
               <div class="edit-modal-container" :class="{ dark: isDark }">
                 <!-- Header -->
                 <div class="edit-modal-header">
@@ -1542,6 +1542,11 @@ onUnmounted(() => {
 }
 
 /* Camera Modal Styles */
+/* Edição do equipamento por cima do BaseModal (3000); .modal-overlay é global e fica a 1040 */
+.site-edit-overlay {
+  z-index: 3100;
+}
+
 .camera-modal-overlay {
   position: fixed;
   top: 0;
@@ -1552,7 +1557,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1060;
+  z-index: 3200; /* acima do BaseModal (3000) do modal de Site */
   padding: 20px;
 }
 
@@ -1741,7 +1746,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1100;
+  z-index: 3300;
   padding: 20px;
 }
 

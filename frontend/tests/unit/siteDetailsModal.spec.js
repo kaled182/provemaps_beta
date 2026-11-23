@@ -6,6 +6,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { ref } from 'vue'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import {
   deriveDeviceStatus,
   countDeviceStatuses,
@@ -138,5 +140,23 @@ describe('SiteDetailsModal', () => {
     q('[data-testid="base-modal-close"]').click()
     expect(w.emitted('close')).toHaveLength(1)
     w.unmount()
+  })
+})
+
+describe('modais filhos por cima do BaseModal (regressão do EV-0065)', () => {
+  const read = (p) => readFileSync(resolve(__dirname, '../../src', p), 'utf8')
+  const zOf = (css, selector) => {
+    const m = css.match(new RegExp(`${selector.replace('.', '\\.')}\\s*\\{[^}]*?z-index:\\s*(\\d+)`))
+    return m ? Number(m[1]) : null
+  }
+
+  it('edição, câmeras e mosaico abrem acima do modal de Site', () => {
+    const base = zOf(read('components/Common/BaseModal.vue'), '.bm-backdrop')
+    const site = read('components/SiteDetailsModal.vue')
+    expect(base).toBeGreaterThan(0)
+    expect(site).toContain('class="modal-overlay site-edit-overlay"')
+    for (const sel of ['.site-edit-overlay', '.camera-modal-overlay', '.mosaic-modal-overlay']) {
+      expect(zOf(site, sel), sel).toBeGreaterThan(base)
+    }
   })
 })
