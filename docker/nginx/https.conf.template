@@ -13,6 +13,24 @@ server {
         root /var/www/certbot;
     }
 
+    # EV-0047: o healthcheck do container bate aqui por HTTP em 127.0.0.1. Sem esta
+    # rota era redirecionado para https://127.0.0.1 (certificado do domínio → falha)
+    # e o nginx ficava sempre «unhealthy». Proxy ao /healthz real: o nginx só está
+    # saudável se o Django responder. Só para o próprio container.
+    location = /healthz {
+        # de fora continua o redirect para HTTPS (não 403)
+        error_page 403 = @to_https;
+        allow 127.0.0.1;
+        deny all;
+        access_log off;
+        proxy_pass http://web:8000/healthz;
+        proxy_set_header Host localhost;
+    }
+
+    location @to_https {
+        return 301 https://$host$request_uri;
+    }
+
     location / {
         return 301 https://$host$request_uri;
     }

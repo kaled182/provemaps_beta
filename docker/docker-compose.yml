@@ -345,7 +345,8 @@
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "nginx -t 2>/dev/null && wget -qO- http://localhost/healthz || exit 1"]
+      # EV-0047: 127.0.0.1 (localhost resolvia para ::1, onde o nginx não escuta)
+      test: ["CMD-SHELL", "nginx -t 2>/dev/null && wget -qO- http://127.0.0.1/healthz || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
