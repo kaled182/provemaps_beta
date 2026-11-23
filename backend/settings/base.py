@@ -114,6 +114,12 @@ CSRF_TRUSTED_ORIGINS = [
     origin.strip() for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if origin.strip()
 ]
 
+# Sondas de saúde do Docker (`/healthz`, `/ready`, `/live`) batem em http://localhost
+# dentro do container: com SECURE_SSL_REDIRECT iriam para https://localhost:8000, onde
+# não há TLS, e o web ficava «unhealthy» — e o nginx (depends_on: service_healthy) não
+# arrancaria. Ficam isentas; tudo o resto continua a ser redirecionado (EV-0046).
+SECURE_REDIRECT_EXEMPT = [r"^healthz/?$", r"^ready/?$", r"^live/?$"]
+
 # Extra security toggles when DEBUG is disabled
 if not DEBUG:
     SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "True").lower() == "true"
