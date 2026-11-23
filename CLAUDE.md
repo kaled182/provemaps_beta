@@ -122,10 +122,11 @@ log em inglês, como já está.
 🐛 Problemas
 - `EV-0081` **129 portas com chaves Zabbix que não existem em nenhum host; portas 334/514 com TX 32,2471 constante** · por triar · admin · há 0 dias
 
-**Entrada, por triar (1)**
+**Entrada, por triar (2)**
 
 🐛 Problemas
 - `EV-0082` **Itens Zabbix nunca coletados ou «unsupported» ficam gravados como 0,00 dBm — leitura inventada (ex.: ponta B do cabo ELAGRO-SANTA TEREZINHA)** · por triar · admin · há 0 dias
+- `EV-0083` **Produção aceita qualquer cabeçalho Host: o docker-compose.yml força ALLOWED_HOSTS="*" e ignora a lista do .env (envenenamento de links, ex.: recuperação de senha)** · por triar · admin · há 0 dias
 
 <!-- EVOLUCAO:FIM -->
 
