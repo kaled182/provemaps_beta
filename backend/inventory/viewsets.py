@@ -367,6 +367,15 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                 status=500,
             )
 
+    @extend_schema(
+        summary="CPU, memória e uptime de vários equipamentos numa chamada ao Zabbix",
+        description=(
+            "`cpu_source`/`memory_source`: `zabbix` (medido), `manual` (valor configurado "
+            "no equipamento) ou null. `last_collected`: lastclock mais recente das métricas. "
+            "`zabbix_error: true` quando o Zabbix não respondeu (EV-0058)."
+        ),
+        responses={200: OpenApiTypes.OBJECT},
+    )
     @action(detail=False, methods=["get"], url_path="metrics-batch")
     def metrics_batch(self, request):
         """
@@ -435,7 +444,12 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                 ),
                 "uptime_seconds": None,
                 "uptime_human": None,
+                # EV-0058: de onde vem o número — manual não é medição
+                "cpu_source": "manual" if d.cpu_usage_manual_percent is not None else None,
+                "memory_source": ("manual" if d.memory_usage_manual_percent is not None else None),
+                "last_collected": None,
             }
+        zabbix_error = False
 
         # Uma única consulta ao Zabbix para todos os hostids+keys
         if hostid_to_device and all_keys:
@@ -445,7 +459,7 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                 raw = zabbix_request(
                     "item.get",
                     {
-                        "output": ["key_", "lastvalue", "hostid"],
+                        "output": ["key_", "lastvalue", "lastclock", "hostid"],
                         "hostids": list(hostid_to_device.keys()),
                         "filter": {"key_": list(all_keys)},
                     },
@@ -465,6 +479,11 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                         bucket = results.get(str(device.id))
                         if bucket is None:
                             continue
+                        clock = _lastclock_iso(it.get("lastclock"))
+                        if clock and (
+                            bucket["last_collected"] is None or clock > bucket["last_collected"]
+                        ):
+                            bucket["last_collected"] = clock
 
                         if key == device.uptime_item_key:
                             try:
@@ -484,25 +503,22 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                             except (ValueError, TypeError):
                                 bucket["uptime_human"] = str(last)
                         elif key == device.cpu_usage_item_key:
-                            try:
-                                bucket["cpu"] = float(last)
-                            except (ValueError, TypeError):
-                                try:
-                                    bucket["cpu"] = float(str(last).replace("%", ""))
-                                except (ValueError, TypeError):
-                                    pass
+                            value = _percent_or_none(last)
+                            if value is not None:
+                                bucket["cpu"] = value
+                                bucket["cpu_source"] = "zabbix"
                         elif key == getattr(device, "memory_usage_item_key", None):
-                            try:
-                                bucket["memory"] = float(last)
-                            except (ValueError, TypeError):
-                                try:
-                                    bucket["memory"] = float(str(last).replace("%", ""))
-                                except (ValueError, TypeError):
-                                    pass
+                            value = _percent_or_none(last)
+                            if value is not None:
+                                bucket["memory"] = value
+                                bucket["memory_source"] = "zabbix"
+                else:
+                    zabbix_error = raw is None
             except Exception as exc:
                 logger.warning("Zabbix batch metrics failed: %s", exc, exc_info=True)
+                zabbix_error = True
 
-        return Response({"results": results})
+        return Response({"results": results, "zabbix_error": zabbix_error})
 
     @action(detail=True, methods=["get"], url_path="metrics")
     def metrics(self, request, pk=None):
@@ -847,6 +863,27 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                 },
             }
         )
+
+
+def _percent_or_none(value):
+    """`'12.5'`/`'12.5%'` → 12.5; ilegível → None."""
+    try:
+        return float(str(value).replace("%", "").strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _lastclock_iso(value):
+    """lastclock do Zabbix (epoch s) → ISO 8601 UTC; 0/ausente → None."""
+    try:
+        seconds = int(value)
+    except (TypeError, ValueError):
+        return None
+    if seconds <= 0:
+        return None
+    from datetime import UTC, datetime
+
+    return datetime.fromtimestamp(seconds, tz=UTC).isoformat()
 
 
 class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]

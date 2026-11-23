@@ -80,6 +80,12 @@ const routes = [
     component: () => import('@/views/LinksView.vue'),
   },
   {
+    // EV-0058: equipamentos com estado, uptime, CPU e portas ópticas
+    path: '/ativos',
+    name: 'assets',
+    component: () => import('@/views/AssetsView.vue'),
+  },
+  {
     path: '/network/inventory',
     name: 'inventory',
     component: () => import('@/components/Inventory/InventoryView.vue'),

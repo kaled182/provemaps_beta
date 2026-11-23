@@ -1152,7 +1152,12 @@ def api_devices_zabbix_status(request: HttpRequest) -> JsonResponse:
             logger.info(f"[Zabbix Status] Resposta Zabbix: {result}")
         except Exception as e:
             logger.error(f"Erro ao buscar status Zabbix em batch: {e}")
-            return JsonResponse({"statuses": {str(d_id): "unknown" for d_id in device_ids}})
+            result = None
+        if result is None:
+            # EV-0058: «Zabbix fora» ≠ «estado desconhecido» até à UI (CLAUDE.md §7)
+            return JsonResponse(
+                {"statuses": {str(d_id): "unknown" for d_id in device_ids}, "zabbix_error": True}
+            )
 
         # Mapeia hostid → status
         hostid_status = {}

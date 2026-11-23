@@ -224,6 +224,7 @@ def _end_payload(port: Port | None, snapshot: dict[str, Any], now: Any) -> dict[
     return {
         "port_id": snapshot.get("port_id"),
         "port_name": snapshot.get("port_name"),
+        "device_id": getattr(device, "id", None),
         "device_name": getattr(device, "name", None),
         "site_name": getattr(site, "display_name", None) if site else None,
         "rx": snapshot.get("rx"),

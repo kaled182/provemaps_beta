@@ -22,6 +22,7 @@ import {
   PhBook,
   PhFaders,
   PhLineSegments,
+  PhHardDrives,
 } from '@phosphor-icons/vue';
 
 export const NAV_SECTIONS = Object.freeze([
@@ -42,6 +43,7 @@ export const NAV_SECTIONS = Object.freeze([
     icon: PhShareNetwork,
     items: [
       { label: 'Enlaces & fibra', path: '/enlaces', icon: PhLineSegments },
+      { label: 'Ativos', path: '/ativos', icon: PhHardDrives },
       { label: 'Projeto de rede', path: '/Network/NetworkDesign/', icon: PhGitBranch },
       { label: 'Inventário', path: '/network/inventory', icon: PhListBullets },
       { label: 'Importar dispositivos', path: '/Network/DeviceImport/', icon: PhPlusCircle },
