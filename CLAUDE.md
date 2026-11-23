@@ -103,7 +103,11 @@ log em inglês, como já está.
 <!-- EVOLUCAO:INICIO — quadro manual até a Central (app `evolucao`) estar em produção e semeada; depois `make evolucao-sync` gera este bloco. -->
 **A fazer** — padronização de modais (pedido do Paulo 2026-11-23, dividida em 5 e aceita: «5 itens nesta ordem»). As cores vêm dos tokens do ADR 0007 (o pedido trazia hex `#111827`/ciano `#06B6D4`; a decisão de paleta de 2026-11-23 mantém o teal/Slate do CRM):
 
-- `EV-0068` **Varrer os restantes modais com gradiente roxo/azul-marinho** para o `BaseModal` · Ideia · ~15 componentes (`grep -rln "#667eea\|#764ba2\|purple-\|violet-"`)
+- `EV-0068` **Varrer os restantes modais (gradiente roxo/azul-marinho, `window.confirm`) para o `BaseModal`** · Ideia · ~17 modais, ~9.000 linhas — dividido em três fatias pelo Paulo 2026-11-23 («Sim pode dividir»), cada uma com deploy próprio:
+  - `EV-0068a` mapa e portas: `AlarmConfigModal`, `ConnectivityMapModal`, `PortActionsModal`, `PortTrafficModal`, sub-modais do Site (edição do equipamento, câmeras, mosaico) e a configuração de alarmes do Cabo
+  - `EV-0068b` inventário: `DeviceImport/DeviceEditModal` (1.581), `Inventory/Fiber/{FiberConnectionModal,FiberCreateModal}`, `Inventory/Fibers/CableStructureModal`, `Inventory/Groups/DeviceGroupEditModal`, `FiberCableQuickModal`
+  - `EV-0068c` configuração e manutenção: `Configuration/{ContactEditModal,ContactImportModal,BulkMessageModal,BackupServiceSettingsModal}`, `monitoring/components/MaintenanceNotifyModal`
+  - Fora: as outras ocorrências do `grep` não são modais (badges `purple-*` no Inventário/Utilizadores/EditorSidebar) ou são código morto (`components/Site/*`, EV-0070; `TraceRoute/IntegrationExample.vue`)
 
 **Entrada, por triar — 🐛 Problemas** (abertos pelo assistente com prova; a triagem é do Paulo)
 
