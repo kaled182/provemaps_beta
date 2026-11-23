@@ -54,6 +54,18 @@ RUN npm ci
 RUN mkdir -p /app/backend/staticfiles/vue-spa/assets
 
 COPY frontend/ ./
+# EV-0031: o `content` do tailwind.config.js lê os templates Django (login em 2 passos, setup,
+# dashboard legado) e o JS legado que monta classes. Sem estes ficheiros neste estágio, o CSS
+# da imagem sairia sem as classes deles — o login iria para produção sem estilo.
+COPY backend/templates/ /app/backend/templates/
+COPY backend/maps_view/templates/ /app/backend/maps_view/templates/
+COPY backend/setup_app/templates/ /app/backend/setup_app/templates/
+COPY backend/inventory/templates/ /app/backend/inventory/templates/
+COPY backend/service_accounts/templates/ /app/backend/service_accounts/templates/
+COPY backend/static/js/ /app/backend/static/js/
+COPY backend/setup_app/static/js/ /app/backend/setup_app/static/js/
+COPY backend/maps_view/static/js/ /app/backend/maps_view/static/js/
+COPY backend/monitoring/usecases.py /app/backend/monitoring/usecases.py
 RUN npm run build
 
 RUN ls -lah /app/backend/staticfiles/vue-spa/ && \

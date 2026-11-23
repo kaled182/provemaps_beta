@@ -6,24 +6,19 @@
   <title>Login | Monitoring Portal</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="icon" type="image/x-icon" href="{% static 'favicon.ico' %}">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            portal: {
-              light: '#E6F0FF',
-              DEFAULT: '#004AAD',
-              dark: '#002E6D',
-            },
-          },
-        },
-      },
-    };
-  </script>
+  {# EV-0031: Tailwind vem do CSS do build do Vite (manifest), não do Play CDN. #}
+  {# As cores «portal» (antes no tailwind.config inline) são valores arbitrários: #}
+  {# [#E6F0FF] = #E6F0FF, [#002E6D] = #002E6D. #}
+  {% static 'vue-spa/' as vite_base %}
+  {% if VITE_ENTRY %}
+    {% for css in VITE_ENTRY.css %}
+      <link rel="stylesheet" href="{{ vite_base }}{{ css }}">
+    {% endfor %}
+  {% else %}
+    <link rel="stylesheet" href="{% static 'vue-spa/assets/main.css' %}?v={{ STATIC_ASSET_VERSION|default:'1' }}">
+  {% endif %}
 </head>
-<body class="h-full bg-portal-dark flex items-center justify-center p-6">
+<body class="h-full bg-[#002E6D] flex items-center justify-center p-6">
 
   <div class="w-full max-w-sm animate-fade-in">
     <div class="bg-white/10 backdrop-blur-md rounded-2xl shadow-2xl border border-white/20 p-8">
@@ -72,29 +67,29 @@
         <div>
           <label for="id_username" class="block text-sm font-medium text-gray-100">Username</label>
           <input type="text" name="username" autofocus required id="id_username" autocomplete="username"
-                 class="mt-1 w-full rounded-lg border border-white/20 bg-white/10 text-white placeholder-gray-300 focus:ring-2 focus:ring-portal-light focus:border-portal-light transition duration-150 ease-in-out">
+                 class="mt-1 w-full rounded-lg border border-white/20 bg-white/10 text-white placeholder-gray-300 focus:ring-2 focus:ring-[#E6F0FF] focus:border-[#E6F0FF] transition duration-150 ease-in-out">
         </div>
 
         <div>
           <label for="id_password" class="block text-sm font-medium text-gray-100">Password</label>
           <input type="password" name="password" required id="id_password" autocomplete="current-password"
-                 class="mt-1 w-full rounded-lg border border-white/20 bg-white/10 text-white placeholder-gray-300 focus:ring-2 focus:ring-portal-light focus:border-portal-light transition duration-150 ease-in-out">
+                 class="mt-1 w-full rounded-lg border border-white/20 bg-white/10 text-white placeholder-gray-300 focus:ring-2 focus:ring-[#E6F0FF] focus:border-[#E6F0FF] transition duration-150 ease-in-out">
         </div>
 
         <div class="flex items-center justify-between">
           <label class="flex items-center gap-2 text-xs text-gray-200">
             <input id="remember" name="remember" type="checkbox"
-                   class="h-4 w-4 rounded border-gray-400 bg-white/10 text-portal-light focus:ring-portal-light">
+                   class="h-4 w-4 rounded border-gray-400 bg-white/10 text-[#E6F0FF] focus:ring-[#E6F0FF]">
             Remember me
           </label>
           <a href="/accounts/password_reset/"
-             class="text-xs text-portal-light hover:text-white hover:underline transition">
+             class="text-xs text-[#E6F0FF] hover:text-white hover:underline transition">
              Forgot password
           </a>
         </div>
 
         <button type="submit"
-                class="w-full rounded-lg bg-portal-light py-2.5 text-portal-dark font-semibold hover:bg-white hover:text-portal-dark focus:outline-none focus:ring-4 focus:ring-portal-light/40 transition-all duration-200 shadow-lg">
+                class="w-full rounded-lg bg-[#E6F0FF] py-2.5 text-[#002E6D] font-semibold hover:bg-white hover:text-[#002E6D] focus:outline-none focus:ring-4 focus:ring-[#E6F0FF]/40 transition-all duration-200 shadow-lg">
           Sign in
         </button>
 

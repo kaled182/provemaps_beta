@@ -132,14 +132,17 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Content Security Policy (basic; override via env vars)
-# Allow trusted CDNs for Chart.js, Tailwind CSS, and Google Maps API
+# EV-0031: sem Tailwind Play CDN (compilador em runtime) em nenhum template — o
+# `'unsafe-eval'` e os hosts cdn.tailwindcss.com / cdnjs.cloudflare.com saíram.
+# Ficam: cdn.jsdelivr.net (Chart.js do dashboard legado `dashboard.html` e de
+# `maps_view/static/js/traffic_chart.js`, só com USE_VUE_DASHBOARD desligado),
+# fonts.googleapis.com/fonts.gstatic.com (o SDK do Google Maps carrega Roboto/Google
+# Sans de lá) e os hosts do Google Maps/Mapbox.
 CSP_DEFAULT_SRC = os.getenv("CSP_DEFAULT_SRC", "'self'").split()
 CSP_SCRIPT_SRC = os.getenv(
     "CSP_SCRIPT_SRC",
-    "'self' 'unsafe-inline' 'unsafe-eval' "
+    "'self' 'unsafe-inline' "
     "https://cdn.jsdelivr.net "
-    "https://cdn.tailwindcss.com "
-    "https://cdnjs.cloudflare.com "
     "https://maps.googleapis.com "
     "https://api.mapbox.com "
     "https://events.mapbox.com "
@@ -147,11 +150,7 @@ CSP_SCRIPT_SRC = os.getenv(
 ).split()
 CSP_STYLE_SRC = os.getenv(
     "CSP_STYLE_SRC",
-    "'self' 'unsafe-inline' "
-    "https://cdn.tailwindcss.com "
-    "https://cdnjs.cloudflare.com "
-    "https://fonts.googleapis.com "
-    "https://api.mapbox.com",
+    "'self' 'unsafe-inline' https://fonts.googleapis.com https://api.mapbox.com",
 ).split()
 CSP_IMG_SRC = os.getenv(
     "CSP_IMG_SRC",
@@ -168,7 +167,7 @@ CSP_IMG_SRC = os.getenv(
 ).split()
 CSP_FONT_SRC = os.getenv(
     "CSP_FONT_SRC",
-    "'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com https://api.mapbox.com",
+    "'self' data: https://fonts.gstatic.com https://api.mapbox.com",
 ).split()
 CSP_CONNECT_SRC = os.getenv(
     "CSP_CONNECT_SRC",

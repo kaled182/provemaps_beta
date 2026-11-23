@@ -11,6 +11,18 @@ export default {
     './src/**/*.{vue,js}',
     // O shell Django do SPA também usa utilitários (body/html).
     '../backend/templates/base_spa.html',
+    // EV-0031: os templates Django legados (login em 2 passos, setup, dashboard
+    // legado, configuração) deixaram o Play CDN e usam este CSS — as classes deles,
+    // dos partials que incluem e do JS legado que monta HTML/classes têm de entrar aqui.
+    '../backend/templates/**/*.html',
+    '../backend/*/templates/**/*.html',
+    '../backend/static/js/**/*.js',
+    '../backend/setup_app/static/js/**/*.js',
+    '../backend/maps_view/static/js/*.js',
+    // Classes de estado do dashboard legado (`host.status_class`).
+    '../backend/monitoring/usecases.py',
+    // form_first_time_setup.js monta `border-${cor}-500` / `bg-${cor}-500/10`.
+    { raw: 'border-green-500 bg-green-500/10 bg-green-500 border-blue-500 bg-blue-500/10 bg-blue-500' },
   ],
   safelist: [
     // SiteDetailsModal monta `grid-cols-${cols}` a partir do layout do mosaico.
