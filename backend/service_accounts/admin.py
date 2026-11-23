@@ -280,6 +280,14 @@ class ServiceAccountAuditLogAdmin(AuditLogAdminBase):
     ) -> bool:
         return False
 
+    def has_delete_permission(
+        self,
+        request: HttpRequest,
+        obj: ServiceAccountAuditLog | None = None,
+    ) -> bool:
+        # EV-0078: a auditoria não se apaga no admin (nem por superuser).
+        return False
+
 
 @admin.register(ServiceAccountToken)
 class ServiceAccountTokenAdmin(TokenAdminBase):
@@ -331,6 +339,15 @@ class ServiceAccountTokenAdmin(TokenAdminBase):
         request: HttpRequest,
         obj: ServiceAccountToken | None = None,
     ) -> bool:
+        return False
+
+    def has_delete_permission(
+        self,
+        request: HttpRequest,
+        obj: ServiceAccountToken | None = None,
+    ) -> bool:
+        # EV-0078: um token revoga-se (ação «Revogar tokens selecionados»), não se apaga —
+        # apagar perdia o registo e o rasto. Vale também para superusers.
         return False
 
     def has_manage_permission(self, request: HttpRequest) -> bool:

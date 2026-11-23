@@ -161,3 +161,31 @@ def test_manager_sees_revoke_action(account) -> None:
     request.user = _staff("manager2", "manage_tokens")
     model_admin = admin.site._registry[ServiceAccountToken]
     assert ACTION in model_admin.get_actions(request)
+
+
+# ── EV-0078: tokens e auditoria não se apagam no admin (nem por superuser) ──────────────
+
+
+@pytest.mark.django_db
+def test_superuser_cannot_delete_tokens(admin_client: Client, account) -> None:
+    _, token = account.create_token()
+    model_admin = admin.site._registry[ServiceAccountToken]
+    request = RequestFactory().get("/")
+    request.user = get_user_model().objects.get(username="admin")
+    assert model_admin.has_delete_permission(request, token) is False
+    assert "delete_selected" not in model_admin.get_actions(request)
+
+    url = reverse("admin:service_accounts_serviceaccounttoken_delete", args=[token.pk])
+    assert admin_client.post(url, {"post": "yes"}).status_code == 403
+    assert ServiceAccountToken.objects.filter(pk=token.pk).exists()
+
+
+@pytest.mark.django_db
+def test_superuser_cannot_delete_audit_log(admin_client: Client, account) -> None:
+    _, token = account.create_token()
+    token.revoke(reason="teste")
+    entry = ServiceAccountAuditLog.objects.filter(account=account).first()
+    assert entry is not None
+    url = reverse("admin:service_accounts_serviceaccountauditlog_delete", args=[entry.pk])
+    assert admin_client.post(url, {"post": "yes"}).status_code == 403
+    assert ServiceAccountAuditLog.objects.filter(pk=entry.pk).exists()
