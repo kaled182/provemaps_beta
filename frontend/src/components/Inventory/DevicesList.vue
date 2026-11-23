@@ -1,13 +1,13 @@
 <template>
-  <div class="h-full flex flex-col gap-6 relative">
+  <div class="h-full flex flex-col gap-3 relative">
     <!-- KPIs -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2">
       <div class="kpi-card">
         <div>
           <p class="kpi-label">Total</p>
           <p class="kpi-value">{{ kpis.total }}</p>
         </div>
-        <div class="kpi-icon bg-blue-50 text-blue-600 dark:bg-blue-900/20">
+        <div class="kpi-icon bg-info/10 text-info">
           <i class="fas fa-server"></i>
         </div>
       </div>
@@ -15,9 +15,9 @@
       <div class="kpi-card">
         <div>
           <p class="kpi-label">Online</p>
-          <p class="kpi-value text-green-600 dark:text-green-400">{{ kpis.online }}</p>
+          <p class="kpi-value text-success">{{ kpis.online }}</p>
         </div>
-        <div class="kpi-icon bg-green-50 text-green-600 dark:bg-green-900/20">
+        <div class="kpi-icon bg-success/10 text-success">
           <i class="fas fa-check-circle"></i>
         </div>
       </div>
@@ -25,9 +25,9 @@
       <div class="kpi-card">
         <div>
           <p class="kpi-label">Offline</p>
-          <p class="kpi-value text-red-600 dark:text-red-400">{{ kpis.offline }}</p>
+          <p class="kpi-value text-danger">{{ kpis.offline }}</p>
         </div>
-        <div class="kpi-icon bg-red-50 text-red-600 dark:bg-red-900/20">
+        <div class="kpi-icon bg-danger/10 text-danger">
           <i class="fas fa-exclamation-triangle"></i>
         </div>
       </div>
@@ -35,38 +35,38 @@
       <div class="kpi-card">
         <div>
           <p class="kpi-label">Sites</p>
-          <p class="kpi-value text-gray-900 dark:text-white">{{ kpis.sites }}</p>
+          <p class="kpi-value text-neutral-900">{{ kpis.sites }}</p>
         </div>
-        <div class="kpi-icon bg-purple-50 text-purple-600 dark:bg-purple-900/20">
+        <div class="kpi-icon bg-primary-50 text-primary-600">
           <i class="fas fa-map-marker-alt"></i>
         </div>
       </div>
     </div>
 
     <!-- Toolbar de filtros -->
-    <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col lg:flex-row gap-3 items-start lg:items-center justify-between">
+    <div class="bg-surface px-3 py-2 rounded-lg border border-neutral-200 flex flex-col lg:flex-row gap-3 items-start lg:items-center justify-between">
       <div class="relative w-full lg:w-96">
-        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400"></i>
         <input
           v-model="filters.search"
           type="text"
           placeholder="Buscar por nome, IP ou HostID..."
-          class="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+          class="w-full pl-10 pr-4 py-2 rounded-lg border border-neutral-300 bg-neutral-50 text-neutral-900 focus:ring-2 focus:ring-primary-500 outline-none"
         />
       </div>
 
       <div class="flex flex-wrap gap-2 w-full lg:w-auto justify-end items-center">
-        <select v-model="filters.site" class="filter-select dark:bg-gray-900 dark:border-gray-700">
+        <select v-model="filters.site" class="filter-select">
           <option value="">Todos os Sites</option>
           <option v-for="site in sitesOptions" :key="site" :value="site">{{ site }}</option>
         </select>
 
-        <select v-model="filters.vendor" class="filter-select dark:bg-gray-900 dark:border-gray-700">
+        <select v-model="filters.vendor" class="filter-select">
           <option value="">Todos os Fabricantes</option>
           <option v-for="vendor in vendorOptions" :key="vendor" :value="vendor">{{ vendor }}</option>
         </select>
 
-        <select v-model="filters.status" class="filter-select dark:bg-gray-900 dark:border-gray-700">
+        <select v-model="filters.status" class="filter-select">
           <option value="">Todos Status</option>
           <option value="online">Online</option>
           <option value="offline">Offline</option>
@@ -74,7 +74,7 @@
         </select>
 
         <button
-          class="px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-200 rounded-lg transition-colors flex items-center gap-2"
+          class="px-3 py-2 bg-surface border border-neutral-300 hover:bg-neutral-100 text-neutral-600 rounded-lg transition-colors flex items-center gap-2"
           title="Atualizar status Zabbix"
           :disabled="refreshing"
           @click="refreshStatuses"
@@ -86,19 +86,19 @@
         <div class="relative">
           <button
             @click="showColumnsMenu = !showColumnsMenu"
-            class="px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-200 rounded-lg transition-colors flex items-center gap-2"
+            class="px-3 py-2 bg-surface border border-neutral-300 hover:bg-neutral-100 text-neutral-600 rounded-lg transition-colors flex items-center gap-2"
           >
             <i class="fas fa-columns"></i>
             <span class="hidden sm:inline">Colunas</span>
           </button>
           <div
             v-if="showColumnsMenu"
-            class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-2 z-30"
+            class="absolute right-0 mt-2 w-48 bg-surface border border-neutral-200 rounded-lg shadow-lg p-2 z-30"
           >
             <label
               v-for="col in columns"
               :key="col.key"
-              class="flex items-center gap-2 px-2 py-1 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded"
+              class="flex items-center gap-2 px-2 py-1 text-sm text-neutral-700 hover:bg-neutral-50 rounded"
             >
               <input type="checkbox" v-model="col.visible" />
               <span>{{ col.label }}</span>
@@ -107,7 +107,7 @@
         </div>
 
         <button
-          class="px-4 py-2 bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-200 rounded-lg transition-colors"
+          class="px-4 py-2 bg-neutral-100 border border-neutral-300 hover:bg-neutral-200 text-neutral-600 rounded-lg transition-colors"
           title="Limpar filtros"
           @click="clearFilters"
         >
@@ -117,23 +117,23 @@
     </div>
 
     <!-- Tabela -->
-    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex-1 overflow-hidden flex flex-col">
+    <div class="bg-surface rounded-xl shadow-sm border border-neutral-200 flex-1 overflow-hidden flex flex-col">
       <div class="flex-1 overflow-auto inventory-scroll">
-        <div v-if="loading" class="p-6 text-center text-gray-500 dark:text-gray-400">Carregando devices...</div>
-        <div v-else-if="error" class="p-6 text-red-600 dark:text-red-300">{{ error }}</div>
-        <div v-else-if="filteredDevices.length === 0" class="flex flex-col items-center justify-center py-12 text-gray-400">
+        <div v-if="loading" class="p-6 text-center text-neutral-500">Carregando devices...</div>
+        <div v-else-if="error" class="p-6 text-danger">{{ error }}</div>
+        <div v-else-if="filteredDevices.length === 0" class="flex flex-col items-center justify-center py-12 text-neutral-400">
           <i class="fas fa-search text-4xl mb-3 opacity-20"></i>
           <p>Nenhum dispositivo encontrado.</p>
         </div>
         <table v-else class="w-full text-left border-collapse">
-          <thead class="bg-gray-50 dark:bg-gray-800 sticky top-0 z-20">
+          <thead class="bg-neutral-50 sticky top-0 z-20">
             <tr>
               <th class="th w-10 text-center">
                 <input
                   type="checkbox"
                   :checked="isAllSelected"
                   @change="toggleSelectAll"
-                  class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  class="rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
                 />
               </th>
               <th v-if="isVisible('status')" class="th w-32">Status</th>
@@ -144,60 +144,54 @@
               <th v-if="isVisible('hostid')" class="th text-right">HostID</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-            <tr v-for="device in filteredDevices" :key="device.id" class="group hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-              <td class="px-5 py-4 text-center align-middle">
+          <tbody class="divide-y divide-neutral-100">
+            <tr v-for="device in filteredDevices" :key="device.id" class="group hover:bg-neutral-50 transition-colors">
+              <td class="px-3 py-1.5 text-center align-middle">
                 <input
                   type="checkbox"
                   :checked="selectedIds.has(device.id)"
                   @change="toggleSelection(device.id)"
-                  class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  class="rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
                 />
               </td>
 
-              <td v-if="isVisible('status')" class="px-5 py-4 align-middle">
+              <td v-if="isVisible('status')" class="px-3 py-1.5 align-middle">
                 <div class="flex items-center gap-2" :title="statusTooltip(device)">
                   <span :class="['status-dot', statusClass(device)]"></span>
-                  <span class="text-xs text-gray-500 dark:text-gray-400 capitalize">{{ displayStatus(device) }}</span>
+                  <span class="text-xs text-neutral-500 capitalize">{{ displayStatus(device) }}</span>
                 </div>
               </td>
 
-              <td v-if="isVisible('device')" class="px-5 py-4 align-middle">
-                <div class="flex items-center gap-3">
-                  <div class="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300">
-                    <i :class="roleIcon(device)"></i>
-                  </div>
-                  <div>
-                    <div class="font-bold text-gray-900 dark:text-white text-sm">{{ device.name }}</div>
-                    <div class="text-xs text-indigo-500 dark:text-indigo-300" v-if="device.group_name">
-                      {{ device.group_name }}
-                    </div>
-                  </div>
+              <td v-if="isVisible('device')" class="px-3 py-1.5 align-middle">
+                <div class="flex items-center gap-2 whitespace-nowrap">
+                  <i :class="[roleIcon(device), 'w-4 text-center text-neutral-500']"></i>
+                  <span class="font-semibold text-neutral-900 text-sm">{{ device.name }}</span>
+                  <span v-if="device.group_name" class="text-xs text-primary-600 truncate">{{ device.group_name }}</span>
                 </div>
               </td>
 
-              <td v-if="isVisible('ip')" class="px-5 py-4 align-middle">
+              <td v-if="isVisible('ip')" class="px-3 py-1.5 align-middle">
                 <button
                   @click="copyToClipboard(device.primary_ip || device.ip)"
-                  class="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group/ip"
+                  class="flex items-center gap-2 px-1.5 py-0.5 rounded hover:bg-neutral-100 transition-colors group/ip"
                 >
-                  <span class="font-mono text-sm text-gray-700 dark:text-gray-200">{{ device.primary_ip || device.ip || '—' }}</span>
-                  <i class="fas fa-copy text-xs text-gray-300 group-hover/ip:text-indigo-500 transition-colors"></i>
+                  <span class="font-mono text-sm tabular-nums text-neutral-700">{{ device.primary_ip || device.ip || '—' }}</span>
+                  <i class="fas fa-copy text-xs text-neutral-300 group-hover/ip:text-primary-500 transition-colors"></i>
                 </button>
               </td>
 
-              <td v-if="isVisible('site')" class="px-5 py-4 align-middle">
+              <td v-if="isVisible('site')" class="px-3 py-1.5 align-middle">
                 <div class="flex flex-col">
-                  <span class="text-sm font-medium text-gray-700 dark:text-gray-200">{{ siteLabel(device) || '—' }}</span>
+                  <span class="text-sm font-medium text-neutral-700">{{ siteLabel(device) || '—' }}</span>
                 </div>
               </td>
 
-              <td v-if="isVisible('vendor')" class="px-5 py-4 align-middle">
-                <div class="text-sm text-gray-700 dark:text-gray-300">{{ device.vendor || '—' }}</div>
-                <div class="text-xs text-gray-500">{{ device.model || '—' }}</div>
+              <td v-if="isVisible('vendor')" class="px-3 py-1.5 align-middle">
+                <span class="text-sm text-neutral-700 whitespace-nowrap">{{ device.vendor || '—' }}</span>
+                <span class="text-xs text-neutral-500 whitespace-nowrap"> · {{ device.model || '—' }}</span>
               </td>
 
-              <td v-if="isVisible('hostid')" class="px-5 py-4 text-right text-sm text-gray-600 dark:text-gray-300 align-middle">
+              <td v-if="isVisible('hostid')" class="px-3 py-1.5 text-right text-sm text-neutral-600 align-middle font-mono tabular-nums">
                 {{ device.zabbix_hostid || '—' }}
               </td>
             </tr>
@@ -205,7 +199,7 @@
         </table>
       </div>
 
-      <div class="border-t border-gray-200 dark:border-gray-700 px-6 py-3 bg-gray-50 dark:bg-gray-700/30 flex justify-between items-center text-xs text-gray-500">
+      <div class="border-t border-neutral-200 px-6 py-3 bg-neutral-50 flex justify-between items-center text-xs text-neutral-500">
         <span>Mostrando {{ filteredDevices.length }} de {{ devices.length }} registros</span>
       </div>
     </div>
@@ -220,53 +214,24 @@
     >
       <div
         v-if="selectedIds.size > 0"
-        class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-2xl rounded-full px-6 py-3 flex items-center gap-4 z-40"
+        class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-surface border border-neutral-200 shadow-2xl rounded-full px-6 py-3 flex items-center gap-4 z-40"
       >
-        <span class="text-sm font-medium text-gray-600 dark:text-gray-300 border-r border-gray-200 dark:border-gray-700 pr-4">
-          <span class="text-indigo-600 dark:text-indigo-400 font-bold">{{ selectedIds.size }}</span> selecionados
+        <span class="text-sm font-medium text-neutral-600 border-r border-neutral-200 pr-4">
+          <span class="text-primary-600 font-bold">{{ selectedIds.size }}</span> selecionados
         </span>
         <div class="flex gap-2">
-          <button @click="openGroupModal" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full text-gray-600 dark:text-gray-300" title="Mover para grupo">
+          <button @click="openGroupModal" class="p-2 hover:bg-neutral-100 rounded-full text-neutral-600" title="Mover para grupo">
             <i class="fas fa-layer-group"></i>
           </button>
-          <button @click="openStatusModal" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full text-gray-600 dark:text-gray-300" title="Modo manutenção">
+          <button @click="openStatusModal" class="p-2 hover:bg-neutral-100 rounded-full text-neutral-600" title="Modo manutenção">
             <i class="fas fa-tools"></i>
           </button>
-        </div>
-        <button @click="clearSelection" class="ml-2 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 underline">
-          Cancelar
-        </button>
-      </div>
-    </transition>
-
-    <transition
-      enter-active-class="transform ease-out duration-300 transition"
-      enter-from-class="translate-y-full opacity-0"
-      enter-to-class="translate-y-0 opacity-100"
-      leave-active-class="transition ease-in duration-200"
-      leave-from-class="translate-y-0 opacity-100"
-      leave-to-class="translate-y-full opacity-0"
-    >
-      <div
-        v-if="selectedIds.size > 0"
-        class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-2xl rounded-full px-6 py-3 flex items-center gap-4 z-40"
-      >
-        <span class="text-sm font-medium text-gray-600 dark:text-gray-300 border-r border-gray-200 dark:border-gray-700 pr-4">
-          <span class="text-indigo-600 dark:text-indigo-400 font-bold">{{ selectedIds.size }}</span> selecionados
-        </span>
-        <div class="flex gap-2">
-          <button @click="openGroupModal" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full text-gray-600 dark:text-gray-300" title="Mover para grupo">
-            <i class="fas fa-layer-group"></i>
-          </button>
-          <button @click="openStatusModal" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full text-gray-600 dark:text-gray-300" title="Modo manutenção">
-            <i class="fas fa-tools"></i>
-          </button>
-          <div class="w-px h-4 bg-gray-300 dark:bg-gray-600 my-auto"></div>
-          <button @click="confirmBulkDelete" class="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full text-red-600 dark:text-red-400" title="Excluir">
+          <div class="w-px h-4 bg-neutral-300 my-auto"></div>
+          <button @click="confirmBulkDelete" class="p-2 hover:bg-danger/10 rounded-full text-danger" title="Excluir">
             <i class="fas fa-trash-alt"></i>
           </button>
         </div>
-        <button @click="clearSelection" class="ml-2 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 underline">
+        <button @click="clearSelection" class="ml-2 text-xs text-neutral-400 hover:text-neutral-600 underline">
           Cancelar
         </button>
       </div>
@@ -274,36 +239,36 @@
 
     <!-- Modal de Grupo -->
     <div v-if="modals.group" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-gray-700">
-        <div class="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
-          <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <i class="fas fa-layer-group text-indigo-500"></i> Alterar Grupo
+      <div class="bg-surface rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-neutral-200">
+        <div class="p-6 border-b border-neutral-100 flex justify-between items-center">
+          <h3 class="text-lg font-bold text-neutral-900 flex items-center gap-2">
+            <i class="fas fa-layer-group text-primary-500"></i> Alterar Grupo
           </h3>
-          <button @click="modals.group = false" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+          <button @click="modals.group = false" class="text-neutral-400 hover:text-neutral-600">
             <i class="fas fa-times"></i>
           </button>
         </div>
         <div class="p-6">
-          <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
-            Selecione o novo grupo para os <span class="font-bold text-gray-900 dark:text-white">{{ selectedIds.size }}</span> dispositivos selecionados.
+          <p class="text-sm text-neutral-500 mb-4">
+            Selecione o novo grupo para os <span class="font-bold text-neutral-900">{{ selectedIds.size }}</span> dispositivos selecionados.
           </p>
-          <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Novo Grupo</label>
+          <label class="block text-xs font-bold text-neutral-500 uppercase mb-2">Novo Grupo</label>
           <div class="relative">
-            <select v-model="forms.groupTarget" class="w-full appearance-none bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500">
+            <select v-model="forms.groupTarget" class="w-full appearance-none bg-neutral-50 border border-neutral-300 text-neutral-900 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-primary-500">
               <option value="" disabled>Selecione um grupo...</option>
               <option v-for="group in availableGroups" :key="group.id" :value="group.id">{{ group.name }}</option>
             </select>
-            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
+            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-neutral-500">
               <i class="fas fa-chevron-down text-xs"></i>
             </div>
           </div>
         </div>
-        <div class="p-4 bg-gray-50 dark:bg-gray-700/50 flex justify-end gap-3">
-          <button @click="modals.group = false" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg font-medium text-sm">Cancelar</button>
+        <div class="p-4 bg-neutral-50 flex justify-end gap-3">
+          <button @click="modals.group = false" class="px-4 py-2 text-neutral-600 hover:bg-neutral-200 rounded-lg font-medium text-sm">Cancelar</button>
           <button
             @click="saveBulkGroup"
             :disabled="!forms.groupTarget"
-            class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm shadow-sm flex items-center gap-2"
+            class="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm shadow-sm flex items-center gap-2"
           >
             <i class="fas fa-save"></i> Salvar Mudanças
           </button>
@@ -313,44 +278,44 @@
 
     <!-- Modal de Status / Manutenção -->
     <div v-if="modals.status" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-gray-700">
-        <div class="p-6 border-b border-gray-100 dark:border-gray-700">
-          <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <i class="fas fa-tools text-orange-500"></i> Gestão de Status
+      <div class="bg-surface rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-neutral-200">
+        <div class="p-6 border-b border-neutral-100">
+          <h3 class="text-lg font-bold text-neutral-900 flex items-center gap-2">
+            <i class="fas fa-tools text-warning"></i> Gestão de Status
           </h3>
-          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          <p class="text-xs text-neutral-500 mt-1">
             Dispositivos: {{ selectedIds.size }} selecionados
           </p>
         </div>
         <div class="p-6 space-y-4">
-          <div class="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-100 dark:border-blue-800 flex gap-3">
-            <i class="fas fa-info-circle text-blue-500 mt-0.5"></i>
-            <p class="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+          <div class="bg-info/10 p-3 rounded-lg border border-blue-100 flex gap-3">
+            <i class="fas fa-info-circle text-info mt-0.5"></i>
+            <p class="text-xs text-info leading-relaxed">
               O status <b>Online/Offline</b> é gerido automaticamente pelo Zabbix/SNMP. Use esta opção para definir janelas de manutenção.
             </p>
           </div>
           <div class="space-y-3">
-            <label class="flex items-center p-3 border border-gray-200 dark:border-gray-700 rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors" :class="{'ring-2 ring-green-500 border-transparent': forms.statusTarget === 'active'}">
-              <input type="radio" v-model="forms.statusTarget" value="active" class="w-4 h-4 text-green-600 focus:ring-green-500 border-gray-300 dark:border-gray-600" />
+            <label class="flex items-center p-3 border border-neutral-200 rounded-xl cursor-pointer hover:bg-neutral-50 transition-colors" :class="{'ring-2 ring-green-500 border-transparent': forms.statusTarget === 'active'}">
+              <input type="radio" v-model="forms.statusTarget" value="active" class="w-4 h-4 text-success focus:ring-green-500 border-neutral-300" />
               <div class="ml-3">
-                <span class="block text-sm font-bold text-gray-900 dark:text-white">Ativo (Monitorado)</span>
-                <span class="block text-xs text-gray-500">Alertas habilitados.</span>
+                <span class="block text-sm font-bold text-neutral-900">Ativo (Monitorado)</span>
+                <span class="block text-xs text-neutral-500">Alertas habilitados.</span>
               </div>
             </label>
-            <label class="flex items-center p-3 border border-gray-200 dark:border-gray-700 rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors" :class="{'ring-2 ring-orange-500 border-transparent': forms.statusTarget === 'maintenance'}">
-              <input type="radio" v-model="forms.statusTarget" value="maintenance" class="w-4 h-4 text-orange-600 focus:ring-orange-500 border-gray-300 dark:border-gray-600" />
+            <label class="flex items-center p-3 border border-neutral-200 rounded-xl cursor-pointer hover:bg-neutral-50 transition-colors" :class="{'ring-2 ring-orange-500 border-transparent': forms.statusTarget === 'maintenance'}">
+              <input type="radio" v-model="forms.statusTarget" value="maintenance" class="w-4 h-4 text-warning focus:ring-orange-500 border-neutral-300" />
               <div class="ml-3">
-                <span class="block text-sm font-bold text-gray-900 dark:text-white">Em Manutenção</span>
-                <span class="block text-xs text-gray-500">Silencia alertas temporariamente.</span>
+                <span class="block text-sm font-bold text-neutral-900">Em Manutenção</span>
+                <span class="block text-xs text-neutral-500">Silencia alertas temporariamente.</span>
               </div>
             </label>
           </div>
         </div>
-        <div class="p-4 bg-gray-50 dark:bg-gray-700/50 flex justify-end gap-3">
-          <button @click="modals.status = false" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg font-medium text-sm">Cancelar</button>
+        <div class="p-4 bg-neutral-50 flex justify-end gap-3">
+          <button @click="modals.status = false" class="px-4 py-2 text-neutral-600 hover:bg-neutral-200 rounded-lg font-medium text-sm">Cancelar</button>
           <button
             @click="saveBulkStatus"
-            class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm shadow-sm flex items-center gap-2"
+            class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium text-sm shadow-sm flex items-center gap-2"
           >
             <i class="fas fa-check"></i> Confirmar
           </button>
@@ -634,22 +599,22 @@ onMounted(async () => {
 
 <style scoped>
 .kpi-card {
-  @apply bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-between;
+  @apply bg-surface px-3 py-2 rounded-lg border border-neutral-200 flex items-center justify-between;
 }
 .kpi-label {
-  @apply text-xs font-semibold text-gray-500 uppercase tracking-wide;
+  @apply text-xs font-semibold text-neutral-500 uppercase tracking-wide;
 }
 .kpi-value {
-  @apply text-2xl font-bold text-gray-900 dark:text-white;
+  @apply text-xl font-semibold text-neutral-900 font-mono tabular-nums;
 }
 .kpi-icon {
-  @apply p-3 rounded-lg;
+  @apply p-2 rounded-md;
 }
 .filter-select {
-  @apply px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none;
+  @apply px-3 py-2 rounded-lg border border-neutral-300 bg-surface text-sm text-neutral-900 focus:ring-2 focus:ring-primary-500 outline-none;
 }
 .th {
-  @apply px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider;
+  @apply px-3 py-2 text-xs font-semibold text-neutral-500 uppercase tracking-wider;
 }
 .status-dot {
   @apply h-3 w-3 rounded-full inline-block;

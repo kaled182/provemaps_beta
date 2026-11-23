@@ -1,39 +1,39 @@
 <template>
-  <div class="h-full flex flex-col gap-6">
+  <div class="h-full flex flex-col gap-3">
     <!-- KPIs -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2">
       <div class="kpi-card">
         <p class="kpi-label">Total de Cabos</p>
         <p class="kpi-value">{{ cables.length }}</p>
       </div>
       <div class="kpi-card">
         <p class="kpi-label">Extensão Total</p>
-        <p class="kpi-value text-indigo-600 dark:text-indigo-400">
-          {{ totalKm }} <span class="text-sm text-gray-400 font-normal">km</span>
+        <p class="kpi-value text-primary-600">
+          {{ totalKm }} <span class="text-sm text-neutral-400 font-normal">km</span>
         </p>
       </div>
       <div class="kpi-card">
         <p class="kpi-label">Cabos Saturados (&gt;80%)</p>
-        <p class="kpi-value text-orange-600 dark:text-orange-400">{{ saturatedCables }}</p>
+        <p class="kpi-value text-warning">{{ saturatedCables }}</p>
       </div>
       <div class="kpi-card flex items-center justify-between">
         <div>
           <p class="kpi-label">Ocupação Média</p>
-          <p class="kpi-value text-blue-600 dark:text-blue-400">{{ averageOccupancy }}%</p>
+          <p class="kpi-value text-info">{{ averageOccupancy }}%</p>
         </div>
-        <i class="fas fa-fiber-core text-blue-300 dark:text-blue-700"></i>
+        <i class="fas fa-fiber-core text-blue-300"></i>
       </div>
     </div>
 
     <!-- Toolbar -->
-    <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col lg:flex-row gap-4 items-center justify-between">
+    <div class="bg-surface px-3 py-2 rounded-lg border border-neutral-200 flex flex-col lg:flex-row gap-3 items-center justify-between">
       <div class="relative w-full lg:w-96">
-        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400"></i>
         <input
           v-model="search"
           type="text"
           placeholder="Buscar cabo, site ou código..."
-          class="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+          class="w-full pl-10 pr-4 py-2 rounded-lg border border-neutral-300 bg-neutral-50 text-sm text-neutral-900 focus:ring-2 focus:ring-primary-500 outline-none"
         />
       </div>
 
@@ -52,14 +52,14 @@
           <option value="drop">Drop</option>
         </select>
 
-        <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
-          <input type="checkbox" v-model="onlySaturated" class="text-indigo-600 focus:ring-indigo-500 rounded" />
+        <label class="inline-flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+          <input type="checkbox" v-model="onlySaturated" class="text-primary-600 focus:ring-primary-500 rounded" />
           Cabos saturados
         </label>
 
         <button
           @click="openCreateModal"
-          class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm transition-colors flex items-center gap-2 text-sm font-medium whitespace-nowrap"
+          class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg shadow-sm transition-colors flex items-center gap-2 text-sm font-medium whitespace-nowrap"
         >
           <i class="fas fa-plus"></i> Novo Cabo
         </button>
@@ -67,14 +67,14 @@
     </div>
 
     <!-- Table -->
-    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex-1 overflow-hidden flex flex-col">
+    <div class="bg-surface rounded-xl shadow-sm border border-neutral-200 flex-1 overflow-hidden flex flex-col">
       <div class="overflow-auto flex-1">
-        <div v-if="loading" class="p-6 text-center text-gray-500 dark:text-gray-400">Carregando cabos...</div>
-        <div v-else-if="error" class="p-6 text-red-600 dark:text-red-300">{{ error }}</div>
-        <div v-else-if="filteredCables.length === 0" class="p-6 text-center text-gray-500 dark:text-gray-400">Nenhum cabo encontrado.</div>
+        <div v-if="loading" class="p-6 text-center text-neutral-500">Carregando cabos...</div>
+        <div v-else-if="error" class="p-6 text-danger">{{ error }}</div>
+        <div v-else-if="filteredCables.length === 0" class="p-6 text-center text-neutral-500">Nenhum cabo encontrado.</div>
 
         <table v-else class="w-full text-left border-collapse">
-          <thead class="bg-gray-50 dark:bg-gray-700/50 sticky top-0 z-10">
+          <thead class="bg-neutral-50 sticky top-0 z-10">
             <tr>
               <th class="th w-2"></th>
               <th class="th">Identificação</th>
@@ -84,41 +84,35 @@
               <th class="th text-right">Ações</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-            <tr v-for="cable in filteredCables" :key="cable.id" class="group hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-              <td class="px-0 py-4 relative">
-                <div :class="['absolute left-0 top-4 bottom-4 w-1 rounded-r-md', statusColor(cable.status)]"></div>
+          <tbody class="divide-y divide-neutral-100">
+            <tr v-for="cable in filteredCables" :key="cable.id" class="group hover:bg-neutral-50 transition-colors">
+              <td class="px-0 py-1.5 relative">
+                <div :class="['absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-md', statusColor(cable.status)]"></div>
               </td>
 
-              <td class="px-6 py-4">
-                <div class="flex items-center gap-3">
-                  <div class="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
-                    <i :class="cable.type === 'drop' ? 'fas fa-level-down-alt' : 'fas fa-project-diagram'"></i>
-                  </div>
-                  <div>
-                    <div class="font-bold text-gray-900 dark:text-white text-sm">{{ cable.name }}</div>
-                    <div class="text-xs text-gray-500">
-                      {{ cable.type || 'Backbone' }} • {{ cable.fiber_count || '?' }} FO
-                    </div>
-                  </div>
+              <td class="px-3 py-1.5">
+                <div class="flex items-center gap-2 whitespace-nowrap">
+                  <i :class="[cable.type === 'drop' ? 'fas fa-level-down-alt' : 'fas fa-project-diagram', 'w-4 text-center text-neutral-500']"></i>
+                  <span class="font-semibold text-neutral-900 text-sm">{{ cable.name }}</span>
+                  <span class="text-xs text-neutral-500 tabular-nums">{{ cable.type || 'Backbone' }} · {{ cable.fiber_count || '?' }} FO</span>
                 </div>
               </td>
 
-              <td class="px-6 py-4">
+              <td class="px-3 py-1.5">
                 <div v-if="cable.site_a_name || cable.site_b_name" class="flex items-center gap-2 text-sm">
                   <span class="pill blue" :title="cable.site_a_name">{{ cable.site_a_name }}</span>
-                  <i class="fas fa-arrow-right text-gray-300 text-xs"></i>
+                  <i class="fas fa-arrow-right text-neutral-300 text-xs"></i>
                   <span class="pill indigo" :title="cable.site_b_name">{{ cable.site_b_name }}</span>
                 </div>
                 
                 <div v-else class="flex items-center gap-2">
-                  <span class="text-xs text-gray-400 italic flex items-center gap-1">
+                  <span class="text-xs text-neutral-400 italic flex items-center gap-1">
                     <i class="fas fa-unlink text-xs"></i>
                     Não conectado
                   </span>
                   <button 
                     @click="openConnectionModal(cable)"
-                    class="text-xs bg-gray-100 dark:bg-gray-700 hover:bg-purple-50 dark:hover:bg-purple-900/20 text-purple-600 dark:text-purple-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-purple-300 transition-all font-medium"
+                    class="text-xs bg-neutral-100 hover:bg-primary-50 text-primary-600 px-2 py-1 rounded border border-neutral-200 hover:border-primary-300 transition-all font-medium"
                     title="Conectar cabo a sites"
                   >
                     <i class="fas fa-link mr-1"></i> Conectar
@@ -126,29 +120,29 @@
                 </div>
               </td>
 
-              <td class="px-6 py-4">
+              <td class="px-3 py-1.5">
                 <CapacityBar :used="cable.used_strands" :total="cable.fiber_count || 1" />
               </td>
 
-              <td class="px-6 py-4 text-right">
-                <span class="font-mono text-sm text-gray-700 dark:text-gray-300">{{ formatLength(cable.length) }}</span>
+              <td class="px-3 py-1.5 text-right">
+                <span class="font-mono text-sm tabular-nums text-neutral-700">{{ formatLength(cable.length) }}</span>
               </td>
 
-              <td class="px-6 py-4 text-right space-x-2">
+              <td class="px-3 py-1.5 text-right space-x-2">
                 <button 
                   @click="openStructureModal(cable)" 
-                  class="text-gray-400 hover:text-purple-600 p-1" 
+                  class="text-neutral-400 hover:text-primary-600 p-1" 
                   title="Ver estrutura física"
                 >
                   <i class="fas fa-bullseye"></i>
                 </button>
-                <button @click="goToRouteEditor(cable)" class="text-gray-400 hover:text-blue-600 p-1" title="Ver no mapa">
+                <button @click="goToRouteEditor(cable)" class="text-neutral-400 hover:text-info p-1" title="Ver no mapa">
                   <i class="fas fa-map-marked-alt"></i>
                 </button>
-                <button @click="handleEdit(cable)" class="text-gray-400 hover:text-indigo-600 p-1" title="Editar">
+                <button @click="handleEdit(cable)" class="text-neutral-400 hover:text-primary-600 p-1" title="Editar">
                   <i class="fas fa-edit"></i>
                 </button>
-                <button @click="handleDelete(cable)" class="text-gray-400 hover:text-red-600 p-1" title="Apagar cabo">
+                <button @click="handleDelete(cable)" class="text-neutral-400 hover:text-danger p-1" title="Apagar cabo">
                   <i class="fas fa-trash-alt"></i>
                 </button>
               </td>
@@ -683,27 +677,27 @@ const handleDelete = async (cable) => {
 
 <style scoped>
 .kpi-card {
-  @apply bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm;
+  @apply bg-surface px-3 py-2 rounded-lg border border-neutral-200;
 }
 .kpi-label {
-  @apply text-xs font-semibold text-gray-500 uppercase tracking-wide;
+  @apply text-xs font-semibold text-neutral-500 uppercase tracking-wide;
 }
 .kpi-value {
-  @apply text-2xl font-bold text-gray-900 dark:text-white;
+  @apply text-xl font-semibold text-neutral-900 font-mono tabular-nums;
 }
 .th {
-  @apply px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider;
+  @apply px-3 py-2 text-xs font-semibold text-neutral-500 uppercase tracking-wider;
 }
 .filter-select {
-  @apply px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none;
+  @apply px-3 py-2 rounded-lg border border-neutral-300 bg-surface text-sm text-neutral-900 focus:ring-2 focus:ring-primary-500 outline-none;
 }
 .pill {
-  @apply px-2 py-1 rounded text-sm font-medium truncate max-w-[140px];
+  @apply px-2 py-0.5 rounded text-xs font-medium truncate max-w-[160px];
 }
 .pill.blue {
-  @apply bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300;
+  @apply bg-info/10 text-info;
 }
 .pill.indigo {
-  @apply bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300;
+  @apply bg-primary-50 text-primary-700;
 }
 </style>
