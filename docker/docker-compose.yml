@@ -54,6 +54,7 @@
       INIT_MIGRATE: "true"
       # Ensure collectstatic runs in the container so static files are available to the web server
       INIT_COLLECTSTATIC: "true"
+      SYNC_SPA_ASSETS: "true"
       INIT_ENSURE_SUPERUSER: "true"
       CELERY_STATUS_TIMEOUT: "6"
       CELERY_PING_TIMEOUT: "2"
@@ -86,7 +87,9 @@
       - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
       - ../database:/app/database
       - ../logs:/app/backend/logs
-      - ../backend/staticfiles:/app/backend/staticfiles  # serve static files directly from host build output
+      # EV-0052: estáticos num volume (não na pasta do host). O SPA vem da imagem:
+      # o entrypoint copia /app/spa-dist para aqui a cada arranque (SYNC_SPA_ASSETS).
+      - static_data:/app/backend/staticfiles
 
   whatsapp-qr:
     build:
@@ -336,7 +339,7 @@
       - ./nginx:/etc/nginx/setup:ro          # configs e templates
       - certbot_www:/var/www/certbot         # desafio ACME
       - certbot_certs:/etc/letsencrypt       # certificados
-      - ../backend/staticfiles:/app/staticfiles:ro  # static files
+      - static_data:/app/staticfiles:ro  # mesmo volume que o web publica (EV-0052)
     depends_on:
       web:
         condition: service_healthy
@@ -349,6 +352,7 @@
       start_period: 60s
 
 volumes:
+  static_data:  # STATIC_ROOT: collectstatic + SPA da imagem (EV-0052)
   redis_data:
   postgres_data:
   whatsapp_qr_data:

@@ -124,6 +124,10 @@ COPY VERSION /app/VERSION
 
 # Assets do frontend (compilados no Stage 2)
 COPY --from=frontend-builder /app/backend/staticfiles/vue-spa/ /app/backend/staticfiles/vue-spa/
+# EV-0052: cópia fora do STATIC_ROOT. Em produção o STATIC_ROOT é um volume
+# (tapa o que a imagem traz em /app/backend/staticfiles); o entrypoint do web
+# copia daqui para o volume a cada arranque — o SPA no ar é sempre o da imagem.
+COPY --from=frontend-builder /app/backend/staticfiles/vue-spa/ /app/spa-dist/vue-spa/
 
 RUN ls -lah /app/backend/staticfiles/vue-spa/assets/ || echo "Frontend assets not found"
 

@@ -13,6 +13,7 @@
 #   WAIT_FOR_REDIS=true|false        # wait for Redis (default: true when REDIS_URL is set)
 #   INIT_MIGRATE=true|false          # run manage.py migrate before starting (default: false)
 #   INIT_COLLECTSTATIC=true|false    # run manage.py collectstatic --noinput (default: false)
+#   SYNC_SPA_ASSETS=true|false       # copia /app/spa-dist/vue-spa (imagem) para o STATIC_ROOT (EV-0052)
 #   MIGRATE_TIMEOUT=300              # migrate timeout (seconds)
 #   COLLECTSTATIC_TIMEOUT=120        # collectstatic timeout (seconds)
 
@@ -123,6 +124,32 @@ maybe_migrate() {
       run_manage migrate --noinput
     fi
     ok "Migrations applied"
+  fi
+}
+
+# EV-0052: publica no STATIC_ROOT (volume partilhado com o nginx) o SPA compilado
+# que veio na imagem. Troca o diretório inteiro de uma vez (cópia para .new + mv),
+# para não servir uma mistura de builds. Só corre com SYNC_SPA_ASSETS=true (web).
+maybe_sync_spa_assets() {
+  if [[ "${SYNC_SPA_ASSETS:-false}" != "true" ]]; then
+    return 0
+  fi
+  local src="/app/spa-dist/vue-spa"
+  local static_root="${DJANGO_STATIC_ROOT:-/app/backend/staticfiles}"
+  local dest="${static_root}/vue-spa"
+  if [[ ! -f "${src}/.vite/manifest.json" ]]; then
+    warn "SPA da imagem não encontrado em ${src} — mantém o que está em ${dest}"
+    return 0
+  fi
+  rm -rf "${dest}.new" "${dest}.old"
+  if cp -a "${src}" "${dest}.new"; then
+    [[ -d "${dest}" ]] && mv "${dest}" "${dest}.old"
+    mv "${dest}.new" "${dest}"
+    rm -rf "${dest}.old"
+    ok "SPA publicado a partir da imagem ($(grep -o '"file": *"assets/main-[^"]*' "${dest}/.vite/manifest.json" | head -1 | sed 's/.*assets\///'))"
+  else
+    rm -rf "${dest}.new"
+    warn "Falha a copiar o SPA da imagem — mantém o anterior"
   fi
 }
 
@@ -270,6 +297,7 @@ main() {
   maybe_generate_fernet_key
   maybe_migrate
   maybe_collectstatic
+  maybe_sync_spa_assets
   maybe_ensure_superuser
   maybe_init_app_data "$@"
 
