@@ -10,6 +10,10 @@
  *  - Global callbacks onModalOpened / onModalClosed
  */
 
+// Chart.js auto-hospedado (backend/static/vendor/chartjs, ver README.txt; EV-0075: sem CDN).
+// STATIC_URL é "/static/" (settings/base.py).
+const CHART_JS_LOCAL_SRC = '/static/vendor/chartjs/chart.umd.min.js';
+
 class TrafficChartManager {
     constructor() {
         this.instances = new Map();
@@ -334,25 +338,13 @@ class TrafficChartManager {
             if (!existing) document.head.appendChild(s);
         });
 
+        // EV-0075: Chart.js auto-hospedado (sem CDN). O dashboard.html já o carrega por
+        // <script>; isto só cobre páginas que incluam este ficheiro sem a tag. O plugin de
+        // zoom deixou de ser carregado: com a tag presente o return acima já o saltava, logo
+        // o comportamento não muda (a opção `zoom` é ignorada e o «Reset Zoom» tem guarda).
         try {
-            // Primeiro tenta dynamic import (navegadores modernos)
-            try {
-                this.chartLib = await import('https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js');
-            } catch (dynErr) {
-                console.warn('Dynamic import failed, falling back to a Chart.js script tag', dynErr);
-                await loadScript('https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js');
-                this.chartLib = { Chart: window.Chart };
-            }
-            // Plugin zoom
-            if (!window.chartjsPluginZoom) {
-                try {
-                    await import('https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js');
-                } catch (dynZoomErr) {
-                    console.warn('Dynamic import for the zoom plugin failed, falling back to a script tag');
-                    await loadScript('https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js');
-                }
-            }
-            console.info('Chart.js + Zoom plugin ready');
+            await loadScript(CHART_JS_LOCAL_SRC);
+            this.chartLib = { Chart: window.Chart };
         } catch (e) {
             console.error('Failed to load Chart.js:', e);
             throw e;

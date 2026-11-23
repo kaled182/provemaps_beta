@@ -134,15 +134,14 @@ if not DEBUG:
 # Content Security Policy (basic; override via env vars)
 # EV-0031: sem Tailwind Play CDN (compilador em runtime) em nenhum template — o
 # `'unsafe-eval'` e os hosts cdn.tailwindcss.com / cdnjs.cloudflare.com saíram.
-# Ficam: cdn.jsdelivr.net (Chart.js do dashboard legado `dashboard.html` e de
-# `maps_view/static/js/traffic_chart.js`, só com USE_VUE_DASHBOARD desligado),
-# fonts.googleapis.com/fonts.gstatic.com (o SDK do Google Maps carrega Roboto/Google
-# Sans de lá) e os hosts do Google Maps/Mapbox.
+# EV-0075: sem cdn.jsdelivr.net — o Chart.js do dashboard legado (`dashboard.html`,
+# `traffic_chart.js`) é servido de `static/vendor/chartjs/`.
+# Ficam: fonts.googleapis.com/fonts.gstatic.com (o SDK do Google Maps carrega
+# Roboto/Google Sans de lá) e os hosts do Google Maps/Mapbox.
 CSP_DEFAULT_SRC = os.getenv("CSP_DEFAULT_SRC", "'self'").split()
 CSP_SCRIPT_SRC = os.getenv(
     "CSP_SCRIPT_SRC",
     "'self' 'unsafe-inline' "
-    "https://cdn.jsdelivr.net "
     "https://maps.googleapis.com "
     "https://api.mapbox.com "
     "https://events.mapbox.com "
@@ -173,7 +172,6 @@ CSP_CONNECT_SRC = os.getenv(
     "CSP_CONNECT_SRC",
     "'self' "
     "https://maps.googleapis.com "
-    "https://cdn.jsdelivr.net "
     "https://maps.gstatic.com "
     "https://api.mapbox.com "
     "https://events.mapbox.com "
