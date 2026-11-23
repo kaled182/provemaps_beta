@@ -23,7 +23,7 @@
       DB_PORT: "5432"
       DB_NAME: app
       DB_USER: app
-      DJANGO_SETTINGS_MODULE: settings.dev
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-settings.prod}  # EV-0037 (dev local: DJANGO_SETTINGS_MODULE=settings.dev em docker/.env)
       # Aceita qualquer host/IP — configuração via web, sem precisar editar .env
       ALLOWED_HOSTS: "*"
       PYTHONPATH: "/app/backend:/app"
@@ -120,7 +120,7 @@
       DB_PORT: "5432"
       DB_NAME: app
       DB_USER: app
-      DJANGO_SETTINGS_MODULE: settings.dev
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-settings.prod}  # EV-0037 (dev local: DJANGO_SETTINGS_MODULE=settings.dev em docker/.env)
       ALLOWED_HOSTS: "*"
       PYTHONPATH: "/app/backend:/app"
       PYTHONUNBUFFERED: 1
@@ -169,7 +169,7 @@
       DB_PORT: "5432"
       DB_NAME: app
       DB_USER: app
-      DJANGO_SETTINGS_MODULE: settings.dev
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-settings.prod}  # EV-0037 (dev local: DJANGO_SETTINGS_MODULE=settings.dev em docker/.env)
       ALLOWED_HOSTS: "*"
       PYTHONPATH: "/app/backend:/app"
       PYTHONUNBUFFERED: 1
