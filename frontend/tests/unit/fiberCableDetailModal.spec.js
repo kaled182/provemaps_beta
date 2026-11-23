@@ -84,10 +84,12 @@ describe('FiberCableDetailModal (EV-0067)', () => {
     expect(sfc).toContain('const trafficExpandedDestination = ref(true)')
   })
 
-  it('a configuração de alarmes vive fora do BaseModal e acima dele', () => {
-    const end = sfc.indexOf('</BaseModal>')
-    expect(sfc.indexOf('class="alarm-modal-backdrop"')).toBeGreaterThan(end)
-    const css = sfc.slice(sfc.indexOf('.alarm-modal-backdrop {'))
-    expect(Number(css.match(/z-index:\s*(\d+)/)[1])).toBeGreaterThan(10000)
+  it('a configuração de alarmes é um BaseModal próprio, acima do do cabo', () => {
+    const first = sfc.indexOf('</BaseModal>')
+    const alarm = sfc.indexOf('<BaseModal\n    :show="showAlarmModal"')
+    expect(alarm).toBeGreaterThan(first)
+    expect(Number(sfc.slice(alarm).match(/:z-index="(\d+)"/)[1])).toBeGreaterThan(10000)
+    expect(sfc.slice(alarm, alarm + 400)).toContain(':dirty="alarmDirty"')
   })
+
 })

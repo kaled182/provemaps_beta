@@ -1,160 +1,151 @@
 <template>
-  <Teleport to="body">
-    <Transition name="modal">
-      <div v-if="isOpen" class="connectivity-modal-overlay" @click.self="close">
-        <div class="connectivity-modal-container" :class="{ dark: isDark }">
-          <!-- Header -->
-          <div class="connectivity-modal-header">
-            <h3>
-              <i class="fas fa-project-diagram"></i>
-              Mapa de Conectividade - {{ port?.name }}
-            </h3>
-            <button class="close-button" @click="close">
-              <i class="fas fa-times"></i>
-            </button>
+  <BaseModal
+    :show="isOpen"
+    :title="`Mapa de conectividade · ${port?.name || ''}`"
+    :icon="PhGraph"
+    :z-index="3500"
+    size="md"
+    @close="close"
+  >
+    <!-- Content -->
+    <div class="connectivity-modal-content">
+      <div v-if="loading" class="loading-state">
+        <i class="fas fa-spinner fa-spin"></i>
+        <span>Carregando conectividade...</span>
+      </div>
+
+      <div v-else class="connectivity-map">
+        <!-- Source Device/Port -->
+        <div class="connection-node source">
+          <div class="node-icon device">
+            <i class="fas fa-server"></i>
           </div>
-
-          <!-- Content -->
-          <div class="connectivity-modal-content">
-            <div v-if="loading" class="loading-state">
-              <i class="fas fa-spinner fa-spin"></i>
-              <span>Carregando conectividade...</span>
-            </div>
-
-            <div v-else class="connectivity-map">
-              <!-- Source Device/Port -->
-              <div class="connection-node source">
-                <div class="node-icon device">
-                  <i class="fas fa-server"></i>
-                </div>
-                <div class="node-info">
-                  <h4>{{ deviceInfo.name }}</h4>
-                  <p class="node-detail">{{ port?.name }}</p>
-                  <p class="node-detail">{{ deviceInfo.ip }}</p>
-                  <div v-if="port?.optical_tx_power !== null" class="signal-badge tx">
-                    <i class="fas fa-arrow-right"></i>
-                    TX: {{ port.optical_tx_power.toFixed(2) }} dBm
-                  </div>
-                </div>
-              </div>
-
-              <!-- Arrow -->
-              <div class="connection-arrow">
-                <i class="fas fa-long-arrow-alt-right"></i>
-              </div>
-
-              <!-- Cable -->
-              <div v-if="connectivity.cable" class="connection-node cable">
-                <div class="node-icon cable">
-                  <i class="fas fa-link"></i>
-                </div>
-                <div class="node-info">
-                  <h4>{{ connectivity.cable.name || `Cabo #${connectivity.cable.id}` }}</h4>
-                  <p class="node-detail">
-                    <i class="fas fa-ruler"></i>
-                    {{ connectivity.cable.length || 'N/A' }}m
-                  </p>
-                  <p v-if="connectivity.cable.fiber_count" class="node-detail">
-                    <i class="fas fa-network-wired"></i>
-                    {{ connectivity.cable.fiber_count }} fibras
-                  </p>
-                  <p v-if="connectivity.fiber" class="node-detail fiber">
-                    <i class="fas fa-circle"></i>
-                    Fibra {{ connectivity.fiber.number || connectivity.fiber.id }}
-                    <span v-if="connectivity.fiber.color" class="fiber-color" :style="{ backgroundColor: connectivity.fiber.color }"></span>
-                  </p>
-                </div>
-              </div>
-
-              <!-- Arrow -->
-              <div v-if="connectivity.cable" class="connection-arrow">
-                <i class="fas fa-long-arrow-alt-right"></i>
-              </div>
-
-              <!-- Destination Device/Port -->
-              <div v-if="connectivity.destinationPort" class="connection-node destination">
-                <div class="node-icon device">
-                  <i class="fas fa-server"></i>
-                </div>
-                <div class="node-info">
-                  <h4>{{ connectivity.destinationDevice?.name || 'Dispositivo Destino' }}</h4>
-                  <p class="node-detail">{{ connectivity.destinationPort.name }}</p>
-                  <p class="node-detail">{{ connectivity.destinationDevice?.ip || 'N/A' }}</p>
-                  <div v-if="connectivity.destinationPort.optical_rx_power !== null" class="signal-badge rx">
-                    <i class="fas fa-arrow-left"></i>
-                    RX: {{ connectivity.destinationPort.optical_rx_power.toFixed(2) }} dBm
-                  </div>
-                </div>
-              </div>
-
-              <!-- Not Connected -->
-              <div v-else class="connection-node disconnected">
-                <div class="node-icon">
-                  <i class="fas fa-question-circle"></i>
-                </div>
-                <div class="node-info">
-                  <h4>Não Conectado</h4>
-                  <p class="node-detail">Nenhuma porta de destino identificada</p>
-                </div>
-              </div>
-            </div>
-
-            <!-- Connection Details -->
-            <div v-if="!loading" class="connection-details">
-              <h4>Detalhes da Conexão</h4>
-              
-              <div class="detail-grid">
-                <div class="detail-item">
-                  <span class="detail-label">Status:</span>
-                  <span class="detail-value" :class="getConnectionStatus()">
-                    {{ getConnectionStatusLabel() }}
-                  </span>
-                </div>
-
-                <div v-if="connectivity.cable" class="detail-item">
-                  <span class="detail-label">Atenuação:</span>
-                  <span class="detail-value">
-                    {{ calculateAttenuation() }} dB
-                  </span>
-                </div>
-
-                <div v-if="connectivity.cable?.route" class="detail-item">
-                  <span class="detail-label">Rota:</span>
-                  <span class="detail-value">{{ connectivity.cable.route.name }}</span>
-                </div>
-
-                <div v-if="connectivity.fiber" class="detail-item">
-                  <span class="detail-label">Fibra:</span>
-                  <span class="detail-value">
-                    #{{ connectivity.fiber.number || connectivity.fiber.id }}
-                    {{ connectivity.fiber.color ? `(${connectivity.fiber.color})` : '' }}
-                  </span>
-                </div>
-
-                <div v-if="connectivity.cable?.installation_date" class="detail-item">
-                  <span class="detail-label">Instalação:</span>
-                  <span class="detail-value">
-                    {{ formatDate(connectivity.cable.installation_date) }}
-                  </span>
-                </div>
-
-                <div v-if="port?.vlan" class="detail-item">
-                  <span class="detail-label">VLAN:</span>
-                  <span class="detail-value">{{ port.vlan }}</span>
-                </div>
-              </div>
+          <div class="node-info">
+            <h4>{{ deviceInfo.name }}</h4>
+            <p class="node-detail">{{ port?.name }}</p>
+            <p class="node-detail">{{ deviceInfo.ip }}</p>
+            <div v-if="port?.optical_tx_power !== null" class="signal-badge tx">
+              <i class="fas fa-arrow-right"></i>
+              TX: {{ port.optical_tx_power.toFixed(2) }} dBm
             </div>
           </div>
         </div>
+
+        <!-- Arrow -->
+        <div class="connection-arrow">
+          <i class="fas fa-long-arrow-alt-right"></i>
+        </div>
+
+        <!-- Cable -->
+        <div v-if="connectivity.cable" class="connection-node cable">
+          <div class="node-icon cable">
+            <i class="fas fa-link"></i>
+          </div>
+          <div class="node-info">
+            <h4>{{ connectivity.cable.name || `Cabo #${connectivity.cable.id}` }}</h4>
+            <p class="node-detail">
+              <i class="fas fa-ruler"></i>
+              {{ connectivity.cable.length || 'N/A' }}m
+            </p>
+            <p v-if="connectivity.cable.fiber_count" class="node-detail">
+              <i class="fas fa-network-wired"></i>
+              {{ connectivity.cable.fiber_count }} fibras
+            </p>
+            <p v-if="connectivity.fiber" class="node-detail fiber">
+              <i class="fas fa-circle"></i>
+              Fibra {{ connectivity.fiber.number || connectivity.fiber.id }}
+              <span v-if="connectivity.fiber.color" class="fiber-color" :style="{ backgroundColor: connectivity.fiber.color }"></span>
+            </p>
+          </div>
+        </div>
+
+        <!-- Arrow -->
+        <div v-if="connectivity.cable" class="connection-arrow">
+          <i class="fas fa-long-arrow-alt-right"></i>
+        </div>
+
+        <!-- Destination Device/Port -->
+        <div v-if="connectivity.destinationPort" class="connection-node destination">
+          <div class="node-icon device">
+            <i class="fas fa-server"></i>
+          </div>
+          <div class="node-info">
+            <h4>{{ connectivity.destinationDevice?.name || 'Dispositivo Destino' }}</h4>
+            <p class="node-detail">{{ connectivity.destinationPort.name }}</p>
+            <p class="node-detail">{{ connectivity.destinationDevice?.ip || 'N/A' }}</p>
+            <div v-if="connectivity.destinationPort.optical_rx_power !== null" class="signal-badge rx">
+              <i class="fas fa-arrow-left"></i>
+              RX: {{ connectivity.destinationPort.optical_rx_power.toFixed(2) }} dBm
+            </div>
+          </div>
+        </div>
+
+        <!-- Not Connected -->
+        <div v-else class="connection-node disconnected">
+          <div class="node-icon">
+            <i class="fas fa-question-circle"></i>
+          </div>
+          <div class="node-info">
+            <h4>Não Conectado</h4>
+            <p class="node-detail">Nenhuma porta de destino identificada</p>
+          </div>
+        </div>
       </div>
-    </Transition>
-  </Teleport>
+
+      <!-- Connection Details -->
+      <div v-if="!loading" class="connection-details">
+        <h4>Detalhes da Conexão</h4>
+        
+        <div class="detail-grid">
+          <div class="detail-item">
+            <span class="detail-label">Status:</span>
+            <span class="detail-value" :class="getConnectionStatus()">
+              {{ getConnectionStatusLabel() }}
+            </span>
+          </div>
+
+          <div v-if="connectivity.cable" class="detail-item">
+            <span class="detail-label">Atenuação:</span>
+            <span class="detail-value">
+              {{ calculateAttenuation() }} dB
+            </span>
+          </div>
+
+          <div v-if="connectivity.cable?.route" class="detail-item">
+            <span class="detail-label">Rota:</span>
+            <span class="detail-value">{{ connectivity.cable.route.name }}</span>
+          </div>
+
+          <div v-if="connectivity.fiber" class="detail-item">
+            <span class="detail-label">Fibra:</span>
+            <span class="detail-value">
+              #{{ connectivity.fiber.number || connectivity.fiber.id }}
+              {{ connectivity.fiber.color ? `(${connectivity.fiber.color})` : '' }}
+            </span>
+          </div>
+
+          <div v-if="connectivity.cable?.installation_date" class="detail-item">
+            <span class="detail-label">Instalação:</span>
+            <span class="detail-value">
+              {{ formatDate(connectivity.cable.installation_date) }}
+            </span>
+          </div>
+
+          <div v-if="port?.vlan" class="detail-item">
+            <span class="detail-label">VLAN:</span>
+            <span class="detail-value">{{ port.vlan }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </BaseModal>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useApi } from '@/composables/useApi'
-import { useUiStore } from '@/stores/ui'
+import { PhGraph } from '@phosphor-icons/vue'
+import BaseModal from '@/components/Common/BaseModal.vue'
 
 const props = defineProps({
   isOpen: {
@@ -174,7 +165,6 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const { get } = useApi()
-const uiStore = useUiStore()
 
 const loading = ref(false)
 const connectivity = ref({
@@ -184,7 +174,6 @@ const connectivity = ref({
   destinationDevice: null
 })
 
-const isDark = computed(() => uiStore.theme === 'dark')
 
 const opticalWarningThreshold = ref(-24)
 const opticalCriticalThreshold = ref(-27)
@@ -291,89 +280,6 @@ watch(() => props.isOpen, (newVal) => {
 </script>
 
 <style scoped>
-.connectivity-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.75);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 12000;
-  padding: 20px;
-}
-
-.connectivity-modal-container {
-  background: #ffffff;
-  border-radius: 12px;
-  max-width: 900px;
-  width: 100%;
-  max-height: 85vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.connectivity-modal-container.dark {
-  background: #1e293b;
-  color: #f1f5f9;
-}
-
-.connectivity-modal-header {
-  padding: 20px;
-  border-bottom: 1px solid #e2e8f0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.connectivity-modal-container.dark .connectivity-modal-header {
-  border-bottom-color: #334155;
-}
-
-.connectivity-modal-header h3 {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #1e293b;
-}
-
-.connectivity-modal-container.dark .connectivity-modal-header h3 {
-  color: #f1f5f9;
-}
-
-.connectivity-modal-header h3 i {
-  color: #667eea;
-}
-
-.close-button {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: #f1f5f9;
-  border: none;
-  color: #64748b;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.connectivity-modal-container.dark .close-button {
-  background: #334155;
-  color: #cbd5e1;
-}
-
-.close-button:hover {
-  background: #e2e8f0;
-  transform: scale(1.1);
-}
 
 .connectivity-modal-content {
   flex: 1;
@@ -384,7 +290,7 @@ watch(() => props.isOpen, (newVal) => {
 .loading-state {
   text-align: center;
   padding: 60px 20px;
-  color: #64748b;
+  color: rgb(var(--n-500));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -402,13 +308,9 @@ watch(() => props.isOpen, (newVal) => {
   gap: 24px;
   margin-bottom: 32px;
   padding: 24px;
-  background: #f8fafc;
+  background: rgb(var(--n-50));
   border-radius: 12px;
   overflow-x: auto;
-}
-
-.connectivity-modal-container.dark .connectivity-map {
-  background: #0f172a;
 }
 
 .connection-node {
@@ -418,29 +320,25 @@ watch(() => props.isOpen, (newVal) => {
   gap: 12px;
   min-width: 180px;
   padding: 20px;
-  background: white;
+  background: rgb(var(--surface));
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.connectivity-modal-container.dark .connection-node {
-  background: #1e293b;
-}
-
 .connection-node.source {
-  border: 2px solid #3b82f6;
+  border: 2px solid rgb(var(--info));
 }
 
 .connection-node.destination {
-  border: 2px solid #10b981;
+  border: 2px solid rgb(var(--success));
 }
 
 .connection-node.cable {
-  border: 2px solid #8b5cf6;
+  border: 2px solid rgb(var(--primary-500));
 }
 
 .connection-node.disconnected {
-  border: 2px dashed #94a3b8;
+  border: 2px dashed rgb(var(--n-400));
   opacity: 0.6;
 }
 
@@ -455,22 +353,18 @@ watch(() => props.isOpen, (newVal) => {
 }
 
 .node-icon.device {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: rgb(var(--primary-600));
   color: white;
 }
 
 .node-icon.cable {
-  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  background: rgb(var(--primary-600));
   color: white;
 }
 
 .connection-node.disconnected .node-icon {
-  background: #e2e8f0;
-  color: #94a3b8;
-}
-
-.connectivity-modal-container.dark .connection-node.disconnected .node-icon {
-  background: #334155;
+  background: rgb(var(--n-200));
+  color: rgb(var(--n-400));
 }
 
 .node-info {
@@ -482,16 +376,12 @@ watch(() => props.isOpen, (newVal) => {
   font-size: 14px;
   font-weight: 600;
   margin: 0 0 8px 0;
-  color: #1e293b;
-}
-
-.connectivity-modal-container.dark .node-info h4 {
-  color: #f1f5f9;
+  color: rgb(var(--n-900));
 }
 
 .node-detail {
   font-size: 12px;
-  color: #64748b;
+  color: rgb(var(--n-500));
   margin: 4px 0;
   display: flex;
   align-items: center;
@@ -501,7 +391,7 @@ watch(() => props.isOpen, (newVal) => {
 
 .node-detail.fiber {
   font-weight: 600;
-  color: #8b5cf6;
+  color: rgb(var(--primary-500));
 }
 
 .fiber-color {
@@ -509,7 +399,7 @@ watch(() => props.isOpen, (newVal) => {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 1px solid #94a3b8;
+  border: 1px solid rgb(var(--n-400));
 }
 
 .signal-badge {
@@ -524,43 +414,31 @@ watch(() => props.isOpen, (newVal) => {
 }
 
 .signal-badge.tx {
-  background: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
+  background: rgb(var(--info) / 0.1);
+  color: rgb(var(--info));
 }
 
 .signal-badge.rx {
-  background: rgba(16, 185, 129, 0.1);
-  color: #10b981;
+  background: rgb(var(--success) / 0.1);
+  color: rgb(var(--success));
 }
 
 .connection-arrow {
   font-size: 32px;
-  color: #cbd5e1;
-}
-
-.connectivity-modal-container.dark .connection-arrow {
-  color: #475569;
+  color: rgb(var(--n-300));
 }
 
 .connection-details {
   padding: 24px;
-  background: #f8fafc;
+  background: rgb(var(--n-50));
   border-radius: 12px;
-}
-
-.connectivity-modal-container.dark .connection-details {
-  background: #0f172a;
 }
 
 .connection-details h4 {
   font-size: 16px;
   font-weight: 600;
   margin: 0 0 16px 0;
-  color: #1e293b;
-}
-
-.connectivity-modal-container.dark .connection-details h4 {
-  color: #f1f5f9;
+  color: rgb(var(--n-900));
 }
 
 .detail-grid {
@@ -578,7 +456,7 @@ watch(() => props.isOpen, (newVal) => {
 .detail-label {
   font-size: 12px;
   font-weight: 500;
-  color: #64748b;
+  color: rgb(var(--n-500));
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -586,28 +464,24 @@ watch(() => props.isOpen, (newVal) => {
 .detail-value {
   font-size: 14px;
   font-weight: 600;
-  color: #1e293b;
-}
-
-.connectivity-modal-container.dark .detail-value {
-  color: #f1f5f9;
+  color: rgb(var(--n-900));
 }
 
 .detail-value.good {
-  color: #10b981;
+  color: rgb(var(--success));
 }
 
 .detail-value.warning {
-  color: #f59e0b;
+  color: rgb(var(--warning));
 }
 
 .detail-value.critical {
-  color: #ef4444;
+  color: rgb(var(--danger));
 }
 
 .detail-value.disconnected,
 .detail-value.unknown {
-  color: #94a3b8;
+  color: rgb(var(--n-400));
 }
 
 @media (max-width: 768px) {

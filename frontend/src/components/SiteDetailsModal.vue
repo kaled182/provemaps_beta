@@ -59,191 +59,170 @@
     </div>
   </BaseModal>
 
-        <!-- Device Edit Modal -->
-        <Teleport to="body">
-          <Transition name="modal">
-            <div v-if="showEditModal" class="modal-overlay site-edit-overlay" @click.self="closeEditModal">
-              <div class="edit-modal-container" :class="{ dark: isDark }">
-                <!-- Header -->
-                <div class="edit-modal-header">
-                  <div class="header-content">
-                    <i class="fas fa-cog"></i>
-                    <h3>Editar Dispositivo</h3>
-                  </div>
-                  <button class="close-button" @click="closeEditModal">
-                    <i class="fas fa-times"></i>
-                  </button>
-                </div>
-
-                <!-- Content -->
-                <div class="edit-modal-content">
-                  <div class="form-section">
-                    <h4 class="section-title">Informações Básicas</h4>
-                    <div class="form-field">
-                      <label>Nome do Host</label>
-                      <input v-model="editForm.name" type="text" class="form-input" readonly />
-                    </div>
-                    <div class="form-field">
-                      <label>IP de Gerência</label>
-                      <div class="input-with-icon">
-                        <i class="fas fa-globe"></i>
-                        <input v-model="editForm.ip_address" type="text" class="form-input" readonly />
-                      </div>
-                    </div>
-                    <div class="form-field">
-                      <label>Zabbix HostID</label>
-                      <input v-model="editForm.zabbix_hostid" type="text" class="form-input" readonly />
-                    </div>
-                  </div>
-
-                  <div class="form-section">
-                    <h4 class="section-title">Zabbix & Métricas</h4>
-                    <div class="form-field">
-                      <label>Uptime item key</label>
-                      <input v-model="editForm.uptime_item_key" type="text" class="form-input" placeholder="ex: sysUpTime | system.uptime" />
-                      <p class="field-help">Zabbix item key para uptime (e.g. system.uptime)</p>
-                    </div>
-
-                    <div class="form-field">
-                      <label>Cpu usage item key</label>
-                      <input v-model="editForm.cpu_usage_item_key" type="text" class="form-input" placeholder="ex: system.cpu.util[,user]" />
-                      <p class="field-help">Zabbix item key para CPU usage (e.g. system.cpu.util[,user])</p>
-                    </div>
-
-                    <div class="form-field">
-                      <label>Memory usage item key</label>
-                      <input v-model="editForm.memory_usage_item_key" type="text" class="form-input" placeholder="ex: vm.memory.size[percent] | mem.util" />
-                      <p class="field-help">Zabbix item key para Memory usage (e.g. vm.memory.size[percent] ou mem.util)</p>
-                    </div>
-
-                    <div class="form-row">
-                      <div class="form-field">
-                        <label>Cpu usage manual percent</label>
-                        <input v-model.number="editForm.cpu_usage_manual_percent" type="number" step="0.1" min="0" max="100" class="form-input" placeholder="ex: 30" />
-                        <p class="field-help">Valor manual quando Zabbix estiver indisponível</p>
-                      </div>
-                      <div class="form-field">
-                        <label>Memory usage manual percent</label>
-                        <input v-model.number="editForm.memory_usage_manual_percent" type="number" step="0.1" min="0" max="100" class="form-input" placeholder="ex: 55" />
-                        <p class="field-help">Valor manual quando Zabbix estiver indisponível</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Footer -->
-                <div class="edit-modal-footer">
-                  <button @click="closeEditModal" class="btn-secondary">
-                    <i class="fas fa-times"></i> Cancelar
-                  </button>
-                  <button @click="saveDevice" class="btn-primary" :disabled="saving">
-                    <i class="fas fa-save" :class="{ 'fa-spin': saving }"></i>
-                    {{ saving ? 'Salvando...' : 'Salvar Device' }}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </Transition>
-        </Teleport>
-
-        <!-- Device Details Modal -->
-        <DeviceDetailsModal
-          :is-open="showDeviceDetailsModal"
-          :device="selectedDeviceForDetails"
-          @close="closeDeviceDetails"
-        />
-
-  <!-- Camera Mosaic Modal -->
-  <Teleport to="body">
-    <Transition name="modal">
-      <div v-if="showCameraModal" class="camera-modal-overlay" @click.self="closeCameraModal">
-        <div class="camera-modal-container">
-          <div class="camera-modal-header">
-            <h3>
-              <i class="fas fa-video"></i>
-              Câmeras - {{ site?.name }}
-            </h3>
-            <button class="camera-close-btn" @click="closeCameraModal">
-              <i class="fas fa-times"></i>
-            </button>
+  <!-- Edição do equipamento -->
+  <BaseModal
+    :show="showEditModal"
+    title="Editar dispositivo"
+    :subtitle="editForm.name"
+    :icon="PhGear"
+    :dirty="editDirty"
+    :z-index="3100"
+    size="md"
+    @close="closeEditModal"
+  >
+    <div class="edit-modal-content">
+      <div class="form-section">
+        <h4 class="section-title">Informações Básicas</h4>
+        <div class="form-field">
+          <label>Nome do Host</label>
+          <input v-model="editForm.name" type="text" class="form-input" readonly />
+        </div>
+        <div class="form-field">
+          <label>IP de Gerência</label>
+          <div class="input-with-icon">
+            <i class="fas fa-globe"></i>
+            <input v-model="editForm.ip_address" type="text" class="form-input" readonly />
           </div>
-          <div class="camera-modal-body">
-            <div v-if="loadingCameras" class="camera-loading">
-              <i class="fas fa-spinner fa-spin"></i>
-              <span>Carregando câmeras...</span>
+        </div>
+        <div class="form-field">
+          <label>Zabbix HostID</label>
+          <input v-model="editForm.zabbix_hostid" type="text" class="form-input" readonly />
+        </div>
+      </div>
+
+      <div class="form-section">
+        <h4 class="section-title">Zabbix & Métricas</h4>
+        <div class="form-field">
+          <label>Uptime item key</label>
+          <input v-model="editForm.uptime_item_key" type="text" class="form-input" placeholder="ex: sysUpTime | system.uptime" />
+          <p class="field-help">Zabbix item key para uptime (e.g. system.uptime)</p>
+        </div>
+
+        <div class="form-field">
+          <label>Cpu usage item key</label>
+          <input v-model="editForm.cpu_usage_item_key" type="text" class="form-input" placeholder="ex: system.cpu.util[,user]" />
+          <p class="field-help">Zabbix item key para CPU usage (e.g. system.cpu.util[,user])</p>
+        </div>
+
+        <div class="form-field">
+          <label>Memory usage item key</label>
+          <input v-model="editForm.memory_usage_item_key" type="text" class="form-input" placeholder="ex: vm.memory.size[percent] | mem.util" />
+          <p class="field-help">Zabbix item key para Memory usage (e.g. vm.memory.size[percent] ou mem.util)</p>
+        </div>
+
+        <div class="form-row">
+          <div class="form-field">
+            <label>Cpu usage manual percent</label>
+            <input v-model.number="editForm.cpu_usage_manual_percent" type="number" step="0.1" min="0" max="100" class="form-input" placeholder="ex: 30" />
+            <p class="field-help">Valor manual quando Zabbix estiver indisponível</p>
+          </div>
+          <div class="form-field">
+            <label>Memory usage manual percent</label>
+            <input v-model.number="editForm.memory_usage_manual_percent" type="number" step="0.1" min="0" max="100" class="form-input" placeholder="ex: 55" />
+            <p class="field-help">Valor manual quando Zabbix estiver indisponível</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <template #footer>
+      <div class="edit-modal-footer">
+        <button @click="closeEditModal" class="btn-secondary">
+          <i class="fas fa-times"></i> Cancelar
+        </button>
+        <button @click="saveDevice" class="btn-primary" :disabled="saving">
+          <i class="fas fa-save" :class="{ 'fa-spin': saving }"></i>
+          {{ saving ? 'Salvando...' : 'Salvar Device' }}
+        </button>
+      </div>
+    </template>
+  </BaseModal>
+
+  <!-- Device Details Modal -->
+  <DeviceDetailsModal
+    :is-open="showDeviceDetailsModal"
+    :device="selectedDeviceForDetails"
+    @close="closeDeviceDetails"
+  />
+
+  <!-- Câmeras do site -->
+  <BaseModal
+    :show="showCameraModal"
+    :title="`Câmeras · ${site?.name || ''}`"
+    :icon="PhVideoCamera"
+    :z-index="3200"
+    size="full"
+    flush
+    @close="closeCameraModal"
+  >
+    <div class="camera-modal-body">
+      <div v-if="loadingCameras" class="camera-loading">
+        <i class="fas fa-spinner fa-spin"></i>
+        <span>Carregando câmeras...</span>
+      </div>
+      <div v-else-if="cameras.length === 0" class="camera-empty">
+        <i class="fas fa-video-slash"></i>
+        <span>Nenhuma câmera encontrada para este site</span>
+      </div>
+      <div v-else class="camera-grid" :class="getCameraGridClass">
+        <div v-for="camera in cameras" :key="camera.connectionKey ?? camera.id" class="camera-cell">
+          <div class="camera-video-container">
+            <video 
+              :ref="el => { if (el) cameraVideoRefs[camera.connectionKey ?? camera.id] = el }"
+              class="camera-video"
+              autoplay
+              muted
+              playsinline
+            ></video>
+            <div class="camera-overlay">
+              <span class="camera-name">{{ camera.name }}</span>
+              <span v-if="cameraConnections[camera.connectionKey ?? camera.id]" class="camera-status connected">
+                <i class="fas fa-circle"></i> Ao vivo
+              </span>
+              <span v-else class="camera-status connecting">
+                <i class="fas fa-spinner fa-spin"></i> Conectando...
+              </span>
             </div>
-            <div v-else-if="cameras.length === 0" class="camera-empty">
-              <i class="fas fa-video-slash"></i>
-              <span>Nenhuma câmera encontrada para este site</span>
-            </div>
-            <div v-else class="camera-grid" :class="getCameraGridClass">
-              <div v-for="camera in cameras" :key="camera.connectionKey ?? camera.id" class="camera-cell">
-                <div class="camera-video-container">
-                  <video 
-                    :ref="el => { if (el) cameraVideoRefs[camera.connectionKey ?? camera.id] = el }"
-                    class="camera-video"
-                    autoplay
-                    muted
-                    playsinline
-                  ></video>
-                  <div class="camera-overlay">
-                    <span class="camera-name">{{ camera.name }}</span>
-                    <span v-if="cameraConnections[camera.connectionKey ?? camera.id]" class="camera-status connected">
-                      <i class="fas fa-circle"></i> Ao vivo
-                    </span>
-                    <span v-else class="camera-status connecting">
-                      <i class="fas fa-spinner fa-spin"></i> Conectando...
-                    </span>
-                  </div>
-                </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </BaseModal>
+
+  <!-- Mosaico do site -->
+  <BaseModal
+    :show="showMosaicModal"
+    :title="`${currentMosaic?.name || 'Mosaico'} · ${site?.name || ''}`"
+    :icon="PhSquaresFour"
+    :z-index="3300"
+    size="full"
+    flush
+    @close="closeMosaicModal"
+  >
+      <div class="mosaic-modal-body">
+        <div v-if="loadingMosaic" class="mosaic-loading">
+          <i class="fas fa-spinner fa-spin"></i>
+          <span>Carregando mosaico...</span>
+        </div>
+        <div v-else-if="mosaicCameras.length === 0" class="mosaic-empty">
+          <i class="fas fa-video-slash"></i>
+          <span>Nenhuma câmera no mosaico</span>
+        </div>
+        <div v-else class="mosaic-grid" :class="getMosaicGridClass">
+          <div v-for="(camera, idx) in mosaicCameras" :key="camera.id || idx" class="mosaic-cell">
+            <div class="mosaic-video-container">
+              <CameraPlayer 
+                :camera="camera"
+                :autoplay="true"
+                :muted="true"
+              />
+              <div class="mosaic-overlay">
+                <span class="mosaic-camera-name">{{ camera.name }}</span>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </Transition>
-  </Teleport>
-
-  <!-- Mosaic Viewer Modal -->
-  <Teleport to="body">
-    <div v-if="showMosaicModal" class="mosaic-modal-overlay" @click.self="closeMosaicModal">
-      <div class="mosaic-modal-container">
-          <div class="mosaic-modal-header">
-            <h3>
-              <i class="fas fa-th"></i>
-              {{ currentMosaic?.name || 'Mosaico' }} - {{ site?.name }}
-            </h3>
-            <button class="mosaic-close-btn" @click="closeMosaicModal">
-              <i class="fas fa-times"></i>
-            </button>
-          </div>
-          <div class="mosaic-modal-body">
-            <div v-if="loadingMosaic" class="mosaic-loading">
-              <i class="fas fa-spinner fa-spin"></i>
-              <span>Carregando mosaico...</span>
-            </div>
-            <div v-else-if="mosaicCameras.length === 0" class="mosaic-empty">
-              <i class="fas fa-video-slash"></i>
-              <span>Nenhuma câmera no mosaico</span>
-            </div>
-            <div v-else class="mosaic-grid" :class="getMosaicGridClass">
-              <div v-for="(camera, idx) in mosaicCameras" :key="camera.id || idx" class="mosaic-cell">
-                <div class="mosaic-video-container">
-                  <CameraPlayer 
-                    :camera="camera"
-                    :autoplay="true"
-                    :muted="true"
-                  />
-                  <div class="mosaic-overlay">
-                    <span class="mosaic-camera-name">{{ camera.name }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+  </BaseModal>
 </template>
 
 <script setup>
@@ -251,15 +230,13 @@ import { ref, computed, watch, reactive, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApi } from '@/composables/useApi'
 import { useNotification } from '@/composables/useNotification'
-import { useEscapeKey } from '@/composables/useEscapeKey'
-import { useUiStore } from '@/stores/ui'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { normalizeRealtimeMessage } from '@/composables/useRealtimeStatus'
 import { useWebRTC } from '@/composables/useWebRTC'
 import DeviceDetailsModal from './DeviceDetailsModal.vue'
 import BaseModal from '@/components/Common/BaseModal.vue'
 import SiteDeviceCard from '@/components/SiteDetails/SiteDeviceCard.vue'
-import { PhMapPin, PhVideoCamera } from '@phosphor-icons/vue'
+import { PhMapPin, PhVideoCamera, PhGear, PhSquaresFour } from '@phosphor-icons/vue'
 import { buildSiteDevice, applyRealtimeHost, countDeviceStatuses, siteHeaderStatus } from '@/utils/siteDevices'
 import CameraPlayer from '@/components/Video/CameraPlayer.vue'
 
@@ -279,7 +256,6 @@ const emit = defineEmits(['close'])
 const router = useRouter()
 const { get, patch, post } = useApi()
 const { success, error: notifyError } = useNotification()
-const uiStore = useUiStore()
 
 const devices = ref([])
 const loading = ref(false)
@@ -763,7 +739,6 @@ const connectCameraWithFallback = async (camera, refsMap, connectionsMap, label)
   }
 }
 
-const isDark = computed(() => uiStore.theme === 'dark')
 
 const zabbixError = ref(false)
 const deviceStats = computed(() => countDeviceStatuses(devices.value))
@@ -837,7 +812,8 @@ const openEditDevice = async (device) => {
     editForm.memory_usage_item_key = freshData.memory_usage_item_key || ''
     editForm.cpu_usage_manual_percent = freshData.cpu_usage_manual_percent ?? null
     editForm.memory_usage_manual_percent = freshData.memory_usage_manual_percent ?? null
-    
+    editSnapshot.value = JSON.stringify(editForm)
+
     showEditModal.value = true
   } catch (error) {
     console.error('[SiteDetailsModal] Failed to load device data:', error)
@@ -845,12 +821,14 @@ const openEditDevice = async (device) => {
   }
 }
 
+// EV-0068a: o BaseModal avisa ao fechar com alterações por guardar.
+const editSnapshot = ref('')
+const editDirty = computed(() => showEditModal.value && JSON.stringify(editForm) !== editSnapshot.value)
+
 const closeEditModal = () => {
   showEditModal.value = false
 }
 
-// ESC para fechar modal de edição
-useEscapeKey(() => closeEditModal(), { isOpen: showEditModal })
 
 const openDeviceDetails = (device) => {
   console.log('[SiteDetailsModal] Abrindo detalhes do dispositivo:', device?.id, device?.name)
@@ -1050,7 +1028,6 @@ const closeMosaicModal = async () => {
 }
 
 // ESC para fechar modal de mosaico
-useEscapeKey(() => closeMosaicModal(), { isOpen: showMosaicModal })
 
 const connectMosaicCamera = async (camera, idx) => {
   // NÃO reassinar connectionKey aqui - já foi feito em openMosaicViewer
@@ -1104,7 +1081,6 @@ const closeCameraModal = () => {
 }
 
 // ESC para fechar modal de câmeras
-useEscapeKey(() => closeCameraModal(), { isOpen: showCameraModal })
 
 const loadCameras = async () => {
   if (!props.site) return
@@ -1305,61 +1281,11 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #1e293b;
+  color: rgb(var(--n-900));
 }
 
 .section-title i {
-  color: #667eea;
-}
-
-/* Edit Modal */
-.edit-modal-container {
-  background: white;
-  border-radius: 16px;
-  max-width: 600px;
-  width: 90%;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.edit-modal-container.dark {
-  background: #1e293b;
-}
-
-.edit-modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 24px;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.edit-modal-container.dark .edit-modal-header {
-  border-bottom-color: #334155;
-}
-
-.edit-modal-header .header-content {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: #1e293b;
-}
-
-.edit-modal-container.dark .edit-modal-header .header-content {
-  color: #f1f5f9;
-}
-
-.edit-modal-header .header-content i {
-  font-size: 20px;
-  color: #667eea;
-}
-
-.edit-modal-header h3 {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0;
+  color: rgb(var(--primary-500));
 }
 
 .edit-modal-content {
@@ -1381,7 +1307,7 @@ onUnmounted(() => {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #64748b;
+  color: rgb(var(--n-500));
   margin-bottom: 16px;
 }
 
@@ -1397,45 +1323,30 @@ onUnmounted(() => {
   display: block;
   font-size: 14px;
   font-weight: 500;
-  color: #1e293b;
+  color: rgb(var(--n-900));
   margin-bottom: 8px;
-}
-
-.edit-modal-container.dark .form-field label {
-  color: #f1f5f9;
 }
 
 .form-input {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgb(var(--n-200));
   border-radius: 8px;
   font-size: 14px;
-  color: #1e293b;
-  background: white;
+  color: rgb(var(--n-900));
+  background: rgb(var(--surface));
   transition: all 0.2s;
-}
-
-.edit-modal-container.dark .form-input {
-  background: #0f172a;
-  border-color: #334155;
-  color: #f1f5f9;
 }
 
 .form-input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: rgb(var(--primary-500));
+  box-shadow: 0 0 0 3px rgb(var(--primary-500) / 0.1);
 }
 
 .form-input:read-only {
-  background: #f8fafc;
+  background: rgb(var(--n-50));
   cursor: not-allowed;
-}
-
-.edit-modal-container.dark .form-input:read-only {
-  background: #0f172a;
-  opacity: 0.6;
 }
 
 .input-with-icon {
@@ -1447,7 +1358,7 @@ onUnmounted(() => {
   left: 12px;
   top: 50%;
   transform: translateY(-50%);
-  color: #94a3b8;
+  color: rgb(var(--n-400));
 }
 
 .input-with-icon .form-input {
@@ -1456,7 +1367,7 @@ onUnmounted(() => {
 
 .field-help {
   font-size: 12px;
-  color: #64748b;
+  color: rgb(var(--n-500));
   margin-top: 4px;
   margin-bottom: 0;
 }
@@ -1472,11 +1383,7 @@ onUnmounted(() => {
   justify-content: flex-end;
   gap: 12px;
   padding: 20px 24px;
-  border-top: 1px solid #e2e8f0;
-}
-
-.edit-modal-container.dark .edit-modal-footer {
-  border-top-color: #334155;
+  border-top: 1px solid rgb(var(--n-200));
 }
 
 .btn-secondary,
@@ -1494,31 +1401,22 @@ onUnmounted(() => {
 }
 
 .btn-secondary {
-  background: #f1f5f9;
-  color: #475569;
-}
-
-.edit-modal-container.dark .btn-secondary {
-  background: #334155;
-  color: #cbd5e1;
+  background: rgb(var(--n-100));
+  color: rgb(var(--n-600));
 }
 
 .btn-secondary:hover {
-  background: #e2e8f0;
-}
-
-.edit-modal-container.dark .btn-secondary:hover {
-  background: #475569;
+  background: rgb(var(--n-200));
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: rgb(var(--primary-600));
   color: white;
 }
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 12px rgb(var(--primary-500) / 0.3);
 }
 
 .btn-primary:disabled {
@@ -1541,80 +1439,13 @@ onUnmounted(() => {
   opacity: 0;
 }
 
-/* Camera Modal Styles */
-/* Edição do equipamento por cima do BaseModal (3000); .modal-overlay é global e fica a 1040 */
-.site-edit-overlay {
-  z-index: 3100;
-}
-
-.camera-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.75);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 3200; /* acima do BaseModal (3000) do modal de Site */
-  padding: 20px;
-}
-
-.camera-modal-container {
-  background: #1e293b;
-  border-radius: 16px;
-  width: 100%;
-  max-width: 1600px;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
-}
-
-.camera-modal-header {
-  padding: 20px 24px;
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.camera-modal-header h3 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-  color: white;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.camera-close-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  color: white;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.camera-close-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-  transform: scale(1.1);
-}
-
+/* Área de vídeo: sempre escura (como o visualizador de mosaicos), ocupa o corpo do BaseModal full */
 .camera-modal-body {
-  flex: 1;
+  height: 100%;
   padding: 24px;
   overflow-y: auto;
+  background: #0f172a;
+  color: #e2e8f0;
 }
 
 .camera-loading,
@@ -1735,72 +1566,8 @@ onUnmounted(() => {
   font-size: 8px;
 }
 
-/* Mosaic Modal Styles */
-.mosaic-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.85);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 3300;
-  padding: 20px;
-}
-
-.mosaic-modal-container {
-  background: #1e293b;
-  border-radius: 16px;
-  width: 95vw;
-  height: 95vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9);
-}
-
-.mosaic-modal-header {
-  padding: 20px 24px;
-  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.mosaic-modal-header h3 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-  color: white;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.mosaic-close-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  color: white;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.mosaic-close-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-  transform: scale(1.1);
-}
-
 .mosaic-modal-body {
-  flex: 1;
+  height: 100%;
   padding: 24px;
   overflow: hidden;
   background: #0f172a;

@@ -132,6 +132,24 @@ describe('SiteDetailsModal', () => {
     w.unmount()
   })
 
+  it('a engrenagem abre a edição por cima do modal de Site, com aviso de alterações', async () => {
+    const w = await mountModal()
+    document.body.querySelector('[data-testid="site-device-card"] .sdc-edit').click()
+    await flushPromises()
+    const modals = qa('[data-testid="base-modal"]')
+    const edit = modals.find((m) => m.querySelector('.bm-title')?.textContent === 'Editar dispositivo')
+    expect(edit).toBeTruthy()
+    expect(Number(edit.style.zIndex)).toBeGreaterThan(3000)
+    const input = edit.querySelector('input[placeholder^="ex: sysUpTime"]')
+    input.value = 'system.uptime'
+    input.dispatchEvent(new Event('input'))
+    await flushPromises()
+    edit.querySelector('[data-testid="base-modal-close"]').click()
+    await flushPromises()
+    expect(edit.querySelector('[data-testid="base-modal-discard"]')).not.toBeNull()
+    w.unmount()
+  })
+
   it('WebSocket põe o equipamento offline e o X fecha', async () => {
     const w = await mountModal()
     lastMessage.value = { event: 'dashboard.status', data: { hosts: [{ device_id: 1, status: 'offline' }] } }
@@ -143,20 +161,31 @@ describe('SiteDetailsModal', () => {
   })
 })
 
-describe('modais filhos por cima do BaseModal (regressão do EV-0065)', () => {
+describe('modais filhos por cima do BaseModal (regressão do EV-0065, EV-0068a)', () => {
   const read = (p) => readFileSync(resolve(__dirname, '../../src', p), 'utf8')
-  const zOf = (css, selector) => {
-    const m = css.match(new RegExp(`${selector.replace('.', '\\.')}\\s*\\{[^}]*?z-index:\\s*(\\d+)`))
-    return m ? Number(m[1]) : null
-  }
+  // z-index de cada <BaseModal> pelo :show, na ordem do template
+  const layers = (sfc) =>
+    Object.fromEntries(
+      [...sfc.matchAll(/<BaseModal\s+:show="([^"]+)"([^>]*)>/g)].map((m) => {
+        const z = m[2].match(/:z-index="(\d+)"/)
+        return [m[1], z ? Number(z[1]) : 3000]
+      }),
+    )
 
-  it('edição, câmeras e mosaico abrem acima do modal de Site', () => {
-    const base = zOf(read('components/Common/BaseModal.vue'), '.bm-backdrop')
-    const site = read('components/SiteDetailsModal.vue')
-    expect(base).toBeGreaterThan(0)
-    expect(site).toContain('class="modal-overlay site-edit-overlay"')
-    for (const sel of ['.site-edit-overlay', '.camera-modal-overlay', '.mosaic-modal-overlay']) {
-      expect(zOf(site, sel), sel).toBeGreaterThan(base)
+  it('edição, câmeras e mosaico abrem acima do modal de Site (3000 por omissão)', () => {
+    const z = layers(read('components/SiteDetailsModal.vue'))
+    for (const key of ['showEditModal', 'showCameraModal', 'showMosaicModal']) {
+      expect(z[key], key).toBeGreaterThan(3000)
     }
+  })
+
+  it('o modal de Dispositivo e os seus sub-modais empilham por ordem', () => {
+    const device = layers(read('components/DeviceDetailsModal.vue')).isOpen
+    expect(device).toBeGreaterThan(3300)
+    for (const p of ['PortActionsModal', 'ConnectivityMapModal', 'PortTrafficModal', 'AlarmConfigModal']) {
+      expect(layers(read(`components/${p}.vue`)).isOpen, p).toBeGreaterThan(device)
+    }
+    // o alarme abre também por cima do tráfego
+    expect(layers(read('components/AlarmConfigModal.vue')).isOpen).toBeGreaterThan(layers(read('components/PortTrafficModal.vue')).isOpen)
   })
 })

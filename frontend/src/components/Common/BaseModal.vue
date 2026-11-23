@@ -80,7 +80,7 @@ const props = defineProps({
   icon: { type: [Object, Function], default: null },
   /** cor do ícone: online | attention | critical | neutral */
   status: { type: String, default: 'neutral' },
-  /** detail (max-w-5xl) | md (max-w-2xl) | sm (max-w-md) */
+  /** detail (max-w-5xl) | md (max-w-2xl) | sm (max-w-md) | full (vídeo: até 95vw, altura fixa 88vh) */
   size: { type: String, default: 'detail' },
   /** há edição com alterações por guardar */
   dirty: { type: Boolean, default: false },
@@ -167,6 +167,7 @@ defineExpose({ requestClose })
 .bm-detail { max-width: 64rem; } /* max-w-5xl */
 .bm-md { max-width: 42rem; }
 .bm-sm { max-width: 28rem; }
+.bm-full { max-width: min(95vw, 100rem); height: 88vh; }
 
 .bm-header {
   display: flex;

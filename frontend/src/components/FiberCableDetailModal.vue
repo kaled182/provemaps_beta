@@ -569,317 +569,313 @@
     </div>
   </BaseModal>
 
-  <!-- Configuração de alarmes: fora do BaseModal (o backdrop dele tem backdrop-filter) -->
-  <Teleport to="body">
-    <!-- Configure Alarms Modal -->
-    <div v-if="showAlarmModal" class="alarm-modal-backdrop" @click.self="closeAlarmModal">
-      <div class="alarm-modal">
-        <div class="alarm-modal-header">
-          <h3>{{ editingAlarmIds.length ? 'Editar Configuração' : 'Nova Configuração' }}</h3>
-          <button class="close-btn" @click="closeAlarmModal">
-            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+  <!-- Configuração de alarmes: BaseModal próprio, por cima do do cabo (10000) -->
+  <BaseModal
+    :show="showAlarmModal"
+    :title="editingAlarmIds.length ? 'Editar configuração de alarme' : 'Nova configuração de alarme'"
+    :subtitle="cable?.name || ''"
+    :icon="PhBell"
+    :dirty="alarmDirty"
+    :z-index="11000"
+    size="md"
+    @close="closeAlarmModal"
+  >
+    <div class="alarm-modal-content">
+      <!-- ── Saved configs ────────────────────────────────────── -->
+      <section class="saved-configs-section">
+        <h4>Configurações existentes</h4>
+        <div v-if="isLoadingAlarmConfigs" class="saved-configs-loading">
+          <span class="spinner small"></span>
+          <span>Carregando configurações...</span>
         </div>
-
-        <div class="alarm-modal-content">
-          <!-- ── Saved configs ────────────────────────────────────── -->
-          <section class="saved-configs-section">
-            <h4>Configurações existentes</h4>
-            <div v-if="isLoadingAlarmConfigs" class="saved-configs-loading">
-              <span class="spinner small"></span>
-              <span>Carregando configurações...</span>
-            </div>
-            <div v-else-if="groupedAlarmConfigs.length" class="saved-configs-list">
-              <div v-for="group in groupedAlarmConfigs" :key="group.ids.join(',')" class="saved-config-card">
-                <div class="saved-config-header">
-                  <span class="saved-config-target">{{ group.targetDisplay }}</span>
-                  <div class="saved-config-badges">
-                    <span v-if="group.snoozeActive" class="saved-config-snooze" :title="`Silenciado até ${formatSnoozeUntil(group.snoozeUntil)}`">
-                      🔕 Silenciado até {{ formatSnoozeUntil(group.snoozeUntil) }}
-                    </span>
-                    <span
-                      v-for="(atype, i) in group.alertTypes"
-                      :key="atype"
-                      class="saved-config-atype"
-                      :class="`atype-${atype}`"
-                    >{{ group.alertTypeLabels[i] || atype }}</span>
-                    <span class="saved-config-level" :class="`level-${group.triggerLevel}`">{{ group.triggerLabel }}</span>
-                  </div>
-                </div>
-                <div class="saved-config-channels">
-                  <span v-for="channel in group.channels" :key="channel" class="saved-config-channel">
-                    {{ channelLabelDictionary[channel] || channel }}
-                  </span>
-                </div>
-                <div class="saved-config-meta">
-                  <span>{{ formatPersistLabel(group.persistMinutes) }}</span>
-                  <span v-if="group.createdAt">Atualizado {{ formatAlarmTime(group.createdAt) }}</span>
-                </div>
-                <p v-if="group.description" class="saved-config-notes">{{ group.description }}</p>
-                <div class="saved-config-actions">
-                  <button
-                    v-if="group.snoozeActive"
-                    class="btn-config-action btn-snooze-off"
-                    @click="snoozeAlarm(group, 0)"
-                    title="Retomar avisos automáticos imediatamente"
-                  >
-                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                    </svg>
-                    Retomar
-                  </button>
-                  <button
-                    v-else
-                    class="btn-config-action btn-snooze"
-                    @click="askSnoozeDuration(group)"
-                    title="Pausar temporariamente avisos automáticos (manutenção planejada)"
-                  >
-                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M9 17H4l1.405-1.405A2.032 2.032 0 006 14.158V11a6.002 6.002 0 014-5.659V5a2 2 0 114 0v.341C16.33 6.165 18 8.388 18 11v3.159c0 .538.214 1.055.595 1.436L20 17h-5M4 4l16 16" />
-                    </svg>
-                    Silenciar
-                  </button>
-                  <button
-                    class="btn-config-action btn-test"
-                    :disabled="testingAlarmIds.has(group.ids[0])"
-                    @click="sendTestAlarm(group)"
-                    title="Enviar mensagem de teste real para os destinatários"
-                  >
-                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    {{ testingAlarmIds.has(group.ids[0]) ? 'Enviando…' : 'Enviar Teste' }}
-                  </button>
-                  <button class="btn-config-action btn-edit" @click="startEditAlarm(group)" title="Editar">
-                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                    Editar
-                  </button>
-                  <template v-if="pendingDeleteKey === group.ids.join(',')">
-                    <button class="btn-config-action btn-delete" data-testid="alarm-delete-confirm" @click="deleteAlarm(group)">Confirmar exclusão</button>
-                    <button class="btn-config-action" @click="pendingDeleteKey = null">Cancelar</button>
-                  </template>
-                  <button v-else class="btn-config-action btn-delete" title="Excluir" data-testid="alarm-delete" @click="pendingDeleteKey = group.ids.join(',')">
-                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                    Excluir
-                  </button>
-                </div>
+        <div v-else-if="groupedAlarmConfigs.length" class="saved-configs-list">
+          <div v-for="group in groupedAlarmConfigs" :key="group.ids.join(',')" class="saved-config-card">
+            <div class="saved-config-header">
+              <span class="saved-config-target">{{ group.targetDisplay }}</span>
+              <div class="saved-config-badges">
+                <span v-if="group.snoozeActive" class="saved-config-snooze" :title="`Silenciado até ${formatSnoozeUntil(group.snoozeUntil)}`">
+                  🔕 Silenciado até {{ formatSnoozeUntil(group.snoozeUntil) }}
+                </span>
+                <span
+                  v-for="(atype, i) in group.alertTypes"
+                  :key="atype"
+                  class="saved-config-atype"
+                  :class="`atype-${atype}`"
+                >{{ group.alertTypeLabels[i] || atype }}</span>
+                <span class="saved-config-level" :class="`level-${group.triggerLevel}`">{{ group.triggerLabel }}</span>
               </div>
             </div>
-            <div v-else class="saved-configs-empty">
-              Nenhuma configuração cadastrada para este cabo.
+            <div class="saved-config-channels">
+              <span v-for="channel in group.channels" :key="channel" class="saved-config-channel">
+                {{ channelLabelDictionary[channel] || channel }}
+              </span>
             </div>
-          </section>
-
-          <!-- ── Histórico de Avisos (Fase C) ────────────────────── -->
-          <section class="alarm-history-section">
-            <button
-              type="button"
-              class="alarm-history-toggle"
-              :aria-expanded="showAlarmHistory"
-              @click="showAlarmHistory = !showAlarmHistory"
-            >
-              <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>Histórico de Avisos</span>
-              <span v-if="alarmNotifications.length" class="alarm-history-badge">{{ alarmNotifications.length }}</span>
-              <span class="alarm-history-chevron">{{ showAlarmHistory ? '▴' : '▾' }}</span>
-            </button>
-
-            <div v-if="showAlarmHistory" class="alarm-history-body">
-              <div v-if="isLoadingAlarmNotifications" class="alarm-history-loading">
-                <span class="spinner small"></span>
-                <span>Carregando histórico…</span>
-              </div>
-
-              <div v-else-if="alarmNotifications.length === 0" class="alarm-history-empty">
-                Nenhum aviso enviado ainda. Quando o cabo cair (ou voltar), os
-                destinatários cadastrados receberão notificação automática.
-              </div>
-
-              <ul v-else class="alarm-history-list">
-                <li
-                  v-for="n in alarmNotifications"
-                  :key="n.id"
-                  class="alarm-history-item"
-                  :class="{ 'is-failed': !n.success, 'is-test': n.is_test }"
-                >
-                  <span class="ah-icon">{{ ALERT_TYPE_ICONS[n.alert_type] || '🔔' }}</span>
-                  <div class="ah-content">
-                    <div class="ah-line-1">
-                      <span class="ah-type">{{ n.alert_type_label }}</span>
-                      <span v-if="n.is_test" class="ah-tag-test">TESTE</span>
-                      <span class="ah-time">{{ formatNotificationTime(n.sent_at) }}</span>
-                    </div>
-                    <div class="ah-line-2">
-                      <span class="ah-channel">{{ CHANNEL_LABELS[n.channel] || n.channel }}</span>
-                      <span class="ah-recipient">→ {{ n.recipient_label || n.recipient_phone || n.recipient_email || '—' }}</span>
-                      <span v-if="n.success" class="ah-status ah-status--ok">✓ Enviado</span>
-                      <span v-else class="ah-status ah-status--fail">✗ Falhou</span>
-                    </div>
-                    <div v-if="!n.success && n.error" class="ah-error">{{ n.error }}</div>
-                  </div>
-                </li>
-              </ul>
-
+            <div class="saved-config-meta">
+              <span>{{ formatPersistLabel(group.persistMinutes) }}</span>
+              <span v-if="group.createdAt">Atualizado {{ formatAlarmTime(group.createdAt) }}</span>
+            </div>
+            <p v-if="group.description" class="saved-config-notes">{{ group.description }}</p>
+            <div class="saved-config-actions">
               <button
-                v-if="alarmNotifications.length > 0"
-                class="alarm-history-refresh"
-                @click="loadAlarmNotifications(props.cable.id)"
-                :disabled="isLoadingAlarmNotifications"
+                v-if="group.snoozeActive"
+                class="btn-config-action btn-snooze-off"
+                @click="snoozeAlarm(group, 0)"
+                title="Retomar avisos automáticos imediatamente"
               >
-                Atualizar
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                Retomar
+              </button>
+              <button
+                v-else
+                class="btn-config-action btn-snooze"
+                @click="askSnoozeDuration(group)"
+                title="Pausar temporariamente avisos automáticos (manutenção planejada)"
+              >
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M9 17H4l1.405-1.405A2.032 2.032 0 006 14.158V11a6.002 6.002 0 014-5.659V5a2 2 0 114 0v.341C16.33 6.165 18 8.388 18 11v3.159c0 .538.214 1.055.595 1.436L20 17h-5M4 4l16 16" />
+                </svg>
+                Silenciar
+              </button>
+              <button
+                class="btn-config-action btn-test"
+                :disabled="testingAlarmIds.has(group.ids[0])"
+                @click="sendTestAlarm(group)"
+                title="Enviar mensagem de teste real para os destinatários"
+              >
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {{ testingAlarmIds.has(group.ids[0]) ? 'Enviando…' : 'Enviar Teste' }}
+              </button>
+              <button class="btn-config-action btn-edit" @click="startEditAlarm(group)" title="Editar">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Editar
+              </button>
+              <template v-if="pendingDeleteKey === group.ids.join(',')">
+                <button class="btn-config-action btn-delete" data-testid="alarm-delete-confirm" @click="deleteAlarm(group)">Confirmar exclusão</button>
+                <button class="btn-config-action" @click="pendingDeleteKey = null">Cancelar</button>
+              </template>
+              <button v-else class="btn-config-action btn-delete" title="Excluir" data-testid="alarm-delete" @click="pendingDeleteKey = group.ids.join(',')">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Excluir
               </button>
             </div>
-          </section>
-
-          <!-- ── Alert type ───────────────────────────────────────── -->
-          <section>
-            <h4>Tipo de Aviso</h4>
-            <div class="alert-type-grid">
-              <label
-                v-for="atype in alertTypeOptions"
-                :key="atype.id"
-                class="alert-type-card"
-                :class="{ selected: alarmForm.alertTypes.includes(atype.id) }"
-              >
-                <input type="checkbox" :value="atype.id" v-model="alarmForm.alertTypes" class="sr-only" />
-                <div class="atype-icon" :class="`atype-${atype.id}`">{{ atype.icon }}</div>
-                <div class="atype-name">{{ atype.label }}</div>
-                <div class="atype-desc">{{ atype.description }}</div>
-              </label>
-            </div>
-          </section>
-
-          <!-- ── Target ───────────────────────────────────────────── -->
-          <section>
-            <h4>Alvo do Alarme</h4>
-            <div class="target-options">
-              <label class="target-option">
-                <input type="radio" value="department_group" v-model="alarmForm.target"
-                  @change="resetTargetDetails" />
-                <span>Grupo de Departamento</span>
-              </label>
-              <label class="target-option">
-                <input type="radio" value="system_user" v-model="alarmForm.target"
-                  @change="resetTargetDetails" />
-                <span>Usuário do Sistema</span>
-              </label>
-              <label class="target-option">
-                <input type="radio" value="contact" v-model="alarmForm.target"
-                  @change="resetTargetDetails" />
-                <span>Contato Cadastrado</span>
-              </label>
-              <label class="target-option">
-                <input type="radio" value="department" v-model="alarmForm.target"
-                  @change="resetTargetDetails" />
-                <span>Departamento</span>
-              </label>
-            </div>
-
-            <div class="target-selector" v-if="alarmForm.target === 'department_group'">
-              <label>Selecionar Grupo</label>
-              <select v-model="alarmForm.departmentGroup" :disabled="isContactsLoading && !departmentGroups.length">
-                <option disabled value="">{{ isContactsLoading && !departmentGroups.length ? 'Carregando grupos...' : 'Selecione um grupo' }}</option>
-                <option v-for="group in departmentGroups" :key="group.id" :value="group.id">
-                  {{ group.name }} ({{ group.contact_count ?? 0 }} contatos)
-                </option>
-              </select>
-            </div>
-
-            <div class="target-selector" v-else-if="alarmForm.target === 'system_user'">
-              <label>Selecionar Usuário</label>
-              <select v-model="alarmForm.systemUser" :disabled="isContactsLoading && !systemUsers.length">
-                <option disabled value="">{{ isContactsLoading && !systemUsers.length ? 'Carregando usuários...' : 'Selecione um usuário' }}</option>
-                <option v-for="user in systemUsers" :key="user.id" :value="user.id">
-                  {{ user.name }}<span v-if="user.email"> ({{ user.email }})</span>
-                </option>
-              </select>
-            </div>
-
-            <div class="target-selector" v-else-if="alarmForm.target === 'contact'">
-              <label>Selecionar Contato</label>
-              <select v-model="alarmForm.contact" :disabled="isContactsLoading && !contactOptions.length">
-                <option disabled value="">{{ isContactsLoading && !contactOptions.length ? 'Carregando contatos...' : 'Selecione um contato' }}</option>
-                <option v-for="contact in contactOptions" :key="contact.id" :value="contact.id">
-                  {{ contact.name }} ({{ contact.summary }})
-                </option>
-              </select>
-            </div>
-
-            <div class="target-selector" v-else-if="alarmForm.target === 'department'">
-              <label>Selecionar Departamento</label>
-              <select v-model="alarmForm.department" :disabled="isContactsLoading && !departments.length">
-                <option disabled value="">{{ isContactsLoading && !departments.length ? 'Carregando departamentos...' : 'Selecione um departamento' }}</option>
-                <option v-for="dept in departments" :key="dept.id" :value="dept.id">
-                  {{ dept.name }} ({{ dept.member_count ?? 0 }} membros)
-                </option>
-              </select>
-            </div>
-          </section>
-
-          <!-- ── Channels ─────────────────────────────────────────── -->
-          <section>
-            <h4>Canais de Notificação</h4>
-            <div class="channel-grid">
-              <label v-for="channel in availableChannels" :key="channel.id" class="channel-option">
-                <input type="checkbox" :value="channel.id" v-model="alarmForm.channels" />
-                <span class="channel-icon" :class="channel.id">{{ channel.label }}</span>
-              </label>
-            </div>
-          </section>
-
-          <!-- ── Conditions ───────────────────────────────────────── -->
-          <section>
-            <h4>Condições</h4>
-            <div class="conditions-grid">
-              <label v-if="alarmForm.alertTypes.includes('attenuation')">
-                <span>Acionar em nível</span>
-                <select v-model="alarmForm.triggerLevel">
-                  <option value="warning">Atenção</option>
-                  <option value="critical">Crítico</option>
-                </select>
-              </label>
-              <label>
-                <span>Persistência mínima</span>
-                <input type="number" min="0" step="1" v-model.number="alarmForm.persistMinutes" />
-                <small>Minutos de duração antes do disparo</small>
-              </label>
-            </div>
-          </section>
+          </div>
         </div>
+        <div v-else class="saved-configs-empty">
+          Nenhuma configuração cadastrada para este cabo.
+        </div>
+      </section>
 
-        <div class="alarm-modal-footer">
-          <button class="btn-secondary" @click="closeAlarmModal">Cancelar</button>
-          <button class="btn-primary" :disabled="!canSaveAlarm" @click="saveAlarmConfig">
-            <svg v-if="isSavingAlarm" class="icon spinning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            <span v-else>{{ editingAlarmIds.length ? 'Salvar alterações' : 'Salvar configuração' }}</span>
+      <!-- ── Histórico de Avisos (Fase C) ────────────────────── -->
+      <section class="alarm-history-section">
+        <button
+          type="button"
+          class="alarm-history-toggle"
+          :aria-expanded="showAlarmHistory"
+          @click="showAlarmHistory = !showAlarmHistory"
+        >
+          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>Histórico de Avisos</span>
+          <span v-if="alarmNotifications.length" class="alarm-history-badge">{{ alarmNotifications.length }}</span>
+          <span class="alarm-history-chevron">{{ showAlarmHistory ? '▴' : '▾' }}</span>
+        </button>
+
+        <div v-if="showAlarmHistory" class="alarm-history-body">
+          <div v-if="isLoadingAlarmNotifications" class="alarm-history-loading">
+            <span class="spinner small"></span>
+            <span>Carregando histórico…</span>
+          </div>
+
+          <div v-else-if="alarmNotifications.length === 0" class="alarm-history-empty">
+            Nenhum aviso enviado ainda. Quando o cabo cair (ou voltar), os
+            destinatários cadastrados receberão notificação automática.
+          </div>
+
+          <ul v-else class="alarm-history-list">
+            <li
+              v-for="n in alarmNotifications"
+              :key="n.id"
+              class="alarm-history-item"
+              :class="{ 'is-failed': !n.success, 'is-test': n.is_test }"
+            >
+              <span class="ah-icon">{{ ALERT_TYPE_ICONS[n.alert_type] || '🔔' }}</span>
+              <div class="ah-content">
+                <div class="ah-line-1">
+                  <span class="ah-type">{{ n.alert_type_label }}</span>
+                  <span v-if="n.is_test" class="ah-tag-test">TESTE</span>
+                  <span class="ah-time">{{ formatNotificationTime(n.sent_at) }}</span>
+                </div>
+                <div class="ah-line-2">
+                  <span class="ah-channel">{{ CHANNEL_LABELS[n.channel] || n.channel }}</span>
+                  <span class="ah-recipient">→ {{ n.recipient_label || n.recipient_phone || n.recipient_email || '—' }}</span>
+                  <span v-if="n.success" class="ah-status ah-status--ok">✓ Enviado</span>
+                  <span v-else class="ah-status ah-status--fail">✗ Falhou</span>
+                </div>
+                <div v-if="!n.success && n.error" class="ah-error">{{ n.error }}</div>
+              </div>
+            </li>
+          </ul>
+
+          <button
+            v-if="alarmNotifications.length > 0"
+            class="alarm-history-refresh"
+            @click="loadAlarmNotifications(props.cable.id)"
+            :disabled="isLoadingAlarmNotifications"
+          >
+            Atualizar
           </button>
         </div>
-      </div>
+      </section>
+
+      <!-- ── Alert type ───────────────────────────────────────── -->
+      <section>
+        <h4>Tipo de Aviso</h4>
+        <div class="alert-type-grid">
+          <label
+            v-for="atype in alertTypeOptions"
+            :key="atype.id"
+            class="alert-type-card"
+            :class="{ selected: alarmForm.alertTypes.includes(atype.id) }"
+          >
+            <input type="checkbox" :value="atype.id" v-model="alarmForm.alertTypes" class="sr-only" />
+            <div class="atype-icon" :class="`atype-${atype.id}`">{{ atype.icon }}</div>
+            <div class="atype-name">{{ atype.label }}</div>
+            <div class="atype-desc">{{ atype.description }}</div>
+          </label>
+        </div>
+      </section>
+
+      <!-- ── Target ───────────────────────────────────────────── -->
+      <section>
+        <h4>Alvo do Alarme</h4>
+        <div class="target-options">
+          <label class="target-option">
+            <input type="radio" value="department_group" v-model="alarmForm.target"
+              @change="resetTargetDetails" />
+            <span>Grupo de Departamento</span>
+          </label>
+          <label class="target-option">
+            <input type="radio" value="system_user" v-model="alarmForm.target"
+              @change="resetTargetDetails" />
+            <span>Usuário do Sistema</span>
+          </label>
+          <label class="target-option">
+            <input type="radio" value="contact" v-model="alarmForm.target"
+              @change="resetTargetDetails" />
+            <span>Contato Cadastrado</span>
+          </label>
+          <label class="target-option">
+            <input type="radio" value="department" v-model="alarmForm.target"
+              @change="resetTargetDetails" />
+            <span>Departamento</span>
+          </label>
+        </div>
+
+        <div class="target-selector" v-if="alarmForm.target === 'department_group'">
+          <label>Selecionar Grupo</label>
+          <select v-model="alarmForm.departmentGroup" :disabled="isContactsLoading && !departmentGroups.length">
+            <option disabled value="">{{ isContactsLoading && !departmentGroups.length ? 'Carregando grupos...' : 'Selecione um grupo' }}</option>
+            <option v-for="group in departmentGroups" :key="group.id" :value="group.id">
+              {{ group.name }} ({{ group.contact_count ?? 0 }} contatos)
+            </option>
+          </select>
+        </div>
+
+        <div class="target-selector" v-else-if="alarmForm.target === 'system_user'">
+          <label>Selecionar Usuário</label>
+          <select v-model="alarmForm.systemUser" :disabled="isContactsLoading && !systemUsers.length">
+            <option disabled value="">{{ isContactsLoading && !systemUsers.length ? 'Carregando usuários...' : 'Selecione um usuário' }}</option>
+            <option v-for="user in systemUsers" :key="user.id" :value="user.id">
+              {{ user.name }}<span v-if="user.email"> ({{ user.email }})</span>
+            </option>
+          </select>
+        </div>
+
+        <div class="target-selector" v-else-if="alarmForm.target === 'contact'">
+          <label>Selecionar Contato</label>
+          <select v-model="alarmForm.contact" :disabled="isContactsLoading && !contactOptions.length">
+            <option disabled value="">{{ isContactsLoading && !contactOptions.length ? 'Carregando contatos...' : 'Selecione um contato' }}</option>
+            <option v-for="contact in contactOptions" :key="contact.id" :value="contact.id">
+              {{ contact.name }} ({{ contact.summary }})
+            </option>
+          </select>
+        </div>
+
+        <div class="target-selector" v-else-if="alarmForm.target === 'department'">
+          <label>Selecionar Departamento</label>
+          <select v-model="alarmForm.department" :disabled="isContactsLoading && !departments.length">
+            <option disabled value="">{{ isContactsLoading && !departments.length ? 'Carregando departamentos...' : 'Selecione um departamento' }}</option>
+            <option v-for="dept in departments" :key="dept.id" :value="dept.id">
+              {{ dept.name }} ({{ dept.member_count ?? 0 }} membros)
+            </option>
+          </select>
+        </div>
+      </section>
+
+      <!-- ── Channels ─────────────────────────────────────────── -->
+      <section>
+        <h4>Canais de Notificação</h4>
+        <div class="channel-grid">
+          <label v-for="channel in availableChannels" :key="channel.id" class="channel-option">
+            <input type="checkbox" :value="channel.id" v-model="alarmForm.channels" />
+            <span class="channel-icon" :class="channel.id">{{ channel.label }}</span>
+          </label>
+        </div>
+      </section>
+
+      <!-- ── Conditions ───────────────────────────────────────── -->
+      <section>
+        <h4>Condições</h4>
+        <div class="conditions-grid">
+          <label v-if="alarmForm.alertTypes.includes('attenuation')">
+            <span>Acionar em nível</span>
+            <select v-model="alarmForm.triggerLevel">
+              <option value="warning">Atenção</option>
+              <option value="critical">Crítico</option>
+            </select>
+          </label>
+          <label>
+            <span>Persistência mínima</span>
+            <input type="number" min="0" step="1" v-model.number="alarmForm.persistMinutes" />
+            <small>Minutos de duração antes do disparo</small>
+          </label>
+        </div>
+      </section>
     </div>
-  </Teleport>
+    <template #footer>
+      <div class="alarm-modal-footer">
+        <button class="btn-secondary" @click="closeAlarmModal">Cancelar</button>
+        <button class="btn-primary" :disabled="!canSaveAlarm" @click="saveAlarmConfig">
+          <svg v-if="isSavingAlarm" class="icon spinning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span v-else>{{ editingAlarmIds.length ? 'Salvar alterações' : 'Salvar configuração' }}</span>
+        </button>
+      </div>
+    </template>
+  </BaseModal>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
-import { PhLinkSimple } from '@phosphor-icons/vue'
+import { PhLinkSimple, PhBell } from '@phosphor-icons/vue'
 import BaseModal from '@/components/Common/BaseModal.vue'
 import TimeSeriesChart from './charts/TimeSeriesChart.vue'
 import { bpsToMbps, isRxCritical } from '@/utils/opticalSeries'
@@ -1557,6 +1553,15 @@ const startEditAlarm = async (group) => {
   }
   showAlarmModal.value = true
 }
+
+// EV-0068a: aviso ao fechar a configuração com alterações por guardar.
+// `templates` fica de fora: é derivado dos canais (syncTemplatesSelection) e muda sozinho.
+const alarmFormKey = () => JSON.stringify({ ...alarmForm.value, templates: undefined })
+const alarmSnapshot = ref('')
+const alarmDirty = computed(() => showAlarmModal.value && alarmFormKey() !== alarmSnapshot.value)
+watch(showAlarmModal, (open) => {
+  alarmSnapshot.value = open ? alarmFormKey() : ''
+})
 
 // Exclusão em dois cliques na própria linha (sem diálogo do navegador).
 const pendingDeleteKey = ref(null)
@@ -2661,66 +2666,6 @@ onUnmounted(() => {
 .btn-primary-small .icon {
   width: 16px;
   height: 16px;
-}
-
-.alarm-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.65);
-  backdrop-filter: blur(6px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 11000;
-  padding: 24px;
-}
-
-.alarm-modal {
-  width: min(560px, 100%);
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(15, 23, 42, 0.92) 100%);
-  border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.6);
-  display: flex;
-  flex-direction: column;
-  max-height: 90vh;
-  overflow: hidden;
-}
-
-.alarm-modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px 24px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
-  background: linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, transparent 100%);
-}
-
-.alarm-modal-header h3 {
-  margin: 0;
-  color: rgb(var(--n-800));
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.alarm-modal-header .close-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  background: rgba(148, 163, 184, 0.1);
-  color: rgb(var(--n-500));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.alarm-modal-header .close-btn:hover {
-  background: rgba(248, 113, 113, 0.15);
-  border-color: rgba(248, 113, 113, 0.4);
-  color: rgb(var(--danger));
 }
 
 .alarm-modal-content {
