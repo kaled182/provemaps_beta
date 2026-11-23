@@ -906,7 +906,11 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             "responsible",
             "responsible_user",
         )
-        .prefetch_related("segments__start_infrastructure", "segments__end_infrastructure")
+        .prefetch_related(
+            "segments__start_infrastructure",
+            "segments__end_infrastructure",
+            "infrastructure_points",  # EV-0062: era uma consulta por cabo
+        )
         .annotate(**OCCUPANCY_ANNOTATIONS)  # EV-0061: ocupação numa só consulta
         .order_by("name")
     )

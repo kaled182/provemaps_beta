@@ -64,3 +64,39 @@ def test_list_occupancy_has_no_per_cable_query(client):
     for i in range(2, 8):
         _strands(FiberCable.objects.create(name=f"c{i}"), ["lit", "dark"])
     assert strand_queries() == few
+
+
+@pytest.mark.django_db
+def test_list_infrastructure_points_are_prefetched(client):
+    """EV-0062: os pontos de infraestrutura vêm de um prefetch, não de uma
+    consulta por cabo."""
+    import django.db
+    from django.contrib.gis.geos import Point
+    from django.test.utils import CaptureQueriesContext
+
+    from inventory.models import FiberInfrastructure
+
+    def infra_queries():
+        with CaptureQueriesContext(django.db.connection) as q:
+            body = client.get("/api/v1/fiber-cables/").json()
+        n = sum(1 for x in q.captured_queries if "inventory_fiber_infrastructure" in x["sql"])
+        return n, body
+
+    def add(i):
+        cable = FiberCable.objects.create(name=f"infra-{i}")
+        FiberInfrastructure.objects.create(
+            cable=cable,
+            type=FiberInfrastructure.TYPES[0][0],
+            name=f"p{i}",
+            location=Point(-49, -16),
+        )
+
+    for i in range(2):
+        add(i)
+    few, _ = infra_queries()
+    for i in range(2, 8):
+        add(i)
+    many, body = infra_queries()
+    assert many == few
+    rows = body.get("results", body)
+    assert all(len(r["infrastructure_points"]) == 1 for r in rows)
