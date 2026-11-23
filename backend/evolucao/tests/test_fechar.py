@@ -69,6 +69,28 @@ class ComandoFecharTests(TestCase):
         self.item.refresh_from_db()
         self.assertEqual(self.item.fechado_por["deploy_em"], "2026-11-23T22:00:00+00:00")
 
+    def test_item_semeado_do_quadro_recebe_o_deploy(self):
+        """O seed escreve `fechado_por` com `deploy_em: None` (fechado no quadro manual, deploy
+        por observar) — também tem de receber a observação."""
+        EvolucaoItem.objects.filter(pk=self.item.pk).update(
+            estado="feito",
+            fechado_por={"commit": "", "mensagem": "x", "deploy_em": None, "fonte": "CLAUDE.md"},
+        )
+        out, _ = self._run(
+            [
+                {
+                    "codigo": "EV-0001",
+                    "commit": "abc1234",
+                    "mensagem": "m",
+                    "deploy_em": "2026-11-23T22:00:00+00:00",
+                }
+            ]
+        )
+        self.assertIn("1 item(ns) fechado(s)", out)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.fechado_por["commit"], "abc1234")
+        self.assertEqual(self.item.fechado_por["deploy_em"], "2026-11-23T22:00:00+00:00")
+
     def test_item_recusado_nao_e_reaberto(self):
         EvolucaoItem.objects.filter(pk=self.item.pk).update(
             estado="recusado", recusa_motivo="duplicado"
