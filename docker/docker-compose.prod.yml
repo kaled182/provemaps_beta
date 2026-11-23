@@ -40,7 +40,7 @@ services:
       - frontend
       - backend
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/healthz/"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://127.0.0.1/healthz"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -176,7 +176,7 @@ services:
       - app_media:/app/media
       - app_staticfiles:/app/staticfiles
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; resp = urllib.request.urlopen('http://localhost:8000/healthz/', timeout=5); exit(0 if resp.getcode() == 200 else 1)\" || exit 1"]
+      test: ["CMD-SHELL", "test \"$$(curl -s -o /dev/null -m 5 -w '%{http_code}' http://localhost:8000/healthz)\" = 200"]
       interval: 30s
       timeout: 15s
       retries: 3
