@@ -102,3 +102,19 @@ describe('popup do cabo no mapa (EV-0064)', () => {
     expect(css).toMatch(/\.level-critical \{ color: rgb\(var\(--danger\)\)/)
   })
 })
+
+describe('BaseModal — modais empilhados (EV-0068b)', () => {
+  it('o scroll da página só volta quando o último modal fecha', async () => {
+    const a = mount(BaseModal, { props: { show: true, title: 'A' }, attachTo: document.body })
+    const b = mount(BaseModal, { props: { show: true, title: 'B', zIndex: 3100 }, attachTo: document.body })
+    await nextTick()
+    expect(document.body.style.overflow).toBe('hidden')
+    await b.setProps({ show: false })
+    expect(document.body.style.overflow).toBe('hidden') // A continua aberto
+    b.unmount()
+    expect(document.body.style.overflow).toBe('hidden')
+    await a.setProps({ show: false })
+    expect(document.body.style.overflow).toBe('')
+    a.unmount()
+  })
+})

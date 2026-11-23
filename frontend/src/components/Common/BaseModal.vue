@@ -60,6 +60,12 @@
   </Teleport>
 </template>
 
+<script>
+// Modais empilhados (Site → edição, Dispositivo → tráfego → alarme): o scroll da página
+// só volta quando o ÚLTIMO fecha. Contador partilhado por todas as instâncias.
+let openModals = 0
+</script>
+
 <script setup>
 /**
  * Modal único do produto (EV-0064). Superfície e bordas por tokens (dois temas),
@@ -95,6 +101,21 @@ const titleId = `bm-title-${Math.random().toString(36).slice(2, 10)}`
 const panel = ref(null)
 const confirmingDiscard = ref(false)
 let previousFocus = null
+let locked = false
+
+function lockScroll() {
+  if (locked) return
+  locked = true
+  openModals += 1
+  document.body.style.overflow = 'hidden'
+}
+
+function unlockScroll() {
+  if (!locked) return
+  locked = false
+  openModals = Math.max(0, openModals - 1)
+  if (openModals === 0) document.body.style.overflow = ''
+}
 
 function requestClose() {
   if (props.dirty) {
@@ -115,11 +136,11 @@ watch(
     confirmingDiscard.value = false
     if (open) {
       previousFocus = document.activeElement
-      document.body.style.overflow = 'hidden'
+      lockScroll()
       await nextTick()
       panel.value?.focus()
     } else {
-      document.body.style.overflow = ''
+      unlockScroll()
       previousFocus?.focus?.()
     }
   },
@@ -134,7 +155,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
-  document.body.style.overflow = ''
+  unlockScroll()
 })
 
 defineExpose({ requestClose })
