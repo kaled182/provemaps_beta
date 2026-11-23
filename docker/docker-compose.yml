@@ -3,6 +3,13 @@
     build:
       context: ..
       dockerfile: docker/dockerfile
+      # EV-0039: commit e versão cozidos na imagem (saem no /healthz; a Central fecha itens por eles).
+      # `docker compose build` simples continua a funcionar (fica git_sha "" e version "dev");
+      # para os passar: GIT_SHA=$(git rev-parse HEAD) APP_VERSION=$(cat VERSION) docker compose … build
+      # (o scripts/update.sh já o faz). Não os ponha fixos no docker/.env — mentiriam no deploy seguinte.
+      args:
+        GIT_SHA: "${GIT_SHA:-}"
+        APP_VERSION: "${APP_VERSION:-}"
     command: >
       gunicorn core.asgi:application
       -k uvicorn.workers.UvicornWorker
@@ -108,6 +115,10 @@
     build:
       context: ..
       dockerfile: docker/dockerfile
+      # EV-0039: ver o comentário do serviço web.
+      args:
+        GIT_SHA: "${GIT_SHA:-}"
+        APP_VERSION: "${APP_VERSION:-}"
     command: celery -A core.celery_app worker -Q default,zabbix,maps -l info -c 4
     entrypoint: ["/docker-entrypoint.sh"]
     env_file:
@@ -157,6 +168,10 @@
     build:
       context: ..
       dockerfile: docker/dockerfile
+      # EV-0039: ver o comentário do serviço web.
+      args:
+        GIT_SHA: "${GIT_SHA:-}"
+        APP_VERSION: "${APP_VERSION:-}"
     command: celery -A core.celery_app beat -l info --pidfile=/tmp/celerybeat.pid
     entrypoint: ["/docker-entrypoint.sh"]
     env_file:
