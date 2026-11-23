@@ -117,6 +117,8 @@ class ScriptFechadosTests(SimpleTestCase):
                     "feat: abre EV-0001 (menciona, não fecha)",
                     "fix(mapa): osm — fecha EV-0002",
                     'fix: aspas "x" — resolve o EV-0003 e closes EV-0004',
+                    # o verbo no CORPO, numa linha própria (como manda o CLAUDE.md)
+                    "fix(csrf): leitor único\n\nPorquê: o cookie tinha outro nome.\n\nfecha EV-0006",
                 ],
             )
             # um commit DEPOIS do implantado não conta
@@ -144,7 +146,9 @@ class ScriptFechadosTests(SimpleTestCase):
                 repo, {"status": "ok", "git_sha": sha, "iniciado_em": "2026-10-04T10:00:00+00:00"}
             )
             codigos = sorted(e["codigo"] for e in saida)
-            self.assertEqual(codigos, ["EV-0002", "EV-0003", "EV-0004"])
+            self.assertEqual(codigos, ["EV-0002", "EV-0003", "EV-0004", "EV-0006"])
+            e6 = next(e for e in saida if e["codigo"] == "EV-0006")
+            self.assertEqual(e6["mensagem"], "fix(csrf): leitor único")  # só o assunto
             e3 = next(e for e in saida if e["codigo"] == "EV-0003")
             self.assertIn('aspas "x"', e3["mensagem"])
             self.assertEqual(e3["deploy_em"], "2026-10-04T10:00:00+00:00")
