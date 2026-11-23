@@ -203,6 +203,127 @@ def build_optical_summary(cable: FiberCable) -> dict[str, Any]:
     }
 
 
+# ── Agregado de níveis ópticos da rede (EV-0057 / EV-0049) ───────────────────
+# Lê só o banco: `Port.last_rx_power/last_tx_power` são escritos a cada 60 s pela
+# tarefa `update_all_port_optical_levels` (fila zabbix). Nenhuma chamada ao Zabbix.
+
+OPTICAL_STALE_AFTER_SECONDS = 600  # 10 min sem leitura = dado velho (a tarefa corre a cada 60 s)
+_HEALTH_BY_STATUS = {
+    "online": "healthy",
+    "warning": "attention",
+    "critical": "critical",
+    "offline": "critical",
+}
+
+
+def _end_payload(port: Port | None, snapshot: dict[str, Any], now: Any) -> dict[str, Any]:
+    device = getattr(port, "device", None) if port else None
+    site = getattr(device, "site", None) if device else None
+    last_check = getattr(port, "last_optical_check", None) if port else None
+    stale = bool(last_check) and (now - last_check).total_seconds() > OPTICAL_STALE_AFTER_SECONDS
+    return {
+        "port_id": snapshot.get("port_id"),
+        "port_name": snapshot.get("port_name"),
+        "device_name": getattr(device, "name", None),
+        "site_name": getattr(site, "display_name", None) if site else None,
+        "rx": snapshot.get("rx"),
+        "tx": snapshot.get("tx"),
+        "status": snapshot.get("status", "unknown"),
+        "warning_threshold": snapshot.get("warning_threshold"),
+        "critical_threshold": snapshot.get("critical_threshold"),
+        "last_check": snapshot.get("last_check"),
+        "stale": stale,
+    }
+
+
+def _loss(tx: float | None, rx: float | None) -> float | None:
+    """Perda do sentido: TX que sai de uma ponta menos o RX que chega à outra (dB)."""
+    if tx is None or rx is None:
+        return None
+    return round(tx - rx, 2)
+
+
+def _cable_center(cable: FiberCable) -> dict[str, float] | None:
+    path = getattr(cable, "path", None)
+    if not path:
+        return None
+    try:
+        centroid = path.centroid
+        return {"lat": centroid.y, "lng": centroid.x}
+    except Exception:  # geometria inválida: sem centro, o ecrã não oferece «ver no mapa»
+        return None
+
+
+def list_cables_optical_summary() -> dict[str, Any]:
+    """Todos os cabos principais com RX/TX das duas pontas, perda por sentido e estado.
+
+    `totals` conta por saúde (`healthy|attention|critical|unknown`); `worst` é o
+    cabo com o RX mais baixo entre as leituras frescas (nunca uma leitura velha).
+    Estados e limiares vêm de `build_optical_summary` (mesma regra do modal).
+    """
+    from django.utils import timezone
+
+    now = timezone.now()
+    cables = (
+        FiberCable.objects.filter(parent_cable__isnull=True)
+        .select_related(
+            "origin_port__device__site",
+            "destination_port__device__site",
+            "site_a",
+            "site_b",
+        )
+        .order_by("name")
+    )
+
+    items: list[dict[str, Any]] = []
+    totals = {"total": 0, "healthy": 0, "attention": 0, "critical": 0, "unknown": 0}
+    worst: dict[str, Any] | None = None
+    last_check: str | None = None
+
+    for cable in cables:
+        summary = build_optical_summary(cable)
+        origin = _end_payload(cable.origin_port, summary["origin"], now)
+        destination = _end_payload(cable.destination_port, summary["destination"], now)
+        health = _HEALTH_BY_STATUS.get(summary["status"], "unknown")
+        if origin["stale"] and destination["stale"]:
+            health = "unknown"  # só leituras velhas: não se afirma saúde nenhuma
+
+        totals["total"] += 1
+        totals[health] += 1
+
+        for side, end in (("origin", origin), ("destination", destination)):
+            if end["rx"] is None or end["stale"]:
+                continue
+            if worst is None or end["rx"] < worst["rx"]:
+                worst = {
+                    "cable_id": cable.id,
+                    "cable_name": cable.name,
+                    "side": side,
+                    "rx": end["rx"],
+                }
+            if end["last_check"] and (last_check is None or end["last_check"] > last_check):
+                last_check = end["last_check"]
+
+        items.append(
+            {
+                "id": cable.id,
+                "name": cable.name,
+                "length_km": _float_or_none(cable.length_km),
+                "site_a": getattr(cable.site_a, "display_name", None),
+                "site_b": getattr(cable.site_b, "display_name", None),
+                "status": summary["status"],
+                "health": health,
+                "origin": origin,
+                "destination": destination,
+                "loss_ab_db": _loss(origin["tx"], destination["rx"]),
+                "loss_ba_db": _loss(destination["tx"], origin["rx"]),
+                "center": _cable_center(cable),
+            }
+        )
+
+    return {"cables": items, "totals": totals, "worst": worst, "last_check": last_check}
+
+
 class FiberUseCaseError(Exception):
     """Generic business-rule error for fiber operations."""
 

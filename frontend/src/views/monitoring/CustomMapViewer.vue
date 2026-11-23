@@ -108,6 +108,7 @@
       :kpis="mapKpis"
       :telemetry="telemetryState"
       :last-update="lastStatusUpdate"
+      :optical="opticalHud"
     />
 
     <!-- Site Details Modal (lazy: monta na 1ª abertura) -->
@@ -185,6 +186,7 @@ import { useMapSelection } from '@/composables/map/useMapSelection'
 import { useMapData } from '@/composables/map/useMapData'
 import MapLegend from './components/MapLegend.vue'
 import MapKpiHud from './components/MapKpiHud.vue'
+import { useOpticalSummary } from '@/composables/useOpticalSummary'
 import { computeMapKpis, siteStatuses, deviceMatchesKpiFilter, cableMatchesKpiFilter } from '@/utils/mapKpis'
 import MapContextMenu from './components/MapContextMenu.vue'
 
@@ -367,6 +369,20 @@ const siteStatusMap = computed(() => {
   return siteStatuses(availableItems.value.devices.filter(d => selected.has(d.id)))
 })
 
+// Pior RX da rede (EV-0049): agregado lido do banco; recarrega quando o WebSocket
+// anuncia mudança de estado de cabos (sem polling).
+const opticalSummary = useOpticalSummary()
+const opticalHud = computed(() => {
+  const body = opticalSummary.data.value
+  const worst = body?.worst || null
+  let critical = null
+  if (worst) {
+    const cable = (body.cables || []).find(c => c.id === worst.cable_id)
+    critical = cable?.[worst.side]?.critical_threshold ?? null
+  }
+  return { worst, critical, error: opticalSummary.error.value }
+})
+
 const telemetryState = computed(() => {
   if (realtime.connected.value) return 'live'
   if (degradedPolling.value) return 'degraded'
@@ -454,7 +470,10 @@ function startDegradedPolling() {
 }
 
 realtime.onHosts((_hosts, next) => applyDeviceStatuses(new Map([...deviceStatusMap.value, ...next])))
-realtime.onCables((_cables, next) => applyCableStatuses(next))
+realtime.onCables((_cables, next) => {
+  applyCableStatuses(next)
+  opticalSummary.load()
+})
 watch(realtime.error, (err) => {
   if (err === 'Max reconnect attempts reached') startDegradedPolling()
 })
@@ -468,6 +487,7 @@ watch(realtime.connected, (isConnected) => {
 
 function startStatusPolling() {
   fetchAndApplyDeviceStatuses()
+  opticalSummary.load()
   realtime.connect()
 }
 

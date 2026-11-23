@@ -4,6 +4,8 @@ import logging
 
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -1259,6 +1261,25 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         # Return updated cable
         serializer = self.get_serializer(cable)
         return Response(serializer.data)
+
+    @extend_schema(
+        summary="Níveis ópticos de todos os cabos (RX/TX por ponta, perda, estado)",
+        description=(
+            "Lido do banco (Port.last_*), sem chamar o Zabbix. `totals` por saúde, "
+            "`worst` = cabo com o RX mais baixo entre leituras frescas (EV-0057/EV-0049)."
+        ),
+        responses={200: OpenApiTypes.OBJECT},
+    )
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="optical-summary",
+        permission_classes=[IsAuthenticated],
+    )
+    def optical_summary(self, request):
+        from inventory.usecases.fibers import list_cables_optical_summary
+
+        return Response(list_cables_optical_summary())
 
     @action(
         detail=True,

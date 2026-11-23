@@ -74,6 +74,12 @@ const routes = [
     component: () => import('@/components/DeviceImport/DeviceImportManager.vue'),
   },
   {
+    // EV-0057: níveis ópticos de todos os enlaces
+    path: '/enlaces',
+    name: 'links',
+    component: () => import('@/views/LinksView.vue'),
+  },
+  {
     path: '/network/inventory',
     name: 'inventory',
     component: () => import('@/components/Inventory/InventoryView.vue'),

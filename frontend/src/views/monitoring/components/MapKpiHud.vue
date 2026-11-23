@@ -44,14 +44,18 @@
       </span>
     </button>
 
-    <!-- 3. Pior atenuação — sem fonte agregada no backend: diz isso, não inventa -->
+    <!-- 3. Pior RX da rede (EV-0049): leitura fresca mais baixa; sem leitura → «sem dados» -->
     <div
       class="kpi-card kpi-card--static"
-      title="Ainda não há agregado de níveis ópticos da rede no backend (EV-0049). Passe o rato num cabo para ver o nível dele."
+      :title="worstTitle"
       data-testid="kpi-attenuation"
     >
-      <span class="kpi-label">Pior atenuação</span>
-      <span class="kpi-value text-neutral-500"><span class="kpi-unit">sem dados</span></span>
+      <span class="kpi-label">Pior sinal RX</span>
+      <span v-if="optical?.error" class="kpi-value"><span class="kpi-unit text-danger">erro ao ler</span></span>
+      <span v-else-if="optical?.worst" class="kpi-value">
+        <span :class="worstClass">{{ Number(optical.worst.rx).toFixed(2) }}</span><span class="kpi-unit"> dBm · {{ optical.worst.cable_name }}</span>
+      </span>
+      <span v-else class="kpi-value text-neutral-500"><span class="kpi-unit">sem dados</span></span>
     </div>
 
     <!-- 4. Telemetria / coleta -->
@@ -83,6 +87,8 @@ const props = defineProps({
   /** 'live' (WebSocket), 'degraded' (polling REST), 'connecting', 'offline' */
   telemetry: { type: String, default: 'connecting' },
   lastUpdate: { type: Date, default: null },
+  /** { worst: {rx, cable_name, side} | null, critical: number|null, error: string } (EV-0049) */
+  optical: { type: Object, default: null },
 });
 const emit = defineEmits(['update:filter']);
 
@@ -109,6 +115,20 @@ onMounted(() => {
 onBeforeUnmount(() => clearInterval(clock));
 
 const ago = computed(() => formatAgo(props.lastUpdate, now.value));
+
+const worstClass = computed(() => {
+  const w = props.optical?.worst;
+  const critical = props.optical?.critical;
+  if (!w || critical === null || critical === undefined) return '';
+  return w.rx <= critical ? 'text-danger' : '';
+});
+const worstTitle = computed(() => {
+  if (props.optical?.error) return `Erro ao ler os níveis ópticos: ${props.optical.error}`;
+  const w = props.optical?.worst;
+  if (!w) return 'Sem leituras ópticas recentes';
+  const side = w.side === 'origin' ? 'ponta A' : 'ponta B';
+  return `Menor RX entre leituras recentes: ${w.cable_name} (${side}). Ver todos em Rede › Enlaces & fibra.`;
+});
 </script>
 
 <style scoped>
