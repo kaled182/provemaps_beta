@@ -299,4 +299,34 @@ describe('CustomMapViewer (EV-0012c)', () => {
     expect(wrapper.find('.map-toast').text()).toContain('Mapbox token not configured');
     wrapper.unmount();
   });
+
+  it('EV-0048: HUD conta sites e enlaces do mapa e os cards filtram o desenho', async () => {
+    useUiStore().theme = 'light';
+    const wrapper = mountViewer();
+    await flushPromises();
+    const map = fakeFactory.maps[0];
+    const hud = wrapper.get('[data-testid="map-kpi-hud"]');
+    // POP A tem um equipamento online → site online; o cabo está ok
+    expect(hud.get('[data-testid="kpi-sites"]').text()).toMatch(/1\s*online.*0\s*offline/);
+    expect(hud.get('[data-testid="kpi-links"]').text()).toMatch(/1\s*\/1 ok/);
+    expect(hud.get('[data-testid="kpi-attenuation"]').text()).toContain('sem dados');
+
+    // Só enlaces com problema: o único cabo está ok → sai do mapa
+    await hud.get('[data-testid="kpi-links"]').trigger('click');
+    await flushPromises();
+    expect(map.polylines[0].remove).toHaveBeenCalled();
+    expect(map.markers[0].remove).not.toHaveBeenCalled();
+
+    // Clicar de novo limpa o filtro e o cabo volta
+    await hud.get('[data-testid="kpi-links"]').trigger('click');
+    await flushPromises();
+    expect(map.createPolyline).toHaveBeenCalledTimes(2);
+
+    // Só sites offline: o POP A está online → marcadores saem
+    await hud.get('[data-testid="kpi-sites"]').trigger('click');
+    await flushPromises();
+    expect(map.markers[0].remove).toHaveBeenCalled();
+    expect(map.markers[1].remove).toHaveBeenCalled();
+    wrapper.unmount();
+  });
 });

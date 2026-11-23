@@ -102,18 +102,13 @@
       </div>
     </transition>
 
-    <!-- Status badge — live Zabbix polling indicator (Fase 5.1) -->
-    <div class="status-poll-badge" :class="{ 'status-poll-badge--stale': !lastStatusUpdate }">
-      <span class="spb-dot" :class="`spb-dot--${statusSummary.offline > 0 ? 'warning' : 'ok'}`"></span>
-      <span class="spb-counts">
-        <span class="spb-online">{{ statusSummary.online }} online</span>
-        <template v-if="statusSummary.offline > 0">
-          · <span class="spb-offline">{{ statusSummary.offline }} offline</span>
-        </template>
-      </span>
-      <span v-if="lastUpdateLabel" class="spb-time">· {{ lastUpdateLabel }}</span>
-      <span v-else class="spb-time">· aguardando…</span>
-    </div>
+    <!-- HUD de KPIs no topo do mapa (EV-0048): clicar filtra o mapa -->
+    <MapKpiHud
+      v-model:filter="kpiFilter"
+      :kpis="mapKpis"
+      :telemetry="telemetryState"
+      :last-update="lastStatusUpdate"
+    />
 
     <!-- Site Details Modal (lazy: monta na 1ª abertura) -->
     <SiteDetailsModal
@@ -189,6 +184,8 @@ import { createMap, getMapConfig } from '@/providers/maps/MapProviderFactory.js'
 import { useMapSelection } from '@/composables/map/useMapSelection'
 import { useMapData } from '@/composables/map/useMapData'
 import MapLegend from './components/MapLegend.vue'
+import MapKpiHud from './components/MapKpiHud.vue'
+import { computeMapKpis, siteStatuses, deviceMatchesKpiFilter, cableMatchesKpiFilter } from '@/utils/mapKpis'
 import MapContextMenu from './components/MapContextMenu.vue'
 
 // Componentes pesados: lazy via defineAsyncComponent — só baixam o JS quando renderizados.
@@ -354,22 +351,27 @@ const realtime = useRealtimeStatus({ autoConnect: false })
 
 const STATUS_SEVERITY = { offline: 4, critical: 3, warning: 2, online: 1, unknown: 0 }
 
-const statusSummary = computed(() => {
-  const counts = { online: 0, warning: 0, critical: 0, offline: 0, unknown: 0 }
-  availableItems.value.devices.forEach(d => {
-    const k = d.status || 'unknown'
-    counts[k] = (counts[k] || 0) + 1
-  })
-  const total = availableItems.value.devices.length
-  return { ...counts, total }
+// ── HUD de KPIs (EV-0048) ────────────────────────────────────────────────────
+const kpiFilter = ref(null) // null | KPI_FILTERS.*
+const degradedPolling = ref(false)
+
+const mapKpis = computed(() => computeMapKpis({
+  devices: availableItems.value.devices,
+  cables: availableItems.value.cables,
+  selectedDeviceIds: selectedItems.value.devices,
+  selectedCableIds: selectedItems.value.cables,
+}))
+
+const siteStatusMap = computed(() => {
+  const selected = new Set(selectedItems.value.devices)
+  return siteStatuses(availableItems.value.devices.filter(d => selected.has(d.id)))
 })
 
-const lastUpdateLabel = computed(() => {
-  if (!lastStatusUpdate.value) return null
-  const diffMs = Date.now() - lastStatusUpdate.value.getTime()
-  const secs = Math.round(diffMs / 1000)
-  if (secs < 60) return `${secs}s atrás`
-  return `${Math.round(secs / 60)}min atrás`
+const telemetryState = computed(() => {
+  if (realtime.connected.value) return 'live'
+  if (degradedPolling.value) return 'degraded'
+  if (realtime.connecting?.value) return 'connecting'
+  return 'offline'
 })
 
 const _normalizeAvailability = (avail) => availabilityToStatus(avail, 'unknown')
@@ -446,6 +448,7 @@ async function fetchAndApplyDeviceStatuses() {
 
 function startDegradedPolling() {
   if (statusPollTimer) return
+  degradedPolling.value = true
   console.warn('[CustomMapViewer] WebSocket indisponível; polling de 60 s em modo degradado')
   statusPollTimer = setInterval(fetchAndApplyDeviceStatuses, STATUS_POLL_INTERVAL)
 }
@@ -459,6 +462,7 @@ watch(realtime.connected, (isConnected) => {
   if (isConnected && statusPollTimer) {
     clearInterval(statusPollTimer)
     statusPollTimer = null
+    degradedPolling.value = false
   }
 })
 
@@ -566,9 +570,29 @@ const toggleCameraSite = (siteName, cameras) => {
 // ── Marcadores (diff incremental por id) ────────────────────────────────────
 const activeMarkers = new Map() // deviceId → IMarker
 
+// Ids no mapa = selecionados ∩ filtro do card do HUD
+function visibleDeviceIds() {
+  const ids = new Set(selectedItems.value.devices)
+  if (!kpiFilter.value) return ids
+  const bySite = siteStatusMap.value
+  availableItems.value.devices.forEach(d => {
+    if (ids.has(d.id) && !deviceMatchesKpiFilter(d, kpiFilter.value, bySite)) ids.delete(d.id)
+  })
+  return ids
+}
+
+function visibleCableIds() {
+  const ids = new Set(selectedItems.value.cables)
+  if (!kpiFilter.value) return ids
+  availableItems.value.cables.forEach(c => {
+    if (ids.has(c.id) && !cableMatchesKpiFilter(c, kpiFilter.value)) ids.delete(c.id)
+  })
+  return ids
+}
+
 function updateMarkers() {
   if (!map.value) return
-  const wanted = new Set(selectedItems.value.devices)
+  const wanted = visibleDeviceIds()
 
   activeMarkers.forEach((marker, id) => {
     if (!wanted.has(id)) {
@@ -622,7 +646,7 @@ function cablePath(cable) {
 
 function updatePolylines() {
   if (!map.value) return
-  const wanted = new Set(selectedItems.value.cables)
+  const wanted = visibleCableIds()
   const base = cableBaseStyle()
 
   activePolylines.forEach((polyline, id) => {
@@ -900,6 +924,12 @@ const initMap = async () => {
     showToast('Erro ao carregar o mapa: ' + error.message, 'error', 5000)
   }
 }
+
+// Card do HUD: redesenha só o que passa no filtro (sem reenquadrar)
+watch(kpiFilter, () => {
+  updateMarkers()
+  updatePolylines()
+})
 
 // Tema do utilizador: o fundo do mapa segue-o pela factory (EV-0045); aqui só os
 // cabos mudam de espessura
@@ -1181,40 +1211,6 @@ onBeforeUnmount(() => {
   left: 0 !important;
 }
 
-/* ── Status poll badge (Fase 5.1) ── */
-.status-poll-badge {
-  position: absolute;
-  bottom: 80px;
-  left: 16px;
-  z-index: 900;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(15, 23, 42, 0.82);
-  backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-  padding: 5px 12px;
-  font-size: 0.75rem;
-  color: #cbd5e1;
-  pointer-events: none;
-}
-.spb-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  animation: spb-pulse 2s ease-in-out infinite;
-}
-.spb-dot--ok      { background: #10b981; }
-.spb-dot--warning { background: #f59e0b; }
-.spb-online { color: #6ee7b7; font-weight: 600; }
-.spb-offline { color: #fca5a5; font-weight: 600; }
-.spb-time   { color: #64748b; }
-@keyframes spb-pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.5; }
-}
 
 /* ==========================================
    LIGHT THEME OVERRIDES
