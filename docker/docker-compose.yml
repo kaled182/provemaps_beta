@@ -31,8 +31,8 @@
       DB_NAME: app
       DB_USER: app
       DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-settings.prod}  # EV-0037 (dev local: DJANGO_SETTINGS_MODULE=settings.dev em docker/.env)
-      # Aceita qualquer host/IP — configuração via web, sem precisar editar .env
-      ALLOWED_HOSTS: "*"
+      # EV-0083: ALLOWED_HOSTS vem do ../.env (env_file); um "*" aqui sobrepunha-se e o Django
+      # aceitava qualquer cabeçalho Host (envenenamento de links, ex.: recuperação de senha).
       PYTHONPATH: "/app/backend:/app"
       PYTHONUNBUFFERED: 1
       GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
@@ -127,7 +127,6 @@
       DB_NAME: app
       DB_USER: app
       DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-settings.prod}  # EV-0037 (dev local: DJANGO_SETTINGS_MODULE=settings.dev em docker/.env)
-      ALLOWED_HOSTS: "*"
       PYTHONPATH: "/app/backend:/app"
       PYTHONUNBUFFERED: 1
       GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
@@ -180,7 +179,6 @@
       DB_NAME: app
       DB_USER: app
       DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-settings.prod}  # EV-0037 (dev local: DJANGO_SETTINGS_MODULE=settings.dev em docker/.env)
-      ALLOWED_HOSTS: "*"
       PYTHONPATH: "/app/backend:/app"
       PYTHONUNBUFFERED: 1
       GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
