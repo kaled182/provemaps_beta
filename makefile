@@ -192,4 +192,5 @@ evolucao-quadro:  ## Regenera o bloco EVOLUCAO do CLAUDE.md a partir da Central
 	$(MANAGE) evolucao_quadro
 
 .PHONY: evolucao-sync
-evolucao-sync: evolucao-fechar evolucao-quadro  ## Fecha o que está no ar e regenera o quadro
+evolucao-sync:  ## Fecha na Central o que está no ar e regenera o quadro do CLAUDE.md do host (produção: container web, porto 8100)
+	./scripts/evolucao_sync.sh

@@ -44,18 +44,37 @@ vai-se até ao fim.
 
 **A triagem é do Paulo.** O assistente **não mexe na «Entrada»** — não
 aceita, não recusa, não promove, não inventa prioridade. Um relato só entra na
-fila quando o Paulo o aceita. O assistente **abre** itens novos quando
-encontra um problema com prova (ficheiro, linha, comando que reproduz).
+fila quando o Paulo o aceita (na Central: `/system/evolucao`). O assistente **abre** itens
+novos quando encontra um problema com prova (ficheiro, linha, comando que reproduz) —
+na Central, com `origem="agente"` e a evidência obrigatória:
+
+```bash
+docker exec -i docker-web-1 python manage.py shell -c "
+from django.contrib.auth import get_user_model; from evolucao import usecases as uc
+uc.criar_item(autor=get_user_model().objects.get(username='<staff>'), tipo='problema', origem='agente',
+  titulo='…', descricao='…', evidencia={'ficheiro': 'backend/x.py:12', 'comando': '…'})"
+```
 
 **Implanta-se ANTES de passar ao item seguinte.** Um item «feito» que não está
 em produção é um item que a fila diz resolvido e o utilizador continua a
 sofrer.
 
-**Ao fechar um item, o commit leva o verbo:** `fecha EV-0003`. Mencionar o
-código sem o verbo **não** fecha — de propósito. Quando a Central de Evolução
-existir (ADR 0006), é este verbo que fecha o item sozinho ao chegar a produção;
-até lá, o verbo já vale como convenção e o quadro abaixo é atualizado à mão
-no mesmo commit.
+**Ao fechar um item, o commit leva o verbo:** `fecha EV-0003` (no assunto ou numa linha do
+corpo). Mencionar o código sem o verbo **não** fecha — de propósito. É este verbo que fecha o
+item na Central quando o commit chega a produção (ADR 0006). **Desde 2026-11-23 o quadro abaixo
+é GERADO** — não se edita à mão (uma edição desaparece na geração seguinte):
+
+```bash
+# deploy com o commit e a versão na imagem (sem eles o /healthz não tem SHA e nada fecha)
+export GIT_SHA=$(git rev-parse HEAD) APP_VERSION=$(cat VERSION)
+docker compose -f docker/docker-compose.yml build web celery beat
+docker compose -f docker/docker-compose.yml up -d web celery beat nginx
+make evolucao-sync     # fecha o que está no ar e regenera o bloco deste ficheiro; commitar o resultado
+```
+
+O detalhe de cada item fechado até 2026-11-23 (o que mudou, números medidos, notas «Fica») está
+arquivado em [`doc/analysis/2026-11-23-quadro-manual.md`](doc/analysis/2026-11-23-quadro-manual.md);
+dali para a frente vive no commit e na descrição do item na Central.
 
 **Um item grande demais para uma sessão NÃO se parte por iniciativa do
 assistente.** Sobe ao Paulo com a leitura («isto não cabe numa sessão e tranca
