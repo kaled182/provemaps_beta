@@ -1960,18 +1960,18 @@ html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary:hover {
   align-items: center;
   gap: 6px;
   padding: 7px 12px;
-  background: var(--bg-card, #1e2433);
-  color: var(--text-primary, #e2e8f0);
-  border: 1px solid var(--border-primary, rgba(255,255,255,0.08));
+  background: rgb(var(--surface) / 0.95);
+  color: rgb(var(--n-800));
+  border: 1px solid rgb(var(--n-200));
   border-radius: 8px;
   font-size: 0.78rem;
   font-weight: 500;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.15);
   transition: background 0.15s, transform 0.1s;
 }
 .map-fit-btn:hover {
-  background: var(--bg-hover, #2a3347);
+  background: rgb(var(--n-100));
   transform: translateY(-1px);
 }
 .map-fit-btn:active {
@@ -1988,28 +1988,29 @@ html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary:hover {
   align-items: center;
   gap: 8px;
   padding: 10px 14px 10px 12px;
-  background: rgba(10, 60, 40, 0.96);
-  border: 1px solid #10b981;
+  background: rgb(var(--surface) / 0.96);
+  border: 1px solid rgb(var(--success));
   border-radius: 10px;
-  color: #ecfdf5;
+  color: rgb(var(--n-900));
   font-size: 0.82rem;
   font-weight: 600;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.2);
   white-space: nowrap;
   pointer-events: all;
 }
+.notify-sent-badge > svg { color: rgb(var(--success)); flex-shrink: 0; }
 .nsb-close {
   display: flex;
   align-items: center;
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgb(var(--n-500));
   cursor: pointer;
   padding: 0;
   margin-left: 4px;
   transition: color 0.15s;
 }
-.nsb-close:hover { color: #fff; }
+.nsb-close:hover { color: rgb(var(--n-900)); }
 
 /* ── Toast notification ──────────────────────────────────────────────────── */
 .map-toast {
@@ -2024,30 +2025,22 @@ html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary:hover {
   padding: 11px 20px 11px 14px;
   border-radius: 10px;
   backdrop-filter: blur(12px);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.2);
+  background: rgb(var(--surface) / 0.96);
+  color: rgb(var(--n-900));
   font-size: 0.82rem;
   font-weight: 600;
   white-space: nowrap;
   pointer-events: none;
 }
 
-.map-toast--success {
-  background: rgba(10, 60, 40, 0.96);
-  border: 1px solid #10b981;
-  color: #ecfdf5;
-}
-
-.map-toast--error {
-  background: rgba(80, 10, 10, 0.96);
-  border: 1px solid #ef4444;
-  color: #fff1f2;
-}
-
-.map-toast--warning {
-  background: rgba(70, 45, 0, 0.96);
-  border: 1px solid #f59e0b;
-  color: #fffbeb;
-}
+/* Superfície do tema + borda/ícone semânticos (EV-0050): legível em claro e escuro */
+.map-toast--success { border: 1px solid rgb(var(--success)); }
+.map-toast--success .map-toast__icon { color: rgb(var(--success)); }
+.map-toast--error { border: 1px solid rgb(var(--danger)); }
+.map-toast--error .map-toast__icon { color: rgb(var(--danger)); }
+.map-toast--warning { border: 1px solid rgb(var(--warning)); }
+.map-toast--warning .map-toast__icon { color: rgb(var(--warning)); }
 
 .map-toast__icon {
   display: flex;
