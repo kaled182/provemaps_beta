@@ -19,15 +19,18 @@ class ServiceAccountAuditLog(models.Model):
     class Action(models.TextChoices):
         CREATED = "created", "Account Created"
         UPDATED = "updated", "Account Updated"
+        DEACTIVATED = "deactivated", "Account Deactivated"
         TOKEN_CREATED = "token_created", "Token Created"
         TOKEN_REVOKED = "token_revoked", "Token Revoked"
         TOKEN_ROTATED = "token_rotated", "Token Rotated"
         TOKEN_EXPIRED = "token_expired", "Token Expired"
         ROTATION_NOTICE = "rotation_notice", "Rotation Notice Sent"
 
+    # EV-0080: PROTECT — uma conta com auditoria não se apaga (desativa-se); apagar em
+    # cascata perdia o rasto de quem criou, usou e revogou os tokens dela.
     account: models.ForeignKey[ServiceAccount] = models.ForeignKey(
         "service_accounts.ServiceAccount",
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="audit_logs",
     )
     action = models.CharField(max_length=32, choices=Action.choices)

@@ -184,6 +184,79 @@ def revoke_tokens(
     return {"revoked": revoked, "already_revoked": already_revoked}
 
 
+def deactivate_accounts(
+    *,
+    account_ids: Any,
+    actor: Any = None,
+    reason: str | None = None,
+    remote_addr: str | None = None,
+) -> dict[str, int]:
+    """Deactivate service accounts instead of deleting them (EV-0080).
+
+    For each account: ``is_active=False``, every non-revoked token is revoked
+    through :func:`revoke_tokens` (one ``token_revoked`` audit entry each) and a
+    ``deactivated`` entry is written with the number of tokens actually revoked.
+    Accounts that were already inactive are not re-audited, but any token they
+    still hold unrevoked is revoked too. Returns
+    ``{"deactivated", "already_inactive", "tokens_revoked"}``.
+    """
+
+    deactivated = 0
+    already_inactive = 0
+    tokens_revoked = 0
+    with transaction.atomic():
+        accounts = (
+            ServiceAccount.objects.select_for_update()
+            .filter(pk__in=list(account_ids))
+            .order_by("pk")
+        )
+        for account in accounts:
+            open_token_ids = list(
+                account.tokens.filter(revoked_at__isnull=True).values_list("pk", flat=True)
+            )
+            result = revoke_tokens(
+                token_ids=open_token_ids,
+                actor=actor,
+                reason="Token revogado ao desativar a conta",
+                remote_addr=remote_addr,
+            )
+            tokens_revoked += result["revoked"]
+
+            if not account.is_active:
+                already_inactive += 1
+                continue
+
+            account.is_active = False
+            update_fields = ["is_active", "updated_at"]
+            if actor is not None:
+                account.updated_by = actor
+                update_fields.append("updated_by")
+            account.save(update_fields=update_fields)
+            ServiceAccountAuditLog.log(
+                account=account,
+                action=_action("DEACTIVATED"),
+                actor=actor,
+                message=reason or "Account deactivated",
+                extra_data={"tokens_revoked": result["revoked"]},
+                remote_addr=remote_addr,
+            )
+            deactivated += 1
+    logger.info(
+        "service_account.accounts_deactivated",
+        extra={
+            "deactivated": deactivated,
+            "already_inactive": already_inactive,
+            "tokens_revoked": tokens_revoked,
+            "actor_id": getattr(actor, "pk", None),
+        },
+    )
+    return {
+        "deactivated": deactivated,
+        "already_inactive": already_inactive,
+        "tokens_revoked": tokens_revoked,
+    }
+
+
 def _should_dispatch_notice(
     *,
     account: ServiceAccount,

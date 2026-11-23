@@ -15,7 +15,7 @@ from django.utils import timezone
 from django.utils.html import format_html
 
 from .models import ServiceAccount, ServiceAccountAuditLog, ServiceAccountToken
-from .services import revoke_tokens
+from .services import deactivate_accounts, revoke_tokens
 
 MANAGE_PERMISSION = "service_accounts.manage_tokens"
 AUDIT_LOG_VIEW_PERMISSION = "service_accounts.view_serviceaccountauditlog"
@@ -83,6 +83,7 @@ class ServiceAccountAdmin(ServiceAccountAdminBase):
     search_fields = ("name", "email")
     readonly_fields = ("created_at", "updated_at")
     inlines = (ServiceAccountTokenInline,)
+    actions = ("deactivate_selected_accounts",)
 
     class TokenGenerationForm(forms.Form):
         expires_at = forms.DateTimeField(
@@ -132,9 +133,65 @@ class ServiceAccountAdmin(ServiceAccountAdminBase):
         request: HttpRequest,
         obj: ServiceAccount | None = None,
     ) -> bool:
-        if super().has_delete_permission(request, obj):
-            return True
+        # EV-0080: uma conta desativa-se (ação «Desativar contas selecionadas»), não se
+        # apaga — apagar levava tokens e auditoria. Vale também para superusers.
+        return False
+
+    def has_manage_permission(self, request: HttpRequest) -> bool:
+        """Gate for actions declared with ``permissions=["manage"]`` (EV-0080)."""
         return self._can_manage(request)
+
+    @admin.action(
+        description="Desativar contas selecionadas",
+        permissions=["manage"],
+    )
+    def deactivate_selected_accounts(
+        self,
+        request: HttpRequest,
+        queryset: Any,
+    ) -> None:
+        # Defence in depth: Django already hides the action without the permission,
+        # but a forged POST must not deactivate anything either.
+        if not self.has_manage_permission(request):
+            raise PermissionDenied
+
+        actor: Model | None = None
+        if request.user.is_authenticated:
+            actor = cast(Model, request.user)
+
+        result = deactivate_accounts(
+            account_ids=queryset.values_list("pk", flat=True),
+            actor=actor,
+            reason="Conta desativada via admin",
+            remote_addr=request.META.get("REMOTE_ADDR"),
+        )
+        deactivated = result["deactivated"]
+        already = result["already_inactive"]
+        tokens = result["tokens_revoked"]
+        if deactivated:
+            self.message_user(
+                request,
+                f"{deactivated} conta(s) desativada(s).",
+                level=messages.SUCCESS,
+            )
+        if already:
+            self.message_user(
+                request,
+                f"{already} conta(s) já estavam inativas.",
+                level=messages.WARNING,
+            )
+        if tokens:
+            self.message_user(
+                request,
+                f"{tokens} token(s) revogado(s).",
+                level=messages.SUCCESS,
+            )
+        if not deactivated and not already:
+            self.message_user(
+                request,
+                "Nenhuma conta desativada.",
+                level=messages.WARNING,
+            )
 
     def save_model(
         self,
