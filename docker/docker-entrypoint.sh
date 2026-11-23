@@ -261,7 +261,9 @@ main() {
 
   # Ensure writable directories exist (bind-mounted from host may be missing)
   mkdir -p /app/backend/media /app/backend/logs /app/backend/staticfiles /app/database 2>/dev/null || true
-  chmod -R 777 /app/backend/media /app/backend/logs /app/backend/staticfiles /app/database 2>/dev/null || warn "Could not set permissions on data dirs"
+  chmod -R 777 /app/backend/media /app/backend/logs /app/backend/staticfiles 2>/dev/null || warn "Could not set permissions on data dirs"
+  # database/ guarda fernet.key e runtime.env (credenciais): nunca legível por «outros»
+  chmod -R u+rwX,g+rwX,o-rwx /app/database 2>/dev/null || warn "Could not restrict /app/database"
 
   # Optional initialization steps
   maybe_load_runtime_env

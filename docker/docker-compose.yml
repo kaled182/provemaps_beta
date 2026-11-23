@@ -23,9 +23,7 @@
       DB_PORT: "5432"
       DB_NAME: app
       DB_USER: app
-      DB_PASSWORD: app
       DJANGO_SETTINGS_MODULE: settings.dev
-      SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
       # Aceita qualquer host/IP — configuração via web, sem precisar editar .env
       ALLOWED_HOSTS: "*"
       PYTHONPATH: "/app/backend:/app"
@@ -98,7 +96,7 @@
       LOG_LEVEL: "info"
       DATA_DIR: /data
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
     volumes:
       - whatsapp_qr_data:/data
     restart: unless-stopped
@@ -119,9 +117,7 @@
       DB_PORT: "5432"
       DB_NAME: app
       DB_USER: app
-      DB_PASSWORD: app
       DJANGO_SETTINGS_MODULE: settings.dev
-      SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
       ALLOWED_HOSTS: "*"
       PYTHONPATH: "/app/backend:/app"
       PYTHONUNBUFFERED: 1
@@ -170,9 +166,7 @@
       DB_PORT: "5432"
       DB_NAME: app
       DB_USER: app
-      DB_PASSWORD: app
       DJANGO_SETTINGS_MODULE: settings.dev
-      SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
       ALLOWED_HOSTS: "*"
       PYTHONPATH: "/app/backend:/app"
       PYTHONUNBUFFERED: 1
@@ -207,7 +201,7 @@
   redis:
     image: redis:7-alpine
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"  # nunca 0.0.0.0: Redis sem senha foi invadido em 2026-11-07
     command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -220,16 +214,17 @@
 
   postgres:
     image: postgis/postgis:16-3.4
+    env_file:
+      - ../.env   # POSTGRES_PASSWORD (= DB_PASSWORD); só é lido na criação do volume
     environment:
       POSTGRES_DB: app
       POSTGRES_USER: app
-      POSTGRES_PASSWORD: app
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.utf8"
       POSTGIS_GDAL_ENABLED_DRIVERS: ENABLE_ALL
       POSTGIS_ENABLE_OUTDB_RASTERS: 1
     # Map to host port 5433 to avoid conflicts with local Postgres installations on 5432
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./sql/init_postgis.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
@@ -241,72 +236,14 @@
       start_period: 30s
     restart: unless-stopped
 
-  # Prometheus - Metrics collection and alerting
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: docker-prometheus-1
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
-      - '--web.enable-lifecycle'
-      - '--storage.tsdb.retention.time=30d'
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./prometheus/alerts:/etc/prometheus/alerts:ro
-      - prometheus_data:/prometheus
-    restart: unless-stopped
-    networks:
-      - default
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-
-  # Grafana - Metrics visualization and dashboards
-  grafana:
-    image: grafana/grafana:latest
-    container_name: docker-grafana-1
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_SERVER_ROOT_URL=http://localhost:3000
-      - GF_ANALYTICS_REPORTING_ENABLED=false
-      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
-      - GF_INSTALL_PLUGINS=
-    ports:
-      - "3002:3000"
-    volumes:
-      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
-      - grafana_data:/var/lib/grafana
-    restart: unless-stopped
-    depends_on:
-      prometheus:
-        condition: service_healthy
-    networks:
-      - default
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
   video-hls:
     build:
       context: ./hls
     image: docker-video-hls:latest
     container_name: docker-video-hls-1
     ports:
-      - "1935:1935"
-      - "8083:8080"
+      - "127.0.0.1:1935:1935"
+      - "127.0.0.1:8083:8080"
     volumes:
       - hls_cache:/var/www/hls
     healthcheck:
@@ -330,7 +267,7 @@
       mediamtx:
         condition: service_started
     ports:
-      - "9000:9000"
+      - "127.0.0.1:9000:9000"
     restart: unless-stopped
     volumes:
       - hls_cache:/var/www/hls
@@ -345,7 +282,7 @@
       - MTX_WEBRTCICEUDPMUXADDRESS=:8189
       - MTX_WEBRTCICEHOSTNAT=localhost
     ports:
-      - "8554:8554"   # RTSP
+      - "127.0.0.1:8554:8554"   # RTSP
       - "8888:8888"   # HLS (LL-HLS)
       - "8889:8889"   # WebRTC (HTTP signaling)
       - "8189:8189/udp" # WebRTC ICE/UDP candidates
@@ -367,9 +304,7 @@
       DB_PORT: "5432"
       DB_NAME: app
       DB_USER: app
-      DB_PASSWORD: app
       DJANGO_SETTINGS_MODULE: settings.test
-      SECRET_KEY: "django-insecure-test-key"
       PYTHONPATH: "/app/backend:/app"
       PYTHONUNBUFFERED: 1
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
@@ -416,8 +351,6 @@
 volumes:
   redis_data:
   postgres_data:
-  prometheus_data:
-  grafana_data:
   whatsapp_qr_data:
   certbot_www:
   certbot_certs:

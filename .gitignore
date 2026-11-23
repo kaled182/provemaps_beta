@@ -262,3 +262,6 @@ backend/nul
 # Documentação de backups (gerada automaticamente)
 backups/*.md
 backups/*.txt
+
+# Chave Fernet local (segredo; nunca versionar)
+database/fernet.key

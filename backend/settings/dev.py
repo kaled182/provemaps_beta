@@ -64,7 +64,10 @@ if TYPE_CHECKING:  # pragma: no cover - assists type checkers only
 # -----------------------------------------------------
 # Core
 # -----------------------------------------------------
-DEBUG = True  # type: ignore[assignment]
+# Por omissão True (desenvolvimento). A produção corre esta pilha com settings.dev
+# (EV-0037) e põe DEBUG=False no .env: um erro 500 não pode mostrar o traceback.
+_debug_env = os.getenv("DEBUG", "True").strip().lower()
+DEBUG = _debug_env in {"1", "true", "yes", "on"}  # type: ignore[assignment]
 
 # Development hosts — aceita qualquer host/IP para facilitar instalação em qualquer servidor
 # Em desenvolvimento nunca restrinja: o servidor pode ter qualquer IP
