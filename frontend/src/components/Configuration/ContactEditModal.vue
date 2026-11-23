@@ -1,120 +1,126 @@
 <template>
-  <div class="modal-overlay" @click="$emit('close')">
-    <div class="modal-dialog" @click.stop>
-      <header class="modal-header">
-        <h3>{{ contact ? 'Editar Contato' : 'Novo Contato' }}</h3>
-        <button type="button" class="btn-close" @click="$emit('close')">&times;</button>
-      </header>
-
-      <form class="modal-body" @submit.prevent="handleSubmit">
-        <div class="form-row">
-          <div class="form-group">
-            <label for="contact-name">Nome <span class="required">*</span></label>
-            <input
-              id="contact-name"
-              v-model="formData.name"
-              class="form-control"
-              type="text"
-              placeholder="Nome completo"
-              required
-            />
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label for="contact-phone">Telefone <span class="required">*</span></label>
-            <input
-              id="contact-phone"
-              v-model="formData.phone"
-              class="form-control"
-              type="tel"
-              placeholder="+5561999999999 ou 61999999999"
-              :disabled="Boolean(contact?.id)"
-              required
-            />
-            <small class="form-hint">
-              {{ contact?.id ? 'Telefone não pode ser alterado' : 'Formato: +5561999999999 ou 61999999999' }}
-            </small>
-          </div>
-          <div class="form-group">
-            <label for="contact-email">Email</label>
-            <input
-              id="contact-email"
-              v-model="formData.email"
-              class="form-control"
-              type="email"
-              placeholder="email@exemplo.com"
-            />
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label for="contact-company">Empresa</label>
-            <input
-              id="contact-company"
-              v-model="formData.company"
-              class="form-control"
-              type="text"
-              placeholder="Nome da empresa"
-            />
-          </div>
-          <div class="form-group">
-            <label for="contact-position">Cargo</label>
-            <input
-              id="contact-position"
-              v-model="formData.position"
-              class="form-control"
-              type="text"
-              placeholder="Cargo na empresa"
-            />
-          </div>
-        </div>
-
+  <BaseModal
+    :show="true"
+    :title="contact ? 'Editar contato' : 'Novo contato'"
+    :icon="PhAddressBook"
+    :dirty="dirty"
+    size="md"
+    flush
+    @close="$emit('close')"
+  >
+    <form id="contact-edit-form" class="modal-body" @submit.prevent="handleSubmit">
+      <div class="form-row">
         <div class="form-group">
-          <label>Grupos</label>
-          <div class="checkbox-group">
-            <label v-for="group in groups" :key="group.id" class="checkbox-label">
-              <input v-model="formData.groups" type="checkbox" :value="group.id" />
-              <span>{{ group.name }}</span>
-            </label>
-          </div>
-          <small v-if="groups.length === 0" class="form-hint text-muted">Nenhum grupo disponível.</small>
-        </div>
-
-        <div class="form-group">
-          <label for="contact-notes">Observações</label>
-          <textarea
-            id="contact-notes"
-            v-model="formData.notes"
+          <label for="contact-name">Nome <span class="required">*</span></label>
+          <input
+            id="contact-name"
+            v-model="formData.name"
             class="form-control"
-            rows="3"
-            placeholder="Informações adicionais"
-          ></textarea>
+            type="text"
+            placeholder="Nome completo"
+            required
+          />
         </div>
+      </div>
 
+      <div class="form-row">
         <div class="form-group">
-          <label class="checkbox-label">
-            <input v-model="formData.is_active" type="checkbox" />
-            Contato ativo
+          <label for="contact-phone">Telefone <span class="required">*</span></label>
+          <input
+            id="contact-phone"
+            v-model="formData.phone"
+            class="form-control"
+            type="tel"
+            placeholder="+5561999999999 ou 61999999999"
+            :disabled="Boolean(contact?.id)"
+            required
+          />
+          <small class="form-hint">
+            {{ contact?.id ? 'Telefone não pode ser alterado' : 'Formato: +5561999999999 ou 61999999999' }}
+          </small>
+        </div>
+        <div class="form-group">
+          <label for="contact-email">Email</label>
+          <input
+            id="contact-email"
+            v-model="formData.email"
+            class="form-control"
+            type="email"
+            placeholder="email@exemplo.com"
+          />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="contact-company">Empresa</label>
+          <input
+            id="contact-company"
+            v-model="formData.company"
+            class="form-control"
+            type="text"
+            placeholder="Nome da empresa"
+          />
+        </div>
+        <div class="form-group">
+          <label for="contact-position">Cargo</label>
+          <input
+            id="contact-position"
+            v-model="formData.position"
+            class="form-control"
+            type="text"
+            placeholder="Cargo na empresa"
+          />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Grupos</label>
+        <div class="checkbox-group">
+          <label v-for="group in groups" :key="group.id" class="checkbox-label">
+            <input v-model="formData.groups" type="checkbox" :value="group.id" />
+            <span>{{ group.name }}</span>
           </label>
         </div>
+        <small v-if="groups.length === 0" class="form-hint text-muted">Nenhum grupo disponível.</small>
+      </div>
 
-        <footer class="modal-footer">
-          <button type="button" class="btn btn-secondary" @click="$emit('close')">Cancelar</button>
-          <button type="submit" class="btn btn-primary">
-            <i class="fas fa-save"></i>
-            {{ contact ? 'Atualizar' : 'Criar' }}
-          </button>
-        </footer>
-      </form>
-    </div>
-  </div>
+      <div class="form-group">
+        <label for="contact-notes">Observações</label>
+        <textarea
+          id="contact-notes"
+          v-model="formData.notes"
+          class="form-control"
+          rows="3"
+          placeholder="Informações adicionais"
+        ></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input v-model="formData.is_active" type="checkbox" />
+          Contato ativo
+        </label>
+      </div>
+      <p v-if="formError" class="form-error" role="alert" data-testid="contact-form-error">{{ formError }}</p>
+    </form>
+
+    <template #footer>
+      <div class="flex items-center justify-end gap-2">
+        <button type="button" class="btn btn-secondary" @click="$emit('close')">Cancelar</button>
+        <button type="submit" form="contact-edit-form" class="btn btn-primary">
+          <i class="fas fa-save"></i>
+          {{ contact ? 'Atualizar' : 'Criar' }}
+        </button>
+      </div>
+    </template>
+  </BaseModal>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { PhAddressBook } from '@phosphor-icons/vue'
+import BaseModal from '@/components/Common/BaseModal.vue'
 
 const props = defineProps({
   contact: {
@@ -142,6 +148,10 @@ const emptyForm = () => ({
 })
 
 const formData = ref(emptyForm())
+// EV-0068c: aviso ao fechar com alterações; validação no próprio modal (sem alert).
+const initial = ref('')
+const dirty = computed(() => JSON.stringify(formData.value) !== initial.value)
+const formError = ref('')
 
 const initForm = () => {
   if (props.contact) {
@@ -159,6 +169,8 @@ const initForm = () => {
   } else {
     formData.value = emptyForm()
   }
+  initial.value = JSON.stringify(formData.value)
+  formError.value = ''
 }
 
 watch(
@@ -186,7 +198,7 @@ const normalizePhone = (value) => {
 
 const handleSubmit = () => {
   if (!formData.value.name.trim() || !formData.value.phone.trim()) {
-    alert('Nome e telefone são obrigatórios.')
+    formError.value = 'Nome e telefone são obrigatórios.'
     return
   }
 
@@ -200,58 +212,6 @@ const handleSubmit = () => {
 </script>
 
 <style scoped>
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-  padding: 20px;
-}
-
-.modal-dialog {
-  width: 100%;
-  max-width: 720px;
-  border-radius: 12px;
-  background: var(--surface-card, #ffffff);
-  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.35);
-  overflow: hidden;
-}
-
-.modal-header,
-.modal-footer {
-  background: var(--bg-secondary, #f8fafc);
-  border-color: var(--border-secondary, #cbd5e1);
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--border-secondary, #cbd5e1);
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-size: 20px;
-  color: var(--text-primary, #0f172a);
-}
-
-.btn-close {
-  background: none;
-  border: none;
-  font-size: 30px;
-  color: var(--text-tertiary, #94a3b8);
-  cursor: pointer;
-  line-height: 1;
-}
-
-.btn-close:hover {
-  color: var(--text-primary, #0f172a);
-}
 
 .modal-body {
   padding: 24px;
@@ -275,31 +235,41 @@ const handleSubmit = () => {
 
 .form-group label {
   font-weight: 500;
-  color: var(--text-primary, #0f172a);
+  color: var(--text-primary, rgb(var(--n-950)));
+}
+
+.form-error {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border: 1px solid rgb(var(--danger) / 0.4);
+  border-radius: 6px;
+  background: rgb(var(--danger) / 0.1);
+  color: rgb(var(--danger));
+  font-size: 13px;
 }
 
 .required {
-  color: var(--accent-danger, #dc2626);
+  color: var(--accent-danger, rgb(var(--danger)));
 }
 
 .form-control {
   width: 100%;
   padding: 10px 12px;
   border-radius: 6px;
-  border: 1px solid var(--border-secondary, #cbd5e1);
+  border: 1px solid var(--border-secondary, rgb(var(--n-300)));
   background: var(--surface-card, #ffffff);
-  color: var(--text-primary, #0f172a);
+  color: var(--text-primary, rgb(var(--n-950)));
   font-size: 14px;
 }
 
 .form-control:focus {
   outline: none;
-  border-color: var(--accent-primary, #2563eb);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  border-color: var(--accent-primary, rgb(var(--info)));
+  box-shadow: 0 0 0 3px rgb(var(--info) / 0.15);
 }
 
 .form-control:disabled {
-  background: var(--bg-secondary, #f8fafc);
+  background: var(--bg-secondary, rgb(var(--n-50)));
   cursor: not-allowed;
 }
 
@@ -310,11 +280,11 @@ textarea.form-control {
 
 .form-hint {
   font-size: 12px;
-  color: var(--text-tertiary, #94a3b8);
+  color: var(--text-tertiary, rgb(var(--n-400)));
 }
 
 .text-muted {
-  color: var(--text-tertiary, #94a3b8);
+  color: var(--text-tertiary, rgb(var(--n-400)));
 }
 
 .checkbox-group {
@@ -322,9 +292,9 @@ textarea.form-control {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 10px;
   padding: 12px;
-  border: 1px solid var(--border-secondary, #cbd5e1);
+  border: 1px solid var(--border-secondary, rgb(var(--n-300)));
   border-radius: 6px;
-  background: var(--bg-secondary, #f8fafc);
+  background: var(--bg-secondary, rgb(var(--n-50)));
   max-height: 160px;
   overflow-y: auto;
 }
@@ -334,21 +304,13 @@ textarea.form-control {
   align-items: center;
   gap: 8px;
   font-weight: 500;
-  color: var(--text-secondary, #475569);
+  color: var(--text-secondary, rgb(var(--n-600)));
 }
 
 .checkbox-label input[type='checkbox'] {
   width: 16px;
   height: 16px;
   cursor: pointer;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 16px 24px;
-  border-top: 1px solid var(--border-secondary, #cbd5e1);
 }
 
 .btn {
@@ -364,28 +326,25 @@ textarea.form-control {
 }
 
 .btn-primary {
-  background: var(--accent-primary, #2563eb);
+  background: var(--accent-primary, rgb(var(--info)));
   color: #fff;
 }
 
 .btn-primary:hover {
-  background: var(--accent-primary-dark, #1e40af);
+  background: var(--accent-primary-dark, rgb(var(--info-strong)));
 }
 
 .btn-secondary {
-  background: var(--bg-secondary, #f8fafc);
-  color: var(--text-primary, #0f172a);
-  border: 1px solid var(--border-secondary, #cbd5e1);
+  background: var(--bg-secondary, rgb(var(--n-50)));
+  color: var(--text-primary, rgb(var(--n-950)));
+  border: 1px solid var(--border-secondary, rgb(var(--n-300)));
 }
 
 .btn-secondary:hover {
-  background: var(--surface-highlight, #f1f5f9);
+  background: var(--surface-highlight, rgb(var(--n-100)));
 }
 
 @media (max-width: 768px) {
-  .modal-dialog {
-    max-width: 92vw;
-  }
 
   .form-row {
     grid-template-columns: 1fr;

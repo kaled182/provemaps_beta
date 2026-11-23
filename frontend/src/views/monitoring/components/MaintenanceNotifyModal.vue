@@ -1,200 +1,189 @@
 <template>
-  <transition name="modal-fade">
-    <div v-if="visible" class="notify-overlay" @click.self="$emit('close')">
-      <div class="notify-modal">
+  <BaseModal
+    :show="visible"
+    title="Notificar responsáveis"
+    :icon="PhPhone"
+    :z-index="9200"
+    size="md"
+    flush
+    @close="$emit('close')"
+  >
+    <!-- Context summary -->
+    <div class="nm-context">
+      <span class="nm-ctx-item">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        {{ cables.length }} cabo(s) afetado(s)
+      </span>
+      <span class="nm-ctx-sep">·</span>
+      <span class="nm-ctx-item">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/></svg>
+        {{ devices.length }} equipamento(s) afetado(s)
+      </span>
+    </div>
 
-        <!-- Header -->
-        <div class="nm-header">
-          <div class="nm-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.41 2 2 0 0 1 3.6 1.23h3a2 2 0 0 1 2 1.72c.13 1 .36 1.97.72 2.9a2 2 0 0 1-.45 2.11L7.91 9A16 16 0 0 0 14 15.08l.96-.96a2 2 0 0 1 2.11-.45c.93.35 1.9.59 2.9.72a2 2 0 0 1 1.72 2.03z"/>
-            </svg>
-            Notificar Responsáveis
-          </div>
-          <button class="nm-close" @click="$emit('close')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
+    <!-- Loading / error state -->
+    <div v-if="loading" class="nm-loading">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin">
+        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+      </svg>
+      Carregando destinatários…
+    </div>
 
-        <!-- Context summary -->
-        <div class="nm-context">
-          <span class="nm-ctx-item">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-            {{ cables.length }} cabo(s) afetado(s)
-          </span>
-          <span class="nm-ctx-sep">·</span>
-          <span class="nm-ctx-item">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/></svg>
-            {{ devices.length }} equipamento(s) afetado(s)
-          </span>
-        </div>
+    <div v-else-if="loadError" class="nm-error">
+      {{ loadError }}
+    </div>
 
-        <!-- Loading / error state -->
-        <div v-if="loading" class="nm-loading">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin">
-            <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-          </svg>
-          Carregando destinatários…
-        </div>
+    <template v-else>
+      <!-- Message -->
+      <div class="nm-section">
+        <label class="nm-label">
+          Mensagem
+          <span class="nm-label-hint">(opcional — em branco envia "ENLACE OFF.")</span>
+        </label>
+        <textarea
+          v-model="message"
+          class="nm-textarea"
+          rows="3"
+          placeholder='Deixe em branco para usar "ENLACE OFF." ou descreva o motivo…'
+        ></textarea>
+      </div>
 
-        <div v-else-if="loadError" class="nm-error">
-          {{ loadError }}
+      <!-- Tabs: Users / Responsáveis -->
+      <div class="nm-tabs">
+        <button
+          v-for="tab in tabs"
+          :key="tab.key"
+          :class="['nm-tab', { active: activeTab === tab.key }]"
+          @click="activeTab = tab.key"
+        >
+          {{ tab.label }}
+          <span class="nm-tab-count">{{ tab.count }}</span>
+        </button>
+      </div>
+
+      <!-- Recipients list -->
+      <div class="nm-list">
+        <div v-if="currentList.length === 0" class="nm-empty">
+          Nenhum destinatário disponível
+          <span v-if="!smtpEnabled" class="nm-empty-hint">— SMTP não configurado</span>
         </div>
 
         <template v-else>
-          <!-- Message -->
-          <div class="nm-section">
-            <label class="nm-label">
-              Mensagem
-              <span class="nm-label-hint">(opcional — em branco envia "ENLACE OFF.")</span>
-            </label>
-            <textarea
-              v-model="message"
-              class="nm-textarea"
-              rows="3"
-              placeholder='Deixe em branco para usar "ENLACE OFF." ou descreva o motivo…'
-            ></textarea>
+          <!-- Primary responsibles section (auto-detected from cables) -->
+          <div v-if="primaryInCurrentTab.length > 0" class="nm-group-label">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+            Responsável(is) dos cabos afetados
           </div>
 
-          <!-- Tabs: Users / Responsáveis -->
-          <div class="nm-tabs">
-            <button
-              v-for="tab in tabs"
-              :key="tab.key"
-              :class="['nm-tab', { active: activeTab === tab.key }]"
-              @click="activeTab = tab.key"
-            >
-              {{ tab.label }}
-              <span class="nm-tab-count">{{ tab.count }}</span>
-            </button>
-          </div>
-
-          <!-- Recipients list -->
-          <div class="nm-list">
-            <div v-if="currentList.length === 0" class="nm-empty">
-              Nenhum destinatário disponível
-              <span v-if="!smtpEnabled" class="nm-empty-hint">— SMTP não configurado</span>
+          <div
+            v-for="rec in primaryInCurrentTab"
+            :key="`primary-${rec.type}-${rec.id}`"
+            class="nm-recipient nm-recipient--primary"
+            :class="{ selected: isSelected(rec) }"
+          >
+            <div class="nm-rec-info">
+              <div class="nm-rec-name-row">
+                <span class="nm-rec-name">{{ rec.name }}</span>
+                <span class="nm-badge-primary">Responsável</span>
+              </div>
+              <span v-if="rec.type_label" class="nm-rec-type">{{ rec.type_label }}</span>
+              <span v-if="rec.email" class="nm-rec-detail">{{ rec.email }}</span>
+              <span v-if="rec.phone" class="nm-rec-detail">{{ rec.phone }}</span>
             </div>
-
-            <template v-else>
-              <!-- Primary responsibles section (auto-detected from cables) -->
-              <div v-if="primaryInCurrentTab.length > 0" class="nm-group-label">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-                </svg>
-                Responsável(is) dos cabos afetados
-              </div>
-
-              <div
-                v-for="rec in primaryInCurrentTab"
-                :key="`primary-${rec.type}-${rec.id}`"
-                class="nm-recipient nm-recipient--primary"
-                :class="{ selected: isSelected(rec) }"
-              >
-                <div class="nm-rec-info">
-                  <div class="nm-rec-name-row">
-                    <span class="nm-rec-name">{{ rec.name }}</span>
-                    <span class="nm-badge-primary">Responsável</span>
-                  </div>
-                  <span v-if="rec.type_label" class="nm-rec-type">{{ rec.type_label }}</span>
-                  <span v-if="rec.email" class="nm-rec-detail">{{ rec.email }}</span>
-                  <span v-if="rec.phone" class="nm-rec-detail">{{ rec.phone }}</span>
-                </div>
-                <div class="nm-channels">
-                  <button
-                    v-for="ch in rec.channels"
-                    :key="ch"
-                    :class="['nm-ch', `nm-ch--${ch}`, { active: isChannelSelected(rec, ch) }]"
-                    :title="channelLabel(ch)"
-                    @click="toggleChannel(rec, ch)"
-                  >
-                    <svg v-if="ch === 'email'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
-                    </svg>
-                    <svg v-else-if="ch === 'whatsapp'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                    </svg>
-                    <svg v-else-if="ch === 'telegram'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                    </svg>
-                    {{ channelLabel(ch) }}
-                  </button>
-                </div>
-              </div>
-
-              <!-- Divider when there are additional recipients -->
-              <div v-if="primaryInCurrentTab.length > 0 && secondaryInCurrentTab.length > 0" class="nm-group-label nm-group-label--secondary">
-                Adicionar mais destinatários
-              </div>
-
-              <!-- Other recipients -->
-              <div
-                v-for="rec in secondaryInCurrentTab"
-                :key="`${rec.type}-${rec.id}`"
-                class="nm-recipient"
-                :class="{ selected: isSelected(rec) }"
-              >
-                <div class="nm-rec-info">
-                  <span class="nm-rec-name">{{ rec.name }}</span>
-                  <span v-if="rec.type_label" class="nm-rec-type">{{ rec.type_label }}</span>
-                  <span v-if="rec.email" class="nm-rec-detail">{{ rec.email }}</span>
-                  <span v-if="rec.phone" class="nm-rec-detail">{{ rec.phone }}</span>
-                </div>
-                <div class="nm-channels">
-                  <button
-                    v-for="ch in rec.channels"
-                    :key="ch"
-                    :class="['nm-ch', `nm-ch--${ch}`, { active: isChannelSelected(rec, ch) }]"
-                    :title="channelLabel(ch)"
-                    @click="toggleChannel(rec, ch)"
-                  >
-                    <svg v-if="ch === 'email'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
-                    </svg>
-                    <svg v-else-if="ch === 'whatsapp'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                    </svg>
-                    <svg v-else-if="ch === 'telegram'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                    </svg>
-                    {{ channelLabel(ch) }}
-                  </button>
-                </div>
-              </div>
-            </template>
-          </div>
-
-          <!-- Footer -->
-          <div class="nm-footer">
-            <span class="nm-sel-count">{{ totalSelectedCount }} destinatário(s) selecionado(s)</span>
-            <div class="nm-footer-actions">
-              <button class="nm-btn nm-btn--secondary" @click="$emit('close')">Cancelar</button>
+            <div class="nm-channels">
               <button
-                class="nm-btn nm-btn--primary"
-                :disabled="!canSend || sending"
-                @click="send"
+                v-for="ch in rec.channels"
+                :key="ch"
+                :class="['nm-ch', `nm-ch--${ch}`, { active: isChannelSelected(rec, ch) }]"
+                :title="channelLabel(ch)"
+                @click="toggleChannel(rec, ch)"
               >
-                <svg v-if="sending" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin">
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                <svg v-if="ch === 'email'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
                 </svg>
-                <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg v-else-if="ch === 'whatsapp'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                <svg v-else-if="ch === 'telegram'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
                 </svg>
-                {{ sending ? 'Enviando…' : 'Enviar' }}
+                {{ channelLabel(ch) }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Divider when there are additional recipients -->
+          <div v-if="primaryInCurrentTab.length > 0 && secondaryInCurrentTab.length > 0" class="nm-group-label nm-group-label--secondary">
+            Adicionar mais destinatários
+          </div>
+
+          <!-- Other recipients -->
+          <div
+            v-for="rec in secondaryInCurrentTab"
+            :key="`${rec.type}-${rec.id}`"
+            class="nm-recipient"
+            :class="{ selected: isSelected(rec) }"
+          >
+            <div class="nm-rec-info">
+              <span class="nm-rec-name">{{ rec.name }}</span>
+              <span v-if="rec.type_label" class="nm-rec-type">{{ rec.type_label }}</span>
+              <span v-if="rec.email" class="nm-rec-detail">{{ rec.email }}</span>
+              <span v-if="rec.phone" class="nm-rec-detail">{{ rec.phone }}</span>
+            </div>
+            <div class="nm-channels">
+              <button
+                v-for="ch in rec.channels"
+                :key="ch"
+                :class="['nm-ch', `nm-ch--${ch}`, { active: isChannelSelected(rec, ch) }]"
+                :title="channelLabel(ch)"
+                @click="toggleChannel(rec, ch)"
+              >
+                <svg v-if="ch === 'email'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+                </svg>
+                <svg v-else-if="ch === 'whatsapp'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                <svg v-else-if="ch === 'telegram'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+                {{ channelLabel(ch) }}
               </button>
             </div>
           </div>
         </template>
-
       </div>
-    </div>
-  </transition>
+
+      <!-- Footer -->
+      <div class="nm-footer">
+        <span class="nm-sel-count">{{ totalSelectedCount }} destinatário(s) selecionado(s)</span>
+        <div class="nm-footer-actions">
+          <button class="nm-btn nm-btn--secondary" @click="$emit('close')">Cancelar</button>
+          <button
+            class="nm-btn nm-btn--primary"
+            :disabled="!canSend || sending"
+            @click="send"
+          >
+            <svg v-if="sending" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin">
+              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+            </svg>
+            <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+            {{ sending ? 'Enviando…' : 'Enviar' }}
+          </button>
+        </div>
+      </div>
+    </template>
+  </BaseModal>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { PhPhone } from '@phosphor-icons/vue'
+import BaseModal from '@/components/Common/BaseModal.vue'
 import { getCsrfToken } from '@/composables/useApi.js'
 
 const props = defineProps({
@@ -407,64 +396,6 @@ watch(() => props.visible, (val) => {
 </script>
 
 <style scoped>
-.notify-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9200;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-
-.notify-modal {
-  width: 100%;
-  max-width: 520px;
-  max-height: 90vh;
-  background: rgba(15, 23, 42, 0.98);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  border-radius: 14px;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
-  overflow: hidden;
-}
-
-/* Header */
-.nm-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 16px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  flex-shrink: 0;
-}
-
-.nm-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: #f59e0b;
-}
-
-.nm-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 7px;
-  color: rgba(255, 255, 255, 0.5);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.nm-close:hover { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border-color: rgba(239, 68, 68, 0.3); }
 
 /* Context */
 .nm-context {
@@ -472,8 +403,8 @@ watch(() => props.visible, (val) => {
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  background: rgba(245, 158, 11, 0.06);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgb(var(--warning) / 0.06);
+  border-bottom: 1px solid rgb(var(--n-200));
   flex-shrink: 0;
 }
 .nm-ctx-item {
@@ -481,10 +412,10 @@ watch(() => props.visible, (val) => {
   align-items: center;
   gap: 5px;
   font-size: 0.75rem;
-  color: #fbbf24;
+  color: rgb(var(--warning));
   font-weight: 600;
 }
-.nm-ctx-sep { color: rgba(255, 255, 255, 0.25); font-size: 0.75rem; }
+.nm-ctx-sep { color: rgb(var(--n-500)); font-size: 0.75rem; }
 
 /* Loading / error */
 .nm-loading, .nm-error {
@@ -493,10 +424,10 @@ watch(() => props.visible, (val) => {
   gap: 10px;
   padding: 24px 16px;
   font-size: 0.82rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgb(var(--n-600));
   justify-content: center;
 }
-.nm-error { color: #fca5a5; }
+.nm-error { color: rgb(var(--danger)); }
 
 /* Section */
 .nm-section {
@@ -509,7 +440,7 @@ watch(() => props.visible, (val) => {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgb(var(--n-600));
   margin-bottom: 6px;
 }
 .nm-label-hint {
@@ -517,15 +448,15 @@ watch(() => props.visible, (val) => {
   font-weight: 400;
   text-transform: none;
   letter-spacing: 0;
-  color: rgba(255, 255, 255, 0.35);
+  color: rgb(var(--n-500));
   margin-left: 6px;
 }
 .nm-textarea {
   width: 100%;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgb(var(--n-50));
+  border: 1px solid rgb(var(--n-200));
   border-radius: 8px;
-  color: #e2e8f0;
+  color: rgb(var(--n-900));
   font-size: 0.82rem;
   padding: 10px 12px;
   resize: none;
@@ -534,15 +465,15 @@ watch(() => props.visible, (val) => {
   transition: border-color 0.15s;
   box-sizing: border-box;
 }
-.nm-textarea:focus { border-color: rgba(245, 158, 11, 0.5); }
-.nm-textarea::placeholder { color: rgba(255, 255, 255, 0.25); }
+.nm-textarea:focus { border-color: rgb(var(--warning) / 0.5); }
+.nm-textarea::placeholder { color: rgb(var(--n-400)); }
 
 /* Tabs */
 .nm-tabs {
   display: flex;
   gap: 0;
   padding: 12px 16px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgb(var(--n-200));
   flex-shrink: 0;
 }
 .nm-tab {
@@ -553,22 +484,22 @@ watch(() => props.visible, (val) => {
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgb(var(--n-600));
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s;
   margin-bottom: -1px;
 }
-.nm-tab.active { color: #f59e0b; border-bottom-color: #f59e0b; }
+.nm-tab.active { color: rgb(var(--warning)); border-bottom-color: rgb(var(--warning)); }
 .nm-tab-count {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgb(var(--n-100));
   border-radius: 10px;
   padding: 1px 6px;
   font-size: 0.68rem;
   font-weight: 700;
 }
-.nm-tab.active .nm-tab-count { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+.nm-tab.active .nm-tab-count { background: rgb(var(--warning) / 0.2); color: rgb(var(--warning)); }
 
 /* List */
 .nm-list {
@@ -580,9 +511,9 @@ watch(() => props.visible, (val) => {
   padding: 24px 16px;
   text-align: center;
   font-size: 0.78rem;
-  color: rgba(255, 255, 255, 0.3);
+  color: rgb(var(--n-500));
 }
-.nm-empty-hint { color: rgba(239, 68, 68, 0.7); }
+.nm-empty-hint { color: rgb(var(--danger) / 0.7); }
 
 /* Group labels */
 .nm-group-label {
@@ -594,12 +525,12 @@ watch(() => props.visible, (val) => {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #f59e0b;
+  color: rgb(var(--warning));
 }
 .nm-group-label--secondary {
-  color: rgba(255, 255, 255, 0.3);
+  color: rgb(var(--n-500));
   padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid rgb(var(--n-200));
   margin-top: 4px;
 }
 
@@ -609,16 +540,16 @@ watch(() => props.visible, (val) => {
   justify-content: space-between;
   gap: 10px;
   padding: 10px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgb(var(--n-200));
   transition: background 0.12s;
 }
-.nm-recipient:hover { background: rgba(255, 255, 255, 0.03); }
-.nm-recipient.selected { background: rgba(245, 158, 11, 0.05); }
+.nm-recipient:hover { background: rgb(var(--n-50)); }
+.nm-recipient.selected { background: rgb(var(--warning) / 0.05); }
 .nm-recipient--primary {
-  background: rgba(245, 158, 11, 0.04);
-  border-left: 2px solid rgba(245, 158, 11, 0.4);
+  background: rgb(var(--warning) / 0.04);
+  border-left: 2px solid rgb(var(--warning) / 0.4);
 }
-.nm-recipient--primary.selected { background: rgba(245, 158, 11, 0.09); }
+.nm-recipient--primary.selected { background: rgb(var(--warning) / 0.09); }
 
 .nm-rec-info {
   display: flex;
@@ -635,7 +566,7 @@ watch(() => props.visible, (val) => {
 .nm-rec-name {
   font-size: 0.82rem;
   font-weight: 600;
-  color: #e2e8f0;
+  color: rgb(var(--n-900));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -645,22 +576,22 @@ watch(() => props.visible, (val) => {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #fbbf24;
-  background: rgba(245, 158, 11, 0.15);
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: rgb(var(--warning));
+  background: rgb(var(--warning) / 0.15);
+  border: 1px solid rgb(var(--warning) / 0.3);
   border-radius: 4px;
   padding: 1px 5px;
   flex-shrink: 0;
 }
 .nm-rec-type {
   font-size: 0.68rem;
-  color: #64748b;
+  color: rgb(var(--n-500));
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 .nm-rec-detail {
   font-size: 0.72rem;
-  color: rgba(255, 255, 255, 0.35);
+  color: rgb(var(--n-500));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -682,14 +613,14 @@ watch(() => props.visible, (val) => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.35);
+  background: rgb(var(--n-50));
+  border: 1px solid rgb(var(--n-200));
+  color: rgb(var(--n-500));
 }
-.nm-ch--email.active   { background: rgba(59, 130, 246, 0.18); border-color: rgba(59, 130, 246, 0.45); color: #93c5fd; }
-.nm-ch--whatsapp.active { background: rgba(16, 185, 129, 0.18); border-color: rgba(16, 185, 129, 0.45); color: #6ee7b7; }
-.nm-ch--telegram.active { background: rgba(56, 189, 248, 0.18); border-color: rgba(56, 189, 248, 0.45); color: #7dd3fc; }
-.nm-ch:hover { border-color: rgba(255, 255, 255, 0.25); color: rgba(255, 255, 255, 0.6); }
+.nm-ch--email.active   { background: rgb(var(--info) / 0.18); border-color: rgb(var(--info) / 0.45); color: rgb(var(--info)); }
+.nm-ch--whatsapp.active { background: rgb(var(--success) / 0.18); border-color: rgb(var(--success) / 0.45); color: rgb(var(--success)); }
+.nm-ch--telegram.active { background: rgb(var(--info) / 0.18); border-color: rgb(var(--info) / 0.45); color: rgb(var(--info)); }
+.nm-ch:hover { border-color: rgb(var(--n-300)); color: rgb(var(--n-700)); }
 
 /* Footer */
 .nm-footer {
@@ -698,12 +629,12 @@ watch(() => props.visible, (val) => {
   justify-content: space-between;
   gap: 10px;
   padding: 12px 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgb(var(--n-200));
   flex-shrink: 0;
 }
 .nm-sel-count {
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.35);
+  color: rgb(var(--n-500));
 }
 .nm-footer-actions { display: flex; gap: 8px; }
 
@@ -720,47 +651,20 @@ watch(() => props.visible, (val) => {
   border: 1px solid transparent;
 }
 .nm-btn--secondary {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.6);
+  background: rgb(var(--n-100));
+  border-color: rgb(var(--n-200));
+  color: rgb(var(--n-700));
 }
-.nm-btn--secondary:hover { background: rgba(255, 255, 255, 0.1); }
+.nm-btn--secondary:hover { background: rgb(var(--n-100)); }
 .nm-btn--primary {
-  background: #f59e0b;
-  border-color: #f59e0b;
-  color: #0f172a;
+  background: rgb(var(--warning));
+  border-color: rgb(var(--warning));
+  color: #0f172a; /* texto escuro fixo sobre o âmbar, nos dois temas */
 }
-.nm-btn--primary:hover:not(:disabled) { background: #fbbf24; }
+.nm-btn--primary:hover:not(:disabled) { background: rgb(var(--warning)); }
 .nm-btn--primary:disabled { opacity: 0.45; cursor: not-allowed; }
-
-/* Transition */
-.modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.2s ease; }
-.modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
 
 /* Spin animation */
 .spin { animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-
-/* Light theme overrides */
-:root[data-theme="light"] .notify-modal {
-  background: rgba(255, 255, 255, 0.98);
-  border-color: rgba(245, 158, 11, 0.4);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
-}
-:root[data-theme="light"] .nm-header {
-  border-bottom-color: rgba(0, 0, 0, 0.08);
-}
-:root[data-theme="light"] .nm-close {
-  background: rgba(0, 0, 0, 0.05);
-  border-color: rgba(0, 0, 0, 0.1);
-  color: rgba(0, 0, 0, 0.4);
-}
-:root[data-theme="light"] .nm-close:hover {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-  border-color: rgba(239, 68, 68, 0.3);
-}
-:root[data-theme="light"] .nm-context {
-  border-bottom-color: rgba(0, 0, 0, 0.06);
-}
 </style>
