@@ -365,7 +365,6 @@ async function ensureDeviceOptionsLoaded() {
     try {
         const options = await fetchDeviceOptions();
 
-        window.__FIBER_DEVICE_OPTIONS = options;
         setDeviceOptions(options);
 
         if (!deviceOptionsDispatched) {
@@ -491,7 +490,6 @@ function destroyNetworkDesignApp() {
     delete window.cancelFiberEditing;
     delete window.closeManualSaveModal;
     delete window.loadFiberDetail;
-    delete window.closeKmlModal;
     
     appInitialized = false;
     globalListenersBound = false;
@@ -614,7 +612,7 @@ function _updateLossEstimate(distanceKm) {
 // REMOVED: clearAllCablesFromMap() - moved into cableService.js
 // REMOVED: loadAllCablesForVisualization_local() - replaced by modular cableService version
 
-// Expose function globally for use in import_kml.js
+// Global usado pelo NetworkDesignView como recurso de limpeza ao desmontar
 window.clearMapAndResetState = clearMapAndResetState;
 
 // Exposed for admin panel: reload all cables visualization without fitting bounds
@@ -952,7 +950,7 @@ async function loadFibers() {
     }
 }
 
-// Expose function globally for use in import_kml.js
+// Global legado (o import_kml.js que o usava saiu no EV-0034)
 window.loadFibers = loadFibers;
 
 async function loadFiberDetail(id) {
@@ -1549,7 +1547,8 @@ function initializeDomBindings() {
     
     document.getElementById('contextImportKML')?.addEventListener('click', () => {
         hideContextMenu();
-        openKmlModal();
+        // EV-0034: o NetworkDesignView abre o KmlImportModal (sem window.openKmlModal)
+        document.dispatchEvent(new CustomEvent('fiber:open-kml-import'));
     });
     
     // Context menu - Conditional options (cable selected)

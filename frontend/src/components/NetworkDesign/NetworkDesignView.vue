@@ -799,171 +799,8 @@
       </div>
     </div>
 
-    <div
-      id="importKmlModal"
-      class="fixed inset-0 flex items-center justify-center bg-black/60 opacity-0 pointer-events-none transition-opacity duration-300 z-50"
-    >
-      <div
-        id="importKmlModalContent"
-        class="modal-card rounded-2xl shadow-2xl w-full max-w-md p-6 relative transform scale-95 opacity-0 transition-all duration-300 overflow-y-auto"
-        style="max-height:90vh"
-      >
-        <button
-          type="button"
-          class="absolute top-4 right-4 text-gray-400 hover:text-gray-200 text-xl leading-none bg-transparent border-none cursor-pointer"
-          @click="closeKmlModal"
-          aria-label="Fechar"
-        >
-          &times;
-        </button>
-
-        <h2 class="text-lg font-semibold mb-2">Importar rota via KML</h2>
-
-        <p class="text-xs text-gray-400 mb-3 leading-relaxed">
-          Vincule o arquivo <strong>.kml</strong> aos dispositivos monitorados. Você pode monitorar apenas a porta de origem (uma via) ou definir dispositivos de origem e destino distintos.
-        </p>
-
-        <div class="rounded-lg px-3 py-2 text-xs text-blue-300 mb-4 leading-relaxed" style="background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.3)">
-          O arquivo deve conter um <em>LineString</em> com a sequência de pontos (origem → destino) que representa o cabo físico.
-        </div>
-
-        <form id="importKmlForm" enctype="multipart/form-data" class="space-y-3">
-          <input type="hidden" name="csrfmiddlewaretoken" :value="csrfToken" />
-
-          <!-- Nome da rota -->
-          <div>
-            <label class="block text-xs font-medium mb-1">Nome da rota</label>
-            <input
-              type="text"
-              name="name"
-              required
-              placeholder="Ex: Backbone GYN → BSB"
-              class="nd-kml-input w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
-            />
-          </div>
-
-          <!-- Grupo do cabo -->
-          <div>
-            <label class="block text-xs font-medium mb-1">Grupo do cabo</label>
-            <select
-              id="kmlCableGroupSelect"
-              name="cable_group_id"
-              class="nd-kml-input w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
-            >
-              <option value="">— Sem grupo —</option>
-            </select>
-          </div>
-
-          <!-- Responsável -->
-          <div>
-            <label class="block text-xs font-medium mb-1">Responsável</label>
-            <select
-              id="kmlResponsibleSelect"
-              name="responsible_user_id"
-              class="nd-kml-input w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
-            >
-              <option value="">— Sem responsável —</option>
-            </select>
-          </div>
-
-          <!-- Dispositivo origem -->
-          <div>
-            <label class="block text-xs font-medium mb-1">Dispositivo origem</label>
-            <select
-              name="origin_device_id"
-              id="kmlOriginDeviceSelect"
-              required
-              data-placeholder="Selecione..."
-              class="nd-kml-input w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
-            >
-              <option value="">Selecione...</option>
-            </select>
-          </div>
-
-          <!-- Porta origem -->
-          <div>
-            <label class="block text-xs font-medium mb-1">Porta origem</label>
-            <select
-              name="origin_port_id"
-              id="kmlOriginPortSelect"
-              required
-              class="nd-kml-input w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
-            >
-              <option value="">Selecione...</option>
-            </select>
-          </div>
-
-          <!-- Monitorar apenas porta de origem -->
-          <div class="flex items-center justify-between">
-            <label for="kmlSinglePortOnly" class="text-xs cursor-pointer select-none">Monitorar apenas porta de origem</label>
-            <input
-              type="checkbox"
-              id="kmlSinglePortOnly"
-              name="single_port"
-              value="true"
-              class="w-4 h-4 cursor-pointer flex-shrink-0"
-              style="accent-color:#3b82f6"
-            />
-          </div>
-
-          <div
-            id="kmlDestNotice"
-            class="hidden text-xs text-blue-300 rounded-lg px-3 py-2"
-            style="background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25)"
-          >
-            Campos de destino desabilitados — apenas a porta de origem será monitorada.
-          </div>
-
-          <!-- Dispositivo destino -->
-          <div>
-            <label class="block text-xs font-medium mb-1">Dispositivo destino</label>
-            <select
-              name="dest_device_id"
-              id="kmlDestDeviceSelect"
-              required
-              data-placeholder="Selecione..."
-              class="nd-kml-input w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
-            >
-              <option value="">Selecione...</option>
-            </select>
-          </div>
-
-          <!-- Porta destino -->
-          <div>
-            <label class="block text-xs font-medium mb-1">Porta destino</label>
-            <select
-              name="dest_port_id"
-              id="kmlDestPortSelect"
-              required
-              class="nd-kml-input w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
-            >
-              <option value="">Selecione...</option>
-            </select>
-          </div>
-
-          <!-- Arquivo KML -->
-          <div>
-            <label class="block text-xs font-medium mb-1">Arquivo KML</label>
-            <input
-              type="file"
-              name="kml_file"
-              accept=".kml"
-              required
-              class="nd-kml-input w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
-            />
-          </div>
-
-          <div class="flex justify-end gap-2 pt-2">
-            <button type="button" class="nd-kml-btn-cancel px-4 py-2 rounded-lg text-sm font-medium cursor-pointer" @click="closeKmlModal">
-              Cancelar
-            </button>
-            <button type="submit" class="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer bg-blue-600 border-none text-white hover:bg-blue-700 transition">
-              Importar rota
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <!-- EV-0034: importação KML como componente Vue (era DOM legado + window.*) -->
+    <KmlImportModal :show="kmlOpen" :devices="kmlDevices" @close="kmlOpen = false" />
   </div>
 
 </template>
@@ -975,7 +812,7 @@ import { parseFocusQuery } from '@/utils/mapFocus';
 import { initializeNetworkDesignApp, whenNetworkDesignMapReady, flyToLocation, highlightSearchResult, cancelNetworkDesignEditing, saveNetworkDesignRoute } from '@/features/networkDesign/fiberRouteBuilder.js';
 import { getLoadedGroups, setGroupLayerVisible, setFolderFilter, getFallbackCables, setApiGroups, getGroupCounts, getTypeCounts, setTypeFilter } from '@/features/networkDesign/modules/cableService.js';
 import { request as apiRequest } from '@/features/networkDesign/modules/apiClient.js';
-import { initializeKmlModal, cleanupKmlModal } from '@/features/networkDesign/partials/import_kml.js';
+import KmlImportModal from '@/components/NetworkDesign/KmlImportModal.vue';
 
 const route = useRoute();
 const csrfToken = ref(window.CSRF_TOKEN || '');
@@ -1693,33 +1530,22 @@ const vClickOutside = {
   },
 };
 
-const ensureFiberGlobals = () => {
-  if (!Array.isArray(window.__FIBER_DEVICE_OPTIONS)) {
-    window.__FIBER_DEVICE_OPTIONS = [];
-  }
+// EV-0034: modal KML em Vue. O fiberRouteBuilder pede para abrir por evento e
+// publica os equipamentos por `fiber:device-options-loaded` (sem globais window.*).
+const kmlOpen = ref(false);
+const kmlDevices = ref([]);
+const onOpenKmlImport = () => {
+  kmlOpen.value = true;
 };
-
-const waitForKmlModal = async (retries = 5) => {
-  for (let attempt = 0; attempt < retries; attempt += 1) {
-    const ready = await initializeKmlModal(attempt > 0);
-    if (ready) {
-      return true;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 120 * (attempt + 1)));
-  }
-  console.warn('[NetworkDesign] KML modal could not be initialized.');
-  return false;
+const onDeviceOptionsLoaded = (event) => {
+  if (Array.isArray(event.detail?.devices)) kmlDevices.value = event.detail.devices;
 };
+document.addEventListener('fiber:open-kml-import', onOpenKmlImport);
+document.addEventListener('fiber:device-options-loaded', onDeviceOptionsLoaded);
 
 const closeManualModal = () => {
   if (typeof window.closeManualSaveModal === 'function') {
     window.closeManualSaveModal();
-  }
-};
-
-const closeKmlModal = () => {
-  if (typeof window.closeKmlModal === 'function') {
-    window.closeKmlModal();
   }
 };
 
@@ -1732,8 +1558,7 @@ onMounted(async () => {
     'toastHost',
     'confirmHost',
     'contextMenu',
-    'manualSaveModal',
-    'importKmlModal'
+    'manualSaveModal'
   ];
   
   orphanedElements.forEach(id => {
@@ -1743,8 +1568,6 @@ onMounted(async () => {
       bodyElement.remove();
     }
   });
-
-  ensureFiberGlobals();
 
   // IMPORTANTE: NetworkDesign refatorado para usar Provider Pattern
   // Funciona com qualquer provider configurado (Mapbox, Google Maps, etc.)
@@ -1784,7 +1607,6 @@ onMounted(async () => {
 
   await nextTick();
 
-  await waitForKmlModal();
   initializeNetworkDesignApp({ force: true });
   loadFolderTree();
   loadCableGroupsFromApi();
@@ -1800,8 +1622,9 @@ onMounted(async () => {
 onUnmounted(() => {
   console.log('[NetworkDesignView] Component unmounting, cleaning up...');
   
-  closeKmlModal();
-  cleanupKmlModal();
+  kmlOpen.value = false;
+  document.removeEventListener('fiber:open-kml-import', onOpenKmlImport);
+  document.removeEventListener('fiber:device-options-loaded', onDeviceOptionsLoaded);
   
   // Call the comprehensive cleanup function
   if (typeof window.destroyNetworkDesignApp === 'function') {
@@ -2546,45 +2369,6 @@ onUnmounted(() => {
   background: var(--nd-input-bg);
   color: var(--nd-modal-text);
   border-color: var(--nd-input-border);
-}
-
-.network-design-page #importKmlModalContent {
-  color: var(--nd-modal-text);
-}
-
-.network-design-page #importKmlModalContent h2 {
-  color: var(--nd-modal-text);
-}
-
-.network-design-page #importKmlModalContent p,
-.network-design-page #importKmlModalContent .text-gray-500,
-.network-design-page #importKmlModalContent .text-gray-600,
-.network-design-page #importKmlModalContent .text-gray-700 {
-  color: var(--nd-modal-muted);
-}
-
-.network-design-page #importKmlModalContent input,
-.network-design-page #importKmlModalContent select,
-.network-design-page #importKmlModalContent textarea {
-  background: var(--nd-input-bg);
-  color: var(--nd-modal-text);
-  border-color: var(--nd-input-border);
-}
-
-.network-design-page #importKmlModalContent .bg-gray-100 {
-  background: var(--nd-list-bg);
-}
-
-.network-design-page .nd-kml-input {
-  background: var(--nd-input-bg);
-  color: var(--nd-modal-text);
-  border: 1px solid var(--nd-input-border);
-}
-
-.network-design-page .nd-kml-btn-cancel {
-  background: transparent;
-  border: 1px solid var(--nd-input-border);
-  color: var(--nd-modal-text);
 }
 
 .network-design-page .modal-card .bg-blue-50 {
