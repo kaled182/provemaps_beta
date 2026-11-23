@@ -14,12 +14,12 @@
       </div>
       <div class="kpi-card">
         <p class="kpi-label">Cabos Saturados (&gt;80%)</p>
-        <p class="kpi-value text-warning">{{ saturatedCables }}</p>
+        <p class="kpi-value text-warning" data-testid="cables-saturated">{{ saturatedCables === null ? 'sem dados' : saturatedCables }}</p>
       </div>
       <div class="kpi-card flex items-center justify-between">
         <div>
           <p class="kpi-label">Ocupação Média</p>
-          <p class="kpi-value text-info">{{ averageOccupancy }}%</p>
+          <p class="kpi-value text-info" data-testid="cables-occupancy">{{ averageOccupancy === null ? 'sem dados' : `${averageOccupancy}%` }}</p>
         </div>
         <i class="fas fa-fiber-core text-blue-300"></i>
       </div>
@@ -121,7 +121,8 @@
               </td>
 
               <td class="px-3 py-1.5">
-                <CapacityBar :used="cable.used_strands" :total="cable.fiber_count || 1" />
+                <CapacityBar v-if="cable.occupancy" :used="cable.occupancy.used" :total="cable.occupancy.registered" />
+                <span v-else class="text-xs text-neutral-500" :title="cable.fiber_count ? `${cable.fiber_count} FO no grupo; nenhuma fibra cadastrada` : 'Nenhuma fibra cadastrada'">sem dados</span>
               </td>
 
               <td class="px-3 py-1.5 text-right">
@@ -256,8 +257,9 @@ const mappedCables = computed(() =>
     length: c.length_km ? Number(c.length_km) * 1000 : c.length || 0,
     status: c.status || 'unknown',
     type: c.type || 'backbone',
-    fiber_count: c.fiber_count || c.capacity || c.strands || 0,
-    used_strands: c.used_strands || c.used || 0,
+    fiber_count: c.fiber_count ?? null,
+    // EV-0061: ocupação pelas fibras cadastradas; null = sem dados (nunca 0 %)
+    occupancy: c.occupancy || null,
     // Connection state
     is_connected: c.is_connected || false,
     connection_status: c.connection_status || 'floating',
@@ -274,9 +276,8 @@ const filteredCables = computed(() => {
       (c.site_b_name || '').toLowerCase().includes(q);
     const matchStatus = !filterStatus.value || c.status === filterStatus.value;
     const matchType = !filterType.value || c.type === filterType.value;
-    const occupancy =
-      c.fiber_count > 0 ? (c.used_strands / c.fiber_count) * 100 : 0;
-    const matchSaturated = !onlySaturated.value || occupancy >= 80;
+    const pct = occupancyPercent(c);
+    const matchSaturated = !onlySaturated.value || (pct !== null && pct >= 80);
     return matchSearch && matchStatus && matchType && matchSaturated;
   });
 });
@@ -286,17 +287,20 @@ const totalKm = computed(() => {
   return (meters / 1000).toFixed(2);
 });
 
+// EV-0061: só cabos com fibras cadastradas entram nas contas; sem nenhum → null («sem dados»)
+function occupancyPercent(c) {
+  return c.occupancy && c.occupancy.registered > 0 ? (c.occupancy.used / c.occupancy.registered) * 100 : null;
+}
+
+const withOccupancy = computed(() => mappedCables.value.filter((c) => occupancyPercent(c) !== null));
+
 const saturatedCables = computed(() =>
-  mappedCables.value.filter(
-    (c) => c.fiber_count > 0 && (c.used_strands / c.fiber_count) >= 0.8
-  ).length
+  withOccupancy.value.length ? withOccupancy.value.filter((c) => occupancyPercent(c) >= 80).length : null
 );
 
 const averageOccupancy = computed(() => {
-  const values = mappedCables.value
-    .filter((c) => c.fiber_count > 0)
-    .map((c) => (c.used_strands / c.fiber_count) * 100);
-  if (!values.length) return 0;
+  const values = withOccupancy.value.map(occupancyPercent);
+  if (!values.length) return null;
   return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
 });
 

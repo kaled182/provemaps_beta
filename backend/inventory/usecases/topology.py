@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
+from inventory.domain.strands import USED_STATUSES, occupancy_from_counts
 from inventory.models import FiberCable, FiberStrand
 from inventory.usecases.fibers import list_cables_optical_summary
 
@@ -63,17 +64,13 @@ def build_topology() -> dict[str, Any]:
         a = _end_site(cable.origin_port, cable.site_a)
         b = _end_site(cable.destination_port, cable.site_b)
         group = getattr(cable, "cable_group", None)
-        counts = per_cable.get(cable.id)
-        occupancy = None
-        if counts:
-            total = sum(counts.values())
-            used = counts.get("lit", 0) + counts.get("reserved", 0)
-            occupancy = {
-                "registered": total,
-                "used": used,
-                "free": counts.get("dark", 0),
-                "broken": counts.get("broken", 0),
-            }
+        counts = per_cable.get(cable.id) or {}
+        occupancy = occupancy_from_counts(
+            sum(counts.values()),
+            sum(counts.get(st, 0) for st in USED_STATUSES),
+            counts.get("dark", 0),
+            counts.get("broken", 0),
+        )
         item = {
             "id": cable.id,
             "name": cable.name,

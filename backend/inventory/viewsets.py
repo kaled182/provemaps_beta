@@ -13,6 +13,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from inventory.cache.fibers import invalidate_fiber_cache
+from inventory.domain.strands import OCCUPANCY_ANNOTATIONS
 from inventory.domain.zabbix_history import (
     fetch_aligned_series,
     get_item_by_key,
@@ -906,6 +907,7 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             "responsible_user",
         )
         .prefetch_related("segments__start_infrastructure", "segments__end_infrastructure")
+        .annotate(**OCCUPANCY_ANNOTATIONS)  # EV-0061: ocupação numa só consulta
         .order_by("name")
     )
     serializer_class = FiberCableSerializer

@@ -5,22 +5,22 @@ Exposes Site, Device, Port via REST API for Vue 3 frontend
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from rest_framework import serializers
 
 from inventory.models import (
-    Site,
+    BufferTube,
+    CableSegment,
     Device,
     DeviceGroup,
-    Port,
     FiberCable,
-    CableSegment,
-    FiberProfile,
-    BufferTube,
-    FiberStrand,
     FiberFusion,
+    FiberProfile,
+    FiberStrand,
     ImportRule,
+    Port,
+    Site,
 )
 from inventory.usecases.fibers import build_optical_summary
 
@@ -28,26 +28,16 @@ from inventory.usecases.fibers import build_optical_summary
 class SiteSerializer(serializers.ModelSerializer[Site]):
     """Site serializer with backward-compatible name field"""
 
-    name = serializers.CharField(
-        source="display_name", read_only=False, required=True
-    )
-    address = serializers.CharField(
-        source="address_line1", allow_blank=True, required=False
-    )
-    address_line2 = serializers.CharField(
-        allow_blank=True, required=False
-    )
-    address_line3 = serializers.CharField(
-        allow_blank=True, required=False
-    )
+    name = serializers.CharField(source="display_name", read_only=False, required=True)
+    address = serializers.CharField(source="address_line1", allow_blank=True, required=False)
+    address_line2 = serializers.CharField(allow_blank=True, required=False)
+    address_line3 = serializers.CharField(allow_blank=True, required=False)
     type = serializers.CharField(
         source="address_line2",
         allow_blank=True,
         required=False,
     )
-    zip_code = serializers.CharField(
-        source="postal_code", allow_blank=True, required=False
-    )
+    zip_code = serializers.CharField(source="postal_code", allow_blank=True, required=False)
     latitude = serializers.DecimalField(
         max_digits=9,
         decimal_places=6,
@@ -62,20 +52,19 @@ class SiteSerializer(serializers.ModelSerializer[Site]):
     )
     device_count = serializers.IntegerField(read_only=True)
     camera_count = serializers.SerializerMethodField()
-    
+
     def get_camera_count(self, obj: Site) -> int:
         """Count video cameras assigned to this site"""
         try:
             from setup_app.models import MessagingGateway
+
             # Try matching by display_name first, then name
             count = MessagingGateway.objects.filter(
-                gateway_type='video',
-                site_name=obj.display_name
+                gateway_type="video", site_name=obj.display_name
             ).count()
             if count == 0 and obj.display_name != obj.name:
                 count = MessagingGateway.objects.filter(
-                    gateway_type='video',
-                    site_name=obj.name
+                    gateway_type="video", site_name=obj.name
                 ).count()
             return count
         except Exception:
@@ -104,7 +93,7 @@ class SiteSerializer(serializers.ModelSerializer[Site]):
 
 class CableSegmentSerializer(serializers.ModelSerializer[CableSegment]):
     """Serializer for cable segments with infrastructure references"""
-    
+
     start_infra_name = serializers.CharField(
         source="start_infrastructure.name", read_only=True, allow_null=True
     )
@@ -114,10 +103,8 @@ class CableSegmentSerializer(serializers.ModelSerializer[CableSegment]):
     start_infra_location = serializers.SerializerMethodField()
     end_infra_location = serializers.SerializerMethodField()
     break_location = serializers.SerializerMethodField()  # Para segmentos BROKEN
-    status_display = serializers.CharField(
-        source="get_status_display", read_only=True
-    )
-    
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+
     def get_start_infra_location(self, obj: CableSegment) -> dict[str, float] | None:
         """Return lat/lng for start infrastructure"""
         infra = obj.start_infrastructure
@@ -127,7 +114,7 @@ class CableSegmentSerializer(serializers.ModelSerializer[CableSegment]):
             except Exception:
                 return None
         return None
-    
+
     def get_end_infra_location(self, obj: CableSegment) -> dict[str, float] | None:
         """Return lat/lng for end infrastructure"""
         infra = obj.end_infrastructure
@@ -137,78 +124,78 @@ class CableSegmentSerializer(serializers.ModelSerializer[CableSegment]):
             except Exception:
                 return None
         return None
-    
+
     def get_break_location(self, obj: CableSegment) -> dict[str, float] | None:
         """Calculate break location for BROKEN segments based on cable path"""
-        if obj.status != 'broken':
+        if obj.status != "broken":
             return None
-        
+
         # Tentar usar localização da infraestrutura primeiro
         if obj.start_infrastructure and obj.start_infrastructure.location:
             try:
                 return {
                     "lat": obj.start_infrastructure.location.y,
-                    "lng": obj.start_infrastructure.location.x
+                    "lng": obj.start_infrastructure.location.x,
                 }
             except Exception:
                 pass
-        
+
         # Se CEO não tem localização, calcular do path do cabo
         cable = obj.cable
         if not cable or not cable.path:
             return None
-        
+
         try:
             # Calcular distância acumulada até este segmento
             previous_segments = cable.segments.filter(
                 segment_number__lt=obj.segment_number
-            ).order_by('segment_number')
-            
-            accumulated_meters = sum(
-                seg.length_meters for seg in previous_segments
-            )
-            
+            ).order_by("segment_number")
+
+            accumulated_meters = sum(seg.length_meters for seg in previous_segments)
+
             # Interpolar ponto ao longo do path
-            from django.contrib.gis.geos import LineString, Point
+            from django.contrib.gis.geos import Point
+
             coords = list(cable.path.coords)
-            
+
             # Calcular distância acumulada até encontrar o ponto
             current_distance = 0.0
             target_distance = accumulated_meters
-            
+
             for i in range(len(coords) - 1):
                 p1 = Point(coords[i][0], coords[i][1], srid=4326)
-                p2 = Point(coords[i+1][0], coords[i+1][1], srid=4326)
-                
+                p2 = Point(coords[i + 1][0], coords[i + 1][1], srid=4326)
+
                 # Distância deste segmento (aprox: 1 grau ~ 111km)
                 segment_dist_km = p1.distance(p2) * 111
                 segment_dist_m = segment_dist_km * 1000
-                
+
                 if current_distance + segment_dist_m >= target_distance:
                     # O ponto está neste segmento
                     # Interpolar entre p1 e p2
                     remaining = target_distance - current_distance
                     ratio = remaining / segment_dist_m if segment_dist_m > 0 else 0
-                    
-                    lat = coords[i][1] + ratio * (coords[i+1][1] - coords[i][1])
-                    lng = coords[i][0] + ratio * (coords[i+1][0] - coords[i][0])
-                    
+
+                    lat = coords[i][1] + ratio * (coords[i + 1][1] - coords[i][1])
+                    lng = coords[i][0] + ratio * (coords[i + 1][0] - coords[i][0])
+
                     return {"lat": lat, "lng": lng}
-                
+
                 current_distance += segment_dist_m
-            
+
             # Se não encontrou, retornar último ponto
             if coords:
                 return {"lat": coords[-1][1], "lng": coords[-1][0]}
-            
+
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.warning(f"Error calculating break_location for segment {obj.id}: {e}")
             return None
-        
+
         return None
-    
+
     class Meta:
         model = CableSegment
         fields = [
@@ -245,9 +232,7 @@ class DeviceGroupSerializer(serializers.ModelSerializer[DeviceGroup]):
 class DeviceSerializer(serializers.ModelSerializer[Device]):
     """Device serializer with nested site and monitoring group info"""
 
-    site_name = serializers.CharField(
-        source="site.display_name", read_only=True
-    )
+    site_name = serializers.CharField(source="site.display_name", read_only=True)
     # Alias para o frontend: mapeia category -> role (read-only)
     role = serializers.CharField(source="category", read_only=True)
     # Traz o nome do grupo para exibir na lista
@@ -297,12 +282,7 @@ class DeviceSerializer(serializers.ModelSerializer[Device]):
             "enable_email_alert",
             "alerts",  # Objeto consolidado {screen, whatsapp, email}
         ]
-        read_only_fields = [
-            "id",
-            "site_name",
-            "group_name",
-            "alerts"
-        ]
+        read_only_fields = ["id", "site_name", "group_name", "alerts"]
 
     def get_alerts(self, obj: Device) -> dict[str, bool]:
         """Retorna alertas como objeto para compatibilidade com frontend"""
@@ -318,9 +298,7 @@ class PortSerializer(serializers.ModelSerializer[Port]):
 
     device_name = serializers.CharField(source="device.name", read_only=True)
     device_id = serializers.IntegerField(source="device.id", read_only=True)
-    site_name = serializers.CharField(
-        source="device.site.display_name", read_only=True
-    )
+    site_name = serializers.CharField(source="device.site.display_name", read_only=True)
     site_id = serializers.IntegerField(source="device.site.id", read_only=True)
 
     class Meta:
@@ -365,10 +343,27 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
     - is_connected / connection_status (computed state)
     """
 
+    occupancy = serializers.SerializerMethodField()
+
+    def get_occupancy(self, obj: FiberCable) -> dict | None:
+        from inventory.domain.strands import OCCUPANCY_ANNOTATIONS, occupancy_from_counts
+
+        if getattr(obj, "strands_registered", None) is None:
+            # Sem anotação (detalhe, criação): uma consulta só para este cabo.
+            counts = FiberCable.objects.filter(pk=obj.pk).aggregate(**OCCUPANCY_ANNOTATIONS)
+        else:
+            counts = {k: getattr(obj, k) for k in OCCUPANCY_ANNOTATIONS}
+        return occupancy_from_counts(
+            counts["strands_registered"] or 0,
+            counts["strands_used"] or 0,
+            counts["strands_free"] or 0,
+            counts["strands_broken"] or 0,
+        )
+
     # Logical Connection (Sites - may exist without ports)
     site_a_name = serializers.SerializerMethodField()
     site_b_name = serializers.SerializerMethodField()
-    
+
     # Physical Termination (Devices - only when ports defined)
     origin_device_id = serializers.IntegerField(
         source="origin_port.device.id", read_only=True, allow_null=True
@@ -390,7 +385,7 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
     destination_port_name = serializers.CharField(
         source="destination_port.name", read_only=True, allow_null=True
     )
-    
+
     # Connection state (computed)
     is_connected = serializers.SerializerMethodField()
     connection_status = serializers.SerializerMethodField()
@@ -403,32 +398,54 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
     site_a_location = serializers.SerializerMethodField()
     site_b_location = serializers.SerializerMethodField()
     infrastructure_points = serializers.SerializerMethodField()
-    
+
     # Path coordinates (retrocompatibilidade - extrai de PostGIS path)
     path_coordinates = serializers.SerializerMethodField()
-    
+
     # Cable type classification
-    cable_type_id = serializers.IntegerField(source='cable_type.id', read_only=True, allow_null=True)
-    cable_type_name = serializers.CharField(source='cable_type.name', read_only=True, allow_null=True)
+    cable_type_id = serializers.IntegerField(
+        source="cable_type.id", read_only=True, allow_null=True
+    )
+    cable_type_name = serializers.CharField(
+        source="cable_type.name", read_only=True, allow_null=True
+    )
 
     # Cable group (optical budget group)
-    cable_group_id = serializers.IntegerField(source='cable_group.id', read_only=True, allow_null=True)
-    cable_group_name = serializers.CharField(source='cable_group.name', read_only=True, allow_null=True)
-    cable_group_attenuation = serializers.FloatField(source='cable_group.attenuation_db_per_km', read_only=True, allow_null=True)
-    fiber_count = serializers.IntegerField(source='cable_group.fiber_count', read_only=True, allow_null=True)
+    cable_group_id = serializers.IntegerField(
+        source="cable_group.id", read_only=True, allow_null=True
+    )
+    cable_group_name = serializers.CharField(
+        source="cable_group.name", read_only=True, allow_null=True
+    )
+    cable_group_attenuation = serializers.FloatField(
+        source="cable_group.attenuation_db_per_km", read_only=True, allow_null=True
+    )
+    fiber_count = serializers.IntegerField(
+        source="cable_group.fiber_count", read_only=True, allow_null=True
+    )
 
     # Folder classification
-    folder_id = serializers.IntegerField(source='folder.id', read_only=True, allow_null=True)
-    folder_name = serializers.CharField(source='folder.name', read_only=True, allow_null=True)
+    folder_id = serializers.IntegerField(source="folder.id", read_only=True, allow_null=True)
+    folder_name = serializers.CharField(source="folder.name", read_only=True, allow_null=True)
 
     # Responsible (Responsible model entity)
-    responsible_id = serializers.IntegerField(source='responsible.id', read_only=True, allow_null=True)
-    responsible_name = serializers.CharField(source='responsible.name', read_only=True, allow_null=True)
-    responsible_email = serializers.CharField(source='responsible.email', read_only=True, allow_null=True)
-    responsible_phone = serializers.CharField(source='responsible.phone', read_only=True, allow_null=True)
+    responsible_id = serializers.IntegerField(
+        source="responsible.id", read_only=True, allow_null=True
+    )
+    responsible_name = serializers.CharField(
+        source="responsible.name", read_only=True, allow_null=True
+    )
+    responsible_email = serializers.CharField(
+        source="responsible.email", read_only=True, allow_null=True
+    )
+    responsible_phone = serializers.CharField(
+        source="responsible.phone", read_only=True, allow_null=True
+    )
 
     # Responsible user (system User)
-    responsible_user_id = serializers.IntegerField(source='responsible_user.id', read_only=True, allow_null=True)
+    responsible_user_id = serializers.IntegerField(
+        source="responsible_user.id", read_only=True, allow_null=True
+    )
     responsible_user_name = serializers.SerializerMethodField()
 
     def get_responsible_user_name(self, obj: FiberCable) -> str | None:
@@ -439,19 +456,15 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
 
     # Segments (when cable is split)
     segments = CableSegmentSerializer(many=True, read_only=True)
-    
+
     def get_site_a_name(self, obj: FiberCable) -> str | None:
         """Get site A name from site_a or origin_port.device.site"""
         if obj.site_a:
             return obj.site_a.display_name
-        if (
-            obj.origin_port
-            and obj.origin_port.device
-            and obj.origin_port.device.site
-        ):
+        if obj.origin_port and obj.origin_port.device and obj.origin_port.device.site:
             return obj.origin_port.device.site.display_name
         return None
-    
+
     def get_site_b_name(self, obj: FiberCable) -> str | None:
         """Get site B name from site_b or destination_port.device.site"""
         if obj.site_b:
@@ -463,26 +476,21 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
         ):
             return obj.destination_port.device.site.display_name
         return None
-    
+
     def get_is_connected(self, obj: FiberCable) -> bool:
         """Check if cable has logical connection (sites/ports defined)"""
-        return bool(
-            obj.site_a
-            or obj.site_b
-            or obj.origin_port
-            or obj.destination_port
-        )
-    
+        return bool(obj.site_a or obj.site_b or obj.origin_port or obj.destination_port)
+
     def get_connection_status(self, obj: FiberCable) -> str:
         """Return connection status: floating, logical, physical"""
         has_ports = bool(obj.origin_port and obj.destination_port)
         has_sites = bool(obj.site_a or obj.site_b)
-        
+
         if has_ports:
             return "physical"  # Physically terminated on ports
         if has_sites:
-            return "logical"   # Logically connected between sites
-        return "floating"      # Inventory only, not connected
+            return "logical"  # Logically connected between sites
+        return "floating"  # Inventory only, not connected
 
     def get_site_a_location(self, obj: FiberCable) -> dict[str, float] | None:
         """Return lat/lng dict for Site A when available."""
@@ -501,11 +509,7 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
             "site",
             None,
         )
-        if (
-            dev_site
-            and dev_site.latitude is not None
-            and dev_site.longitude is not None
-        ):
+        if dev_site and dev_site.latitude is not None and dev_site.longitude is not None:
             try:
                 return {
                     "lat": float(dev_site.latitude),
@@ -532,11 +536,7 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
             "site",
             None,
         )
-        if (
-            dev_site
-            and dev_site.latitude is not None
-            and dev_site.longitude is not None
-        ):
+        if dev_site and dev_site.latitude is not None and dev_site.longitude is not None:
             try:
                 return {
                     "lat": float(dev_site.latitude),
@@ -562,25 +562,28 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
             except Exception:
                 loc = None
             type_label = getattr(p, "get_type_display", lambda: None)()
-            result.append({
-                "id": p.id,
-                "type": p.type,
-                "type_display": type_label,
-                "name": p.name,
-                "location": loc,
-                "distance_from_origin": p.distance_from_origin,
-                "metadata": p.metadata,
-                "created_at": p.created_at,
-            })
+            result.append(
+                {
+                    "id": p.id,
+                    "type": p.type,
+                    "type_display": type_label,
+                    "name": p.name,
+                    "location": loc,
+                    "distance_from_origin": p.distance_from_origin,
+                    "metadata": p.metadata,
+                    "created_at": p.created_at,
+                }
+            )
         return result
 
     def get_path_coordinates(self, obj: FiberCable) -> list:
         """Extrai coordenadas do PostGIS path para retrocompatibilidade com frontend."""
         if not obj.path:
             return []
-        
+
         try:
             from inventory.spatial import linestring_to_coords
+
             return linestring_to_coords(obj.path)
         except Exception:
             return []
@@ -642,6 +645,8 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
             "last_status_update",
             "optical_status",
             "optical_summary",
+            # EV-0061: ocupação pelas fibras cadastradas; null = sem fibras (nunca 0 %)
+            "occupancy",
         ]
         read_only_fields = [
             "id",
@@ -681,9 +686,7 @@ class FiberCableSerializer(serializers.ModelSerializer[FiberCable]):
 class ImportRuleSerializer(serializers.ModelSerializer[ImportRule]):
     """Serializer for auto-import rules with regex pattern validation."""
 
-    group_name = serializers.CharField(
-        source="group.name", read_only=True, allow_null=True
-    )
+    group_name = serializers.CharField(source="group.name", read_only=True, allow_null=True)
 
     class Meta:
         model = ImportRule
@@ -708,9 +711,7 @@ class ImportRuleSerializer(serializers.ModelSerializer[ImportRule]):
         try:
             re.compile(value, re.IGNORECASE)
         except re.error as e:
-            raise serializers.ValidationError(
-                f"Invalid regex pattern: {e}"
-            )
+            raise serializers.ValidationError(f"Invalid regex pattern: {e}") from e
         return value
 
 
@@ -735,9 +736,7 @@ class FiberProfileSerializer(serializers.ModelSerializer):
 class FiberStrandSerializer(serializers.ModelSerializer):
     """Individual fiber strand within a buffer tube."""
 
-    status_display = serializers.CharField(
-        source="get_status_display", read_only=True
-    )
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
     full_address = serializers.SerializerMethodField()
     primary_peer = serializers.SerializerMethodField()
     primary_fusion = serializers.SerializerMethodField()
@@ -795,19 +794,16 @@ class FiberStrandSerializer(serializers.ModelSerializer):
         peer = self.get_primary_peer(obj)
         return peer.get("id") if peer else None
 
-    def get_fusions(self, obj: FiberStrand) -> List[Dict[str, Any]]:
-        return [
-            self._build_fusion_payload(obj, fusion)
-            for fusion in self._get_all_fusions(obj)
-        ]
+    def get_fusions(self, obj: FiberStrand) -> list[dict[str, Any]]:
+        return [self._build_fusion_payload(obj, fusion) for fusion in self._get_all_fusions(obj)]
 
-    def _get_all_fusions(self, obj: FiberStrand) -> List[FiberFusion]:
+    def _get_all_fusions(self, obj: FiberStrand) -> list[FiberFusion]:
         cache_key = "_cached_fusions"
         cached = getattr(obj, cache_key, None)
         if cached is not None:
             return cached
 
-        seen: Dict[int, FiberFusion] = {}
+        seen: dict[int, FiberFusion] = {}
         for fusion in obj.fusions_as_a.all():
             seen[fusion.pk] = fusion
         for fusion in obj.fusions_as_b.all():
@@ -862,36 +858,20 @@ class FiberStrandSerializer(serializers.ModelSerializer):
 
         payload: dict[str, Any] = {
             "id": fusion.pk,
-            "infrastructure_id": (
-                infrastructure.pk if infrastructure else None
-            ),
-            "infrastructure_name": (
-                infrastructure.name if infrastructure else None
-            ),
+            "infrastructure_id": (infrastructure.pk if infrastructure else None),
+            "infrastructure_name": (infrastructure.name if infrastructure else None),
             "tray": fusion.tray,
             "slot": fusion.slot,
             "created_at": fusion.created_at.isoformat(),
             "peer": peer_payload,
             "peer_fiber_id": peer_payload["id"] if peer_payload else None,
-            "peer_cable_id": (
-                peer_payload["cable_id"] if peer_payload else None
-            ),
-            "peer_cable_name": (
-                peer_payload["cable_name"] if peer_payload else None
-            ),
-            "peer_number": (
-                peer_payload["number"] if peer_payload else None
-            ),
-            "peer_absolute_number": (
-                peer_payload["absolute_number"] if peer_payload else None
-            ),
+            "peer_cable_id": (peer_payload["cable_id"] if peer_payload else None),
+            "peer_cable_name": (peer_payload["cable_name"] if peer_payload else None),
+            "peer_number": (peer_payload["number"] if peer_payload else None),
+            "peer_absolute_number": (peer_payload["absolute_number"] if peer_payload else None),
             "peer_color": peer_payload["color"] if peer_payload else None,
-            "peer_color_hex": (
-                peer_payload["color_hex"] if peer_payload else None
-            ),
-            "is_repair": bool(
-                peer_payload and peer_payload.get("id") == strand.pk
-            ),
+            "peer_color_hex": (peer_payload["color_hex"] if peer_payload else None),
+            "is_repair": bool(peer_payload and peer_payload.get("id") == strand.pk),
         }
         return payload
 
@@ -920,12 +900,8 @@ class FiberCableStructureSerializer(serializers.ModelSerializer):
     """
 
     tubes = BufferTubeSerializer(many=True, read_only=True)
-    profile_name = serializers.CharField(
-        source="profile.name", read_only=True, allow_null=True
-    )
-    profile_id = serializers.IntegerField(
-        source="profile.id", read_only=True, allow_null=True
-    )
+    profile_name = serializers.CharField(source="profile.name", read_only=True, allow_null=True)
+    profile_id = serializers.IntegerField(source="profile.id", read_only=True, allow_null=True)
 
     class Meta:
         model = FiberCable
@@ -940,5 +916,3 @@ class FiberCableStructureSerializer(serializers.ModelSerializer):
             "profile_name",
             "tubes",
         ]
-
-
