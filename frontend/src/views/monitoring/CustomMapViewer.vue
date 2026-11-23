@@ -901,10 +901,10 @@ const initMap = async () => {
   }
 }
 
-// Tema do utilizador: o provider re-estiliza o fundo (Google) e os cabos mudam de espessura
-watch(() => uiStore.theme, (newTheme) => {
+// Tema do utilizador: o fundo do mapa segue-o pela factory (EV-0045); aqui só os
+// cabos mudam de espessura
+watch(() => uiStore.theme, () => {
   if (!map.value) return
-  map.value.setTheme(newTheme === 'dark' ? 'dark' : 'light')
   updatePolylines()
 })
 

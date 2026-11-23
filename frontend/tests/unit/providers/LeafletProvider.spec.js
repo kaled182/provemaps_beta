@@ -51,7 +51,7 @@ vi.mock('leaflet', () => {
       return m;
     }),
     tileLayer: vi.fn((url, opts) => {
-      const t = { url, opts, addTo: vi.fn(function () { return this; }) };
+      const t = { url, opts, el: { style: {} }, addTo: vi.fn(function () { return this; }), getContainer() { return this.el; } };
       fake.tileLayers.push(t);
       return t;
     }),
@@ -449,5 +449,17 @@ describe('LeafletMarker — rightclick (EV-0012d)', () => {
     fake.markers[0].fire('contextmenu', { latlng: { lat: 1, lng: 2 }, originalEvent: original });
     expect(cb).toHaveBeenCalledWith(expect.objectContaining({ lat: 1, lng: 2, clientX: 3 }));
     expect(original.preventDefault).toHaveBeenCalled();
+  });
+});
+
+describe('LeafletMap segue o tema (EV-0045)', () => {
+  it('escurece só a camada de tiles e volta ao normal no claro', async () => {
+    const { map } = await makeMap();
+    const tiles = fake.tileLayers[0];
+    expect(tiles.el.style.filter || '').toBe('');
+    map.setTheme('dark');
+    expect(tiles.el.style.filter).toContain('invert(1)');
+    map.setTheme('light');
+    expect(tiles.el.style.filter).toBe('');
   });
 });

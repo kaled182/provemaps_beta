@@ -272,7 +272,7 @@ describe('CustomMapViewer (EV-0012c)', () => {
     wrapper.unmount();
   });
 
-  it('tema do utilizador re-estiliza o mapa e os cabos; desmontar destrói o mapa e desliga o tempo real', async () => {
+  it('tema do utilizador re-estiliza os cabos; desmontar destrói o mapa e desliga o tempo real', async () => {
     const wrapper = mountViewer();
     await flushPromises();
     const map = fakeFactory.maps[0];
@@ -281,7 +281,8 @@ describe('CustomMapViewer (EV-0012c)', () => {
     // a store nasce em dark nos testes: muda-se para light e verifica-se a re-estilização
     ui.theme = 'light';
     await flushPromises();
-    expect(map.setTheme).toHaveBeenCalledWith('light');
+    // O fundo do mapa segue o tema pela factory (EV-0045, testado em providers/); aqui só os cabos
+    expect(map.setTheme).not.toHaveBeenCalled();
     expect(map.polylines[0].setStyle).toHaveBeenCalledWith(expect.objectContaining({ strokeWeight: 3, strokeOpacity: 0.8 }));
 
     wrapper.unmount();

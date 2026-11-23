@@ -313,3 +313,51 @@ describe('MapboxMap — sources só depois do estilo carregar (produção 1.5.0:
     expect(created.maps[0].addSource).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('MapboxMap segue o tema (EV-0045)', () => {
+  it('nasce na variante do tema: streets → dark-v11 no escuro', async () => {
+    await makeMap({ mapboxStyle: 'streets' }, { theme: 'dark' });
+    expect(created.maps[0].opts.style).toBe('mapbox://styles/mapbox/dark-v11');
+  });
+
+  it('satélite e estilo próprio não mudam com o tema', async () => {
+    await makeMap({ mapboxStyle: 'satellite' }, { theme: 'dark' });
+    expect(created.maps[0].opts.style).toBe('mapbox://styles/mapbox/satellite-v9');
+    const map = await makeMap({ mapboxCustomStyle: 'mapbox://styles/x/custom' }, { theme: 'light' });
+    map.setTheme('dark');
+    expect(created.maps[1].setStyle).not.toHaveBeenCalled();
+  });
+
+  it('setTheme troca o estilo e repõe cabos e polígonos no style.load, sem duplicar ouvintes', async () => {
+    const map = await makeMap({}, { theme: 'light' });
+    const native = created.maps[0];
+    const line = map.createPolyline({ path: [{ lat: 0, lng: 0 }, { lat: 1, lng: 1 }], strokeColor: '#111' });
+    const poly = map.createPolygon({ path: [{ lat: 0, lng: 0 }, { lat: 0, lng: 1 }, { lat: 1, lng: 1 }] });
+    const gone = map.createPolyline({ path: [{ lat: 0, lng: 0 }, { lat: 2, lng: 2 }] });
+    gone.remove();
+    const clickBinds = native.on.mock.calls.filter(([ev, layer]) => ev === 'click' && layer === line.hitLayerId).length;
+    native.addSource.mockClear();
+
+    map.setTheme('dark');
+    expect(native.setStyle).toHaveBeenCalledWith('mapbox://styles/mapbox/dark-v11');
+    line.setPath([{ lat: 5, lng: 5 }, { lat: 6, lng: 6 }]); // durante a troca: guardado
+    const queued = map.createPolyline({ path: [{ lat: 0, lng: 0 }, { lat: 3, lng: 3 }] });
+    expect(native.addSource).not.toHaveBeenCalled();
+
+    native.fire('style.load');
+    const ids = native.addSource.mock.calls.map(([id]) => id);
+    expect(ids).toEqual([line.sourceId, poly.sourceId, queued.sourceId]);
+    const lineData = native.addSource.mock.calls[0][1].data;
+    expect(lineData.geometry.coordinates[0]).toEqual([5, 5]);
+    const clickBindsAfter = native.on.mock.calls.filter(([ev, layer]) => ev === 'click' && layer === line.hitLayerId).length;
+    expect(clickBindsAfter).toBe(clickBinds);
+  });
+
+  it('o mesmo tema duas vezes não recarrega o estilo', async () => {
+    const map = await makeMap({}, { theme: 'dark' });
+    map.setTheme('dark');
+    expect(created.maps[0].setStyle).not.toHaveBeenCalled();
+    map.setTheme('light');
+    expect(created.maps[0].setStyle).toHaveBeenCalledWith(MAPBOX_DEFAULT_STYLE);
+  });
+});

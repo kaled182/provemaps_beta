@@ -7,6 +7,7 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { IMapProvider, IMap, IPolyline, IMarker, IPolygon } from './IMapProvider.js';
 import { getMarkerConfig } from './markerStyles.js';
+import { mapboxStyleForTheme } from './mapTheme.js';
 
 let mapboxLoaded = false;
 let layerIdCounter = 0;
@@ -131,6 +132,15 @@ class MapboxPolyline extends IPolyline {
       paint: { 'line-color': 'transparent', 'line-width': 16, 'line-opacity': 0 },
     });
 
+    // Reposição depois de uma troca de estilo (EV-0045): as camadas voltam, os
+    // ouvintes por camada do Mapbox continuam registados no mapa — não duplicar.
+    if (this._onTop) {
+      this.mapboxMap.moveLayer(this.layerId);
+      this.mapboxMap.moveLayer(this.hitLayerId);
+    }
+    if (this._eventsBound) return;
+    this._eventsBound = true;
+
     if (this.options.clickable !== false) {
       // Use hit layer for events so the wider area is responsive
       this.mapboxMap.on('click', this.hitLayerId, this._handleClick.bind(this));
@@ -236,6 +246,7 @@ class MapboxPolyline extends IPolyline {
     }
     // zIndex: o Mapbox desenha camadas por ordem de inserção; traz-se para cima
     if (style.zIndex !== undefined && style.zIndex >= 1000) {
+      this._onTop = true;
       this.mapboxMap.moveLayer(this.layerId);
       this.mapboxMap.moveLayer(this.hitLayerId);
     }
@@ -279,6 +290,7 @@ class MapboxPolyline extends IPolyline {
 
   remove() {
     this._removed = true;
+    this.map._overlays?.delete(this);
     if (!this._added) return; // ainda em fila: nunca chegou a entrar no mapa
     // Remove hit layer first (it's on top)
     if (this.hitLayerId && this.mapboxMap.getLayer(this.hitLayerId)) {
@@ -479,6 +491,7 @@ class MapboxMarker extends IMarker {
 class MapboxPolygon extends IPolygon {
   constructor(map, options) {
     super();
+    this.map = map;
     this.mapboxMap = map.mapboxMap;
     this.options = { ...options };
     this.path = options.path;
@@ -546,6 +559,7 @@ class MapboxPolygon extends IPolygon {
 
   remove() {
     this._removed = true;
+    this.map._overlays?.delete(this);
     if (!this._added) return;
     [this.lineLayerId, this.fillLayerId].forEach((id) => {
       if (this.mapboxMap.getLayer(id)) this.mapboxMap.removeLayer(id);
@@ -566,10 +580,19 @@ class MapboxMap extends IMap {
 
     // Estilo: o pedido, senão a cadeia configurada (personalizado → configurado → padrão).
     // Se um estilo falhar antes do primeiro `load`, tenta-se o seguinte.
-    this._styleCandidates = options.style
+    // EV-0045: cada candidato passa à variante do tema (streets/light ↔ dark,
+    // navigation-day ↔ night); satélite/outdoors/personalizado não mudam.
+    this._baseStyleCandidates = options.style
       ? [resolveMapboxStyle(options.style) || options.style]
       : (options.styleCandidates?.length ? options.styleCandidates : [MAPBOX_DEFAULT_STYLE]);
+    this._theme = options.theme;
+    this._styleCandidates = this._baseStyleCandidates.map((s) => mapboxStyleForTheme(s, this._theme));
     this._styleIndex = 0;
+    this._appliedStyle = this._styleCandidates[0];
+    // Polylines/polígonos vivos: uma troca de estilo apaga sources/camadas e
+    // estes são repostos no `style.load` seguinte.
+    this._overlays = new Set();
+    this._restyling = false;
     this._loaded = false;
     // Sources/camadas só podem entrar depois de o estilo carregar («Style is not done
     // loading»); quem cria polylines/polígonos antes disso fica em fila até ao `load`.
@@ -588,7 +611,13 @@ class MapboxMap extends IMap {
     });
 
     this.mapboxMap.once('load', () => { this._loaded = true; this._flushStyleReady(); });
-    this.mapboxMap.on('style.load', () => this._flushStyleReady());
+    this.mapboxMap.on('style.load', () => {
+      if (this._restyling) {
+        this._restyling = false;
+        this._readdOverlays();
+      }
+      this._flushStyleReady();
+    });
     this.mapboxMap.on('error', (event) => this._onStyleError(event));
 
     // Add controls
@@ -608,7 +637,38 @@ class MapboxMap extends IMap {
     console.warn('[MapboxProvider] Estilo falhou, a tentar o seguinte:', this._styleCandidates[this._styleIndex], event?.error?.message);
     this._styleIndex = next;
     this._styleReady = false;
-    this.mapboxMap.setStyle(this._styleCandidates[next]);
+    this._appliedStyle = this._styleCandidates[next];
+    this.mapboxMap.setStyle(this._appliedStyle);
+  }
+
+  /**
+   * Troca para a variante clara/escura do estilo carregado e repõe os overlays
+   * no `style.load`. Marcadores são DOM e não precisam de reposição.
+   * @param {'light'|'dark'} theme
+   */
+  setTheme(theme) {
+    if (!theme || theme === this._theme) return;
+    this._theme = theme;
+    const base = this._baseStyleCandidates[this._styleIndex];
+    const next = mapboxStyleForTheme(base, theme);
+    this._styleCandidates = this._baseStyleCandidates.map((s) => mapboxStyleForTheme(s, theme));
+    if (next === this._appliedStyle) return;
+    this._appliedStyle = next;
+    this._styleReady = false;
+    this._restyling = true;
+    this.mapboxMap.setStyle(next);
+  }
+
+  _readdOverlays() {
+    this._overlays.forEach((overlay) => {
+      if (overlay._added && !overlay._removed) {
+        try {
+          overlay._addToMap();
+        } catch (e) {
+          console.warn('[MapboxProvider] Falha a repor camada depois da troca de estilo:', e);
+        }
+      }
+    });
   }
 
   _flushStyleReady() {
@@ -762,7 +822,9 @@ class MapboxMap extends IMap {
   }
 
   createPolyline(options) {
-    return new MapboxPolyline(this, options);
+    const polyline = new MapboxPolyline(this, options);
+    this._overlays.add(polyline);
+    return polyline;
   }
 
   createMarker(options) {
@@ -770,7 +832,9 @@ class MapboxMap extends IMap {
   }
 
   createPolygon(options) {
-    return new MapboxPolygon(this, options);
+    const polygon = new MapboxPolygon(this, options);
+    this._overlays.add(polygon);
+    return polygon;
   }
 
   destroy() {
