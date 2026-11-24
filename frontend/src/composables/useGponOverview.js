@@ -171,9 +171,47 @@ export function useGponOverview({ autoRefresh = true } = {}) {
   const scopedOnus = computed(() =>
     scopeActive.value ? (data.value?.onus || []).filter((o) => scopedIds.value.has(o.device_id)) : data.value?.onus || [],
   )
-  const totals = computed(() =>
-    scopeActive.value ? computeTotals(scopedOlts.value, scopedOnus.value) : data.value?.totals || {},
-  )
+  /**
+   * EV-0120: afunilamento — rede → OLT → (slot) → PON. A PON escolhida (no chassi, ou a mais
+   * crítica ao focar uma OLT) manda; sem ela, a placa; sem ela, a OLT do seletor.
+   */
+  const funnel = computed(() => {
+    const oltOf = (id) => allOlts.value.find((o) => o.device_id === id) || null
+    if (selectedPon.value !== null) {
+      const [id, ponId] = splitKey(selectedPon.value)
+      const pon = ponIndex.value.get(selectedPon.value) || null
+      return { level: 'pon', olt: oltOf(id), pon, ponId, label: pon?.label || `PON ${ponId}` }
+    }
+    if (selectedSlot.value !== null) {
+      const [id, slot] = splitKey(selectedSlot.value)
+      return { level: 'slot', olt: oltOf(id), slot, label: `Slot ${slot}` }
+    }
+    if (oltFilter.value !== null) return { level: 'olt', olt: oltOf(oltFilter.value) }
+    return { level: 'network', olt: null }
+  })
+
+  /** Totais do nível do funil (mesmas contas do backend); na rede, os do recorte fabricante/POP. */
+  const totals = computed(() => {
+    const f = funnel.value
+    const onus = data.value?.onus || []
+    if (f.olt && f.level === 'pon') {
+      return computeTotals(
+        [{ ...f.olt, pons: f.pon ? [f.pon] : [] }],
+        onus.filter((o) => o.device_id === f.olt.device_id && String(o.pon_id) === String(f.ponId)),
+      )
+    }
+    if (f.olt && f.level === 'slot') {
+      const inSlot = (ponId) => String(ponId).startsWith(`${f.slot}/`)
+      return computeTotals(
+        [{ ...f.olt, pons: (f.olt.pons || []).filter((p) => inSlot(p.pon_id)) }],
+        onus.filter((o) => o.device_id === f.olt.device_id && inSlot(o.pon_id)),
+      )
+    }
+    if (f.olt && f.level === 'olt') {
+      return computeTotals([f.olt], onus.filter((o) => o.device_id === f.olt.device_id))
+    }
+    return scopeActive.value ? computeTotals(scopedOlts.value, scopedOnus.value) : data.value?.totals || {}
+  })
 
   // Um POP que não existe no fabricante escolhido cai; a OLT escolhida fora do recorte também.
   watch([vendorFilter, data], () => {
@@ -318,6 +356,16 @@ export function useGponOverview({ autoRefresh = true } = {}) {
    * tabela mostra logo essa PON. Só reage à troca de OLT (não a cada atualização de 60 s), para
    * não desfazer o «Todas as portas» nem a escolha do operador.
    */
+  let skipAutoPon = false
+  /** EV-0120: foca uma OLT; `autoPon: false` fica na OLT inteira (sem a PON mais crítica). */
+  function focusOlt(id, { autoPon = true } = {}) {
+    clearSelection()
+    if (oltFilter.value === id) return
+    // só quando o foco muda de facto (senão o watch não corre e a flag ficaria pendurada)
+    skipAutoPon = !autoPon && id !== null && focusOltId.value !== id
+    oltFilter.value = id
+  }
+
   const focusOltId = computed(() => {
     if (oltFilter.value !== null) return oltFilter.value
     return scopedOlts.value.length === 1 ? scopedOlts.value[0].device_id : null
@@ -326,6 +374,11 @@ export function useGponOverview({ autoRefresh = true } = {}) {
     [focusOltId, () => data.value !== null],
     ([id, loaded], [prevId, prevLoaded]) => {
       if (id === null || !loaded || (id === prevId && prevLoaded)) return
+      // EV-0120: «× da porta» foca a OLT inteira — não volta a escolher a PON mais crítica
+      if (skipAutoPon) {
+        skipAutoPon = false
+        return
+      }
       const olt = allOlts.value.find((o) => o.device_id === id)
       const ponId = mostCriticalPon(olt?.pons)
       selectedSlot.value = null
@@ -361,6 +414,7 @@ export function useGponOverview({ autoRefresh = true } = {}) {
     allOlts,
     thresholds,
     totals,
+    funnel,
     zabbix,
     visibleOlts,
     visibleOnus,
@@ -372,6 +426,7 @@ export function useGponOverview({ autoRefresh = true } = {}) {
     signalBand,
     toggleSignalBand,
     focusOltId,
+    focusOlt,
     stop,
   }
 }

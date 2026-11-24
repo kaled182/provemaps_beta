@@ -183,6 +183,45 @@ describe('MonitoringGpon', () => {
     w.unmount()
   })
 
+  it('EV-0120: rede → OLT → PON — KPIs, trilha e tabela afunilam; × volta um nível', async () => {
+    const { w } = await mountView()
+    expect(t(w, 'gpon-funnel').exists()).toBe(false)
+    expect(t(w, 'gpon-kpi-olts').text()).toContain('OLTs ativas')
+    await t(w, 'gpon-olt-select').setValue('22')
+    await flushPromises()
+    // a OLT abre já na PON mais crítica (EV-0106): nível PON
+    expect(t(w, 'gpon-funnel-olt').text()).toContain('ZTE - OLT BRV C300')
+    expect(t(w, 'gpon-funnel-pon').text()).toContain('PON 9/14')
+    expect(t(w, 'gpon-kpi-olt-status').text()).toBe('Online')
+    expect(t(w, 'gpon-kpi-los').text()).toContain('2')
+    expect(t(w, 'gpon-kpi-dying').text()).toContain('0')
+    expect(t(w, 'gpon-kpi-olts').text()).toContain('1 PON')
+    // × da porta: a OLT inteira, sem reescolher a PON
+    await t(w, 'gpon-funnel-pon-clear').trigger('click')
+    await flushPromises()
+    expect(t(w, 'gpon-funnel-pon').exists()).toBe(false)
+    expect(t(w, 'gpon-kpi-dying').text()).toContain('1')
+    expect(t(w, 'gpon-kpi-onus').text()).toContain('/ 6')
+    expect(t(w, 'gpon-kpi-olts').text()).toContain('3 PONs')
+    expect(w.findAll('[data-testid="gpon-onu-row"]')).toHaveLength(6)
+    // × da OLT: rede inteira
+    await t(w, 'gpon-funnel-network').trigger('click')
+    await flushPromises()
+    expect(t(w, 'gpon-funnel').exists()).toBe(false)
+    expect(t(w, 'gpon-olt-select').element.selectedIndex).toBe(0)
+    expect(t(w, 'gpon-kpi-olts').text()).toContain('OLTs ativas')
+    w.unmount()
+  })
+
+  it('EV-0120: clicar numa PON no chassi sem OLT escolhida também afunila', async () => {
+    const { w } = await mountView()
+    await t(w, 'gpon-pon-9/15').trigger('click')
+    expect(t(w, 'gpon-funnel-pon').text()).toContain('PON 9/15')
+    expect(t(w, 'gpon-kpi-signal').text()).toContain('+ 1')
+    expect(t(w, 'gpon-kpi-onus').text()).toContain('/ 2')
+    w.unmount()
+  })
+
   it('limita a renderização a 200 linhas com «Mostrar mais»', async () => {
     const base = payload()
     const many = Array.from({ length: 250 }, (_, i) => ({ ...base.onus[0], id: 1000 + i, onu_index: i }))

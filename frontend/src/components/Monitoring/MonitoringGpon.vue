@@ -27,7 +27,27 @@
       <p v-if="loading && !data" class="text-sm text-neutral-500">Carregando…</p>
 
       <template v-if="data">
-        <GponKpis :totals="totals" />
+        <!-- EV-0120: trilha do afunilamento — KPIs, chassi e tabela seguem o nível escolhido -->
+        <nav v-if="funnel.level !== 'network'" class="funnel" aria-label="Afunilamento" data-testid="gpon-funnel">
+          <button type="button" class="crumb-root" data-testid="gpon-funnel-network" @click="backToNetwork">Rede</button>
+          <PhCaretRight :size="12" class="text-neutral-400" aria-hidden="true" />
+          <span class="chip" data-testid="gpon-funnel-olt">
+            {{ funnel.olt?.name || 'OLT' }}
+            <button type="button" class="chip-x" title="Voltar à rede inteira" aria-label="Tirar a OLT" @click="backToNetwork">
+              <PhX :size="11" weight="bold" />
+            </button>
+          </span>
+          <template v-if="funnel.level === 'pon' || funnel.level === 'slot'">
+            <PhCaretRight :size="12" class="text-neutral-400" aria-hidden="true" />
+            <span class="chip chip-on" data-testid="gpon-funnel-pon">
+              {{ funnel.label }}
+              <button type="button" class="chip-x" title="Voltar à OLT inteira" aria-label="Tirar a porta" data-testid="gpon-funnel-pon-clear" @click="backToOlt">
+                <PhX :size="11" weight="bold" />
+              </button>
+            </span>
+          </template>
+        </nav>
+        <GponKpis :totals="totals" :olt="funnel.olt" />
 
         <p v-if="!visibleOlts.length" class="px-3 py-4 rounded-lg border border-neutral-200 bg-surface text-center text-sm text-neutral-500" data-testid="gpon-no-olts">
           Nenhuma OLT neste filtro.
@@ -96,7 +116,7 @@
  * de coleta gravou (o pedido não vai ao Zabbix). «Zabbix fora» ≠ «sem dados».
  */
 import { computed, ref } from 'vue'
-import { PhCube, PhSquaresFour } from '@phosphor-icons/vue'
+import { PhCaretRight, PhCube, PhSquaresFour, PhX } from '@phosphor-icons/vue'
 import GponHeader from '@/components/Gpon/GponHeader.vue'
 import GponKpis from '@/components/Gpon/GponKpis.vue'
 import OltCard from '@/components/Gpon/OltCard.vue'
@@ -121,6 +141,7 @@ const {
   scopedOlts,
   thresholds,
   totals,
+  funnel,
   zabbix,
   visibleOlts,
   visibleOnus,
@@ -131,7 +152,17 @@ const {
   clearSelection,
   signalBand,
   toggleSignalBand,
+  focusOlt,
 } = useGponOverview()
+
+/** EV-0120: × da porta volta à OLT inteira (sem reescolher a PON mais crítica). */
+function backToOlt() {
+  focusOlt(funnel.value.olt?.device_id ?? null, { autoPon: false })
+}
+/** × da OLT (ou «Rede») volta à rede inteira. */
+function backToNetwork() {
+  focusOlt(null)
+}
 
 /** Vista das OLTs (EV-0101): painel frontal (padrão) ou a grade compacta de cartões. */
 const VIEWS = [
@@ -185,6 +216,46 @@ function ponsOf(deviceId) {
 </script>
 
 <style scoped>
+.funnel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.crumb-root {
+  color: rgb(var(--n-500));
+}
+.crumb-root:hover {
+  color: rgb(var(--primary-600));
+  text-decoration: underline;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 4px 1px 8px;
+  border: 1px solid rgb(var(--n-300));
+  border-radius: 999px;
+  background: rgb(var(--surface));
+  color: rgb(var(--n-800));
+  font-weight: 600;
+}
+.chip-on {
+  border-color: rgb(var(--primary-500));
+  background: rgb(var(--primary-500) / 0.1);
+  color: rgb(var(--primary-700));
+}
+.chip-x {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 999px;
+  color: rgb(var(--n-500));
+}
+.chip-x:hover {
+  background: rgb(var(--n-200));
+  color: rgb(var(--n-900));
+}
 .view-toggle {
   display: inline-flex;
   padding: 2px;

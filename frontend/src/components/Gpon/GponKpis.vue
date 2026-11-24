@@ -1,6 +1,12 @@
 <template>
   <section class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2" aria-label="Resumo GPON">
-    <div class="kpi" data-testid="gpon-kpi-olts">
+    <!-- EV-0120: com uma OLT em foco (OLT, placa ou PON), o 1.º cartão é o estado dela -->
+    <div v-if="olt" class="kpi" :class="{ 'kpi-alert': olt.status === 'offline' }" data-testid="gpon-kpi-olts">
+      <span class="kpi-label"><PhHardDrives :size="13" />Status da OLT</span>
+      <span class="kpi-value" :class="OLT_STATUS[olt.status]?.cls" data-testid="gpon-kpi-olt-status">{{ OLT_STATUS[olt.status]?.label || 'Sem dados' }}</span>
+      <span class="kpi-sub truncate" :title="olt.name">{{ olt.name }} · {{ n(t.pons) }} {{ t.pons === 1 ? 'PON' : 'PONs' }}</span>
+    </div>
+    <div v-else class="kpi" data-testid="gpon-kpi-olts">
       <span class="kpi-label"><PhHardDrives :size="13" />OLTs ativas</span>
       <span class="kpi-value">{{ n(t.olts_online) }}<span class="kpi-of">/ {{ n(t.olts) }}</span></span>
       <span class="kpi-sub">
@@ -44,7 +50,15 @@ import { formatInt, formatPercent } from '@/utils/ptBrFormat'
 
 const props = defineProps({
   totals: { type: Object, default: () => ({}) },
+  /** EV-0120: OLT em foco no funil (null = rede/recorte) */
+  olt: { type: Object, default: null },
 })
+
+const OLT_STATUS = {
+  online: { label: 'Online', cls: 'text-success' },
+  offline: { label: 'Offline', cls: 'text-danger' },
+  unknown: { label: 'Sem dados', cls: 'text-neutral-500' },
+}
 
 const t = computed(() => props.totals || {})
 const n = formatInt
