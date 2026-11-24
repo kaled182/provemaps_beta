@@ -387,7 +387,10 @@ def staff(db):
 
 
 @pytest.fixture
-def clean_notify():
+def clean_notify(settings):
+    # setup_app.usecases.config._apply_runtime_overrides escreve settings.EMAIL_BACKEND no
+    # processo (smtp/console) e os testes do setup_app deixam-no assim: fixar o locmem aqui.
+    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
     cache.delete(COLLECTION_HEALTH_NOTIFIED_KEY)
     mail.outbox = []
     yield
