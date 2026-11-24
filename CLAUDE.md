@@ -117,11 +117,6 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**A fazer (1)**
-
-💡 Ideias
-- `EV-0116` **Tela de Switches: chassi 1U desenhado a partir das portas reais + painel de inspeção da porta (sparkline 24 h, Copiar resumo, Ver enlace no mapa)** · P2 · admin · há 0 dias
-
 **Entrada, por triar (4)**
 
 🐛 Problemas
