@@ -249,6 +249,7 @@ def _olt_meta(
             "model": None,
             "pon_status": {},
             "has_known_onu": False,
+            "cards": [],
         }
     return {
         "collected_at": now.isoformat(),
@@ -260,6 +261,17 @@ def _olt_meta(
         "model": reading.model,
         "pon_status": dict(reading.pon_status),
         "has_known_onu": reading.has_known_onu,
+        "cards": [
+            {
+                "slot": card.slot,
+                "card_type": card.card_type,
+                "oper_status_code": card.oper_status_code,
+                "standby_code": card.standby_code,
+                "cpu_pct": card.cpu_pct,
+                "mem_pct": card.mem_pct,
+            }
+            for card in sorted(reading.cards.values(), key=lambda c: c.slot)
+        ],
     }
 
 
@@ -432,6 +444,7 @@ def _pon_payload(
         "onus_online": len(online),
         "occupancy_pct": occupancy,
         "rx_avg_dbm": round(sum(rx_values) / len(rx_values), 1) if rx_values else None,
+        "rx_worst_dbm": round(min(rx_values), 1) if rx_values else None,
         "los": len(los),
         "dying_gasp": sum(1 for o in onus if o["reason"] == parsers.REASON_DYING_GASP),
         "signal_warning": signal_warning,
@@ -445,6 +458,77 @@ def _pon_payload(
             signal_critical=signal_critical,
             occupancy=occupancy,
         ),
+    }
+
+
+# EV-0101: função da placa pelo prefixo do tipo (ZTE: GTGH/GTGO/GPFA/ETGO, SCXN/SCXM, HUVQ/XUTQ/GUFQ,
+# PRWH/PRAM).
+_CARD_ROLES = (
+    (("GT", "GP", "ET", "EP"), "pon"),
+    (("SC",), "control"),
+    (("HU", "XU", "GU"), "uplink"),
+    (("PR",), "power"),
+)
+_STANDBY = {1: "active", 2: "standby"}
+
+
+def card_role(card_type: str) -> str:
+    upper = (card_type or "").upper()
+    for prefixes, role in _CARD_ROLES:
+        if upper.startswith(prefixes):
+            return role
+    return "other"
+
+
+def _port_entry(port_id: str, status: str) -> dict[str, Any]:
+    return {"port_id": port_id, "port": int(port_id.split("/")[1]), "status": status}
+
+
+def _chassis_payload(
+    vendor: str, meta: Mapping[str, Any] | None, pons: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Vista frontal (EV-0101): placas e portas que o Zabbix deu na última coleta desta OLT."""
+    port_status: dict[str, str] = dict((meta or {}).get("pon_status") or {})
+    if vendor == parsers.VENDOR_ZTE:
+        by_slot: dict[int, list[str]] = defaultdict(list)
+        for port_id in port_status:
+            slot, _, port = port_id.partition("/")
+            if slot.isdigit() and port.isdigit():
+                by_slot[int(slot)].append(port_id)
+        slots = []
+        for card in (meta or {}).get("cards") or []:
+            code = card.get("oper_status_code")
+            slots.append(
+                {
+                    "slot": card["slot"],
+                    "card_type": card["card_type"],
+                    "role": card_role(card["card_type"]),
+                    "in_service": None if code is None else code == 1,
+                    "oper_status_code": code,
+                    "standby": _STANDBY.get(card.get("standby_code")),
+                    "cpu_pct": card.get("cpu_pct"),
+                    "mem_pct": card.get("mem_pct"),
+                    "ports": [
+                        _port_entry(port_id, port_status[port_id])
+                        for port_id in sorted(
+                            by_slot.get(card["slot"], []), key=parsers.pon_sort_key
+                        )
+                    ],
+                }
+            )
+        return {"layout": "zte_c300", "slots": slots, "ports": []}
+
+    ports = {port_id: status for port_id, status in port_status.items() if "/" in port_id}
+    for pon in pons:
+        ports.setdefault(pon["pon_id"], parsers.PON_UNKNOWN)
+    return {
+        "layout": "rack_1u",
+        "slots": [],
+        "ports": [
+            _port_entry(port_id, ports[port_id])
+            for port_id in sorted(ports, key=parsers.pon_sort_key)
+            if port_id.split("/")[1].isdigit()
+        ],
     }
 
 
@@ -546,6 +630,7 @@ def gpon_overview(olt_id: int | None = None, now: datetime | None = None) -> dic
                 "onus_total": len(onus),
                 "onus_online": sum(1 for o in onus if o["status"] == parsers.STATUS_ONLINE),
                 "pons": pons,
+                "chassis": _chassis_payload(vendor, meta, pons),
             }
         )
         all_onus.extend(onus)

@@ -59,6 +59,11 @@ ZTE_KEY_FAMILIES: tuple[str, ...] = (
     "onu.dist",
     "ifOperStatus",
     "cardcpu",
+    # EV-0101: inventário das placas para o chassi (Card[<slot>] = tipo da placa).
+    "Card[",
+    "cardoperstat",
+    "cardstandby",
+    "cardmem",
     "cpu",
     "TempGeral",
     "sysDescr",
@@ -104,6 +109,19 @@ class OnuReading:
 
 
 @dataclass
+class CardReading:
+    """Placa de um slot ZTE (EV-0101). Códigos sem valuemap no Zabbix: ``oper_status_code`` 1 =
+    em serviço; ``standby_code`` 1 = ativa, 2 = reserva (par SCXN 10/11 da BRV)."""
+
+    slot: int
+    card_type: str = ""
+    oper_status_code: int | None = None
+    standby_code: int | None = None
+    cpu_pct: float | None = None
+    mem_pct: float | None = None
+
+
+@dataclass
 class OltReading:
     vendor: str
     technology: str
@@ -111,8 +129,11 @@ class OltReading:
     cpu_pct: float | None = None
     temperature_c: float | None = None
     model: str | None = None
+    # «slot/porta» → up/down/unknown. No ZTE vem de TODAS as interfaces 0x11 (PON, controlo,
+    # uplink); quem é PON decide-se pelas ONUs/placas.
     pon_status: dict[str, str] = field(default_factory=dict)
     onus: list[OnuReading] = field(default_factory=list)
+    cards: dict[int, CardReading] = field(default_factory=dict)
 
     @property
     def has_known_onu(self) -> bool:
@@ -244,6 +265,8 @@ def valuemap_text(mappings: Iterable[Mapping[str, Any]] | None, code: str | None
 
 _ZTE_ONU_KEY = re.compile(r"^onu\.(status|offreason|rx|dist)\[([^,\]]+),(\d+),(\d+),(\d+)\]$")
 _ZTE_IF_KEY = re.compile(r"^ifOperStatus\[(\d+)\]$")
+_ZTE_CARD_TYPE = re.compile(r"^Card\[(\d+)\]$")
+_ZTE_CARD_METRIC = re.compile(r"^card(operstat|standby|cpu|mem)\[\d+\.\d+\.(\d+)\]$")
 _ZTE_MODEL = re.compile(r"^\s*([A-Za-z]\w+)\s+Version\b")
 ZTE_GPON_IFINDEX_TYPE = 0x11
 
@@ -300,6 +323,30 @@ def parse_zte(items: Iterable[Mapping[str, Any]], *, validate_rx: RxValidator) -
                 reading.distance_m = int(distance) if distance and distance > 0 else None
             continue
 
+        card_match = _ZTE_CARD_TYPE.match(key) or _ZTE_CARD_METRIC.match(key)
+        if card_match:
+            slot = int(card_match.group(card_match.lastindex or 1))
+            card = olt.cards.setdefault(slot, CardReading(slot=slot))
+            metric = card_match.group(1) if card_match.re is _ZTE_CARD_METRIC else "type"
+            if metric == "type":
+                card.card_type = (value or "").strip()
+            elif metric in ("operstat", "standby"):
+                number = _float(value)
+                code = int(number) if number is not None else None
+                if metric == "operstat":
+                    card.oper_status_code = code
+                else:
+                    card.standby_code = code
+            else:
+                number = _float(value)
+                if metric == "cpu":
+                    card.cpu_pct = number
+                    if number is not None:
+                        card_cpus.append(number)
+                else:
+                    card.mem_pct = number
+            continue
+
         if_match = _ZTE_IF_KEY.match(key)
         if if_match:
             pon_id = zte_pon_from_ifindex(int(if_match.group(1)))
@@ -309,10 +356,6 @@ def parse_zte(items: Iterable[Mapping[str, Any]], *, validate_rx: RxValidator) -
             olt.ping = _ping(value)
         elif key == "cpu":
             cpu_total = _float(value)
-        elif key.startswith("cardcpu["):
-            number = _float(value)
-            if number is not None:
-                card_cpus.append(number)
         elif key == "TempGeral":
             olt.temperature_c = _float(value)
         elif key == "sysDescr" and value:
@@ -321,6 +364,8 @@ def parse_zte(items: Iterable[Mapping[str, Any]], *, validate_rx: RxValidator) -
 
     # CPU: o item agregado quando coleta; senão a placa mais carregada (a pior é a que importa).
     olt.cpu_pct = cpu_total if cpu_total is not None else (max(card_cpus) if card_cpus else None)
+    # Uma placa sem tipo (só métricas) não é inventário — fica de fora.
+    olt.cards = {slot: card for slot, card in olt.cards.items() if card.card_type}
     olt.onus = list(onus.values())
     return olt
 

@@ -57,6 +57,7 @@ OLT_KEYS = [
     "onus_total",
     "onus_online",
     "pons",
+    "chassis",
 ]
 PON_KEYS = [
     "pon_id",
@@ -67,6 +68,7 @@ PON_KEYS = [
     "onus_online",
     "occupancy_pct",
     "rx_avg_dbm",
+    "rx_worst_dbm",
     "los",
     "dying_gasp",
     "signal_warning",
@@ -409,3 +411,97 @@ def test_repair_migration_rekeys_existing_vsol_rows(olts, fake_zabbix, config):
     assert OnuState.objects.filter(device=olts.vsol).count() == 1
     old.refresh_from_db()
     assert old.status_since == now  # continuou online: a história não se perdeu
+
+
+# --- EV-0101: chassi -------------------------------------------------------------------------
+
+
+def _zte_chassis_items():
+    return [
+        *zte_onu("SHLN3C4CAB56", 13, 1, rx="-20.5"),
+        *zte_onu("SHLN3C33FE00", 13, 2, rx="-26.0"),
+        item("Card[9]", "GTGHK", value_type="4"),
+        item("cardoperstat[1.1.9]", "1", value_type="3"),
+        item("cardstandby[1.1.9]", "1", value_type="3"),
+        item("cardcpu[1.1.9]", "15", value_type="3"),
+        item("cardmem[1.1.9]", "58", value_type="3"),
+        item("Card[10]", "SCXN", value_type="4"),
+        item("cardoperstat[1.1.10]", "1", value_type="3"),
+        item("cardstandby[1.1.10]", "1", value_type="3"),
+        item("Card[11]", "SCXN", value_type="4"),
+        item("cardoperstat[1.1.11]", "3", value_type="3"),
+        item("cardstandby[1.1.11]", "2", value_type="3"),
+        item("Card[19]", "HUVQ", value_type="4"),
+        item("Card[0]", "PRWH", value_type="4"),
+        item("cardcpu[1.1.5]", "9", value_type="3"),  # métrica sem Card[] → não é placa
+        item("ifOperStatus[285280525]", "1", value_type="3"),  # 9/13
+        item("ifOperStatus[285280515]", "2", value_type="3"),  # 9/3
+        item("ifOperStatus[285283073]", "1", value_type="3"),  # 19/1
+        item("icmpping", "1", value_type="3"),
+    ]
+
+
+def test_zte_chassis_has_real_cards_and_ports(olts, fake_zabbix, config):
+    fake_zabbix.items[ZTE_HOST] = _zte_chassis_items()
+    usecases.collect_onu_states()
+    [olt] = usecases.gpon_overview(olt_id=olts.zte.pk)["olts"]
+    chassis = olt["chassis"]
+    assert chassis["layout"] == "zte_c300" and chassis["ports"] == []
+    assert [s["slot"] for s in chassis["slots"]] == [0, 9, 10, 11, 19]
+    by_slot = {s["slot"]: s for s in chassis["slots"]}
+    assert by_slot[9] == {
+        "slot": 9,
+        "card_type": "GTGHK",
+        "role": "pon",
+        "in_service": True,
+        "oper_status_code": 1,
+        "standby": "active",
+        "cpu_pct": 15.0,
+        "mem_pct": 58.0,
+        "ports": [
+            {"port_id": "9/3", "port": 3, "status": "down"},
+            {"port_id": "9/13", "port": 13, "status": "up"},
+        ],
+    }
+    assert (by_slot[10]["role"], by_slot[10]["standby"]) == ("control", "active")
+    assert (by_slot[11]["in_service"], by_slot[11]["standby"]) == (False, "standby")
+    assert by_slot[19]["role"] == "uplink"
+    assert by_slot[19]["ports"] == [{"port_id": "19/1", "port": 1, "status": "up"}]
+    assert (by_slot[0]["role"], by_slot[0]["in_service"], by_slot[0]["cpu_pct"]) == (
+        "power",
+        None,
+        None,
+    )
+    [pon] = olt["pons"]
+    assert (pon["rx_avg_dbm"], pon["rx_worst_dbm"]) == (-23.2, -26.0)
+
+
+def test_vsol_chassis_is_rack_1u_with_interface_and_onu_ports(olts, fake_zabbix, config):
+    fake_zabbix.items[VSOL_HOST] = [
+        *vsol_onu(3, 1, "00:19:46:49:4b:7d"),
+        item("ifOperStatus[EPON0/1]", "1", value_type="3"),
+        item("ifOperStatus[EPON0/2]", "2", value_type="3"),
+    ]
+    usecases.collect_onu_states()
+    [olt] = usecases.gpon_overview(olt_id=olts.vsol.pk)["olts"]
+    assert olt["chassis"] == {
+        "layout": "rack_1u",
+        "slots": [],
+        "ports": [
+            {"port_id": "0/1", "port": 1, "status": "up"},
+            {"port_id": "0/2", "port": 2, "status": "down"},
+            {"port_id": "0/3", "port": 3, "status": "unknown"},  # só pelas ONUs
+        ],
+    }
+
+
+def test_chassis_without_collection_is_empty_not_invented(olts, config):
+    [olt] = usecases.gpon_overview(olt_id=olts.zte.pk)["olts"]
+    assert olt["chassis"] == {"layout": "zte_c300", "slots": [], "ports": []}
+
+
+def test_card_role_by_type_prefix():
+    assert [
+        usecases.card_role(t)
+        for t in ("GTGHK", "GTGO", "ETGO", "SCXN", "HUVQ", "XUTQ", "PRWH", "PRAM", "XYZ", "")
+    ] == ["pon", "pon", "pon", "control", "uplink", "uplink", "power", "power", "other", "other"]

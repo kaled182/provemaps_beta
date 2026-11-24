@@ -27,15 +27,52 @@
         <p v-if="!visibleOlts.length" class="px-3 py-4 rounded-lg border border-neutral-200 bg-surface text-center text-sm text-neutral-500" data-testid="gpon-no-olts">
           Nenhuma OLT neste filtro.
         </p>
-        <OltCard
-          v-for="o in visibleOlts"
-          :key="o.device_id"
-          :olt="o"
-          :selected-pon="selectedPon"
-          @toggle-pon="togglePon"
-        />
+        <div v-if="visibleOlts.length" class="flex items-center justify-end">
+          <div class="view-toggle" role="group" aria-label="Vista das OLTs" data-testid="gpon-view-toggle">
+            <button
+              v-for="v in VIEWS"
+              :key="v.value"
+              type="button"
+              :class="{ 'view-on': view === v.value }"
+              :aria-pressed="view === v.value"
+              :data-testid="`gpon-view-${v.value}`"
+              @click="setView(v.value)"
+            >
+              <component :is="v.icon" :size="14" /> {{ v.label }}
+            </button>
+          </div>
+        </div>
 
-        <OnuTable :onus="visibleOnus" :scope="tableScope" :show-olt="oltFilter === null && selectedPon === null" @history="openHistory" />
+        <template v-if="view === 'chassis'">
+          <OltChassis
+            v-for="o in visibleOlts"
+            :key="o.device_id"
+            :olt="o"
+            :pons="ponsOf(o.device_id)"
+            :filtered="filter !== 'all'"
+            :selected-pon="selectedPon"
+            :selected-slot="selectedSlot"
+            :thresholds="thresholds"
+            @toggle-pon="togglePon"
+            @toggle-slot="toggleSlot"
+          />
+        </template>
+        <template v-else>
+          <OltCard
+            v-for="o in visibleOlts"
+            :key="o.device_id"
+            :olt="o"
+            :selected-pon="selectedPon"
+            @toggle-pon="togglePon"
+          />
+        </template>
+
+        <OnuTable
+          :onus="visibleOnus"
+          :scope="tableScope"
+          :show-olt="oltFilter === null && selectedPon === null && selectedSlot === null"
+          @history="openHistory"
+        />
       </template>
     </main>
 
@@ -49,12 +86,14 @@
  * de coleta gravou (o pedido não vai ao Zabbix). «Zabbix fora» ≠ «sem dados».
  */
 import { ref } from 'vue'
+import { PhCube, PhSquaresFour } from '@phosphor-icons/vue'
 import GponHeader from '@/components/Gpon/GponHeader.vue'
 import GponKpis from '@/components/Gpon/GponKpis.vue'
 import OltCard from '@/components/Gpon/OltCard.vue'
+import OltChassis from '@/components/Gpon/OltChassis.vue'
 import OnuTable from '@/components/Gpon/OnuTable.vue'
 import OnuHistoryModal from '@/components/Gpon/OnuHistoryModal.vue'
-import { useGponOverview } from '@/composables/useGponOverview'
+import { VIEW_KEY, useGponOverview } from '@/composables/useGponOverview'
 
 const {
   data,
@@ -64,6 +103,7 @@ const {
   filter,
   query,
   selectedPon,
+  selectedSlot,
   allOlts,
   thresholds,
   totals,
@@ -73,10 +113,70 @@ const {
   tableScope,
   load,
   togglePon,
+  toggleSlot,
 } = useGponOverview()
+
+/** Vista das OLTs (EV-0101): painel frontal (padrão) ou a grade compacta de cartões. */
+const VIEWS = [
+  { value: 'chassis', label: 'Vista do chassi', icon: PhCube },
+  { value: 'grid', label: 'Grade compacta', icon: PhSquaresFour },
+]
+function readView() {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'grid' ? 'grid' : 'chassis'
+  } catch {
+    return 'chassis'
+  }
+}
+const view = ref(readView())
+function setView(v) {
+  view.value = v
+  if (v === 'grid') selectedSlot.value = null
+  try {
+    localStorage.setItem(VIEW_KEY, v)
+  } catch {
+    /* sem localStorage (janela privada): a escolha vale só nesta visita */
+  }
+}
+
+/** Todas as PONs de uma OLT (sem a pílula), para os LEDs do chassi. */
+function ponsOf(deviceId) {
+  return allOlts.value.find((o) => o.device_id === deviceId)?.pons || []
+}
 
 const historyOnu = ref(null)
 function openHistory(onu) {
   if (onu.has_history) historyOnu.value = onu
 }
 </script>
+
+<style scoped>
+.view-toggle {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 8px;
+  border: 1px solid rgb(var(--n-200));
+  background: rgb(var(--surface));
+}
+.view-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: rgb(var(--n-600));
+}
+.view-toggle button:hover {
+  color: rgb(var(--n-800));
+}
+.view-toggle .view-on {
+  color: rgb(var(--primary-600));
+  background: rgb(var(--primary-500) / 0.12);
+  font-weight: 600;
+}
+.view-toggle button:focus-visible {
+  outline: 2px solid rgb(var(--primary-500));
+  outline-offset: 1px;
+}
+</style>

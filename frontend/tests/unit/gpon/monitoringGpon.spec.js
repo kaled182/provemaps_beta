@@ -17,7 +17,7 @@ vi.mock('chart.js/auto', () => ({
 }))
 
 import MonitoringGpon from '@/components/Monitoring/MonitoringGpon.vue'
-import { useGponOverview, REFRESH_MS } from '@/composables/useGponOverview'
+import { useGponOverview, REFRESH_MS, VIEW_KEY } from '@/composables/useGponOverview'
 import { NOW, payload, mockFetch } from './fixtures'
 
 const t = (w, id) => w.find(`[data-testid="${id}"]`)
@@ -27,6 +27,8 @@ async function mountView(body = payload(), history) {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(NOW)
   const spy = mockFetch(body, history)
+  // Estes testes são da grade compacta (OltCard/PonCard); o chassi tem o seu spec (EV-0101).
+  localStorage.setItem(VIEW_KEY, 'grid')
   const w = mount(MonitoringGpon, { attachTo: document.body })
   await flushPromises()
   return { w, spy }
@@ -36,6 +38,7 @@ afterEach(() => {
   vi.useRealTimers()
   vi.restoreAllMocks()
   document.body.innerHTML = ''
+  localStorage.clear()
 })
 
 describe('MonitoringGpon', () => {

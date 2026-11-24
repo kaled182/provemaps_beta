@@ -8,6 +8,7 @@
  *
  * Regras da tabela de ONUs (já vêm ordenadas por severity_rank — nunca se reordena):
  * - PON selecionada → as ONUs dessa PON;
+ * - slot selecionado (chassi, EV-0101) → as ONUs da OLT com pon_id «<slot>/…»;
  * - senão OLT escolhida → as ONUs dessa OLT;
  * - senão, com filtro (pílula) ou busca → todas as que casam;
  * - senão → só as com problema (severity_rank ≤ 4).
@@ -28,6 +29,15 @@ export const FILTERS = [
 ]
 
 export const ponKey = (deviceId, ponId) => `${deviceId}:${ponId}`
+export const slotKey = (deviceId, slot) => `${deviceId}:${slot}`
+
+/** Chave do localStorage da vista do ecrã (EV-0101): 'chassis' | 'grid'. */
+export const VIEW_KEY = 'provemaps.gpon.view'
+
+const splitKey = (key) => {
+  const i = key.indexOf(':')
+  return [Number(key.slice(0, i)), key.slice(i + 1)]
+}
 
 /** Estado do Zabbix para o badge do cabeçalho: ok | down | stale. */
 export function zabbixState(data, now = Date.now()) {
@@ -54,6 +64,7 @@ export function useGponOverview({ autoRefresh = true } = {}) {
   const filter = ref('all')
   const query = ref('')
   const selectedPon = ref(null)
+  const selectedSlot = ref(null)
   let timer = null
 
   async function load() {
@@ -108,10 +119,12 @@ export function useGponOverview({ autoRefresh = true } = {}) {
   const visibleOnus = computed(() => {
     const q = query.value.trim().toLowerCase()
     const sel = selectedPon.value
-    const scoped = sel !== null || oltFilter.value !== null
+    const slot = selectedSlot.value === null ? null : splitKey(selectedSlot.value)
+    const scoped = sel !== null || slot !== null || oltFilter.value !== null
     return (data.value?.onus || []).filter((o) => {
       if (sel !== null && ponKey(o.device_id, o.pon_id) !== sel) return false
-      if (sel === null && oltFilter.value !== null && o.device_id !== oltFilter.value) return false
+      if (slot !== null && (o.device_id !== slot[0] || !String(o.pon_id).startsWith(`${slot[1]}/`))) return false
+      if (sel === null && slot === null && oltFilter.value !== null && o.device_id !== oltFilter.value) return false
       if (!onuMatchesFilter(o)) return false
       if (q && !onuMatchesQuery(o, q)) return false
       if (!scoped && filter.value === 'all' && !q && o.severity_rank > PROBLEM_RANK) return false
@@ -122,8 +135,9 @@ export function useGponOverview({ autoRefresh = true } = {}) {
   const tableScope = computed(() => {
     if (selectedPon.value !== null) {
       const pon = ponIndex.value.get(selectedPon.value)
-      return pon ? pon.label : 'PON'
+      return pon ? pon.label : `PON ${splitKey(selectedPon.value)[1]}`
     }
+    if (selectedSlot.value !== null) return `Slot ${splitKey(selectedSlot.value)[1]}`
     if (oltFilter.value !== null) return allOlts.value.find((o) => o.device_id === oltFilter.value)?.name || 'OLT'
     if (filter.value === 'all' && !query.value.trim()) return 'ONUs com problema'
     return 'ONUs'
@@ -132,15 +146,46 @@ export function useGponOverview({ autoRefresh = true } = {}) {
   function togglePon(deviceId, ponId) {
     const key = ponKey(deviceId, ponId)
     selectedPon.value = selectedPon.value === key ? null : key
+    if (selectedPon.value !== null) selectedSlot.value = null
   }
 
-  // A PON selecionada tem de continuar no ecrã; trocar de OLT ou de filtro que a esconde desmarca.
+  /** Seleção de placa do chassi (EV-0101); exclusiva com a de PON. */
+  function toggleSlot(deviceId, slot) {
+    const key = slotKey(deviceId, slot)
+    selectedSlot.value = selectedSlot.value === key ? null : key
+    if (selectedSlot.value !== null) selectedPon.value = null
+  }
+
+  /**
+   * O que pode continuar selecionado: as PONs que passam o filtro e, sem pílula, também as
+   * portas e placas do chassi (porta sem ONUs é clicável no chassi).
+   */
+  function selectableKeys() {
+    const pons = new Set()
+    const slots = new Set()
+    for (const o of visibleOlts.value) {
+      for (const p of o.pons) {
+        pons.add(ponKey(o.device_id, p.pon_id))
+        const slash = String(p.pon_id).indexOf('/')
+        if (slash > 0) slots.add(slotKey(o.device_id, String(p.pon_id).slice(0, slash)))
+      }
+      if (filter.value !== 'all') continue
+      const ch = o.chassis || {}
+      for (const port of ch.ports || []) pons.add(ponKey(o.device_id, port.port_id))
+      for (const s of ch.slots || []) {
+        slots.add(slotKey(o.device_id, s.slot))
+        for (const port of s.ports || []) pons.add(ponKey(o.device_id, port.port_id))
+      }
+    }
+    return { pons, slots }
+  }
+
+  // A seleção tem de continuar no ecrã; trocar de OLT ou de filtro que a esconde desmarca.
   watch([oltFilter, filter, data], () => {
-    if (selectedPon.value === null) return
-    const stillVisible = visibleOlts.value.some((o) =>
-      o.pons.some((p) => ponKey(o.device_id, p.pon_id) === selectedPon.value),
-    )
-    if (!stillVisible) selectedPon.value = null
+    if (selectedPon.value === null && selectedSlot.value === null) return
+    const keys = selectableKeys()
+    if (selectedPon.value !== null && !keys.pons.has(selectedPon.value)) selectedPon.value = null
+    if (selectedSlot.value !== null && !keys.slots.has(selectedSlot.value)) selectedSlot.value = null
   })
 
   function stop() {
@@ -162,6 +207,7 @@ export function useGponOverview({ autoRefresh = true } = {}) {
     filter,
     query,
     selectedPon,
+    selectedSlot,
     allOlts,
     thresholds,
     totals,
@@ -171,6 +217,7 @@ export function useGponOverview({ autoRefresh = true } = {}) {
     tableScope,
     load,
     togglePon,
+    toggleSlot,
     stop,
   }
 }
