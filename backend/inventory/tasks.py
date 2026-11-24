@@ -209,6 +209,7 @@ def update_all_port_optical_levels() -> dict[str, Any]:
     As APIs passam a ler diretamente do banco (Port.last_rx_power / last_tx_power).
     """
     from inventory.domain.optical import fetch_ports_optical_snapshots
+    from inventory.domain.optical_apply import apply_optical_snapshot
 
     logger.info("[Optical Levels Task] Iniciando atualização de níveis ópticos (batch)")
 
@@ -257,8 +258,6 @@ def update_all_port_optical_levels() -> dict[str, Any]:
     for port in ports:
         try:
             snapshot = snapshots_map.get(port.pk) or {}
-            rx_dbm = snapshot.get("rx_dbm")
-            tx_dbm = snapshot.get("tx_dbm")
             # EV-0063/EV-0082: o snapshot só traz `rx_dbm`/`tx_dbm` com leitura válida
             # (item coletado e suportado, valor em -60…+15 dBm, sem sentinela de ONU);
             # o motivo da leitura descartada vem em `rx_problem`/`tx_problem`. Essa
@@ -274,25 +273,10 @@ def update_all_port_optical_levels() -> dict[str, Any]:
                 logger.warning("[Optical Levels Task] %s", msg)
                 errors.append(msg)
 
-            update_fields: list[str] = []
-            if rx_dbm is not None:
-                port.last_rx_power = rx_dbm
-                update_fields.append("last_rx_power")
-            if tx_dbm is not None:
-                port.last_tx_power = tx_dbm
-                update_fields.append("last_tx_power")
+            # EV-0082/EV-0088: regra partilhada com o refresh manual (um só `last_optical_check`;
+            # a ponta sem leitura válida, com ou sem chave, passa a null quando a outra é gravada).
+            update_fields = apply_optical_snapshot(port, snapshot, now)
             if update_fields:
-                # EV-0082: `last_optical_check` é um só para RX e TX. Se só uma ponta
-                # tem leitura válida, a outra não pode ficar com o valor antigo sob a
-                # hora nova — passaria por fresca. Vale também para a ponta SEM chave
-                # (ex.: TX das ONU depois do EV-0081, que esvaziou chaves erradas: o TX
-                # de agosto aparecia com a hora do RX novo).
-                for field, value in (("last_rx_power", rx_dbm), ("last_tx_power", tx_dbm)):
-                    if value is None and getattr(port, field) is not None:
-                        setattr(port, field, None)
-                        update_fields.append(field)
-                port.last_optical_check = now
-                update_fields.append("last_optical_check")
                 port.save(update_fields=update_fields)
                 updated += 1
         except Exception as exc:
