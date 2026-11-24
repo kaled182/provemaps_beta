@@ -43,7 +43,7 @@
       <p v-else-if="history && !history.zabbix_ok" class="od-msg text-warning" role="alert" data-testid="onu-detail-zabbix-down">
         Zabbix indisponível<span v-if="history.zabbix_error">: {{ history.zabbix_error }}</span>
       </p>
-      <p v-else-if="history && !history.points.length" class="od-msg" data-testid="onu-detail-empty">Sem leituras no período.</p>
+      <p v-else-if="history && !(history.points || []).length" class="od-msg" data-testid="onu-detail-empty">Sem leituras no período.</p>
       <TimeSeriesChart
         v-else-if="history"
         :series="series"

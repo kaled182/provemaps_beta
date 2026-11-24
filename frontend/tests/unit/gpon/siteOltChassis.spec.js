@@ -55,6 +55,26 @@ describe('SiteOltChassis', () => {
     w2.unmount()
   })
 
+  it('EV-0121: a lista de ONUs por baixo segue a porta do chassi e abre a ficha na linha (sem modal)', async () => {
+    mockApi()
+    const w = mount(SiteOltChassis, { props: { deviceId: 22 }, attachTo: document.body })
+    await flushPromises()
+    const ids = () => w.findAll('[data-testid="gpon-onu-row"]').map((r) => r.attributes('data-onu-id'))
+    expect(w.get('[data-testid="site-olt-onus"]').text()).toContain('PON 9/14 · 2 ONUs')
+    expect(ids()).toEqual(['501', '502'])
+    await w.get('[data-testid="chassis-port-9/15"]').trigger('click')
+    expect(w.get('[data-testid="insp-title"]').text()).toBe('PON 9/15')
+    expect(ids()).toEqual(['503', '504'])
+    await w.findAll('[data-testid="gpon-onu-row"]')[0].trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="onu-detail-503"]').exists()).toBe(true)
+    expect(document.body.querySelector('[data-testid="base-modal"]')).toBeNull()
+    await w.get('[data-testid="insp-clear"]').trigger('click') // «Todas as portas»
+    expect(w.get('[data-testid="site-olt-onus"]').text()).toContain('Todas as portas')
+    expect(ids()).toHaveLength(6)
+    w.unmount()
+  })
+
   it('atualiza a cada 60 s e para ao desmontar', async () => {
     vi.useFakeTimers()
     const spy = mockApi()
