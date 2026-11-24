@@ -199,9 +199,6 @@ print(f"[STATIC_VERSION] STATIC_ASSET_VERSION={STATIC_ASSET_VERSION}")
 # Em dev não há build: o SHA vem do próprio repositório (EV-0027b).
 GIT_SHA = os.getenv("GIT_SHA") or _git_sha()
 
-# No-cache middleware for sensitive routes
-MIDDLEWARE.append("core.middleware.no_cache_dev.NoCacheDevMiddleware")
-
 # Security relaxations for development
 if DEBUG:
     SECURE_SSL_REDIRECT = False  # type: ignore[assignment]
