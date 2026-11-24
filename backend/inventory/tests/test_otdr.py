@@ -212,3 +212,46 @@ def test_adjusting_a_pinned_alert_recomputes_for_everyone_and_logs_it(cable):
         ).status_code
         == 404
     )
+
+
+# ── EV-0131: medição cruzada (A + B) ─────────────────────────────────────────
+def test_cross_measurement_uses_the_real_slack_and_the_proportion(cable):
+    total = total_m()
+    # fibra com 3 % a mais que o traçado; rompimento a 30 % de A
+    fiber = total * 1.03
+    a, b = fiber * 0.3, fiber * 0.7
+    r = locate_otdr(cable.pk, direction="ba", distance_m=a, slack_pct=0, distance_b_m=b)
+    assert r["mode"] == "cross" and r["direction"] == "ab"  # o sentido é sempre a partir de A
+    assert r["cross"]["slack_real_pct"] == pytest.approx(3.0, abs=0.01)
+    assert r["cross"]["proportion"] == pytest.approx(0.3, abs=1e-4)
+    assert r["map_distance_m"] == pytest.approx(total * 0.3, abs=0.2)
+    assert r["warnings"] == []
+
+
+def test_cross_warns_when_the_readings_are_shorter_than_the_trace(cable):
+    r = locate_otdr(cable.pk, direction="ab", distance_m=3000, slack_pct=0, distance_b_m=5000)
+    assert r["cross"]["slack_real_pct"] < 0
+    assert "menor que o traçado" in r["warnings"][0]
+    assert r["map_distance_m"] == pytest.approx(total_m() * 3 / 8, abs=0.2)
+
+
+def test_pinning_a_cross_measurement_keeps_b_and_the_offset_on_adjust(cable):
+    c = Client()
+    c.force_login(get_user_model().objects.create_user(username="ana", password="x"))
+    url = "/api/v1/inventory/otdr-alerts/"
+    body = {
+        "cable_id": cable.pk,
+        "direction": "ab",
+        "distance_m": 3000,
+        "distance_b_m": 7300,
+        "offset_m": 50,
+    }
+    alert = c.post(url, body, content_type="application/json").json()
+    assert alert["result"]["mode"] == "cross" and alert["result"]["offset_m"] == 50
+    moved = c.patch(
+        f"{url}{alert['id']}/", {"offset_m": 150}, content_type="application/json"
+    ).json()
+    assert moved["result"]["mode"] == "cross"
+    assert moved["result"]["map_distance_m"] == pytest.approx(
+        alert["result"]["base_map_distance_m"] + 150, abs=0.2
+    )

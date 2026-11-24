@@ -486,7 +486,7 @@ describe('CustomMapViewer (EV-0012c)', () => {
     await wrapper.find('[data-testid="otdr-pin-alert"]').trigger('click');
     await flushPromises();
     const post = calls.find(([u, m]) => u === '/api/v1/inventory/otdr-alerts/' && m === 'POST');
-    expect(JSON.parse(post[2])).toEqual({ cable_id: 1, direction: 'ab', distance_m: 1000, slack_pct: 1.5 });
+    expect(JSON.parse(post[2])).toEqual({ cable_id: 1, direction: 'ab', distance_m: 1000, offset_m: 0, slack_pct: 1.5 });
     expect(wrapper.findAll('[data-testid="otdr-pin"]')).toHaveLength(2);
     expect(wrapper.find('[data-testid="otdr-card-pinned"]').text()).toContain('por Rui');
 

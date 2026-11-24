@@ -1105,12 +1105,11 @@ async function pinOtdr() {
   otdrBusy.value = true
   otdrError.value = ''
   try {
-    const alert = await apiPost(OTDR_ALERTS_URL, {
-      cable_id: r.cable_id,
-      direction: r.direction,
-      distance_m: r.otdr_m,
-      slack_pct: r.slack_pct,
-    })
+    // o servidor recalcula com os mesmos parâmetros: leitura(s), folga e o ajuste fino já feito
+    const body = { cable_id: r.cable_id, direction: r.direction, distance_m: r.otdr_m, offset_m: Number(r.offset_m) || 0 }
+    if (r.mode === 'cross' && r.cross) body.distance_b_m = r.cross.reading_b_m // EV-0131
+    else body.slack_pct = r.slack_pct
+    const alert = await apiPost(OTDR_ALERTS_URL, body)
     otdrDraft.value = null
     otdrAlerts.value = [alert, ...otdrAlerts.value.filter((a) => a.id !== alert.id)]
     otdrOpenKey.value = `a${alert.id}`
@@ -1135,12 +1134,10 @@ async function adjustOtdr(pt, offsetM) {
       otdrAlerts.value = otdrAlerts.value.map((a) => (a.id === updated.id ? updated : a))
     } else {
       const r = pt.result
-      otdrDraft.value = await apiGet(`/api/v1/inventory/cables/${encodeURIComponent(r.cable_id)}/otdr-locate/`, {
-        direction: r.direction,
-        distance_m: r.otdr_m,
-        slack_pct: r.slack_pct,
-        offset_m: offsetM,
-      })
+      const params = { direction: r.direction, distance_m: r.otdr_m, offset_m: offsetM }
+      if (r.mode === 'cross' && r.cross) params.distance_b_m = r.cross.reading_b_m // EV-0131
+      else params.slack_pct = r.slack_pct
+      otdrDraft.value = await apiGet(`/api/v1/inventory/cables/${encodeURIComponent(r.cable_id)}/otdr-locate/`, params)
     }
   } catch (e) {
     otdrError.value = `Não foi possível ajustar: ${e?.message || 'erro desconhecido'}`

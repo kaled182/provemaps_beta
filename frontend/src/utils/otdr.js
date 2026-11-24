@@ -54,7 +54,9 @@ export function whatsappText(r) {
     '*Rompimento de fibra — localização OTDR*',
     `Cabo: ${r.cable_name}`,
     `Sentido: ${from} → ${to}`,
-    `Leitura OTDR: ${formatMeters(r.otdr_m)} (folga ${String(r.slack_pct).replace('.', ',')}% → ${formatMeters(r.map_distance_m)} no traçado)`,
+    r.mode === 'cross' && r.cross
+      ? `Medição cruzada: ${formatMeters(r.cross.reading_a_m)} (de ${from}) + ${formatMeters(r.cross.reading_b_m)} (de ${to}) · folga real ${String(r.cross.slack_real_pct).replace('.', ',')}% → ${formatMeters(r.map_distance_m)} no traçado`
+      : `Leitura OTDR: ${formatMeters(r.otdr_m)} (folga ${String(r.slack_pct).replace('.', ',')}% → ${formatMeters(r.map_distance_m)} no traçado)`,
     ...(Number(r.offset_m) ? [`Ajuste em campo: ${r.offset_m > 0 ? '+' : ''}${formatMeters(r.offset_m)} sobre o traçado`] : []),
     `Coordenadas: ${formatCoords(r.point)} (±${Math.round(r.tolerance_m)} m)`,
     `Até ${from}: ${formatMeters(r.origin?.distance_m)} · até ${to}: ${formatMeters(r.target?.distance_m)}`,

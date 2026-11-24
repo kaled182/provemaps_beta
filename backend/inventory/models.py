@@ -1734,6 +1734,8 @@ class OtdrAlert(models.Model):
     cable = models.ForeignKey(FiberCable, on_delete=models.CASCADE, related_name="otdr_alerts")
     direction = models.CharField(max_length=2)
     otdr_m = models.FloatField()
+    # EV-0131: medição cruzada — leitura feita do Site B (otdr_m é então a do Site A)
+    otdr_b_m = models.FloatField(null=True, blank=True)
     slack_pct = models.FloatField()
     result = models.JSONField(help_text="Resposta de otdr-locate no momento em que foi fixado")
     note = models.CharField(max_length=200, blank=True)

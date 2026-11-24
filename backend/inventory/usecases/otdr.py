@@ -84,16 +84,26 @@ def locate_otdr(
     distance_m: float,
     slack_pct: float,
     offset_m: float = 0.0,
+    distance_b_m: float | None = None,
 ) -> dict[str, Any]:
     """Ponto provável do rompimento a ``distance_m`` (leitura do OTDR) medidos a partir do site
     de origem do sentido escolhido, descontada a folga; trecho de ±40 m à volta.
 
+    EV-0131 — medição cruzada: com ``distance_b_m`` (leitura feita do Site B), ``distance_m`` é a
+    leitura do Site A; a folga deixa de ser estimada e passa a ser a real do cabo,
+    ``(A + B) / traçado - 1``, e o ponto fica na proporção ``A / (A + B)`` do traçado.
+
     ``InventoryValidationError`` para sentido/folga inválidos, cabo sem traçado ou leitura que,
     descontada a folga, passa do fim do traçado.
     """
+    cross = distance_b_m is not None
+    if cross:
+        direction = "ab"
+        if distance_b_m <= 0:
+            raise InventoryValidationError("a leitura do Site B tem de ser positiva")
     if direction not in DIRECTIONS:
         raise InventoryValidationError("sentido deve ser «ab» ou «ba»")
-    if not 0 <= slack_pct <= SLACK_PCT_MAX:
+    if not cross and not 0 <= slack_pct <= SLACK_PCT_MAX:
         raise InventoryValidationError(f"folga entre 0 e {SLACK_PCT_MAX:g} %")
     if distance_m <= 0:
         raise InventoryValidationError("a distância do OTDR tem de ser positiva")
@@ -116,7 +126,31 @@ def locate_otdr(
 
     acc = geo.cumulative_m(coords)
     total_m = acc[-1]
-    base_m = distance_m / (1 + slack_pct / 100.0)
+    warnings: list[str] = []
+    cross_info: dict[str, Any] | None = None
+    if cross:
+        fiber_m = distance_m + float(distance_b_m)
+        slack_pct = round((fiber_m / total_m - 1) * 100, 2)
+        cross_info = {
+            "reading_a_m": round(distance_m, 1),
+            "reading_b_m": round(float(distance_b_m), 1),
+            "fiber_length_m": round(fiber_m, 1),
+            "slack_real_pct": slack_pct,
+            "proportion": round(distance_m / fiber_m, 4),
+        }
+        if slack_pct < 0:
+            warnings.append(
+                "A soma das leituras é menor que o traçado do mapa: o traçado pode estar mais longo"
+                " que a fibra real, ou as leituras não são do mesmo evento."
+            )
+        elif slack_pct > SLACK_PCT_MAX:
+            warnings.append(
+                f"Folga real de {slack_pct:.1f}% acima de {SLACK_PCT_MAX:g}%: confirmar as leituras"
+                " e se o traçado do mapa está completo."
+            )
+        base_m = distance_m / fiber_m * total_m  # = A / (1 + folga real)
+    else:
+        base_m = distance_m / (1 + slack_pct / 100.0)
     if base_m > total_m:
         raise InventoryValidationError(
             f"a leitura, descontada a folga ({base_m / 1000:.2f} km), passa do fim do traçado "
@@ -143,6 +177,9 @@ def locate_otdr(
         "segment": [[round(x, 7), round(y, 7)] for x, y in segment],
         "tolerance_m": geo.TOLERANCE_M,
         "references": _references(cable, coords, acc, map_m),
+        "mode": "cross" if cross else "single",
+        "cross": cross_info,
+        "warnings": warnings,
     }
 
 
@@ -177,15 +214,32 @@ def active_alerts() -> list[dict[str, Any]]:
 
 
 def pin_alert(
-    cable_id: int, *, direction: str, distance_m: float, slack_pct: float, user: Any, note: str = ""
+    cable_id: int,
+    *,
+    direction: str,
+    distance_m: float,
+    slack_pct: float,
+    user: Any,
+    note: str = "",
+    distance_b_m: float | None = None,
+    offset_m: float = 0.0,
 ) -> dict[str, Any]:
     """Recalcula o ponto (mesmas validações do locate) e fixa-o para toda a equipa."""
-    result = locate_otdr(cable_id, direction=direction, distance_m=distance_m, slack_pct=slack_pct)
+    result = locate_otdr(
+        cable_id,
+        direction=direction,
+        distance_m=distance_m,
+        slack_pct=slack_pct,
+        distance_b_m=distance_b_m,
+        offset_m=offset_m,
+    )
     alert = OtdrAlert.objects.create(
         cable_id=cable_id,
-        direction=direction,
+        direction=result["direction"],
         otdr_m=distance_m,
-        slack_pct=slack_pct,
+        otdr_b_m=distance_b_m,
+        offset_m=result["offset_m"],
+        slack_pct=result["slack_pct"],
         result=result,
         note=note[:200],
         created_by=user if getattr(user, "is_authenticated", False) else None,
@@ -204,6 +258,7 @@ def adjust_alert(alert_id: int, *, offset_m: float, user: Any) -> dict[str, Any]
         distance_m=alert.otdr_m,
         slack_pct=alert.slack_pct,
         offset_m=offset_m,
+        distance_b_m=alert.otdr_b_m,
     )
     previous = float(alert.offset_m or 0)
     alert.offset_m = result["offset_m"]

@@ -186,3 +186,45 @@ describe('OtdrResultCard — EV-0130', () => {
   })
 })
 
+describe('Medição cruzada — EV-0131', () => {
+  const CROSS = {
+    ...RESULT, mode: 'cross', direction: 'ab', otdr_m: 22000, slack_pct: 3, offset_m: 0, base_map_distance_m: 21300,
+    map_distance_m: 21300, references: { registered: 0, before: null, after: null },
+    cross: { reading_a_m: 22000, reading_b_m: 53300, fiber_length_m: 75300, slack_real_pct: 2.97, proportion: 0.2922 },
+    warnings: [],
+  }
+
+  it('formulário: duas leituras com os nomes dos sites, prévia da folga real e pedido com distance_b_m', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(() => ok(CROSS))
+    const w = mount(OtdrLocatorModal, { props: { show: true, cable: CABLE }, attachTo: document.body })
+    await flushPromises()
+    document.body.querySelector('[data-testid="otdr-mode-cross"]').click()
+    await flushPromises()
+    expect(document.body.querySelector('label[for="otdr-a"]').textContent).toContain('Vila Mandi')
+    expect(document.body.querySelector('label[for="otdr-b"]').textContent).toContain('Vila Rica')
+    const set = async (sel, v) => {
+      const el = document.body.querySelector(sel)
+      el.value = v
+      el.dispatchEvent(new Event('input'))
+      await flushPromises()
+    }
+    await set('[data-testid="otdr-distance"]', '22')
+    await set('[data-testid="otdr-distance-b"]', '53.3')
+    const preview = document.body.querySelector('[data-testid="otdr-cross-preview"]').textContent
+    expect(preview).toContain('Folga real 3,0%') // (22 + 53,3) / 73,13 − 1
+    expect(preview).toContain('29,2%')
+    document.body.querySelector('[data-testid="otdr-submit"]').click()
+    await flushPromises()
+    expect(spy.mock.calls[0][0]).toBe('/api/v1/inventory/cables/7/otdr-locate/?direction=ab&distance_m=22000&distance_b_m=53300')
+    w.unmount()
+  })
+
+  it('cartão e WhatsApp mostram as duas leituras e a folga real; avisos aparecem', () => {
+    const w = mount(OtdrResultCard, { props: { result: { ...CROSS, warnings: ['A soma das leituras é menor que o traçado do mapa'] } } })
+    expect(w.get('[data-testid="otdr-card-cross"]').text()).toContain('22,00 km + 53,30 km')
+    expect(w.get('[data-testid="otdr-card-cross"]').text()).toContain('folga real 2,97%')
+    expect(w.get('[data-testid="otdr-card-warning"]').text()).toContain('menor que o traçado')
+    expect(whatsappText(CROSS)).toContain('Medição cruzada: 22,00 km (de SITE - VILA MANDI) + 53,30 km (de SITE - VILA RICA) · folga real 2,97%')
+  })
+})
+

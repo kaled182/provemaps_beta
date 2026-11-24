@@ -18,6 +18,44 @@
         </select>
       </div>
 
+      <!-- EV-0131: medição simples (uma ponta + folga estimada) ou cruzada (as duas pontas) -->
+      <div class="seg" role="tablist" aria-label="Tipo de medição">
+        <button type="button" class="seg-btn" :class="{ 'seg-on': mode === 'single' }" data-testid="otdr-mode-single" @click="mode = 'single'">
+          Medição simples
+        </button>
+        <button type="button" class="seg-btn" :class="{ 'seg-on': mode === 'cross' }" data-testid="otdr-mode-cross" @click="mode = 'cross'">
+          Medição cruzada (A + B)
+        </button>
+      </div>
+
+      <template v-if="mode === 'cross'">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="otdr-label" for="otdr-a">OTDR em {{ siteA }}</label>
+            <input id="otdr-a" v-model="distance" type="number" min="0" step="any" inputmode="decimal" class="otdr-input otdr-input-full num" data-testid="otdr-distance" />
+          </div>
+          <div>
+            <label class="otdr-label" for="otdr-b">OTDR em {{ siteB }}</label>
+            <input id="otdr-b" v-model="distanceB" type="number" min="0" step="any" inputmode="decimal" class="otdr-input otdr-input-full num" data-testid="otdr-distance-b" />
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-neutral-500">Unidade</span>
+          <div class="seg" role="group" aria-label="Unidade">
+            <button v-for="u in ['km', 'm']" :key="u" type="button" class="seg-btn" :class="{ 'seg-on': unit === u }" :data-testid="`otdr-unit-${u}`" @click="unit = u">{{ u }}</button>
+          </div>
+        </div>
+        <p class="text-xs text-neutral-500" data-testid="otdr-cross-preview">
+          <template v-if="crossPreview">
+            Folga real <span class="num">{{ crossPreview.slack }}%</span> · rompimento a
+            <span class="num">{{ crossPreview.pct }}%</span> do caminho de {{ siteA }}
+            <template v-if="crossPreview.map"> · no traçado <span class="num">{{ crossPreview.map }}</span></template>
+          </template>
+          <template v-else>Folga real = (A + B) ÷ traçado − 1 · posição = A ÷ (A + B)</template>
+        </p>
+      </template>
+
+      <template v-else>
       <!-- Sentido da medição -->
       <fieldset>
         <legend class="otdr-label">Sentido da medição (onde está o OTDR)</legend>
@@ -90,6 +128,7 @@
           No traçado: <span class="num">{{ previewText }}</span> = OTDR ÷ (1 + folga)
         </p>
       </fieldset>
+      </template>
 
       <p v-if="localError || error" class="text-sm text-danger" role="alert" data-testid="otdr-error">{{ localError || error }}</p>
     </form>
@@ -126,8 +165,10 @@ const props = defineProps({
 const emit = defineEmits(['close', 'located'])
 
 const api = useApi()
+const mode = ref('single') // EV-0131
 const direction = ref('ab')
 const distance = ref('')
+const distanceB = ref('')
 const unit = ref('km')
 const slack = ref(1.5)
 const customSlack = ref(false)
@@ -174,12 +215,33 @@ const distanceM = computed(() => {
   if (!Number.isFinite(v) || v <= 0) return null
   return unit.value === 'km' ? v * 1000 : v
 })
+const toMeters = (raw) => {
+  const v = Number(String(raw).replace(',', '.'))
+  if (!Number.isFinite(v) || v <= 0) return null
+  return unit.value === 'km' ? v * 1000 : v
+}
+const distanceBM = computed(() => toMeters(distanceB.value))
+/** Prévia da medição cruzada com o comprimento do cabo no inventário (o servidor usa o traçado). */
+const crossPreview = computed(() => {
+  const a = distanceM.value
+  const b = distanceBM.value
+  if (a === null || b === null) return null
+  const km = Number(current.value?.length_km)
+  const lengthM = Number.isFinite(km) && km > 0 ? km * 1000 : null
+  const fmt = (v, d) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d })
+  return {
+    slack: lengthM ? fmt(((a + b) / lengthM - 1) * 100, 1) : '—',
+    pct: fmt((a / (a + b)) * 100, 1),
+    map: lengthM ? formatMeters((a / (a + b)) * lengthM) : null,
+  }
+})
 const slackPct = computed(() => Number(slack.value))
 const mapM = computed(() => (distanceM.value === null ? null : distanceM.value / (1 + slackPct.value / 100)))
 const previewText = computed(() => (mapM.value === null ? '—' : formatMeters(mapM.value)))
 
 /** Validação local antes de ir ao servidor (o servidor valida contra o traçado real). */
 const localError = computed(() => {
+  if (mode.value === 'cross') return '' // as duas leituras validam-se no servidor (folga real)
   if (distance.value === '' || distance.value === null) return ''
   if (distanceM.value === null) return 'Indique a distância medida no OTDR.'
   if (!Number.isFinite(slackPct.value) || slackPct.value < 0 || slackPct.value > SLACK_MAX) return `A folga vai de 0 a ${SLACK_MAX}%.`
@@ -196,19 +258,19 @@ async function locate() {
     error.value = 'Escolha o cabo.'
     return
   }
-  if (distanceM.value === null) {
-    error.value = 'Indique a distância medida no OTDR.'
+  if (distanceM.value === null || (mode.value === 'cross' && distanceBM.value === null)) {
+    error.value = mode.value === 'cross' ? 'Indique as duas leituras do OTDR (Site A e Site B).' : 'Indique a distância medida no OTDR.'
     return
   }
   if (localError.value) return
   loading.value = true
   error.value = ''
   try {
-    const result = await api.get(`/api/v1/inventory/cables/${encodeURIComponent(current.value.id)}/otdr-locate/`, {
-      direction: direction.value,
-      distance_m: Math.round(distanceM.value * 10) / 10,
-      slack_pct: slackPct.value,
-    })
+    const params =
+      mode.value === 'cross'
+        ? { direction: 'ab', distance_m: Math.round(distanceM.value * 10) / 10, distance_b_m: Math.round(distanceBM.value * 10) / 10 }
+        : { direction: direction.value, distance_m: Math.round(distanceM.value * 10) / 10, slack_pct: slackPct.value }
+    const result = await api.get(`/api/v1/inventory/cables/${encodeURIComponent(current.value.id)}/otdr-locate/`, params)
     emit('located', result)
   } catch (e) {
     error.value = e?.message || 'Não foi possível calcular o ponto.'
@@ -266,6 +328,9 @@ async function locate() {
   color: rgb(var(--n-900));
 }
 .otdr-select {
+  width: 100%;
+}
+.otdr-input-full {
   width: 100%;
 }
 .otdr-input-sm {

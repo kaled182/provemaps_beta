@@ -27,6 +27,8 @@ class OtdrQuerySerializer(serializers.Serializer):
     slack_pct = serializers.FloatField(min_value=0, max_value=SLACK_PCT_MAX, default=0)
     # EV-0130: ajuste fino (m sobre o traçado; o ponto fica entre as pontas)
     offset_m = serializers.FloatField(default=0, min_value=-500_000, max_value=500_000)
+    # EV-0131: medição cruzada — leitura do Site B (distance_m é então a do A; direction ignorado)
+    distance_b_m = serializers.FloatField(required=False, min_value=1)
 
 
 class OtdrSiteSerializer(serializers.Serializer):
@@ -49,6 +51,14 @@ class OtdrReferencesSerializer(serializers.Serializer):
     after = OtdrRefSerializer(allow_null=True)
 
 
+class OtdrCrossSerializer(serializers.Serializer):
+    reading_a_m = serializers.FloatField()
+    reading_b_m = serializers.FloatField()
+    fiber_length_m = serializers.FloatField()
+    slack_real_pct = serializers.FloatField()
+    proportion = serializers.FloatField()
+
+
 class OtdrResultSerializer(serializers.Serializer):
     cable_id = serializers.IntegerField()
     cable_name = serializers.CharField()
@@ -66,6 +76,9 @@ class OtdrResultSerializer(serializers.Serializer):
     segment = serializers.ListField(child=serializers.ListField(child=serializers.FloatField()))
     tolerance_m = serializers.FloatField()
     references = OtdrReferencesSerializer()
+    mode = serializers.ChoiceField(choices=["single", "cross"])
+    cross = OtdrCrossSerializer(allow_null=True)
+    warnings = serializers.ListField(child=serializers.CharField())
 
 
 class OtdrLocateView(APIView):
@@ -91,6 +104,7 @@ class OtdrLocateView(APIView):
                 distance_m=v["distance_m"],
                 slack_pct=v["slack_pct"],
                 offset_m=v["offset_m"],
+                distance_b_m=v.get("distance_b_m"),
             )
         except InventoryValidationError as exc:
             return Response({"detail": str(exc)}, status=400)
@@ -103,6 +117,8 @@ class OtdrPinSerializer(serializers.Serializer):
     distance_m = serializers.FloatField(min_value=1)
     slack_pct = serializers.FloatField(min_value=0, max_value=SLACK_PCT_MAX, default=0)
     note = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
+    distance_b_m = serializers.FloatField(required=False, min_value=1)  # EV-0131
+    offset_m = serializers.FloatField(default=0, min_value=-500_000, max_value=500_000)
 
 
 class OtdrAlertSerializer(serializers.Serializer):
@@ -149,6 +165,8 @@ class OtdrAlertsView(APIView):
                 slack_pct=v["slack_pct"],
                 note=v["note"],
                 user=request.user,
+                distance_b_m=v.get("distance_b_m"),
+                offset_m=v["offset_m"],
             )
         except InventoryValidationError as exc:
             return Response({"detail": str(exc)}, status=400)

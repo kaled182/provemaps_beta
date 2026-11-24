@@ -10,11 +10,21 @@
       <dd>{{ result.cable_name }}</dd>
       <dt>Sentido</dt>
       <dd data-testid="otdr-card-direction">{{ originName }} → {{ targetName }}</dd>
-      <dt>Leitura OTDR</dt>
-      <dd class="num">{{ formatMeters(result.otdr_m) }}</dd>
+      <template v-if="result.mode === 'cross' && result.cross">
+        <dt>Leituras A + B</dt>
+        <dd class="num" data-testid="otdr-card-cross">
+          {{ formatMeters(result.cross.reading_a_m) }} + {{ formatMeters(result.cross.reading_b_m) }}
+          <span class="text-neutral-500">· folga real {{ String(result.cross.slack_real_pct).replace('.', ',') }}%</span>
+        </dd>
+      </template>
+      <template v-else>
+        <dt>Leitura OTDR</dt>
+        <dd class="num">{{ formatMeters(result.otdr_m) }}</dd>
+      </template>
       <dt>No traçado</dt>
       <dd class="num" data-testid="otdr-card-map">
-        {{ formatMeters(result.map_distance_m) }} <span class="text-neutral-500">(folga {{ slackText }}%)</span>
+        {{ formatMeters(result.map_distance_m) }}
+        <span v-if="result.mode !== 'cross'" class="text-neutral-500">(folga {{ slackText }}%)</span>
         <span v-if="offset" class="orc-offset" data-testid="otdr-card-offset">ajuste {{ offset > 0 ? '+' : '' }}{{ formatMeters(offset) }}</span>
       </dd>
       <dt>GPS</dt>
@@ -24,6 +34,7 @@
       <dt>Até {{ targetName }}</dt>
       <dd class="num">{{ formatMeters(result.target.distance_m) }}</dd>
     </dl>
+    <p v-for="w in result.warnings || []" :key="w" class="orc-warn" role="alert" data-testid="otdr-card-warning">{{ w }}</p>
 
     <!-- EV-0130: ajuste fino em campo, ao longo do traçado -->
     <div class="orc-adjust" data-testid="otdr-adjust">
@@ -188,6 +199,14 @@ onBeforeUnmount(() => clearTimeout(timer))
   margin: 0;
   color: rgb(var(--n-900));
   overflow-wrap: anywhere;
+}
+.orc-warn {
+  margin: 6px 0 0;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: rgb(var(--warning));
+  background: rgb(var(--warning) / 0.1);
 }
 .orc-offset {
   margin-left: 4px;
