@@ -14,10 +14,7 @@ import pytest
 
 from inventory.domain import optical
 from inventory.models import Device, Port, Site
-from inventory.tests.test_optical_key_discovery_ev0086 import (
-    OPTICAL_ZABBIX,
-    _fake_optical_zabbix,
-)
+from inventory.tests.test_optical_key_discovery_ev0086 import OPTICAL_ZABBIX, _fake_optical_zabbix
 from inventory.usecases import devices_ports
 
 DISCOVERABLE = "269025536.1"  # a descoberta, se corresse, gravaria onu.rx[...] nesta porta
