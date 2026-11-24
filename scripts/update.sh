@@ -209,7 +209,7 @@ echo ""
 [[ "${VERSION_ATUAL}" != "${VERSION_NOVA}" ]] && \
     echo -e "  Versão: ${YLW}v${VERSION_ATUAL}${NC} → ${GRN}${BLD}v${VERSION_NOVA}${NC}"
 echo ""
-echo -e "  Acesso:  ${BLD}http://${SERVER_IP}:8100${NC}"
+echo -e "  Acesso:  ${BLD}http://${SERVER_IP}${NC}"
 echo ""
 echo -e "  Comandos úteis:"
 echo -e "    docker compose -f ${COMPOSE_FILE} ps"
