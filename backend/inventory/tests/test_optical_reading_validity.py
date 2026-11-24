@@ -153,6 +153,19 @@ def test_invalid_side_is_cleared_when_other_side_refreshes_check(port):
     assert port.last_tx_power is None
 
 
+@pytest.mark.django_db
+def test_keyless_side_is_cleared_when_other_side_refreshes_check(port):
+    """Ponta SEM chave (ex.: TX das ONU depois do EV-0081) com um valor antigo: ao gravar o
+    RX novo, o TX antigo não pode ficar sob a hora nova."""
+    Port.objects.filter(pk=port.pk).update(tx_power_item_key="", last_tx_power=Decimal("-20.81"))
+    port.refresh_from_db()
+    _run([_item("hwEntityOpticalLaneRxPower[1]", "-18.4")])
+
+    port.refresh_from_db()
+    assert port.last_rx_power == Decimal("-18.40")
+    assert port.last_tx_power is None
+
+
 def test_validate_optical_reading_rules():
     ok = _item("k", "-20")
     assert optical.validate_optical_reading(ok, -20.0) == (-20.0, None)

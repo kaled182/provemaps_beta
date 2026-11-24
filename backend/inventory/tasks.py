@@ -283,14 +283,12 @@ def update_all_port_optical_levels() -> dict[str, Any]:
                 update_fields.append("last_tx_power")
             if update_fields:
                 # EV-0082: `last_optical_check` é um só para RX e TX. Se só uma ponta
-                # tem leitura válida, a outra (chave configurada sem leitura) não pode
-                # ficar com o valor antigo sob a hora nova — passaria por fresca.
-                for field, key_field, value in (
-                    ("last_rx_power", "rx_power_item_key", rx_dbm),
-                    ("last_tx_power", "tx_power_item_key", tx_dbm),
-                ):
-                    has_key = bool((getattr(port, key_field, "") or "").strip())
-                    if value is None and has_key and getattr(port, field) is not None:
+                # tem leitura válida, a outra não pode ficar com o valor antigo sob a
+                # hora nova — passaria por fresca. Vale também para a ponta SEM chave
+                # (ex.: TX das ONU depois do EV-0081, que esvaziou chaves erradas: o TX
+                # de agosto aparecia com a hora do RX novo).
+                for field, value in (("last_rx_power", rx_dbm), ("last_tx_power", tx_dbm)):
+                    if value is None and getattr(port, field) is not None:
                         setattr(port, field, None)
                         update_fields.append(field)
                 port.last_optical_check = now
