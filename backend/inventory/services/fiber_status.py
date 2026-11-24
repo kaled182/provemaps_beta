@@ -109,8 +109,7 @@ def fetch_interface_status_advanced(
                     "name",
                 ],
                 "hostids": hostid,
-                "search": {"key_": key},
-                "searchByAny": True,
+                "filter": {"key_": key},
                 "limit": 1,
             },
         )
@@ -413,8 +412,7 @@ def get_oper_status_from_zabbix(
                 "name",
             ],
             "hostids": device.zabbix_hostid,
-            "search": {"key_": item_key},
-            "searchByAny": True,
+            "filter": {"key_": item_key},
             "limit": 1,
         },
     )
@@ -476,8 +474,7 @@ def get_oper_status_from_port(port: Any) -> tuple[str, Any, dict[str, Any]]:
                     "name",
                 ],
                 "hostids": hostid,
-                "search": {"key_": key},
-                "searchByAny": True,
+                "filter": {"key_": key},
                 "limit": 1,
             },
         )

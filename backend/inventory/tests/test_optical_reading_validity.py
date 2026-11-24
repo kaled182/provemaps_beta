@@ -181,7 +181,7 @@ def test_validate_optical_reading_rules():
 
 def test_fiber_status_ignores_never_collected_zero():
     def fake(method, params=None, *a, **k):
-        key = params["search"]["key_"]
+        key = params["filter"]["key_"]  # EV-0091: chave exata, não LIKE
         return [_item(key, "0", lastclock="0")]
 
     with patch(STATUS_ZABBIX, side_effect=fake):
