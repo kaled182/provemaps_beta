@@ -644,6 +644,23 @@ class FiberCable(models.Model):
         related_name="cables_end",
         help_text="Site de destino (opcional até conexão lógica)",
     )
+    # EV-0135: cabo derivado que nasce (ou termina) numa CEO no meio de outro cabo
+    origin_infrastructure = models.ForeignKey(
+        "FiberInfrastructure",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="derived_cables",
+        help_text="CEO onde o cabo começa (derivação)",
+    )
+    destination_infrastructure = models.ForeignKey(
+        "FiberInfrastructure",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="arriving_cables",
+        help_text="CEO onde o cabo termina",
+    )
 
     origin_port = models.ForeignKey(
         Port,

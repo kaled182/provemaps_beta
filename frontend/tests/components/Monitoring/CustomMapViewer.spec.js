@@ -447,6 +447,30 @@ describe('CustomMapViewer (EV-0012c)', () => {
     wrapper.unmount();
   }, 15_000); // imports dinâmicos (modal OTDR): na suite completa a 1.ª compilação passa dos 5 s
 
+  it('EV-0135: CEOs aparecem como pinos; «Inserir CEO aqui» abre o formulário com o ponto do clique; o cartão abre no pino', async () => {
+    const CEO = { id: 4, name: 'CEO-04', cable_id: 1, cable_name: 'Cabo 1', point: [-49.25, -16.65], km: 1.2, mode: 'corte', mode_label: 'Corte / emenda total', slack_m: null, trays: 2, derived: [] };
+    global.fetch = vi.fn(async (url) =>
+      url === '/api/v1/inventory/ceos/'
+        ? { ok: true, status: 200, json: async () => [CEO] }
+        : { ok: true, status: 200, json: async () => ({ hosts_status: [] }) },
+    );
+    const wrapper = mountViewer();
+    await flushPromises();
+    const map = fakeFactory.maps[0];
+    expect(wrapper.findAll('[data-testid="ceo-pin"]')).toHaveLength(1);
+    await wrapper.find('[data-testid="ceo-pin"]').trigger('click');
+    expect(wrapper.find('[data-testid="ceo-card-4"]').text()).toContain('Corte / emenda total');
+    map.polylines[0].fire('click', { lat: -16.66, lng: -49.24, clientX: 200, clientY: 100 });
+    await flushPromises();
+    wrapper.findComponent({ name: 'CableOpticalTooltip' }).vm.$emit('insert-ceo', { id: 'c1', name: 'Cabo 1' });
+    await vi.dynamicImportSettled();
+    await flushPromises();
+    const modal = wrapper.findComponent({ name: 'CeoCreateModal' });
+    expect(modal.props('point')).toEqual({ lat: -16.66, lng: -49.24 });
+    expect(modal.props('cable')).toEqual({ id: 'c1', name: 'Cabo 1' });
+    wrapper.unmount();
+  }, 15_000);
+
   it('EV-0128: alertas da equipa aparecem ao abrir; fixar grava no servidor; limpar um fixado limpa para todos; barra abre o formulário', async () => {
     const result = (lng, lat) => ({
       cable_id: 1, cable_name: 'Cabo 1', direction: 'ab', otdr_m: 1000, slack_pct: 1.5, map_distance_m: 985.2,

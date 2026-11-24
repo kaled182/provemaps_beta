@@ -81,7 +81,7 @@
 
           <!-- Pontas A e B: «Conectar a porta» -->
           <div v-for="end in ['a', 'b']" :key="end" class="panel-end" :data-testid="`end-${end}`">
-            <p class="end-title">Ponta {{ end.toUpperCase() }} · {{ ends[end]?.site_name || 'sem site no cabo' }}</p>
+            <p class="end-title">Ponta {{ end.toUpperCase() }} · {{ ends[end]?.site_name || (ends[end]?.ceo_name ? `na ${ends[end].ceo_name} (emenda na caixa)` : 'sem site no cabo') }}</p>
             <p v-if="portOf(selected, end)" class="end-port" :data-testid="`end-${end}-port`">
               {{ portOf(selected, end).device_name }} → <span class="num">{{ portOf(selected, end).name }}</span>
             </p>

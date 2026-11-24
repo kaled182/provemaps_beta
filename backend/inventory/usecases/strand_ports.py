@@ -81,32 +81,37 @@ def _used_ports(port_ids: list[int]) -> dict[int, dict[str, Any]]:
     return used
 
 
+def site_ports(site: Site) -> dict[str, Any]:
+    """Equipamentos do site com as portas e quem as usa (fibra/cabo/ponta)."""
+    ports = list(
+        Port.objects.filter(device__site=site)
+        .select_related("device")
+        .order_by("device__name", "name")
+        .only("id", "name", "device__id", "device__name")
+    )
+    used = _used_ports([p.pk for p in ports])
+    devices: dict[int, dict[str, Any]] = {}
+    for p in ports:
+        dev = devices.setdefault(
+            p.device_id, {"id": p.device_id, "name": p.device.name, "ports": []}
+        )
+        dev["ports"].append({"id": p.pk, "name": p.name, "used_by": used.get(p.pk)})
+    return {"site_id": site.pk, "site_name": site.display_name, "devices": list(devices.values())}
+
+
 def cable_ends(cable: FiberCable) -> dict[str, Any]:
     """Sites das duas pontas, com os equipamentos e as portas (e quem as usa)."""
     out: dict[str, Any] = {}
     for end in ENDS:
         site = end_site(cable, end)
-        if site is None:
-            out[end] = {"site_id": None, "site_name": None, "devices": []}
-            continue
-        ports = list(
-            Port.objects.filter(device__site=site)
-            .select_related("device")
-            .order_by("device__name", "name")
-            .only("id", "name", "device__id", "device__name")
+        out[end] = (
+            site_ports(site)
+            if site is not None
+            else {"site_id": None, "site_name": None, "devices": []}
         )
-        used = _used_ports([p.pk for p in ports])
-        devices: dict[int, dict[str, Any]] = {}
-        for p in ports:
-            dev = devices.setdefault(
-                p.device_id, {"id": p.device_id, "name": p.device.name, "ports": []}
-            )
-            dev["ports"].append({"id": p.pk, "name": p.name, "used_by": used.get(p.pk)})
-        out[end] = {
-            "site_id": site.pk,
-            "site_name": site.display_name,
-            "devices": list(devices.values()),
-        }
+        # EV-0135: ponta numa CEO (cabo derivado) — não há porta, a emenda é na caixa
+        ceo = cable.origin_infrastructure if end == "a" else cable.destination_infrastructure
+        out[end]["ceo_name"] = (ceo.name or f"CEO #{ceo.pk}") if ceo is not None else None
     return out
 
 

@@ -25,6 +25,25 @@
         </MapPopup>
       </template>
 
+      <!-- EV-0135: CEOs nos traçados -->
+      <template v-if="map">
+        <MapPopup v-for="c in ceos" :key="`ceo-${c.id}`" :map="map" :position="{ lat: c.point[1], lng: c.point[0] }" bare>
+          <CeoPin :name="c.name" :mode="c.mode" @open="ceoOpenId = c.id" />
+        </MapPopup>
+        <MapPopup v-if="ceoOpen" :map="map" :position="{ lat: ceoOpen.point[1], lng: ceoOpen.point[0] }" :offset-y="14">
+          <CeoCard :ceo="ceoOpen" @close="ceoOpenId = null" @derive="startDerive" />
+        </MapPopup>
+      </template>
+      <CeoDerivePanel
+        v-if="map && ceoDeriving"
+        :map="map"
+        :ceo="ceoDeriving"
+        :ceos="ceos"
+        :sites="siteOptions"
+        @close="ceoDeriving = null"
+        @created="onDerived"
+      />
+
       <!-- EV-0128: localizar OTDR escolhendo o cabo -->
       <button class="map-otdr-btn" title="Localizar rompimento por leitura do OTDR" data-testid="map-otdr-btn" @click="openOtdr(null)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
@@ -187,6 +206,17 @@
       @close="showCableTooltip = false"
       @open-details="openCableDetailsFromTooltip"
       @otdr="openOtdr"
+      @insert-ceo="openInsertCeo"
+    />
+
+    <!-- EV-0135: inserir CEO no ponto do cabo onde se clicou -->
+    <CeoCreateModal
+      v-if="ceoCreate"
+      :show="!!ceoCreate"
+      :cable="ceoCreate.cable"
+      :point="ceoCreate.point"
+      @close="ceoCreate = null"
+      @created="onCeoCreated"
     />
 
     <!-- EV-0127: localizador OTDR -->
@@ -243,6 +273,10 @@ import { computeMapKpis, siteStatuses, deviceMatchesKpiFilter, cableMatchesKpiFi
 import MapContextMenu from './components/MapContextMenu.vue'
 import MapPopup from '@/components/Map/MapPopup.vue'
 import OtdrPin from '@/components/Otdr/OtdrPin.vue'
+import CeoPin from '@/components/Ceo/CeoPin.vue'
+import CeoCard from '@/components/Ceo/CeoCard.vue'
+const CeoCreateModal = defineAsyncComponent(() => import('@/components/Ceo/CeoCreateModal.vue'))
+const CeoDerivePanel = defineAsyncComponent(() => import('@/components/Ceo/CeoDerivePanel.vue'))
 import OtdrResultCard from '@/components/Otdr/OtdrResultCard.vue'
 
 // Componentes pesados: lazy via defineAsyncComponent — só baixam o JS quando renderizados.
@@ -1012,7 +1046,9 @@ function cableHoverText(cable) {
 /** Clique no cabo: o card completo (TX/RX/atenuação e ações), onde se clicou. */
 const handleCableClick = (cable, event) => {
   if (nearSiteMarker(event)) return
+  if (ceoDeriving.value) return // a desenhar um derivado: o clique é ponto do traçado
   cableHover.value = null
+  cableClickPoint.value = Number.isFinite(event?.lat) && Number.isFinite(event?.lng) ? { lat: event.lat, lng: event.lng } : null
   hoveredCable.value = cable
   tooltipPosition.value = { x: event?.clientX || 0, y: event?.clientY || 0 }
   showCableTooltip.value = true
@@ -1022,6 +1058,48 @@ const openCableDetailsFromTooltip = (cable) => {
   showCableTooltip.value = false
   selectedCable.value = cable
   showCableDetailModal.value = true
+}
+
+// ── EV-0135: CEOs no traçado e cabos derivados ───────────────────────────────
+const CEOS_URL = '/api/v1/inventory/ceos/'
+const ceos = ref([])
+const ceoOpenId = ref(null)
+const ceoCreate = ref(null) // {cable, point}
+const ceoDeriving = ref(null)
+const cableClickPoint = ref(null)
+const ceoOpen = computed(() => ceos.value.find((c) => c.id === ceoOpenId.value) || null)
+const siteOptions = computed(() =>
+  [...sitesMap.value.values()]
+    .map((s) => ({ id: s.id, name: s.display_name || s.name || `Site ${s.id}` }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
+)
+
+async function loadCeos() {
+  try {
+    const body = await apiGet(CEOS_URL)
+    ceos.value = Array.isArray(body) ? body.filter((c) => Array.isArray(c?.point)) : []
+  } catch (e) {
+    console.warn('[CustomMapViewer] CEOs indisponíveis:', e?.message)
+  }
+}
+function openInsertCeo(cable) {
+  if (!cableClickPoint.value) return
+  showCableTooltip.value = false
+  ceoCreate.value = { cable, point: cableClickPoint.value }
+}
+async function onCeoCreated(ceo) {
+  ceoCreate.value = null
+  await loadCeos()
+  ceoOpenId.value = ceo.id
+}
+function startDerive(ceo) {
+  ceoOpenId.value = null
+  ceoDeriving.value = ceo
+}
+async function onDerived(cable) {
+  ceoDeriving.value = null
+  await Promise.all([loadCeos(), loadInventoryItems()])
+  if (!selectedItems.value.cables.includes(cable.id)) selectedItems.value.cables = [...selectedItems.value.cables, cable.id]
 }
 
 // ── EV-0127/0128: localizador OTDR ───────────────────────────────────────────
@@ -1433,6 +1511,7 @@ const openCableFullDetails = (cable) => {
 
 // Função para salvar alterações do cabo
 onMounted(async () => {
+  loadCeos() // EV-0135
   // EV-0128: pontos OTDR fixados pela equipa — ao abrir e a cada minuto
   loadOtdrAlerts()
   otdrTimer = setInterval(loadOtdrAlerts, OTDR_ALERTS_REFRESH_MS)
