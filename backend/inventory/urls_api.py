@@ -76,6 +76,7 @@ from inventory.api.maintenance_alert import (  # noqa: E402
     api_maintenance_recipients,
     api_maintenance_send_alert,
 )
+from inventory.api.otdr import OtdrLocateView  # noqa: E402
 from inventory.api.perform_update import api_perform_update  # noqa: E402
 from inventory.api.responsibles import api_create_responsible, api_list_responsibles  # noqa: E402
 from inventory.api.search import api_global_search  # noqa: E402
@@ -424,6 +425,12 @@ urlpatterns = [
         "devices/grouped/",
         device_api.api_inventory_grouped,
         name="inventory-grouped",
+    ),
+    # EV-0127: localizador de rompimento OTDR sobre o traçado do cabo
+    path(
+        "cables/<int:cable_id>/otdr-locate/",
+        OtdrLocateView.as_view(),
+        name="cable-otdr-locate",
     ),
     # EV-0111: resumo de portas por dispositivo (cards do modal de Site)
     path(

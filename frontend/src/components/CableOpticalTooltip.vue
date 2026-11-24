@@ -123,6 +123,14 @@
 
         <!-- Rodapé com botão de detalhes -->
         <div class="panel-actions">
+          <!-- EV-0127: localizar rompimento por leitura do OTDR -->
+          <button class="details-btn otdr-btn" data-testid="cable-otdr" @click.stop="$emit('otdr', cableData)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="7" stroke-width="2" />
+              <path stroke-linecap="round" stroke-width="2" d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+            </svg>
+            Localizar OTDR
+          </button>
           <button class="details-btn" @click.stop="$emit('open-details', cableData)">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -147,7 +155,7 @@ const props = defineProps({
   position: { type: Object, default: () => ({ x: 0, y: 0 }) },
 })
 
-const emit = defineEmits(['close', 'open-details'])
+const emit = defineEmits(['close', 'open-details', 'otdr'])
 
 const { get } = useApi()
 
@@ -556,7 +564,14 @@ const formatTimestamp = (ts) => {
 .refresh-btn svg { width: 12px; height: 12px; }
 .refresh-btn svg.spinning { animation: spin 1s linear infinite; }
 
-.panel-actions { padding: 8px 12px 10px; border-top: 1px solid rgb(var(--n-200)); }
+.panel-actions { display: flex; gap: 6px; padding: 8px 12px 10px; border-top: 1px solid rgb(var(--n-200)); }
+/* EV-0127: «Localizar OTDR» ao lado de «Ver detalhes», em estilo secundário */
+.details-btn.otdr-btn {
+  background: rgb(var(--surface));
+  color: rgb(var(--n-700));
+  border: 1px solid rgb(var(--n-300));
+}
+.details-btn.otdr-btn:hover { background: rgb(var(--n-100)); color: rgb(var(--danger)); border-color: rgb(var(--danger) / 0.5); }
 .details-btn {
   display: flex;
   align-items: center;

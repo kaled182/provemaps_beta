@@ -2,13 +2,17 @@
   <div
     v-if="pixel"
     class="map-popup"
+    :class="{ 'map-popup-bare': bare }"
     :style="{ left: `${pixel.x}px`, top: `${pixel.y}px` }"
-    role="dialog"
+    :role="bare ? undefined : 'dialog'"
   >
-    <div class="map-popup-content">
-      <slot />
-    </div>
-    <div class="map-popup-arrow" aria-hidden="true"></div>
+    <slot v-if="bare" />
+    <template v-else>
+      <div class="map-popup-content">
+        <slot />
+      </div>
+      <div class="map-popup-arrow" aria-hidden="true"></div>
+    </template>
   </div>
 </template>
 
@@ -29,13 +33,15 @@ const props = defineProps({
   position: { type: Object, required: true },
   /** Distância em px entre a âncora e a base da janela */
   offsetY: { type: Number, default: 10 },
+  /** EV-0127: sem caixa nem seta, centrado na coordenada (marcadores Vue, ex. o pino OTDR) */
+  bare: { type: Boolean, default: false },
 });
 
 const pixel = ref(null);
 
 function reproject() {
   const point = props.map?.latLngToPixel?.(props.position);
-  pixel.value = point ? { x: point.x, y: point.y - props.offsetY } : null;
+  pixel.value = point ? { x: point.x, y: point.y - (props.bare ? 0 : props.offsetY) } : null;
 }
 
 let boundMap = null;
@@ -64,6 +70,12 @@ onBeforeUnmount(() => bind(null));
   z-index: 20;
   transform: translate(-50%, -100%);
   pointer-events: auto;
+}
+
+.map-popup-bare {
+  z-index: 19;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
 .map-popup-content {

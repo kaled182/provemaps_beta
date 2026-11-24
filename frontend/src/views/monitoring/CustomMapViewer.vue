@@ -5,6 +5,14 @@
       <!-- Mapa: criado pelo provider configurado (providers/maps) -->
       <div ref="mapContainer" class="map-container"></div>
 
+      <!-- EV-0127: ponto do rompimento OTDR (pino pulsante) e o seu cartão -->
+      <MapPopup v-if="map && otdrResult" :map="map" :position="otdrPosition" bare>
+        <OtdrPin />
+      </MapPopup>
+      <MapPopup v-if="map && otdrResult && otdrCardOpen" :map="map" :position="otdrPosition" :offset-y="18">
+        <OtdrResultCard :result="otdrResult" @close="otdrCardOpen = false" @clear="clearOtdr" />
+      </MapPopup>
+
       <!-- Painel Lateral: Gerenciar Itens (lazy: só monta após 1ª abertura, depois mantém estado) -->
       <MapInventoryPanel
         v-if="inventoryPanelMounted"
@@ -155,6 +163,16 @@
       :position="tooltipPosition"
       @close="showCableTooltip = false"
       @open-details="openCableDetailsFromTooltip"
+      @otdr="openOtdr"
+    />
+
+    <!-- EV-0127: localizador OTDR -->
+    <OtdrLocatorModal
+      v-if="otdrCable"
+      :show="otdrCable !== null"
+      :cable="otdrCable"
+      @close="otdrCable = null"
+      @located="showOtdr"
     />
 
     <!-- Toast notification -->
@@ -198,6 +216,9 @@ import MapKpiHud from './components/MapKpiHud.vue'
 import { useOpticalSummary } from '@/composables/useOpticalSummary'
 import { computeMapKpis, siteStatuses, deviceMatchesKpiFilter, cableMatchesKpiFilter } from '@/utils/mapKpis'
 import MapContextMenu from './components/MapContextMenu.vue'
+import MapPopup from '@/components/Map/MapPopup.vue'
+import OtdrPin from '@/components/Otdr/OtdrPin.vue'
+import OtdrResultCard from '@/components/Otdr/OtdrResultCard.vue'
 
 // Componentes pesados: lazy via defineAsyncComponent — só baixam o JS quando renderizados.
 // Modais (SiteDetails, FiberCable*, CableOpticalTooltip, MaintenanceNotify) são montados
@@ -207,6 +228,7 @@ const SiteDetailsModal = defineAsyncComponent(() => import('@/components/SiteDet
 const FiberCableQuickModal = defineAsyncComponent(() => import('@/components/FiberCableQuickModal.vue'))
 const FiberCableDetailModal = defineAsyncComponent(() => import('@/components/FiberCableDetailModal.vue'))
 const CableOpticalTooltip = defineAsyncComponent(() => import('@/components/CableOpticalTooltip.vue'))
+const OtdrLocatorModal = defineAsyncComponent(() => import('@/components/Otdr/OtdrLocatorModal.vue'))
 const MapInventoryPanel = defineAsyncComponent(() => import('./components/MapInventoryPanel.vue'))
 const MaintenanceAreaPanel = defineAsyncComponent(() => import('./components/MaintenanceAreaPanel.vue'))
 const MaintenanceNotifyModal = defineAsyncComponent(() => import('./components/MaintenanceNotifyModal.vue'))
@@ -240,6 +262,8 @@ const DEVICE_MARKER_SIZE = 14
 // EV-0126: área de clique do cabo (Mapbox) e raio (px) à volta de um site em que o cabo cede
 const CABLE_HIT_WIDTH = 8
 const SITE_PRIORITY_PX = 18
+// EV-0127: trecho provável da falha (±40 m) — âmbar, por cima do cabo
+const OTDR_SEGMENT_STYLE = { strokeColor: '#f59e0b', strokeOpacity: 0.95, strokeWeight: 8 }
 const MAINTENANCE_STYLE = { strokeColor: '#f59e0b', strokeOpacity: 0.9, strokeWeight: 2, fillColor: '#f59e0b', fillOpacity: 0.12 }
 const DEFAULT_CENTER = { lat: -15.7801, lng: -47.9292 }
 const DEFAULT_ZOOM = 12
@@ -975,6 +999,44 @@ const openCableDetailsFromTooltip = (cable) => {
   showCableDetailModal.value = true
 }
 
+// ── EV-0127: localizador OTDR ────────────────────────────────────────────────
+const otdrCable = ref(null)
+const otdrResult = ref(null)
+const otdrCardOpen = ref(false)
+let otdrLine = null
+const otdrPosition = computed(() => {
+  const [lng, lat] = otdrResult.value?.point || []
+  return { lat, lng }
+})
+
+/** «Localizar OTDR» no cartão do cabo: o formulário com o cabo já escolhido. */
+function openOtdr(cable) {
+  showCableTooltip.value = false
+  otdrCable.value = cable
+}
+
+/** Resultado do backend: trecho âmbar, pino pulsante e cartão; centra no ponto. */
+function showOtdr(result) {
+  otdrCable.value = null
+  clearOtdr()
+  otdrResult.value = result
+  otdrCardOpen.value = true
+  if (!map.value) return
+  const path = (result.segment || []).map(([lng, lat]) => ({ lat, lng }))
+  if (path.length >= 2) {
+    otdrLine = map.value.createPolyline({ path, ...OTDR_SEGMENT_STYLE, clickable: false })
+  }
+  map.value.setCenter(otdrPosition.value)
+  map.value.setZoom(16)
+}
+
+function clearOtdr() {
+  otdrLine?.remove()
+  otdrLine = null
+  otdrResult.value = null
+  otdrCardOpen.value = false
+}
+
 // EV-0126: hover no cabo = só o realce do traço (provider) + etiqueta mínima «nome · km» que
 // segue o rato; o card de telemetria abre no clique. Junto a um site, o hover é do site.
 const cableHover = ref(null)
@@ -1261,6 +1323,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   clearTimeout(focusTimer)
   clearTimeout(cableFocusTimer)
+  otdrLine?.remove()
   stopStatusPolling()
 
   if (maintenanceMode.value) {

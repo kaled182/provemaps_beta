@@ -415,4 +415,35 @@ describe('CustomMapViewer (EV-0012c)', () => {
       routeFake.query = {};
     }
   });
+
+  it('EV-0127: «Localizar OTDR» no cartão do cabo abre o formulário; o resultado desenha trecho, pino e cartão; Limpar tira tudo', async () => {
+    const wrapper = mountViewer();
+    await flushPromises();
+    const map = fakeFactory.maps[0];
+    map.polylines[0].fire('click', { lat: -16.65, lng: -49.25, clientX: 200, clientY: 100 });
+    await flushPromises();
+    wrapper.findComponent({ name: 'CableOpticalTooltip' }).vm.$emit('otdr', { id: 'c1', name: 'Cabo 1' });
+    await vi.dynamicImportSettled();
+    await flushPromises();
+    const modal = wrapper.findComponent({ name: 'OtdrLocatorModal' });
+    expect(modal.props('cable')).toEqual({ id: 'c1', name: 'Cabo 1' });
+    const result = {
+      cable_id: 1, cable_name: 'Cabo 1', direction: 'ab', otdr_m: 1000, slack_pct: 0, map_distance_m: 1000,
+      path_length_m: 15000, inventory_length_km: null, origin: { id: 1, name: 'A', distance_m: 1000 },
+      target: { id: 2, name: 'B', distance_m: 14000 }, point: [-49.21, -16.61],
+      segment: [[-49.209, -16.609], [-49.211, -16.611]], tolerance_m: 40,
+    };
+    modal.vm.$emit('located', result);
+    await flushPromises();
+    const seg = map.polylines.at(-1);
+    expect(seg.opts).toEqual(expect.objectContaining({ strokeColor: '#f59e0b', clickable: false }));
+    expect(seg.opts.path).toEqual([{ lat: -16.609, lng: -49.209 }, { lat: -16.611, lng: -49.211 }]);
+    expect(map.setCenter).toHaveBeenCalledWith({ lat: -16.61, lng: -49.21 });
+    expect(wrapper.find('[data-testid="otdr-pin"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="otdr-card"]').exists()).toBe(true);
+    await wrapper.find('[data-testid="otdr-clear"]').trigger('click');
+    expect(seg.remove).toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="otdr-pin"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
 });
