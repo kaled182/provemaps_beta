@@ -247,7 +247,7 @@ def get_device_ports_with_live_status(device_id: int) -> dict[str, Any]:
             return fetch_ports_optical_snapshots(
                 ports_list,
                 discovery_cache=cache,
-                persist_keys=True,
+                persist_keys=False,
                 include_status_meta=False,
             )
 
@@ -700,7 +700,7 @@ def get_device_ports_with_optical(device_id: int) -> dict[str, Any]:
         snapshots = fetch_ports_optical_snapshots(
             ports_list,
             discovery_cache=discovery_cache,
-            persist_keys=True,
+            persist_keys=False,
             include_status_meta=False,
         )
 
@@ -857,7 +857,7 @@ def device_port_optical_status(port_id: int) -> dict[str, Any]:
     if not hostid:
         raise InventoryValidationError("Device missing Zabbix Host ID")
 
-    optical_snapshot = fetch_port_optical_snapshot(port)
+    optical_snapshot = fetch_port_optical_snapshot(port, persist_keys=False)
     return {
         "port_id": port.pk,
         "port_name": port.name,

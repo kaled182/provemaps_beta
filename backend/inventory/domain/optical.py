@@ -720,7 +720,7 @@ def fetch_port_optical_snapshot(
     port: Port,
     *,
     discovery_cache: dict[Any, Any] | None | None = None,
-    persist_keys: bool = True,
+    persist_keys: bool = False,
     include_status_meta: bool = True,
     value_cache: ValueCache | None = None,
 ) -> dict[str, Any]:
@@ -729,6 +729,9 @@ def fetch_port_optical_snapshot(
     Exposed to avoid importing the private helper from downstream modules while
     keeping the original implementation intact. Delegates all parameters to the
     internal function.
+
+    EV-0090: ``persist_keys`` é False por omissão — ler nunca grava. Só quem descobre
+    chaves (descoberta/importação de equipamentos) passa ``persist_keys=True``.
     """
 
     return _fetch_port_optical_snapshot(
@@ -793,10 +796,14 @@ def fetch_ports_optical_snapshots(
     ports: Sequence[Port],
     *,
     discovery_cache: dict[Any, Any] | None | None = None,
-    persist_keys: bool = True,
+    persist_keys: bool = False,
     include_status_meta: bool = True,
 ) -> dict[int, dict[str, Any]]:
-    """Fetch optical snapshots for a sequence of ports with batching."""
+    """Fetch optical snapshots for a sequence of ports with batching.
+
+    EV-0090: ``persist_keys`` é False por omissão — ler nunca grava; a descoberta de
+    equipamentos pede ``persist_keys=True`` explicitamente.
+    """
 
     if discovery_cache is None:
         discovery_cache = {}
