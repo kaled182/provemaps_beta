@@ -117,7 +117,11 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**Nada aberto.**
+**A fazer (2)**
+
+💡 Ideias
+- `EV-0131` **OTDR: Medição Cruzada (A + B) no formulário — folga real do cabo e posição proporcional** · P2 · admin · há 0 dias
+- `EV-0132` **OTDR: estado do atendimento no pino fixado (Em deslocamento / Em fusão / Concluído) e histórico dos rompimentos na aba Histórico do cabo** · P2 · admin · há 0 dias
 
 <!-- EVOLUCAO:FIM -->
 
