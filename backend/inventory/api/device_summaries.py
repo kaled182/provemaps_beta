@@ -1,4 +1,8 @@
-"""``GET /api/v1/inventory/devices/ports-summary/?device_ids=1,2`` (EV-0111)."""
+"""Resumos de dispositivo para o modal de Site.
+
+- ``GET /api/v1/inventory/devices/ports-summary/?device_ids=1,2`` (EV-0111)
+- ``GET /api/v1/inventory/devices/<id>/temperature/`` (EV-0112)
+"""
 
 from __future__ import annotations
 
@@ -8,7 +12,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from inventory.usecases.device_summaries import ports_summaries
+from inventory.usecases.device_summaries import device_temperature, ports_summaries
 
 
 class DeviceIdsQuerySerializer(serializers.Serializer):
@@ -54,3 +58,22 @@ class PortsSummaryView(APIView):
         query = DeviceIdsQuerySerializer(data=request.query_params)
         query.is_valid(raise_exception=True)
         return Response(ports_summaries(query.validated_data["device_ids"]))
+
+
+class DeviceTemperatureSerializer(serializers.Serializer):
+    device_id = serializers.IntegerField()
+    temperature_c = serializers.FloatField(allow_null=True)
+    sensor = serializers.CharField(allow_null=True)
+    sensors = serializers.IntegerField()
+    at = serializers.DateTimeField(allow_null=True)
+    reason = serializers.ChoiceField(choices=["no_host", "no_item", "no_reading"], allow_null=True)
+    zabbix_ok = serializers.BooleanField()
+
+
+class DeviceTemperatureView(APIView):
+    @extend_schema(
+        responses=DeviceTemperatureSerializer,
+        summary="Temperatura mais alta entre os sensores do equipamento (Zabbix)",
+    )
+    def get(self, request: Request, device_id: int) -> Response:
+        return Response(device_temperature(device_id))

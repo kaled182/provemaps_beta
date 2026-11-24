@@ -25,6 +25,8 @@ vi.mock('@/composables/useWebSocket', () => ({
   useWebSocket: () => ({ connected: ref(false), lastMessage, connect: vi.fn(), disconnect: vi.fn() }),
 }))
 vi.mock('@/components/Video/CameraPlayer.vue', () => ({ default: { render: () => null } }))
+const routerPush = vi.fn()
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: routerPush }) }))
 
 describe('siteDevices', () => {
   it('disponibilidade decide online/offline; sem ela fica «sem estado»', () => {
@@ -97,6 +99,13 @@ describe('SiteDetailsModal', () => {
     { id: 3, name: 'RT-Sul', group_name: null, primary_ip: null, zabbix_hostid: null },
   ]
 
+  const fresh = new Date().toISOString()
+  const PORTS = [
+    { id: 21, name: 'XGigabitEthernet0/0/1', description: 'ENLACE CDT', last_rx_power: '-12.50', last_tx_power: '-2.10', last_optical_check: fresh },
+    { id: 22, name: 'XGigabitEthernet0/0/2', description: 'ENLACE STA', last_rx_power: '-27.80', last_tx_power: '-2.00', last_optical_check: fresh },
+    { id: 23, name: 'GigabitEthernet0/0/9', description: '', last_rx_power: null, last_tx_power: null },
+  ]
+
   async function mountModal({ status = { statuses: { 1: 'online', 2: 'offline', 3: 'unknown' } }, metrics } = {}) {
     setActivePinia(createPinia())
     const m = metrics || {
@@ -112,6 +121,12 @@ describe('SiteDetailsModal', () => {
       if (url.startsWith('/api/v1/inventory/devices/ports-summary/'))
         return ok({ devices: { 2: { ports_total: 24, ports_in_use: 6, worst_rx_dbm: -27.5, worst_rx_level: 'critical', stale_readings: 0 } } })
       if (url.startsWith('/api/v1/inventory/devices/zabbix-status/')) return ok(status)
+      if (url.startsWith('/api/v1/inventory/devices/2/temperature/'))
+        return ok({ device_id: 2, temperature_c: 41, sensor: 'LPU Board 1: Temperature', sensors: 2, at: '2026-11-24T15:00:00Z', reason: null, zabbix_ok: true })
+      if (url.startsWith('/api/v1/inventory/devices/3/temperature/'))
+        return ok({ device_id: 3, temperature_c: null, sensor: null, sensors: 0, at: null, reason: 'no_host', zabbix_ok: true })
+      if (url.startsWith('/api/v1/ports/')) return ok({ results: PORTS, next: null })
+      if (url.startsWith('/setup_app/api/config/')) return ok({ configuration: { OPTICAL_RX_WARNING_THRESHOLD: -24, OPTICAL_RX_CRITICAL_THRESHOLD: -27 } })
       if (url.startsWith('/api/v1/devices/')) return ok({ results: DEVICES })
       if (url.startsWith('/api/v1/cameras/')) return ok({ results: [], count: 4 })
       return ok({})
@@ -168,6 +183,58 @@ describe('SiteDetailsModal', () => {
     expect(rx.className).toContain('sdc-lv-critical')
     expect(cards[2].querySelector('[data-testid="site-device-indicator"]')).toBeNull() // sem resumo: nada inventado
     expect(cards[0].textContent).toContain('Inspecionar →')
+  })
+
+  it('EV-0112: clicar no card abre o equipamento no próprio modal (trilha, faixa, portas ópticas) e Voltar regressa', async () => {
+    const w = await mountModal()
+    qa('[data-testid="site-device-card"]')[1].click() // SW-Norte
+    await flushPromises()
+    expect(q('[data-testid="site-devices-grid"]')).toBeNull()
+    expect(q('[data-testid="site-inspector-name"]').textContent).toBe('SW-Norte')
+    expect(q('[data-testid="site-inspector-status"]').textContent).toBe('Offline')
+    expect(q('[data-testid="site-inspector-temperature"]').textContent).toBe('41 °C')
+    expect(q('[data-testid="site-inspector-cpu"]').textContent).toBe('99%') // manual
+    const ports = qa('[data-testid="site-inspector-port"]')
+    expect(ports).toHaveLength(2) // só as com leitura óptica
+    expect(ports[0].textContent).toContain('XGigabitEthernet0/0/2') // pior primeiro
+    expect(ports[0].querySelector('.lv-critical').textContent).toContain('-27.80 dBm')
+    expect(ports[1].querySelector('.lv-normal').textContent).toContain('-12.50 dBm')
+    q('[data-testid="site-inspector-back"]').click()
+    await flushPromises()
+    expect(q('[data-testid="site-devices-grid"]')).not.toBeNull()
+    w.unmount()
+  })
+
+  it('EV-0112: sem temperatura mostra «—» com o motivo; Esc volta à lista antes de fechar', async () => {
+    const w = await mountModal()
+    qa('[data-testid="site-device-card"]')[2].click() // RT-Sul, sem host Zabbix
+    await flushPromises()
+    const temp = q('[data-testid="site-inspector-temperature"]')
+    expect(temp.textContent).toBe('—')
+    expect(temp.parentElement.getAttribute('title')).toBe('Equipamento sem host no Zabbix')
+    q('[data-testid="base-modal-close"]').click()
+    await flushPromises()
+    expect(q('[data-testid="site-devices-grid"]')).not.toBeNull()
+    expect(w.emitted('close')).toBeFalsy()
+    w.unmount()
+  })
+
+  it('EV-0112: «Abrir tela completa» — OLT vai ao ecrã GPON do POP; switch abre o modal de Dispositivo', async () => {
+    const w = await mountModal()
+    qa('[data-testid="site-device-card"]')[1].click()
+    await flushPromises()
+    q('[data-testid="site-inspector-full"]').click()
+    await flushPromises()
+    expect(qa('[data-testid="base-modal"]').some((m) => m.querySelector('.bm-title')?.textContent === 'SW-Norte')).toBe(true)
+    w.unmount()
+    document.body.innerHTML = ''
+    const w2 = await mountModal()
+    qa('[data-testid="site-device-card"]')[0].click() // OLT-Centro (tem resumo GPON)
+    await flushPromises()
+    q('[data-testid="site-inspector-full"]').click()
+    expect(routerPush).toHaveBeenCalledWith({ path: '/monitoring/gpon', query: { pop: 'POP Centro' } })
+    expect(w2.emitted('close')).toBeTruthy()
+    w2.unmount()
   })
 
   it('Zabbix fora é avisado', async () => {

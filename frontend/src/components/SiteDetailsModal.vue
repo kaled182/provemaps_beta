@@ -8,6 +8,16 @@
     size="detail"
     @close="requestClose"
   >
+    <!-- EV-0112: nível 2 — o equipamento inspecionado dentro do modal, sem sair do mapa -->
+    <SiteDeviceInspector
+      v-if="inspectedDevice"
+      :device="inspectedDevice"
+      :site-name="site?.name || ''"
+      @back="inspectedId = null"
+      @open-full="openFullScreen"
+    />
+
+    <template v-else>
     <!-- KPIs do site numa linha -->
     <div class="grid grid-cols-3 gap-2 sm:grid-cols-5" data-testid="site-kpis">
       <div v-for="k in kpis" :key="k.key" class="rounded-md border border-neutral-200 px-3 py-2">
@@ -53,10 +63,11 @@
         v-for="device in devices"
         :key="device.id"
         :device="device"
-        @open="openDeviceDetails"
+        @open="inspectDevice"
         @edit="openEditDevice"
       />
     </div>
+    </template>
   </BaseModal>
 
   <!-- Edição do equipamento -->
@@ -236,6 +247,7 @@ import { useWebRTC } from '@/composables/useWebRTC'
 import DeviceDetailsModal from './DeviceDetailsModal.vue'
 import BaseModal from '@/components/Common/BaseModal.vue'
 import SiteDeviceCard from '@/components/SiteDetails/SiteDeviceCard.vue'
+import SiteDeviceInspector from '@/components/SiteDetails/SiteDeviceInspector.vue'
 import { PhMapPin, PhVideoCamera, PhGear, PhSquaresFour } from '@phosphor-icons/vue'
 import { buildSiteDevice, applyRealtimeHost, countDeviceStatuses, siteHeaderStatus } from '@/utils/siteDevices'
 import CameraPlayer from '@/components/Video/CameraPlayer.vue'
@@ -804,7 +816,30 @@ const hasChildModalOpen = computed(() =>
 )
 const requestClose = () => {
   if (hasChildModalOpen.value) return
+  // EV-0112: no nível do equipamento, Esc/X volta primeiro à lista do Site
+  if (inspectedId.value !== null) {
+    inspectedId.value = null
+    return
+  }
   close()
+}
+
+// EV-0112: navegação em 2 níveis. Guarda-se o id (não uma cópia) para o estado em
+// tempo real do WebSocket, que muda o objeto em `devices`, chegar também ao nível 2.
+const inspectedId = ref(null)
+const inspectedDevice = computed(() => devices.value.find((d) => d.id === inspectedId.value) || null)
+const inspectDevice = (device) => {
+  inspectedId.value = device?.id ?? null
+}
+/** «Abrir tela completa ↗»: OLT → ecrã GPON filtrado pelo POP; resto → modal de Dispositivo. */
+const openFullScreen = (device) => {
+  if (device?.olt) {
+    const pop = props.site?.name
+    router.push({ path: '/monitoring/gpon', query: pop ? { pop } : {} })
+    close()
+    return
+  }
+  openDeviceDetails(device)
 }
 
 const openEditDevice = async (device) => {
@@ -1180,6 +1215,7 @@ watch(() => props.isOpen, (newVal) => {
     loadDevices()
     loadCameraCount()
   } else if (!newVal) {
+    inspectedId.value = null
     closeCameraModal()
     closeMosaicModal()
   }

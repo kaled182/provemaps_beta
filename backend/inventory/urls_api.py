@@ -65,7 +65,7 @@ from inventory.api.cable_types import (  # noqa: E402
 )
 from inventory.api.check_update import api_check_update  # noqa: E402
 from inventory.api.collection_health import api_collection_health  # noqa: E402
-from inventory.api.device_summaries import PortsSummaryView  # noqa: E402
+from inventory.api.device_summaries import DeviceTemperatureView, PortsSummaryView  # noqa: E402
 from inventory.api.fibers import api_fiber_audit_log  # noqa: E402
 from inventory.api.infrastructure import (  # noqa: E402
     api_create_infrastructure,
@@ -430,6 +430,12 @@ urlpatterns = [
         "devices/ports-summary/",
         PortsSummaryView.as_view(),
         name="devices-ports-summary",
+    ),
+    # EV-0112: temperatura para a faixa do equipamento no modal de Site
+    path(
+        "devices/<int:device_id>/temperature/",
+        DeviceTemperatureView.as_view(),
+        name="device-temperature",
     ),
     path(
         "devices/zabbix-status/",
