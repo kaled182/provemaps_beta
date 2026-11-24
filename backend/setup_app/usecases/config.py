@@ -785,6 +785,14 @@ def _persist_configuration(payload: dict[str, str]) -> None:
             "sms_aws_access_key_id": payload["SMS_AWS_ACCESS_KEY_ID"],
             "sms_aws_secret_access_key": payload["SMS_AWS_SECRET_ACCESS_KEY"],
             "sms_infobip_base_url": payload["SMS_INFOBIP_BASE_URL"],
+            # EV-0096: sem isto os limiares e capacidades perdiam-se no reinício.
+            "optical_rx_warning_threshold": float(payload["OPTICAL_RX_WARNING_THRESHOLD"]),
+            "optical_rx_critical_threshold": float(payload["OPTICAL_RX_CRITICAL_THRESHOLD"]),
+            "optical_thresholds_by_distance": parse_distance_thresholds(
+                payload.get("OPTICAL_THRESHOLDS_BY_DISTANCE")
+            ),
+            "gpon_pon_capacity": int(payload["GPON_PON_CAPACITY"]),
+            "epon_pon_capacity": int(payload["EPON_PON_CAPACITY"]),
         },
     )
 

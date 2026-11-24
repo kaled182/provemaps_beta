@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import time
+import uuid
 from dataclasses import dataclass
-from functools import lru_cache
+from typing import Any
 
 from django.conf import settings
 
@@ -220,8 +222,7 @@ def _fallback_config() -> RuntimeConfig:
     )
 
 
-@lru_cache(maxsize=1)
-def get_runtime_config() -> RuntimeConfig:
+def _load_runtime_config() -> RuntimeConfig:
     record = FirstTimeSetup.objects.filter(configured=True).order_by("-configured_at").first()
     if not record:
         return _fallback_config()
@@ -375,15 +376,77 @@ def get_runtime_config() -> RuntimeConfig:
             if record.enable_fullscreen is not None
             else getattr(settings, "ENABLE_FULLSCREEN", True)
         ),
-        optical_rx_warning_threshold=_float_setting("OPTICAL_RX_WARNING_THRESHOLD", -24.0),
-        optical_rx_critical_threshold=_float_setting("OPTICAL_RX_CRITICAL_THRESHOLD", -27.0),
-        optical_thresholds_by_distance=_dict_setting("OPTICAL_THRESHOLDS_BY_DISTANCE", {}),
-        gpon_pon_capacity=_int_setting(
-            "GPON_PON_CAPACITY", 128, PON_CAPACITY_MIN, PON_CAPACITY_MAX
+        optical_rx_warning_threshold=(
+            record.optical_rx_warning_threshold
+            if record.optical_rx_warning_threshold is not None
+            else _float_setting("OPTICAL_RX_WARNING_THRESHOLD", -24.0)
         ),
-        epon_pon_capacity=_int_setting("EPON_PON_CAPACITY", 64, PON_CAPACITY_MIN, PON_CAPACITY_MAX),
+        optical_rx_critical_threshold=(
+            record.optical_rx_critical_threshold
+            if record.optical_rx_critical_threshold is not None
+            else _float_setting("OPTICAL_RX_CRITICAL_THRESHOLD", -27.0)
+        ),
+        optical_thresholds_by_distance=(
+            record.optical_thresholds_by_distance
+            if isinstance(record.optical_thresholds_by_distance, dict)
+            else _dict_setting("OPTICAL_THRESHOLDS_BY_DISTANCE", {})
+        ),
+        gpon_pon_capacity=_record_capacity(record.gpon_pon_capacity, "GPON_PON_CAPACITY", 128),
+        epon_pon_capacity=_record_capacity(record.epon_pon_capacity, "EPON_PON_CAPACITY", 64),
     )
 
 
+def _record_capacity(value: int | None, name: str, default: int) -> int:
+    if value is not None and PON_CAPACITY_MIN <= value <= PON_CAPACITY_MAX:
+        return value
+    return _int_setting(name, default, PON_CAPACITY_MIN, PON_CAPACITY_MAX)
+
+
+# EV-0096: a cópia em memória é por processo. Antes era um `lru_cache` que só o processo que
+# gravava limpava — o Celery (e os outros workers do web) ficavam com a configuração do
+# arranque. Agora quem grava sobe uma versão na cache partilhada (Redis); os outros
+# processos comparam-na no máximo a cada `_VERSION_CHECK_SECONDS` e recarregam se mudou.
+_VERSION_KEY = "setup_app:runtime-config:version"
+_VERSION_CHECK_SECONDS = 30.0
+_state: dict[str, Any] = {"config": None, "version": None, "checked": 0.0}
+
+
+def _shared_version() -> str | None:
+    try:
+        from django.core.cache import cache
+
+        return cache.get(_VERSION_KEY)
+    except Exception:  # cache em baixo: degrada para recarregar pela janela de tempo
+        return None
+
+
+def get_runtime_config() -> RuntimeConfig:
+    now = time.monotonic()
+    config = _state["config"]
+    if config is not None and now - _state["checked"] < _VERSION_CHECK_SECONDS:
+        return config
+    version = _shared_version()
+    if config is not None and version is not None and version == _state["version"]:
+        _state["checked"] = now
+        return config
+    config = _load_runtime_config()
+    _state.update(config=config, version=version, checked=now)
+    return config
+
+
+def _cache_clear() -> None:
+    _state.update(config=None, version=None, checked=0.0)
+
+
+get_runtime_config.cache_clear = _cache_clear  # type: ignore[attr-defined]
+
+
 def reload_config() -> None:
-    get_runtime_config.cache_clear()
+    """Limpa a cópia deste processo e avisa os outros (web, Celery) pela versão partilhada."""
+    _cache_clear()
+    try:
+        from django.core.cache import cache
+
+        cache.set(_VERSION_KEY, uuid.uuid4().hex, timeout=None)
+    except Exception:
+        pass

@@ -135,6 +135,14 @@ class FirstTimeSetup(models.Model):
     sms_aws_access_key_id = EncryptedCharField(max_length=255, blank=True, null=True)
     sms_aws_secret_access_key = EncryptedCharField(max_length=255, blank=True, null=True)
     sms_infobip_base_url = EncryptedCharField(max_length=255, blank=True, null=True)
+    # EV-0096: limiares ópticos e capacidade da PON guardados na base. Antes viviam só no
+    # os.environ/settings do processo web que gravou — perdiam-se ao reiniciar e o Celery
+    # nunca os via. Nulo = «não definido», vale o settings/padrão.
+    optical_rx_warning_threshold = models.FloatField(null=True, blank=True)
+    optical_rx_critical_threshold = models.FloatField(null=True, blank=True)
+    optical_thresholds_by_distance = models.JSONField(null=True, blank=True)
+    gpon_pon_capacity = models.PositiveSmallIntegerField(null=True, blank=True)
+    epon_pon_capacity = models.PositiveSmallIntegerField(null=True, blank=True)
     configured = models.BooleanField(default=False)
     configured_at = models.DateTimeField(auto_now_add=True)
 

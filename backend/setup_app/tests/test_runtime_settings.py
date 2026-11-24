@@ -139,6 +139,15 @@ class GetRuntimeConfigTests(TestCase):
         record.enable_map_clustering = kwargs.get("enable_map_clustering", True)
         record.enable_drawing_tools = kwargs.get("enable_drawing_tools", True)
         record.enable_fullscreen = kwargs.get("enable_fullscreen", True)
+        # EV-0096: campos guardados na base; None = não definido (vale o settings)
+        for name in (
+            "optical_rx_warning_threshold",
+            "optical_rx_critical_threshold",
+            "optical_thresholds_by_distance",
+            "gpon_pon_capacity",
+            "epon_pon_capacity",
+        ):
+            setattr(record, name, kwargs.get(name))
         return record
 
     @override_settings(ALLOWED_HOSTS=["app.test"], DATABASES={"default": {}})
