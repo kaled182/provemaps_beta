@@ -299,3 +299,30 @@ def test_collected_at_is_iso(switches, monkeypatch):
     fake(monkeypatch, {"10679": DEVICE_ITEMS, "10663": DEVICE_ITEMS})
     data = usecases.switches_overview(now=timezone.now())
     assert data["collected_at"].endswith("Z")
+
+
+def test_switch_detail_cuts_the_overview_and_404s_for_non_switches(switches, monkeypatch):
+    fake(
+        monkeypatch,
+        {"10679": DEVICE_ITEMS + iface("XGigabitEthernet0/0/1", desc="x"), "10663": DEVICE_ITEMS},
+    )
+    c = Client()
+    c.force_login(get_user_model().objects.create_user(username="noc", password="x"))
+    body = c.get(f"/api/v1/monitoring/switches/{switches.sw.pk}/").json()
+    assert list(body) == [
+        "collected_at",
+        "zabbix_ok",
+        "zabbix_error",
+        "thresholds",
+        "switch",
+        "ports",
+    ]
+    assert body["switch"]["device_id"] == switches.sw.pk
+    assert {p["device_id"] for p in body["ports"]} == {switches.sw.pk}
+    ubiquiti = Device.objects.get(name__startswith="Ubiquiti")
+    assert c.get(f"/api/v1/monitoring/switches/{ubiquiti.pk}/").status_code == 404
+    assert Client().get(f"/api/v1/monitoring/switches/{switches.sw.pk}/").status_code in (
+        401,
+        403,
+        302,
+    )

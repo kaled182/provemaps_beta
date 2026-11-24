@@ -29,6 +29,14 @@
     <!-- EV-0113: OLT → chassi interativo (placas, PONs, inspetor da porta) -->
     <SiteOltChassis v-if="isOlt" :device-id="device.id" @loaded="(o) => (oltData = o)" />
 
+    <!-- EV-0124: switch com coleta → chassi + inspetor + tabela (como a OLT); sem coleta, a grelha -->
+    <SiteSwitchChassis
+      v-else-if="switchView"
+      :device-id="device.id"
+      @loaded="(sw) => (switchData = sw)"
+      @unavailable="switchView = false"
+    />
+
     <!-- Portas ópticas em uso -->
     <template v-else>
     <div class="sdi-ports-head">
@@ -77,6 +85,7 @@ import { computed, ref, watch } from 'vue'
 import { PhArrowLeft, PhArrowSquareOut, PhCaretRight } from '@phosphor-icons/vue'
 import { useApi } from '@/composables/useApi'
 import SiteOltChassis from '@/components/SiteDetails/SiteOltChassis.vue'
+import SiteSwitchChassis from '@/components/SiteDetails/SiteSwitchChassis.vue'
 import { fetchAllPages } from '@/utils/paginate'
 import { DEVICE_STATUS_LABELS, formatUptimeSeconds, metricBar } from '@/utils/siteDevices'
 import {
@@ -103,6 +112,9 @@ const temperature = ref(null)
 /** EV-0113: OLT como vem da coleta GPON (cpu_pct, temperature_c) — preenchida pelo chassi. */
 const oltData = ref(null)
 const isOlt = computed(() => Boolean(props.device.olt))
+/** EV-0124: tenta o chassi de switch; volta à grelha se o equipamento não tem coleta de switch */
+const switchView = ref(true)
+const switchData = ref(null)
 let seq = 0
 
 const TEMPERATURE_REASON = {
@@ -115,6 +127,8 @@ async function load() {
   const mine = ++seq
   const id = props.device.id
   oltData.value = null
+  switchView.value = true
+  switchData.value = null
   if (isOlt.value) return // a OLT carrega tudo pelo chassi (GPON)
   loadingPorts.value = true
   portsError.value = ''
@@ -183,6 +197,10 @@ const cpuKpi = computed(() => {
   const gponCpu = oltData.value?.cpu_pct
   if ((props.device.cpu === null || props.device.cpu === undefined) && gponCpu !== null && gponCpu !== undefined) {
     return { key: 'cpu', label: 'CPU', ...pct(gponCpu, 'zabbix'), title: 'Coleta GPON' }
+  }
+  const swCpu = switchData.value?.cpu_pct
+  if ((props.device.cpu === null || props.device.cpu === undefined) && swCpu !== null && swCpu !== undefined) {
+    return { key: 'cpu', label: 'CPU', ...pct(swCpu, 'zabbix'), title: 'Coleta dos switches' }
   }
   return { key: 'cpu', label: 'CPU', ...pct(props.device.cpu, props.device.cpuSource) }
 })

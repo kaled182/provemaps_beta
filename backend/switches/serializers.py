@@ -101,3 +101,12 @@ class SwitchesOverviewSerializer(serializers.Serializer):
     switches = SwitchSerializer(many=True)
     ports = SwitchPortSerializer(many=True)
     duration_ms = serializers.IntegerField()
+
+
+class SwitchDetailSerializer(serializers.Serializer):
+    collected_at = serializers.DateTimeField()
+    zabbix_ok = serializers.BooleanField()
+    zabbix_error = serializers.CharField(allow_null=True)
+    thresholds = ThresholdsSerializer()
+    switch = SwitchSerializer()
+    ports = SwitchPortSerializer(many=True)

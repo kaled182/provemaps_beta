@@ -19,6 +19,7 @@ from typing import Any
 
 from django.core.cache import cache
 from django.db.models import Q
+from django.http import Http404
 from django.utils import timezone
 
 from integrations.zabbix.zabbix_service import zabbix_request
@@ -248,3 +249,23 @@ def switches_overview(now: datetime | None = None, *, refresh: bool = False) -> 
     if payload["zabbix_ok"]:
         cache.set(OVERVIEW_CACHE_KEY, payload, OVERVIEW_CACHE_SECONDS)
     return payload
+
+
+def switch_detail(device_id: int) -> dict[str, Any]:
+    """Um switch da visão geral (EV-0124, modal de Site): o mesmo payload em cache, recortado.
+
+    ``Http404`` se o dispositivo não é um switch com coleta (ex.: os Ubiquiti, EV-0117) — o
+    modal mostra então a grelha simples de portas do inventário.
+    """
+    overview = switches_overview()
+    sw = next((s for s in overview["switches"] if s["device_id"] == device_id), None)
+    if sw is None:
+        raise Http404(f"dispositivo {device_id} não é um switch monitorado")
+    return {
+        "collected_at": overview["collected_at"],
+        "zabbix_ok": overview["zabbix_ok"],
+        "zabbix_error": overview["zabbix_error"],
+        "thresholds": overview["thresholds"],
+        "switch": sw,
+        "ports": [p for p in overview["ports"] if p["device_id"] == device_id],
+    }

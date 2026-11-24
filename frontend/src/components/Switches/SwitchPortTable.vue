@@ -18,7 +18,7 @@
             <th class="r">TX (dBm)</th>
             <th class="r">Tráfego ↓ / ↑</th>
             <th class="r">Uptime</th>
-            <th class="c"><span class="sr-only">Gráfico</span></th>
+            <th v-if="showHistory" class="c"><span class="sr-only">Gráfico</span></th>
           </tr>
         </thead>
         <tbody>
@@ -47,7 +47,7 @@
               {{ formatBps(p.in_bps) }} / {{ formatBps(p.out_bps) }}
             </td>
             <td class="r num whitespace-nowrap text-neutral-600">{{ p.uptime_s ? formatDuration(p.uptime_s) : '—' }}</td>
-            <td class="c">
+            <td v-if="showHistory" class="c">
               <button
                 type="button"
                 class="spt-chart"
@@ -79,6 +79,8 @@ const props = defineProps({
   showSwitch: { type: Boolean, default: false },
   selectedKey: { type: String, default: null },
   freeHidden: { type: Number, default: 0 },
+  /** EV-0124: no modal de Site o gráfico está no inspetor — sem botão que abra outro modal */
+  showHistory: { type: Boolean, default: true },
 })
 defineEmits(['select', 'history'])
 

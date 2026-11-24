@@ -219,6 +219,51 @@ describe('SiteDetailsModal', () => {
     w.unmount()
   })
 
+  it('EV-0124: switch com coleta abre o chassi, o inspetor e a tabela das portas (sem botão de gráfico)', async () => {
+    const swPorts = [
+      { device_id: 2, switch_name: 'SW-Norte', name: 'XGigabitEthernet0/0/1', description: 'UPlink-ZAP', kind: 'optical', speed_mbps: 10000, speed_label: '10G', admin: 'up', oper: 'up', in_use: true, state: 'normal', reasons: [], rx_dbm: -2.33, tx_dbm: -3.6, los: false, in_bps: 1e8, out_bps: 2e8, utilization_pct: 2, in_errors: 0, out_errors: 0, uptime_s: 100, port_id: 21, cable_id: null, cable_name: null, severity_rank: 4 },
+      { device_id: 2, switch_name: 'SW-Norte', name: 'XGigabitEthernet0/0/2', description: 'OLT', kind: 'optical', speed_mbps: 10000, speed_label: '10G', admin: 'up', oper: 'down', in_use: true, state: 'down', reasons: ['los'], rx_dbm: null, tx_dbm: -2.6, los: true, in_bps: 0, out_bps: 0, utilization_pct: 0, in_errors: 0, out_errors: 0, uptime_s: null, port_id: 22, cable_id: null, cable_name: null, severity_rank: 0 },
+      { device_id: 2, switch_name: 'SW-Norte', name: 'XGigabitEthernet0/0/3', description: null, kind: 'optical', speed_mbps: 0, speed_label: '10G', admin: 'up', oper: 'down', in_use: false, state: 'free', reasons: [], rx_dbm: null, tx_dbm: null, los: false, in_bps: 0, out_bps: 0, utilization_pct: null, in_errors: 0, out_errors: 0, uptime_s: null, port_id: null, cable_id: null, cable_name: null, severity_rank: 5 },
+    ]
+    const detail = {
+      collected_at: '2026-11-24T18:00:00Z', zabbix_ok: true, zabbix_error: null,
+      thresholds: { warning: -20, critical: -24, utilization_pct: 80 },
+      switch: { device_id: 2, name: 'SW-Norte', vendor: 'huawei', model: 'S6730-H24X6C', ip: '10.0.0.2', site_id: 10, site_name: 'POP Centro', status: 'online', collection_ok: true, cpu_pct: 4, temperature_c: 35, uptime_s: 100, ports_total: 3, ports_up: 1, ports_in_use: 2, ports_down: 1, signal_warning: 0, signal_critical: 0, high_utilization: 0, worst_rx_dbm: -2.33, last_clock: null },
+      ports: swPorts,
+    }
+    const w = await mountModal()
+    const inner = globalThis.fetch.getMockImplementation()
+    globalThis.fetch.mockImplementation((url, opts) =>
+      url.startsWith('/api/v1/monitoring/switches/2/') ? ok(detail) : inner(url, opts),
+    )
+    qa('[data-testid="site-device-card"]')[1].click() // SW-Norte
+    await flushPromises()
+    expect(q('[data-testid="sw-chassis-2"]')).not.toBeNull()
+    expect(q('[data-testid="site-inspector-ports"]')).toBeNull() // a grelha simples sai
+    expect(q('[data-testid="spi-name"]').textContent).toBe('XGigabitEthernet0/0/2') // a mais crítica
+    expect(qa('[data-testid="sw-port-row"]')).toHaveLength(2) // livres fora
+    expect(q('[data-testid="sw-port-chart"]')).toBeNull()
+    qa('[data-testid="sw-port-row"]')[1].click()
+    await flushPromises()
+    expect(q('[data-testid="spi-name"]').textContent).toBe('XGigabitEthernet0/0/1')
+    w.unmount()
+  })
+
+  it('EV-0124: switch sem coleta (404) fica com a grelha de portas', async () => {
+    const w = await mountModal()
+    const inner = globalThis.fetch.getMockImplementation()
+    globalThis.fetch.mockImplementation((url, opts) =>
+      url.startsWith('/api/v1/monitoring/switches/')
+        ? Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({ detail: 'não é um switch monitorado' }) })
+        : inner(url, opts),
+    )
+    qa('[data-testid="site-device-card"]')[1].click()
+    await flushPromises()
+    expect(q('[data-testid="site-switch-chassis"]')).toBeNull()
+    expect(q('[data-testid="site-inspector-ports"]')).not.toBeNull()
+    w.unmount()
+  })
+
   it('EV-0113: uma OLT abre o chassi (dados GPON da OLT) em vez da grelha de portas', async () => {
     const w = await mountModal()
     qa('[data-testid="site-device-card"]')[0].click() // OLT-Centro
