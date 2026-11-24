@@ -117,10 +117,7 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**A fazer (1)**
-
-🐛 Problemas
-- `EV-0129` **Painel da porta do switch: «Sem histórico de tráfego» com 1.440 pontos no Zabbix e «Uptime —» em porta UP** · P2 · admin · há 0 dias
+**Nada aberto.**
 
 <!-- EVOLUCAO:FIM -->
 
