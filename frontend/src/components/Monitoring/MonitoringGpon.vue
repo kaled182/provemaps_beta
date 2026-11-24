@@ -1,5 +1,6 @@
 <template>
-  <div class="h-full flex flex-col bg-canvas text-neutral-900">
+  <div class="min-h-full flex flex-col bg-canvas text-neutral-900">
+    <!-- EV-0123: uma só barra de rolagem — a do shell (App.vue <main>); o cabeçalho fica fixo -->
     <GponHeader
       v-model:olt="oltFilter"
       v-model:vendor="vendorFilter"
@@ -17,7 +18,7 @@
       @refresh="load"
     />
 
-    <main class="flex-1 min-h-0 overflow-auto px-4 md:px-6 py-3 flex flex-col gap-3">
+    <main class="flex-1 px-4 md:px-6 py-3 flex flex-col gap-3">
       <p v-if="error" class="px-3 py-2 rounded-md border border-danger/40 bg-danger/10 text-sm text-danger" role="alert" data-testid="gpon-error">
         Erro ao carregar o monitoramento GPON: {{ error }}
       </p>

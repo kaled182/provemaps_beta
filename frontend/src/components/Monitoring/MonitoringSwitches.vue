@@ -1,5 +1,6 @@
 <template>
-  <div class="h-full flex flex-col bg-canvas" data-testid="monitoring-switches">
+  <div class="min-h-full flex flex-col bg-canvas" data-testid="monitoring-switches">
+    <!-- EV-0123: uma só barra de rolagem — a do shell; o cabeçalho fica fixo -->
     <SwitchesHeader
       v-model:vendor="vendor"
       v-model:pop="pop"
@@ -17,7 +18,7 @@
       @refresh="load({ refresh: true })"
     />
 
-    <main class="flex-1 overflow-auto px-4 md:px-6 py-3 space-y-3">
+    <main class="flex-1 px-4 md:px-6 py-3 space-y-3">
       <p v-if="error && !data" class="sw-alert" role="alert" data-testid="sw-error">Erro ao carregar os switches: {{ error }}</p>
       <p v-else-if="!data" class="py-10 text-center text-sm text-neutral-500">A carregar os switches…</p>
       <template v-else>

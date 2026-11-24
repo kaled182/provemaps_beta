@@ -1,5 +1,5 @@
 <template>
-  <header class="flex-none px-4 md:px-6 py-2 border-b border-neutral-200 bg-surface flex items-center gap-3 flex-wrap">
+  <header class="sticky top-0 z-20 flex-none px-4 md:px-6 py-2 border-b border-neutral-200 bg-surface flex items-center gap-3 flex-wrap">
     <h1 class="text-base font-semibold">Monitoramento de Switches</h1>
     <span v-if="zabbix" class="badge" :class="badge.cls" :title="zabbixError || ''" data-testid="sw-zabbix-badge">
       <span class="dot" aria-hidden="true"></span>{{ badge.label }}
