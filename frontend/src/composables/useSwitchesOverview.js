@@ -18,7 +18,7 @@ export const FILTERS = Object.freeze([
   { value: 'utilization', label: 'Banda > 80%' },
 ])
 
-export const VENDOR_LABELS = Object.freeze({ huawei: 'Huawei' })
+export const VENDOR_LABELS = Object.freeze({ huawei: 'Huawei', ubiquiti: 'Ubiquiti' })
 
 export const STATE_LABELS = Object.freeze({
   normal: 'Normal',

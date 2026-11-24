@@ -157,7 +157,7 @@ const visibleSet = computed(() => (props.visibleNames ? new Set(props.visibleNam
 const lastNumber = (name) => Number((name.match(/(\d+)$/) || [0, 0])[1])
 const speedOf = (list) => {
   const labels = [...new Set(list.map((p) => p.speed_label).filter(Boolean))]
-  return labels.length === 1 ? labels[0] : labels.join('/')
+  return labels.length === 1 ? labels[0] : '' // velocidades mistas: não se escolhe uma
 }
 
 function decorate(p) {
@@ -194,7 +194,8 @@ const groups = computed(() => {
   if (rest.length) {
     const sfp = raw.find((g) => g.key === 'sfp')
     if (sfp) sfp.list.push(...rest)
-    else raw.push({ ...GROUPS[1], list: rest })
+    // EV-0117: nomes sem prefixo conhecido (Ubiquiti «0/1»): grupo neutro, sem adivinhar a gaiola
+    else raw.push({ ...GROUPS[1], key: 'ports', label: 'Portas', list: rest })
   }
   const cols = raw.map((g) => (g.list.length > 1 ? Math.ceil(g.list.length / 2) : 1))
   const units = raw.reduce((n, g, i) => n + cols[i] * g.unit, 0)

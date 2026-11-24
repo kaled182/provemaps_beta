@@ -230,3 +230,21 @@ describe('vista do chassi (EV-0116)', () => {
   })
 })
 
+describe('EV-0117: Ubiquiti no chassi', () => {
+  it('portas «0/n» num grupo neutro «Portas», marca UBIQUITI, e o filtro de fabricante tem Ubiquiti', async () => {
+    const { default: SwitchChassis1u } = await import('@/components/Switches/SwitchChassis1u.vue')
+    const ubq = { ...PAYLOAD.switches[0], device_id: 12, name: 'Ubiquiti - Switch Barreira velha', vendor: 'ubiquiti', model: 'EdgeSwitch 16 XG' }
+    const ports = [
+      port({ device_id: 12, name: '0/1', kind: 'electrical', speed_label: '> 4G' }),
+      port({ device_id: 12, name: '0/2', kind: 'electrical', speed_label: '1G', state: 'free', in_use: false }),
+    ]
+    const w = mount(SwitchChassis1u, { props: { sw: ubq, ports } })
+    expect(w.text()).toContain('UBIQUITI')
+    expect(w.text()).toContain('Portas')
+    expect(w.text()).not.toContain('SFP+')
+    expect(w.find('[data-testid="sw-port-0/1"]').classes()).toContain('led-ok')
+    const { VENDOR_LABELS } = await import('@/composables/useSwitchesOverview')
+    expect(VENDOR_LABELS.ubiquiti).toBe('Ubiquiti')
+  })
+})
+

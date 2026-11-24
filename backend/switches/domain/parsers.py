@@ -38,10 +38,26 @@ SEARCH_KEYS = [f"{f}[" for f in (*IF_FAMILIES, *OPTICAL_FAMILIES)] + [
     *DEVICE_KEYS,
     TEMPERATURE_PREFIX,
 ]
-ITEM_OUTPUT = ["key_", "name", "lastvalue", "lastclock", "value_type"]
+ITEM_OUTPUT = ["key_", "name", "lastvalue", "lastclock", "value_type", "delay"]
 
 # Leitura com mais de 10 min não é estado atual (o tráfego vem a cada 30 s, o estado a cada 1 min).
 STALE_SECONDS = 600
+_DELAY_RE = re.compile(r"^(?P<n>\d+)(?P<u>[smhdw]?)$")
+_DELAY_UNITS = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
+
+
+def max_age_seconds(delay: Any) -> int:
+    """Idade máxima de uma leitura: o dobro do intervalo do item, nunca menos de ``STALE_SECONDS``.
+
+    ``delay`` do Zabbix: «30s», «1m», «30m», «1h» ou segundos; macros/intervalos flexíveis
+    («{$X}», «0;1-5,09:00-18:00») ou ausente → o padrão.
+    """
+    match = _DELAY_RE.match(str(delay or "").strip())
+    if not match:
+        return STALE_SECONDS
+    return max(STALE_SECONDS, 2 * int(match.group("n")) * _DELAY_UNITS[match.group("u")])
+
+
 # A Huawei devolve -40 dBm sem luz no transceptor: é LOS, não uma medida.
 LOS_DBM = -40.0
 OPTICAL_DBM_MIN = -40.0
@@ -98,8 +114,11 @@ def port_kind(ifname: str) -> str:
     return "electrical"
 
 
-def speed_label(mbps: float | None, ifname: str) -> str | None:
-    """«10G»/«1G»/«40G»; com a porta em baixo o ifSpeed vem 0 → velocidade nominal pelo nome."""
+def speed_label(mbps: float | None, ifname: str, *, over_4g: bool = False) -> str | None:
+    """«10G»/«1G»/«40G»; com a porta em baixo o ifSpeed vem 0 → velocidade nominal pelo nome.
+    ``over_4g``: Gauge32 saturado (template IF-MIB) → «> 4G», sem inventar a velocidade."""
+    if over_4g and not mbps:
+        return "> 4G"
     value = mbps if mbps else next((s for p, s in NOMINAL_SPEED_MBPS if ifname.startswith(p)), None)
     if not value:
         return None
@@ -269,3 +288,125 @@ def ifname_sort_key(ifname: str) -> tuple[Any, ...]:
     prefix = re.match(r"^[A-Za-z]+", ifname)
     numbers = tuple(int(n) for n in re.findall(r"\d+", ifname[prefix.end() if prefix else 0 :]))
     return (kind_order.get(port_kind(ifname), 0), prefix.group(0) if prefix else "", numbers)
+
+
+# ── EV-0117: template genérico IF-MIB do Zabbix (Ubiquiti EdgeSwitch) ─────────
+# net.if.<família>[<OID>.<ifIndex>] com o nome «Interface 0/1(DESCRIÇÃO): …»; sem estado
+# administrativo, sem ótica, sem uptime por porta. ifSpeed é Gauge32: 4294967295 = «> 4 Gbps».
+SNMP_IF_FAMILIES = {
+    "net.if.status": "oper",
+    "net.if.speed": "speed_bps",
+    "net.if.in": "in_bps",
+    "net.if.out": "out_bps",
+    "net.if.in.errors": "in_errors",
+    "net.if.out.errors": "out_errors",
+    "net.if.type": "if_type",
+}
+SNMP_DEVICE_KEYS = {
+    "icmpping": "ping",
+    "usoCPU": "cpu_pct",
+    "system.descr[sysDescr.0]": "model",
+    "system.net.uptime[sysUpTime.0]": "uptime_s",
+}
+SNMP_TEMPERATURE_PREFIX = "sensorTemp"
+SNMP_SEARCH_KEYS = ["net.if.", *SNMP_DEVICE_KEYS, SNMP_TEMPERATURE_PREFIX]
+# ethernetCsmacd (6) e gigabitEthernet (117); VLAN, LAG, CPU e loopback ficam de fora
+SNMP_ETHERNET_TYPES = {6, 117}
+GAUGE32_MAX = 4294967295
+_SNMP_KEY_RE = re.compile(r"^(?P<family>net\.if\.[a-z.]+)\[[A-Za-z]+\.(?P<index>\d+)\]$")
+_SNMP_NAME_RE = re.compile(r"^Interface\s+(?P<ifname>[^(:]+?)\s*(?:\((?P<desc>[^)]*)\))?\s*:")
+
+
+def parse_items_snmp(items: Iterable[Mapping[str, Any]], now_ts: float) -> dict[str, Any]:
+    """Como ``parse_items``, para o template IF-MIB genérico (mesma forma de saída).
+
+    Cada interface leva também ``if_index`` (o inventário destes switches tem as portas com o
+    nome «ifOperStatus.<n>»).
+    """
+    device: dict[str, Any] = {
+        "ping": None,
+        "cpu_pct": None,
+        "temperature_c": None,
+        "model": None,
+        "uptime_s": None,
+        "last_clock": None,
+    }
+    by_index: dict[int, dict[str, Any]] = {}
+    for item in items:
+        key = str(item.get("key_") or "")
+        clock = int(_num(item.get("lastclock")) or 0)
+        fresh = clock > 0 and now_ts - clock <= max_age_seconds(item.get("delay"))
+        raw = item.get("lastvalue")
+        if key in SNMP_DEVICE_KEYS:
+            field = SNMP_DEVICE_KEYS[key]
+            if field == "model":
+                text = str(raw or "").strip()
+                device["model"] = text.split(",")[0].strip() or None
+                continue
+            if not fresh:
+                continue
+            device["last_clock"] = max(device["last_clock"] or 0, clock)
+            value = _num(raw)
+            if field == "ping":
+                device["ping"] = None if value is None else int(value)
+            elif field == "uptime_s":
+                device["uptime_s"] = value if value and value > 0 else None
+            else:
+                device[field] = value
+            continue
+        if key.startswith(SNMP_TEMPERATURE_PREFIX):
+            value = _num(raw)
+            if fresh and value is not None and 0 < value <= 150:
+                current = device["temperature_c"]
+                device["temperature_c"] = value if current is None else max(current, value)
+            continue
+        match = _SNMP_KEY_RE.match(key)
+        if not match or match.group("family") not in SNMP_IF_FAMILIES:
+            continue
+        index = int(match.group("index"))
+        entry = by_index.setdefault(
+            index,
+            {
+                "ifname": None,
+                "if_index": index,
+                "if_type": None,
+                "oper": None,
+                "admin": None,
+                "speed_mbps": None,
+                "speed_over_4g": False,
+                "in_bps": None,
+                "out_bps": None,
+                "in_errors": None,
+                "out_errors": None,
+                "uptime_ms": None,
+                "rx_dbm": None,
+                "tx_dbm": None,
+                "description": "",
+                "last_clock": None,
+            },
+        )
+        name_match = _SNMP_NAME_RE.match(str(item.get("name") or ""))
+        if name_match and entry["ifname"] is None:
+            entry["ifname"] = name_match.group("ifname").strip()
+            entry["description"] = (name_match.group("desc") or "").strip()
+        field = SNMP_IF_FAMILIES[match.group("family")]
+        value = _num(raw)
+        if field == "if_type":
+            entry["if_type"] = None if value is None else int(value)  # muda raramente: vale sempre
+            continue
+        if not fresh:
+            continue
+        entry["last_clock"] = max(entry["last_clock"] or 0, clock)
+        if field == "speed_bps":
+            if value is not None and value >= GAUGE32_MAX:
+                entry["speed_over_4g"] = True  # Gauge32 saturado: não se sabe a velocidade real
+            elif value:
+                entry["speed_mbps"] = value / 1_000_000
+            continue
+        entry[field] = value
+    interfaces = {
+        (e["ifname"] or f"if{idx}"): e
+        for idx, e in by_index.items()
+        if e["if_type"] is None or e["if_type"] in SNMP_ETHERNET_TYPES
+    }
+    return {"device": device, "interfaces": interfaces}

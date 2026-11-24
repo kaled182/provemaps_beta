@@ -171,8 +171,8 @@ def switches(db):
         name="Huawei - Switch Santa terezinha", site=site, zabbix_hostid="10663"
     )
     Device.objects.create(
-        name="Ubiquiti - Switch Barreira", site=site, zabbix_hostid="10669"
-    )  # fora (EV-0117)
+        name="Cisco - Switch Barreira", site=site, zabbix_hostid="10669"
+    )  # fabricante sem template suportado: fora
     Device.objects.create(name="ZTE - OLT CONFRESA C600 - 01", site=site, zabbix_hostid="10744")
     port = Port.objects.create(device=sw, name="XGigabitEthernet0/0/2")
     other = Device.objects.create(name="OUTRO", site=site)
@@ -212,7 +212,7 @@ def test_overview_joins_inventory_counts_and_kpis(switches, monkeypatch):
 
     data = usecases.switches_overview(refresh=True)
 
-    assert sorted(calls) == ["10663", "10679"]  # Ubiquiti e OLT fora
+    assert sorted(calls) == ["10663", "10679"]  # Cisco e OLT fora
     assert list(data) == [
         "collected_at",
         "zabbix_ok",
@@ -319,10 +319,88 @@ def test_switch_detail_cuts_the_overview_and_404s_for_non_switches(switches, mon
     ]
     assert body["switch"]["device_id"] == switches.sw.pk
     assert {p["device_id"] for p in body["ports"]} == {switches.sw.pk}
-    ubiquiti = Device.objects.get(name__startswith="Ubiquiti")
-    assert c.get(f"/api/v1/monitoring/switches/{ubiquiti.pk}/").status_code == 404
+    cisco = Device.objects.get(name__startswith="Cisco")
+    assert c.get(f"/api/v1/monitoring/switches/{cisco.pk}/").status_code == 404
     assert Client().get(f"/api/v1/monitoring/switches/{switches.sw.pk}/").status_code in (
         401,
         403,
         302,
     )
+
+
+# ── EV-0117: Ubiquiti (template IF-MIB genérico) ──────────────────────────────
+def snmp_if(idx, name, desc, *, oper=1, speed=4294967295, inb=1e8, outb=2e7, if_type=6):
+    label = f"Interface {name}({desc})"
+    return [
+        it(f"net.if.status[ifOperStatus.{idx}]", oper, f"{label}: Operational status"),
+        it(f"net.if.speed[ifSpeed.{idx}]", speed, f"{label}: Speed"),
+        it(f"net.if.in[ifInOctets.{idx}]", inb, f"{label}: Bits received"),
+        it(f"net.if.out[ifOutOctets.{idx}]", outb, f"{label}: Bits sent"),
+        it(f"net.if.type[ifType.{idx}]", if_type, f"{label}: Interface type"),
+    ]
+
+
+UBQ_DEVICE = [
+    it("icmpping", 1),
+    it("usoCPU", 12.7),
+    it("system.descr[sysDescr.0]", "EdgeSwitch 16 XG, 1.9.2, Linux 3.6.5"),
+    it("system.net.uptime[sysUpTime.0]", 1349056),
+    it("sensorTemp1", 58),
+    it("sensorTemp3", 63),
+]
+
+
+def test_parse_snmp_names_speed_and_only_ethernet():
+    items = (
+        UBQ_DEVICE
+        + snmp_if(1, "0/1", "NOVA-BARREIRA")
+        + snmp_if(6, "0/6", "RB-GERENCIA", speed=1_000_000_000)
+        + snmp_if(65, "lag 1", "", if_type=161)  # LAG: fora
+    )
+    parsed = parsers.parse_items_snmp(items, NOW)
+    assert parsed["device"] == {
+        "ping": 1,
+        "cpu_pct": 12.7,
+        "temperature_c": 63.0,
+        "model": "EdgeSwitch 16 XG",
+        "uptime_s": 1349056.0,
+        "last_clock": int(FRESH),
+    }
+    assert set(parsed["interfaces"]) == {"0/1", "0/6"}
+    p1 = parsed["interfaces"]["0/1"]
+    assert (p1["description"], p1["if_index"], p1["speed_mbps"], p1["speed_over_4g"]) == (
+        "NOVA-BARREIRA",
+        1,
+        None,
+        True,
+    )
+    assert parsers.speed_label(None, "0/1", over_4g=True) == "> 4G"  # Gauge32 saturado
+    assert parsed["interfaces"]["0/6"]["speed_mbps"] == 1000.0
+
+
+def test_ubiquiti_enters_the_overview_and_joins_inventory_by_index(db, monkeypatch):
+    site = Site.objects.create(display_name="SITE - BARREIRA VELHA", latitude=-9.0, longitude=-50.0)
+    ubq = Device.objects.create(
+        name="Ubiquiti - Switch Barreira velha", site=site, zabbix_hostid="10669"
+    )
+    port = Port.objects.create(device=ubq, name="ifOperStatus.1")
+    calls = []
+
+    def zr(method, params=None, *a, **k):
+        calls.append(params["search"]["key_"])
+        return (
+            UBQ_DEVICE + snmp_if(1, "0/1", "NOVA-BARREIRA") + snmp_if(5, "0/5", "CASEARA", oper=2)
+        )
+
+    monkeypatch.setattr("switches.usecases.zabbix_request", zr)
+    data = usecases.switches_overview(refresh=True)
+    assert "net.if." in calls[0]  # pediu as chaves do template IF-MIB
+    sw = data["switches"][0]
+    assert (sw["vendor"], sw["model"], sw["status"], sw["ports_down"]) == (
+        "ubiquiti",
+        "EdgeSwitch 16 XG",
+        "online",
+        1,
+    )
+    p1 = next(p for p in data["ports"] if p["name"] == "0/1")
+    assert (p1["port_id"], p1["speed_label"], p1["utilization_pct"]) == (port.pk, "> 4G", None)

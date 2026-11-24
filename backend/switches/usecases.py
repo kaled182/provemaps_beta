@@ -4,9 +4,10 @@ Sem tarefa Celery nem tabela: 11 switches com ~420 itens cada são um ``item.get
 paralelo) e o resultado fica 60 s em cache — o que a tela pede a cada atualização. Não há
 histórico de estados a guardar (os gráficos vêm do Zabbix pelo inventário).
 
-Quem é switch: ``Device`` com host Zabbix e «switch» e «huawei» no nome (o inventário não
-tem fabricante/modelo preenchidos — mesmo critério por nome das OLT no GPON). Os Ubiquiti
-usam outro template e ficam de fora até o EV-0117.
+Quem é switch: ``Device`` com host Zabbix e «switch» e «huawei» ou «ubiquiti» no nome (o
+inventário não tem fabricante/modelo preenchidos — mesmo critério por nome das OLT no GPON).
+Huawei: template próprio (``parse_items``); Ubiquiti: template IF-MIB genérico do Zabbix
+(``parse_items_snmp``, EV-0117).
 """
 
 from __future__ import annotations
@@ -32,6 +33,15 @@ from .domain import parsers
 OVERVIEW_CACHE_KEY = "switches:overview:v1"
 OVERVIEW_CACHE_SECONDS = 60
 VENDOR_HUAWEI = "huawei"
+VENDOR_UBIQUITI = "ubiquiti"
+VENDORS = (VENDOR_HUAWEI, VENDOR_UBIQUITI)
+
+
+def vendor_of(device: Device) -> str | None:
+    name = device.name.lower()
+    return next((v for v in VENDORS if v in name), None)
+
+
 MAX_WORKERS = 6
 
 
@@ -43,7 +53,7 @@ def switch_devices() -> list[Device]:
     return list(
         Device.objects.select_related("site")
         .filter(name__icontains="switch")
-        .filter(name__icontains="huawei")
+        .filter(Q(name__icontains=VENDOR_HUAWEI) | Q(name__icontains=VENDOR_UBIQUITI))
         .exclude(Q(zabbix_hostid__isnull=True) | Q(zabbix_hostid=""))
         .order_by("name")
     )
@@ -62,13 +72,14 @@ def thresholds() -> dict[str, float]:
     }
 
 
-def _fetch(hostid: str) -> list[Mapping[str, Any]]:
+def _fetch(hostid: str, vendor: str = VENDOR_HUAWEI) -> list[Mapping[str, Any]]:
+    keys = parsers.SNMP_SEARCH_KEYS if vendor == VENDOR_UBIQUITI else parsers.SEARCH_KEYS
     raw = zabbix_request(
         "item.get",
         {
             "hostids": [hostid],
             "output": parsers.ITEM_OUTPUT,
-            "search": {"key_": parsers.SEARCH_KEYS},
+            "search": {"key_": keys},
             "searchByAny": True,
             "startSearch": True,
             "filter": {"status": "0"},
@@ -107,7 +118,10 @@ def _build(now: datetime) -> dict[str, Any]:
     results: dict[int, list[Mapping[str, Any]] | Exception] = {}
     if devices:
         with ThreadPoolExecutor(max_workers=min(MAX_WORKERS, len(devices))) as pool:
-            futures = {d.pk: pool.submit(_fetch, str(d.zabbix_hostid)) for d in devices}
+            futures = {
+                d.pk: pool.submit(_fetch, str(d.zabbix_hostid), vendor_of(d) or VENDOR_HUAWEI)
+                for d in devices
+            }
             for pk, future in futures.items():
                 try:
                     results[pk] = future.result()
@@ -122,8 +136,10 @@ def _build(now: datetime) -> dict[str, Any]:
     for device in devices:
         result = results.get(device.pk)
         collection_ok = not isinstance(result, Exception)
+        vendor = vendor_of(device) or VENDOR_HUAWEI
+        parse = parsers.parse_items_snmp if vendor == VENDOR_UBIQUITI else parsers.parse_items
         parsed = (
-            parsers.parse_items(result, now_ts)
+            parse(result, now_ts)
             if collection_ok and result is not None
             else {"device": {}, "interfaces": {}}
         )
@@ -131,7 +147,16 @@ def _build(now: datetime) -> dict[str, Any]:
         mine: list[dict[str, Any]] = []
         for ifname in sorted(parsed["interfaces"], key=parsers.ifname_sort_key):
             entry = parsed["interfaces"][ifname]
-            inv = inventory.get((device.pk, ifname)) or {}
+            # Ubiquiti: as portas do inventário chamam-se «ifOperStatus.<ifIndex>»
+            inv = (
+                inventory.get((device.pk, ifname))
+                or (
+                    inventory.get((device.pk, f"ifOperStatus.{entry['if_index']}"))
+                    if entry.get("if_index") is not None
+                    else None
+                )
+                or {}
+            )
             cable_id = inv.get("connected_cable_id")
             cls = parsers.classify_port(
                 entry,
@@ -149,7 +174,9 @@ def _build(now: datetime) -> dict[str, Any]:
                     "description": entry["description"] or None,
                     "kind": kind,
                     "speed_mbps": entry["speed_mbps"] or None,
-                    "speed_label": parsers.speed_label(entry["speed_mbps"], ifname),
+                    "speed_label": parsers.speed_label(
+                        entry["speed_mbps"], ifname, over_4g=bool(entry.get("speed_over_4g"))
+                    ),
                     "admin": cls["admin"],
                     "oper": cls["oper"],
                     "in_use": cls["in_use"],
@@ -176,7 +203,7 @@ def _build(now: datetime) -> dict[str, Any]:
             {
                 "device_id": device.pk,
                 "name": device.name,
-                "vendor": VENDOR_HUAWEI,
+                "vendor": vendor,
                 "model": dev.get("model"),
                 "ip": device.primary_ip or None,
                 "site_id": device.site_id,
