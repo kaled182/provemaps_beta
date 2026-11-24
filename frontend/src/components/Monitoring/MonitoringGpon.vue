@@ -79,6 +79,8 @@
         <OnuTable
           :onus="visibleOnus"
           :scope="tableScope"
+          :events-for="eventsFor"
+          :refresh-key="data?.collected_at || null"
           :show-olt="oltFilter === null && selectedPon === null && selectedSlot === null"
           @history="openHistory"
         />
@@ -155,6 +157,14 @@ function setView(v) {
     /* sem localStorage (janela privada): a escolha vale só nesta visita */
   }
 }
+
+/** EV-0108: PON selecionada para a aba de eventos ({ deviceId, ponId }) ou null. */
+const eventsFor = computed(() => {
+  const key = selectedPon.value
+  if (key === null) return null
+  const i = key.indexOf(':')
+  return { deviceId: Number(key.slice(0, i)), ponId: key.slice(i + 1) }
+})
 
 /** EV-0107: ONUs de uma OLT (todas, sem filtros), indexadas uma vez por atualização. */
 const onusByOlt = computed(() => {

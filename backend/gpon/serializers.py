@@ -134,3 +134,33 @@ class OnuHistorySerializer(serializers.Serializer):
     points = HistoryPointSerializer(many=True)
     zabbix_ok = serializers.BooleanField()
     zabbix_error = serializers.CharField(allow_null=True)
+
+
+# ── EV-0108: eventos de ONU por PON ──────────────────────────────────────────
+class PonEventsQuerySerializer(serializers.Serializer):
+    device = serializers.IntegerField(min_value=1)
+    pon = serializers.CharField(max_length=32)
+    hours = serializers.IntegerField(min_value=1, max_value=168, default=24)
+
+
+class OnuEventSerializer(serializers.Serializer):
+    at = serializers.DateTimeField()
+    onu_id = serializers.IntegerField()
+    onu_index = serializers.IntegerField(allow_null=True)
+    serial = serializers.CharField(allow_null=True)
+    mac = serializers.CharField(allow_null=True)
+    cliente_nome = serializers.CharField(allow_null=True)
+    kind = serializers.ChoiceField(choices=["online", "offline", "los", "dying_gasp"])
+    label = serializers.CharField(allow_null=True)
+    previous_kind = serializers.ChoiceField(
+        choices=["online", "offline", "los", "dying_gasp"], allow_null=True
+    )
+
+
+class PonEventsSerializer(serializers.Serializer):
+    device_id = serializers.IntegerField()
+    pon_id = serializers.CharField()
+    hours = serializers.IntegerField()
+    since = serializers.DateTimeField(allow_null=True)
+    truncated = serializers.BooleanField()
+    events = OnuEventSerializer(many=True)

@@ -20,6 +20,8 @@ from .serializers import (
     GponOverviewSerializer,
     OnuHistoryQuerySerializer,
     OnuHistorySerializer,
+    PonEventsQuerySerializer,
+    PonEventsSerializer,
 )
 
 
@@ -49,3 +51,20 @@ class OnuHistoryView(APIView):
         query = OnuHistoryQuerySerializer(data=request.query_params)
         query.is_valid(raise_exception=True)
         return Response(usecases.onu_history(pk, query.validated_data["hours"]))
+
+
+class PonEventsView(APIView):
+    @extend_schema(
+        parameters=[
+            OpenApiParameter("device", int, description="device_id da OLT"),
+            OpenApiParameter("pon", str, description="pon_id (ex.: 9/14)"),
+            OpenApiParameter("hours", int, description="1..168 (padrão 24)"),
+        ],
+        responses=PonEventsSerializer,
+        summary="Eventos das ONUs de uma PON (quedas e reconexões observadas pela coleta)",
+    )
+    def get(self, request: Request) -> Response:
+        query = PonEventsQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        v = query.validated_data
+        return Response(usecases.pon_events(v["device"], v["pon"], v["hours"]))

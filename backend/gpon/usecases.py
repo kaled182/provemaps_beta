@@ -38,7 +38,7 @@ from inventory.models import Device
 from setup_app.services import runtime_settings
 
 from .domain import parsers, rules
-from .models import OnuState
+from .models import OnuEvent, OnuState
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,12 @@ OLT_CACHE_SECONDS = 600
 LAST_RUN_CACHE_SECONDS = 86400
 # ONU que deixou de vir do Zabbix há mais de 1 dia aparece como «unknown» (não se apaga).
 STALE_AFTER = timedelta(days=1)
+
+# EV-0108: eventos de ONU (transições observadas)
+EVENT_RETENTION_DAYS = 7
+EVENTS_HOURS_DEFAULT = 24
+EVENTS_HOURS_MAX = 168
+EVENTS_LIMIT = 500
 
 HISTORY_HOURS_MIN = 1
 HISTORY_HOURS_MAX = 168
@@ -76,6 +82,8 @@ _UPDATE_FIELDS = [
     "status_since",
     "status_since_is_first_seen",
     "last_seen",
+    "last_known_status",
+    "last_known_reason",
 ]
 
 
@@ -175,6 +183,7 @@ def _store_olt(device: Device, vendor: str, now: datetime, reading: parsers.OltR
     existing = {state.onu_key: state for state in OnuState.objects.filter(device=device)}
     to_create: list[OnuState] = []
     to_update: list[OnuState] = []
+    events: list[OnuEvent] = []
     transitions = 0
     # Um valuemap.get por OLT (e em cache 1 h), não um por ONU.
     valuemaps = {
@@ -206,6 +215,7 @@ def _store_olt(device: Device, vendor: str, now: datetime, reading: parsers.OltR
             "rx_item_key": onu.rx_item_key[:255],
             "last_seen": now,
         }
+        known = onu.status != parsers.STATUS_UNKNOWN
         state = existing.get(onu.onu_key)
         if state is None:
             to_create.append(
@@ -215,6 +225,8 @@ def _store_olt(device: Device, vendor: str, now: datetime, reading: parsers.OltR
                     status_since=now,
                     status_since_is_first_seen=True,
                     first_seen=now,
+                    last_known_status=onu.status if known else "",
+                    last_known_reason=reason if known else "",
                     **values,
                 )
             )
@@ -223,6 +235,12 @@ def _store_olt(device: Device, vendor: str, now: datetime, reading: parsers.OltR
             state.status_since = now
             state.status_since_is_first_seen = False
             transitions += 1
+        if known:
+            event = _event_for(state, onu.status, reason, reason_label, now)
+            if event is not None:
+                events.append(event)
+            state.last_known_status = onu.status
+            state.last_known_reason = reason
         for field_name, value in values.items():
             setattr(state, field_name, value)
         to_update.append(state)
@@ -232,7 +250,35 @@ def _store_olt(device: Device, vendor: str, now: datetime, reading: parsers.OltR
             OnuState.objects.bulk_create(to_create, batch_size=500)
         if to_update:
             OnuState.objects.bulk_update(to_update, _UPDATE_FIELDS, batch_size=500)
+        if events:
+            OnuEvent.objects.bulk_create(events, batch_size=500)
     return transitions
+
+
+def _event_for(
+    state: OnuState, status: str, reason: str, reason_label: str, now: datetime
+) -> OnuEvent | None:
+    """Evento da passagem do último estado CONHECIDO para ``status`` (já conhecido).
+
+    Sem estado conhecido anterior (ONU que só tinha estado em «unknown»), só a queda é
+    informativa — «unknown → online» seria uma reconexão inventada.
+    """
+    previous = (state.last_known_status, state.last_known_reason)
+    if previous == (status, reason):
+        return None
+    if not state.last_known_status and status != parsers.STATUS_OFFLINE:
+        return None
+    return OnuEvent(
+        onu=state,
+        device_id=state.device_id,
+        pon_id=state.pon_id,
+        at=now,
+        previous_status=state.last_known_status,
+        previous_reason=state.last_known_reason,
+        status=status,
+        reason=reason,
+        reason_label=reason_label[:64],
+    )
 
 
 def _olt_meta(
@@ -325,11 +371,13 @@ def collect_onu_states(now: datetime | None = None) -> dict[str, Any]:
         "zabbix_error": zabbix_error,
     }
     cache.set(LAST_RUN_CACHE_KEY, last_run, LAST_RUN_CACHE_SECONDS)
+    purged, _ = OnuEvent.objects.filter(at__lt=now - timedelta(days=EVENT_RETENTION_DAYS)).delete()
     return {
         **last_run,
         "olts": len(olts),
         "onus_seen": onus_seen,
         "transitions": transitions,
+        "events_purged": purged,
         "duration_ms": int((time.monotonic() - started) * 1000),
         "results": results,
     }
@@ -778,3 +826,56 @@ def onu_history(onu_id: int, hours: int = HISTORY_HOURS_DEFAULT) -> dict[str, An
         return payload
     payload["points"] = _history_points(series)
     return payload
+
+
+def _event_kind(status: str, reason: str) -> str:
+    if status == parsers.STATUS_ONLINE:
+        return "online"
+    if reason in (parsers.REASON_LOS, parsers.REASON_DYING_GASP):
+        return reason
+    return "offline"
+
+
+def pon_events(
+    device_id: int, pon_id: str, hours: int = EVENTS_HOURS_DEFAULT, now: datetime | None = None
+) -> dict[str, Any]:
+    """Eventos de uma PON nas últimas ``hours`` horas, do mais recente (EV-0108).
+
+    ``since`` é o evento mais antigo guardado (início do registo ou da retenção): o ecrã
+    diz «registo desde …» em vez de dar a entender que antes não houve quedas.
+    """
+    now = now or timezone.now()
+    hours = max(1, min(int(hours), EVENTS_HOURS_MAX))
+    get_object_or_404(Device, pk=device_id)
+    qs = (
+        OnuEvent.objects.filter(
+            device_id=device_id, pon_id=pon_id, at__gte=now - timedelta(hours=hours)
+        )
+        .select_related("onu")
+        .order_by("-at", "-pk")
+    )
+    rows = list(qs[: EVENTS_LIMIT + 1])
+    first = OnuEvent.objects.order_by("at").values_list("at", flat=True).first()
+    return {
+        "device_id": device_id,
+        "pon_id": pon_id,
+        "hours": hours,
+        "since": _iso(first) if first else None,
+        "truncated": len(rows) > EVENTS_LIMIT,
+        "events": [
+            {
+                "at": _iso(e.at),
+                "onu_id": e.onu_id,
+                "onu_index": e.onu.onu_index,
+                "serial": e.onu.serial or None,
+                "mac": e.onu.mac or None,
+                "cliente_nome": e.onu.cliente_nome or None,
+                "kind": _event_kind(e.status, e.reason),
+                "label": e.reason_label or None,
+                "previous_kind": (
+                    _event_kind(e.previous_status, e.previous_reason) if e.previous_status else None
+                ),
+            }
+            for e in rows[:EVENTS_LIMIT]
+        ],
+    }

@@ -44,6 +44,10 @@ class OnuState(models.Model):
     rx_item_key = models.CharField(max_length=255, blank=True)
 
     status_since = models.DateTimeField()
+    # EV-0108: último estado CONHECIDO (online/offline + motivo), para os eventos ignorarem
+    # as passagens por «unknown» (falha de coleta) sem perder de onde a ONU vinha.
+    last_known_status = models.CharField(max_length=8, blank=True)
+    last_known_reason = models.CharField(max_length=16, blank=True)
     # True enquanto `status_since` é só a primeira observação (o ecrã diz «desde ≥ …»).
     status_since_is_first_seen = models.BooleanField(default=True)
     first_seen = models.DateTimeField()
@@ -66,3 +70,35 @@ class OnuState(models.Model):
 
     def __str__(self) -> str:
         return f"{self.onu_key} ({self.pon_id}) {self.status}"
+
+
+class OnuEvent(models.Model):
+    """Transição de estado de uma ONU observada pela coleta (EV-0108).
+
+    Só transições com informação: ir para ``unknown`` não é evento, e ao sair de ``unknown``
+    compara-se com o último estado CONHECIDO (uma ONU que volta igual não gera «reconexão»
+    falsa — lição do EV-0059, onde a oscilação unknown↔down dava MTTR falso). O registo
+    começa no deploy do EV-0108; retenção de ``gpon.usecases.EVENT_RETENTION_DAYS``.
+    """
+
+    onu = models.ForeignKey(OnuState, on_delete=models.CASCADE, related_name="events")
+    # Desnormalizados para a consulta «eventos desta PON» não juntar tabelas.
+    device = models.ForeignKey("inventory.Device", on_delete=models.CASCADE, related_name="+")
+    pon_id = models.CharField(max_length=32)
+    at = models.DateTimeField()
+    previous_status = models.CharField(max_length=8, blank=True)
+    previous_reason = models.CharField(max_length=16, blank=True)
+    status = models.CharField(max_length=8)
+    reason = models.CharField(max_length=16, blank=True)
+    reason_label = models.CharField(max_length=64, blank=True)
+
+    class Meta:
+        verbose_name = "Evento de ONU"
+        verbose_name_plural = "Eventos de ONU"
+        indexes = [
+            models.Index(fields=["device", "pon_id", "at"], name="gpon_evt_device_pon_at_idx"),
+            models.Index(fields=["at"], name="gpon_evt_at_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.onu_id} {self.previous_status}->{self.status} @ {self.at:%Y-%m-%d %H:%M}"
