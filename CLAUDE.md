@@ -117,11 +117,6 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**A fazer (1)**
-
-💡 Ideias
-- `EV-0113` **Modal de Site: OLT inspecionada dentro do modal com o chassi interativo e o inspetor da PON (API GPON filtrada por OLT)** · P2 · admin · há 0 dias
-
 **Entrada, por triar (2)**
 
 🐛 Problemas
