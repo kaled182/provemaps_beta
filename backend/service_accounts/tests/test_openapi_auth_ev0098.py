@@ -15,7 +15,7 @@ def test_schema_documents_bearer_token_without_warnings():
     call_command("spectacular", "--format", "openapi", stdout=out, stderr=err)
     assert "ServiceAccountTokenAuthentication" not in err.getvalue()
     schema = yaml.safe_load(out.getvalue())
-    scheme = schema["components"]["securitySchemes"]["serviceAccountToken"]
+    scheme = schema["components"]["securitySchemes"]["bearerAuth"]
     assert (scheme["type"], scheme["scheme"]) == ("http", "bearer")
     securities = [
         op.get("security", [])
@@ -23,4 +23,4 @@ def test_schema_documents_bearer_token_without_warnings():
         for op in path.values()
         if isinstance(op, dict)
     ]
-    assert any({"serviceAccountToken": []} in sec for sec in securities)
+    assert any({"bearerAuth": []} in sec for sec in securities)

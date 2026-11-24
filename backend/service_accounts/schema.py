@@ -12,7 +12,8 @@ from drf_spectacular.extensions import OpenApiAuthenticationExtension
 
 class ServiceAccountTokenScheme(OpenApiAuthenticationExtension):
     target_class = "service_accounts.authentication.ServiceAccountTokenAuthentication"
-    name = "serviceAccountToken"
+    # O mesmo nome que o SPECTACULAR_SETTINGS já declara (settings/base.py): um só esquema.
+    name = "bearerAuth"
 
     def get_security_definition(self, auto_schema):  # type: ignore[override]
         return {
