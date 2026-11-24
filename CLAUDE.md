@@ -117,7 +117,15 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**Nada aberto.**
+**A fazer (6)**
+
+💡 Ideias
+- `EV-0138` **Projeto de Rede: corrigir carga/salvamento, menu de contexto (mapa/cabo/CEO/site) e dock de modos com snap; ações de CEO (inserir Sangria/Corte, reserva, derivar, emendas) passam para lá** · P2 · admin · há 0 dias
+- `EV-0139` **CTO e Poste no Projeto de Rede; painéis Pastas/Camadas no visual novo; clusterização de CTOs/postes e rótulos a partir do zoom 16** · P2 · admin · há 0 dias
+- `EV-0140` **Parâmetros de orçamento óptico na configuração (fibra dB/km, fusão, splitters 1x2…1x32, TX padrão) e TX de partida real do Zabbix com recurso ao padrão** · P2 · admin · há 0 dias
+- `EV-0141` **Editor de CEO/CTO em 3 colunas (entrada → bandeja/splitters → saída) com tubos loose em acordeão, ocupação por tubo e «Fusionar tubo 1:1»** · P2 · admin · há 0 dias
+- `EV-0142` **Splitters na bandeja da CEO/CTO (1x2…1x16): fibra de entrada, portas de atendimento Livre/Ocupada/Reservada e dBm estimado em cada porta** · P2 · admin · há 0 dias
+- `EV-0143` **Rastreamento destacado no editor de CEO/CTO e no mapa: caminho da OLT/switch até ao destino com distância óptica e dBm acumulados** · P2 · admin · há 0 dias
 
 <!-- EVOLUCAO:FIM -->
 
