@@ -117,10 +117,9 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**A fazer (2)**
+**A fazer (1)**
 
 💡 Ideias
-- `EV-0112` **Modal de Site: navegação em 2 níveis (Voltar + trilha Site › Equipamento) e inspeção de switch/roteador dentro do modal** · P2 · admin · há 0 dias
 - `EV-0113` **Modal de Site: OLT inspecionada dentro do modal com o chassi interativo e o inspetor da PON (API GPON filtrada por OLT)** · P2 · admin · há 0 dias
 
 **Entrada, por triar (2)**
