@@ -220,3 +220,10 @@ zabbix_request("item.get", {"itemids": ["76882", "93826"],
                             "output": ["key_", "lastvalue", "units", "state"]})      # 32.2471 / 32.2471
 import math; 10 * math.log10(2**24 * 1e-4)                                          # 32.2472
 ```
+
+## Aplicado (2026-11-24, autorizado pelo Paulo)
+
+- **A + B:** `manage.py corrigir_chaves_opticas --aplicar` (commit `60e2cdd`) — device 22 `10694 → 10744` e 165 portas (108 ONU → `onu.rx[…]`, 57 chaves erradas esvaziadas), 0 sem correspondência; cópia dos valores antigos em `logs/ev0081-chaves-opticas-20261124001302100049.json` (host `/opt/provemaps/logs`); o ensaio repetido dá «0 a mudar». Coleta seguinte: **132/181 portas atualizadas** (eram 66), **67 ONU da BRV com RX real** (−22…−29 dBm); as restantes 41 dão valor-sentinela e não são gravadas (EV-0082).
+- **Zeros inventados (EV-0082):** 18 RX e 31 TX a 0,00 em 33 portas passaram a `null` (autorizado), cópia em `logs/ev0082-zeros-20261124001415.json`; 0 restantes.
+- **Destapou:** 71 TX antigos das ONU sob a hora nova (ponta sem chave) — corrigido no código a seguir; a própria coleta anula-os depois do deploy.
+- **C (lado Zabbix) — fica para quem administra o Zabbix:** validação «In range» (ex.: −40…+10, descartar) nos itens `hwEntityOpticalLane*Power` do template Huawei e nos `onu.rx` da ZTE (sentinelas 0/−80); corrigir o LLD do template VSOL que gera itens com `{#USERNAME}` literal; os módulos das portas 334/514 não têm DDM.
