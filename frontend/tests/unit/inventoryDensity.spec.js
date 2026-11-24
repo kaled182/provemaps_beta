@@ -7,6 +7,10 @@ import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+// EV-0100: import estático (não `await import()` dentro do teste) — a transformação do SFC
+// corre na recolha do ficheiro e não conta para os 5 s do teste; na suite completa, com a
+// máquina carregada, o import dinâmico estourava o timeout.
+import InventoryView from '@/components/Inventory/InventoryView.vue'
 
 vi.mock('@/components/Inventory/InventoryManager.vue', () => ({ default: { render: () => null } }))
 vi.mock('@/components/Inventory/Groups/DeviceGroupsManager.vue', () => ({ default: { render: () => null } }))
@@ -20,8 +24,7 @@ const template = (sfc) => sfc.slice(sfc.indexOf('<template>'), sfc.lastIndexOf('
 const LISTS = ['DevicesList.vue', 'FiberCablesList.vue', 'PortsList.vue', 'InventoryManager.vue']
 
 describe('Inventário denso e no tema (EV-0054)', () => {
-  it('abas em PT-BR', async () => {
-    const { default: InventoryView } = await import('@/components/Inventory/InventoryView.vue')
+  it('abas em PT-BR', () => {
     const w = mount(InventoryView)
     const labels = w.findAll('[data-testid^="inventory-tab-"]').map((b) => b.text())
     expect(labels).toEqual(['Sites', 'Grupos', 'Dispositivos', 'Cabos', 'Portas'])
