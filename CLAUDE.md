@@ -117,7 +117,10 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**Nada aberto.**
+**Entrada, por triar (1)**
+
+🐛 Problemas
+- `EV-0104` **nginx sem gzip: o GET do ecrã GPON pesa 2,3 MB por atualização (e todo o JSON/JS vai sem compressão)** · por triar · admin · há 0 dias
 
 <!-- EVOLUCAO:FIM -->
 
