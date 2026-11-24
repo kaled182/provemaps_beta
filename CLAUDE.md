@@ -117,7 +117,10 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**Nada aberto.**
+**Aceites, por priorizar (1)**
+
+💡 Ideias
+- `EV-0085` **«Saúde da coleta»: equipamentos com host Zabbix inexistente e portas sem leitura, com o motivo e aviso por e-mail** · por triar · admin · há 0 dias
 
 <!-- EVOLUCAO:FIM -->
 
