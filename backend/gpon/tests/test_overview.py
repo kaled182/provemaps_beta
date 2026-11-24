@@ -353,3 +353,59 @@ def test_api_invalid_olt_param_is_400_and_unknown_is_404(client, user, olts, con
     assert client.get(URL, {"olt": "abc"}).status_code == 400
     assert client.get(URL, {"olt": "0"}).status_code == 400
     assert client.get(URL, {"olt": "999999"}).status_code == 404
+
+
+def test_vsol_gpon_olt_shows_gpon_and_gpon_capacity(olts, fake_zabbix, config):
+    """EV-0097: uma VSOL com ONUs de serial GPON (Furacão/Granada) é GPON no ecrã e a PON
+    usa a capacidade GPON, não a EPON."""
+    fake_zabbix.items[VSOL_HOST] = [
+        *vsol_onu(1, 1, "DACM91889c5c"),
+        *vsol_onu(1, 2, "SHLN3c4653fa"),
+        item("icmpping", "1", value_type="3"),
+    ]
+    usecases.collect_onu_states()
+    data = usecases.gpon_overview(olt_id=olts.vsol.pk)
+    [olt] = data["olts"]
+    assert olt["technology"] == "gpon"
+    assert olt["pons"][0]["capacity"] == 128
+
+
+def test_vsol_epon_olt_keeps_epon(olts, fake_zabbix, config):
+    fake_zabbix.items[VSOL_HOST] = [*vsol_onu(1, 1, "00:19:46:49:4b:7d")]
+    usecases.collect_onu_states()
+    [olt] = usecases.gpon_overview(olt_id=olts.vsol.pk)["olts"]
+    assert (olt["technology"], olt["pons"][0]["capacity"]) == ("epon", 64)
+
+
+def test_repair_migration_rekeys_existing_vsol_rows(olts, fake_zabbix, config):
+    """EV-0099: linhas gravadas antes da reparação (MAC malformado na chave) são reescritas
+    pela migração 0002 e a coleta seguinte encontra-as — sem linha duplicada."""
+    import importlib
+
+    from django.apps import apps
+
+    now = timezone.now() - timedelta(hours=1)
+    old = OnuState.objects.create(
+        device=olts.vsol,
+        onu_key="1:12|a8:bf:3c:35a:32",
+        vendor="vsol",
+        technology="epon",
+        pon_id="0/1",
+        onu_index=12,
+        mac="a8:bf:3c:35a:32",
+        status="online",
+        status_since=now,
+        status_since_is_first_seen=False,
+        first_seen=now,
+        last_seen=now,
+    )
+    migration = importlib.import_module("gpon.migrations.0002_repair_vsol_mac_keys")
+    migration._repair(apps, None)
+    old.refresh_from_db()
+    assert (old.onu_key, old.mac) == ("1:12|a8:bf:3c:35:0a:32", "a8:bf:3c:35:0a:32")
+
+    fake_zabbix.items[VSOL_HOST] = [*vsol_onu(1, 12, "a8:bf:3c:35a:32")]
+    usecases.collect_onu_states()
+    assert OnuState.objects.filter(device=olts.vsol).count() == 1
+    old.refresh_from_db()
+    assert old.status_since == now  # continuou online: a história não se perdeu

@@ -35,7 +35,8 @@ VENDOR_ZTE = "zte"
 VENDOR_VSOL = "vsol"
 TECHNOLOGY_GPON = "gpon"
 TECHNOLOGY_EPON = "epon"
-# Decisão do contrato EV-0095: ZTE → GPON, VSOL → EPON (os nomes dos equipamentos dizem «EPON»).
+# Tecnologia por omissão do fabricante. Na VSOL decide a própria OLT (EV-0097): há VSOL GPON
+# com «EPON» no nome (Furacão, Granada) — ONUs com serial GPON e interfaces «GPON0/<p>».
 TECHNOLOGY_BY_VENDOR = {VENDOR_ZTE: TECHNOLOGY_GPON, VENDOR_VSOL: TECHNOLOGY_EPON}
 
 STATUS_ONLINE = "online"
@@ -333,6 +334,28 @@ _VSOL_NAME = re.compile(r"ONU\s+(\d+)/(\d+)/(\d+)\s+-\s+(.*?)\s+-\s+(.*?)\s*$")
 _VSOL_KEY_INDEX = re.compile(r"-\s*(\d+)\s*$")
 _VSOL_IF_KEY = re.compile(r"^ifOperStatus\[[GE]PON(\d+)/(\d+)\]$", re.IGNORECASE)
 _MAC_LIKE = re.compile(r"^[0-9a-fA-F]{1,4}([:.\-][0-9a-fA-F]{1,4})+$")
+_MAC_OK = re.compile(r"^([0-9a-f]{2}:){5}[0-9a-f]{2}$")
+_MAC_STRIPPED = re.compile(r"^[0-9a-f]{2,}(:[0-9a-f]{2,})+$")
+# Serial GPON: 4 letras do fabricante + 8 hex (SHLN3C4CAB56, DACM91889c5c, ZYXE8caeed48).
+_GPON_SERIAL = re.compile(r"^[A-Za-z]{4}[0-9A-Fa-f]{8}$")
+
+
+def repair_vsol_mac(text: str) -> str:
+    """Desfaz o defeito do template VSOL do Zabbix (EV-0099), que apaga «:0» do MAC:
+    ``a8:bf:3c:35:0a:32`` chega como ``a8:bf:3c:35a:32``. Cada grupo tem o octeto de 2 hex e,
+    a seguir, um hex por cada octeto «0X» que perdeu o «:0» — a inversão é única. Medido em
+    produção (2026-11-24): 0 dos 165 MACs bem formados tinham «:0» (esperavam-se ~45) e os 91
+    malformados dão todos exatamente 6 octetos. O que não encaixa fica como veio."""
+    mac = text.lower()
+    if _MAC_OK.match(mac) or not _MAC_STRIPPED.match(mac):
+        return mac
+    octets: list[str] = []
+    for group in mac.split(":"):
+        octets.append(group[:2])
+        octets.extend(f"0{char}" for char in group[2:])
+    return ":".join(octets) if len(octets) == 6 else mac
+
+
 _INTERFACE_LIKE = re.compile(r"^[GE]PON\d+/\d+:\d+$", re.IGNORECASE)
 
 
@@ -352,6 +375,7 @@ def _vsol_status(value: str | None) -> str:
 def parse_vsol(items: Iterable[Mapping[str, Any]], *, validate_rx: RxValidator) -> OltReading:
     olt = OltReading(vendor=VENDOR_VSOL, technology=TECHNOLOGY_EPON)
     onus: dict[tuple[int, int, int | None], OnuReading] = {}
+    if_prefixes: set[str] = set()
 
     for item in items:
         key = str(item.get("key_") or "").strip()
@@ -372,6 +396,8 @@ def parse_vsol(items: Iterable[Mapping[str, Any]], *, validate_rx: RxValidator) 
                 onu_index = int(index_match.group(1)) if index_match else None
             group = (slot, pon, onu_index)
             reading = onus.get(group)
+            if ident and _MAC_LIKE.match(ident):
+                ident = repair_vsol_mac(ident)
             if reading is None:
                 base_key = f"{pon}:{onu_index if onu_index is not None else param}"
                 reading = OnuReading(
@@ -397,6 +423,7 @@ def parse_vsol(items: Iterable[Mapping[str, Any]], *, validate_rx: RxValidator) 
 
         if_match = _VSOL_IF_KEY.match(key)
         if if_match:
+            if_prefixes.add(key[len("ifOperStatus[") :][0].upper())
             olt.pon_status[f"{int(if_match.group(1))}/{int(if_match.group(2))}"] = _oper_status(
                 value
             )
@@ -408,7 +435,24 @@ def parse_vsol(items: Iterable[Mapping[str, Any]], *, validate_rx: RxValidator) 
             olt.temperature_c = _float(value)
 
     olt.onus = list(onus.values())
+    olt.technology = vsol_technology(olt.onus, if_prefixes)
     return olt
+
+
+def vsol_technology(onus: Iterable[OnuReading], if_prefixes: set[str]) -> str:
+    """GPON ou EPON pela própria OLT (EV-0097): manda o identificador das ONUs (serial GPON vs
+    MAC); sem ONUs identificadas, o nome das interfaces PON; sem nada, EPON."""
+    serials = macs = 0
+    for onu in onus:
+        if onu.mac:
+            macs += 1
+        elif _GPON_SERIAL.match(onu.serial or ""):
+            serials += 1
+    if serials != macs:
+        return TECHNOLOGY_GPON if serials > macs else TECHNOLOGY_EPON
+    if if_prefixes == {"G"}:
+        return TECHNOLOGY_GPON
+    return TECHNOLOGY_EPON
 
 
 PARSERS: dict[str, Callable[..., OltReading]] = {VENDOR_ZTE: parse_zte, VENDOR_VSOL: parse_vsol}

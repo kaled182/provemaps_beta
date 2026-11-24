@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -467,6 +467,7 @@ def gpon_overview(olt_id: int | None = None, now: datetime | None = None) -> dic
         OnuState.objects.filter(device_id__in=list(device_by_id)).only(
             "id",
             "device_id",
+            "technology",
             "pon_id",
             "onu_index",
             "serial",
@@ -491,6 +492,10 @@ def gpon_overview(olt_id: int | None = None, now: datetime | None = None) -> dic
         state.pk: state.status_since for state in states if not state.status_since_is_first_seen
     }
     onus_by_olt: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    # EV-0097: a tecnologia é a que a coleta leu da OLT (uma VSOL pode ser GPON).
+    technologies: dict[int, Counter[str]] = defaultdict(Counter)
+    for state in states:
+        technologies[state.device_id][state.technology] += 1
     for state in states:
         onus_by_olt[state.device_id].append(
             _onu_payload(state, device_by_id[state.device_id].name, now, warning, critical)
@@ -501,7 +506,10 @@ def gpon_overview(olt_id: int | None = None, now: datetime | None = None) -> dic
     all_onus: list[dict[str, Any]] = []
     for device, vendor in olts:
         meta = metas.get(OLT_CACHE_KEY.format(device_id=device.pk))
-        technology = parsers.TECHNOLOGY_BY_VENDOR[vendor]
+        counted = technologies.get(device.pk)
+        technology = (
+            counted.most_common(1)[0][0] if counted else parsers.TECHNOLOGY_BY_VENDOR[vendor]
+        )
         capacity = capacity_by_tech[technology]
         onus = onus_by_olt.get(device.pk, [])
         status = _olt_status(meta)

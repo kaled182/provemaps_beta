@@ -218,7 +218,7 @@ def test_vsol_never_collected_is_unknown_and_null_description():
     [onu] = olt.onus
     assert onu.status == "unknown" and onu.raw_status == ""
     assert onu.description == ""
-    assert onu.mac == "a8:bf:3c:355:3a"
+    assert onu.mac == "a8:bf:3c:35:05:3a"  # EV-0099: «:0» reposto
     assert onu.rx_onu_dbm is None
     assert olt.ping == 1 and olt.cpu_pct is None and olt.temperature_c is None
     assert olt.has_known_onu is False
@@ -304,3 +304,59 @@ def test_classify_reason_text_variants():
     assert parsers.classify_reason_text("Loss of signal") == "los"
     assert parsers.classify_reason_text("DyingGasp") == "dying_gasp"
     assert parsers.classify_reason_text("Closed") == "other"  # «los» dentro de palavra não conta
+
+
+# --- EV-0097: tecnologia da VSOL pela própria OLT --------------------------------------------
+
+
+def _vsol_onu(ident, n, *, pon=1):
+    name = f"Status da ONU 0/{pon}/{n} - {ident} - NULL"
+    return item(f"OnlineStateS0P{pon}[{ident} - {n}]", "1", value_type="3", name=name)
+
+
+def test_vsol_with_gpon_serials_is_gpon():
+    # Furacão/Granada: «EPON» no nome, mas ONUs com serial GPON e interfaces GPON0/<p>.
+    items = [
+        _vsol_onu("DACM91889c5c", 1),
+        _vsol_onu("SHLN3c4653fa", 2),
+        item("ifOperStatus[GPON0/1]", "1", value_type="3"),
+    ]
+    assert parse_vsol(items).technology == "gpon"
+
+
+def test_vsol_with_macs_is_epon():
+    items = [_vsol_onu("00:19:46:49:4b:7d", 1), _vsol_onu("a8:bf:3c:38:e3:18", 2)]
+    assert parse_vsol(items).technology == "epon"
+
+
+def test_vsol_without_identified_onus_uses_interface_names():
+    assert parse_vsol([item("ifOperStatus[GPON0/1]", "1", value_type="3")]).technology == "gpon"
+    assert parse_vsol([item("ifOperStatus[EPON0/1]", "1", value_type="3")]).technology == "epon"
+    assert parse_vsol([]).technology == "epon"
+
+
+# --- EV-0099: MAC com «:0» apagado pelo template do Zabbix ------------------------------------
+
+
+def test_repair_vsol_mac_restores_the_stripped_zero_octets():
+    # pares reais de produção (2026-11-24) → MAC reposto
+    assert parsers.repair_vsol_mac("a8:bf:3c:35a:32") == "a8:bf:3c:35:0a:32"
+    assert parsers.repair_vsol_mac("a8:bf:3c:38:f34") == "a8:bf:3c:38:f3:04"
+    assert parsers.repair_vsol_mac("c8:3a:354:d1:23") == "c8:3a:35:04:d1:23"
+    assert parsers.repair_vsol_mac("d8:38d:66:da:68") == "d8:38:0d:66:da:68"
+    assert parsers.repair_vsol_mac("b4:64:15:d8:4de") == "b4:64:15:d8:4d:0e"
+    # dois octetos «0X» seguidos no mesmo grupo
+    assert parsers.repair_vsol_mac("aa:bb04:cc:dd") == "aa:bb:00:04:cc:dd"
+
+
+def test_repair_vsol_mac_leaves_valid_or_unknown_shapes_alone():
+    assert parsers.repair_vsol_mac("00:19:46:49:4B:7D") == "00:19:46:49:4b:7d"
+    assert parsers.repair_vsol_mac("a8:bf:3c") == "a8:bf:3c"  # não dá 6 octetos
+    assert parsers.repair_vsol_mac("a8:b:3c:35:0a:32") == "a8:b:3c:35:0a:32"  # grupo de 1
+
+
+def test_vsol_onu_key_and_mac_use_the_repaired_mac():
+    [onu] = parse_vsol([_vsol_onu("a8:bf:3c:35a:32", 12)]).onus
+    assert onu.mac == "a8:bf:3c:35:0a:32"
+    assert onu.onu_key == "1:12|a8:bf:3c:35:0a:32"
+    assert onu.rx_item_key == ""  # a chave do Zabbix não muda (só o MAC mostrado)
