@@ -64,6 +64,7 @@
         :card="selectedCard"
         :card-pons="selectedCardPons"
         :thresholds="thresholds"
+        :in-map="inMap"
       />
     </div>
   </section>
@@ -97,6 +98,8 @@ const props = defineProps({
   onus: { type: Array, default: () => [] },
   /** EV-0107: faixa do histograma ativa (vale para a PON selecionada). */
   signalBand: { type: String, default: null },
+  /** EV-0113: dentro do modal de Site (já no mapa) o inspetor não oferece «Ver no mapa». */
+  inMap: { type: Boolean, default: false },
 })
 defineEmits(['toggle-pon', 'toggle-slot', 'clear-selection', 'signal-band'])
 

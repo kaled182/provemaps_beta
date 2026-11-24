@@ -81,6 +81,7 @@
           {{ copied ? 'Copiado!' : 'Copiar resumo OS' }}
         </button>
         <button
+          v-if="!inMap"
           type="button"
           class="act"
           :disabled="!olt?.site_id"
@@ -171,6 +172,8 @@ const props = defineProps({
   olt: { type: Object, default: null },
   /** EV-0107: faixa do histograma ativa na tabela (normal|warning|critical) ou null. */
   signalBand: { type: String, default: null },
+  /** EV-0113: já no mapa (modal de Site) — sem «Ver no mapa». */
+  inMap: { type: Boolean, default: false },
 })
 
 const attention = computed(() => (props.pon?.signal_warning ?? 0) + (props.pon?.signal_critical ?? 0))

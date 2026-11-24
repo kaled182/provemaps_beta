@@ -219,6 +219,18 @@ describe('SiteDetailsModal', () => {
     w.unmount()
   })
 
+  it('EV-0113: uma OLT abre o chassi (dados GPON da OLT) em vez da grelha de portas', async () => {
+    const w = await mountModal()
+    qa('[data-testid="site-device-card"]')[0].click() // OLT-Centro
+    await flushPromises()
+    expect(q('[data-testid="site-olt-chassis"]')).not.toBeNull()
+    expect(q('[data-testid="site-inspector-ports"]')).toBeNull()
+    const calls = globalThis.fetch.mock.calls.map(([u]) => u)
+    expect(calls).toContain('/api/v1/monitoring/gpon/?olt=1')
+    expect(calls.some((u) => u.includes('/devices/1/temperature/'))).toBe(false) // a da OLT vem da coleta GPON
+    w.unmount()
+  })
+
   it('EV-0112: «Abrir tela completa» — OLT vai ao ecrã GPON do POP; switch abre o modal de Dispositivo', async () => {
     const w = await mountModal()
     qa('[data-testid="site-device-card"]')[1].click()

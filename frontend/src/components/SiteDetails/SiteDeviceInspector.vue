@@ -26,7 +26,11 @@
       </div>
     </div>
 
+    <!-- EV-0113: OLT → chassi interativo (placas, PONs, inspetor da porta) -->
+    <SiteOltChassis v-if="isOlt" :device-id="device.id" @loaded="(o) => (oltData = o)" />
+
     <!-- Portas ópticas em uso -->
+    <template v-else>
     <div class="sdi-ports-head">
       <span class="text-sm font-semibold text-neutral-700">Portas ópticas em uso</span>
       <span class="num text-sm text-neutral-500" data-testid="site-inspector-ports-count">{{ opticalPorts.length }}</span>
@@ -58,6 +62,7 @@
         </div>
       </article>
     </div>
+    </template>
   </section>
 </template>
 
@@ -66,11 +71,12 @@
  * Nível 2 do modal de Site (EV-0112): o equipamento inspecionado sem sair do mapa.
  * Faixa CPU/Memória/Uptime (já vêm do card) + Temperatura (`/devices/<id>/temperature/`)
  * e as portas com leitura óptica, coloridas pelos limiares da configuração.
- * O chassi das OLT entra no EV-0113.
+ * OLT (EV-0113): no lugar das portas, o chassi interativo do ecrã GPON (`SiteOltChassis`).
  */
 import { computed, ref, watch } from 'vue'
 import { PhArrowLeft, PhArrowSquareOut, PhCaretRight } from '@phosphor-icons/vue'
 import { useApi } from '@/composables/useApi'
+import SiteOltChassis from '@/components/SiteDetails/SiteOltChassis.vue'
 import { fetchAllPages } from '@/utils/paginate'
 import { DEVICE_STATUS_LABELS, formatUptimeSeconds, metricBar } from '@/utils/siteDevices'
 import {
@@ -94,6 +100,9 @@ const loadingPorts = ref(false)
 const portsError = ref('')
 const thresholds = ref({ ...DEFAULT_THRESHOLDS })
 const temperature = ref(null)
+/** EV-0113: OLT como vem da coleta GPON (cpu_pct, temperature_c) — preenchida pelo chassi. */
+const oltData = ref(null)
+const isOlt = computed(() => Boolean(props.device.olt))
 let seq = 0
 
 const TEMPERATURE_REASON = {
@@ -105,6 +114,8 @@ const TEMPERATURE_REASON = {
 async function load() {
   const mine = ++seq
   const id = props.device.id
+  oltData.value = null
+  if (isOlt.value) return // a OLT carrega tudo pelo chassi (GPON)
   loadingPorts.value = true
   portsError.value = ''
   temperature.value = null
@@ -139,6 +150,18 @@ const pct = (value, source) => {
 }
 
 const temperatureKpi = computed(() => {
+  if (isOlt.value) {
+    const c = oltData.value?.temperature_c
+    if (!oltData.value) return { key: 'temperature', label: 'Temperatura', value: '…' }
+    return c === null || c === undefined
+      ? { key: 'temperature', label: 'Temperatura', value: '—', title: 'Sem leitura de temperatura na coleta GPON' }
+      : {
+          key: 'temperature',
+          label: 'Temperatura',
+          value: `${Number(c).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} °C`,
+          title: 'Coleta GPON (sensor da OLT)',
+        }
+  }
   const t = temperature.value
   if (!t) return { key: 'temperature', label: 'Temperatura', value: '…' }
   if (t.error) return { key: 'temperature', label: 'Temperatura', value: '—', title: 'Erro ao consultar a temperatura' }
@@ -155,8 +178,17 @@ const temperatureKpi = computed(() => {
   }
 })
 
+/** CPU: o do card (metrics-batch); numa OLT sem item de CPU no inventário, o da coleta GPON. */
+const cpuKpi = computed(() => {
+  const gponCpu = oltData.value?.cpu_pct
+  if ((props.device.cpu === null || props.device.cpu === undefined) && gponCpu !== null && gponCpu !== undefined) {
+    return { key: 'cpu', label: 'CPU', ...pct(gponCpu, 'zabbix'), title: 'Coleta GPON' }
+  }
+  return { key: 'cpu', label: 'CPU', ...pct(props.device.cpu, props.device.cpuSource) }
+})
+
 const strip = computed(() => [
-  { key: 'cpu', label: 'CPU', ...pct(props.device.cpu, props.device.cpuSource) },
+  cpuKpi.value,
   { key: 'memory', label: 'Memória', ...pct(props.device.memory, props.device.memorySource) },
   {
     key: 'uptime',
