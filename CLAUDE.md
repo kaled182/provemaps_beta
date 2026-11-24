@@ -117,11 +117,6 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**A fazer (1)**
-
-💡 Ideias
-- `EV-0121` **Modal de Site: chassi da OLT limitado em altura e PonOnuList por baixo, sincronizada com a porta clicada** · P2 · admin · há 0 dias
-
 **Entrada, por triar (4)**
 
 🐛 Problemas
