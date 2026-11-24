@@ -1209,21 +1209,9 @@ const saveMapItems = async () => {
       return
     }
 
-    const response = await fetch(`/api/v1/maps/custom/${mapId}/items/`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
-      },
-      body: JSON.stringify({
-        selected_items: selectedItems.value
-      })
-    })
-
-    if (!response.ok) {
-      throw new Error(`Erro ao salvar: ${response.status}`)
-    }
+    // EV-0118: pelo useApi (CSRF do window.CSRF_TOKEN/cookie); o fetch cru lia um
+    // csrfmiddlewaretoken que a SPA não tem e o DRF respondia 403.
+    await apiPost(`/api/v1/maps/custom/${mapId}/items/`, { selected_items: selectedItems.value })
 
     showToast('Itens salvos com sucesso!')
   } catch (error) {

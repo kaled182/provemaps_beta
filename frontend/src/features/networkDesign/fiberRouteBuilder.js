@@ -4,6 +4,7 @@ import { getPath, setPath as setPathState, addPoint, updatePoint, removePoint, r
 import { initMap as initializeMap, onMapClick, onMapRightClick, drawPolyline, clearPolyline, addMarker as createMarker, removeMarker, clearMarkers as clearAllMarkers, attachPolylineRightClick, createCablePolyline, getMapInstance, cleanupMap, fitMapToBounds } from './modules/mapCore-refactored.js';
 import { latLngToPixel, distanceBetweenPixels, distancePointToSegmentPx } from '@/utils/mapUtils.js';
 import { getMapConfig } from '@/providers/maps/MapProviderFactory.js';
+import { getCsrfToken } from '@/composables/useApi';
 import { initContextMenu, showContextMenu, hideContextMenu, updateContextMenuState, cleanupContextMenu } from './modules/contextMenu.js';
 import {
     initModalEditor,
@@ -1938,8 +1939,9 @@ function initializeDomBindings() {
         document.removeEventListener('keydown', _lbKeydown);
     }
 
+    // EV-0118: a mesma fonte do useApi (window.CSRF_TOKEN ou o cookie csrftoken)
     function _getCsrfToken() {
-        return document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+        return getCsrfToken();
     }
 
     async function _uploadPhotos(files, cableId) {
@@ -2030,7 +2032,7 @@ function initializeDomBindings() {
     document.getElementById('addCableGroupBtn')?.addEventListener('click', async () => {
         const name = window.prompt('Nome do novo grupo de cabos:');
         if (!name || !name.trim()) return;
-        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+        const csrfToken = getCsrfToken();
         try {
             const res = await fetch('/api/v1/inventory/cable-groups/create/', {
                 method: 'POST',
