@@ -168,7 +168,9 @@ def parse_items(items: Iterable[Mapping[str, Any]], now_ts: float) -> dict[str, 
     for item in items:
         key = str(item.get("key_") or "")
         clock = int(_num(item.get("lastclock")) or 0)
-        fresh = clock > 0 and now_ts - clock <= STALE_SECONDS
+        # EV-0129: InterfaceUptime e ifSpeed vêm a cada 30 min — com 10 min fixos apareciam
+        # «—» ~2/3 do tempo; a idade máxima é o dobro do intervalo do próprio item.
+        fresh = clock > 0 and now_ts - clock <= max_age_seconds(item.get("delay"))
         raw = item.get("lastvalue")
         if key in DEVICE_KEYS:
             if key == "sysDescr":

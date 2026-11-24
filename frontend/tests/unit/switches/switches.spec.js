@@ -197,7 +197,14 @@ describe('vista do chassi (EV-0116)', () => {
 
   it('24 h de tráfego e RX pela porta do inventário; sem inventário diz que não há histórico', async () => {
     const t0 = 1795453740
-    const traffic = { in: { history: [{ timestamp: t0, value: 1.2e9 }, { timestamp: t0 + 60, value: 1.1e9 }] }, out: { history: [{ timestamp: t0, value: 1e8 }, { timestamp: t0 + 60, value: 2e8 }] } }
+    // formato real da rota (EV-0129): linhas alinhadas por bucket
+    const traffic = {
+      history: [
+        { timestamp: new Date(t0 * 1000).toISOString(), traffic_in: 1.2e9, traffic_out: 1e8 },
+        { timestamp: new Date((t0 + 60) * 1000).toISOString(), traffic_in: 1.1e9, traffic_out: 2e8 },
+      ],
+      statistics: {},
+    }
     const optical = [{ timestamp: '2026-11-24T10:00:00+00:00', rx_power: -15.4, tx_power: 1.3 }, { timestamp: '2026-11-24T11:00:00+00:00', rx_power: -15.5, tx_power: 1.3 }]
     const { w, spy } = await mountChassis({ '/api/v1/ports/101/traffic_history/': traffic, '/api/v1/ports/101/optical_history/': optical })
     await w.get('[data-testid="sw-port-XGigabitEthernet0/0/1"]').trigger('click')

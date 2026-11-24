@@ -445,7 +445,7 @@ describe('CustomMapViewer (EV-0012c)', () => {
     expect(seg.remove).toHaveBeenCalled();
     expect(wrapper.find('[data-testid="otdr-pin"]').exists()).toBe(false);
     wrapper.unmount();
-  });
+  }, 15_000); // imports dinâmicos (modal OTDR): na suite completa a 1.ª compilação passa dos 5 s
 
   it('EV-0128: alertas da equipa aparecem ao abrir; fixar grava no servidor; limpar um fixado limpa para todos; barra abre o formulário', async () => {
     const result = (lng, lat) => ({
@@ -499,5 +499,5 @@ describe('CustomMapViewer (EV-0012c)', () => {
     expect(calls.some(([u, m]) => u === '/api/v1/inventory/otdr-alerts/5/clear/' && m === 'POST')).toBe(true);
     expect(wrapper.findAll('[data-testid="otdr-pin"]')).toHaveLength(1);
     wrapper.unmount();
-  });
+  }, 15_000); // imports dinâmicos (modal OTDR): na suite completa a 1.ª compilação passa dos 5 s
 });

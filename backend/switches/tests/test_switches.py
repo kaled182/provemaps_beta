@@ -404,3 +404,32 @@ def test_ubiquiti_enters_the_overview_and_joins_inventory_by_index(db, monkeypat
     )
     p1 = next(p for p in data["ports"] if p["name"] == "0/1")
     assert (p1["port_id"], p1["speed_label"], p1["utilization_pct"]) == (port.pk, "> 4G", None)
+
+
+def test_slow_huawei_items_stay_fresh_for_twice_their_interval():
+    """EV-0129: InterfaceUptime/ifSpeed são coletados a cada 30 min."""
+    age = str(int(NOW) - 1500)  # 25 min
+    n = "Interface Uptime em XGigabitEthernet0/0/1 - UPlink"
+    items = [
+        {
+            "key_": "InterfaceUptime[XGigabitEthernet0/0/1]",
+            "name": n,
+            "lastvalue": "1296710000",
+            "lastclock": age,
+            "delay": "30m",
+        },
+        {
+            "key_": "ifOperStatus[XGigabitEthernet0/0/1]",
+            "name": n,
+            "lastvalue": "1",
+            "lastclock": age,
+            "delay": "1m",
+        },
+    ]
+    entry = parsers.parse_items(items, NOW)["interfaces"]["XGigabitEthernet0/0/1"]
+    assert entry["uptime_ms"] == 1296710000.0  # 25 min < o dobro de 30 min
+    assert entry["oper"] is None  # 25 min > 10 min para um item de 1 min
+    assert parsers.max_age_seconds("30m") == 3600
+    assert parsers.max_age_seconds("30s") == 600
+    assert parsers.max_age_seconds("{$IF.DELAY}") == 600
+    assert parsers.max_age_seconds(None) == 600

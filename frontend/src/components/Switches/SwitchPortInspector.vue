@@ -153,12 +153,17 @@ async function loadHistory() {
 }
 watch(() => [props.sw.device_id, props.port?.name, props.port?.port_id], loadHistory, { immediate: true })
 
-const toPoints = (hist) => (hist || []).map((h) => ({ x: h.timestamp * 1000, y: h.value }))
+/**
+ * `/api/v1/ports/<id>/traffic_history/` devolve `{history: [{timestamp, traffic_in, traffic_out}],
+ * statistics}` (linhas já alinhadas por bucket, bps, None nos buracos) — EV-0129: lia-se o formato
+ * de outra rota e o gráfico ficava sempre «sem histórico».
+ */
 const trafficSeries = computed(() => {
-  const t = traffic.value
-  const inn = toPoints(t?.in?.history)
-  const out = toPoints(t?.out?.history)
-  if (inn.length < 2 && out.length < 2) return []
+  const rows = Array.isArray(traffic.value?.history) ? traffic.value.history : []
+  const inn = rows.map((r) => ({ x: r.timestamp, y: r.traffic_in ?? null }))
+  const out = rows.map((r) => ({ x: r.timestamp, y: r.traffic_out ?? null }))
+  const real = (pts) => pts.filter((p) => p.y !== null).length
+  if (real(inn) < 2 && real(out) < 2) return []
   return [
     { label: '↓ Entrada', data: inn },
     { label: '↑ Saída', data: out },
