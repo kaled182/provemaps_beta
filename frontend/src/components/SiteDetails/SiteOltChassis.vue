@@ -8,7 +8,7 @@
       <p v-if="!data.zabbix_ok" class="mb-2 text-xs text-warning" role="alert" data-testid="site-olt-stale">
         Coleta GPON sem resposta do Zabbix — o chassi mostra a última coleta gravada.
       </p>
-      <!-- EV-0121: chassi + inspetor na metade de cima (rola por dentro); ONUs logo por baixo -->
+      <!-- EV-0121: chassi + inspetor em cima, ONUs logo por baixo; quem rola é só o modal (EV-0125) -->
       <div class="soc-top" data-testid="site-olt-top">
         <OltChassis
           :olt="olt"
@@ -172,10 +172,6 @@ function toggleSignalBand(deviceId, ponId, band) {
 </script>
 
 <style scoped>
-.soc-top {
-  max-height: 340px;
-  overflow-y: auto;
-}
 .soc-onus {
   margin-top: 10px;
   border: 1px solid rgb(var(--n-200));

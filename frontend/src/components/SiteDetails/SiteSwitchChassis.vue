@@ -5,7 +5,7 @@
       <p v-if="!data.zabbix_ok" class="mb-2 text-xs text-warning" role="alert" data-testid="site-switch-zabbix">
         Zabbix indisponível — o estado das portas pode não estar atualizado.
       </p>
-      <!-- chassi + inspetor na metade de cima (rola por dentro); portas logo por baixo, como na OLT -->
+      <!-- chassi + inspetor em cima, portas logo por baixo, como na OLT; quem rola é só o modal (EV-0125) -->
       <div class="ssc-top">
         <SwitchChassisBlock
           :sw="data.switch"
@@ -104,10 +104,6 @@ const freeCount = computed(() => dataPorts.value.filter((p) => p.state === 'free
 </script>
 
 <style scoped>
-.ssc-top {
-  max-height: 340px;
-  overflow-y: auto;
-}
 .ssc-ports {
   margin-top: 10px;
 }
