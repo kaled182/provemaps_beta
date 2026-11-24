@@ -82,12 +82,11 @@
           :events-for="eventsFor"
           :refresh-key="data?.collected_at || null"
           :show-olt="oltFilter === null && selectedPon === null && selectedSlot === null"
-          @history="openHistory"
+          :thresholds="thresholds"
         />
       </template>
     </main>
 
-    <OnuHistoryModal :show="historyOnu !== null" :onu="historyOnu" :thresholds="thresholds" @close="historyOnu = null" />
   </div>
 </template>
 
@@ -103,7 +102,6 @@ import GponKpis from '@/components/Gpon/GponKpis.vue'
 import OltCard from '@/components/Gpon/OltCard.vue'
 import OltChassis from '@/components/Gpon/OltChassis.vue'
 import OnuTable from '@/components/Gpon/OnuTable.vue'
-import OnuHistoryModal from '@/components/Gpon/OnuHistoryModal.vue'
 import { VIEW_KEY, useGponOverview } from '@/composables/useGponOverview'
 
 const {
@@ -184,10 +182,6 @@ function ponsOf(deviceId) {
   return allOlts.value.find((o) => o.device_id === deviceId)?.pons || []
 }
 
-const historyOnu = ref(null)
-function openHistory(onu) {
-  if (onu.has_history) historyOnu.value = onu
-}
 </script>
 
 <style scoped>

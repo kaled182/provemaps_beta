@@ -117,7 +117,9 @@ describe('MonitoringGpon', () => {
     const unk = w.findAll('[data-testid="gpon-onu-row"]')[0]
     expect(unk.find('[data-testid="gpon-onu-status"]').classes()).toContain('tag-unknown')
     expect(unk.find('[data-testid="gpon-onu-since"]').text()).toBe('—')
-    expect(unk.find('[data-testid="gpon-onu-history"]').attributes('disabled')).toBeDefined()
+    // EV-0119: a ficha abre na linha mesmo sem histórico, e diz que não há
+    await unk.find('[data-testid="gpon-onu-history"]').trigger('click')
+    expect(w.find('[data-testid="onu-detail-no-history"]').exists()).toBe(true)
     w.unmount()
   })
 
@@ -137,25 +139,47 @@ describe('MonitoringGpon', () => {
     w.unmount()
   })
 
-  it('histórico: pede hours, troca o período e distingue «Zabbix indisponível»', async () => {
+  it('EV-0119: ficha na linha — pede hours, 24 h / 7 d, distingue «Zabbix indisponível», uma aberta de cada vez', async () => {
     const { w, spy } = await mountView(payload(), { onu_id: 501, unit: 'dBm', label: 'RX na OLT', points: [], zabbix_ok: false, zabbix_error: null })
-    await w.findAll('[data-testid="gpon-onu-history"]')[0].trigger('click')
+    await w.findAll('[data-testid="gpon-onu-row"]')[0].trigger('click')
     await flushPromises()
     expect(spy.mock.calls.at(-1)[0]).toBe('/api/v1/monitoring/gpon/onus/501/history/?hours=24')
-    expect(document.body.querySelector('[data-testid="gpon-history-zabbix-down"]').textContent).toContain('Zabbix indisponível')
-    const sel = document.body.querySelector('[data-testid="gpon-history-hours"]')
-    sel.value = '72'
-    sel.dispatchEvent(new Event('change'))
+    expect(t(w, 'onu-detail-501').exists()).toBe(true)
+    expect(t(w, 'onu-detail-zabbix-down').text()).toContain('Zabbix indisponível')
+    expect(t(w, 'onu-detail-diagnosis').text()).toContain('LOS')
+    await t(w, 'onu-detail-hours-168').trigger('click')
     await flushPromises()
-    expect(spy.mock.calls.at(-1)[0]).toBe('/api/v1/monitoring/gpon/onus/501/history/?hours=72')
+    expect(spy.mock.calls.at(-1)[0]).toBe('/api/v1/monitoring/gpon/onus/501/history/?hours=168')
+    expect(document.body.querySelector('[data-testid="base-modal"]')).toBeNull() // nada de modal
+    await w.findAll('[data-testid="gpon-onu-row"]')[1].trigger('click')
+    await flushPromises()
+    expect(w.findAll('[data-testid^="onu-detail-5"]').filter((x) => /^onu-detail-\d+$/.test(x.attributes('data-testid')))).toHaveLength(1)
+    await w.findAll('[data-testid="gpon-onu-history"]')[1].trigger('click') // fecha
+    expect(w.find('[data-testid="onu-detail-502"]').exists()).toBe(false)
     w.unmount()
   })
 
-  it('histórico sem pontos mostra a mensagem vazia do gráfico', async () => {
+  it('EV-0119: histórico sem pontos diz «Sem leituras no período»', async () => {
     const { w } = await mountView(payload(), { onu_id: 501, unit: 'dBm', label: 'RX na OLT', points: [], zabbix_ok: true, zabbix_error: null })
-    await w.findAll('[data-testid="gpon-onu-history"]')[0].trigger('click')
+    await w.findAll('[data-testid="gpon-onu-row"]')[0].trigger('click')
     await flushPromises()
-    expect(document.body.querySelector('.tsc-empty').textContent).toContain('Sem dados')
+    expect(t(w, 'onu-detail-empty').text()).toBe('Sem leituras no período.')
+    w.unmount()
+  })
+
+  it('EV-0119: pílulas Todas / Com falha / Sinal e busca dentro da lista; trocar de PON repõe', async () => {
+    const { w } = await mountView()
+    await t(w, 'gpon-pon-9/15').trigger('click')
+    expect(t(w, 'pol-filter-all').text()).toBe('Todas (2)')
+    expect(t(w, 'pol-filter-failure').text()).toBe('Com falha / LOS (1)')
+    expect(t(w, 'pol-filter-signal').text()).toBe('Sinal crítico / atenção (1)')
+    await t(w, 'pol-filter-signal').trigger('click')
+    expect(w.findAll('[data-testid="gpon-onu-row"]').map((r) => r.attributes('data-onu-id'))).toEqual(['503'])
+    await t(w, 'pol-filter-all').trigger('click')
+    await t(w, 'pol-search').setValue('zyxdg')
+    expect(w.findAll('[data-testid="gpon-onu-row"]').map((r) => r.attributes('data-onu-id'))).toEqual(['504'])
+    await t(w, 'gpon-pon-9/16').trigger('click')
+    expect(t(w, 'pol-search').element.value).toBe('')
     w.unmount()
   })
 
