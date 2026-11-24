@@ -18,13 +18,13 @@
 
     <!-- orelhas de rack -->
     <g v-for="ex in [0, W - EAR]" :key="ex">
-      <rect :x="ex" y="4" :width="EAR" :height="H - 8" rx="3" class="ear" />
+      <rect :x="ex" y="4" :width="EAR" :height="BODY_H - 8" rx="3" class="ear" />
       <rect :x="ex + EAR / 2 - 3.5" y="22" width="7" height="12" rx="3.5" class="ear-hole" />
-      <rect :x="ex + EAR / 2 - 3.5" :y="H - 34" width="7" height="12" rx="3.5" class="ear-hole" />
+      <rect :x="ex + EAR / 2 - 3.5" :y="BODY_H - 34" width="7" height="12" rx="3.5" class="ear-hole" />
     </g>
 
     <!-- corpo -->
-    <rect :x="EAR" y="8" :width="W - 2 * EAR" :height="H - 16" rx="3" class="body" :fill="`url(#${uid}-body)`" />
+    <rect :x="EAR" y="8" :width="W - 2 * EAR" :height="BODY_H - 16" rx="3" class="body" :fill="`url(#${uid}-body)`" />
     <line :x1="EAR + 2" y1="9.5" :x2="W - EAR - 2" y2="9.5" class="body-light" />
 
     <!-- marca e LED do sistema (estado da OLT no payload) -->
@@ -35,8 +35,8 @@
     <text :x="EAR + 32" y="106.5" class="led-label">SYS</text>
 
     <!-- portas PON -->
-    <rect :x="PORTS_X - 10" y="18" :width="portsW + 20" :height="H - 36" rx="3" class="port-panel" />
-    <text v-if="!ports.length" :x="PORTS_X + 12" :y="H / 2 + 3" class="empty-note" data-testid="chassis-1u-empty">
+    <rect :x="PORTS_X - 10" y="18" :width="portsW + 20" :height="BODY_H - 36" rx="3" class="port-panel" />
+    <text v-if="!ports.length" :x="PORTS_X + 12" :y="BODY_H / 2 + 3" class="empty-note" data-testid="chassis-1u-empty">
       Sem portas PON conhecidas
     </text>
     <g
@@ -76,6 +76,8 @@
         class="vent"
       />
     </g>
+    <!-- rodapé: legenda dos LEDs e portas PON ativas/livres (EV-0106) -->
+    <ChassisLegend :x="EAR" :y="BODY_H - 2" :w="W - 2 * EAR" :h="18" :active="counts.active" :free="counts.free" />
   </svg>
 </template>
 
@@ -86,7 +88,8 @@
  * Mesma paleta `--chassis-*` (grafite fixo, EV-0102) da C300.
  */
 import { computed, useId } from 'vue'
-import { indexPons, ponLed, ponTooltip } from './chassisLed'
+import { indexPons, ponLed, ponPortCounts, ponTooltip } from './chassisLed'
+import ChassisLegend from './ChassisLegend.vue'
 
 const props = defineProps({
   chassis: { type: Object, required: true },
@@ -98,7 +101,9 @@ const props = defineProps({
 const emit = defineEmits(['toggle-pon', 'hover'])
 
 const W = 960
-const H = 132
+const BODY_H = 132
+// EV-0106: faixa da legenda por baixo do corpo
+const H = BODY_H + 20
 const EAR = 24
 const PORTS_X = 200
 const PORTS_MAX_W = 560
@@ -112,6 +117,7 @@ const tech = computed(() => (props.olt.technology || '').toUpperCase())
 const sysLed = computed(() => ({ online: 'ok', offline: 'critical' })[props.olt.status] || 'off')
 
 const ponIdx = computed(() => indexPons(props.pons))
+const counts = computed(() => ponPortCounts(props.chassis, ponIdx.value))
 const visibleSet = computed(() => (props.visiblePonIds ? new Set(props.visiblePonIds.map(String)) : null))
 
 const ports = computed(() => {
@@ -119,7 +125,7 @@ const ports = computed(() => {
   const rows = list.length > 8 ? 2 : 1
   const cols = Math.max(1, Math.ceil(list.length / rows))
   const w = Math.min(66, PORTS_MAX_W / cols)
-  const y0 = rows === 1 ? (H - ROW_H) / 2 : 20
+  const y0 = rows === 1 ? (BODY_H - ROW_H) / 2 : 20
   return list.map((p, i) => {
     const row = rows === 1 ? 0 : i % 2
     const col = rows === 1 ? i : Math.floor(i / 2)

@@ -6,6 +6,8 @@
         <PhPlug :size="15" class="text-neutral-500" />
         <span class="font-semibold num" data-testid="insp-title">{{ pon?.label || `PON ${portId}` }}</span>
         <span class="state" :class="`state-${state.tone}`" data-testid="insp-state">{{ state.label }}</span>
+        <span v-if="preview" class="hint" data-testid="insp-preview" title="Porta mais crítica desta OLT — clique numa porta para filtrar a tabela">mais crítica</span>
+        <button v-else type="button" class="clear" data-testid="insp-clear" @click="$emit('clear')">Todas as portas ({{ portsCount }})</button>
       </header>
 
       <div class="mt-3">
@@ -51,6 +53,7 @@
         <span class="state" :class="card.in_service === false ? 'state-danger' : card.in_service ? 'state-success' : 'state-neutral'">
           {{ card.in_service === false ? 'Fora de serviço' : card.in_service ? 'Em serviço' : 'Estado desconhecido' }}
         </span>
+        <button type="button" class="clear" data-testid="insp-clear" @click="$emit('clear')">Todas as portas ({{ portsCount }})</button>
       </header>
       <dl class="facts mt-3 num" data-testid="insp-slot">
         <dt>PONs com ONUs</dt>
@@ -85,6 +88,7 @@ import { OCCUPANCY_LIMIT } from '@/composables/useGponOverview'
 import { formatDbm, formatInt, formatPercent } from '@/utils/ptBrFormat'
 import { ponDiagnostics, ponState } from './chassisLed'
 
+defineEmits(['clear'])
 const props = defineProps({
   /** pon_id da porta selecionada nesta OLT (ou null). */
   portId: { type: String, default: null },
@@ -97,6 +101,10 @@ const props = defineProps({
   /** PONs da placa selecionada. */
   cardPons: { type: Array, default: () => [] },
   thresholds: { type: Object, default: null },
+  /** EV-0106: a porta mostrada é a pré-visualização da mais crítica (não está selecionada). */
+  preview: { type: Boolean, default: false },
+  /** Nº de PONs da OLT, para o botão «Todas as portas (N)». */
+  portsCount: { type: Number, default: 0 },
 })
 
 const attention = computed(() => (props.pon?.signal_warning ?? 0) + (props.pon?.signal_critical ?? 0))
@@ -192,5 +200,25 @@ const slotSummary = computed(() => {
   border-radius: 6px;
   border: 1px solid rgb(var(--warning) / 0.35);
   background: rgb(var(--warning) / 0.07);
+}
+.hint {
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: rgb(var(--n-600));
+  border: 1px dashed rgb(var(--n-300));
+}
+.clear {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: rgb(var(--primary-700));
+  border: 1px solid rgb(var(--primary-500) / 0.4);
+  background: rgb(var(--primary-500) / 0.08);
+}
+.clear:hover {
+  background: rgb(var(--primary-500) / 0.16);
 }
 </style>

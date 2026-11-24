@@ -126,3 +126,47 @@ export function ponDiagnostics(pon, thresholds, status = null) {
 
 /** Número do slot com dois dígitos («09»). */
 export const slotLabel = (n) => String(n).padStart(2, '0')
+
+/**
+ * PON mais crítica de uma OLT (EV-0106) — a que o inspetor mostra ao abrir/trocar de OLT.
+ * Ordem: queda massiva ou porta em baixo → mais ONUs com sinal crítico → mais LOS → mais em
+ * atenção; sem nada disso, a primeira porta ativa (com ONU online ou up); senão a primeira.
+ * `pons` vem ordenado pelo backend (9/2 antes de 9/14); empates ficam com a primeira.
+ */
+export function mostCriticalPon(pons) {
+  const list = pons || []
+  if (!list.length) return null
+  const score = (p) => [
+    p.collective_drop || p.status === 'down' ? 1 : 0,
+    p.signal_critical ?? 0,
+    p.los ?? 0,
+    p.signal_warning ?? 0,
+  ]
+  // comparação lexicográfica: o primeiro critério diferente decide
+  const beats = (a, b) => {
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] > b[i]
+    return false
+  }
+  let best = list[0]
+  let bestScore = score(best)
+  for (const p of list.slice(1)) {
+    const s = score(p)
+    if (beats(s, bestScore)) {
+      best = p
+      bestScore = s
+    }
+  }
+  if (bestScore.some((v) => v > 0)) return String(best.pon_id)
+  const active = list.find((p) => (p.onus_online ?? 0) > 0 || p.status === 'up')
+  return String((active || list[0]).pon_id)
+}
+
+/** Portas PON do chassi com ONUs (LED aceso) e livres (apagado) — para a legenda (EV-0106). */
+export function ponPortCounts(chassis, ponIdx) {
+  const ponPorts = [
+    ...(chassis?.ports || []),
+    ...(chassis?.slots || []).filter((s) => s.role === PON_ROLE).flatMap((s) => s.ports || []),
+  ]
+  const active = ponPorts.filter((p) => ponLed(ponIdx.get(String(p.port_id))) !== 'off').length
+  return { active, free: ponPorts.length - active }
+}

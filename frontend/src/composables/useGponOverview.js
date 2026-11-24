@@ -15,6 +15,7 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useApi } from '@/composables/useApi'
+import { mostCriticalPon } from '@/components/Gpon/chassisLed'
 
 export const GPON_URL = '/api/v1/monitoring/gpon/'
 export const REFRESH_MS = 60 * 1000
@@ -279,6 +280,32 @@ export function useGponOverview({ autoRefresh = true } = {}) {
     if (selectedSlot.value !== null && !keys.slots.has(selectedSlot.value)) selectedSlot.value = null
   })
 
+  function clearSelection() {
+    selectedPon.value = null
+    selectedSlot.value = null
+  }
+
+  /**
+   * EV-0106: com UMA OLT em foco (escolhida no seletor, ou a única do recorte fabricante/POP),
+   * seleciona a PON mais crítica dela ao abrir e ao trocar — o inspetor nunca começa vazio e a
+   * tabela mostra logo essa PON. Só reage à troca de OLT (não a cada atualização de 60 s), para
+   * não desfazer o «Todas as portas» nem a escolha do operador.
+   */
+  const focusOltId = computed(() => {
+    if (oltFilter.value !== null) return oltFilter.value
+    return scopedOlts.value.length === 1 ? scopedOlts.value[0].device_id : null
+  })
+  watch(
+    [focusOltId, () => data.value !== null],
+    ([id, loaded], [prevId, prevLoaded]) => {
+      if (id === null || !loaded || (id === prevId && prevLoaded)) return
+      const olt = allOlts.value.find((o) => o.device_id === id)
+      const ponId = mostCriticalPon(olt?.pons)
+      selectedSlot.value = null
+      selectedPon.value = ponId === null ? null : ponKey(id, ponId)
+    },
+  )
+
   function stop() {
     if (timer) clearInterval(timer)
     timer = null
@@ -314,6 +341,8 @@ export function useGponOverview({ autoRefresh = true } = {}) {
     load,
     togglePon,
     toggleSlot,
+    clearSelection,
+    focusOltId,
     stop,
   }
 }

@@ -193,7 +193,9 @@ describe('Chassi ZTE C300', () => {
     await t(w, 'chassis-port-9/16').trigger('keydown', { key: 'Enter' })
     expect(t(w, 'chassis-port-9/16').attributes('aria-pressed')).toBe('false')
     expect(rowIds(w)).toEqual([501, 502, 601, 503, 504])
-    expect(t(w, 'insp-empty').exists()).toBe(true)
+    // EV-0106: sem seleção o inspetor mostra a PON mais crítica (pré-visualização), não fica vazio
+    expect(t(w, 'insp-empty').exists()).toBe(false)
+    expect(t(w, 'insp-preview').exists()).toBe(true)
     w.unmount()
   })
 
@@ -364,11 +366,50 @@ describe('EV-0103 — chassis ZTE não-C300', () => {
     w.unmount()
   })
 
-  it('C610 (6 baias) fica estreito, sem esticar', async () => {
+  it('C610 (6 baias): moldura a toda a largura, baias centradas sem esticar (EV-0106)', async () => {
     const { default: ChassisZteC300 } = await import('@/components/Gpon/ChassisZteC300.vue')
     const w = mount(ChassisZteC300, { props: { chassis: { layout: 'zte_modular', model: 'C610', bays: [1, 6], slots: [], ports: [] }, pons: [] } })
     expect(w.findAll('[data-testid^="chassis-bay-"]')).toHaveLength(6)
-    expect(w.attributes('style')).toMatch(/max-width: 360px/)
+    expect(w.attributes('style')).toBeUndefined()
+    expect(w.attributes('viewBox')).toBe('0 0 960 410')
+    const x1 = Number(w.find('[data-testid="chassis-bay-1"] rect').attributes('x'))
+    expect(x1).toBeGreaterThan(300) // centrada, não encostada à esquerda
+    w.unmount()
+  })
+})
+
+
+describe('EV-0106 — porta mais crítica, «Todas as portas» e legenda', () => {
+  it('mostCriticalPon: queda massiva/down > sinal crítico > LOS > atenção > primeira ativa', async () => {
+    const { mostCriticalPon } = await import('@/components/Gpon/chassisLed.js')
+    const p = (id, over = {}) => ({ pon_id: id, status: 'up', onus_online: 1, signal_critical: 0, los: 0, signal_warning: 0, collective_drop: false, ...over })
+    expect(mostCriticalPon([])).toBeNull()
+    expect(mostCriticalPon([p('1/1', { signal_critical: 9 }), p('1/2', { status: 'down' })])).toBe('1/2')
+    expect(mostCriticalPon([p('1/1', { signal_critical: 2 }), p('1/2', { signal_critical: 5, los: 0 })])).toBe('1/2')
+    expect(mostCriticalPon([p('1/1', { signal_critical: 2, los: 1 }), p('1/2', { signal_critical: 2, los: 3 })])).toBe('1/2')
+    expect(mostCriticalPon([p('1/1', { onus_online: 0, status: 'unknown' }), p('1/2')])).toBe('1/2')
+    expect(mostCriticalPon([p('1/1', { onus_online: 0, status: 'unknown' })])).toBe('1/1')
+  })
+
+  it('escolher uma OLT seleciona a PON mais crítica e filtra a tabela; «Todas as portas» limpa', async () => {
+    const w = await mountView()
+    await t(w, 'gpon-olt-select').setValue(22)
+    await flushPromises()
+    // 9/14 tem a queda massiva no fixture
+    expect(t(w, 'chassis-port-9/14').attributes('aria-pressed')).toBe('true')
+    expect(t(w, 'insp-title').text()).toBe('PON 9/14')
+    const clear = t(w, 'insp-clear')
+    expect(clear.text()).toMatch(/^Todas as portas \(\d+\)$/)
+    await clear.trigger('click')
+    expect(t(w, 'chassis-port-9/14').attributes('aria-pressed')).toBe('false')
+    expect(t(w, 'gpon-onu-panel').find('h2').text()).toContain('ZTE - OLT BRV C300')
+    w.unmount()
+  })
+
+  it('a legenda no rodapé conta as PONs ativas e livres', async () => {
+    const w = await mountView()
+    const count = w.find('[data-testid="gpon-chassis-22"] [data-testid="chassis-legend-count"]')
+    expect(count.text()).toMatch(/^\d+ PON ativas · \d+ livres$/)
     w.unmount()
   })
 })

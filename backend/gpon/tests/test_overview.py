@@ -538,7 +538,7 @@ def test_zte_c600_chassis_is_modular_with_alt_cpu_and_roles(olts, fake_zabbix, c
     assert (chassis["layout"], chassis["model"], chassis["bays"]) == (
         "zte_modular",
         "C600",
-        [2, 21],
+        [1, 21],
     )
     roles = {s["slot"]: (s["card_type"], s["role"]) for s in chassis["slots"]}
     assert roles == {
@@ -555,3 +555,16 @@ def test_zte_c600_chassis_is_modular_with_alt_cpu_and_roles(olts, fake_zabbix, c
         None,
     )
     assert olt["model"] == "C600" and olt["cpu_pct"] == 21.0
+
+
+def test_c600_has_at_least_17_bays(olts, fake_zabbix, config):
+    """EV-0106: C600 com placas só até ao slot 8 continua a desenhar 1..17."""
+    fake_zabbix.items[ZTE_HOST] = [
+        item("modeloZTE", "ZXA10 C600, ZTE ZXA10 Software Version: V1.2", value_type="4"),
+        item("Card[3]", "GFGH", value_type="4"),
+        item("Card[8]", "GFGH", value_type="4"),
+        item("icmpping", "1", value_type="3"),
+    ]
+    usecases.collect_onu_states()
+    [olt] = usecases.gpon_overview(olt_id=olts.zte.pk)["olts"]
+    assert olt["chassis"]["bays"] == [1, 17]

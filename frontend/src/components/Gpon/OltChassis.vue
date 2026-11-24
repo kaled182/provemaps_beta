@@ -51,8 +51,11 @@
       </div>
 
       <PonInspector
-        :port-id="portId"
+        :port-id="inspectPortId"
         :pon="selectedPonObj"
+        :preview="isPreview"
+        :ports-count="pons.length"
+        @clear="$emit('clear-selection')"
         :port-status="selectedPortStatus"
         :card="selectedCard"
         :card-pons="selectedCardPons"
@@ -65,7 +68,7 @@
 <script setup>
 /**
  * Uma OLT na vista do chassi (EV-0101): cabeçalho como o OltCard + painel frontal (70 %)
- * e inspetor (30 %), empilhados em ecrã estreito. O chassi usa TODAS as PONs da OLT
+ * e inspetor (340 px a partir de 1280 px), empilhados em ecrã estreito. O chassi usa TODAS as PONs da OLT
  * (`pons`) para os LEDs; as que a pílula esconde ficam esbatidas, não apagadas.
  */
 import { computed, ref } from 'vue'
@@ -73,7 +76,7 @@ import { PhCpu, PhHardDrives, PhThermometer } from '@phosphor-icons/vue'
 import ChassisZteC300 from './ChassisZteC300.vue'
 import ChassisRack1u from './ChassisRack1u.vue'
 import PonInspector from './PonInspector.vue'
-import { indexPons, slotPons } from './chassisLed'
+import { indexPons, mostCriticalPon, slotPons } from './chassisLed'
 import { formatInt, formatNumber, formatPercent } from '@/utils/ptBrFormat'
 
 const props = defineProps({
@@ -87,7 +90,7 @@ const props = defineProps({
   selectedSlot: { type: String, default: null },
   thresholds: { type: Object, default: null },
 })
-defineEmits(['toggle-pon', 'toggle-slot'])
+defineEmits(['toggle-pon', 'toggle-slot', 'clear-selection'])
 
 const isNum = (v) => v !== null && v !== undefined && Number.isFinite(Number(v))
 
@@ -118,13 +121,18 @@ const slotNum = computed(() => {
 })
 
 const ponIdx = computed(() => indexPons(props.pons))
-const selectedPonObj = computed(() => (portId.value === null ? null : ponIdx.value.get(portId.value) || null))
+// EV-0106: sem porta nem placa selecionadas nesta OLT, o inspetor mostra já a PON mais crítica
+// («pré-visualização» — não filtra a tabela; clicar na porta é que seleciona).
+const previewPortId = computed(() => (portId.value === null && slotNum.value === null ? mostCriticalPon(props.pons) : null))
+const isPreview = computed(() => previewPortId.value !== null)
+const inspectPortId = computed(() => portId.value ?? previewPortId.value)
+const selectedPonObj = computed(() => (inspectPortId.value === null ? null : ponIdx.value.get(inspectPortId.value) || null))
 const allPorts = computed(() => [
   ...(chassis.value.ports || []),
   ...(chassis.value.slots || []).flatMap((s) => s.ports || []),
 ])
 const selectedPortStatus = computed(
-  () => allPorts.value.find((p) => String(p.port_id) === portId.value)?.status || null,
+  () => allPorts.value.find((p) => String(p.port_id) === inspectPortId.value)?.status || null,
 )
 const selectedCard = computed(
   () => (slotNum.value === null ? null : (chassis.value.slots || []).find((s) => Number(s.slot) === slotNum.value) || null),
@@ -166,7 +174,7 @@ function onHover(payload) {
 }
 @media (min-width: 1280px) {
   .split {
-    grid-template-columns: minmax(0, 1fr) 300px;
+    grid-template-columns: minmax(0, 1fr) 340px;
   }
 }
 .stage {

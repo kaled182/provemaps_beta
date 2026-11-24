@@ -3,7 +3,6 @@
     class="chassis"
     :viewBox="`0 0 ${W} ${H}`"
     width="100%"
-    :style="{ maxWidth: `${W}px` }"
     preserveAspectRatio="xMidYMid meet"
     role="group"
     :aria-label="`Vista frontal do chassi ZTE ZXA10 ${modelName}`"
@@ -140,9 +139,8 @@
       </g>
     </g>
 
-    <!-- bandeja de ventilação -->
-    <rect x="8" :y="H - 24" :width="W - 16" height="16" rx="3" class="band" />
-    <line v-for="v in fanLines" :key="v" :x1="v" :x2="v" :y1="H - 20" :y2="H - 12" class="vent" />
+    <!-- rodapé: legenda dos LEDs e portas PON ativas/livres (EV-0106) -->
+    <ChassisLegend :x="8" :y="H - 25" :w="W - 16" :h="18" :active="counts.active" :free="counts.free" />
   </svg>
 </template>
 
@@ -154,7 +152,8 @@
  * (não inverte no tema escuro — o painel é escuro nos dois temas) e LEDs pelas semânticas.
  */
 import { computed, useId } from 'vue'
-import { cardLeds, indexPons, linkTooltip, portLed, ponTooltip, slotLabel } from './chassisLed'
+import { cardLeds, indexPons, linkTooltip, portLed, ponPortCounts, ponTooltip, slotLabel } from './chassisLed'
+import ChassisLegend from './ChassisLegend.vue'
 
 const props = defineProps({
   chassis: { type: Object, required: true },
@@ -167,10 +166,11 @@ const props = defineProps({
 const emit = defineEmits(['toggle-pon', 'toggle-slot', 'hover'])
 
 const H = 410
-const X0 = 18
-// Largura da baia fixa (a da C300): um chassi com menos slots fica mais estreito, não com placas
-// esticadas; o viewBox acompanha.
-const PITCH = (960 - 2 * X0) / 21
+const W = 960
+const MARGIN = 18
+// Largura da baia fixa (a da C300, 21 baias): um chassi com menos slots (C610) não estica as
+// placas — a moldura ocupa a largura toda (EV-0106) e as baias ficam centradas nela.
+const PITCH = (W - 2 * MARGIN) / 21
 const BAY_W = PITCH - 2
 const CARD_W = BAY_W - 3
 const BAY_Y = 40
@@ -181,14 +181,14 @@ const uid = `c300-${useId()}`
 
 const firstBay = computed(() => (props.chassis.bays?.length === 2 ? Number(props.chassis.bays[0]) : 0))
 const slotCount = computed(() => (props.chassis.bays?.length === 2 ? Number(props.chassis.bays[1]) - firstBay.value + 1 : 21))
-const W = computed(() => Math.max(2 * X0 + slotCount.value * PITCH, 360))
+const X0 = computed(() => (W - slotCount.value * PITCH) / 2)
 const modelName = computed(() => props.chassis.model || 'C300')
 
 const ponIdx = computed(() => indexPons(props.pons))
 const visibleSet = computed(() => (props.visiblePonIds ? new Set(props.visiblePonIds.map(String)) : null))
 const cardsBySlot = computed(() => new Map((props.chassis.slots || []).map((s) => [Number(s.slot), s])))
 const cardCount = computed(() => cardsBySlot.value.size)
-const fanLines = Array.from({ length: 90 }, (_, i) => 20 + i * 10.4)
+const counts = computed(() => ponPortCounts(props.chassis, ponIdx.value))
 
 function layoutPorts(card) {
   const ports = [...(card.ports || [])].sort((a, b) => a.port - b.port)
@@ -212,7 +212,7 @@ function layoutPorts(card) {
 const bays = computed(() =>
   Array.from({ length: slotCount.value }, (_, i) => {
     const n = firstBay.value + i
-    const x = X0 + i * PITCH + 1
+    const x = X0.value + i * PITCH + 1
     const card = cardsBySlot.value.get(n) || null
     if (!card) return { n, x, cx: x + BAY_W / 2, card: null }
     const leds = cardLeds(card, ponIdx.value)

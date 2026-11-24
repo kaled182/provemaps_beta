@@ -475,6 +475,9 @@ _CARD_ROLES = (
 # A C300 tem 21 baias fixas (0..20); os outros chassis ZTE desenham-se com as baias que o
 # Zabbix mostra (placas e interfaces), do menor ao maior slot.
 _C300_BAYS = [0, 20]
+# EV-0106: a C600 tem 17 baias de placa (1..17); alarga-se até ao maior slot que o Zabbix mostrar
+# (energia 18/20 e ventilação 21 na CONFRESA).
+_MIN_BAYS = {"C600": (1, 17)}
 _STANDBY = {1: "active", 2: "standby"}
 
 
@@ -527,7 +530,10 @@ def _chassis_payload(
         if model in (None, "C300"):
             layout, bays = "zte_c300", list(_C300_BAYS)
         else:
-            layout, bays = "zte_modular", [min(known), max(known)] if known else []
+            layout = "zte_modular"
+            low, high = _MIN_BAYS.get(model, (None, None))
+            edges = known + [v for v in (low, high) if v is not None]
+            bays = [min(edges), max(edges)] if edges else []
         return {"layout": layout, "model": model, "bays": bays, "slots": slots, "ports": []}
 
     ports = {port_id: status for port_id, status in port_status.items() if "/" in port_id}

@@ -60,6 +60,7 @@
             :thresholds="thresholds"
             @toggle-pon="togglePon"
             @toggle-slot="toggleSlot"
+            @clear-selection="clearSelection"
           />
         </template>
         <template v-else>
@@ -124,6 +125,7 @@ const {
   load,
   togglePon,
   toggleSlot,
+  clearSelection,
 } = useGponOverview()
 
 /** Vista das OLTs (EV-0101): painel frontal (padrão) ou a grade compacta de cartões. */
