@@ -446,4 +446,58 @@ describe('CustomMapViewer (EV-0012c)', () => {
     expect(wrapper.find('[data-testid="otdr-pin"]').exists()).toBe(false);
     wrapper.unmount();
   });
+
+  it('EV-0128: alertas da equipa aparecem ao abrir; fixar grava no servidor; limpar um fixado limpa para todos; barra abre o formulário', async () => {
+    const result = (lng, lat) => ({
+      cable_id: 1, cable_name: 'Cabo 1', direction: 'ab', otdr_m: 1000, slack_pct: 1.5, map_distance_m: 985.2,
+      path_length_m: 15000, inventory_length_km: null, origin: { id: 1, name: 'A', distance_m: 985.2 },
+      target: { id: 2, name: 'B', distance_m: 14014.8 }, point: [lng, lat],
+      segment: [[lng, lat], [lng + 0.001, lat]], tolerance_m: 40,
+    });
+    const alerts = [{ id: 5, cable_id: 1, note: '', created_by: 'Ana', created_at: '2026-11-24T19:00:00Z', result: result(-49.3, -16.7) }];
+    const calls = [];
+    global.fetch = vi.fn(async (url, opts = {}) => {
+      calls.push([url, opts.method || 'GET', opts.body]);
+      if (url === '/api/v1/inventory/otdr-alerts/' && (opts.method || 'GET') === 'GET')
+        return { ok: true, status: 200, json: async () => alerts };
+      if (url === '/api/v1/inventory/otdr-alerts/' && opts.method === 'POST')
+        return { ok: true, status: 201, json: async () => ({ id: 6, cable_id: 1, note: '', created_by: 'Rui', created_at: '2026-11-24T19:30:00Z', result: result(-49.21, -16.61) }) };
+      if (url.endsWith('/clear/')) return { ok: true, status: 200, json: async () => ({ id: 5, cleared_at: '2026-11-24T20:00:00Z' }) };
+      return { ok: true, status: 200, json: async () => ({ hosts_status: [] }) };
+    });
+    const wrapper = mountViewer();
+    await flushPromises();
+    const map = fakeFactory.maps[0];
+    // o alerta da equipa já está no mapa
+    expect(wrapper.findAll('[data-testid="otdr-pin"]')).toHaveLength(1);
+    expect(map.polylines.some((p) => p.opts.strokeColor === '#f59e0b')).toBe(true);
+
+    // barra do mapa: formulário sem cabo (escolher)
+    await wrapper.find('[data-testid="map-otdr-btn"]').trigger('click');
+    await vi.dynamicImportSettled();
+    await flushPromises();
+    const modal = wrapper.findComponent({ name: 'OtdrLocatorModal' });
+    expect(modal.props('cable')).toBeNull();
+    expect(modal.props('cables')).toHaveLength(1);
+
+    // nova medição → fixar
+    modal.vm.$emit('located', result(-49.21, -16.61));
+    await flushPromises();
+    await wrapper.find('[data-testid="otdr-pin-alert"]').trigger('click');
+    await flushPromises();
+    const post = calls.find(([u, m]) => u === '/api/v1/inventory/otdr-alerts/' && m === 'POST');
+    expect(JSON.parse(post[2])).toEqual({ cable_id: 1, direction: 'ab', distance_m: 1000, slack_pct: 1.5 });
+    expect(wrapper.findAll('[data-testid="otdr-pin"]')).toHaveLength(2);
+    expect(wrapper.find('[data-testid="otdr-card-pinned"]').text()).toContain('por Rui');
+
+    // abrir o da Ana pelo pino e limpar (para todos)
+    await wrapper.findAll('[data-testid="otdr-pin"]')[1].trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="otdr-card-pinned"]').text()).toContain('por Ana');
+    await wrapper.find('[data-testid="otdr-clear"]').trigger('click');
+    await flushPromises();
+    expect(calls.some(([u, m]) => u === '/api/v1/inventory/otdr-alerts/5/clear/' && m === 'POST')).toBe(true);
+    expect(wrapper.findAll('[data-testid="otdr-pin"]')).toHaveLength(1);
+    wrapper.unmount();
+  });
 });

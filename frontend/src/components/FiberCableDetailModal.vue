@@ -30,6 +30,13 @@
     <div class="modal-body">
       <!-- Tab: Informações Gerais (v-if lazy: monta só quando ativa) -->
       <div v-if="activeTab === 'info'" class="tab-content">
+        <!-- EV-0128: localizar rompimento a partir de uma leitura de OTDR -->
+        <div v-if="showOtdr" class="otdr-row">
+          <button type="button" class="otdr-cta" data-testid="cable-detail-otdr" @click="$emit('otdr', cable)">
+            Localizar OTDR
+          </button>
+          <span class="otdr-hint">Passa a leitura do OTDR a um ponto no mapa, com navegação para a equipa de campo.</span>
+        </div>
         <div class="info-grid">
           <!-- Status e Info Básica -->
           <div class="info-section">
@@ -883,6 +890,8 @@ import { getCableOpticalHistory, getCableTrafficHistory, getCableAlarms, createC
 import { useAlertTemplatesStore } from '@/stores/alertTemplates'
 
 const props = defineProps({
+  /** EV-0128: mostra «Localizar OTDR» (o mapa trata o evento `otdr`) */
+  showOtdr: { type: Boolean, default: false },
   show: {
     type: Boolean,
     default: false
@@ -895,7 +904,7 @@ const props = defineProps({
 
 // EV-0067: o «modo de edição» saiu — não havia campo editável e o «Salvar» era um
 // setTimeout com TODO (dado inventado, CLAUDE.md §2.1). Edita-se em Inventário › Cabos.
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'otdr'])
 
 // Estado
 const activeTab = ref('info')
@@ -1976,6 +1985,29 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.otdr-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.otdr-cta {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgb(var(--danger) / 0.5);
+  border-radius: 6px;
+  background: rgb(var(--surface));
+  color: rgb(var(--danger));
+  font-size: 13px;
+  font-weight: 600;
+}
+.otdr-cta:hover {
+  background: rgb(var(--danger) / 0.08);
+}
+.otdr-hint {
+  font-size: 12px;
+  color: rgb(var(--n-500));
+}
 
 /* Tabs */
 .tabs-header {

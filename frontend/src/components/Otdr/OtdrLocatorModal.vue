@@ -2,13 +2,22 @@
   <BaseModal
     :show="show"
     title="Localizar rompimento (OTDR)"
-    :subtitle="cable ? `${cable.name}${lengthText ? ` · ${lengthText}` : ''}` : ''"
+    :subtitle="current ? `${current.name}${lengthText ? ` · ${lengthText}` : ''}` : 'Escolha o cabo'"
     :icon="PhCrosshair"
     :z-index="zIndex"
     size="md"
     @close="$emit('close')"
   >
     <form class="space-y-4" data-testid="otdr-form" @submit.prevent="locate">
+      <!-- EV-0128: aberto pela barra do mapa, escolhe-se o cabo aqui -->
+      <div v-if="!cable">
+        <label class="otdr-label" for="otdr-cable">Cabo</label>
+        <select id="otdr-cable" v-model="pickedId" class="otdr-input otdr-select" data-testid="otdr-cable">
+          <option :value="null" disabled>Escolher o cabo…</option>
+          <option v-for="c in pickable" :key="c.id" :value="c.id">{{ c.name }}{{ c.length_km ? ` · ${formatMeters(c.length_km * 1000)}` : '' }}</option>
+        </select>
+      </div>
+
       <!-- Sentido da medição -->
       <fieldset>
         <legend class="otdr-label">Sentido da medição (onde está o OTDR)</legend>
@@ -108,8 +117,10 @@ import { SLACK_MAX, SLACK_PRESETS, formatMeters } from '@/utils/otdr'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
-  /** cabo do mapa: { id, name, length_km, site_a_name, site_b_name } */
+  /** cabo do mapa: { id, name, length_km, site_a_name, site_b_name }; null → escolher em `cables` */
   cable: { type: Object, default: null },
+  /** EV-0128: cabos do mapa para escolher (só os com traçado) */
+  cables: { type: Array, default: () => [] },
   zIndex: { type: Number, default: 3000 },
 })
 const emit = defineEmits(['close', 'located'])
@@ -133,14 +144,23 @@ watch(
   },
 )
 
-const siteA = computed(() => props.cable?.site_a_name || 'Site A')
-const siteB = computed(() => props.cable?.site_b_name || 'Site B')
+const pickedId = ref(null)
+const pickable = computed(() =>
+  props.cables
+    .filter((c) => (c.path_coordinates?.length || 0) >= 2)
+    .slice()
+    .sort((a, b) => String(a.name).localeCompare(String(b.name), 'pt-BR')),
+)
+/** O cabo da medição: o recebido, ou o escolhido na lista. */
+const current = computed(() => props.cable || pickable.value.find((c) => c.id === pickedId.value) || null)
+const siteA = computed(() => current.value?.site_a_name || 'Site A')
+const siteB = computed(() => current.value?.site_b_name || 'Site B')
 const directions = computed(() => [
   { value: 'ab', label: `${siteA.value} → ${siteB.value}` },
   { value: 'ba', label: `${siteB.value} → ${siteA.value}` },
 ])
 const lengthText = computed(() => {
-  const km = Number(props.cable?.length_km)
+  const km = Number(current.value?.length_km)
   return Number.isFinite(km) && km > 0 ? formatMeters(km * 1000) : ''
 })
 
@@ -163,7 +183,7 @@ const localError = computed(() => {
   if (distance.value === '' || distance.value === null) return ''
   if (distanceM.value === null) return 'Indique a distância medida no OTDR.'
   if (!Number.isFinite(slackPct.value) || slackPct.value < 0 || slackPct.value > SLACK_MAX) return `A folga vai de 0 a ${SLACK_MAX}%.`
-  const km = Number(props.cable?.length_km)
+  const km = Number(current.value?.length_km)
   if (Number.isFinite(km) && km > 0 && mapM.value > km * 1000 * 1.02) {
     return `Descontada a folga (${formatMeters(mapM.value)}), passa da extensão do cabo (${formatMeters(km * 1000)}).`
   }
@@ -171,7 +191,11 @@ const localError = computed(() => {
 })
 
 async function locate() {
-  if (!props.cable || loading.value) return
+  if (loading.value) return
+  if (!current.value) {
+    error.value = 'Escolha o cabo.'
+    return
+  }
   if (distanceM.value === null) {
     error.value = 'Indique a distância medida no OTDR.'
     return
@@ -180,7 +204,7 @@ async function locate() {
   loading.value = true
   error.value = ''
   try {
-    const result = await api.get(`/api/v1/inventory/cables/${encodeURIComponent(props.cable.id)}/otdr-locate/`, {
+    const result = await api.get(`/api/v1/inventory/cables/${encodeURIComponent(current.value.id)}/otdr-locate/`, {
       direction: direction.value,
       distance_m: Math.round(distanceM.value * 10) / 10,
       slack_pct: slackPct.value,
@@ -240,6 +264,9 @@ async function locate() {
   background: rgb(var(--surface));
   font-size: 14px;
   color: rgb(var(--n-900));
+}
+.otdr-select {
+  width: 100%;
 }
 .otdr-input-sm {
   width: 5rem;

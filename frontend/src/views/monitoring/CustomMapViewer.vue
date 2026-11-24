@@ -5,13 +5,32 @@
       <!-- Mapa: criado pelo provider configurado (providers/maps) -->
       <div ref="mapContainer" class="map-container"></div>
 
-      <!-- EV-0127: ponto do rompimento OTDR (pino pulsante) e o seu cartão -->
-      <MapPopup v-if="map && otdrResult" :map="map" :position="otdrPosition" bare>
-        <OtdrPin />
-      </MapPopup>
-      <MapPopup v-if="map && otdrResult && otdrCardOpen" :map="map" :position="otdrPosition" :offset-y="18">
-        <OtdrResultCard :result="otdrResult" @close="otdrCardOpen = false" @clear="clearOtdr" />
-      </MapPopup>
+      <!-- EV-0127/0128: pontos de rompimento OTDR (o desta medição e os fixados pela equipa) -->
+      <template v-if="map">
+        <MapPopup v-for="pt in otdrPoints" :key="pt.key" :map="map" :position="pointLatLng(pt.result)" bare>
+          <OtdrPin @open="otdrOpenKey = pt.key" />
+        </MapPopup>
+        <MapPopup v-if="otdrOpen" :map="map" :position="pointLatLng(otdrOpen.result)" :offset-y="18">
+          <OtdrResultCard
+            :result="otdrOpen.result"
+            :alert="otdrOpen.alert"
+            :busy="otdrBusy"
+            :error="otdrError"
+            @close="otdrOpenKey = null"
+            @pin="pinOtdr"
+            @clear="clearOtdr(otdrOpen)"
+          />
+        </MapPopup>
+      </template>
+
+      <!-- EV-0128: localizar OTDR escolhendo o cabo -->
+      <button class="map-otdr-btn" title="Localizar rompimento por leitura do OTDR" data-testid="map-otdr-btn" @click="openOtdr(null)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+          <circle cx="12" cy="12" r="7" stroke-width="2" />
+          <path stroke-linecap="round" stroke-width="2" d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+        </svg>
+        Localizar OTDR
+      </button>
 
       <!-- Painel Lateral: Gerenciar Itens (lazy: só monta após 1ª abertura, depois mantém estado) -->
       <MapInventoryPanel
@@ -141,7 +160,9 @@
       v-if="showCableDetailModal"
       :show="showCableDetailModal"
       :cable="selectedCable"
+      show-otdr
       @close="showCableDetailModal = false"
+      @otdr="openOtdr"
     />
 
     <!-- EV-0126: etiqueta mínima do cabo no hover (o card completo abre no clique) -->
@@ -168,10 +189,11 @@
 
     <!-- EV-0127: localizador OTDR -->
     <OtdrLocatorModal
-      v-if="otdrCable"
-      :show="otdrCable !== null"
+      v-if="otdrModalOpen"
+      :show="otdrModalOpen"
       :cable="otdrCable"
-      @close="otdrCable = null"
+      :cables="availableItems.cables"
+      @close="otdrModalOpen = false"
       @located="showOtdr"
     />
 
@@ -206,6 +228,7 @@
  */
 import { ref, shallowRef, computed, onMounted, onBeforeUnmount, watch, defineAsyncComponent } from 'vue'
 import { useRoute } from 'vue-router'
+import { useApi } from '@/composables/useApi'
 import { useUiStore } from '@/stores/ui'
 import { useRealtimeStatus, availabilityToStatus } from '@/composables/useRealtimeStatus'
 import { createMap, getMapConfig } from '@/providers/maps/MapProviderFactory.js'
@@ -999,42 +1022,119 @@ const openCableDetailsFromTooltip = (cable) => {
   showCableDetailModal.value = true
 }
 
-// ── EV-0127: localizador OTDR ────────────────────────────────────────────────
-const otdrCable = ref(null)
-const otdrResult = ref(null)
-const otdrCardOpen = ref(false)
-let otdrLine = null
-const otdrPosition = computed(() => {
-  const [lng, lat] = otdrResult.value?.point || []
-  return { lat, lng }
-})
+// ── EV-0127/0128: localizador OTDR ───────────────────────────────────────────
+const { get: apiGet, post: apiPost } = useApi()
+const OTDR_ALERTS_URL = '/api/v1/inventory/otdr-alerts/'
+const OTDR_ALERTS_REFRESH_MS = 60 * 1000
+const otdrModalOpen = ref(false)
+const otdrCable = ref(null) // null = escolher o cabo no formulário
+const otdrDraft = ref(null) // resultado desta medição, ainda não fixado
+const otdrAlerts = ref([]) // fixados pela equipa (servidor)
+const otdrOpenKey = ref(null)
+const otdrBusy = ref(false)
+const otdrError = ref('')
+const otdrLines = new Map() // key → polilinha do trecho ±40 m
+let otdrTimer = null
 
-/** «Localizar OTDR» no cartão do cabo: o formulário com o cabo já escolhido. */
+const pointLatLng = (result) => {
+  const [lng, lat] = result?.point || []
+  return { lat, lng }
+}
+/** Pontos no mapa: os fixados e, se houver, o desta medição. */
+const otdrPoints = computed(() => [
+  ...otdrAlerts.value.map((a) => ({ key: `a${a.id}`, result: a.result, alert: a })),
+  ...(otdrDraft.value ? [{ key: 'draft', result: otdrDraft.value, alert: null }] : []),
+])
+const otdrOpen = computed(() => otdrPoints.value.find((p) => p.key === otdrOpenKey.value) || null)
+
+/** Trechos âmbar: cria os que faltam, tira os que já não estão. */
+function syncOtdrLines() {
+  if (!map.value) return
+  const wanted = new Map(otdrPoints.value.map((p) => [p.key, p]))
+  for (const [key, line] of otdrLines) {
+    if (!wanted.has(key)) {
+      line.remove()
+      otdrLines.delete(key)
+    }
+  }
+  for (const [key, pt] of wanted) {
+    if (otdrLines.has(key)) continue
+    const path = (pt.result.segment || []).map(([lng, lat]) => ({ lat, lng }))
+    if (path.length >= 2) otdrLines.set(key, map.value.createPolyline({ path, ...OTDR_SEGMENT_STYLE, clickable: false }))
+  }
+}
+watch([otdrPoints, map], syncOtdrLines)
+
+/** «Localizar OTDR»: com o cabo (cartão, detalhes) ou a escolher (barra do mapa). */
 function openOtdr(cable) {
   showCableTooltip.value = false
-  otdrCable.value = cable
+  showCableDetailModal.value = false
+  otdrCable.value = cable || null
+  otdrModalOpen.value = true
 }
 
-/** Resultado do backend: trecho âmbar, pino pulsante e cartão; centra no ponto. */
+/** Resultado do backend: trecho, pino e cartão; centra no ponto. */
 function showOtdr(result) {
-  otdrCable.value = null
-  clearOtdr()
-  otdrResult.value = result
-  otdrCardOpen.value = true
+  otdrModalOpen.value = false
+  otdrError.value = ''
+  otdrDraft.value = result
+  otdrOpenKey.value = 'draft'
   if (!map.value) return
-  const path = (result.segment || []).map(([lng, lat]) => ({ lat, lng }))
-  if (path.length >= 2) {
-    otdrLine = map.value.createPolyline({ path, ...OTDR_SEGMENT_STYLE, clickable: false })
-  }
-  map.value.setCenter(otdrPosition.value)
+  map.value.setCenter(pointLatLng(result))
   map.value.setZoom(16)
 }
 
-function clearOtdr() {
-  otdrLine?.remove()
-  otdrLine = null
-  otdrResult.value = null
-  otdrCardOpen.value = false
+async function loadOtdrAlerts() {
+  try {
+    const list = await apiGet(OTDR_ALERTS_URL)
+    otdrAlerts.value = Array.isArray(list) ? list : []
+  } catch {
+    /* sem alertas visíveis até ao próximo ciclo; o mapa continua */
+  }
+}
+
+/** «Fixar alerta no mapa»: o servidor recalcula e guarda; passa a ser visto por todos. */
+async function pinOtdr() {
+  const r = otdrDraft.value
+  if (!r || otdrBusy.value) return
+  otdrBusy.value = true
+  otdrError.value = ''
+  try {
+    const alert = await apiPost(OTDR_ALERTS_URL, {
+      cable_id: r.cable_id,
+      direction: r.direction,
+      distance_m: r.otdr_m,
+      slack_pct: r.slack_pct,
+    })
+    otdrDraft.value = null
+    otdrAlerts.value = [alert, ...otdrAlerts.value.filter((a) => a.id !== alert.id)]
+    otdrOpenKey.value = `a${alert.id}`
+  } catch (e) {
+    otdrError.value = `Não foi possível fixar: ${e?.message || 'erro desconhecido'}`
+  } finally {
+    otdrBusy.value = false
+  }
+}
+
+/** «Limpar»: o desta medição sai só daqui; um fixado é limpo para toda a equipa. */
+async function clearOtdr(pt) {
+  if (!pt) return
+  otdrError.value = ''
+  if (!pt.alert) {
+    otdrDraft.value = null
+    otdrOpenKey.value = null
+    return
+  }
+  otdrBusy.value = true
+  try {
+    await apiPost(`${OTDR_ALERTS_URL}${pt.alert.id}/clear/`, {})
+    otdrAlerts.value = otdrAlerts.value.filter((a) => a.id !== pt.alert.id)
+    otdrOpenKey.value = null
+  } catch (e) {
+    otdrError.value = `Não foi possível limpar: ${e?.message || 'erro desconhecido'}`
+  } finally {
+    otdrBusy.value = false
+  }
 }
 
 // EV-0126: hover no cabo = só o realce do traço (provider) + etiqueta mínima «nome · km» que
@@ -1294,6 +1394,9 @@ const openCableFullDetails = (cable) => {
 
 // Função para salvar alterações do cabo
 onMounted(async () => {
+  // EV-0128: pontos OTDR fixados pela equipa — ao abrir e a cada minuto
+  loadOtdrAlerts()
+  otdrTimer = setInterval(loadOtdrAlerts, OTDR_ALERTS_REFRESH_MS)
   document.addEventListener('click', _hideCtxMenu)
   document.addEventListener('keydown', _globalKeydown)
 
@@ -1323,7 +1426,9 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   clearTimeout(focusTimer)
   clearTimeout(cableFocusTimer)
-  otdrLine?.remove()
+  otdrLines.forEach((line) => line.remove())
+  otdrLines.clear()
+  clearInterval(otdrTimer)
   stopStatusPolling()
 
   if (maintenanceMode.value) {
@@ -2122,6 +2227,27 @@ html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary:hover {
 }
 
 /* ── Notify sent badge ───────────────────────────────────────────────────── */
+.map-otdr-btn {
+  position: absolute;
+  bottom: 124px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid rgb(var(--n-300));
+  border-radius: 8px;
+  background: rgb(var(--surface));
+  color: rgb(var(--n-800));
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgb(var(--n-950) / 0.15);
+}
+.map-otdr-btn:hover {
+  color: rgb(var(--danger));
+  border-color: rgb(var(--danger) / 0.5);
+}
 .map-fit-btn {
   position: absolute;
   bottom: 80px;

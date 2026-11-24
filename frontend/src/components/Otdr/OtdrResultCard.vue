@@ -27,8 +27,16 @@
       <button type="button" class="orc-btn" data-testid="otdr-whatsapp" @click="copyWhatsapp">
         {{ copied ? 'Copiado!' : 'Copiar para WhatsApp' }}
       </button>
-      <button type="button" class="orc-btn orc-btn-clear" data-testid="otdr-clear" @click="$emit('clear')">Limpar</button>
+      <!-- EV-0128: fixar para toda a equipa (servidor) ou limpar -->
+      <button v-if="!alert" type="button" class="orc-btn orc-btn-pin" :disabled="busy" data-testid="otdr-pin-alert" @click="$emit('pin')">
+        {{ busy ? 'A fixar…' : 'Fixar alerta no mapa' }}
+      </button>
+      <button type="button" class="orc-btn orc-btn-clear" :disabled="busy" data-testid="otdr-clear" @click="$emit('clear')">Limpar</button>
     </div>
+    <p v-if="alert" class="orc-pinned" data-testid="otdr-card-pinned">
+      Fixado para a equipa{{ alert.created_by ? ` por ${alert.created_by}` : '' }} · {{ pinnedAt }}{{ alert.note ? ` · ${alert.note}` : '' }}
+    </p>
+    <p v-if="error" class="mt-1 text-xs text-danger" role="alert" data-testid="otdr-card-error">{{ error }}</p>
     <p v-if="copyError" class="mt-1 text-xs text-danger" role="alert">Não foi possível copiar: {{ copyError }}</p>
   </div>
 </template>
@@ -41,8 +49,18 @@ import { formatCoords, formatMeters, googleMapsUrl, wazeUrl, whatsappText } from
 
 const props = defineProps({
   result: { type: Object, required: true },
+  /** EV-0128: alerta fixado (servidor) a que este ponto pertence; null = só neste ecrã */
+  alert: { type: Object, default: null },
+  busy: { type: Boolean, default: false },
+  error: { type: String, default: '' },
 })
-defineEmits(['close', 'clear'])
+defineEmits(['close', 'clear', 'pin'])
+
+const pinnedAt = computed(() =>
+  props.alert?.created_at
+    ? new Date(props.alert.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : '',
+)
 
 const originName = computed(() => props.result.origin?.name || (props.result.direction === 'ab' ? 'Site A' : 'Site B'))
 const targetName = computed(() => props.result.target?.name || (props.result.direction === 'ab' ? 'Site B' : 'Site A'))
@@ -131,6 +149,19 @@ onBeforeUnmount(() => clearTimeout(timer))
 .orc-btn:hover {
   border-color: rgb(var(--primary-500));
   color: rgb(var(--primary-600));
+}
+.orc-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.orc-btn-pin {
+  border-color: rgb(var(--danger) / 0.5);
+  color: rgb(var(--danger));
+}
+.orc-pinned {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: rgb(var(--n-600));
 }
 .orc-btn-clear:hover {
   border-color: rgb(var(--danger));

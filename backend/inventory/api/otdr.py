@@ -1,4 +1,5 @@
-"""``GET /api/v1/inventory/cables/<id>/otdr-locate/`` (EV-0127)."""
+"""OTDR: ``GET /api/v1/inventory/cables/<id>/otdr-locate/`` (EV-0127) e os alertas fixados no mapa,
+``GET|POST /api/v1/inventory/otdr-alerts/`` e ``POST …/otdr-alerts/<id>/clear/`` (EV-0128)."""
 
 from __future__ import annotations
 
@@ -9,7 +10,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from inventory.usecases.devices_common import InventoryValidationError
-from inventory.usecases.otdr import DIRECTIONS, SLACK_PCT_MAX, locate_otdr
+from inventory.usecases.otdr import (
+    DIRECTIONS,
+    SLACK_PCT_MAX,
+    active_alerts,
+    clear_alert,
+    locate_otdr,
+    pin_alert,
+)
 
 
 class OtdrQuerySerializer(serializers.Serializer):
@@ -66,3 +74,66 @@ class OtdrLocateView(APIView):
         except InventoryValidationError as exc:
             return Response({"detail": str(exc)}, status=400)
         return Response(data)
+
+
+class OtdrPinSerializer(serializers.Serializer):
+    cable_id = serializers.IntegerField(min_value=1)
+    direction = serializers.ChoiceField(choices=list(DIRECTIONS))
+    distance_m = serializers.FloatField(min_value=1)
+    slack_pct = serializers.FloatField(min_value=0, max_value=SLACK_PCT_MAX, default=0)
+    note = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
+
+
+class OtdrAlertSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    cable_id = serializers.IntegerField()
+    note = serializers.CharField(allow_blank=True)
+    created_by = serializers.CharField(allow_null=True)
+    created_at = serializers.DateTimeField()
+    result = OtdrResultSerializer()
+
+
+class OtdrAlertClearedSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    cleared_at = serializers.DateTimeField()
+
+
+class OtdrAlertsView(APIView):
+    @extend_schema(
+        responses=OtdrAlertSerializer(many=True),
+        summary="Pontos de rompimento OTDR fixados no mapa (ativos)",
+    )
+    def get(self, request: Request) -> Response:
+        return Response(active_alerts())
+
+    @extend_schema(
+        request=OtdrPinSerializer,
+        responses={201: OtdrAlertSerializer},
+        summary="Fixa no mapa, para toda a equipa, o ponto OTDR (recalculado no servidor)",
+    )
+    def post(self, request: Request) -> Response:
+        body = OtdrPinSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        v = body.validated_data
+        try:
+            data = pin_alert(
+                v["cable_id"],
+                direction=v["direction"],
+                distance_m=v["distance_m"],
+                slack_pct=v["slack_pct"],
+                note=v["note"],
+                user=request.user,
+            )
+        except InventoryValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(data, status=201)
+
+
+class OtdrAlertClearView(APIView):
+    @extend_schema(
+        request=None,
+        responses=OtdrAlertClearedSerializer,
+        summary="Limpa o ponto OTDR do mapa (após o reparo)",
+    )
+    def post(self, request: Request, alert_id: int) -> Response:
+        return Response(clear_alert(alert_id, user=request.user))

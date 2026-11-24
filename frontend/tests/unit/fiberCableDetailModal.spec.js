@@ -51,6 +51,21 @@ describe('FiberCableDetailModal (EV-0067)', () => {
     w.unmount()
   })
 
+  it('EV-0128: «Localizar OTDR» na aba Informações só com show-otdr, e emite o cabo', async () => {
+    let w = await mountModal()
+    expect(q('[data-testid="cable-detail-otdr"]')).toBeNull()
+    w.unmount()
+    vi.restoreAllMocks()
+    document.body.innerHTML = ''
+    setActivePinia(createPinia())
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) }))
+    w = mount(FiberCableDetailModal, { props: { show: true, cable: CABLE, showOtdr: true }, attachTo: document.body })
+    await flushPromises()
+    q('[data-testid="cable-detail-otdr"]').click()
+    expect(w.emitted('otdr')[0][0]).toEqual(CABLE)
+    w.unmount()
+  })
+
   it('sem modo de edição falso nem rodapé «Salvar»; o X fecha sem window.confirm', async () => {
     const confirm = vi.spyOn(window, 'confirm')
     const w = await mountModal()

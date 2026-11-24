@@ -96,6 +96,32 @@ describe('OtdrLocatorModal', () => {
   })
 })
 
+describe('OtdrLocatorModal sem cabo (EV-0128)', () => {
+  it('escolhe o cabo (só os com traçado) e pede para o escolhido', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(() => ok(RESULT))
+    const cables = [
+      { id: 9, name: 'SEM TRAÇADO', path_coordinates: [] },
+      { id: 7, name: 'MANDI - VLP', length_km: 73.13, site_a_name: 'Vila Mandi', site_b_name: 'Vila Rica', path_coordinates: [{}, {}] },
+    ]
+    const w = mount(OtdrLocatorModal, { props: { show: true, cable: null, cables }, attachTo: document.body })
+    await flushPromises()
+    const sel = document.body.querySelector('[data-testid="otdr-cable"]')
+    expect([...sel.options].map((o) => o.textContent.trim())).toEqual(['Escolher o cabo…', 'MANDI - VLP · 73,13 km'])
+    sel.value = '7'
+    sel.dispatchEvent(new Event('change'))
+    await flushPromises()
+    expect(document.body.querySelector('[data-testid="otdr-dir-ab"]').textContent.trim()).toBe('Vila Mandi → Vila Rica')
+    const d = document.body.querySelector('[data-testid="otdr-distance"]')
+    d.value = '2'
+    d.dispatchEvent(new Event('input'))
+    await flushPromises()
+    document.body.querySelector('[data-testid="otdr-submit"]').click()
+    await flushPromises()
+    expect(spy.mock.calls[0][0]).toContain('/api/v1/inventory/cables/7/otdr-locate/')
+    w.unmount()
+  })
+})
+
 describe('OtdrResultCard', () => {
   it('mostra sentido, distâncias e GPS; links abrem noutra aba; copia para o WhatsApp; limpa', async () => {
     const writeText = vi.fn(() => Promise.resolve())

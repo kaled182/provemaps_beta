@@ -1,17 +1,21 @@
 <template>
-  <span class="pin" aria-label="Rompimento OTDR" data-testid="otdr-pin">
+  <span class="pin" role="button" tabindex="0" aria-label="Rompimento OTDR — abrir o cartão" data-testid="otdr-pin" @click="$emit('open')" @keydown.enter.prevent="$emit('open')">
     <span class="pin-pulse" aria-hidden="true" />
     <span class="pin-core" aria-hidden="true" />
   </span>
 </template>
 
 <script setup>
-/** Marcador pulsante do ponto OTDR (EV-0127), desenhado em Vue sobre o mapa (MapPopup bare). */
+/** Marcador pulsante do ponto OTDR (EV-0127), desenhado em Vue sobre o mapa (MapPopup bare);
+ * clicável (EV-0128) para reabrir o cartão. */
+defineEmits(['open'])
 </script>
 
 <style scoped>
 .pin {
   position: relative;
+  cursor: pointer;
+  pointer-events: auto;
   display: block;
   width: 18px;
   height: 18px;

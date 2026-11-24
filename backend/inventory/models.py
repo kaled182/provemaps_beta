@@ -1722,3 +1722,33 @@ RouteSegment = cast(
     "type[RouteSegmentModel]",
     _routes.RouteSegment,
 )
+
+
+class OtdrAlert(models.Model):
+    """Ponto de rompimento OTDR fixado no mapa para toda a equipa (EV-0128).
+
+    O ponto e o trecho guardados são os que o servidor calculou (``usecases.otdr``) a partir dos
+    parâmetros — nunca coordenadas vindas do browser. Fica ativo até alguém o limpar após o reparo.
+    """
+
+    cable = models.ForeignKey(FiberCable, on_delete=models.CASCADE, related_name="otdr_alerts")
+    direction = models.CharField(max_length=2)
+    otdr_m = models.FloatField()
+    slack_pct = models.FloatField()
+    result = models.JSONField(help_text="Resposta de otdr-locate no momento em que foi fixado")
+    note = models.CharField(max_length=200, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    cleared_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    cleared_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["cleared_at"], name="otdr_alert_active_idx")]
+
+    def __str__(self) -> str:
+        return f"OTDR {self.cable_id} {self.direction} {self.otdr_m:.0f} m"

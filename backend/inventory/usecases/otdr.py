@@ -1,6 +1,7 @@
 """Localizador de rompimento OTDR (EV-0127): leitura do OTDR → ponto e trecho no traçado do cabo.
 
-Só leitura — não grava nada (fixar o alerta no mapa é o EV-0128).
+``locate_otdr`` só lê. Os alertas fixados para a equipa (EV-0128) recalculam o ponto no servidor
+e guardam-no em ``OtdrAlert``.
 """
 
 from __future__ import annotations
@@ -8,9 +9,10 @@ from __future__ import annotations
 from typing import Any
 
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
 from inventory.domain import otdr as geo
-from inventory.models import FiberCable, Site
+from inventory.models import FiberCable, OtdrAlert, Site
 
 from .devices_common import InventoryValidationError
 
@@ -98,3 +100,55 @@ def locate_otdr(
         "segment": [[round(x, 7), round(y, 7)] for x, y in segment],
         "tolerance_m": geo.TOLERANCE_M,
     }
+
+
+# ── EV-0128: alertas fixados no mapa (partilhados pela equipa) ────────────────
+def _user_label(user: Any) -> str | None:
+    if user is None:
+        return None
+    full = (user.get_full_name() or "").strip() if hasattr(user, "get_full_name") else ""
+    return full or getattr(user, "username", None)
+
+
+def alert_payload(alert: OtdrAlert) -> dict[str, Any]:
+    return {
+        "id": alert.pk,
+        "cable_id": alert.cable_id,
+        "note": alert.note,
+        "created_by": _user_label(alert.created_by),
+        "created_at": alert.created_at.isoformat().replace("+00:00", "Z"),
+        "result": alert.result,
+    }
+
+
+def active_alerts() -> list[dict[str, Any]]:
+    """Alertas ainda não limpos, do mais recente."""
+    qs = OtdrAlert.objects.filter(cleared_at__isnull=True).select_related("created_by")
+    return [alert_payload(a) for a in qs]
+
+
+def pin_alert(
+    cable_id: int, *, direction: str, distance_m: float, slack_pct: float, user: Any, note: str = ""
+) -> dict[str, Any]:
+    """Recalcula o ponto (mesmas validações do locate) e fixa-o para toda a equipa."""
+    result = locate_otdr(cable_id, direction=direction, distance_m=distance_m, slack_pct=slack_pct)
+    alert = OtdrAlert.objects.create(
+        cable_id=cable_id,
+        direction=direction,
+        otdr_m=distance_m,
+        slack_pct=slack_pct,
+        result=result,
+        note=note[:200],
+        created_by=user if getattr(user, "is_authenticated", False) else None,
+    )
+    return alert_payload(alert)
+
+
+def clear_alert(alert_id: int, *, user: Any) -> dict[str, Any]:
+    """Limpa (após o reparo). Limpar um já limpo não faz nada."""
+    alert = get_object_or_404(OtdrAlert, pk=alert_id)
+    if alert.cleared_at is None:
+        alert.cleared_at = timezone.now()
+        alert.cleared_by = user if getattr(user, "is_authenticated", False) else None
+        alert.save(update_fields=["cleared_at", "cleared_by"])
+    return {"id": alert.pk, "cleared_at": alert.cleared_at.isoformat().replace("+00:00", "Z")}

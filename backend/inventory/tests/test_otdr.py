@@ -95,3 +95,50 @@ def test_endpoint_requires_login_validates_and_404(cable):
     assert over.status_code == 400 and "passa do fim" in over.json()["detail"]
     assert c.get(url, {"direction": "zz", "distance_m": 10}).status_code == 400
     assert c.get("/api/v1/inventory/cables/999999/otdr-locate/", q).status_code == 404
+
+
+# ── EV-0128: pontos fixados para toda a equipa ───────────────────────────────
+def test_pin_recomputes_on_the_server_lists_and_clears(cable):
+    from inventory.models import OtdrAlert
+
+    c = Client()
+    user = get_user_model().objects.create_user(username="noc", password="x", first_name="Ana")
+    c.force_login(user)
+    url = "/api/v1/inventory/otdr-alerts/"
+    body = {
+        "cable_id": cable.pk,
+        "direction": "ab",
+        "distance_m": 2500,
+        "slack_pct": 0,
+        "note": "OS 123",
+    }
+    # o ponto vem do servidor, mesmo que o browser mande outro
+    created = c.post(url, {**body, "point": [0, 0]}, content_type="application/json")
+    assert created.status_code == 201
+    alert = created.json()
+    assert alert["created_by"] == "Ana" and alert["note"] == "OS 123"
+    assert alert["result"]["point"][1] == pytest.approx(0.09 * 2500 / total_m(), abs=1e-6)
+    assert [a["id"] for a in c.get(url).json()] == [alert["id"]]
+    # outro operador vê o mesmo
+    other = Client()
+    other.force_login(get_user_model().objects.create_user(username="noc2", password="x"))
+    assert len(other.get(url).json()) == 1
+    cleared = other.post(f"{url}{alert['id']}/clear/")
+    assert cleared.status_code == 200 and cleared.json()["cleared_at"]
+    assert c.get(url).json() == []
+    row = OtdrAlert.objects.get()
+    assert row.cleared_by.username == "noc2"
+
+
+def test_pin_validates_like_locate_and_requires_login(cable):
+    url = "/api/v1/inventory/otdr-alerts/"
+    assert Client().get(url).status_code in (401, 403, 302)
+    c = Client()
+    c.force_login(get_user_model().objects.create_user(username="noc", password="x"))
+    over = c.post(
+        url,
+        {"cable_id": cable.pk, "direction": "ab", "distance_m": 99_000},
+        content_type="application/json",
+    )
+    assert over.status_code == 400 and "passa do fim" in over.json()["detail"]
+    assert c.post(f"{url}999999/clear/").status_code == 404
