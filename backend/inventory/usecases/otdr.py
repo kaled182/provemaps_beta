@@ -191,6 +191,9 @@ def _user_label(user: Any) -> str | None:
     return full or getattr(user, "username", None)
 
 
+STATUS_LABELS = dict(OtdrAlert.STATUSES)
+
+
 def _now_iso() -> str:
     return timezone.now().isoformat().replace("+00:00", "Z")
 
@@ -204,13 +207,46 @@ def alert_payload(alert: OtdrAlert) -> dict[str, Any]:
         "created_at": alert.created_at.isoformat().replace("+00:00", "Z"),
         "result": alert.result,
         "log": alert.log or [],
+        "status": alert.status,
+        "status_label": STATUS_LABELS.get(alert.status, alert.status),
+        "cleared_at": (
+            alert.cleared_at.isoformat().replace("+00:00", "Z") if alert.cleared_at else None
+        ),
+        "cleared_by": _user_label(alert.cleared_by),
     }
 
 
 def active_alerts() -> list[dict[str, Any]]:
     """Alertas ainda não limpos, do mais recente."""
-    qs = OtdrAlert.objects.filter(cleared_at__isnull=True).select_related("created_by")
+    qs = OtdrAlert.objects.filter(cleared_at__isnull=True).select_related(
+        "created_by", "cleared_by"
+    )
     return [alert_payload(a) for a in qs]
+
+
+def cable_alert_history(cable_id: int) -> list[dict[str, Any]]:
+    """EV-0132: todos os rompimentos OTDR do cabo (ativos e concluídos), do mais recente."""
+    get_object_or_404(FiberCable.objects.only("id"), pk=cable_id)
+    qs = OtdrAlert.objects.filter(cable_id=cable_id).select_related("created_by", "cleared_by")
+    return [alert_payload(a) for a in qs]
+
+
+def set_alert_status(alert_id: int, *, status: str, user: Any) -> dict[str, Any]:
+    """EV-0132: muda o estado do atendimento (com registo). «done» conclui e tira o pino."""
+    if status not in STATUS_LABELS:
+        raise InventoryValidationError(f"estado deve ser um de: {', '.join(STATUS_LABELS)}")
+    alert = get_object_or_404(OtdrAlert, pk=alert_id, cleared_at__isnull=True)
+    if alert.status != status:
+        alert.status = status
+        entry = {"at": _now_iso(), "by": _user_label(user), "action": "status", "status": status}
+        alert.log = [*(alert.log or []), entry]
+        fields = ["status", "log"]
+        if status == "done":
+            alert.cleared_at = timezone.now()
+            alert.cleared_by = user if getattr(user, "is_authenticated", False) else None
+            fields += ["cleared_at", "cleared_by"]
+        alert.save(update_fields=fields)
+    return alert_payload(alert)
 
 
 def pin_alert(
@@ -283,9 +319,10 @@ def clear_alert(alert_id: int, *, user: Any) -> dict[str, Any]:
     if alert.cleared_at is None:
         alert.cleared_at = timezone.now()
         alert.cleared_by = user if getattr(user, "is_authenticated", False) else None
+        alert.status = "done"
         alert.log = [
             *(alert.log or []),
             {"at": _now_iso(), "by": _user_label(user), "action": "cleared"},
         ]
-        alert.save(update_fields=["cleared_at", "cleared_by", "log"])
+        alert.save(update_fields=["cleared_at", "cleared_by", "status", "log"])
     return {"id": alert.pk, "cleared_at": alert.cleared_at.isoformat().replace("+00:00", "Z")}

@@ -228,3 +228,49 @@ describe('Medição cruzada — EV-0131', () => {
   })
 })
 
+describe('EV-0132: estado do atendimento e histórico do cabo', () => {
+  it('cartão de um fixado: estado atual e botões (o atual fica desativado); sem «Limpar»', async () => {
+    const alert = { id: 5, created_by: 'Ana', created_at: '2026-11-24T19:00:00Z', note: '', status: 'en_route', status_label: 'Em deslocamento' }
+    const w = mount(OtdrResultCard, { props: { result: { ...RESULT, references: { registered: 0 } }, alert } })
+    expect(w.get('[data-testid="otdr-status-label"]').text()).toBe('Em deslocamento')
+    expect(w.get('[data-testid="otdr-status-en_route"]').attributes('disabled')).toBeDefined()
+    expect(w.find('[data-testid="otdr-clear"]').exists()).toBe(false)
+    await w.get('[data-testid="otdr-status-done"]').trigger('click')
+    expect(w.emitted('status')[0][0]).toBe('done')
+  })
+
+  it('histórico: rompimentos do cabo com o estado e a linha do tempo', async () => {
+    const { default: OtdrCableHistory } = await import('@/components/Otdr/OtdrCableHistory.vue')
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      ok([
+        {
+          id: 5, cable_id: 7, created_by: 'Ana', created_at: '2026-11-24T19:00:00Z', status: 'done', status_label: 'Concluído',
+          result: { ...RESULT, mode: 'single' },
+          log: [
+            { at: '2026-11-24T19:00:00Z', by: 'Ana', action: 'pinned' },
+            { at: '2026-11-24T19:10:00Z', by: 'Ana', action: 'adjusted', delta_m: 200 },
+            { at: '2026-11-24T19:30:00Z', by: 'Rui', action: 'status', status: 'en_route' },
+            { at: '2026-11-24T21:00:00Z', by: 'Rui', action: 'status', status: 'done' },
+          ],
+        },
+      ]),
+    )
+    const w = mount(OtdrCableHistory, { props: { cableId: 7 } })
+    await flushPromises()
+    expect(spy.mock.calls[0][0]).toBe('/api/v1/inventory/cables/7/otdr-alerts/')
+    const item = w.get('[data-testid="otdr-history-5"]').text()
+    expect(item).toContain('Concluído')
+    expect(item).toContain('OTDR 14,85 km de SITE - VILA MANDI → 14,63 km no traçado')
+    expect(item).toContain('Ajuste fino +200 m — Ana')
+    expect(item).toContain('Atendimento: Em deslocamento — Rui')
+  })
+
+  it('histórico vazio diz isso', async () => {
+    const { default: OtdrCableHistory } = await import('@/components/Otdr/OtdrCableHistory.vue')
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => ok([]))
+    const w = mount(OtdrCableHistory, { props: { cableId: 7 } })
+    await flushPromises()
+    expect(w.get('[data-testid="otdr-history-empty"]').text()).toContain('Nenhum rompimento')
+  })
+})
+

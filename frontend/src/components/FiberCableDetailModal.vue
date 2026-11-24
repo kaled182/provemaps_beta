@@ -549,6 +549,8 @@
 
       <!-- Tab: Histórico (v-if lazy) -->
       <div v-if="activeTab === 'history'" class="tab-content">
+        <!-- EV-0132: rompimentos localizados por OTDR e o seu atendimento -->
+        <OtdrCableHistory v-if="cable?.id" :cable-id="cable.id" />
         <div class="history-section">
           <h3>Histórico de Manutenção</h3>
           <div class="timeline">
@@ -883,6 +885,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { PhLinkSimple, PhBell } from '@phosphor-icons/vue'
+import OtdrCableHistory from '@/components/Otdr/OtdrCableHistory.vue'
 import BaseModal from '@/components/Common/BaseModal.vue'
 import TimeSeriesChart from './charts/TimeSeriesChart.vue'
 import { bpsToMbps, isRxCritical } from '@/utils/opticalSeries'

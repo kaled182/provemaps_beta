@@ -1725,6 +1725,14 @@ RouteSegment = cast(
 
 
 class OtdrAlert(models.Model):
+    # EV-0132: estado do atendimento; «Concluído» tira o pino do mapa (cleared_at)
+    STATUSES = [
+        ("registered", "Registado"),
+        ("en_route", "Em deslocamento"),
+        ("splicing", "Em fusão"),
+        ("done", "Concluído"),
+    ]
+
     """Ponto de rompimento OTDR fixado no mapa para toda a equipa (EV-0128).
 
     O ponto e o trecho guardados são os que o servidor calculou (``usecases.otdr``) a partir dos
@@ -1739,6 +1747,7 @@ class OtdrAlert(models.Model):
     slack_pct = models.FloatField()
     result = models.JSONField(help_text="Resposta de otdr-locate no momento em que foi fixado")
     note = models.CharField(max_length=200, blank=True)
+    status = models.CharField(max_length=12, choices=STATUSES, default="registered")
     # EV-0130: ajuste fino em campo (m sobre o traçado, a partir do ponto calculado)
     offset_m = models.FloatField(default=0)
     # Registo do atendimento: [{at, by, action: pinned|adjusted|cleared|…, …}]

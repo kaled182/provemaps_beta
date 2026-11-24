@@ -92,7 +92,26 @@
       <button v-if="!alert" type="button" class="orc-btn orc-btn-pin" :disabled="busy" data-testid="otdr-pin-alert" @click="$emit('pin')">
         {{ busy ? 'A fixar…' : 'Fixar alerta no mapa' }}
       </button>
-      <button type="button" class="orc-btn orc-btn-clear" :disabled="busy" data-testid="otdr-clear" @click="$emit('clear')">Limpar</button>
+      <button v-if="!alert" type="button" class="orc-btn orc-btn-clear" :disabled="busy" data-testid="otdr-clear" @click="$emit('clear')">Limpar</button>
+    </div>
+
+    <!-- EV-0132: estado do atendimento de um ponto fixado (vale para toda a equipa) -->
+    <div v-if="alert" class="orc-status" data-testid="otdr-status">
+      <span class="orc-status-now">Atendimento: <b data-testid="otdr-status-label">{{ alert.status_label || 'Registado' }}</b></span>
+      <div class="orc-status-btns">
+        <button
+          v-for="s in STATUS_ACTIONS"
+          :key="s.value"
+          type="button"
+          class="orc-btn"
+          :class="[{ 'orc-status-on': alert.status === s.value }, s.cls]"
+          :disabled="busy || alert.status === s.value"
+          :data-testid="`otdr-status-${s.value}`"
+          @click="$emit('status', s.value)"
+        >
+          {{ s.label }}
+        </button>
+      </div>
     </div>
     <p v-if="alert" class="orc-pinned" data-testid="otdr-card-pinned">
       Fixado para a equipa{{ alert.created_by ? ` por ${alert.created_by}` : '' }} · {{ pinnedAt }}{{ alert.note ? ` · ${alert.note}` : '' }}
@@ -115,7 +134,13 @@ const props = defineProps({
   busy: { type: Boolean, default: false },
   error: { type: String, default: '' },
 })
-defineEmits(['close', 'clear', 'pin', 'adjust'])
+defineEmits(['close', 'clear', 'pin', 'adjust', 'status'])
+
+const STATUS_ACTIONS = [
+  { value: 'en_route', label: 'Em deslocamento', cls: '' },
+  { value: 'splicing', label: 'Em fusão', cls: '' },
+  { value: 'done', label: 'Concluído / Remover pino', cls: 'orc-btn-done' },
+]
 
 const offset = computed(() => Number(props.result.offset_m) || 0)
 const refs = computed(() => props.result.references || { registered: 0, before: null, after: null })
@@ -199,6 +224,30 @@ onBeforeUnmount(() => clearTimeout(timer))
   margin: 0;
   color: rgb(var(--n-900));
   overflow-wrap: anywhere;
+}
+.orc-status {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgb(var(--n-200));
+}
+.orc-status-now {
+  font-size: 11px;
+  color: rgb(var(--n-600));
+}
+.orc-status-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.orc-status-on {
+  border-color: rgb(var(--primary-500));
+  color: rgb(var(--primary-700));
+  background: rgb(var(--primary-500) / 0.1);
+}
+.orc-btn-done:hover:not(:disabled) {
+  border-color: rgb(var(--success));
+  color: rgb(var(--success));
 }
 .orc-warn {
   margin: 6px 0 0;

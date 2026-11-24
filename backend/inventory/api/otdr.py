@@ -15,9 +15,11 @@ from inventory.usecases.otdr import (
     SLACK_PCT_MAX,
     active_alerts,
     adjust_alert,
+    cable_alert_history,
     clear_alert,
     locate_otdr,
     pin_alert,
+    set_alert_status,
 )
 
 
@@ -129,6 +131,14 @@ class OtdrAlertSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField()
     result = OtdrResultSerializer()
     log = serializers.ListField(child=serializers.DictField(), help_text="registo do atendimento")
+    status = serializers.CharField()
+    status_label = serializers.CharField()
+    cleared_at = serializers.DateTimeField(allow_null=True)
+    cleared_by = serializers.CharField(allow_null=True)
+
+
+class OtdrStatusSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=["registered", "en_route", "splicing", "done"])
 
 
 class OtdrAdjustSerializer(serializers.Serializer):
@@ -199,3 +209,26 @@ class OtdrAlertDetailView(APIView):
         except InventoryValidationError as exc:
             return Response({"detail": str(exc)}, status=400)
         return Response(data)
+
+
+class OtdrAlertStatusView(APIView):
+    @extend_schema(
+        request=OtdrStatusSerializer,
+        responses=OtdrAlertSerializer,
+        summary="Estado do atendimento de um rompimento OTDR («Concluído» tira o pino do mapa)",
+    )
+    def post(self, request: Request, alert_id: int) -> Response:
+        body = OtdrStatusSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        return Response(
+            set_alert_status(alert_id, status=body.validated_data["status"], user=request.user)
+        )
+
+
+class CableOtdrHistoryView(APIView):
+    @extend_schema(
+        responses=OtdrAlertSerializer(many=True),
+        summary="Rompimentos OTDR do cabo (ativos e concluídos), com o registo do atendimento",
+    )
+    def get(self, request: Request, cable_id: int) -> Response:
+        return Response(cable_alert_history(cable_id))

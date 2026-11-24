@@ -255,3 +255,57 @@ def test_pinning_a_cross_measurement_keeps_b_and_the_offset_on_adjust(cable):
     assert moved["result"]["map_distance_m"] == pytest.approx(
         alert["result"]["base_map_distance_m"] + 150, abs=0.2
     )
+
+
+# ── EV-0132: estado do atendimento e histórico do cabo ────────────────────────
+def test_status_flow_logs_and_done_removes_the_pin_and_history_keeps_it(cable):
+    c = Client()
+    c.force_login(
+        get_user_model().objects.create_user(username="ana", password="x", first_name="Ana")
+    )
+    url = "/api/v1/inventory/otdr-alerts/"
+    alert = c.post(
+        url,
+        {"cable_id": cable.pk, "direction": "ab", "distance_m": 2500},
+        content_type="application/json",
+    ).json()
+    assert (alert["status"], alert["status_label"]) == ("registered", "Registado")
+    st = f"{url}{alert['id']}/status/"
+    assert (
+        c.post(st, {"status": "en_route"}, content_type="application/json").json()["status_label"]
+        == "Em deslocamento"
+    )
+    assert (
+        c.post(st, {"status": "splicing"}, content_type="application/json").json()["status"]
+        == "splicing"
+    )
+    assert len(c.get(url).json()) == 1  # ainda no mapa
+    done = c.post(st, {"status": "done"}, content_type="application/json").json()
+    assert done["status"] == "done" and done["cleared_at"] and done["cleared_by"] == "Ana"
+    assert c.get(url).json() == []  # saiu do mapa
+    history = c.get(f"/api/v1/inventory/cables/{cable.pk}/otdr-alerts/").json()
+    assert [h["id"] for h in history] == [alert["id"]]
+    assert [e.get("status") or e["action"] for e in history[0]["log"]] == [
+        "pinned",
+        "en_route",
+        "splicing",
+        "done",
+    ]
+    assert (
+        c.post(st, {"status": "en_route"}, content_type="application/json").status_code == 404
+    )  # concluído
+    assert c.post(st, {"status": "xx"}, content_type="application/json").status_code == 400
+    assert c.get("/api/v1/inventory/cables/999999/otdr-alerts/").status_code == 404
+
+
+def test_clear_marks_the_alert_done(cable):
+    c = Client()
+    c.force_login(get_user_model().objects.create_user(username="ana", password="x"))
+    url = "/api/v1/inventory/otdr-alerts/"
+    alert = c.post(
+        url,
+        {"cable_id": cable.pk, "direction": "ab", "distance_m": 2500},
+        content_type="application/json",
+    ).json()
+    c.post(f"{url}{alert['id']}/clear/")
+    assert c.get(f"/api/v1/inventory/cables/{cable.pk}/otdr-alerts/").json()[0]["status"] == "done"

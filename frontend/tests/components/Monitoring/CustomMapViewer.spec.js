@@ -463,6 +463,10 @@ describe('CustomMapViewer (EV-0012c)', () => {
       if (url === '/api/v1/inventory/otdr-alerts/' && opts.method === 'POST')
         return { ok: true, status: 201, json: async () => ({ id: 6, cable_id: 1, note: '', created_by: 'Rui', created_at: '2026-11-24T19:30:00Z', result: result(-49.21, -16.61) }) };
       if (url.endsWith('/clear/')) return { ok: true, status: 200, json: async () => ({ id: 5, cleared_at: '2026-11-24T20:00:00Z' }) };
+      if (url.endsWith('/status/')) {
+        const st = JSON.parse(opts.body).status;
+        return { ok: true, status: 200, json: async () => ({ ...alerts[0], status: st, status_label: st === 'done' ? 'Concluído' : 'Em deslocamento' }) };
+      }
       return { ok: true, status: 200, json: async () => ({ hosts_status: [] }) };
     });
     const wrapper = mountViewer();
@@ -490,13 +494,18 @@ describe('CustomMapViewer (EV-0012c)', () => {
     expect(wrapper.findAll('[data-testid="otdr-pin"]')).toHaveLength(2);
     expect(wrapper.find('[data-testid="otdr-card-pinned"]').text()).toContain('por Rui');
 
-    // abrir o da Ana pelo pino e limpar (para todos)
+    // abrir o da Ana pelo pino: estado do atendimento (EV-0132) e concluir (sai do mapa para todos)
     await wrapper.findAll('[data-testid="otdr-pin"]')[1].trigger('click');
     await flushPromises();
     expect(wrapper.find('[data-testid="otdr-card-pinned"]').text()).toContain('por Ana');
-    await wrapper.find('[data-testid="otdr-clear"]').trigger('click');
+    expect(wrapper.find('[data-testid="otdr-clear"]').exists()).toBe(false); // num fixado conclui-se
+    await wrapper.find('[data-testid="otdr-status-en_route"]').trigger('click');
     await flushPromises();
-    expect(calls.some(([u, m]) => u === '/api/v1/inventory/otdr-alerts/5/clear/' && m === 'POST')).toBe(true);
+    expect(wrapper.find('[data-testid="otdr-status-label"]').text()).toBe('Em deslocamento');
+    await wrapper.find('[data-testid="otdr-status-done"]').trigger('click');
+    await flushPromises();
+    const statusCalls = calls.filter(([u, m]) => u === '/api/v1/inventory/otdr-alerts/5/status/' && m === 'POST');
+    expect(statusCalls.map(([, , b]) => JSON.parse(b).status)).toEqual(['en_route', 'done']);
     expect(wrapper.findAll('[data-testid="otdr-pin"]')).toHaveLength(1);
     wrapper.unmount();
   }, 15_000); // imports dinâmicos (modal OTDR): na suite completa a 1.ª compilação passa dos 5 s

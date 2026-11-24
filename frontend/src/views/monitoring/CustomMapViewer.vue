@@ -19,6 +19,7 @@
             @close="otdrOpenKey = null"
             @pin="pinOtdr"
             @adjust="adjustOtdr(otdrOpen, $event)"
+            @status="setOtdrStatus(otdrOpen, $event)"
             @clear="clearOtdr(otdrOpen)"
           />
         </MapPopup>
@@ -1141,6 +1142,26 @@ async function adjustOtdr(pt, offsetM) {
     }
   } catch (e) {
     otdrError.value = `Não foi possível ajustar: ${e?.message || 'erro desconhecido'}`
+  } finally {
+    otdrBusy.value = false
+  }
+}
+
+/** EV-0132: estado do atendimento (para toda a equipa); «Concluído» tira o pino do mapa. */
+async function setOtdrStatus(pt, status) {
+  if (!pt?.alert || otdrBusy.value) return
+  otdrBusy.value = true
+  otdrError.value = ''
+  try {
+    const updated = await apiPost(`${OTDR_ALERTS_URL}${pt.alert.id}/status/`, { status })
+    if (updated.status === 'done') {
+      otdrAlerts.value = otdrAlerts.value.filter((a) => a.id !== updated.id)
+      otdrOpenKey.value = null
+    } else {
+      otdrAlerts.value = otdrAlerts.value.map((a) => (a.id === updated.id ? updated : a))
+    }
+  } catch (e) {
+    otdrError.value = `Não foi possível mudar o estado: ${e?.message || 'erro desconhecido'}`
   } finally {
     otdrBusy.value = false
   }

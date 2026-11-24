@@ -77,8 +77,10 @@ from inventory.api.maintenance_alert import (  # noqa: E402
     api_maintenance_send_alert,
 )
 from inventory.api.otdr import (  # noqa: E402
+    CableOtdrHistoryView,
     OtdrAlertClearView,
     OtdrAlertDetailView,
+    OtdrAlertStatusView,
     OtdrAlertsView,
     OtdrLocateView,
 )
@@ -434,6 +436,16 @@ urlpatterns = [
     # EV-0128: pontos OTDR fixados no mapa para toda a equipa
     path("otdr-alerts/", OtdrAlertsView.as_view(), name="otdr-alerts"),
     path("otdr-alerts/<int:alert_id>/", OtdrAlertDetailView.as_view(), name="otdr-alert-detail"),
+    path(
+        "otdr-alerts/<int:alert_id>/status/",
+        OtdrAlertStatusView.as_view(),
+        name="otdr-alert-status",
+    ),
+    path(
+        "cables/<int:cable_id>/otdr-alerts/",
+        CableOtdrHistoryView.as_view(),
+        name="cable-otdr-history",
+    ),
     path(
         "otdr-alerts/<int:alert_id>/clear/",
         OtdrAlertClearView.as_view(),
