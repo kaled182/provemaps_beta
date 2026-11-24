@@ -164,3 +164,44 @@ class PonEventsSerializer(serializers.Serializer):
     since = serializers.DateTimeField(allow_null=True)
     truncated = serializers.BooleanField()
     events = OnuEventSerializer(many=True)
+
+
+# ── EV-0109: tendência 24 h do RX da PON e tráfego da porta ─────────────────
+class PonTrendQuerySerializer(serializers.Serializer):
+    device = serializers.IntegerField(min_value=1)
+    pon = serializers.CharField(max_length=32)
+
+
+class PonRxPointSerializer(serializers.Serializer):
+    t = serializers.DateTimeField()
+    rx_avg_dbm = serializers.FloatField()
+    rx_worst_dbm = serializers.FloatField()
+    onus = serializers.IntegerField()
+
+
+class TrafficPointSerializer(serializers.Serializer):
+    t = serializers.DateTimeField()
+    bps = serializers.FloatField(allow_null=True)
+
+
+class PonTrafficSerializer(serializers.Serializer):
+    available = serializers.BooleanField()
+    in_bps = serializers.FloatField(allow_null=True)
+    out_bps = serializers.FloatField(allow_null=True)
+    at = serializers.DateTimeField(allow_null=True)
+    stale = serializers.BooleanField()
+    out = TrafficPointSerializer(many=True)
+
+
+# «in» é palavra reservada em Python: o campo entra com o nome real da resposta.
+PonTrafficSerializer._declared_fields["in"] = TrafficPointSerializer(many=True)
+
+
+class PonTrendSerializer(serializers.Serializer):
+    device_id = serializers.IntegerField()
+    pon_id = serializers.CharField()
+    hours = serializers.IntegerField()
+    rx = PonRxPointSerializer(many=True)
+    traffic = PonTrafficSerializer()
+    zabbix_ok = serializers.BooleanField()
+    zabbix_error = serializers.CharField(allow_null=True)

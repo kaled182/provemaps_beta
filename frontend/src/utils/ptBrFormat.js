@@ -66,3 +66,13 @@ export function formatSince(iso, firstSeen = false, now = Date.now()) {
   const d = formatDuration((now - t) / 1000)
   return firstSeen ? `≥ ${d}` : `há ${d}`
 }
+
+/** EV-0109: bits por segundo → «950 kbps» / «8,8 Mbps» / «1,2 Gbps»; ausência → «—». */
+export function formatBps(bps) {
+  if (!isNum(bps)) return DASH
+  const v = Number(bps)
+  if (Math.abs(v) >= 1e9) return `${formatNumber(v / 1e9, 1)} Gbps`
+  if (Math.abs(v) >= 1e6) return `${formatNumber(v / 1e6, 1)} Mbps`
+  if (Math.abs(v) >= 1e3) return `${formatNumber(v / 1e3, 0)} kbps`
+  return `${formatNumber(v, 0)} bps`
+}

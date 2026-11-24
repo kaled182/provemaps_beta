@@ -35,6 +35,15 @@
         <dd data-testid="insp-sfp-temp" title="não coletado">—</dd>
       </dl>
 
+      <!-- EV-0109: tendência 24 h do RX médio e tráfego atual da porta -->
+      <PonTrend
+        v-if="pon && olt?.device_id"
+        :device-id="olt.device_id"
+        :pon-id="portId"
+        :current-rx="pon.rx_avg_dbm ?? null"
+        :thresholds="thresholds"
+      />
+
       <!-- EV-0107: histograma de saúde óptica — clicar filtra a tabela por essa faixa -->
       <div v-if="pon" class="mt-3" data-testid="insp-bands">
         <p class="text-xs font-semibold text-neutral-700">Saúde óptica das ONUs</p>
@@ -137,6 +146,7 @@ import { OCCUPANCY_LIMIT } from '@/composables/useGponOverview'
 import { formatDbm, formatInt, formatPercent } from '@/utils/ptBrFormat'
 import { ponState } from './chassisLed'
 import { copyText, ponDiagnostics, ponOsSummary, ponSignalBands } from './ponDiagnosis'
+import PonTrend from './PonTrend.vue'
 
 defineEmits(['clear', 'band'])
 const props = defineProps({

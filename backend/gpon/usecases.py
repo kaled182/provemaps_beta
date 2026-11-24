@@ -58,6 +58,12 @@ EVENTS_HOURS_DEFAULT = 24
 EVENTS_HOURS_MAX = 168
 EVENTS_LIMIT = 500
 
+# EV-0109: tendência da PON (tendências horárias do Zabbix) e tráfego atual da porta
+TREND_HOURS = 24
+TREND_CACHE_KEY = "gpon:pon-trend:{device_id}:{pon_id}"
+TREND_CACHE_SECONDS = 300
+TRAFFIC_STALE_SECONDS = 600
+
 HISTORY_HOURS_MIN = 1
 HISTORY_HOURS_MAX = 168
 HISTORY_HOURS_DEFAULT = 24
@@ -879,3 +885,158 @@ def pon_events(
             for e in rows[:EVENTS_LIMIT]
         ],
     }
+
+
+def zte_pon_ifindex(pon_id: str, rack: int = 1) -> int | None:
+    """«slot/porta» → ``ifIndex`` ZTE ``0x11 RR SS PP`` (inversa de ``zte_pon_from_ifindex``)."""
+    try:
+        slot, port = (int(x) for x in str(pon_id).split("/"))
+    except (TypeError, ValueError):
+        return None
+    if not (0 <= slot <= 0xFF and 0 <= port <= 0xFF):
+        return None
+    return (parsers.ZTE_GPON_IFINDEX_TYPE << 24) | (rack << 16) | (slot << 8) | port
+
+
+def _num(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _hourly_rx(trends: list[Mapping[str, Any]], rx_itemids: set[str]) -> list[dict[str, Any]]:
+    """Por hora: média das médias e pior mínimo das ONUs, só com horas «limpas».
+
+    Uma hora cujo mínimo sai da gama de dBm (a ZTE devolve -80 com a ONU offline) mistura
+    sentinela com sinal real — fica de fora dessa ONU nessa hora, em vez de puxar a média.
+    """
+    by_clock: dict[int, list[tuple[float, float]]] = defaultdict(list)
+    for t in trends:
+        if str(t.get("itemid")) not in rx_itemids:
+            continue
+        low, avg = _num(t.get("value_min")), _num(t.get("value_avg"))
+        if low is None or avg is None or not is_plausible_dbm(low) or not is_plausible_dbm(avg):
+            continue
+        by_clock[int(t["clock"])].append((avg, low))
+    return [
+        {
+            "t": _iso(datetime.fromtimestamp(clock, tz=UTC)),
+            "rx_avg_dbm": round(sum(a for a, _ in vals) / len(vals), 2),
+            "rx_worst_dbm": round(min(low for _, low in vals), 2),
+            "onus": len(vals),
+        }
+        for clock, vals in sorted(by_clock.items())
+    ]
+
+
+def _hourly_traffic(trends: list[Mapping[str, Any]], itemid: str | None) -> list[dict[str, Any]]:
+    if not itemid:
+        return []
+    return [
+        {
+            "t": _iso(datetime.fromtimestamp(int(t["clock"]), tz=UTC)),
+            "bps": _num(t.get("value_avg")),
+        }
+        for t in sorted(trends, key=lambda x: int(x["clock"]))
+        if str(t.get("itemid")) == itemid
+    ]
+
+
+def pon_trend(device_id: int, pon_id: str, now: datetime | None = None) -> dict[str, Any]:
+    """Tendência de 24 h do RX da PON e tráfego da porta (EV-0109), em cache 5 min.
+
+    RX: tendências HORÁRIAS do Zabbix (``trend.get``, uma chamada para todas as ONUs) — não
+    um ``history.get`` por ONU. A hora em curso ainda não tem tendência: o ecrã junta-lhe o
+    RX médio da última coleta. Tráfego: ZTE pelo ``ifIndex`` da PON; a VSOL não expõe tráfego
+    por PON no Zabbix (só as GE de uplink) → ``traffic.available`` false.
+    """
+    now = now or timezone.now()
+    device = get_object_or_404(Device.objects.only("id", "zabbix_hostid", "name"), pk=device_id)
+    key = TREND_CACHE_KEY.format(device_id=device_id, pon_id=pon_id)
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+
+    states = list(
+        OnuState.objects.filter(device_id=device_id, pon_id=pon_id)
+        .exclude(rx_item_key="")
+        .values_list("vendor", "rx_item_key")
+    )
+    vendor = states[0][0] if states else ("zte" if "ZTE" in device.name.upper() else "vsol")
+    rx_keys = sorted({k for _, k in states})
+    ifindex = zte_pon_ifindex(pon_id) if vendor == parsers.VENDOR_ZTE else None
+    traffic_keys = (
+        {"in": f"net.if.in[ifHCInOctets.{ifindex}]", "out": f"net.if.out[ifHCOutOctets.{ifindex}]"}
+        if ifindex is not None
+        else {}
+    )
+    payload: dict[str, Any] = {
+        "device_id": device_id,
+        "pon_id": pon_id,
+        "hours": TREND_HOURS,
+        "rx": [],
+        "traffic": {
+            "available": bool(traffic_keys),
+            "in_bps": None,
+            "out_bps": None,
+            "at": None,
+            "stale": False,
+            "in": [],
+            "out": [],
+        },
+        "zabbix_ok": True,
+        "zabbix_error": None,
+    }
+    hostid = str(device.zabbix_hostid or "")
+    if not hostid or not (rx_keys or traffic_keys):
+        cache.set(key, payload, TREND_CACHE_SECONDS)
+        return payload
+    try:
+        items = _request(
+            "item.get",
+            {
+                "hostids": [hostid],
+                "filter": {"key_": rx_keys + list(traffic_keys.values())},
+                "output": ["itemid", "key_", "lastvalue", "lastclock"],
+            },
+        )
+        by_key = {str(i.get("key_")): i for i in items if isinstance(i, Mapping)}
+        rx_ids = {str(by_key[k]["itemid"]) for k in rx_keys if k in by_key}
+        traffic_ids = {d: str(by_key[k]["itemid"]) for d, k in traffic_keys.items() if k in by_key}
+        till = int(now.timestamp())
+        trends = []
+        if rx_ids or traffic_ids:
+            trends = _request(
+                "trend.get",
+                {
+                    "itemids": sorted(rx_ids | set(traffic_ids.values())),
+                    "time_from": till - TREND_HOURS * 3600,
+                    "time_till": till,
+                    "output": ["itemid", "clock", "value_min", "value_avg", "value_max"],
+                },
+            )
+        payload["rx"] = _hourly_rx(trends, rx_ids)
+        traffic = payload["traffic"]
+        traffic["available"] = bool(traffic_ids)
+        traffic["in"] = _hourly_traffic(trends, traffic_ids.get("in"))
+        traffic["out"] = _hourly_traffic(trends, traffic_ids.get("out"))
+        if traffic_ids:
+            last_in = by_key[traffic_keys["in"]] if "in" in traffic_ids else {}
+            last_out = by_key[traffic_keys["out"]] if "out" in traffic_ids else {}
+            clock = (
+                max(int(_num(x.get("lastclock")) or 0) for x in (last_in, last_out) if x)
+                if (last_in or last_out)
+                else 0
+            )
+            if clock > 0:
+                traffic["in_bps"] = _num(last_in.get("lastvalue")) if last_in else None
+                traffic["out_bps"] = _num(last_out.get("lastvalue")) if last_out else None
+                traffic["at"] = _iso(datetime.fromtimestamp(clock, tz=UTC))
+                traffic["stale"] = till - clock > TRAFFIC_STALE_SECONDS
+    except ZabbixUnavailable as exc:
+        payload["zabbix_ok"] = False
+        payload["zabbix_error"] = str(exc)
+        return payload  # sem cache: tenta de novo no próximo pedido
+    cache.set(key, payload, TREND_CACHE_SECONDS)
+    return payload

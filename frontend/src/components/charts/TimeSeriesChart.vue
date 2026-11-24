@@ -32,6 +32,8 @@ const props = defineProps({
   beginAtZero: { type: Boolean, default: false },
   spanGaps: { type: Boolean, default: false },
   emptyMessage: { type: String, default: 'Sem dados para o período selecionado' },
+  /** EV-0109: mini-gráfico (sparkline) — sem legenda nem eixo X, poucos ticks no Y */
+  compact: { type: Boolean, default: false },
 })
 
 const canvasRef = ref(null)
@@ -140,7 +142,7 @@ const buildOptions = () => {
     interaction: { mode: 'nearest', axis: 'x', intersect: false },
     plugins: {
       legend: {
-        display: true,
+        display: !props.compact,
         labels: { color: colors.text, boxWidth: 12, usePointStyle: true },
       },
       tooltip: {
@@ -154,13 +156,19 @@ const buildOptions = () => {
     scales: {
       x: {
         type: 'linear',
+        display: !props.compact,
         grid: { color: colors.grid },
         ticks: { color: colors.text, maxTicksLimit: 8, maxRotation: 0, callback: (v) => formatTick(v) },
       },
       y: {
         beginAtZero: props.beginAtZero,
-        grid: { color: colors.grid },
-        ticks: { color: colors.text, callback: (v) => formatValue(v) },
+        grid: { color: colors.grid, display: !props.compact },
+        ticks: {
+          color: colors.text,
+          maxTicksLimit: props.compact ? 3 : undefined,
+          font: props.compact ? { size: 10 } : undefined,
+          callback: (v) => formatValue(v),
+        },
       },
     },
   }

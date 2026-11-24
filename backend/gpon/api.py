@@ -22,6 +22,8 @@ from .serializers import (
     OnuHistorySerializer,
     PonEventsQuerySerializer,
     PonEventsSerializer,
+    PonTrendQuerySerializer,
+    PonTrendSerializer,
 )
 
 
@@ -68,3 +70,19 @@ class PonEventsView(APIView):
         query.is_valid(raise_exception=True)
         v = query.validated_data
         return Response(usecases.pon_events(v["device"], v["pon"], v["hours"]))
+
+
+class PonTrendView(APIView):
+    @extend_schema(
+        parameters=[
+            OpenApiParameter("device", int, description="device_id da OLT"),
+            OpenApiParameter("pon", str, description="pon_id (ex.: 9/14)"),
+        ],
+        responses=PonTrendSerializer,
+        summary="Tendência 24 h do RX da PON (médias horárias) e tráfego atual da porta",
+    )
+    def get(self, request: Request) -> Response:
+        query = PonTrendQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        v = query.validated_data
+        return Response(usecases.pon_trend(v["device"], v["pon"]))
