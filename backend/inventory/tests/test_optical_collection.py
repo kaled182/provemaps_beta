@@ -12,6 +12,8 @@ from inventory.models import Device, Port, Site
 from inventory.tasks import OPTICAL_LOCK_KEY, update_all_port_optical_levels
 
 ZABBIX = "inventory.domain.optical.zabbix_request"
+# EV-0082: o item.get pede `state`/`lastclock`; sem eles a leitura é descartada.
+OK = {"state": "0", "lastclock": "1795450000"}
 
 
 def test_plausible_dbm_range():
@@ -28,7 +30,7 @@ def test_missing_key_is_not_fetched_again_nor_without_hostid():
 
     def fake(method, params=None, *a, **k):
         calls.append((method, params))
-        return [{"itemid": "1", "key_": "rx.ok", "lastvalue": "-20.5", "value_type": "0"}]
+        return [{"itemid": "1", "key_": "rx.ok", "lastvalue": "-20.5", "value_type": "0", **OK}]
 
     with patch(ZABBIX, side_effect=fake):
         cache_map = optical._bulk_fetch_item_values("101", ["rx.ok", "rx.nao-existe"])
@@ -77,13 +79,14 @@ def test_task_one_call_per_host_and_rejects_non_dbm(ports):
     def fake(method, params=None, *a, **k):
         calls.append(method)
         return [
-            {"itemid": "1", "key_": "rx.good", "lastvalue": "-19.25", "value_type": "0"},
-            {"itemid": "2", "key_": "tx.good", "lastvalue": "2.1", "value_type": "0"},
+            {"itemid": "1", "key_": "rx.good", "lastvalue": "-19.25", "value_type": "0", **OK},
+            {"itemid": "2", "key_": "tx.good", "lastvalue": "2.1", "value_type": "0", **OK},
             {
                 "itemid": "3",
                 "key_": "net.if.in[ifHCInOctets.1]",
                 "lastvalue": "2246566704",
                 "value_type": "3",
+                **OK,
             },
         ]
 

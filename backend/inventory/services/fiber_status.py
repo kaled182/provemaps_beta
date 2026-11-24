@@ -95,6 +95,8 @@ def fetch_interface_status_advanced(
                     "itemid",
                     "key_",
                     "lastvalue",
+                    "lastclock",
+                    "state",
                     "value_type",
                     "name",
                 ],
@@ -153,6 +155,8 @@ def fetch_interface_status_advanced(
                     "itemid",
                     "key_",
                     "lastvalue",
+                    "lastclock",
+                    "state",
                     "value_type",
                     "name",
                 ],
@@ -218,8 +222,21 @@ def fetch_interface_status_advanced(
         except (TypeError, ValueError):
             return None
 
-    rx_val = _parse_float(rx_item.get("lastvalue")) if rx_item else None
-    tx_val = _parse_float(tx_item.get("lastvalue")) if tx_item else None
+    # EV-0082: a mesma regra da coleta — item nunca coletado/unsupported devolve
+    # `lastvalue "0"`, que aqui virava `zero_signal`. Import tardio: domain.optical
+    # importa este módulo.
+    from inventory.domain.optical import validate_optical_reading
+
+    rx_val = (
+        validate_optical_reading(rx_item, _parse_float(rx_item.get("lastvalue")))[0]
+        if rx_item
+        else None
+    )
+    tx_val = (
+        validate_optical_reading(tx_item, _parse_float(tx_item.get("lastvalue")))[0]
+        if tx_item
+        else None
+    )
 
     if rx_val is not None or tx_val is not None:
         dist_thresholds = _get_thresholds_for_length(length_km)

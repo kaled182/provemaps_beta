@@ -16,7 +16,6 @@ from django.db import models
 from django.utils import timezone
 
 from inventory.domain import optical as optical_domain
-from inventory.domain.optical import is_plausible_dbm
 from inventory.models import Port
 
 logger = logging.getLogger(__name__)
@@ -221,6 +220,8 @@ def update_all_port_optical_levels() -> dict[str, Any]:
             "name",
             "rx_power_item_key",
             "tx_power_item_key",
+            "last_rx_power",
+            "last_tx_power",
             "device__zabbix_hostid",
         )
         .filter(
@@ -258,19 +259,20 @@ def update_all_port_optical_levels() -> dict[str, Any]:
             snapshot = snapshots_map.get(port.pk) or {}
             rx_dbm = snapshot.get("rx_dbm")
             tx_dbm = snapshot.get("tx_dbm")
-            # EV-0063: fora da gama de potência óptica não é dBm (ex.: contador de
-            # octetos configurado como chave de RX) — não se grava; regista-se.
+            # EV-0063/EV-0082: o snapshot só traz `rx_dbm`/`tx_dbm` com leitura válida
+            # (item coletado e suportado, valor em -60…+15 dBm, sem sentinela de ONU);
+            # o motivo da leitura descartada vem em `rx_problem`/`tx_problem`. Essa
+            # ponta não é gravada e `last_optical_check` não avança por ela — o valor
+            # anterior fica com a hora antiga e a UI marca-o como leitura antiga.
             bad = [
-                f"{label}={value:g} ({snapshot.get(label.lower() + '_key')})"
-                for label, value in (("RX", rx_dbm), ("TX", tx_dbm))
-                if value is not None and not is_plausible_dbm(value)
+                f"{label} ({snapshot.get(prefix + '_key')}): {snapshot[prefix + '_problem']}"
+                for label, prefix in (("RX", "rx"), ("TX", "tx"))
+                if snapshot.get(prefix + "_problem")
             ]
             if bad:
                 msg = f"Port {port.id} ({port.name}) chave não devolve dBm: {', '.join(bad)}"
                 logger.warning("[Optical Levels Task] %s", msg)
                 errors.append(msg)
-                rx_dbm = rx_dbm if rx_dbm is None or is_plausible_dbm(rx_dbm) else None
-                tx_dbm = tx_dbm if tx_dbm is None or is_plausible_dbm(tx_dbm) else None
 
             update_fields: list[str] = []
             if rx_dbm is not None:
@@ -280,6 +282,17 @@ def update_all_port_optical_levels() -> dict[str, Any]:
                 port.last_tx_power = tx_dbm
                 update_fields.append("last_tx_power")
             if update_fields:
+                # EV-0082: `last_optical_check` é um só para RX e TX. Se só uma ponta
+                # tem leitura válida, a outra (chave configurada sem leitura) não pode
+                # ficar com o valor antigo sob a hora nova — passaria por fresca.
+                for field, key_field, value in (
+                    ("last_rx_power", "rx_power_item_key", rx_dbm),
+                    ("last_tx_power", "tx_power_item_key", tx_dbm),
+                ):
+                    has_key = bool((getattr(port, key_field, "") or "").strip())
+                    if value is None and has_key and getattr(port, field) is not None:
+                        setattr(port, field, None)
+                        update_fields.append(field)
                 port.last_optical_check = now
                 update_fields.append("last_optical_check")
                 port.save(update_fields=update_fields)

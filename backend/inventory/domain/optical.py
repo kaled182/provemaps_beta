@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, cast
 
 from integrations.zabbix.zabbix_service import zabbix_request
@@ -18,6 +18,10 @@ __all__ = [
     "_fetch_port_optical_snapshot",
     "fetch_ports_optical_snapshots",
     "fetch_port_optical_snapshot",
+    "is_plausible_dbm",
+    "optical_item_problem",
+    "optical_value_problem",
+    "validate_optical_reading",
 ]
 
 
@@ -35,6 +39,77 @@ OPTICAL_DBM_MAX = 15.0
 
 def is_plausible_dbm(value: float | None) -> bool:
     return value is not None and OPTICAL_DBM_MIN <= float(value) <= OPTICAL_DBM_MAX
+
+
+# EV-0082: os itens de ONU das OLT ZTE («OLT ZTE GPON», `onu.rx[<serial>,<slot>,<pon>,<onu>]`)
+# e VSOL (`SinalRXS0P<pon>[GPON0/<pon>:<onu> - <onu>]`) usam valores-sentinela: 0 = ONU
+# online sem leitura, -80 = ONU offline. Nessas chaves não são medidas. Fora delas, 0 dBm
+# é potência real possível (TX de muitos transceptores) e grava-se.
+OPTICAL_SENTINEL_KEY_PREFIXES = ("onu.rx[", "onu.tx[", "sinalrxs0p")
+OPTICAL_SENTINEL_VALUES = frozenset({0.0, -80.0})
+
+
+def optical_item_problem(item: Mapping[str, Any] | None) -> str | None:
+    """Return why an ``item.get`` row is not a current reading (``None`` when it is).
+
+    EV-0082: o Zabbix devolve ``lastvalue "0"`` em itens nunca coletados
+    (``lastclock`` 0) e em itens «unsupported» (``state`` 1); usá-lo gravava 0,00 dBm
+    como leitura fresca. Exige os campos ``state``/``lastclock``/``lastvalue`` no
+    ``output`` do ``item.get`` — campo ausente conta como leitura inválida.
+    """
+    if not item:
+        return "item inexistente"
+    state = str(item.get("state", "")).strip()
+    if state != "0":
+        if state == "1":
+            return "item unsupported no Zabbix"
+        return f"estado do item desconhecido ({state or 'ausente'})"
+    try:
+        lastclock = int(str(item.get("lastclock") or "0").strip())
+    except (TypeError, ValueError):
+        lastclock = 0
+    if lastclock <= 0:
+        return "item sem coleta (lastclock 0)"
+    raw = item.get("lastvalue")
+    if raw is None or not str(raw).strip():
+        return "lastvalue vazio"
+    return None
+
+
+def optical_value_problem(key: str | None, value: float | None) -> str | None:
+    """Return why a numeric value is not an optical power in dBm (``None`` when it is)."""
+    if value is None:
+        return "valor não numérico"
+    if not is_plausible_dbm(value):
+        return f"{value:g} fora de {OPTICAL_DBM_MIN:g}…+{OPTICAL_DBM_MAX:g} dBm"
+    key_lower = (key or "").strip().lower()
+    if key_lower.startswith(OPTICAL_SENTINEL_KEY_PREFIXES) and (
+        float(value) in OPTICAL_SENTINEL_VALUES
+    ):
+        return f"{value:g} é valor-sentinela de ONU sem leitura"
+    return None
+
+
+def validate_optical_reading(
+    item: Mapping[str, Any] | None,
+    value: float | None,
+    key: str | None = None,
+) -> tuple[float | None, str | None]:
+    """Return ``(dbm, problem)`` for an item and its numeric value.
+
+    ``(None, None)`` = não há item (nada a registar); ``(None, motivo)`` = há item
+    mas o valor não é uma medida atual em dBm; ``(dbm, None)`` = leitura válida.
+    Regra única da coleta (``fetch_ports_optical_snapshots``) e do estado do cabo
+    (``services.fiber_status``).
+    """
+    if item is None:
+        return None, None
+    problem = optical_item_problem(item) or optical_value_problem(
+        key or cast(str | None, item.get("key_")), value
+    )
+    if problem:
+        return None, problem
+    return float(cast(float, value)), None
 
 
 def _value_cache_key(hostid: str | int | None, key: str | None) -> str:
@@ -65,7 +140,7 @@ def _fetch_item_value(
         return value_cache[cache_key]
 
     params: dict[str, Any] = {
-        "output": ["itemid", "lastvalue", "value_type", "units"],
+        "output": ["itemid", "key_", "lastvalue", "lastclock", "state", "value_type", "units"],
         "hostids": [str(hostid)],
         "filter": {"key_": key},
         "limit": 1,
@@ -82,7 +157,8 @@ def _fetch_item_value(
     item = items[0]
     raw = item.get("lastvalue")
     value = _safe_float(raw)
-    if value is None:
+    # EV-0082: item sem leitura atual (nunca coletado, unsupported) não vai ao histórico.
+    if value is None and optical_item_problem(item) is None:
         try:
             history = cast(
                 list[dict[str, Any]],
@@ -274,7 +350,12 @@ def _resolve_optical_keys(
             tx_key = candidate.strip()
             break
 
-    if (not rx_key or not tx_key) and port.name:
+    # EV-0082: a descoberta pelo nome da porta (LIKE no Zabbix) só corre quando as chaves
+    # descobertas são gravadas e revistas (descoberta de equipamentos, `persist_keys=True`).
+    # Na coleta periódica (`persist_keys=False`) uma chave vazia é «sem leitura»: antes a
+    # porta lia, a cada ciclo, um item escolhido por heurística — de outra ONU/interface —
+    # e esse valor era gravado como medida (o EV-0081 esvazia chaves erradas de propósito).
+    if persist_keys and (not rx_key or not tx_key) and port.name:
         discovered = _discover_optical_keys_by_portname(
             hostid,
             port.name,
@@ -307,7 +388,7 @@ def _bulk_fetch_item_values(hostid: str, keys: Iterable[str]) -> ValueCache:
         return {}
 
     params: dict[str, Any] = {
-        "output": ["itemid", "key_", "lastvalue", "value_type", "units"],
+        "output": ["itemid", "key_", "lastvalue", "lastclock", "state", "value_type", "units"],
         "hostids": [hostid],
         "filter": {"status": "0", "key_": unique_keys},
         "limit": max(len(unique_keys), 1),
@@ -339,7 +420,8 @@ def _bulk_fetch_item_values(hostid: str, keys: Iterable[str]) -> ValueCache:
         value = _safe_float(raw)
         cache[cache_key] = (value, raw, item)
         missing_keys.discard(key_value)
-        if value is None:
+        # EV-0082: item sem leitura atual não vai ao histórico (o valor seria antigo).
+        if value is None and optical_item_problem(item) is None:
             try:
                 value_type = int(item.get("value_type", 0))
             except (TypeError, ValueError):
@@ -399,6 +481,39 @@ def _bulk_fetch_item_values(hostid: str, keys: Iterable[str]) -> ValueCache:
         )
 
     return cache
+
+
+def _read_optical_value(
+    hostid: str,
+    key: str,
+    value_cache: ValueCache | None,
+) -> tuple[float | None, Any | None, str | None]:
+    """Return ``(dbm, raw, problem)`` for a port key — ``dbm`` só com leitura válida."""
+    value, raw, item = _fetch_item_value(hostid, key, value_cache=value_cache)
+    dbm, problem = validate_optical_reading(item, value, key)
+    return dbm, raw, problem
+
+
+def _optical_payload(
+    rx: tuple[float | None, Any | None, str | None],
+    tx: tuple[float | None, Any | None, str | None],
+    rx_key: str,
+    tx_key: str,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "rx_dbm": rx[0],
+        "tx_dbm": tx[0],
+        "rx_raw": rx[1],
+        "tx_raw": tx[1],
+        "rx_key": rx_key or None,
+        "tx_key": tx_key or None,
+    }
+    # EV-0082: motivo da leitura descartada (só quando há item e o valor não serve).
+    if rx[2]:
+        payload["rx_problem"] = rx[2]
+    if tx[2]:
+        payload["tx_problem"] = tx[2]
+    return payload
 
 
 def fetch_port_optical_snapshot(
@@ -462,29 +577,11 @@ def _fetch_port_optical_snapshot(
         persist_keys=persist_keys,
     )
 
-    rx_value = rx_raw = None
-    tx_value = tx_raw = None
-    if rx_key:
-        rx_value, rx_raw, _ = _fetch_item_value(
-            hostid,
-            rx_key,
-            value_cache=value_cache,
-        )
-    if tx_key:
-        tx_value, tx_raw, _ = _fetch_item_value(
-            hostid,
-            tx_key,
-            value_cache=value_cache,
-        )
+    empty: tuple[float | None, Any | None, str | None] = (None, None, None)
+    rx = _read_optical_value(hostid, rx_key, value_cache) if rx_key else empty
+    tx = _read_optical_value(hostid, tx_key, value_cache) if tx_key else empty
 
-    result: dict[str, Any] = {
-        "rx_dbm": rx_value,
-        "tx_dbm": tx_value,
-        "rx_raw": rx_raw,
-        "tx_raw": tx_raw,
-        "rx_key": rx_key or None,
-        "tx_key": tx_key or None,
-    }
+    result = _optical_payload(rx, tx, rx_key, tx_key)
     if status_meta:
         result["meta"] = status_meta
     if updates:
@@ -546,30 +643,12 @@ def fetch_ports_optical_snapshots(
 
         value_cache = _bulk_fetch_item_values(hostid, bulk_keys)
 
+        empty: tuple[float | None, Any | None, str | None] = (None, None, None)
         for port, rx_key, tx_key, status_meta, updates in contexts:
-            rx_value = rx_raw = None
-            tx_value = tx_raw = None
-            if rx_key:
-                rx_value, rx_raw, _ = _fetch_item_value(
-                    hostid,
-                    rx_key,
-                    value_cache=value_cache,
-                )
-            if tx_key:
-                tx_value, tx_raw, _ = _fetch_item_value(
-                    hostid,
-                    tx_key,
-                    value_cache=value_cache,
-                )
+            rx = _read_optical_value(hostid, rx_key, value_cache) if rx_key else empty
+            tx = _read_optical_value(hostid, tx_key, value_cache) if tx_key else empty
 
-            payload: dict[str, Any] = {
-                "rx_dbm": rx_value,
-                "tx_dbm": tx_value,
-                "rx_raw": rx_raw,
-                "tx_raw": tx_raw,
-                "rx_key": rx_key or None,
-                "tx_key": tx_key or None,
-            }
+            payload = _optical_payload(rx, tx, rx_key, tx_key)
             if status_meta:
                 payload["meta"] = status_meta
             if updates:
