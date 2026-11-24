@@ -147,6 +147,12 @@ app.conf.update(
             # pela seguinte — expira em vez de se acumular na fila.
             "options": {"queue": "zabbix", "expires": 55},
         },
+        # EV-0095: estado das ONU (1 item.get por OLT); a tarefa tem lock próprio (cache.add).
+        "collect-onu-states": {
+            "task": "gpon.tasks.collect_onu_states",
+            "schedule": 120.0,
+            "options": {"queue": "zabbix", "expires": 110},
+        },
         # Dispatch de alarmes de fibra (Fase A): a cada 1 min lê FiberEvent novos
         # e envia notificação WhatsApp/Email para configs aplicáveis.
         "dispatch-fiber-alarms": {

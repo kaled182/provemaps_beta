@@ -88,6 +88,13 @@ class RuntimeConfig:
     optical_rx_warning_threshold: float
     optical_rx_critical_threshold: float
     optical_thresholds_by_distance: dict
+    # EV-0095: capacidade de ONUs por PON (ocupação no ecrã «Monitoramento GPON»).
+    gpon_pon_capacity: int
+    epon_pon_capacity: int
+
+
+PON_CAPACITY_MIN = 1
+PON_CAPACITY_MAX = 1024
 
 
 def _float_setting(name: str, default: float) -> float:
@@ -95,6 +102,15 @@ def _float_setting(name: str, default: float) -> float:
         return float(getattr(settings, name, default))
     except (TypeError, ValueError):
         return default
+
+
+def _int_setting(name: str, default: int, low: int, high: int) -> int:
+    """Inteiro em ``low..high``; ausente, inválido ou fora da gama → ``default``."""
+    try:
+        value = int(str(getattr(settings, name, default)).strip())
+    except (TypeError, ValueError):
+        return default
+    return value if low <= value <= high else default
 
 
 def _dict_setting(name: str, default: dict) -> dict:
@@ -197,6 +213,10 @@ def _fallback_config() -> RuntimeConfig:
         optical_rx_warning_threshold=_float_setting("OPTICAL_RX_WARNING_THRESHOLD", -24.0),
         optical_rx_critical_threshold=_float_setting("OPTICAL_RX_CRITICAL_THRESHOLD", -27.0),
         optical_thresholds_by_distance=_dict_setting("OPTICAL_THRESHOLDS_BY_DISTANCE", {}),
+        gpon_pon_capacity=_int_setting(
+            "GPON_PON_CAPACITY", 128, PON_CAPACITY_MIN, PON_CAPACITY_MAX
+        ),
+        epon_pon_capacity=_int_setting("EPON_PON_CAPACITY", 64, PON_CAPACITY_MIN, PON_CAPACITY_MAX),
     )
 
 
@@ -358,6 +378,10 @@ def get_runtime_config() -> RuntimeConfig:
         optical_rx_warning_threshold=_float_setting("OPTICAL_RX_WARNING_THRESHOLD", -24.0),
         optical_rx_critical_threshold=_float_setting("OPTICAL_RX_CRITICAL_THRESHOLD", -27.0),
         optical_thresholds_by_distance=_dict_setting("OPTICAL_THRESHOLDS_BY_DISTANCE", {}),
+        gpon_pon_capacity=_int_setting(
+            "GPON_PON_CAPACITY", 128, PON_CAPACITY_MIN, PON_CAPACITY_MAX
+        ),
+        epon_pon_capacity=_int_setting("EPON_PON_CAPACITY", 64, PON_CAPACITY_MIN, PON_CAPACITY_MAX),
     )
 
 

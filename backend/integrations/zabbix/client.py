@@ -105,6 +105,8 @@ READ_ONLY_SAFE_METHODS = {
     "map.get",
     "application.get",
     "hostinterface.get",
+    # EV-0095: texto do motivo de queda das ONU ZTE (`onu.offreason`) vem do valuemap do item.
+    "valuemap.get",
 }
 
 UNAUTHENTICATED_METHODS = {"user.login", "apiinfo.version"}

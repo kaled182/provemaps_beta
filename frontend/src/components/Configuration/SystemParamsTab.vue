@@ -503,6 +503,20 @@
             <p class="text-xs text-neutral-500 mt-1">Padrão: -27 dBm</p>
           </div>
         </div>
+        <div class="grid grid-cols-2 gap-6 mt-6">
+          <div>
+            <label class="label-custom" for="gpon-pon-capacity">Capacidade da PON GPON (ONUs)</label>
+            <input id="gpon-pon-capacity" v-model="config.GPON_PON_CAPACITY" type="number" min="1" step="1"
+              class="input-custom" placeholder="128" autocomplete="off" data-testid="cfg-gpon-pon-capacity" />
+            <p class="text-xs text-neutral-500 mt-1">Padrão: 128</p>
+          </div>
+          <div>
+            <label class="label-custom" for="epon-pon-capacity">Capacidade da PON EPON (ONUs)</label>
+            <input id="epon-pon-capacity" v-model="config.EPON_PON_CAPACITY" type="number" min="1" step="1"
+              class="input-custom" placeholder="64" autocomplete="off" data-testid="cfg-epon-pon-capacity" />
+            <p class="text-xs text-neutral-500 mt-1">Padrão: 64</p>
+          </div>
+        </div>
       </div>
 
       <div class="flex justify-end gap-3">

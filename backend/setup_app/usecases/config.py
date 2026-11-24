@@ -122,6 +122,9 @@ EDITABLE_KEYS = [
     "OPTICAL_RX_WARNING_THRESHOLD",
     "OPTICAL_RX_CRITICAL_THRESHOLD",
     "OPTICAL_THRESHOLDS_BY_DISTANCE",
+    # EV-0095: capacidade de ONUs por PON (inteiros 1..1024)
+    "GPON_PON_CAPACITY",
+    "EPON_PON_CAPACITY",
     # Backup automation
     "BACKUP_AUTO_ENABLED",
     "BACKUP_FREQUENCY",
@@ -143,6 +146,8 @@ _EXPORT_EXCLUDED = {
     "OPTICAL_RX_WARNING_THRESHOLD",
     "OPTICAL_RX_CRITICAL_THRESHOLD",
     "OPTICAL_THRESHOLDS_BY_DISTANCE",
+    "GPON_PON_CAPACITY",
+    "EPON_PON_CAPACITY",
     "BACKUP_AUTO_ENABLED",
     "BACKUP_FREQUENCY",
     "BACKUP_RETENTION_DAYS",
@@ -380,6 +385,8 @@ def _fallback_values(current_values: dict[str, str]) -> dict[str, Any]:
         "OPTICAL_THRESHOLDS_BY_DISTANCE": parse_distance_thresholds(
             runtime_config.optical_thresholds_by_distance
         ),
+        "GPON_PON_CAPACITY": str(runtime_config.gpon_pon_capacity),
+        "EPON_PON_CAPACITY": str(runtime_config.epon_pon_capacity),
         "BACKUP_AUTO_ENABLED": False,
         "BACKUP_FREQUENCY": "weekly",
         "BACKUP_RETENTION_DAYS": "30",
@@ -480,6 +487,9 @@ def _parse_float_str(value: Any, default: float) -> str:
         return str(float(str(value).strip()))
     except Exception:
         return str(default)
+
+
+_PON_CAPACITY_RANGE = (runtime_settings.PON_CAPACITY_MIN, runtime_settings.PON_CAPACITY_MAX)
 
 
 def _clamp_int(raw: str, default: int, low: int, high: int) -> int:
@@ -611,6 +621,12 @@ def build_configuration_payload(
         "OPTICAL_THRESHOLDS_BY_DISTANCE": json.dumps(
             parse_distance_thresholds(data.get("OPTICAL_THRESHOLDS_BY_DISTANCE"))
         ),
+        "GPON_PON_CAPACITY": str(
+            _clamp_int(_str(data, "GPON_PON_CAPACITY"), 128, *_PON_CAPACITY_RANGE)
+        ),
+        "EPON_PON_CAPACITY": str(
+            _clamp_int(_str(data, "EPON_PON_CAPACITY"), 64, *_PON_CAPACITY_RANGE)
+        ),
     }
 
     # E-mail: o backend SMTP do Django segue a secção SMTP
@@ -649,6 +665,8 @@ def _apply_runtime_overrides(payload: dict[str, str]) -> None:
     """Efeito imediato, sem reiniciar: thresholds, e-mail e comandos de restart."""
     os.environ["OPTICAL_RX_WARNING_THRESHOLD"] = payload["OPTICAL_RX_WARNING_THRESHOLD"]
     os.environ["OPTICAL_RX_CRITICAL_THRESHOLD"] = payload["OPTICAL_RX_CRITICAL_THRESHOLD"]
+    os.environ["GPON_PON_CAPACITY"] = payload["GPON_PON_CAPACITY"]
+    os.environ["EPON_PON_CAPACITY"] = payload["EPON_PON_CAPACITY"]
     os.environ["SERVICE_RESTART_COMMANDS"] = payload["SERVICE_RESTART_COMMANDS"]
     settings.EMAIL_BACKEND = payload.get("EMAIL_BACKEND", settings.EMAIL_BACKEND)
     settings.EMAIL_HOST = payload.get("EMAIL_HOST", settings.EMAIL_HOST)
@@ -667,6 +685,11 @@ def _apply_runtime_overrides(payload: dict[str, str]) -> None:
     ):
         try:
             setattr(settings, key, float(payload[key]))
+        except (TypeError, ValueError):
+            setattr(settings, key, default)
+    for key, default in (("GPON_PON_CAPACITY", 128), ("EPON_PON_CAPACITY", 64)):
+        try:
+            setattr(settings, key, int(payload[key]))
         except (TypeError, ValueError):
             setattr(settings, key, default)
     distance = parse_distance_thresholds(payload.get("OPTICAL_THRESHOLDS_BY_DISTANCE"))

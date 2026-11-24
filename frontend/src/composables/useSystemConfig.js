@@ -103,6 +103,9 @@ export function useSystemConfig() {
     // Network thresholds
     OPTICAL_RX_WARNING_THRESHOLD: '-24',
     OPTICAL_RX_CRITICAL_THRESHOLD: '-27',
+    // Capacidade da PON por tecnologia (EV-0095)
+    GPON_PON_CAPACITY: '128',
+    EPON_PON_CAPACITY: '64',
   })
 
   // Estados de teste
@@ -166,7 +169,8 @@ export function useSystemConfig() {
           'MAPBOX_STYLE', 'MAPBOX_CUSTOM_STYLE', 'MAPBOX_ENABLE_3D',
           'ESRI_API_KEY', 'ESRI_BASEMAP',
           'MAP_LANGUAGE', 'MAP_THEME', 'ENABLE_MAP_CLUSTERING', 'ENABLE_DRAWING_TOOLS', 'ENABLE_FULLSCREEN',
-          'OPTICAL_RX_WARNING_THRESHOLD', 'OPTICAL_RX_CRITICAL_THRESHOLD'
+          'OPTICAL_RX_WARNING_THRESHOLD', 'OPTICAL_RX_CRITICAL_THRESHOLD',
+          'GPON_PON_CAPACITY', 'EPON_PON_CAPACITY'
         ]
         
         const booleanFields = new Set([
@@ -369,6 +373,8 @@ export function useSystemConfig() {
       ZABBIX_API_KEY: '',
       OPTICAL_RX_WARNING_THRESHOLD: '-24',
       OPTICAL_RX_CRITICAL_THRESHOLD: '-27',
+      GPON_PON_CAPACITY: '128',
+      EPON_PON_CAPACITY: '64',
     }
     clearTestResults()
   }
