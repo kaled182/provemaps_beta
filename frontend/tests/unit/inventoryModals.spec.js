@@ -62,16 +62,15 @@ describe('FiberCreateModal', () => {
 })
 
 describe('CableStructureModal', () => {
-  it('sem fibra escolhida os botões ficam desativados, com dica (sem alert)', async () => {
+  it('EV-0134: o rodapé só fecha — «Conectar a porta» está no painel da fibra; a fusão chega no EV-0136', async () => {
     const w = mount(CableStructureModal, {
       props: { show: true, cableId: 7 },
       attachTo: document.body,
       global: { stubs: { CableStructureView: true } },
     })
     await flushPromises()
-    expect(q('[data-testid="fiber-hint"]')).not.toBeNull()
-    const fusion = [...document.body.querySelectorAll('.bm-footer button')].find((x) => x.textContent.includes('Criar Fusão'))
-    expect(fusion.disabled).toBe(true)
+    const labels = [...document.body.querySelectorAll('.bm-footer button')].map((x) => x.textContent.trim())
+    expect(labels).toEqual(['Fechar'])
     w.unmount()
   })
 })

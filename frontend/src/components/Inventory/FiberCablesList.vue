@@ -174,8 +174,6 @@
     :cable-id="structureCableId"
     @close="showStructureModal = false"
     @fiber-selected="handleFiberSelected"
-    @fusion-requested="handleFusionRequested"
-    @port-connection-requested="handlePortConnectionRequested"
   />
 
   <CableMapModal
@@ -607,18 +605,6 @@ const handleMapSaved = async () => {
 const handleFiberSelected = (fiber) => {
   console.log('Fibra selecionada:', fiber);
   // TODO: Pode ser usado para destacar a fibra ou armazenar para fusão/conexão
-};
-
-const handleFusionRequested = (fiber) => {
-  console.log('Fusão solicitada para fibra:', fiber);
-  // TODO: Abrir modal de fusão (Fase 3)
-  alert(`Fusão de fibra será implementada na Fase 3\nFibra: ${fiber.number} (${fiber.color})`);
-};
-
-const handlePortConnectionRequested = (fiber) => {
-  console.log('Conexão a porta solicitada para fibra:', fiber);
-  // TODO: Abrir modal de conexão a porta (Fase 3)
-  alert(`Conexão de fibra a porta será implementada na Fase 3\nFibra: ${fiber.number} (${fiber.color})`);
 };
 
 const handleEdit = async (cable) => {

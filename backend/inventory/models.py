@@ -1130,6 +1130,15 @@ class FiberStrand(models.Model):
         related_name="connected_fiber",
         help_text="Porta de dispositivo conectada (DIO, ODF, Switch)",
     )
+    # EV-0134: a fibra tem duas pontas — connected_device_port é a do Site A, esta a do Site B
+    connected_device_port_b = models.OneToOneField(
+        Port,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="connected_fiber_b",
+        help_text="Porta de dispositivo conectada na ponta do Site B",
+    )
 
     # Metadados de qualidade (medições ópticas)
     attenuation_db = models.DecimalField(

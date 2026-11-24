@@ -761,6 +761,10 @@ class FiberStrandSerializer(serializers.ModelSerializer):
     has_multiple_fusions = serializers.SerializerMethodField()
     fused_to = serializers.SerializerMethodField()  # Legacy alias
     fusions = serializers.SerializerMethodField()
+    # EV-0134: estado no diagrama e as portas das duas pontas
+    state = serializers.SerializerMethodField()
+    port_a = serializers.SerializerMethodField()
+    port_b = serializers.SerializerMethodField()
 
     class Meta:
         model = FiberStrand
@@ -782,7 +786,27 @@ class FiberStrandSerializer(serializers.ModelSerializer):
             "attenuation_db",
             "last_test_date",
             "full_address",
+            "state",
+            "port_a",
+            "port_b",
         ]
+
+    def get_state(self, obj: FiberStrand) -> str:
+        from inventory.usecases.strand_ports import strand_state
+
+        return strand_state(obj, cable_broken=bool(self.context.get("cable_broken")))
+
+    @staticmethod
+    def _port(port: Any) -> dict[str, Any] | None:
+        if port is None:
+            return None
+        return {"id": port.pk, "name": port.name, "device_name": port.device.name}
+
+    def get_port_a(self, obj: FiberStrand) -> dict[str, Any] | None:
+        return self._port(obj.connected_device_port)
+
+    def get_port_b(self, obj: FiberStrand) -> dict[str, Any] | None:
+        return self._port(obj.connected_device_port_b)
 
     def get_full_address(self, obj: FiberStrand) -> dict[str, Any]:
         """Return structured address (Cabo/Tubo/Fibra notation)."""

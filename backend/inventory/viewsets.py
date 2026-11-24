@@ -1053,6 +1053,8 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                 "destination_port__device__site",
             )
             .prefetch_related(
+                "tubes__strands__connected_device_port__device",
+                "tubes__strands__connected_device_port_b__device",
                 "tubes__strands__fusions_as_a__infrastructure",
                 "tubes__strands__fusions_as_a__fiber_b__tube__cable",
                 "tubes__strands__fusions_as_b__infrastructure",
@@ -1061,10 +1063,36 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             .get(pk=cable.pk)
         )
 
-        data = dict(FiberCableStructureSerializer(cable).data)
+        # EV-0134: rompimento OTDR ativo no cabo → as fibras aparecem rompidas; pontas A/B com portas
+        from inventory.usecases.strand_ports import active_otdr, cable_ends
+
+        otdr = active_otdr(cable)
+        data = dict(
+            FiberCableStructureSerializer(cable, context={"cable_broken": otdr is not None}).data
+        )
         data["needs_profile"] = outcome["needs_profile"]
+        data["otdr_alert"] = otdr
+        data["ends"] = cable_ends(cable)
         if outcome["needs_profile"]:
             data["available_profiles"] = available_profiles()
+        return Response(data)
+
+    @action(detail=True, methods=["post"], url_path=r"strands/(?P<strand_id>\d+)/port")
+    def strand_port(self, request, pk=None, strand_id=None):
+        """EV-0134: liga/desliga a ponta A ou B de uma fibra a uma porta do site dessa ponta."""
+        from inventory.usecases.devices_common import InventoryValidationError
+        from inventory.usecases.strand_ports import connect_strand_port
+
+        end = str(request.data.get("end") or "")
+        raw = request.data.get("port_id")
+        try:
+            port_id = None if raw in (None, "") else int(raw)
+        except (TypeError, ValueError):
+            return Response({"detail": "port_id inválido"}, status=400)
+        try:
+            data = connect_strand_port(int(pk), int(strand_id), end=end, port_id=port_id)
+        except InventoryValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
         return Response(data)
 
     @action(detail=True, methods=["post"], url_path="structure/profile")
