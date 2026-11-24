@@ -3,9 +3,10 @@
     class="chassis"
     :viewBox="`0 0 ${W} ${H}`"
     width="100%"
+    :style="{ maxWidth: `${W}px` }"
     preserveAspectRatio="xMidYMid meet"
     role="group"
-    aria-label="Vista frontal do chassi ZTE ZXA10 C300"
+    :aria-label="`Vista frontal do chassi ZTE ZXA10 ${modelName}`"
     data-testid="chassis-c300"
   >
     <defs>
@@ -25,10 +26,10 @@
     <rect x="2" y="2" :width="W - 4" :height="H - 4" rx="7" class="frame" :fill="`url(#${uid}-frame)`" />
     <rect x="8" y="8" :width="W - 16" height="26" rx="3" class="band" />
     <text x="18" y="25.5" class="brand">ZTE</text>
-    <text x="50" y="25.5" class="model">ZXA10 C300</text>
-    <text :x="W - 18" y="25.5" class="band-note" text-anchor="end">{{ cardCount }} placas · 21 slots</text>
+    <text x="50" y="25.5" class="model">ZXA10 {{ modelName }}</text>
+    <text :x="W - 18" y="25.5" class="band-note" text-anchor="end">{{ cardCount }} placas · {{ slotCount }} slots</text>
 
-    <!-- baias 0..20 -->
+    <!-- baias: C300 0..20; outros ZTE as que o Zabbix mostra (chassis.bays) -->
     <g v-for="b in bays" :key="b.n" :data-testid="`chassis-bay-${b.n}`">
       <rect :x="b.x" :y="BAY_Y" :width="BAY_W" :height="BAY_H" rx="2" class="bay" />
       <line :x1="b.x + 1" :y1="BAY_Y + 1" :x2="b.x + BAY_W - 1" :y2="BAY_Y + 1" class="bay-shadow" />
@@ -121,6 +122,11 @@
           <line v-for="v in 9" :key="v" :x1="b.x + 10" :x2="b.x + CARD_W - 8" :y1="BAY_Y + 190 + v * 11" :y2="BAY_Y + 190 + v * 11" class="vent" />
         </g>
 
+        <!-- ventilação (C600/C610): só grelha -->
+        <g v-if="b.card.role === 'fan'" class="fan">
+          <line v-for="v in 22" :key="v" :x1="b.x + 8" :x2="b.x + CARD_W - 6" :y1="BAY_Y + 70 + v * 11" :y2="BAY_Y + 70 + v * 11" class="vent" />
+        </g>
+
         <rect :x="b.x + 7" :y="BAY_Y + BAY_H - 18" :width="CARD_W - 11" height="6" rx="2" class="ejector" />
         <rect
           v-if="selectedSlot === b.n"
@@ -142,7 +148,8 @@
 
 <script setup>
 /**
- * Painel frontal da ZTE C300 (EV-0101): 21 baias (slots 0..20) da esquerda para a direita;
+ * Painel frontal ZTE (EV-0101/EV-0103): C300 com 21 baias (slots 0..20); C600/C610 com as baias
+ * de `chassis.bays` (do menor ao maior slot que o Zabbix mostra), da esquerda para a direita;
  * placas e portas só as que vêm em `chassis.slots`. Cores do chassi: tokens `--chassis-*` (grafite fixo, EV-0102)
  * (não inverte no tema escuro — o painel é escuro nos dois temas) e LEDs pelas semânticas.
  */
@@ -159,11 +166,11 @@ const props = defineProps({
 })
 const emit = defineEmits(['toggle-pon', 'toggle-slot', 'hover'])
 
-const W = 960
 const H = 410
-const SLOTS = 21
 const X0 = 18
-const PITCH = (W - 2 * X0) / SLOTS
+// Largura da baia fixa (a da C300): um chassi com menos slots fica mais estreito, não com placas
+// esticadas; o viewBox acompanha.
+const PITCH = (960 - 2 * X0) / 21
 const BAY_W = PITCH - 2
 const CARD_W = BAY_W - 3
 const BAY_Y = 40
@@ -171,6 +178,11 @@ const BAY_H = H - BAY_Y - 30
 const PORTS_Y = BAY_Y + 78
 const PORTS_END = BAY_Y + BAY_H - 24
 const uid = `c300-${useId()}`
+
+const firstBay = computed(() => (props.chassis.bays?.length === 2 ? Number(props.chassis.bays[0]) : 0))
+const slotCount = computed(() => (props.chassis.bays?.length === 2 ? Number(props.chassis.bays[1]) - firstBay.value + 1 : 21))
+const W = computed(() => Math.max(2 * X0 + slotCount.value * PITCH, 360))
+const modelName = computed(() => props.chassis.model || 'C300')
 
 const ponIdx = computed(() => indexPons(props.pons))
 const visibleSet = computed(() => (props.visiblePonIds ? new Set(props.visiblePonIds.map(String)) : null))
@@ -198,8 +210,9 @@ function layoutPorts(card) {
 }
 
 const bays = computed(() =>
-  Array.from({ length: SLOTS }, (_, n) => {
-    const x = X0 + n * PITCH + 1
+  Array.from({ length: slotCount.value }, (_, i) => {
+    const n = firstBay.value + i
+    const x = X0 + i * PITCH + 1
     const card = cardsBySlot.value.get(n) || null
     if (!card) return { n, x, cx: x + BAY_W / 2, card: null }
     const leds = cardLeds(card, ponIdx.value)

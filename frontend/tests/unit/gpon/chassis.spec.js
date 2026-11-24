@@ -341,3 +341,34 @@ describe('EV-0102 — chassi em grafite fixo', () => {
     expect(tokens.match(/--chassis-body:/g)).toHaveLength(1) // só no :root
   })
 })
+
+describe('EV-0103 — chassis ZTE não-C300', () => {
+  it('C600 desenha as baias de chassis.bays, o modelo e a ventilação', async () => {
+    const { default: ChassisZteC300 } = await import('@/components/Gpon/ChassisZteC300.vue')
+    const chassis = {
+      layout: 'zte_modular',
+      model: 'C600',
+      bays: [1, 21],
+      slots: [
+        { slot: 2, card_type: 'GFGH', role: 'pon', in_service: null, oper_status_code: null, standby: null, cpu_pct: 21, mem_pct: 40, ports: [{ port_id: '2/1', port: 1, status: 'up' }] },
+        { slot: 21, card_type: 'FCVDIC', role: 'fan', in_service: null, oper_status_code: null, standby: null, cpu_pct: null, mem_pct: null, ports: [] },
+      ],
+      ports: [],
+    }
+    const w = mount(ChassisZteC300, { props: { chassis, pons: [] } })
+    expect(w.findAll('[data-testid^="chassis-bay-"]')).toHaveLength(21)
+    expect(w.find('[data-testid="chassis-bay-0"]').exists()).toBe(false)
+    expect(w.find('[data-testid="chassis-bay-21"]').exists()).toBe(true)
+    expect(w.text()).toContain('ZXA10 C600')
+    expect(w.find('.fan').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('C610 (6 baias) fica estreito, sem esticar', async () => {
+    const { default: ChassisZteC300 } = await import('@/components/Gpon/ChassisZteC300.vue')
+    const w = mount(ChassisZteC300, { props: { chassis: { layout: 'zte_modular', model: 'C610', bays: [1, 6], slots: [], ports: [] }, pons: [] } })
+    expect(w.findAll('[data-testid^="chassis-bay-"]')).toHaveLength(6)
+    expect(w.attributes('style')).toMatch(/max-width: 360px/)
+    w.unmount()
+  })
+})

@@ -18,7 +18,7 @@
     <div class="split p-3">
       <div ref="wrap" class="stage" @mouseleave="tip = null">
         <ChassisZteC300
-          v-if="layout === 'zte_c300'"
+          v-if="layout === 'zte_c300' || layout === 'zte_modular'"
           :chassis="chassis"
           :pons="pons"
           :visible-pon-ids="visiblePonIds"

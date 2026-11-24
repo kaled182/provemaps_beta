@@ -463,12 +463,18 @@ def _pon_payload(
 
 # EV-0101: função da placa pelo prefixo do tipo (ZTE: GTGH/GTGO/GPFA/ETGO, SCXN/SCXM, HUVQ/XUTQ/GUFQ,
 # PRWH/PRAM).
+# EV-0103: C600 GFGH/GFBT, C610 GVGH (PON) · SFUQ/SFUC (controlo) · PRVR/PUMD (energia) ·
+# FCVDIC/FUMO (ventilação).
 _CARD_ROLES = (
-    (("GT", "GP", "ET", "EP"), "pon"),
-    (("SC",), "control"),
+    (("GT", "GP", "ET", "EP", "GF", "GV"), "pon"),
+    (("SC", "SF"), "control"),
     (("HU", "XU", "GU"), "uplink"),
-    (("PR",), "power"),
+    (("PR", "PU"), "power"),
+    (("FC", "FU", "FA"), "fan"),
 )
+# A C300 tem 21 baias fixas (0..20); os outros chassis ZTE desenham-se com as baias que o
+# Zabbix mostra (placas e interfaces), do menor ao maior slot.
+_C300_BAYS = [0, 20]
 _STANDBY = {1: "active", 2: "standby"}
 
 
@@ -516,13 +522,21 @@ def _chassis_payload(
                     ],
                 }
             )
-        return {"layout": "zte_c300", "slots": slots, "ports": []}
+        model = ((meta or {}).get("model") or "").upper() or None
+        known = [s["slot"] for s in slots] + list(by_slot)
+        if model in (None, "C300"):
+            layout, bays = "zte_c300", list(_C300_BAYS)
+        else:
+            layout, bays = "zte_modular", [min(known), max(known)] if known else []
+        return {"layout": layout, "model": model, "bays": bays, "slots": slots, "ports": []}
 
     ports = {port_id: status for port_id, status in port_status.items() if "/" in port_id}
     for pon in pons:
         ports.setdefault(pon["pon_id"], parsers.PON_UNKNOWN)
     return {
         "layout": "rack_1u",
+        "model": (meta or {}).get("model") or None,
+        "bays": [],
         "slots": [],
         "ports": [
             _port_entry(port_id, ports[port_id])

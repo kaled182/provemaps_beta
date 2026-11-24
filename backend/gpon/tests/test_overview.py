@@ -447,6 +447,7 @@ def test_zte_chassis_has_real_cards_and_ports(olts, fake_zabbix, config):
     [olt] = usecases.gpon_overview(olt_id=olts.zte.pk)["olts"]
     chassis = olt["chassis"]
     assert chassis["layout"] == "zte_c300" and chassis["ports"] == []
+    assert chassis["bays"] == [0, 20]
     assert [s["slot"] for s in chassis["slots"]] == [0, 9, 10, 11, 19]
     by_slot = {s["slot"]: s for s in chassis["slots"]}
     assert by_slot[9] == {
@@ -486,6 +487,8 @@ def test_vsol_chassis_is_rack_1u_with_interface_and_onu_ports(olts, fake_zabbix,
     [olt] = usecases.gpon_overview(olt_id=olts.vsol.pk)["olts"]
     assert olt["chassis"] == {
         "layout": "rack_1u",
+        "model": None,
+        "bays": [],
         "slots": [],
         "ports": [
             {"port_id": "0/1", "port": 1, "status": "up"},
@@ -497,7 +500,13 @@ def test_vsol_chassis_is_rack_1u_with_interface_and_onu_ports(olts, fake_zabbix,
 
 def test_chassis_without_collection_is_empty_not_invented(olts, config):
     [olt] = usecases.gpon_overview(olt_id=olts.zte.pk)["olts"]
-    assert olt["chassis"] == {"layout": "zte_c300", "slots": [], "ports": []}
+    assert olt["chassis"] == {
+        "layout": "zte_c300",
+        "model": None,
+        "bays": [0, 20],
+        "slots": [],
+        "ports": [],
+    }
 
 
 def test_card_role_by_type_prefix():
@@ -505,3 +514,44 @@ def test_card_role_by_type_prefix():
         usecases.card_role(t)
         for t in ("GTGHK", "GTGO", "ETGO", "SCXN", "HUVQ", "XUTQ", "PRWH", "PRAM", "XYZ", "")
     ] == ["pon", "pon", "pon", "control", "uplink", "uplink", "power", "power", "other", "other"]
+
+
+def test_zte_c600_chassis_is_modular_with_alt_cpu_and_roles(olts, fake_zabbix, config):
+    """EV-0103: a C600 não tem cardcpu/cardoperstat; CPU e memória vêm de CPU.Card/Memoria.Card,
+    o modelo de «ZXA10 C600,» e o chassi desenha as baias que o Zabbix mostra (1..21)."""
+    fake_zabbix.items[ZTE_HOST] = [
+        *zte_onu("ZYXECB06E62E", 10, 2, slot=2),
+        item("modeloZTE", "ZXA10 C600, ZTE ZXA10 Software Version: V1.2", value_type="4"),
+        item("Card[2]", "GFGH", value_type="4"),
+        item("CPU.Card[2]", "21", value_type="3"),
+        item("Memoria.Card[2]", "40", value_type="3"),
+        item("Card[10]", "SFUQ", value_type="4"),
+        item("Card[11]", "", value_type="4"),  # baia sem tipo → não é placa
+        item("Card[18]", "PRVR", value_type="4"),
+        item("Card[21]", "FCVDIC", value_type="4"),
+        item("ifOperStatus[285280778]", "1", value_type="3"),  # 0x11010A0A → 10/10
+        item("icmpping", "1", value_type="3"),
+    ]
+    usecases.collect_onu_states()
+    [olt] = usecases.gpon_overview(olt_id=olts.zte.pk)["olts"]
+    chassis = olt["chassis"]
+    assert (chassis["layout"], chassis["model"], chassis["bays"]) == (
+        "zte_modular",
+        "C600",
+        [2, 21],
+    )
+    roles = {s["slot"]: (s["card_type"], s["role"]) for s in chassis["slots"]}
+    assert roles == {
+        2: ("GFGH", "pon"),
+        10: ("SFUQ", "control"),
+        18: ("PRVR", "power"),
+        21: ("FCVDIC", "fan"),
+    }
+    slot2 = next(s for s in chassis["slots"] if s["slot"] == 2)
+    assert (slot2["cpu_pct"], slot2["mem_pct"], slot2["in_service"], slot2["standby"]) == (
+        21.0,
+        40.0,
+        None,
+        None,
+    )
+    assert olt["model"] == "C600" and olt["cpu_pct"] == 21.0

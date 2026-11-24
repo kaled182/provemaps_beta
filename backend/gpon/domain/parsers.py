@@ -64,6 +64,10 @@ ZTE_KEY_FAMILIES: tuple[str, ...] = (
     "cardoperstat",
     "cardstandby",
     "cardmem",
+    # C600/C610 (EV-0103): sem cardcpu/cardmem/cardoperstat — CPU e memória por placa aqui.
+    "CPU.Card",
+    "Memoria.Card",
+    "modeloZTE",
     "cpu",
     "TempGeral",
     "sysDescr",
@@ -267,7 +271,11 @@ _ZTE_ONU_KEY = re.compile(r"^onu\.(status|offreason|rx|dist)\[([^,\]]+),(\d+),(\
 _ZTE_IF_KEY = re.compile(r"^ifOperStatus\[(\d+)\]$")
 _ZTE_CARD_TYPE = re.compile(r"^Card\[(\d+)\]$")
 _ZTE_CARD_METRIC = re.compile(r"^card(operstat|standby|cpu|mem)\[\d+\.\d+\.(\d+)\]$")
+# Fallback das C600/C610 (e também presente nas C300): CPU.Card[<slot>] / Memoria.Card[<slot>].
+_ZTE_CARD_ALT = re.compile(r"^(CPU|Memoria)\.Card\[(\d+)\]$")
 _ZTE_MODEL = re.compile(r"^\s*([A-Za-z]\w+)\s+Version\b")
+# C600/C610: «ZXA10 C600, ZTE ZXA10 Software Version: …»
+_ZTE_MODEL_ZXA10 = re.compile(r"^\s*ZXA10\s+([A-Za-z]\w+)\s*,")
 ZTE_GPON_IFINDEX_TYPE = 0x11
 
 
@@ -291,6 +299,8 @@ def parse_zte(items: Iterable[Mapping[str, Any]], *, validate_rx: RxValidator) -
     olt = OltReading(vendor=VENDOR_ZTE, technology=TECHNOLOGY_GPON)
     onus: dict[str, OnuReading] = {}
     card_cpus: list[float] = []
+    alt_cpu: dict[int, float] = {}
+    alt_mem: dict[int, float] = {}
     cpu_total: float | None = None
 
     for item in items:
@@ -321,6 +331,19 @@ def parse_zte(items: Iterable[Mapping[str, Any]], *, validate_rx: RxValidator) -
             elif family == "dist":
                 distance = _float(value)
                 reading.distance_m = int(distance) if distance and distance > 0 else None
+            continue
+
+        alt_match = _ZTE_CARD_ALT.match(key)
+        if alt_match:
+            number = _float(value)
+            if number is not None:
+                card = olt.cards.setdefault(
+                    int(alt_match.group(2)), CardReading(slot=int(alt_match.group(2)))
+                )
+                if alt_match.group(1) == "CPU":
+                    alt_cpu[card.slot] = number
+                else:
+                    alt_mem[card.slot] = number
             continue
 
         card_match = _ZTE_CARD_TYPE.match(key) or _ZTE_CARD_METRIC.match(key)
@@ -358,10 +381,20 @@ def parse_zte(items: Iterable[Mapping[str, Any]], *, validate_rx: RxValidator) -
             cpu_total = _float(value)
         elif key == "TempGeral":
             olt.temperature_c = _float(value)
-        elif key == "sysDescr" and value:
-            model = _ZTE_MODEL.match(value)
+        elif key in ("sysDescr", "modeloZTE") and value and not olt.model:
+            model = _ZTE_MODEL.match(value) or _ZTE_MODEL_ZXA10.match(value)
             olt.model = model.group(1) if model else None
 
+    # cardcpu/cardmem (C300) mandam; CPU.Card/Memoria.Card só preenchem o que faltar (C600/C610).
+    for slot, number in alt_cpu.items():
+        card = olt.cards[slot]
+        if card.cpu_pct is None:
+            card.cpu_pct = number
+            card_cpus.append(number)
+    for slot, number in alt_mem.items():
+        card = olt.cards[slot]
+        if card.mem_pct is None:
+            card.mem_pct = number
     # CPU: o item agregado quando coleta; senão a placa mais carregada (a pior é a que importa).
     olt.cpu_pct = cpu_total if cpu_total is not None else (max(card_cpus) if card_cpus else None)
     # Uma placa sem tipo (só métricas) não é inventário — fica de fora.
