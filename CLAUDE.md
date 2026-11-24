@@ -117,7 +117,14 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**Nada aberto.**
+**Entrada, por triar (5)**
+
+🐛 Problemas
+- `EV-0096` **Limiares ópticos e capacidades de PON editados na Configuração não sobrevivem a um reinício e o Celery nunca os vê** · por triar · admin · há 0 dias
+- `EV-0097` **As OLTs VSOL Furacão e Granada parecem GPON, não EPON (capacidade da PON aplicada é a de EPON)** · por triar · admin · há 0 dias
+- `EV-0098` **O OpenAPI avisa em todas as views: falta a OpenApiAuthenticationExtension do ServiceAccountTokenAuthentication** · por triar · admin · há 0 dias
+- `EV-0099` **O template VSOL do Zabbix devolve MACs malformados no nome dos itens de ONU** · por triar · admin · há 0 dias
+- `EV-0100` **Teste instável: inventoryDensity.spec.js «abas em PT-BR» dá timeout de 5 s na suite completa** · por triar · admin · há 0 dias
 
 <!-- EVOLUCAO:FIM -->
 
