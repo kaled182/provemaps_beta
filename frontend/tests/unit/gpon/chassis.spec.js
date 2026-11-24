@@ -324,3 +324,20 @@ describe('EV-0101 — ocupação alta no inspetor', () => {
     expect(ponDiagnostics(pon, { warning: -24 }).join(' ')).toMatch(/Ocupação de 94%/)
   })
 })
+
+describe('EV-0102 — chassi em grafite fixo', () => {
+  it('as molduras usam os tokens --chassis-* (não a escala da marca) e os tokens não invertem no escuro', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const read = (p) => readFileSync(resolve(__dirname, '../../../src', p), 'utf8')
+    for (const f of ['components/Gpon/ChassisZteC300.vue', 'components/Gpon/ChassisRack1u.vue']) {
+      const css = read(f).split('<style')[1]
+      expect(css).not.toMatch(/--primary-(50|[1-36-9]00|950)\b/) // primary só no realce (400/500)
+      expect(css).toContain('--chassis-body')
+      expect(css).not.toMatch(/#[0-9a-fA-F]{3,6}\b/)
+    }
+    const tokens = read('design-system/tokens.css')
+    expect(tokens).toMatch(/--chassis-body: 22 25 31;/)
+    expect(tokens.match(/--chassis-body:/g)).toHaveLength(1) // só no :root
+  })
+})

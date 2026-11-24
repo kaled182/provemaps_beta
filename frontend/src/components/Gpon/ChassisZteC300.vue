@@ -143,7 +143,7 @@
 <script setup>
 /**
  * Painel frontal da ZTE C300 (EV-0101): 21 baias (slots 0..20) da esquerda para a direita;
- * placas e portas só as que vêm em `chassis.slots`. Cores do chassi: escala `primary-9xx`
+ * placas e portas só as que vêm em `chassis.slots`. Cores do chassi: tokens `--chassis-*` (grafite fixo, EV-0102)
  * (não inverte no tema escuro — o painel é escuro nos dois temas) e LEDs pelas semânticas.
  */
 import { computed, useId } from 'vue'
@@ -241,77 +241,77 @@ function hover(event, text) {
   user-select: none;
 }
 .stop-frame {
-  stop-color: rgb(var(--primary-950));
+  stop-color: rgb(var(--chassis-body));
 }
 .stop-frame-hi {
-  stop-color: rgb(var(--primary-900));
+  stop-color: rgb(var(--chassis-plate-lo));
 }
 .stop-plate-hi {
-  stop-color: rgb(var(--primary-800));
+  stop-color: rgb(var(--chassis-plate-hi));
 }
 .stop-plate {
-  stop-color: rgb(var(--primary-900));
+  stop-color: rgb(var(--chassis-plate));
 }
 .stop-plate-lo {
-  stop-color: rgb(var(--primary-950));
+  stop-color: rgb(var(--chassis-plate-lo));
 }
 .frame {
-  stroke: rgb(var(--primary-800));
+  stroke: rgb(var(--chassis-border));
   stroke-width: 1.5;
 }
 .band {
-  fill: rgb(var(--primary-950));
-  stroke: rgb(var(--primary-800) / 0.6);
+  fill: rgb(var(--chassis-body));
+  stroke: rgb(var(--chassis-border));
 }
 .brand {
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 14px;
-  fill: rgb(var(--primary-100));
+  fill: rgb(var(--chassis-text));
   letter-spacing: 0.5px;
 }
 .model {
   font-size: 11px;
-  fill: rgb(var(--primary-300));
+  fill: rgb(var(--chassis-text-dim));
   letter-spacing: 1px;
 }
 .band-note {
   font-size: 9px;
-  fill: rgb(var(--primary-400));
+  fill: rgb(var(--chassis-text-mute));
 }
 .bay {
-  fill: rgb(var(--primary-950));
+  fill: rgb(var(--chassis-bay));
 }
 .bay-shadow {
-  stroke: rgb(var(--primary-950));
+  stroke: rgb(var(--chassis-bay));
   stroke-width: 2;
 }
 .bay-light {
-  stroke: rgb(var(--primary-800) / 0.7);
+  stroke: rgb(var(--chassis-bay-edge));
 }
 .empty {
   opacity: 0.45;
 }
 .empty-plate {
   fill: none;
-  stroke: rgb(var(--primary-700));
+  stroke: rgb(var(--chassis-bay-edge));
   stroke-dasharray: 3 3;
 }
 .slot-num-dim {
   font-size: 9px;
-  fill: rgb(var(--primary-400));
+  fill: rgb(var(--chassis-text-mute));
 }
 .plate {
-  stroke: rgb(var(--primary-700));
+  stroke: rgb(var(--chassis-edge));
   stroke-width: 0.8;
 }
 .screw {
-  fill: rgb(var(--primary-700));
-  stroke: rgb(var(--primary-950));
+  fill: rgb(var(--chassis-border));
+  stroke: rgb(var(--chassis-bay));
   stroke-width: 0.6;
 }
 .head-bg {
-  fill: rgb(var(--primary-950) / 0.55);
+  fill: rgb(var(--chassis-bay) / 0.55);
   stroke: transparent;
 }
 .head-btn {
@@ -328,20 +328,20 @@ function hover(event, text) {
 .slot-num {
   font-size: 11px;
   font-weight: 700;
-  fill: rgb(var(--primary-50));
+  fill: rgb(var(--chassis-text));
 }
 .card-type {
   font-size: 7.5px;
-  fill: rgb(var(--primary-300));
+  fill: rgb(var(--chassis-text-dim));
   letter-spacing: 0.3px;
 }
 .led-label {
   font-size: 5px;
-  fill: rgb(var(--primary-400));
+  fill: rgb(var(--chassis-text-mute));
 }
 .ms {
-  fill: rgb(var(--primary-950));
-  stroke: rgb(var(--primary-600));
+  fill: rgb(var(--chassis-bay));
+  stroke: rgb(var(--chassis-edge));
 }
 .ms-M {
   stroke: rgb(var(--success));
@@ -349,7 +349,7 @@ function hover(event, text) {
 .ms-text {
   font-size: 8px;
   font-weight: 700;
-  fill: rgb(var(--primary-100));
+  fill: rgb(var(--chassis-text));
 }
 .sel-ring {
   fill: none;
@@ -359,8 +359,8 @@ function hover(event, text) {
 
 /* LEDs: a classe `led-<estado>` vem no próprio círculo (placa) ou no grupo da porta. */
 .led {
-  fill: rgb(var(--primary-800));
-  stroke: rgb(var(--primary-950));
+  fill: rgb(var(--chassis-edge));
+  stroke: rgb(var(--chassis-bay));
   stroke-width: 0.6;
 }
 .led.led-ok,
@@ -381,7 +381,7 @@ function hover(event, text) {
 }
 .led-unknown .led {
   fill: none;
-  stroke: rgb(var(--primary-500));
+  stroke: rgb(var(--chassis-text-mute));
   stroke-dasharray: 1.2 1.2;
 }
 
@@ -412,39 +412,39 @@ function hover(event, text) {
   opacity: 0.32;
 }
 .sfp {
-  fill: rgb(var(--primary-800));
-  stroke: rgb(var(--primary-600));
+  fill: rgb(var(--chassis-edge));
+  stroke: rgb(var(--chassis-edge));
   stroke-width: 0.7;
 }
 .sfp-hole {
-  fill: rgb(var(--primary-950));
+  fill: rgb(var(--chassis-bay));
 }
 .port-num {
   font-size: 6px;
-  fill: rgb(var(--primary-300));
+  fill: rgb(var(--chassis-text-dim));
 }
 .inlet,
 .switch {
-  fill: rgb(var(--primary-950));
-  stroke: rgb(var(--primary-600));
+  fill: rgb(var(--chassis-bay));
+  stroke: rgb(var(--chassis-edge));
 }
 .pin {
-  fill: rgb(var(--primary-600));
+  fill: rgb(var(--chassis-edge));
 }
 .glyph {
   fill: none;
-  stroke: rgb(var(--primary-200));
+  stroke: rgb(var(--chassis-text));
   stroke-width: 1.3;
   stroke-linecap: round;
 }
 .vent {
-  stroke: rgb(var(--primary-950));
+  stroke: rgb(var(--chassis-bay));
   stroke-width: 2;
   stroke-linecap: round;
 }
 .ejector {
-  fill: rgb(var(--primary-700));
-  stroke: rgb(var(--primary-950));
+  fill: rgb(var(--chassis-border));
+  stroke: rgb(var(--chassis-bay));
   stroke-width: 0.6;
 }
 

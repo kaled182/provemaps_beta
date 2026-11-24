@@ -106,6 +106,20 @@
   --surface: 255 255 255;
   --canvas: 248 250 252;
 
+  /* ── Chassi de OLT (EV-0102): metal grafite de rack, IGUAL nos dois temas ─
+     (não se redefine no escuro: é a cor do equipamento, não da interface). */
+  --chassis-body: 22 25 31; /* #16191F corpo externo */
+  --chassis-border: 42 48 60; /* #2A303C borda do corpo */
+  --chassis-plate: 30 35 43; /* #1E232B frente das placas / 1U */
+  --chassis-plate-hi: 35 41 51; /* #232933 gradiente, topo */
+  --chassis-plate-lo: 26 30 38; /* #1A1E26 gradiente, base */
+  --chassis-edge: 50 57 70; /* #323946 bordas internas */
+  --chassis-bay: 18 21 26; /* #12151A baia vazia / furos */
+  --chassis-bay-edge: 35 40 50; /* #232832 borda da baia vazia */
+  --chassis-text: 226 232 240; /* serigrafia */
+  --chassis-text-dim: 148 163 184;
+  --chassis-text-mute: 100 116 139;
+
   /* ── Marca: teal institucional Simples Internet ───────────────────────── */
   --primary-50: 240 250 251;
   --primary-100: 217 242 244;

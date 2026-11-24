@@ -157,14 +157,16 @@ function onHover(payload) {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
+/* EV-0102: chassi elástico + inspetor fixo de 300 px a partir de xl (1280 px); abaixo empilha.
+   O 7fr/3fr cortava o 1U à direita: o SVG tem largura mínima e o 3fr roubava-a. */
 .split {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
+  gap: 16px;
 }
-@media (min-width: 1024px) {
+@media (min-width: 1280px) {
   .split {
-    grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
+    grid-template-columns: minmax(0, 1fr) 300px;
   }
 }
 .stage {

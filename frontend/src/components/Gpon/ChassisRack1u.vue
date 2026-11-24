@@ -83,7 +83,7 @@
 /**
  * Painel frontal 1U (VSOL e o resto, EV-0101): só as portas PON de `chassis.ports`
  * (até 8 numa fila, mais do que isso em duas). Nada de placas — a VSOL não as tem.
- * Mesma paleta `primary-9xx` (não inverte) da C300.
+ * Mesma paleta `--chassis-*` (grafite fixo, EV-0102) da C300.
  */
 import { computed, useId } from 'vue'
 import { indexPons, ponLed, ponTooltip } from './chassisLed'
@@ -164,54 +164,54 @@ function hover(event, text) {
   user-select: none;
 }
 .stop-hi {
-  stop-color: rgb(var(--primary-800));
+  stop-color: rgb(var(--chassis-plate-hi));
 }
 .stop-mid {
-  stop-color: rgb(var(--primary-900));
+  stop-color: rgb(var(--chassis-plate));
 }
 .stop-lo {
-  stop-color: rgb(var(--primary-950));
+  stop-color: rgb(var(--chassis-plate-lo));
 }
 .ear {
-  fill: rgb(var(--primary-900));
-  stroke: rgb(var(--primary-700));
+  fill: rgb(var(--chassis-body));
+  stroke: rgb(var(--chassis-border));
 }
 .ear-hole {
-  fill: rgb(var(--primary-950));
+  fill: rgb(var(--chassis-bay));
 }
 .body {
-  stroke: rgb(var(--primary-700));
+  stroke: rgb(var(--chassis-border));
   stroke-width: 1.2;
 }
 .body-light {
-  stroke: rgb(var(--primary-600) / 0.6);
+  stroke: rgb(var(--chassis-edge));
 }
 .brand {
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 18px;
-  fill: rgb(var(--primary-100));
+  fill: rgb(var(--chassis-text));
   letter-spacing: 1px;
 }
 .model {
   font-size: 11px;
-  fill: rgb(var(--primary-300));
+  fill: rgb(var(--chassis-text-dim));
 }
 .tech {
   font-size: 9px;
-  fill: rgb(var(--primary-400));
+  fill: rgb(var(--chassis-text-mute));
 }
 .led-label {
   font-size: 7px;
-  fill: rgb(var(--primary-400));
+  fill: rgb(var(--chassis-text-mute));
 }
 .port-panel {
-  fill: rgb(var(--primary-950) / 0.6);
-  stroke: rgb(var(--primary-800));
+  fill: rgb(var(--chassis-bay) / 0.6);
+  stroke: rgb(var(--chassis-edge));
 }
 .empty-note {
   font-size: 11px;
-  fill: rgb(var(--primary-400));
+  fill: rgb(var(--chassis-text-mute));
 }
 .port {
   cursor: pointer;
@@ -241,22 +241,22 @@ function hover(event, text) {
 }
 .port-num {
   font-size: 8px;
-  fill: rgb(var(--primary-300));
+  fill: rgb(var(--chassis-text-dim));
 }
 .sfp {
-  fill: rgb(var(--primary-800));
-  stroke: rgb(var(--primary-600));
+  fill: rgb(var(--chassis-edge));
+  stroke: rgb(var(--chassis-edge));
   stroke-width: 0.8;
 }
 .sfp-hole {
-  fill: rgb(var(--primary-950));
+  fill: rgb(var(--chassis-bay));
 }
 .vent {
-  fill: rgb(var(--primary-950));
+  fill: rgb(var(--chassis-bay));
 }
 .led {
-  fill: rgb(var(--primary-800));
-  stroke: rgb(var(--primary-950));
+  fill: rgb(var(--chassis-edge));
+  stroke: rgb(var(--chassis-bay));
   stroke-width: 0.6;
 }
 .led.led-ok,
