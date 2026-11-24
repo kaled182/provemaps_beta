@@ -587,30 +587,6 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> dict[str, Any]:
         record = PortRecord(port=port, created=port_created, defaults=defaults)
         port_records.append(record)
         port_record_map[_port_map_key(port)] = record
-        key = item.get("key_") or ""
-        tokens = _extract_key_tokens(key)
-        if not tokens:
-            continue
-        port_name = tokens[0].strip()
-        if not port_name:
-            continue
-
-        defaults = {
-            "zabbix_item_key": key,
-            "zabbix_interfaceid": str(item.get("interfaceid") or ""),
-            "zabbix_itemid": str(item.get("itemid") or ""),
-            "notes": item.get("name", ""),
-        }
-
-        port, port_created = Port.objects.get_or_create(
-            device=device,
-            name=port_name,
-            defaults=defaults,
-        )
-
-        record = PortRecord(port=port, created=port_created, defaults=defaults)
-        port_records.append(record)
-        port_record_map[_port_map_key(port)] = record
 
     if import_interfaces and not port_records:
         for item in host_items:
