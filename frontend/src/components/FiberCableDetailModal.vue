@@ -10,6 +10,9 @@
     flush
     @close="requestClose"
   >
+    <template #header-actions>
+      <EditInProjectLink type="cable" :target="cable" />
+    </template>
     <!-- Tabs -->
     <div class="tabs-header">
       <button
@@ -882,6 +885,7 @@
 </template>
 
 <script setup>
+import EditInProjectLink from '@/components/Map/EditInProjectLink.vue'
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { PhLinkSimple, PhBell } from '@phosphor-icons/vue'

@@ -16,7 +16,7 @@
               type="button"
               class="end"
               :class="{ 'end-used': e.fusion_id, 'end-a': pickA?.key === e.key, 'end-b': pickB?.key === e.key }"
-              :disabled="!!e.fusion_id"
+              :disabled="readonly || !!e.fusion_id"
               :title="`Fibra ${e.absolute_number} (${e.color}, tubo ${e.tube_number}) → ${e.toward}${e.fusion_id ? ' · já emendada' : ''}`"
               :data-testid="`end-${e.key}`"
               @click="pick(e)"
@@ -35,6 +35,7 @@
 
       <!-- Criar fusão e lista -->
       <aside class="cfm-side">
+        <template v-if="!readonly">
         <h4 class="cfm-h">Criar fusão</h4>
         <p class="cfm-pick" data-testid="fusion-pick-a">Fibra A: <b>{{ label(pickA) || 'clique numa fibra' }}</b></p>
         <p class="cfm-pick" data-testid="fusion-pick-b">Fibra B: <b>{{ label(pickB) || (pickA ? 'clique na outra fibra' : '—') }}</b></p>
@@ -47,6 +48,10 @@
           <button type="button" class="btn" :disabled="!pickA" @click="clearPick">Limpar</button>
         </div>
         <p v-if="error && data" class="text-xs text-danger mt-1" role="alert" data-testid="fusion-error">{{ error }}</p>
+        </template>
+        <p v-else class="text-xs text-neutral-500" data-testid="fusion-readonly">
+          Só leitura no monitoramento — as emendas editam-se no Projeto de Rede.
+        </p>
 
         <h4 class="cfm-h mt-4">Fusões nesta caixa ({{ data.fusions.length }})</h4>
         <p v-if="!data.fusions.length" class="text-xs text-neutral-500">Nenhuma ainda.</p>
@@ -54,13 +59,19 @@
           <li v-for="f in data.fusions" :key="f.id" :data-testid="`fusion-${f.id}`">
             <span class="num text-neutral-500">{{ f.tray ? `B${f.tray}·${f.slot ?? '–'}` : '—' }}</span>
             <span class="min-w-0">{{ label(f.a) }} ↔ {{ label(f.b) }}</span>
-            <button type="button" class="cfm-del" :disabled="busy" :data-testid="`fusion-del-${f.id}`" @click="remove(f)">Desfazer</button>
+            <button v-if="!readonly" type="button" class="cfm-del" :disabled="busy" :data-testid="`fusion-del-${f.id}`" @click="remove(f)">Desfazer</button>
+            <button v-else type="button" class="cfm-trace" :data-testid="`fusion-trace-${f.id}`" @click="traced = traced?.id === f.id ? null : f">
+              {{ traced?.id === f.id ? 'Fechar' : 'Rastrear' }}
+            </button>
+            <!-- a luz que entra pela ponta do cabo para onde segue a metade A da fusão passa nesta emenda -->
+            <FiberTrace v-if="traced?.id === f.id" class="cfm-trace-box" :strand-id="f.a.strand_id" :start="f.a.side" />
           </li>
         </ul>
       </aside>
     </div>
     <template #footer>
-      <div class="flex justify-end">
+      <div class="flex justify-end gap-2">
+        <EditInProjectLink v-if="readonly" type="ceo" :target="ceo" />
         <button type="button" class="btn" @click="$emit('close')">Fechar</button>
       </div>
     </template>
@@ -77,10 +88,14 @@ import { computed, ref, watch } from 'vue'
 import { PhGitMerge } from '@phosphor-icons/vue'
 import BaseModal from '@/components/Common/BaseModal.vue'
 import { useApi } from '@/composables/useApi'
+import EditInProjectLink from '@/components/Map/EditInProjectLink.vue'
+import FiberTrace from '@/components/Inventory/Fibers/FiberTrace.vue'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
   ceo: { type: Object, required: true },
+  /** EV-0137: no mapa de monitoramento só se vê (e rastreia) */
+  readonly: { type: Boolean, default: false },
 })
 defineEmits(['close'])
 
@@ -94,6 +109,7 @@ const pickA = ref(null)
 const pickB = ref(null)
 const tray = ref(null)
 const slot = ref(null)
+const traced = ref(null)
 const url = computed(() => `/api/v1/inventory/ceos/${props.ceo.id}/fusions/`)
 const modeHint = computed(() =>
   (data.value?.ceo?.mode || props.ceo.mode) === 'corte'
@@ -116,6 +132,7 @@ async function load() {
 }
 
 function pick(e) {
+  if (props.readonly) return
   error.value = ''
   if (pickA.value?.key === e.key) pickA.value = null
   else if (!pickA.value) pickA.value = e
@@ -289,6 +306,13 @@ watch(
   padding: 5px 0;
   border-top: 1px solid rgb(var(--n-200));
   color: rgb(var(--n-900));
+}
+.cfm-trace {
+  font-size: 11px;
+  color: rgb(var(--primary-600));
+}
+.cfm-trace-box {
+  grid-column: 1 / -1;
 }
 .cfm-del {
   font-size: 11px;

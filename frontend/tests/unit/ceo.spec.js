@@ -3,7 +3,7 @@
  * (traçado desenhado no mapa a começar na CEO, destino site/porta ou outra CEO).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount, flushPromises, RouterLinkStub } from '@vue/test-utils'
 import CeoCreateModal from '@/components/Ceo/CeoCreateModal.vue'
 import CeoDerivePanel from '@/components/Ceo/CeoDerivePanel.vue'
 import CeoCard from '@/components/Ceo/CeoCard.vue'
@@ -60,13 +60,15 @@ describe('CeoCreateModal', () => {
 })
 
 describe('CeoCard', () => {
-  it('mostra km, modo, reserva e derivados; «Derivar cabo» emite a CEO', async () => {
-    const w = mount(CeoCard, { props: { ceo: { ...CEO, derived: [{ id: 9, name: 'CEO-04 - VILA NOVA' }] } } })
+  it('só leitura (EV-0137): km, modo, reserva e derivados; «Ver emendas» emite a CEO; «Editar no Projeto ↗» focado na CEO', async () => {
+    const w = mount(CeoCard, { props: { ceo: { ...CEO, derived: [{ id: 9, name: 'CEO-04 - VILA NOVA' }] } }, global: { stubs: { RouterLink: RouterLinkStub } } })
     expect(w.text()).toContain('km 4,976')
     expect(w.get('[data-testid="ceo-card-mode"]').text()).toBe('Sangria (passagem direta)')
     expect(w.get('[data-testid="ceo-card-derived"]').text()).toBe('CEO-04 - VILA NOVA')
-    await w.get('[data-testid="ceo-derive"]').trigger('click')
-    expect(w.emitted('derive')[0][0].id).toBe(4)
+    expect(w.find('[data-testid="ceo-derive"]').exists()).toBe(false)
+    expect(w.getComponent(RouterLinkStub).props('to')).toEqual({ path: '/Network/NetworkDesign/', query: { foco: 'ceo', id: '4', lat: '0.045', lng: '-50', nome: 'CEO-04' } })
+    await w.get('[data-testid="ceo-fusions"]').trigger('click')
+    expect(w.emitted('fusions')[0][0].id).toBe(4)
   })
 })
 

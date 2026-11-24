@@ -131,13 +131,6 @@
             </svg>
             Localizar OTDR
           </button>
-          <!-- EV-0135: CEO no ponto do cabo onde se clicou -->
-          <button class="details-btn otdr-btn" data-testid="cable-insert-ceo" @click.stop="$emit('insert-ceo', cableData)">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="7" y="7" width="10" height="10" rx="1" stroke-width="2" transform="rotate(45 12 12)" />
-            </svg>
-            Inserir CEO aqui
-          </button>
           <button class="details-btn" @click.stop="$emit('open-details', cableData)">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -162,7 +155,7 @@ const props = defineProps({
   position: { type: Object, default: () => ({ x: 0, y: 0 }) },
 })
 
-const emit = defineEmits(['close', 'open-details', 'otdr', 'insert-ceo'])
+const emit = defineEmits(['close', 'open-details', 'otdr'])
 
 const { get } = useApi()
 

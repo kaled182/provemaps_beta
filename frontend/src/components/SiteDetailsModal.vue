@@ -8,6 +8,9 @@
     size="detail"
     @close="requestClose"
   >
+    <template #header-actions>
+      <EditInProjectLink type="site" :target="site" />
+    </template>
     <!-- EV-0112: nível 2 — o equipamento inspecionado dentro do modal, sem sair do mapa -->
     <SiteDeviceInspector
       v-if="inspectedDevice"
@@ -237,6 +240,7 @@
 </template>
 
 <script setup>
+import EditInProjectLink from '@/components/Map/EditInProjectLink.vue'
 import { ref, computed, watch, reactive, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApi } from '@/composables/useApi'

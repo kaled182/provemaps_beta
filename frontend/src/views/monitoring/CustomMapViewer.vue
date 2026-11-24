@@ -31,18 +31,9 @@
           <CeoPin :name="c.name" :mode="c.mode" @open="ceoOpenId = c.id" />
         </MapPopup>
         <MapPopup v-if="ceoOpen" :map="map" :position="{ lat: ceoOpen.point[1], lng: ceoOpen.point[0] }" :offset-y="14">
-          <CeoCard :ceo="ceoOpen" @close="ceoOpenId = null" @derive="startDerive" @fusions="ceoFusionsFor = $event" />
+          <CeoCard :ceo="ceoOpen" @close="ceoOpenId = null" @fusions="ceoFusionsFor = $event" />
         </MapPopup>
       </template>
-      <CeoDerivePanel
-        v-if="map && ceoDeriving"
-        :map="map"
-        :ceo="ceoDeriving"
-        :ceos="ceos"
-        :sites="siteOptions"
-        @close="ceoDeriving = null"
-        @created="onDerived"
-      />
 
       <!-- EV-0128: localizar OTDR escolhendo o cabo -->
       <button class="map-otdr-btn" title="Localizar rompimento por leitura do OTDR" data-testid="map-otdr-btn" @click="openOtdr(null)">
@@ -206,21 +197,10 @@
       @close="showCableTooltip = false"
       @open-details="openCableDetailsFromTooltip"
       @otdr="openOtdr"
-      @insert-ceo="openInsertCeo"
     />
 
-    <!-- EV-0135: inserir CEO no ponto do cabo onde se clicou -->
-    <CeoCreateModal
-      v-if="ceoCreate"
-      :show="!!ceoCreate"
-      :cable="ceoCreate.cable"
-      :point="ceoCreate.point"
-      @close="ceoCreate = null"
-      @created="onCeoCreated"
-    />
-
-    <!-- EV-0136: emendas da CEO -->
-    <CeoFusionsModal v-if="ceoFusionsFor" :show="!!ceoFusionsFor" :ceo="ceoFusionsFor" @close="ceoFusionsFor = null" />
+    <!-- EV-0136/0137: emendas da CEO em leitura (a edição é no Projeto de Rede) -->
+    <CeoFusionsModal v-if="ceoFusionsFor" :show="!!ceoFusionsFor" :ceo="ceoFusionsFor" readonly @close="ceoFusionsFor = null" />
 
     <!-- EV-0127: localizador OTDR -->
     <OtdrLocatorModal
@@ -278,8 +258,6 @@ import MapPopup from '@/components/Map/MapPopup.vue'
 import OtdrPin from '@/components/Otdr/OtdrPin.vue'
 import CeoPin from '@/components/Ceo/CeoPin.vue'
 import CeoCard from '@/components/Ceo/CeoCard.vue'
-const CeoCreateModal = defineAsyncComponent(() => import('@/components/Ceo/CeoCreateModal.vue'))
-const CeoDerivePanel = defineAsyncComponent(() => import('@/components/Ceo/CeoDerivePanel.vue'))
 const CeoFusionsModal = defineAsyncComponent(() => import('@/components/Ceo/CeoFusionsModal.vue'))
 import OtdrResultCard from '@/components/Otdr/OtdrResultCard.vue'
 
@@ -1050,9 +1028,7 @@ function cableHoverText(cable) {
 /** Clique no cabo: o card completo (TX/RX/atenuação e ações), onde se clicou. */
 const handleCableClick = (cable, event) => {
   if (nearSiteMarker(event)) return
-  if (ceoDeriving.value) return // a desenhar um derivado: o clique é ponto do traçado
   cableHover.value = null
-  cableClickPoint.value = Number.isFinite(event?.lat) && Number.isFinite(event?.lng) ? { lat: event.lat, lng: event.lng } : null
   hoveredCable.value = cable
   tooltipPosition.value = { x: event?.clientX || 0, y: event?.clientY || 0 }
   showCableTooltip.value = true
@@ -1064,21 +1040,12 @@ const openCableDetailsFromTooltip = (cable) => {
   showCableDetailModal.value = true
 }
 
-// ── EV-0135: CEOs no traçado e cabos derivados ───────────────────────────────
+// ── EV-0135/0137: CEOs nos traçados — só leitura aqui (a edição é no Projeto de Rede) ──
 const CEOS_URL = '/api/v1/inventory/ceos/'
 const ceos = ref([])
 const ceoOpenId = ref(null)
-const ceoCreate = ref(null) // {cable, point}
-const ceoDeriving = ref(null)
 const ceoFusionsFor = ref(null) // EV-0136
-const cableClickPoint = ref(null)
 const ceoOpen = computed(() => ceos.value.find((c) => c.id === ceoOpenId.value) || null)
-const siteOptions = computed(() =>
-  [...sitesMap.value.values()]
-    .map((s) => ({ id: s.id, name: s.display_name || s.name || `Site ${s.id}` }))
-    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
-)
-
 async function loadCeos() {
   try {
     const body = await apiGet(CEOS_URL)
@@ -1086,25 +1053,6 @@ async function loadCeos() {
   } catch (e) {
     console.warn('[CustomMapViewer] CEOs indisponíveis:', e?.message)
   }
-}
-function openInsertCeo(cable) {
-  if (!cableClickPoint.value) return
-  showCableTooltip.value = false
-  ceoCreate.value = { cable, point: cableClickPoint.value }
-}
-async function onCeoCreated(ceo) {
-  ceoCreate.value = null
-  await loadCeos()
-  ceoOpenId.value = ceo.id
-}
-function startDerive(ceo) {
-  ceoOpenId.value = null
-  ceoDeriving.value = ceo
-}
-async function onDerived(cable) {
-  ceoDeriving.value = null
-  await Promise.all([loadCeos(), loadInventoryItems()])
-  if (!selectedItems.value.cables.includes(cable.id)) selectedItems.value.cables = [...selectedItems.value.cables, cable.id]
 }
 
 // ── EV-0127/0128: localizador OTDR ───────────────────────────────────────────

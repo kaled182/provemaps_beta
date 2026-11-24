@@ -20,16 +20,18 @@
       <dd data-testid="ceo-card-derived">{{ ceo.derived.length ? ceo.derived.map((d) => d.name).join(', ') : 'nenhum' }}</dd>
     </dl>
     <div class="cc-actions">
-      <button type="button" class="cc-btn" data-testid="ceo-fusions" @click="$emit('fusions', ceo)">Emendas</button>
-      <button type="button" class="cc-btn" data-testid="ceo-derive" @click="$emit('derive', ceo)">Derivar cabo</button>
+      <button type="button" class="cc-btn" data-testid="ceo-fusions" @click="$emit('fusions', ceo)">Ver emendas</button>
+      <EditInProjectLink type="ceo" :target="ceo" />
     </div>
   </div>
 </template>
 
 <script setup>
-/** Cartão de uma CEO no mapa (EV-0135). */
+/** Cartão de uma CEO no mapa de monitoramento (EV-0135), só leitura (EV-0137): editar é no Projeto. */
+import EditInProjectLink from '@/components/Map/EditInProjectLink.vue'
+
 defineProps({ ceo: { type: Object, required: true } })
-defineEmits(['close', 'derive', 'fusions'])
+defineEmits(['close', 'fusions'])
 </script>
 
 <style scoped>

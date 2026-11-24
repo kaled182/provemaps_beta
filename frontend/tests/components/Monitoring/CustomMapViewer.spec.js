@@ -58,9 +58,14 @@ vi.mock('@/providers/maps/MapProviderFactory.js', () => ({
 }));
 
 const routeFake = { params: { mapId: 'default', category: 'backbone' }, query: {} };
-vi.mock('vue-router', () => ({
-  useRoute: () => routeFake,
-}));
+vi.mock('vue-router', async () => {
+  const { h } = await vi.importActual('vue');
+  return {
+    useRoute: () => routeFake,
+    // EV-0137: «Editar no Projeto ↗» — o destino fica legível no atributo
+    RouterLink: { props: ['to'], setup: (p, { slots, attrs }) => () => h('a', { ...attrs, 'data-to': JSON.stringify(p.to) }, slots.default?.()) },
+  };
+});
 
 const realtimeFake = { hostsCb: null, cablesCb: null, connect: vi.fn(), disconnect: vi.fn(), error: ref(null), connected: ref(false) };
 vi.mock('@/composables/useRealtimeStatus', () => ({
@@ -447,27 +452,36 @@ describe('CustomMapViewer (EV-0012c)', () => {
     wrapper.unmount();
   }, 15_000); // imports dinâmicos (modal OTDR): na suite completa a 1.ª compilação passa dos 5 s
 
-  it('EV-0135: CEOs aparecem como pinos; «Inserir CEO aqui» abre o formulário com o ponto do clique; o cartão abre no pino', async () => {
+  it('EV-0137: só leitura — o cartão do cabo não insere CEO; a CEO mostra-se, as emendas abrem em leitura e «Editar no Projeto ↗» leva ao Projeto de Rede focado', async () => {
     const CEO = { id: 4, name: 'CEO-04', cable_id: 1, cable_name: 'Cabo 1', point: [-49.25, -16.65], km: 1.2, mode: 'corte', mode_label: 'Corte / emenda total', slack_m: null, trays: 2, derived: [] };
     global.fetch = vi.fn(async (url) =>
       url === '/api/v1/inventory/ceos/'
         ? { ok: true, status: 200, json: async () => [CEO] }
-        : { ok: true, status: 200, json: async () => ({ hosts_status: [] }) },
+        : String(url).startsWith('/api/v1/inventory/ceos/4/fusions/')
+          ? { ok: true, status: 200, json: async () => ({ ceo: { id: 4, name: 'CEO-04', mode: 'corte', trays: 2, splices_per_tray: 24 }, cables: [], fusions: [] }) }
+          : { ok: true, status: 200, json: async () => ({ hosts_status: [] }) },
     );
     const wrapper = mountViewer();
     await flushPromises();
     const map = fakeFactory.maps[0];
-    expect(wrapper.findAll('[data-testid="ceo-pin"]')).toHaveLength(1);
-    await wrapper.find('[data-testid="ceo-pin"]').trigger('click');
-    expect(wrapper.find('[data-testid="ceo-card-4"]').text()).toContain('Corte / emenda total');
     map.polylines[0].fire('click', { lat: -16.66, lng: -49.24, clientX: 200, clientY: 100 });
     await flushPromises();
-    wrapper.findComponent({ name: 'CableOpticalTooltip' }).vm.$emit('insert-ceo', { id: 'c1', name: 'Cabo 1' });
     await vi.dynamicImportSettled();
     await flushPromises();
-    const modal = wrapper.findComponent({ name: 'CeoCreateModal' });
-    expect(modal.props('point')).toEqual({ lat: -16.66, lng: -49.24 });
-    expect(modal.props('cable')).toEqual({ id: 'c1', name: 'Cabo 1' });
+    expect(wrapper.find('[data-testid="cable-insert-ceo"]').exists()).toBe(false);
+    expect(wrapper.findAll('[data-testid="ceo-pin"]')).toHaveLength(1);
+    await wrapper.find('[data-testid="ceo-pin"]').trigger('click');
+    const card = wrapper.find('[data-testid="ceo-card-4"]');
+    expect(card.text()).toContain('Corte / emenda total');
+    expect(card.find('[data-testid="ceo-derive"]').exists()).toBe(false);
+    const to = JSON.parse(card.get('[data-testid="edit-in-project"]').attributes('data-to'));
+    expect(to).toEqual({ path: '/Network/NetworkDesign/', query: { foco: 'ceo', id: '4', lat: '-16.65', lng: '-49.25', nome: 'CEO-04' } });
+    await card.get('[data-testid="ceo-fusions"]').trigger('click');
+    await vi.dynamicImportSettled();
+    await flushPromises();
+    expect(wrapper.findComponent({ name: 'CeoFusionsModal' }).props('readonly')).toBe(true);
+    expect(document.body.querySelector('[data-testid="fusion-readonly"]')).not.toBeNull();
+    expect(document.body.querySelector('[data-testid="fusion-create"]')).toBeNull();
     wrapper.unmount();
   }, 15_000);
 
