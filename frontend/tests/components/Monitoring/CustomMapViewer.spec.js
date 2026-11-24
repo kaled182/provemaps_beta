@@ -55,8 +55,9 @@ vi.mock('@/providers/maps/MapProviderFactory.js', () => ({
   createMap: vi.fn(async (container, options) => makeFakeMap(options)),
 }));
 
+const routeFake = { params: { mapId: 'default', category: 'backbone' }, query: {} };
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: { mapId: 'default', category: 'backbone' } }),
+  useRoute: () => routeFake,
 }));
 
 const realtimeFake = { hostsCb: null, cablesCb: null, connect: vi.fn(), disconnect: vi.fn(), error: ref(null), connected: ref(false) };
@@ -328,5 +329,37 @@ describe('CustomMapViewer (EV-0012c)', () => {
     expect(map.markers[0].remove).toHaveBeenCalled();
     expect(map.markers[1].remove).toHaveBeenCalled();
     wrapper.unmount();
+  });
+
+  it('EV-0107: ?site= enquadra e destaca os equipamentos do POP em vez de enquadrar tudo', async () => {
+    routeFake.query = { site: '10' };
+    try {
+      const wrapper = mountViewer();
+      await flushPromises();
+      const map = fakeFactory.maps[0];
+      expect(map.fitBounds).toHaveBeenCalledTimes(1);
+      expect(map.fitBounds).toHaveBeenCalledWith(expect.any(Array), { padding: 80, maxZoom: 16 });
+      expect(map.fitBounds.mock.calls[0][0]).toHaveLength(2); // os 2 equipamentos com coordenadas do POP 10
+      expect(map.markers[0].setStyle).toHaveBeenCalledWith({ size: 24 });
+      vi.advanceTimersByTime(6000);
+      expect(map.markers[0].setStyle).toHaveBeenLastCalledWith({ size: 14 });
+      wrapper.unmount();
+    } finally {
+      routeFake.query = {};
+    }
+  });
+
+  it('EV-0107: ?site= de um POP sem equipamentos no mapa avisa e enquadra tudo', async () => {
+    routeFake.query = { site: '999' };
+    try {
+      const wrapper = mountViewer();
+      await flushPromises();
+      const map = fakeFactory.maps[0];
+      expect(map.fitBounds).toHaveBeenCalledWith(expect.any(Array), { padding: 50, maxZoom: 15 });
+      expect(wrapper.text()).toContain('O POP pedido não tem equipamentos com coordenadas neste mapa.');
+      wrapper.unmount();
+    } finally {
+      routeFake.query = {};
+    }
   });
 });

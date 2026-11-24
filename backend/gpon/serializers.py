@@ -75,6 +75,7 @@ class OltSerializer(serializers.Serializer):
     model = serializers.CharField(allow_null=True)
     ip = serializers.CharField(allow_null=True)
     site_name = serializers.CharField(allow_null=True)
+    site_id = serializers.IntegerField(allow_null=True)
     status = serializers.ChoiceField(choices=["online", "offline", "unknown"])
     collection_ok = serializers.BooleanField()
     cpu_pct = serializers.FloatField(allow_null=True)

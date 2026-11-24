@@ -103,27 +103,6 @@ export function ponState(pon, status = null) {
   return { label: 'Operacional', tone: 'success' }
 }
 
-/** Diagnóstico do inspetor — só frases com base em factos do payload. */
-export function ponDiagnostics(pon, thresholds, status = null) {
-  const out = []
-  if (pon?.collective_drop) {
-    out.push(
-      `Queda massiva: ${formatInt(pon.los)} ONUs em LOS na mesma janela de 10 min — provável rompimento a montante (cabo/fusão/splitter primário).`,
-    )
-  }
-  const att = attentionOf(pon)
-  if (att > 0) {
-    const limit = thresholds?.warning ?? null
-    const below = limit === null ? 'com sinal em atenção' : `com sinal abaixo de ${formatCompact(limit)} dBm`
-    out.push(`${formatInt(att)} ONUs ${below} — verificar fusão, conector ou splitter da caixa.`)
-  }
-  if ((pon?.occupancy_pct ?? 0) > OCCUPANCY_LIMIT) {
-    out.push(`Ocupação de ${formatPercent(pon.occupancy_pct)} da capacidade da PON — planear expansão ou balanceamento.`)
-  }
-  if ((pon?.status ?? status) === 'down') out.push('Porta PON em baixo no Zabbix.')
-  return out
-}
-
 /** Número do slot com dois dígitos («09»). */
 export const slotLabel = (n) => String(n).padStart(2, '0')
 

@@ -58,9 +58,12 @@
             :selected-pon="selectedPon"
             :selected-slot="selectedSlot"
             :thresholds="thresholds"
+            :onus="onusOf(o.device_id)"
+            :signal-band="signalBand"
             @toggle-pon="togglePon"
             @toggle-slot="toggleSlot"
             @clear-selection="clearSelection"
+            @signal-band="toggleSignalBand"
           />
         </template>
         <template v-else>
@@ -91,7 +94,7 @@
  * Monitoramento GPON (EV-0095): OLTs, PONs e ONUs a partir do estado que a tarefa
  * de coleta gravou (o pedido não vai ao Zabbix). «Zabbix fora» ≠ «sem dados».
  */
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { PhCube, PhSquaresFour } from '@phosphor-icons/vue'
 import GponHeader from '@/components/Gpon/GponHeader.vue'
 import GponKpis from '@/components/Gpon/GponKpis.vue'
@@ -126,6 +129,8 @@ const {
   togglePon,
   toggleSlot,
   clearSelection,
+  signalBand,
+  toggleSignalBand,
 } = useGponOverview()
 
 /** Vista das OLTs (EV-0101): painel frontal (padrão) ou a grade compacta de cartões. */
@@ -149,6 +154,19 @@ function setView(v) {
   } catch {
     /* sem localStorage (janela privada): a escolha vale só nesta visita */
   }
+}
+
+/** EV-0107: ONUs de uma OLT (todas, sem filtros), indexadas uma vez por atualização. */
+const onusByOlt = computed(() => {
+  const map = new Map()
+  for (const o of data.value?.onus || []) {
+    if (!map.has(o.device_id)) map.set(o.device_id, [])
+    map.get(o.device_id).push(o)
+  }
+  return map
+})
+function onusOf(deviceId) {
+  return onusByOlt.value.get(deviceId) || []
 }
 
 /** Todas as PONs de uma OLT (sem a pílula), para os LEDs do chassi. */

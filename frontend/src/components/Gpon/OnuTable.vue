@@ -23,7 +23,18 @@
             <span v-if="showOlt" class="block text-xs text-neutral-500 font-sans">{{ o.olt_name }}</span>
           </td>
           <td class="td">
-            <span class="num">{{ o.serial || o.mac || '—' }}</span>
+            <button
+              v-if="o.serial || o.mac"
+              type="button"
+              class="copy num"
+              :title="copiedId === o.id ? 'Copiado' : 'Copiar'"
+              :data-testid="`onu-copy-${o.id}`"
+              @click="copySerial(o)"
+            >
+              {{ o.serial || o.mac }}
+              <component :is="copiedId === o.id ? PhCheck : PhCopy" :size="12" class="copy-icon" :class="{ 'copy-done': copiedId === o.id }" />
+            </button>
+            <span v-else class="num">—</span>
             <span v-if="o.serial && o.mac" class="num text-xs text-neutral-500 ml-2">{{ o.mac }}</span>
             <span v-if="subline(o)" class="block text-xs text-neutral-500 truncate max-w-xs">{{ subline(o) }}</span>
           </td>
@@ -61,8 +72,9 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
-import { PhChartLine } from '@phosphor-icons/vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { PhChartLine, PhCheck, PhCopy } from '@phosphor-icons/vue'
+import { copyText } from './ponDiagnosis'
 import { formatDbm, formatDistance, formatSince } from '@/utils/ptBrFormat'
 
 const PAGE = 200
@@ -72,6 +84,23 @@ const props = defineProps({
   showOlt: { type: Boolean, default: true },
 })
 defineEmits(['history'])
+
+// EV-0107: serial/MAC copiável com 1 clique, com confirmação breve
+const copiedId = ref(null)
+let copiedTimer = null
+async function copySerial(o) {
+  try {
+    await copyText(o.serial || o.mac)
+    copiedId.value = o.id
+    clearTimeout(copiedTimer)
+    copiedTimer = setTimeout(() => {
+      copiedId.value = null
+    }, 1500)
+  } catch {
+    copiedId.value = null
+  }
+}
+onBeforeUnmount(() => clearTimeout(copiedTimer))
 
 const limit = ref(PAGE)
 const shown = computed(() => props.onus.slice(0, limit.value))
@@ -118,6 +147,26 @@ function distanceSince(o) {
 </script>
 
 <style scoped>
+.copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 2px;
+  border-radius: 4px;
+  color: rgb(var(--n-900));
+}
+.copy:hover {
+  background: rgb(var(--n-100));
+}
+.copy-icon {
+  color: rgb(var(--n-400));
+}
+.copy:hover .copy-icon {
+  color: rgb(var(--n-700));
+}
+.copy-done {
+  color: rgb(var(--success));
+}
 .th {
   padding: 6px 10px;
   text-align: left;

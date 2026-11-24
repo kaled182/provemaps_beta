@@ -22,7 +22,6 @@ import {
   indexPons,
   linkLed,
   linkTooltip,
-  ponDiagnostics,
   ponLed,
   ponState,
   ponTooltip,
@@ -124,15 +123,7 @@ describe('chassisLed — regras', () => {
     expect(ponState(null, 'up').label).toBe('Sem ONUs')
     expect(ponState(pon({ severity: 'warning' })).label).toBe('Operacional')
 
-    const th = { warning: -24.0, critical: -27.5 }
-    expect(ponDiagnostics(pon(), th)).toEqual([])
-    expect(ponDiagnostics(pon({ collective_drop: true, los: 5 }), th)[0]).toBe(
-      'Queda massiva: 5 ONUs em LOS na mesma janela de 10 min — provável rompimento a montante (cabo/fusão/splitter primário).',
-    )
-    expect(ponDiagnostics(pon({ signal_warning: 3, signal_critical: 1 }), th)).toEqual([
-      '4 ONUs com sinal abaixo de -24 dBm — verificar fusão, conector ou splitter da caixa.',
-    ])
-    expect(ponDiagnostics(null, th, 'down')).toEqual(['Porta PON em baixo no Zabbix.'])
+    // diagnóstico da porta: tests/unit/gpon/ponDiagnosis.spec.js (EV-0107)
   })
 })
 
@@ -320,7 +311,8 @@ describe('Alternador de vista', () => {
 
 describe('EV-0101 — ocupação alta no inspetor', () => {
   it('PON em warning só por ocupação diz «Ocupação alta» e explica', async () => {
-    const { ponState, ponDiagnostics } = await import('@/components/Gpon/chassisLed.js')
+    const { ponState } = await import('@/components/Gpon/chassisLed.js')
+    const { ponDiagnostics } = await import('@/components/Gpon/ponDiagnosis.js')
     const pon = { pon_id: '0/1', onus_provisioned: 60, capacity: 64, occupancy_pct: 93.8, severity: 'warning', status: 'up', los: 0, signal_warning: 0, signal_critical: 0, collective_drop: false }
     expect(ponState(pon)).toEqual({ label: 'Ocupação alta', tone: 'warning' })
     expect(ponDiagnostics(pon, { warning: -24 }).join(' ')).toMatch(/Ocupação de 94%/)

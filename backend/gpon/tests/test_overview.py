@@ -50,6 +50,7 @@ OLT_KEYS = [
     "model",
     "ip",
     "site_name",
+    "site_id",
     "status",
     "collection_ok",
     "cpu_pct",
@@ -174,6 +175,7 @@ def test_keys_and_order_follow_the_contract(olts, fake_zabbix, config):
         "10.254.0.2",
     )
     assert zte["site_name"] == "SITE - BARREIRA VELHA" and zte["technology"] == "gpon"
+    assert isinstance(zte["site_id"], int)  # EV-0107: «Ver no mapa» foca o POP
     assert zte["pons"][0]["status"] == "up" and zte["pons"][0]["label"] == "PON 9/14"
     vsol = next(o for o in data["olts"] if o["vendor"] == "vsol")
     assert vsol["status"] == "offline" and vsol["technology"] == "epon"

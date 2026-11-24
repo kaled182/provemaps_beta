@@ -56,6 +56,10 @@
         :preview="isPreview"
         :ports-count="pons.length"
         @clear="$emit('clear-selection')"
+        @band="(band) => $emit('signal-band', olt.device_id, inspectPortId, band)"
+        :onus="inspectOnus"
+        :olt="olt"
+        :signal-band="portId !== null ? signalBand : null"
         :port-status="selectedPortStatus"
         :card="selectedCard"
         :card-pons="selectedCardPons"
@@ -89,8 +93,12 @@ const props = defineProps({
   selectedPon: { type: String, default: null },
   selectedSlot: { type: String, default: null },
   thresholds: { type: Object, default: null },
+  /** EV-0107: ONUs desta OLT (sem os filtros da tabela) — o inspetor usa as da porta. */
+  onus: { type: Array, default: () => [] },
+  /** EV-0107: faixa do histograma ativa (vale para a PON selecionada). */
+  signalBand: { type: String, default: null },
 })
-defineEmits(['toggle-pon', 'toggle-slot', 'clear-selection'])
+defineEmits(['toggle-pon', 'toggle-slot', 'clear-selection', 'signal-band'])
 
 const isNum = (v) => v !== null && v !== undefined && Number.isFinite(Number(v))
 
@@ -127,6 +135,9 @@ const previewPortId = computed(() => (portId.value === null && slotNum.value ===
 const isPreview = computed(() => previewPortId.value !== null)
 const inspectPortId = computed(() => portId.value ?? previewPortId.value)
 const selectedPonObj = computed(() => (inspectPortId.value === null ? null : ponIdx.value.get(inspectPortId.value) || null))
+const inspectOnus = computed(() =>
+  inspectPortId.value === null ? [] : props.onus.filter((o) => String(o.pon_id) === inspectPortId.value),
+)
 const allPorts = computed(() => [
   ...(chassis.value.ports || []),
   ...(chassis.value.slots || []).flatMap((s) => s.ports || []),

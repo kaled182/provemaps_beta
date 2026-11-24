@@ -35,6 +35,27 @@
         <dd data-testid="insp-sfp-temp" title="não coletado">—</dd>
       </dl>
 
+      <!-- EV-0107: histograma de saúde óptica — clicar filtra a tabela por essa faixa -->
+      <div v-if="pon" class="mt-3" data-testid="insp-bands">
+        <p class="text-xs font-semibold text-neutral-700">Saúde óptica das ONUs</p>
+        <button
+          v-for="b in bands"
+          :key="b.band"
+          type="button"
+          class="band"
+          :class="[`band-${b.band}`, { 'band-on': signalBand === b.band }]"
+          :disabled="!b.count"
+          :aria-pressed="signalBand === b.band"
+          :title="b.count ? `Mostrar só as ONUs ${b.label.toLowerCase()} na tabela (clique de novo para todas)` : 'Nenhuma ONU nesta faixa'"
+          :data-testid="`insp-band-${b.band}`"
+          @click="$emit('band', b.band)"
+        >
+          <span class="band-label">{{ b.label }}</span>
+          <span class="band-track" aria-hidden="true"><span class="band-fill" :style="{ width: `${b.pct}%` }"></span></span>
+          <span class="band-count num">{{ formatInt(b.count) }}</span>
+        </button>
+      </div>
+
       <div v-if="diagnostics.length" class="diag mt-3" data-testid="insp-diagnostics">
         <p class="flex items-center gap-1.5 text-xs font-semibold text-neutral-700">
           <PhStethoscope :size="14" /> Diagnóstico
@@ -43,6 +64,25 @@
           <li v-for="d in diagnostics" :key="d" class="text-xs text-neutral-700">{{ d }}</li>
         </ul>
       </div>
+
+      <!-- EV-0107: ações rápidas da porta -->
+      <div class="actions mt-3" data-testid="insp-actions">
+        <button type="button" class="act" data-testid="insp-copy-os" @click="copyOs">
+          <component :is="copied ? PhCheck : PhClipboardText" :size="14" />
+          {{ copied ? 'Copiado!' : 'Copiar resumo OS' }}
+        </button>
+        <button
+          type="button"
+          class="act"
+          :disabled="!olt?.site_id"
+          :title="olt?.site_id ? `Abrir o mapa backbone com ${olt.site_name || 'o POP da OLT'} em destaque` : 'OLT sem POP no inventário'"
+          data-testid="insp-map"
+          @click="openMap"
+        >
+          <PhMapPin :size="14" /> Ver no mapa
+        </button>
+      </div>
+      <p v-if="copyError" class="mt-1 text-xs text-danger" role="alert">Não foi possível copiar: {{ copyError }}</p>
     </template>
 
     <!-- placa selecionada -->
@@ -82,13 +122,23 @@
  * Inspetor de porta/placa do chassi (EV-0101). Só factos do payload: o que o Zabbix
  * não dá (temperatura do SFP) fica «—» com «não coletado» (§2.1).
  */
-import { computed } from 'vue'
-import { PhCircuitry, PhCursorClick, PhPlug, PhStethoscope } from '@phosphor-icons/vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import {
+  PhCheck,
+  PhCircuitry,
+  PhClipboardText,
+  PhCursorClick,
+  PhMapPin,
+  PhPlug,
+  PhStethoscope,
+} from '@phosphor-icons/vue'
 import { OCCUPANCY_LIMIT } from '@/composables/useGponOverview'
 import { formatDbm, formatInt, formatPercent } from '@/utils/ptBrFormat'
-import { ponDiagnostics, ponState } from './chassisLed'
+import { ponState } from './chassisLed'
+import { copyText, ponDiagnostics, ponOsSummary, ponSignalBands } from './ponDiagnosis'
 
-defineEmits(['clear'])
+defineEmits(['clear', 'band'])
 const props = defineProps({
   /** pon_id da porta selecionada nesta OLT (ou null). */
   portId: { type: String, default: null },
@@ -105,11 +155,53 @@ const props = defineProps({
   preview: { type: Boolean, default: false },
   /** Nº de PONs da OLT, para o botão «Todas as portas (N)». */
   portsCount: { type: Number, default: 0 },
+  /** EV-0107: ONUs desta porta (todas, sem os filtros da tabela). */
+  onus: { type: Array, default: () => [] },
+  /** EV-0107: OLT (nome, POP, site_id) para o resumo da OS e o «Ver no mapa». */
+  olt: { type: Object, default: null },
+  /** EV-0107: faixa do histograma ativa na tabela (normal|warning|critical) ou null. */
+  signalBand: { type: String, default: null },
 })
 
 const attention = computed(() => (props.pon?.signal_warning ?? 0) + (props.pon?.signal_critical ?? 0))
 const state = computed(() => ponState(props.pon, props.portStatus))
-const diagnostics = computed(() => ponDiagnostics(props.pon, props.thresholds, props.portStatus))
+const diagnostics = computed(() =>
+  ponDiagnostics(props.pon, props.thresholds, props.portStatus, props.onus, Date.now()),
+)
+const bands = computed(() => ponSignalBands(props.onus, props.thresholds))
+
+const router = useRouter()
+const copied = ref(false)
+const copyError = ref('')
+let copiedTimer = null
+
+async function copyOs() {
+  copyError.value = ''
+  const text = ponOsSummary({
+    olt: props.olt,
+    pon: props.pon,
+    portId: props.portId,
+    stateLabel: state.value.label,
+    onus: props.onus,
+    diagnostics: diagnostics.value,
+  })
+  try {
+    await copyText(text)
+    copied.value = true
+    clearTimeout(copiedTimer)
+    copiedTimer = setTimeout(() => {
+      copied.value = false
+    }, 1500)
+  } catch (e) {
+    copyError.value = e?.message || 'área de transferência indisponível'
+  }
+}
+onBeforeUnmount(() => clearTimeout(copiedTimer))
+
+function openMap() {
+  if (!props.olt?.site_id) return
+  router.push({ path: '/monitoring/backbone/map/default', query: { site: String(props.olt.site_id) } })
+}
 const highOccupancy = computed(() => (props.pon?.occupancy_pct ?? 0) > OCCUPANCY_LIMIT)
 const occWidth = computed(() => Math.min(Math.max(props.pon?.occupancy_pct ?? 0, 0), 100))
 const occupancyText = computed(() => {
@@ -200,6 +292,81 @@ const slotSummary = computed(() => {
   border-radius: 6px;
   border: 1px solid rgb(var(--warning) / 0.35);
   background: rgb(var(--warning) / 0.07);
+}
+.band {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 2.5rem;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  text-align: left;
+  color: rgb(var(--n-700));
+}
+.band:hover:not(:disabled) {
+  background: rgb(var(--n-100));
+}
+.band:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.band-on {
+  border-color: rgb(var(--primary-500) / 0.6);
+  background: rgb(var(--primary-500) / 0.08);
+}
+.band-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.band-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgb(var(--n-200));
+  overflow: hidden;
+}
+.band-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+.band-normal .band-fill { background: rgb(var(--success)); }
+.band-warning .band-fill { background: rgb(var(--warning)); }
+.band-critical .band-fill { background: rgb(var(--danger)); }
+.band-count {
+  text-align: right;
+  font-weight: 600;
+  color: rgb(var(--n-900));
+}
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid rgb(var(--n-200));
+}
+.act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgb(var(--n-300));
+  font-size: 12px;
+  font-weight: 500;
+  color: rgb(var(--n-800));
+}
+.act:hover:not(:disabled) {
+  background: rgb(var(--n-100));
+}
+.act:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .hint {
   margin-left: auto;

@@ -643,6 +643,8 @@ def gpon_overview(olt_id: int | None = None, now: datetime | None = None) -> dic
                 "model": (meta or {}).get("model") or device.model or None,
                 "ip": device.primary_ip or None,
                 "site_name": device.site.display_name if device.site_id else None,
+                # EV-0107: «Ver no mapa» foca o POP da OLT no mapa backbone
+                "site_id": device.site_id,
                 "status": status,
                 "collection_ok": collection_ok,
                 "cpu_pct": (meta or {}).get("cpu_pct"),

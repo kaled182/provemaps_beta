@@ -30,6 +30,8 @@ export const FILTERS = [
 ]
 
 export const ponKey = (deviceId, ponId) => `${deviceId}:${ponId}`
+
+const BAND_LABEL = { normal: 'bom', warning: 'em atenção', critical: 'crítico' }
 export const slotKey = (deviceId, slot) => `${deviceId}:${slot}`
 
 /** Chave do localStorage da vista do ecrã (EV-0101): 'chassis' | 'grid'. */
@@ -119,6 +121,14 @@ export function useGponOverview({ autoRefresh = true } = {}) {
   const query = ref('')
   const selectedPon = ref(null)
   const selectedSlot = ref(null)
+  /**
+   * EV-0107: faixa de sinal escolhida no histograma ({ key: PON, band }). Só vale para a PON
+   * em que foi escolhida — selecionar outra porta deixa-a sem efeito, sem `watch` a limpar.
+   */
+  const bandChoice = ref(null)
+  const signalBand = computed(() =>
+    bandChoice.value !== null && bandChoice.value.key === selectedPon.value ? bandChoice.value.band : null,
+  )
   let timer = null
 
   async function load() {
@@ -217,6 +227,7 @@ export function useGponOverview({ autoRefresh = true } = {}) {
       if (slot !== null && (o.device_id !== slot[0] || !String(o.pon_id).startsWith(`${slot[1]}/`))) return false
       if (sel === null && slot === null && oltFilter.value !== null && o.device_id !== oltFilter.value) return false
       if (!onuMatchesFilter(o)) return false
+      if (sel !== null && signalBand.value !== null && o.signal !== signalBand.value) return false
       if (q && !onuMatchesQuery(o, q)) return false
       if (!scoped && filter.value === 'all' && !q && o.severity_rank > PROBLEM_RANK) return false
       return true
@@ -226,7 +237,8 @@ export function useGponOverview({ autoRefresh = true } = {}) {
   const tableScope = computed(() => {
     if (selectedPon.value !== null) {
       const pon = ponIndex.value.get(selectedPon.value)
-      return pon ? pon.label : `PON ${splitKey(selectedPon.value)[1]}`
+      const label = pon ? pon.label : `PON ${splitKey(selectedPon.value)[1]}`
+      return signalBand.value === null ? label : `${label} · sinal ${BAND_LABEL[signalBand.value]}`
     }
     if (selectedSlot.value !== null) return `Slot ${splitKey(selectedSlot.value)[1]}`
     if (oltFilter.value !== null) return allOlts.value.find((o) => o.device_id === oltFilter.value)?.name || 'OLT'
@@ -236,6 +248,7 @@ export function useGponOverview({ autoRefresh = true } = {}) {
   })
 
   function togglePon(deviceId, ponId) {
+    bandChoice.value = null
     const key = ponKey(deviceId, ponId)
     selectedPon.value = selectedPon.value === key ? null : key
     if (selectedPon.value !== null) selectedSlot.value = null
@@ -281,8 +294,22 @@ export function useGponOverview({ autoRefresh = true } = {}) {
   })
 
   function clearSelection() {
+    bandChoice.value = null
     selectedPon.value = null
     selectedSlot.value = null
+  }
+
+  /**
+   * EV-0107: clique numa faixa do histograma — seleciona a PON (se era a pré-visualização) e
+   * filtra a tabela por essa faixa; a mesma faixa outra vez limpa o filtro.
+   */
+  function toggleSignalBand(deviceId, ponId, band) {
+    const key = ponKey(deviceId, ponId)
+    if (selectedPon.value !== key) {
+      selectedSlot.value = null
+      selectedPon.value = key
+    }
+    bandChoice.value = signalBand.value === band ? null : { key, band }
   }
 
   /**
@@ -342,6 +369,8 @@ export function useGponOverview({ autoRefresh = true } = {}) {
     togglePon,
     toggleSlot,
     clearSelection,
+    signalBand,
+    toggleSignalBand,
     focusOltId,
     stop,
   }

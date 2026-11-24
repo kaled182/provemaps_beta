@@ -751,9 +751,39 @@ const updateMap = () => {
   // Carga inicial: ajusta bounds se há itens; sem itens permanece na localização configurada.
   // Sem setTimeout: a factory só devolve o mapa quando o provider está pronto.
   if (wasInitialLoad) {
+    // EV-0107: «Ver no mapa» do ecrã GPON abre com ?site=<id> — enquadra e destaca esse POP
+    if (focusSiteFromQuery()) return
     const hasItems = selectedItems.value.devices.length > 0 || selectedItems.value.cables.length > 0
     if (hasItems) fitAllItemsBounds()
   }
+}
+
+// ── Foco num POP vindo de outro ecrã (?site=<id>) — EV-0107 ───────────────────
+const FOCUS_HIGHLIGHT_MS = 6000
+const FOCUS_MARKER_SIZE = 24
+let focusTimer = null
+
+function focusSiteFromQuery() {
+  const siteId = Number(route.query?.site)
+  if (!map.value || !Number.isFinite(siteId) || siteId <= 0) return false
+  const ids = availableItems.value.devices
+    .filter((d) => Number(d.site ?? d.site_id) === siteId)
+    .map((d) => d.id)
+  const markers = ids.map((id) => activeMarkers.get(id)).filter(Boolean)
+  if (!markers.length) {
+    showToast('O POP pedido não tem equipamentos com coordenadas neste mapa.', 'warning', 5000)
+    return false
+  }
+  map.value.fitBounds(
+    markers.map((m) => m.getPosition()),
+    { padding: 80, maxZoom: 16 },
+  )
+  markers.forEach((m) => m.setStyle({ size: FOCUS_MARKER_SIZE }))
+  clearTimeout(focusTimer)
+  focusTimer = setTimeout(() => {
+    markers.forEach((m) => m.setStyle({ size: DEVICE_MARKER_SIZE }))
+  }, FOCUS_HIGHLIGHT_MS)
+  return true
 }
 
 const toggleItem = (itemId) => {
@@ -1176,6 +1206,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  clearTimeout(focusTimer)
   stopStatusPolling()
 
   if (maintenanceMode.value) {
