@@ -154,6 +154,12 @@ app.conf.update(
             "schedule": 60.0,
             "options": {"queue": "default"},
         },
+        # EV-0085: aviso por e-mail de equipamentos sem leitura (só quando entra um novo).
+        "notify-collection-health": {
+            "task": "inventory.tasks.notify_collection_health",
+            "schedule": 3600.0,
+            "options": {"queue": "default"},
+        },
         "sync-zabbix-inventory": {
             "task": "inventory.tasks.sync_zabbix_inventory_task",
             "schedule": _inventory_sync_interval,

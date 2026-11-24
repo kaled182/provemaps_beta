@@ -64,6 +64,7 @@ from inventory.api.cable_types import (  # noqa: E402
     api_update_cable_type,
 )
 from inventory.api.check_update import api_check_update  # noqa: E402
+from inventory.api.collection_health import api_collection_health  # noqa: E402
 from inventory.api.fibers import api_fiber_audit_log  # noqa: E402
 from inventory.api.infrastructure import (  # noqa: E402
     api_create_infrastructure,
@@ -145,6 +146,8 @@ urlpatterns = [
         name="maintenance-alert-recipients",
     ),
     path("maintenance-alert/send/", api_maintenance_send_alert, name="maintenance-alert-send"),
+    # EV-0085: saúde da coleta óptica
+    path("collection-health/", api_collection_health, name="collection-health"),
     # Alarm configuration sources (users, groups, contacts)
     path("alarm-config-sources/", api_alarm_config_sources, name="alarm-config-sources"),
     # Cable Attachments

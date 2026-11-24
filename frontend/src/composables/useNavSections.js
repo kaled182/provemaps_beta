@@ -8,6 +8,7 @@
  */
 import {
   PhPulse,
+  PhHeartbeat,
   PhListBullets,
   PhShareNetwork,
   PhTreeStructure,
@@ -35,6 +36,7 @@ export const NAV_SECTIONS = Object.freeze([
     items: [
       { label: 'Visão geral', path: '/monitoring/monitoring-all', icon: PhListBullets },
       { label: 'Alarmes', path: '/alarmes', icon: PhBell },
+      { label: 'Saúde da coleta', path: '/saude-coleta', icon: PhHeartbeat },
       { label: 'Backbone', path: '/monitoring/backbone', icon: PhShareNetwork },
       { label: 'GPON', path: '/monitoring/gpon', icon: PhTreeStructure },
       { label: 'DWDM', path: '/monitoring/dwdm', icon: PhWaveform },

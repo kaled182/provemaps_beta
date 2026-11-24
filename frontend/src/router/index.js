@@ -92,6 +92,12 @@ const routes = [
     component: () => import('@/views/AlarmsView.vue'),
   },
   {
+    // EV-0085: o que não está a ser coletado do Zabbix
+    path: '/saude-coleta',
+    name: 'collection-health',
+    component: () => import('@/views/CollectionHealthView.vue'),
+  },
+  {
     // EV-0060 / ADR 0009: POPs e enlaces em SVG
     path: '/topologia',
     name: 'topology',

@@ -27,6 +27,9 @@ OPTICAL_LOCK_SECONDS = 300
 
 fetch_port_optical_snapshot = optical_domain.fetch_port_optical_snapshot
 
+# EV-0085: motivo gravado quando a chave da porta não existe (ou está desativada) no host.
+OPTICAL_ITEM_MISSING = "item não existe no host"
+
 
 @shared_task(
     name="inventory.sync_zabbix_inventory",
@@ -223,6 +226,7 @@ def update_all_port_optical_levels() -> dict[str, Any]:
             "tx_power_item_key",
             "last_rx_power",
             "last_tx_power",
+            "optical_problem",
             "device__zabbix_hostid",
         )
         .filter(
@@ -254,6 +258,17 @@ def update_all_port_optical_levels() -> dict[str, Any]:
         logger.error("[Optical Levels Task] Batch fetch falhou: %s", exc, exc_info=True)
         return {"success": False, "total": total, "updated": 0, "errors": 1, "error": str(exc)}
 
+    # EV-0085: uma chave que não veio no item.get do host fica no snapshot sem `*_dbm` e sem
+    # `*_problem` (o domínio guarda-a como «sem item»). Isso tanto é «item apagado no host»
+    # como «Zabbix em baixo» (o item.get em lote engole a exceção e devolve zero itens). Só
+    # se regista «item não existe no host» quando esta coleta recebeu pelo menos um item —
+    # sem isso uma falha do Zabbix marcava todas as portas como problema de item.
+    zabbix_answered = any(
+        snap.get(prefix + "_dbm") is not None or snap.get(prefix + "_problem")
+        for snap in snapshots_map.values()
+        for prefix in ("rx", "tx")
+    )
+
     # Persiste resultados em bulk-style (um save por porta com update_fields)
     for port in ports:
         try:
@@ -275,9 +290,26 @@ def update_all_port_optical_levels() -> dict[str, Any]:
 
             # EV-0082/EV-0088: regra partilhada com o refresh manual (um só `last_optical_check`;
             # a ponta sem leitura válida, com ou sem chave, passa a null quando a outra é gravada).
-            update_fields = apply_optical_snapshot(port, snapshot, now)
+            reading_fields = apply_optical_snapshot(port, snapshot, now)
+            update_fields = list(reading_fields)
+
+            # EV-0085: o motivo fica na porta (o ecrã «Saúde da coleta» e o aviso por e-mail
+            # leem-no); só entra no save quando muda, para não multiplicar escritas a cada 60 s.
+            missing = [
+                f"{label} ({snapshot.get(prefix + '_key')}): {OPTICAL_ITEM_MISSING}"
+                for label, prefix in (("RX", "rx"), ("TX", "tx"))
+                if snapshot.get(prefix + "_key")
+                and snapshot.get(prefix + "_dbm") is None
+                and not snapshot.get(prefix + "_problem")
+            ]
+            if not missing or zabbix_answered:
+                problem = ", ".join(bad + missing)[:255]
+                if problem != (port.optical_problem or ""):
+                    port.optical_problem = problem
+                    update_fields.append("optical_problem")
             if update_fields:
                 port.save(update_fields=update_fields)
+            if reading_fields:  # `updated` conta leituras gravadas, não só o motivo
                 updated += 1
         except Exception as exc:
             msg = f"Port {port.id} ({port.name}) falhou: {exc}"
@@ -642,3 +674,121 @@ def dispatch_fiber_alarms_task(window_minutes: int = 30) -> dict[str, Any]:
     except Exception as exc:
         logger.exception("dispatch_fiber_alarms_task failed: %s", exc)
         return {"error": str(exc)}
+
+
+# ── EV-0085: aviso por e-mail da saúde da coleta ────────────────────────────
+
+COLLECTION_HEALTH_NOTIFIED_KEY = "inventory:collection-health:notified"
+COLLECTION_HEALTH_NOTIFIED_TIMEOUT = 30 * 24 * 3600
+COLLECTION_HEALTH_ROUTE = "/saude-coleta"
+
+
+def _collection_health_alarms(report: dict[str, Any]) -> dict[int, dict[str, Any]]:
+    """Equipamentos «em alarme»: host Zabbix inexistente OU nenhuma porta com leitura.
+
+    Zabbix em baixo → ``devices_missing_host`` vem vazio: desconhecido não conta como inexistente.
+    """
+    alarms: dict[int, dict[str, Any]] = {}
+    for dev in report["devices_missing_host"]:
+        alarms.setdefault(
+            dev["device_id"],
+            {"name": dev["device_name"], "site": dev["site_name"], "reasons": []},
+        )["reasons"].append(f"host Zabbix {dev['zabbix_hostid']} não existe")
+    first_problem: dict[int, str] = {}
+    for port in report["ports"]:
+        if port["problem"]:
+            first_problem.setdefault(port["device_id"], port["problem"])
+    for dev in report["devices_without_readings"]:
+        reason = f"0 de {dev['ports_with_key']} porta(s) com leitura"
+        if dev["device_id"] in first_problem:
+            reason += f" (ex.: {first_problem[dev['device_id']]})"
+        alarms.setdefault(
+            dev["device_id"],
+            {"name": dev["device_name"], "site": dev["site_name"], "reasons": []},
+        )["reasons"].append(reason)
+    return alarms
+
+
+def _collection_health_email(
+    alarms: dict[int, dict[str, Any]], new_ids: set[int], stale_hours: int
+) -> tuple[str, str]:
+    lines = []
+    for device_id, info in sorted(alarms.items(), key=lambda kv: (kv[1]["name"], kv[0])):
+        mark = " [novo]" if device_id in new_ids else ""
+        site = f" — {info['site']}" if info["site"] else ""
+        lines.append(f"- {info['name']}{site}{mark}: {'; '.join(info['reasons'])}")
+    subject = f"[ProVeMaps] Saúde da coleta: {len(alarms)} equipamento(s) sem leitura"
+    body = (
+        "Equipamentos com host Zabbix inexistente ou sem nenhuma leitura óptica nas últimas "
+        f"{stale_hours} h:\n\n" + "\n".join(lines) + f"\n\nDetalhe em {COLLECTION_HEALTH_ROUTE}.\n"
+    )
+    return subject, body
+
+
+@shared_task(name="inventory.tasks.notify_collection_health")
+def notify_collection_health() -> dict[str, Any]:
+    """Um e-mail só quando um equipamento ENTRA no conjunto em alarme face ao último aviso.
+
+    O conjunto avisado fica em cache; quem sai do alarme sai também do guardado (se voltar,
+    avisa-se de novo). Nunca rebenta por SMTP nem por Zabbix: regista e devolve um dict.
+    """
+    from django.conf import settings
+    from django.core.mail import send_mail
+
+    from evolucao.tasks import destinatarios_staff
+    from inventory.usecases.collection_health import collection_health
+
+    try:
+        report = collection_health()
+    except Exception as exc:
+        logger.warning("[Collection Health] cálculo falhou: %s", exc, exc_info=True)
+        return {"sent": False, "error": str(exc)[:200]}
+
+    alarms = _collection_health_alarms(report)
+    current = set(alarms)
+    previous = {int(i) for i in (cache.get(COLLECTION_HEALTH_NOTIFIED_KEY) or [])}
+    new_ids = current - previous
+    result: dict[str, Any] = {
+        "sent": False,
+        "alarms": len(current),
+        "new": len(new_ids),
+        "zabbix_ok": report["zabbix_ok"],
+    }
+    # Os que saíram do alarme saem do guardado — menos com o Zabbix em baixo: aí o «host
+    # inexistente» é desconhecido e largá-los fazia o aviso repetir quando o Zabbix voltasse.
+    kept = (previous & current) if report["zabbix_ok"] else previous
+    if not new_ids:
+        cache.set(COLLECTION_HEALTH_NOTIFIED_KEY, sorted(kept), COLLECTION_HEALTH_NOTIFIED_TIMEOUT)
+        return result
+
+    recipients = destinatarios_staff()
+    if not recipients:
+        logger.warning(
+            "[Collection Health] %d equipamento(s) em alarme e sem destinatários", len(current)
+        )
+        result["error"] = "sem destinatários"
+        return result
+
+    subject, body = _collection_health_email(alarms, new_ids, report["stale_hours"])
+    try:
+        send_mail(
+            subject,
+            body,
+            getattr(settings, "DEFAULT_FROM_EMAIL", None) or None,
+            recipients,
+            fail_silently=False,
+        )
+    except Exception as exc:  # SMTP em baixo não mata a tarefa; tenta-se na hora seguinte
+        logger.warning("[Collection Health] envio falhou: %s", exc)
+        result["error"] = str(exc)[:200]
+        return result
+
+    cache.set(
+        COLLECTION_HEALTH_NOTIFIED_KEY, sorted(current | kept), COLLECTION_HEALTH_NOTIFIED_TIMEOUT
+    )
+    result["sent"] = True
+    result["recipients"] = len(recipients)
+    logger.info(
+        "[Collection Health] aviso enviado: %d em alarme (%d novo(s))", len(current), len(new_ids)
+    )
+    return result

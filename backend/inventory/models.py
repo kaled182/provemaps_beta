@@ -420,6 +420,13 @@ class Port(models.Model):
         blank=True,
         help_text="Timestamp da última coleta óptica assíncrona",
     )
+    # EV-0085: motivo da última leitura descartada pela coleta («» = leitura boa).
+    optical_problem = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Motivo da última leitura óptica descartada pela coleta (vazio = leitura boa)",
+    )
 
     # Alarm configuration fields
     alarm_enabled = models.BooleanField(
