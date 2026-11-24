@@ -243,10 +243,10 @@ def get_device_ports_with_live_status(device_id: int) -> dict[str, Any]:
     if hostid:
 
         def _fetch_optical():
-            cache = _preload_optical_discovery_cache(hostid, ports_list)
+            # EV-0094: leitura (EV-0090) — só as chaves gravadas; sem pré-carga da
+            # descoberta (um item.get do host inteiro que ninguém lia).
             return fetch_ports_optical_snapshots(
                 ports_list,
-                discovery_cache=cache,
                 persist_keys=False,
                 include_status_meta=False,
             )
@@ -691,15 +691,11 @@ def get_device_ports_with_optical(device_id: int) -> dict[str, Any]:
 
     ports_list: list[Port] = list(ports_qs)
     hostid = (getattr(cast(Any, device), "zabbix_hostid", "") or "").strip()
-    discovery_cache: dict[Any, Any] = {}
-    if hostid:
-        discovery_cache = _preload_optical_discovery_cache(hostid, ports_list)
-
     snapshots: dict[int, dict[str, Any]] = {}
     if hostid:
+        # EV-0094: leitura (EV-0090) — sem pré-carga da descoberta.
         snapshots = fetch_ports_optical_snapshots(
             ports_list,
-            discovery_cache=discovery_cache,
             persist_keys=False,
             include_status_meta=False,
         )

@@ -127,3 +127,16 @@ def test_usecases_ask_for_persist_keys_false(host_device, ports):
         devices_ports.get_device_ports_with_live_status(host_device.pk)
         devices_ports.get_device_ports_with_optical(host_device.pk)
     assert seen == [False, False]
+
+
+@pytest.mark.django_db
+def test_read_screens_do_not_preload_discovery_ev0094(host_device, ports):
+    """EV-0094: sem descoberta na leitura, a pré-carga (um item.get do host inteiro) não corre."""
+    with (
+        patch(OPTICAL_ZABBIX, side_effect=_fake_optical_zabbix([])),
+        patch.object(devices_ports, "_preload_optical_discovery_cache") as preload,
+        patch.object(devices_ports, "_fetch_interface_status_bulk", side_effect=_no_status),
+    ):
+        devices_ports.get_device_ports_with_live_status(host_device.pk)
+        devices_ports.get_device_ports_with_optical(host_device.pk)
+    preload.assert_not_called()
