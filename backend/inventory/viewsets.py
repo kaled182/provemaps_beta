@@ -1002,6 +1002,10 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
     def perform_create(self, serializer):
         """Perform fiber cable creation with metrics."""
         cable = super().perform_create(serializer)
+        # EV-0133: cabo novo já com tubos e fibras (perfil ou grupo)
+        from inventory.usecases.cable_structure import ensure_cable_structure
+
+        ensure_cable_structure(serializer.instance)
         invalidate_fiber_cache()
         invalidate_dashboard_cache()
         return cable
@@ -1010,6 +1014,10 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
     def perform_update(self, serializer):
         """Perform fiber cable update with metrics."""
         cable = super().perform_update(serializer)
+        # EV-0133: ganhou grupo/perfil e ainda não tinha estrutura → gera-a
+        from inventory.usecases.cable_structure import ensure_cable_structure
+
+        ensure_cable_structure(serializer.instance)
         invalidate_fiber_cache()
         invalidate_dashboard_cache()
         return cable
@@ -1033,16 +1041,11 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         """
         cable = self.get_object()
 
-        # Auto-generation (Lazy Creation) for legacy cables
-        if not cable.tubes.exists() and cable.profile:
-            logger.info(
-                "Auto-generating structure for cable %s (profile: %s)",
-                cable.id,
-                cable.profile.name,
-            )
-            cable.create_structure()
-            # Reload to get newly created relationships
-            cable.refresh_from_db()
+        # EV-0133: gera tubos/fibras na 1.ª abertura — perfil do cabo ou o do nº de fibras do
+        # grupo; sem nenhum dos dois devolve needs_profile (o modal pede o perfil).
+        from inventory.usecases.cable_structure import available_profiles, ensure_cable_structure
+
+        outcome = ensure_cable_structure(cable)
 
         cable = (
             FiberCable.objects.select_related(
@@ -1058,8 +1061,27 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             .get(pk=cable.pk)
         )
 
-        serializer = FiberCableStructureSerializer(cable)
-        return Response(serializer.data)
+        data = dict(FiberCableStructureSerializer(cable).data)
+        data["needs_profile"] = outcome["needs_profile"]
+        if outcome["needs_profile"]:
+            data["available_profiles"] = available_profiles()
+        return Response(data)
+
+    @action(detail=True, methods=["post"], url_path="structure/profile")
+    def structure_profile(self, request, pk=None):
+        """EV-0133: escolhe o perfil (nº de fibras) de um cabo sem estrutura e gera-a."""
+        from inventory.usecases.cable_structure import set_cable_profile
+        from inventory.usecases.devices_common import InventoryValidationError
+
+        try:
+            profile_id = int(request.data.get("profile_id"))
+        except (TypeError, ValueError):
+            return Response({"detail": "profile_id obrigatório"}, status=400)
+        try:
+            outcome = set_cable_profile(int(pk), profile_id)
+        except InventoryValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(outcome)
 
     @action(detail=True, methods=["get"], url_path="metrics")
     def metrics(self, request, pk=None):

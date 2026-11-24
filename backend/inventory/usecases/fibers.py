@@ -67,6 +67,13 @@ def _log_audit(
         logger.exception("[audit] Failed to write audit log for cable '%s'", cable_name)
 
 
+def _ensure_structure(fiber: FiberCable) -> None:
+    """EV-0133: cabo novo já com tubos e fibras ABNT (perfil do grupo)."""
+    from .cable_structure import ensure_cable_structure
+
+    ensure_cable_structure(fiber)
+
+
 def _float_or_none(value: Any) -> float | None:
     try:
         return float(value)
@@ -465,6 +472,7 @@ def create_fiber_from_kml(
         cable_group=group,
         responsible_user=responsible_user,
     )
+    _ensure_structure(fiber)
     invalidate_fiber_cache()
     payload = fiber_to_payload(fiber, coords=sanitized)
     payload["length_km"] = length_km
@@ -1306,6 +1314,7 @@ def create_manual_fiber(data: dict[str, object], user=None) -> dict[str, object]
         folder=folder,
         cable_type=cable_type_obj,
     )
+    _ensure_structure(fiber)
     invalidate_fiber_cache()
     _log_audit(fiber, fiber.name, FiberCableAuditLog.Action.CREATED, user=user)
     return {

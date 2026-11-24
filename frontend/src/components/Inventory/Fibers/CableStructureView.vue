@@ -42,6 +42,23 @@
       <button @click="fetchStructure" class="mt-4 text-sm underline text-indigo-600">Tentar novamente</button>
     </div>
 
+    <!-- EV-0133: cabo sem perfil nem grupo — escolher o nº de fibras para gerar a estrutura -->
+    <div v-else-if="structure.needs_profile" class="flex-1 flex flex-col items-center justify-center gap-3 min-h-[300px] p-6" data-testid="structure-needs-profile">
+      <p class="text-sm text-neutral-700 text-center max-w-md">
+        Este cabo não tem grupo nem perfil: escolha o nº de fibras para gerar os tubos loose e as fibras (cores ABNT).
+      </p>
+      <div class="flex items-center gap-2">
+        <select v-model="pickedProfile" class="profile-select" data-testid="structure-profile-select">
+          <option :value="null" disabled>Escolher o perfil…</option>
+          <option v-for="p in structure.available_profiles || []" :key="p.id" :value="p.id">{{ p.name }}</option>
+        </select>
+        <button type="button" class="profile-btn" :disabled="!pickedProfile || generating" data-testid="structure-generate" @click="generate">
+          {{ generating ? 'A gerar…' : 'Gerar estrutura' }}
+        </button>
+      </div>
+      <p v-if="generateError" class="text-sm text-danger" role="alert">{{ generateError }}</p>
+    </div>
+
     <!-- Estrutura Visual (Tubos e Fibras) -->
     <div v-else class="flex-1 p-8 overflow-y-auto bg-gray-50 dark:bg-gray-900/50">
       
@@ -160,6 +177,26 @@ const props = defineProps({
 const emit = defineEmits(['select-fiber'])
 
 const api = useApi()
+const pickedProfile = ref(null)
+const generating = ref(false)
+const generateError = ref('')
+
+/** EV-0133: cabo sem grupo — gera a estrutura com o perfil escolhido. */
+async function generate() {
+  if (!pickedProfile.value || generating.value) return
+  generating.value = true
+  generateError.value = ''
+  try {
+    await api.post(`/api/v1/fiber-cables/${encodeURIComponent(props.cableId)}/structure/profile/`, {
+      profile_id: pickedProfile.value,
+    })
+    await fetchStructure()
+  } catch (e) {
+    generateError.value = `Não foi possível gerar: ${e?.message || 'erro desconhecido'}`
+  } finally {
+    generating.value = false
+  }
+}
 const loading = ref(false)
 const error = ref(false)
 const structure = ref({ tubes: [] })
@@ -216,8 +253,10 @@ const fetchStructure = async () => {
   error.value = false
   
   try {
-    const response = await api.get(`/inventory/fiber-cables/${props.cableId}/structure/`)
-    structure.value = response.data
+    // EV-0133: a rota é /api/v1/… (sem o prefixo vinha o HTML da SPA → «Erro ao carregar») e o
+    // useApi devolve o JSON já lido (não há .data como no axios). O backend gera tubos e fibras
+    // na 1.ª abertura; sem perfil possível devolve needs_profile.
+    structure.value = await api.get(`/api/v1/fiber-cables/${encodeURIComponent(props.cableId)}/structure/`)
   } catch (err) {
     console.error("Erro ao buscar estrutura do cabo:", err)
     error.value = true
@@ -252,6 +291,27 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.profile-select {
+  padding: 6px 10px;
+  border: 1px solid rgb(var(--n-300));
+  border-radius: 6px;
+  background: rgb(var(--surface));
+  font-size: 13px;
+  color: rgb(var(--n-900));
+}
+.profile-btn {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid rgb(var(--primary-600));
+  background: rgb(var(--primary-600));
+  font-size: 13px;
+  @apply text-white;
+}
+.profile-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 /* Animações customizadas para fibras iluminadas */
 @keyframes pulse-glow {
   0%, 100% {

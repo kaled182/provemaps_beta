@@ -12,12 +12,18 @@ from django.db.models import Count, Q
 
 USED_STATUSES = ("lit", "reserved")
 
+# EV-0133: «em uso» = iluminada/reservada, ligada a uma porta, ou emendada numa CEO.
+_USED = (
+    Q(tubes__strands__status__in=USED_STATUSES)
+    | Q(tubes__strands__connected_device_port__isnull=False)
+    | Q(tubes__strands__fusions_as_a__isnull=False)
+    | Q(tubes__strands__fusions_as_b__isnull=False)
+)
+
 # Anotações para um queryset de FiberCable (uma consulta para a lista toda).
 OCCUPANCY_ANNOTATIONS = {
     "strands_registered": Count("tubes__strands", distinct=True),
-    "strands_used": Count(
-        "tubes__strands", filter=Q(tubes__strands__status__in=USED_STATUSES), distinct=True
-    ),
+    "strands_used": Count("tubes__strands", filter=_USED, distinct=True),
     "strands_free": Count("tubes__strands", filter=Q(tubes__strands__status="dark"), distinct=True),
     "strands_broken": Count(
         "tubes__strands", filter=Q(tubes__strands__status="broken"), distinct=True
