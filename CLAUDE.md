@@ -122,6 +122,11 @@ log em inglês, como já está.
 💡 Ideias
 - `EV-0085` **«Saúde da coleta»: equipamentos com host Zabbix inexistente e portas sem leitura, com o motivo e aviso por e-mail** · por triar · admin · há 0 dias
 
+**Entrada, por triar (1)**
+
+🐛 Problemas
+- `EV-0094` **O ecrã de portas faz um item.get por equipamento que já não serve para nada** · por triar · admin · há 0 dias
+
 <!-- EVOLUCAO:FIM -->
 
 ---
