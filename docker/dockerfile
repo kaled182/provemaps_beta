@@ -60,7 +60,6 @@ COPY frontend/ ./
 COPY backend/templates/ /app/backend/templates/
 COPY backend/maps_view/templates/ /app/backend/maps_view/templates/
 COPY backend/setup_app/templates/ /app/backend/setup_app/templates/
-COPY backend/inventory/templates/ /app/backend/inventory/templates/
 COPY backend/service_accounts/templates/ /app/backend/service_accounts/templates/
 COPY backend/static/js/ /app/backend/static/js/
 COPY backend/setup_app/static/js/ /app/backend/setup_app/static/js/
