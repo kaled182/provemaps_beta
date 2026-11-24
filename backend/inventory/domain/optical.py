@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, cast
 
@@ -13,8 +14,13 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "_safe_float",
     "_fetch_item_value",
-    "_score_optical_candidate",
     "_discover_optical_keys_by_portname",
+    "OPTICAL_KEY_FAMILIES",
+    "classify_optical_item",
+    "match_optical_keys",
+    "match_optical_keys_for_ports",
+    "optical_item_port_refs",
+    "optical_key_family",
     "_fetch_port_optical_snapshot",
     "fetch_ports_optical_snapshots",
     "fetch_port_optical_snapshot",
@@ -112,6 +118,269 @@ def validate_optical_reading(
     return float(cast(float, value)), None
 
 
+# --- EV-0086: o que é uma potência óptica (regra única da descoberta de chaves) -------------
+#
+# A descoberta de chaves (`persist_keys=True`: descoberta/importação de equipamentos, ecrãs de
+# portas) só propõe ou grava uma chave óptica quando o item É uma potência óptica. Critério
+# positivo e obrigatório: a UNIDADE do item (`units` = dBm, sem distinguir maiúsculas). Sem
+# unidade no template, aceita-se só uma família conhecida (`OPTICAL_KEY_FAMILIES`). E a porta
+# tem de ser a do item por correspondência EXATA (nome da interface ou índice), nunca `LIKE`;
+# com mais de um candidato não se escolhe. Na dúvida, sem chave.
+
+OPTICAL_POWER_UNITS = frozenset({"dbm"})
+
+# Famílias de chaves de potência óptica conhecidas: prefixo (minúsculas) → sentido.
+# Lista ÚNICA — lida por `classify_optical_item` e por `devices_common._identify_item_role`.
+# - Huawei: `hwEntityOpticalLaneRxPower[<entidade>]` / `hwEntityOpticalLaneTxPower[<entidade>]`
+#   (dBm, multiplicador 0,01); a porta vem do nome do item («… na interface XGigabitEthernet0/0/9»).
+# - ZTE «OLT ZTE GPON»: `onu.rx[<serial>,<slot>,<pon>,<onu>]` — RX na OLT (upstream), dBm,
+#   multiplicador 0,001. Não há item de TX por ONU (não se inventa TX).
+# - VSOL: `SinalRXS0P<pon>[<interface> - <onu>]` — RX da ONU (há templates sem unidade).
+#   Não há item de TX: a mesma chave nunca serve de TX.
+OPTICAL_KEY_FAMILIES: tuple[tuple[str, str], ...] = (
+    ("hwentityopticallanerxpower[", "rx"),
+    ("hwentityopticallanetxpower[", "tx"),
+    ("onu.rx[", "rx"),
+    ("sinalrxs0p", "rx"),
+)
+
+# Nunca são potência óptica, mesmo com unidade dBm mal configurada ou nome enganador
+# (EV-0081: `net.if.in[ifHCInOctets…]` em bps e `olt[power0|1]` em W foram gravados como RX/TX).
+NON_OPTICAL_KEY_MARKERS: tuple[str, ...] = (
+    # tráfego
+    "net.if.in",
+    "net.if.out",
+    "ifhcinoctets",
+    "ifhcoutoctets",
+    "ifinoctets",
+    "ifoutoctets",
+    # energia (fonte de alimentação da OLT, W)
+    "olt[power",
+    # estado
+    "status",
+    "operstat",
+    "adminstat",
+    "lastdowntime",
+)
+# Itens em dBm que não são a potência medida (limiares do transceptor) e grandezas vizinhas.
+NON_OPTICAL_WORDS: tuple[str, ...] = (
+    "threshold",
+    "warn",
+    "alarm",
+    "limit",
+    "bias",
+    "temperature",
+    "voltage",
+    "fault",
+)
+# `value_type` do Zabbix: 0 float, 3 inteiro; 1/2/4 (carácter, log, texto) não são medidas.
+NUMERIC_VALUE_TYPES = frozenset({"0", "3"})
+LLD_MACRO_MARK = "{#"
+_RX_WORDS = ("rx", "receiv", "recebid", "input")
+_TX_WORDS = ("tx", "transmit", "output")
+
+_INTERFACE_IN_NAME_RE = re.compile(r"\binterface\s+(\S+)\s*$", re.IGNORECASE)
+_ONU_RX_KEY_RE = re.compile(r"^onu\.rx\[([^,\]]+),(\d+),(\d+),(\d+)\]$", re.IGNORECASE)
+_HUAWEI_LANE_PREFIXES = ("hwentityopticallanerxpower[", "hwentityopticallanetxpower[")
+
+# Campos do `item.get` que a descoberta precisa (um pedido por host).
+DISCOVERY_ITEM_OUTPUT = [
+    "itemid",
+    "key_",
+    "name",
+    "units",
+    "value_type",
+    "state",
+    "lastvalue",
+    "lastclock",
+]
+DISCOVERY_ITEMS_CACHE_PREFIX = "__items__:"
+
+
+def optical_key_family(key: str | None) -> str | None:
+    """Return ``"rx"``/``"tx"`` when the key belongs to a known optical power family."""
+    key_lower = (key or "").strip().lower()
+    for prefix, direction in OPTICAL_KEY_FAMILIES:
+        if key_lower.startswith(prefix):
+            return direction
+    return None
+
+
+def _current_value_problem(item: Mapping[str, Any], key: str) -> str | None:
+    """Why the item's CURRENT reading shows it is not a dBm power (``None`` if it may be).
+
+    Só com leitura atual no ``item.get`` (``lastclock`` > 0 e valor numérico). Ex.: os
+    Huawei sem DDM (portas 334/514, EV-0081) leem TX = 32,2471 «dBm». Os sentinelas de
+    ONU (0/-80 em `onu.rx`/`SinalRXS0P`) não desqualificam o item: são ONU sem leitura.
+    """
+    try:
+        lastclock = int(str(item.get("lastclock") or "0").strip())
+    except (TypeError, ValueError):
+        lastclock = 0
+    value = _safe_float(item.get("lastvalue"))
+    if lastclock <= 0 or value is None or is_plausible_dbm(value):
+        return None
+    if key.lower().startswith(OPTICAL_SENTINEL_KEY_PREFIXES) and value in OPTICAL_SENTINEL_VALUES:
+        return None
+    return f"lê {value:g}, fora de {OPTICAL_DBM_MIN:g}…+{OPTICAL_DBM_MAX:g} dBm"
+
+
+def classify_optical_item(item: Mapping[str, Any]) -> tuple[str | None, str | None]:
+    """Return ``(direction, None)`` for an optical power item, ``(None, reason)`` otherwise."""
+    key = str(item.get("key_") or "").strip()
+    if not key:
+        return None, "item sem chave"
+    key_lower = key.lower()
+    if LLD_MACRO_MARK in key:
+        return None, "macro LLD por expandir na chave"
+    if any(marker in key_lower for marker in NON_OPTICAL_KEY_MARKERS):
+        return None, "chave de tráfego, energia ou estado"
+    text = f"{key_lower} {str(item.get('name') or '').lower()}"
+    if any(word in text for word in NON_OPTICAL_WORDS):
+        return None, "limiar/alarme/bias/temperatura, não potência medida"
+    raw_value_type = item.get("value_type")
+    value_type = "" if raw_value_type is None else str(raw_value_type).strip()
+    if value_type and value_type not in NUMERIC_VALUE_TYPES:
+        return None, f"value_type {value_type} não numérico"
+
+    if str(item.get("state") or "").strip() == "1":
+        return None, "item unsupported no Zabbix"
+    current_problem = _current_value_problem(item, key)
+    if current_problem:
+        return None, current_problem
+
+    family = optical_key_family(key)
+    units = str(item.get("units") or "").strip().lower()
+    if units:
+        if units not in OPTICAL_POWER_UNITS:
+            return None, f"unidade {units!r} não é dBm"
+    elif family is None:
+        return None, "sem unidade e fora das famílias conhecidas"
+    if family is not None:
+        return family, None
+
+    is_rx = any(word in text for word in _RX_WORDS)
+    is_tx = any(word in text for word in _TX_WORDS)
+    if is_rx == is_tx:
+        return None, "sentido RX/TX indefinido"
+    return ("rx" if is_rx else "tx"), None
+
+
+def _key_params(key: str) -> list[str]:
+    if "[" not in key or not key.endswith("]"):
+        return []
+    inside = key[key.index("[") + 1 : -1]
+    return [part.strip().strip('"').strip("'") for part in inside.split(",") if part.strip()]
+
+
+def _zte_onu_port_names(slot: int, pon: int, onu: int) -> set[str]:
+    """Port names of a ZTE ONU: ``<ifIndex da PON>.<onu>``, ifIndex antigo ou novo.
+
+    Antigo (template `zxolt*`, nomes das portas do inventário): ``0x10SSPP00``;
+    novo (template «OLT ZTE GPON», `ifOperStatus[<ifIndex>]`): ``0x1101SSPP``.
+    """
+    old_ifindex = (0x10 << 24) | (slot << 16) | (pon << 8)
+    new_ifindex = (0x1101 << 16) | (slot << 8) | pon
+    return {f"{old_ifindex}.{onu}", f"{new_ifindex}.{onu}"}
+
+
+def optical_item_port_refs(item: Mapping[str, Any]) -> set[str]:
+    """Return the port names (casefolded) an optical item refers to, by exact identity.
+
+    Huawei: interface no fim do nome do item; ZTE `onu.rx`: posição (slot, PON, ONU) no
+    formato ``<ifIndex>.<onu>``; VSOL: interface antes de `` - `` na chave e no fim do nome;
+    outros: parâmetros da chave, interface no fim do nome, prefixo do nome antes de ``:``.
+    """
+    key = str(item.get("key_") or "").strip()
+    key_lower = key.lower()
+    name = str(item.get("name") or "").strip()
+    refs: set[str] = set()
+    if key_lower.startswith(_HUAWEI_LANE_PREFIXES):
+        match = _INTERFACE_IN_NAME_RE.search(name)
+        if match:
+            refs.add(match.group(1))
+    elif key_lower.startswith("onu.rx["):
+        onu_match = _ONU_RX_KEY_RE.match(key)
+        if onu_match:
+            slot, pon, onu = (int(onu_match.group(i)) for i in (2, 3, 4))
+            refs |= _zte_onu_port_names(slot, pon, onu)
+    elif key_lower.startswith("sinalrxs0p"):
+        params = _key_params(key)
+        if len(params) == 1:
+            refs.add(params[0].split(" - ")[0])
+        if " - " in name:
+            refs.add(name.rsplit(" - ", 1)[1])
+    else:
+        refs.update(_key_params(key))
+        match = _INTERFACE_IN_NAME_RE.search(name)
+        if match:
+            refs.add(match.group(1))
+        if ":" in name:
+            refs.add(name.split(":", 1)[0])
+    return {
+        ref.strip().casefold()
+        for ref in refs
+        if ref.strip() and LLD_MACRO_MARK not in ref and ref.strip().casefold() != "null"
+    }
+
+
+def match_optical_keys_for_ports(
+    port_names: Iterable[str | None],
+    items: Iterable[Mapping[str, Any]],
+    *,
+    hostid: Any = None,
+) -> dict[str, dict[str, str | None]]:
+    """Map each port name to ``{"rx": key|None, "tx": key|None}`` (EV-0086).
+
+    Só itens que `classify_optical_item` aceita, só correspondência exata
+    (`optical_item_port_refs`), e só com UM candidato por sentido — com dois ou mais a
+    porta fica sem chave nesse sentido e o motivo vai para o log.
+    """
+    by_ref: dict[str, dict[str, set[str]]] = {}
+    for item in items:
+        direction, _reason = classify_optical_item(item)
+        if direction is None:
+            continue
+        key = str(item.get("key_") or "").strip()
+        for ref in optical_item_port_refs(item):
+            by_ref.setdefault(ref, {"rx": set(), "tx": set()})[direction].add(key)
+
+    result: dict[str, dict[str, str | None]] = {}
+    for port_name in port_names:
+        if not port_name:
+            continue
+        candidates = by_ref.get(port_name.strip().casefold(), {"rx": set(), "tx": set()})
+        chosen: dict[str, str | None] = {"rx": None, "tx": None}
+        for direction in ("rx", "tx"):
+            keys = sorted(candidates[direction])
+            if len(keys) == 1:
+                chosen[direction] = keys[0]
+            elif keys:
+                logger.info(
+                    "EV-0086: host %s, porta %r: %d candidatos %s em dBm (%s) — fica sem chave",
+                    hostid,
+                    port_name,
+                    len(keys),
+                    direction.upper(),
+                    ", ".join(keys[:5]),
+                )
+        if chosen["rx"] and chosen["rx"] == chosen["tx"]:
+            chosen["tx"] = None
+        result[port_name] = chosen
+    return result
+
+
+def match_optical_keys(
+    port_name: str,
+    items: Iterable[Mapping[str, Any]],
+    *,
+    hostid: Any = None,
+) -> dict[str, str | None]:
+    """Single-port form of `match_optical_keys_for_ports`."""
+    matched = match_optical_keys_for_ports([port_name], items, hostid=hostid)
+    return matched.get(port_name, {"rx": None, "tx": None})
+
+
 def _value_cache_key(hostid: str | int | None, key: str | None) -> str:
     """Return a stable cache key for `(hostid, key)` lookups."""
     return f"{hostid or ''}::{key or ''}"
@@ -185,120 +454,53 @@ def _fetch_item_value(
     return result
 
 
-def _score_optical_candidate(item: dict[str, Any], kind: str) -> int:
-    """Apply a basic heuristic to score RX/TX optical power items."""
-    text = " ".join(
-        [
-            (item.get("key_") or "").lower(),
-            (item.get("name") or "").lower(),
-        ]
+def _host_items_for_discovery(
+    hostid: Any,
+    cache: dict[Any, Any] | None,
+) -> list[dict[str, Any]]:
+    """Active items of a host for key discovery — one ``item.get`` per host (cached)."""
+    cache_key = (f"{DISCOVERY_ITEMS_CACHE_PREFIX}{hostid}", None)
+    if cache is not None and cache_key in cache:
+        return cast(list[dict[str, Any]], cache[cache_key].get("items") or [])
+    items = cast(
+        list[dict[str, Any]],
+        zabbix_request(
+            "item.get",
+            {
+                "output": DISCOVERY_ITEM_OUTPUT,
+                "hostids": [str(hostid)],
+                "filter": {"status": "0"},
+            },
+        )
+        or [],
     )
-    units = (item.get("units") or "").lower()
-    score = 0
-
-    if "power" in text:
-        score += 2
-    if "optical" in text or "fiber" in text:
-        score += 1
-    if "dbm" in text or "dbm" in units:
-        score += 3
-
-    if kind == "rx":
-        if any(token in text for token in ("rx", "receive", "input")):
-            score += 2
-        if "tx" in text:
-            score -= 1
-    else:
-        if any(token in text for token in ("tx", "transmit", "output")):
-            score += 2
-        if "rx" in text:
-            score -= 1
-
-    if any(word in text for word in ("threshold", "alarm", "bias", "temperature", "fault")):
-        score -= 3
-    return score
+    if cache is not None:
+        cache[cache_key] = {"items": items}
+    return items
 
 
 def _discover_optical_keys_by_portname(
     hostid: Any,
     port_name: str | None,
-    cache: dict[tuple[str, str | None], dict[str, str | None]] | None = None,
+    cache: dict[Any, Any] | None = None,
 ) -> dict[str, str | None]:
-    """Discover optical power items using the port name as fallback.
+    """Discover the optical power items of a port by its name.
 
-    This is used when ``interfaceid`` is missing. Returns
-    ``{"rx": key, "tx": key}`` with ``None`` when nothing is found.
+    EV-0086: um só ``item.get`` por host (guardado em ``cache``) e a regra única
+    ``match_optical_keys``: só potências ópticas (unidade dBm ou família conhecida) cujo
+    nome de interface/índice é EXATAMENTE o nome da porta; mais de um candidato → sem
+    chave. Antes: ``LIKE %<nome>%`` no Zabbix e pontuação por palavras («input»,
+    «power»), que atribuía tráfego, a fonte da OLT e itens de outras ONU.
+    Returns ``{"rx": key, "tx": key}`` with ``None`` when nothing is found.
     """
     cache_key: tuple[str, str | None] = (str(hostid), port_name)
     if cache is not None and cache_key in cache:
         return cache[cache_key]
 
-    if not (hostid and port_name):
-        result: dict[str, str | None] = {"rx": None, "tx": None}
-        if cache is not None:
-            cache[cache_key] = result
-        return result
-
-    search_terms = [port_name]
-    for sep in ("/", " ", ":"):
-        if sep in port_name:
-            compact = port_name.replace(sep, "")
-            if compact and compact not in search_terms:
-                search_terms.append(compact)
-
-    candidates: list[dict[str, Any]] = []
-    for term in search_terms:
-        query: dict[str, Any] = {
-            "output": ["itemid", "key_", "name", "lastvalue", "units"],
-            "hostids": [str(hostid)],
-            "filter": {"status": "0"},
-            "search": {"key_": term},
-            "searchByAny": True,
-            "limit": 200,
-        }
-        items = cast(
-            list[dict[str, Any]],
-            zabbix_request("item.get", query) or [],
-        )
-        candidates.extend(items)
-        if items:
-            break
-
-    if not candidates:
-        for term in search_terms:
-            query = {
-                "output": ["itemid", "key_", "name", "lastvalue", "units"],
-                "hostids": [str(hostid)],
-                "filter": {"status": "0"},
-                "search": {"name": term},
-                "searchByAny": True,
-                "limit": 200,
-            }
-            items = cast(
-                list[dict[str, Any]],
-                zabbix_request("item.get", query) or [],
-            )
-            candidates.extend(items)
-            if items:
-                break
-
-    rx_key = tx_key = None
-    best_rx = best_tx = -999
-
-    for item in candidates:
-        key = item.get("key_")
-        if not key:
-            continue
-        rx_score = _score_optical_candidate(item, "rx")
-        tx_score = _score_optical_candidate(item, "tx")
-        if rx_score > best_rx:
-            best_rx = rx_score
-            rx_key = key if rx_score > 0 else rx_key
-        if tx_score > best_tx:
-            best_tx = tx_score
-            tx_key = key if tx_score > 0 else tx_key
-
-    result: dict[str, str | None] = {"rx": rx_key, "tx": tx_key}
+    result: dict[str, str | None] = {"rx": None, "tx": None}
+    if hostid and port_name:
+        items = _host_items_for_discovery(hostid, cache)
+        result = match_optical_keys(port_name, items, hostid=hostid)
     if cache is not None:
         cache[cache_key] = result
     return result
@@ -307,7 +509,7 @@ def _discover_optical_keys_by_portname(
 def _resolve_optical_keys(
     port: Port,
     hostid: str,
-    discovery_cache: dict[tuple[str, str | None], dict[str, str | None]],
+    discovery_cache: dict[Any, Any],
     *,
     include_status_meta: bool,
     persist_keys: bool,
@@ -327,6 +529,7 @@ def _resolve_optical_keys(
                 interfaceid=interfaceid or None,
                 rx_key=rx_key or None,
                 tx_key=tx_key or None,
+                port_name=port.name or None,
             )
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.debug(
@@ -339,18 +542,15 @@ def _resolve_optical_keys(
     original_rx_key = rx_key
     original_tx_key = tx_key
 
-    for meta_key in ("rx_key", "rx_key_generic"):
-        candidate = status_meta.get(meta_key)
-        if candidate:
-            rx_key = candidate.strip()
-            break
-    for meta_key in ("tx_key", "tx_key_generic"):
-        candidate = status_meta.get(meta_key)
-        if candidate:
-            tx_key = candidate.strip()
-            break
+    # EV-0086: `fiber_status` só devolve `rx_key`/`tx_key` descobertos pela regra única
+    # (`match_optical_keys`); o antigo `rx_key_generic` («rx» em qualquer chave) acabou.
+    if status_meta.get("rx_key"):
+        rx_key = str(status_meta["rx_key"]).strip()
+    if status_meta.get("tx_key"):
+        tx_key = str(status_meta["tx_key"]).strip()
 
-    # EV-0082: a descoberta pelo nome da porta (LIKE no Zabbix) só corre quando as chaves
+    # EV-0082: a descoberta pelo nome da porta (EV-0086: correspondência exata, só
+    # potências ópticas, um candidato) só corre quando as chaves
     # descobertas são gravadas e revistas (descoberta de equipamentos, `persist_keys=True`).
     # Na coleta periódica (`persist_keys=False`) uma chave vazia é «sem leitura»: antes a
     # porta lia, a cada ciclo, um item escolhido por heurística — de outra ONU/interface —
@@ -542,7 +742,7 @@ def fetch_port_optical_snapshot(
 
 def _fetch_port_optical_snapshot(
     port: Port | None,
-    discovery_cache: dict[tuple[str, str | None], dict[str, str | None]] | None = None,
+    discovery_cache: dict[Any, Any] | None = None,
     persist_keys: bool = True,
     *,
     include_status_meta: bool = True,

@@ -81,7 +81,15 @@ def fetch_interface_status_advanced(
     rx_key: str | None = None,
     tx_key: str | None = None,
     length_km: Any = None,
+    port_name: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
+    """Estado de uma ponta (item de estado primário, senão potência óptica).
+
+    EV-0086: sem `rx_key`/`tx_key` que resolvam, a procura automática pelos itens do
+    `interfaceid` só aceita potências ópticas (dBm ou família conhecida) cujo nome de
+    interface/índice é exatamente `port_name` — a regra única `match_optical_keys`. Nos
+    hosts SNMP o `interfaceid` é o host inteiro: sem `port_name` não se procura nada.
+    """
     if not hostid:
         return "unknown", {"error": "missing_hostid"}
 
@@ -147,65 +155,26 @@ def fetch_interface_status_advanced(
     rx_item = _get_item(rx_key)
     tx_item = _get_item(tx_key)
 
-    if (not rx_item and not tx_item) and interfaceid:
+    if (not rx_item and not tx_item) and interfaceid and port_name:
+        # Import tardio: domain.optical importa este módulo.
+        from inventory.domain.optical import DISCOVERY_ITEM_OUTPUT, match_optical_keys
+
         candidate_items = _request_list(
             "item.get",
             {
-                "output": [
-                    "itemid",
-                    "key_",
-                    "lastvalue",
-                    "lastclock",
-                    "state",
-                    "value_type",
-                    "name",
-                ],
+                "output": list(DISCOVERY_ITEM_OUTPUT),
                 "interfaceids": [interfaceid],
                 "filter": {"status": "0"},
             },
         )
-        rx_patterns = [
-            "rxpower",
-            "lanerxpower",
-            "opticalrx",
-            "rx low",
-            "rx high",
-        ]
-        tx_patterns = [
-            "txpower",
-            "lanetxpower",
-            "opticaltx",
-            "tx low",
-            "tx high",
-        ]
-
-        def match_any(text: str, patterns: list[str]) -> bool:
-            lowered = text.lower()
-            return any(pattern in lowered for pattern in patterns)
-
-        for item in candidate_items:
-            key_text = (item.get("key_") or "").lower()
-            name_text = (item.get("name") or "").lower()
-            combined = f"{key_text} {name_text}".strip()
-            if not rx_item and match_any(combined, rx_patterns) and "tx" not in combined:
-                rx_item = item
-                discovered["rx_key"] = item.get("key_")
-            elif not tx_item and match_any(combined, tx_patterns) and "rx" not in combined:
-                tx_item = item
-                discovered["tx_key"] = item.get("key_")
-            if rx_item and tx_item:
-                break
-        if not rx_item and not tx_item:
-            for item in candidate_items:
-                key_lower = (item.get("key_") or "").lower()
-                if not rx_item and "rx" in key_lower:
-                    rx_item = item
-                    discovered["rx_key_generic"] = item.get("key_")
-                if not tx_item and "tx" in key_lower:
-                    tx_item = item
-                    discovered["tx_key_generic"] = item.get("key_")
-                if rx_item and tx_item:
-                    break
+        matched = match_optical_keys(port_name, candidate_items, hostid=hostid)
+        by_key = {str(item.get("key_") or "").strip(): item for item in candidate_items}
+        if matched.get("rx"):
+            rx_item = by_key.get(cast(str, matched["rx"]))
+            discovered["rx_key"] = matched["rx"]
+        if matched.get("tx"):
+            tx_item = by_key.get(cast(str, matched["tx"]))
+            discovered["tx_key"] = matched["tx"]
         if discovered:
             discovered["auto_discovered"] = True
 
@@ -364,6 +333,7 @@ def evaluate_cable_status_for_cable(cable: Any) -> dict[str, Any]:
         rx_key=cable.origin_port.rx_power_item_key,
         tx_key=cable.origin_port.tx_power_item_key,
         length_km=cable_length,
+        port_name=cable.origin_port.name,
     )
     dest_status, dest_reason = fetch_interface_status_advanced(
         dest_device.zabbix_hostid,
@@ -372,6 +342,7 @@ def evaluate_cable_status_for_cable(cable: Any) -> dict[str, Any]:
         rx_key=cable.destination_port.rx_power_item_key,
         tx_key=cable.destination_port.tx_power_item_key,
         length_km=cable_length,
+        port_name=cable.destination_port.name,
     )
     combined = combine_cable_status(origin_status, dest_status)
 

@@ -15,7 +15,7 @@ from typing import Any, cast
 from django.db.models import Prefetch
 from django.utils.text import slugify
 
-from inventory.domain.optical import fetch_ports_optical_snapshots
+from inventory.domain.optical import fetch_ports_optical_snapshots, match_optical_keys_for_ports
 from inventory.models import Device, FiberCable, Port, Site
 from inventory.services.device_groups import sync_device_groups_for_device
 from setup_app.models import MessagingGateway
@@ -305,7 +305,18 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> dict[str, Any]:
     raw_host_items = common.ZABBIX_REQUEST(
         "item.get",
         {
-            "output": ["itemid", "key_", "name", "interfaceid", "lastvalue", "units", "snmpindex"],
+            "output": [
+                "itemid",
+                "key_",
+                "name",
+                "interfaceid",
+                "lastvalue",
+                "units",
+                "value_type",
+                "state",
+                "lastclock",
+                "snmpindex",
+            ],
             "hostids": hostid,
             "filter": {"status": "0"},
             "limit": 2000,
@@ -652,7 +663,11 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> dict[str, Any]:
         key_lower = key.lower()
         name_lower = (item.get("name") or "").lower()
         role = item.get("_role") or _identify_item_role(key_lower, name_lower)
-        if not role:
+        # EV-0086: as chaves ópticas não vão pela pontuação aproximada do nome da porta
+        # (substring, `_score_port_match` ≥ 45): com portas «1»/«9» e chaves
+        # `onu.rx[<serial>,9,1,1]` dava a chave de uma ONU a uma porta de cartão. Saem da
+        # regra única `match_optical_keys_for_ports`, a seguir a este ciclo.
+        if not role or role in ("optical_rx", "optical_tx"):
             continue
 
         tokens = _extract_key_tokens(key)
@@ -695,14 +710,25 @@ def add_device_from_zabbix(payload: Mapping[str, Any]) -> dict[str, Any]:
         elif role == "traffic_out":
             if item_id and not port.zabbix_item_id_traffic_out:
                 updates["zabbix_item_id_traffic_out"] = item_id
-        elif role == "optical_rx":
-            if key and port.rx_power_item_key != key:
-                updates["rx_power_item_key"] = key
-        elif role == "optical_tx":
-            if key and port.tx_power_item_key != key:
-                updates["tx_power_item_key"] = key
 
         _apply_port_updates(port, updates, record.updated_fields)
+
+    # EV-0086: só potências ópticas (unidade dBm ou família conhecida), correspondência
+    # EXATA do nome da porta ao nome da interface/índice do item, um candidato por sentido.
+    # Sem candidato (ou com vários) a chave fica como está — na dúvida, sem chave nova.
+    optical_matches = match_optical_keys_for_ports(
+        [entry.port.name for entry in port_entries], host_items, hostid=hostid_str
+    )
+    for entry in port_entries:
+        keys = optical_matches.get(entry.port.name) or {}
+        updates = {}
+        rx_match = keys.get("rx")
+        tx_match = keys.get("tx")
+        if rx_match and entry.port.rx_power_item_key != rx_match:
+            updates["rx_power_item_key"] = rx_match
+        if tx_match and entry.port.tx_power_item_key != tx_match:
+            updates["tx_power_item_key"] = tx_match
+        _apply_port_updates(entry.port, updates, entry.record.updated_fields)
 
     discovery_cache = _preload_optical_discovery_cache(
         str(device.zabbix_hostid or ""),

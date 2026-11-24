@@ -15,6 +15,7 @@ from decimal import Decimal
 from typing import Any, Protocol, TypedDict, cast
 
 from integrations.zabbix.zabbix_service import zabbix_request
+from inventory.domain.optical import optical_key_family
 from inventory.models import Device, Port, Site
 
 ZABBIX_REQUEST = zabbix_request
@@ -215,6 +216,12 @@ def _identify_item_role(key_lower: str, name_lower: str) -> str | None:
         return "traffic_out"
 
     is_threshold = any(word in key_lower for word in ("threshold", "warn", "alarm", "limit"))
+
+    # EV-0086: famílias ópticas conhecidas (lista única em `domain.optical`): `onu.rx[…]` da
+    # ZTE e `SinalRXS0P…` da VSOL são RX; não há TX por ONU, não se inventa.
+    family = optical_key_family(key_lower)
+    if family is not None and not is_threshold:
+        return f"optical_{family}"
 
     rx_markers = (
         "hwentityopticallanerxpower",
