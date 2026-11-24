@@ -117,10 +117,9 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**A fazer (2)**
+**A fazer (1)**
 
 💡 Ideias
-- `EV-0120` **/monitoring/gpon: KPIs e tabela em cascata pela OLT e pela PON escolhidas, com a pílula «OLT › PON [×]»** · P2 · admin · há 0 dias
 - `EV-0121` **Modal de Site: chassi da OLT limitado em altura e PonOnuList por baixo, sincronizada com a porta clicada** · P2 · admin · há 0 dias
 
 **Entrada, por triar (4)**
