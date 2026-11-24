@@ -222,6 +222,14 @@ describe('MonitoringGpon', () => {
     w.unmount()
   })
 
+  it('EV-0122: a lista não encolhe a 0 px debaixo de um chassi alto (flex-col com min-h-0)', async () => {
+    const { w } = await mountView()
+    const panel = t(w, 'gpon-onu-panel')
+    expect(panel.classes()).toContain('shrink-0')
+    expect(panel.classes()).not.toContain('overflow-auto')
+    w.unmount()
+  })
+
   it('limita a renderização a 200 linhas com «Mostrar mais»', async () => {
     const base = payload()
     const many = Array.from({ length: 250 }, (_, i) => ({ ...base.onus[0], id: 1000 + i, onu_index: i }))

@@ -1,5 +1,7 @@
 <template>
-  <section class="rounded-lg border border-neutral-200 bg-surface overflow-auto" data-testid="gpon-onu-panel">
+  <section class="shrink-0 rounded-lg border border-neutral-200 bg-surface overflow-x-auto" data-testid="gpon-onu-panel">
+    <!-- shrink-0: no <main> flex-col com min-h-0, overflow-auto deixava o flex encolher a lista a 0 px
+         debaixo de um chassi alto (EV-0122) -->
     <!-- EV-0108: com uma PON selecionada, abas ONUs | Eventos recentes 24 h -->
     <div v-if="eventsFor" class="tabs border-b border-neutral-200" role="tablist" data-testid="gpon-onu-tabs">
       <button
