@@ -59,6 +59,12 @@ const routes = [
     component: () => import('@/components/Monitoring/MonitoringGpon.vue'),
   },
   {
+    // EV-0115: switches de backbone (Huawei) — portas, RX/TX e tráfego do Zabbix
+    path: '/monitoring/switches',
+    name: 'monitoring-switches',
+    component: () => import('@/components/Monitoring/MonitoringSwitches.vue'),
+  },
+  {
     path: '/monitoring/dwdm',
     name: 'monitoring-dwdm',
     component: () => import('@/components/Monitoring/MonitoringDwdm.vue'),

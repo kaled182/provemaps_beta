@@ -143,6 +143,10 @@ class FirstTimeSetup(models.Model):
     optical_thresholds_by_distance = models.JSONField(null=True, blank=True)
     gpon_pon_capacity = models.PositiveSmallIntegerField(null=True, blank=True)
     epon_pon_capacity = models.PositiveSmallIntegerField(null=True, blank=True)
+    # EV-0115: limiares de RX das portas de switch (backbone) — enlaces ponto a ponto
+    # chegam mais fortes que uma ONU; por isso não são os do GPON. Nulo = padrão (-20/-24).
+    backbone_rx_warning_threshold = models.FloatField(null=True, blank=True)
+    backbone_rx_critical_threshold = models.FloatField(null=True, blank=True)
     configured = models.BooleanField(default=False)
     configured_at = models.DateTimeField(auto_now_add=True)
 

@@ -93,6 +93,9 @@ class RuntimeConfig:
     # EV-0095: capacidade de ONUs por PON (ocupação no ecrã «Monitoramento GPON»).
     gpon_pon_capacity: int
     epon_pon_capacity: int
+    # EV-0115: limiares de RX das portas de switch (tela «Monitoramento de Switches»).
+    backbone_rx_warning_threshold: float = -20.0
+    backbone_rx_critical_threshold: float = -24.0
 
 
 PON_CAPACITY_MIN = 1
@@ -219,6 +222,8 @@ def _fallback_config() -> RuntimeConfig:
             "GPON_PON_CAPACITY", 128, PON_CAPACITY_MIN, PON_CAPACITY_MAX
         ),
         epon_pon_capacity=_int_setting("EPON_PON_CAPACITY", 64, PON_CAPACITY_MIN, PON_CAPACITY_MAX),
+        backbone_rx_warning_threshold=_float_setting("BACKBONE_RX_WARNING_THRESHOLD", -20.0),
+        backbone_rx_critical_threshold=_float_setting("BACKBONE_RX_CRITICAL_THRESHOLD", -24.0),
     )
 
 
@@ -393,6 +398,16 @@ def _load_runtime_config() -> RuntimeConfig:
         ),
         gpon_pon_capacity=_record_capacity(record.gpon_pon_capacity, "GPON_PON_CAPACITY", 128),
         epon_pon_capacity=_record_capacity(record.epon_pon_capacity, "EPON_PON_CAPACITY", 64),
+        backbone_rx_warning_threshold=(
+            record.backbone_rx_warning_threshold
+            if record.backbone_rx_warning_threshold is not None
+            else _float_setting("BACKBONE_RX_WARNING_THRESHOLD", -20.0)
+        ),
+        backbone_rx_critical_threshold=(
+            record.backbone_rx_critical_threshold
+            if record.backbone_rx_critical_threshold is not None
+            else _float_setting("BACKBONE_RX_CRITICAL_THRESHOLD", -24.0)
+        ),
     )
 
 

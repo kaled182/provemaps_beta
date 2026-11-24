@@ -103,6 +103,7 @@ urlpatterns: list[Any] = [
     path("api/v1/telemetry/", include("telemetry.urls")),
     path("api/v1/inventory/", include("inventory.urls_api")),
     path("api/v1/monitoring/gpon/", include("gpon.urls")),  # EV-0095 Monitoramento GPON
+    path("api/v1/monitoring/switches/", include("switches.urls")),  # EV-0115
     path("api/v1/", include("inventory.urls_rest")),
     path("api/v1/monitoring/", include("monitoring.urls_api")),
     path("api/v1/evolucao/", include("evolucao.urls")),  # Central de Evolução (ADR 0006)

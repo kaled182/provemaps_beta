@@ -272,6 +272,7 @@ INSTALLED_APPS = [
     # Modular apps (Phase 0 scaffolding)
     "monitoring",
     "gpon",
+    "switches",  # EV-0115 Monitoramento de Switches
     "dwdm",
     # Telemetry — anonymous usage stats (opt-out via TELEMETRY_ENABLED=false)
     "telemetry",

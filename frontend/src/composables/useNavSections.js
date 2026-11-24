@@ -24,6 +24,7 @@ import {
   PhFaders,
   PhLineSegments,
   PhHardDrives,
+  PhNetwork,
   PhBell,
   PhGraph,
 } from '@phosphor-icons/vue';
@@ -39,6 +40,7 @@ export const NAV_SECTIONS = Object.freeze([
       { label: 'Saúde da coleta', path: '/saude-coleta', icon: PhHeartbeat },
       { label: 'Backbone', path: '/monitoring/backbone', icon: PhShareNetwork },
       { label: 'GPON', path: '/monitoring/gpon', icon: PhTreeStructure },
+      { label: 'Switches', path: '/monitoring/switches', icon: PhNetwork },
       { label: 'DWDM', path: '/monitoring/dwdm', icon: PhWaveform },
     ],
   },

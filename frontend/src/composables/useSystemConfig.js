@@ -106,6 +106,9 @@ export function useSystemConfig() {
     // Capacidade da PON por tecnologia (EV-0095)
     GPON_PON_CAPACITY: '128',
     EPON_PON_CAPACITY: '64',
+    // Limiares de RX das portas de switch / backbone (EV-0115)
+    BACKBONE_RX_WARNING_THRESHOLD: '-20',
+    BACKBONE_RX_CRITICAL_THRESHOLD: '-24',
   })
 
   // Estados de teste
@@ -170,7 +173,8 @@ export function useSystemConfig() {
           'ESRI_API_KEY', 'ESRI_BASEMAP',
           'MAP_LANGUAGE', 'MAP_THEME', 'ENABLE_MAP_CLUSTERING', 'ENABLE_DRAWING_TOOLS', 'ENABLE_FULLSCREEN',
           'OPTICAL_RX_WARNING_THRESHOLD', 'OPTICAL_RX_CRITICAL_THRESHOLD',
-          'GPON_PON_CAPACITY', 'EPON_PON_CAPACITY'
+          'GPON_PON_CAPACITY', 'EPON_PON_CAPACITY',
+          'BACKBONE_RX_WARNING_THRESHOLD', 'BACKBONE_RX_CRITICAL_THRESHOLD'
         ]
         
         const booleanFields = new Set([
@@ -375,6 +379,8 @@ export function useSystemConfig() {
       OPTICAL_RX_CRITICAL_THRESHOLD: '-27',
       GPON_PON_CAPACITY: '128',
       EPON_PON_CAPACITY: '64',
+      BACKBONE_RX_WARNING_THRESHOLD: '-20',
+      BACKBONE_RX_CRITICAL_THRESHOLD: '-24',
     }
     clearTestResults()
   }

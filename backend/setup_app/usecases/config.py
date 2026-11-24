@@ -125,6 +125,9 @@ EDITABLE_KEYS = [
     # EV-0095: capacidade de ONUs por PON (inteiros 1..1024)
     "GPON_PON_CAPACITY",
     "EPON_PON_CAPACITY",
+    # EV-0115: limiares de RX das portas de switch (backbone)
+    "BACKBONE_RX_WARNING_THRESHOLD",
+    "BACKBONE_RX_CRITICAL_THRESHOLD",
     # Backup automation
     "BACKUP_AUTO_ENABLED",
     "BACKUP_FREQUENCY",
@@ -148,6 +151,8 @@ _EXPORT_EXCLUDED = {
     "OPTICAL_THRESHOLDS_BY_DISTANCE",
     "GPON_PON_CAPACITY",
     "EPON_PON_CAPACITY",
+    "BACKBONE_RX_WARNING_THRESHOLD",
+    "BACKBONE_RX_CRITICAL_THRESHOLD",
     "BACKUP_AUTO_ENABLED",
     "BACKUP_FREQUENCY",
     "BACKUP_RETENTION_DAYS",
@@ -387,6 +392,8 @@ def _fallback_values(current_values: dict[str, str]) -> dict[str, Any]:
         ),
         "GPON_PON_CAPACITY": str(runtime_config.gpon_pon_capacity),
         "EPON_PON_CAPACITY": str(runtime_config.epon_pon_capacity),
+        "BACKBONE_RX_WARNING_THRESHOLD": str(runtime_config.backbone_rx_warning_threshold),
+        "BACKBONE_RX_CRITICAL_THRESHOLD": str(runtime_config.backbone_rx_critical_threshold),
         "BACKUP_AUTO_ENABLED": False,
         "BACKUP_FREQUENCY": "weekly",
         "BACKUP_RETENTION_DAYS": "30",
@@ -627,6 +634,12 @@ def build_configuration_payload(
         "EPON_PON_CAPACITY": str(
             _clamp_int(_str(data, "EPON_PON_CAPACITY"), 64, *_PON_CAPACITY_RANGE)
         ),
+        "BACKBONE_RX_WARNING_THRESHOLD": _parse_float_str(
+            data.get("BACKBONE_RX_WARNING_THRESHOLD", "-20"), -20
+        ),
+        "BACKBONE_RX_CRITICAL_THRESHOLD": _parse_float_str(
+            data.get("BACKBONE_RX_CRITICAL_THRESHOLD", "-24"), -24
+        ),
     }
 
     # E-mail: o backend SMTP do Django segue a secção SMTP
@@ -667,6 +680,8 @@ def _apply_runtime_overrides(payload: dict[str, str]) -> None:
     os.environ["OPTICAL_RX_CRITICAL_THRESHOLD"] = payload["OPTICAL_RX_CRITICAL_THRESHOLD"]
     os.environ["GPON_PON_CAPACITY"] = payload["GPON_PON_CAPACITY"]
     os.environ["EPON_PON_CAPACITY"] = payload["EPON_PON_CAPACITY"]
+    os.environ["BACKBONE_RX_WARNING_THRESHOLD"] = payload["BACKBONE_RX_WARNING_THRESHOLD"]
+    os.environ["BACKBONE_RX_CRITICAL_THRESHOLD"] = payload["BACKBONE_RX_CRITICAL_THRESHOLD"]
     os.environ["SERVICE_RESTART_COMMANDS"] = payload["SERVICE_RESTART_COMMANDS"]
     settings.EMAIL_BACKEND = payload.get("EMAIL_BACKEND", settings.EMAIL_BACKEND)
     settings.EMAIL_HOST = payload.get("EMAIL_HOST", settings.EMAIL_HOST)
@@ -682,6 +697,8 @@ def _apply_runtime_overrides(payload: dict[str, str]) -> None:
     for key, default in (
         ("OPTICAL_RX_WARNING_THRESHOLD", -24.0),
         ("OPTICAL_RX_CRITICAL_THRESHOLD", -27.0),
+        ("BACKBONE_RX_WARNING_THRESHOLD", -20.0),
+        ("BACKBONE_RX_CRITICAL_THRESHOLD", -24.0),
     ):
         try:
             setattr(settings, key, float(payload[key]))
@@ -793,6 +810,8 @@ def _persist_configuration(payload: dict[str, str]) -> None:
             ),
             "gpon_pon_capacity": int(payload["GPON_PON_CAPACITY"]),
             "epon_pon_capacity": int(payload["EPON_PON_CAPACITY"]),
+            "backbone_rx_warning_threshold": float(payload["BACKBONE_RX_WARNING_THRESHOLD"]),
+            "backbone_rx_critical_threshold": float(payload["BACKBONE_RX_CRITICAL_THRESHOLD"]),
         },
     )
 

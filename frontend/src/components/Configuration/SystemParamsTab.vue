@@ -517,6 +517,31 @@
             <p class="text-xs text-neutral-500 mt-1">Padrão: 64</p>
           </div>
         </div>
+        <!-- EV-0115: portas de switch (enlaces de backbone chegam mais fortes que uma ONU) -->
+        <div class="mt-6">
+          <h4 class="text-sm font-semibold text-neutral-800">RX das portas de switch (backbone)</h4>
+          <p class="text-xs text-neutral-500 mt-0.5">Usados na tela «Monitoramento de Switches»; o GPON e as portas do inventário seguem os limiares acima.</p>
+        </div>
+        <div class="grid grid-cols-2 gap-6 mt-3">
+          <div>
+            <label class="label-custom" for="backbone-rx-warning">Atenção abaixo de</label>
+            <div class="flex items-center gap-2">
+              <input id="backbone-rx-warning" v-model="config.BACKBONE_RX_WARNING_THRESHOLD" type="number" step="0.5"
+                class="input-custom" placeholder="-20" autocomplete="off" data-testid="cfg-backbone-rx-warning" />
+              <span class="text-sm text-neutral-500 flex-none">dBm</span>
+            </div>
+            <p class="text-xs text-neutral-500 mt-1">Padrão: -20 dBm</p>
+          </div>
+          <div>
+            <label class="label-custom" for="backbone-rx-critical">Crítico abaixo de</label>
+            <div class="flex items-center gap-2">
+              <input id="backbone-rx-critical" v-model="config.BACKBONE_RX_CRITICAL_THRESHOLD" type="number" step="0.5"
+                class="input-custom" placeholder="-24" autocomplete="off" data-testid="cfg-backbone-rx-critical" />
+              <span class="text-sm text-neutral-500 flex-none">dBm</span>
+            </div>
+            <p class="text-xs text-neutral-500 mt-1">Padrão: -24 dBm</p>
+          </div>
+        </div>
       </div>
 
       <div class="flex justify-end gap-3">
