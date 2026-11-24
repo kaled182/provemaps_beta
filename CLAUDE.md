@@ -117,10 +117,7 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**A fazer (1)**
-
-🐛 Problemas
-- `EV-0081` **129 portas com chaves Zabbix que não existem em nenhum host; portas 334/514 com TX 32,2471 constante** · por triar · admin · há 0 dias
+**Nada aberto.**
 
 <!-- EVOLUCAO:FIM -->
 
