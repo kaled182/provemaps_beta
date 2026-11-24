@@ -753,6 +753,8 @@ const updateMap = () => {
   if (wasInitialLoad) {
     // EV-0107: «Ver no mapa» do ecrã GPON abre com ?site=<id> — enquadra e destaca esse POP
     if (focusSiteFromQuery()) return
+    // EV-0116: «Ver enlace no mapa» da tela de Switches abre com ?cable=<id>
+    if (focusCableFromQuery()) return
     const hasItems = selectedItems.value.devices.length > 0 || selectedItems.value.cables.length > 0
     if (hasItems) fitAllItemsBounds()
   }
@@ -783,6 +785,24 @@ function focusSiteFromQuery() {
   focusTimer = setTimeout(() => {
     markers.forEach((m) => m.setStyle({ size: DEVICE_MARKER_SIZE }))
   }, FOCUS_HIGHLIGHT_MS)
+  return true
+}
+
+/** EV-0116: ?cable=<id> — enquadra o cabo e destaca-o durante uns segundos. */
+let cableFocusTimer = null
+function focusCableFromQuery() {
+  const wanted = String(route.query?.cable ?? '').trim()
+  if (!map.value || !wanted) return false
+  const cable = availableItems.value.cables.find((c) => String(c.id) === wanted)
+  const path = cable ? cablePath(cable) : []
+  if (!cable || !activePolylines.get(cable.id) || path.length < 2) {
+    showToast('O cabo pedido não tem traçado neste mapa.', 'warning', 5000)
+    return false
+  }
+  map.value.fitBounds(path, { padding: 80, maxZoom: 16 })
+  highlightCable(cable.id)
+  clearTimeout(cableFocusTimer)
+  cableFocusTimer = setTimeout(() => unhighlightCable(cable.id), FOCUS_HIGHLIGHT_MS)
   return true
 }
 
@@ -1207,6 +1227,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   clearTimeout(focusTimer)
+  clearTimeout(cableFocusTimer)
   stopStatusPolling()
 
   if (maintenanceMode.value) {

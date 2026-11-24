@@ -362,4 +362,34 @@ describe('CustomMapViewer (EV-0012c)', () => {
       routeFake.query = {};
     }
   });
+
+  it('EV-0116: ?cable= enquadra o cabo e destaca-o; volta ao estilo normal depois', async () => {
+    routeFake.query = { cable: String(CABLES[0].id) };
+    try {
+      const wrapper = mountViewer();
+      await flushPromises();
+      const map = fakeFactory.maps[0];
+      expect(map.fitBounds).toHaveBeenCalledTimes(1);
+      expect(map.fitBounds).toHaveBeenCalledWith(expect.any(Array), { padding: 80, maxZoom: 16 });
+      expect(map.polylines[0].setStyle).toHaveBeenCalledWith(expect.objectContaining({ strokeWeight: 5, zIndex: 1000 }));
+      vi.advanceTimersByTime(6000);
+      expect(map.polylines[0].setStyle).toHaveBeenLastCalledWith(expect.objectContaining({ zIndex: 1 }));
+      wrapper.unmount();
+    } finally {
+      routeFake.query = {};
+    }
+  });
+
+  it('EV-0116: ?cable= de um cabo sem traçado avisa e enquadra tudo', async () => {
+    routeFake.query = { cable: '99999' };
+    try {
+      const wrapper = mountViewer();
+      await flushPromises();
+      expect(fakeFactory.maps[0].fitBounds).toHaveBeenCalledWith(expect.any(Array), { padding: 50, maxZoom: 15 });
+      expect(wrapper.text()).toContain('O cabo pedido não tem traçado neste mapa.');
+      wrapper.unmount();
+    } finally {
+      routeFake.query = {};
+    }
+  });
 });

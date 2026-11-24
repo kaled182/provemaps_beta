@@ -8,6 +8,16 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { portMatchesFilter, portMatchesQuery, mostCriticalPort } from '@/composables/useSwitchesOverview'
 import { NAV_SECTIONS } from '@/composables/useNavSections'
 
+const push = vi.fn()
+vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
+vi.mock('chart.js/auto', () => ({
+  default: vi.fn(function FakeChart(el, config) {
+    this.data = config.data
+    this.options = config.options
+    this.destroy = vi.fn()
+    this.update = vi.fn()
+  }),
+}))
 vi.mock('@/components/PortTrafficModal.vue', () => ({
   __esModule: true,
   default: { props: ['isOpen', 'port'], template: '<div v-if="isOpen" data-testid="traffic-modal">{{ port.id }} {{ port.name }}</div>' },
@@ -51,7 +61,9 @@ const ok = (body) => Promise.resolve({ ok: true, status: 200, json: () => Promis
 
 afterEach(() => {
   vi.restoreAllMocks()
+  push.mockClear()
   window.history.replaceState(null, '', '/')
+  try { localStorage.clear() } catch { /* sem armazenamento */ }
 })
 
 describe('regras puras', () => {
@@ -73,8 +85,12 @@ describe('regras puras', () => {
 })
 
 describe('MonitoringSwitches', () => {
-  async function mountPage(body = PAYLOAD) {
-    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(() => ok(body))
+  async function mountPage(body = PAYLOAD, { view = 'grid', history = {} } = {}) {
+    localStorage.setItem('provemaps.switches.view', view)
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {
+      for (const [prefix, reply] of Object.entries(history)) if (url.startsWith(prefix)) return ok(reply)
+      return ok(body)
+    })
     const w = mount(MonitoringSwitches, { attachTo: document.body })
     await flushPromises()
     return { w, spy }
@@ -133,3 +149,84 @@ describe('MonitoringSwitches', () => {
     w.unmount()
   })
 })
+
+describe('vista do chassi (EV-0116)', () => {
+  async function mountChassis(history = {}) {
+    localStorage.setItem('provemaps.switches.view', 'chassis')
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {
+      for (const [prefix, reply] of Object.entries(history)) if (url.startsWith(prefix)) return ok(reply)
+      return ok(PAYLOAD)
+    })
+    const w = mount(MonitoringSwitches, { attachTo: document.body })
+    await flushPromises()
+    return { w, spy }
+  }
+
+  it('desenha as portas reais com LED pelo estado e a legenda de portas', async () => {
+    const { w } = await mountChassis()
+    const chassis = w.get('[data-testid="sw-chassis-6"]')
+    expect(chassis.find('[data-testid="sw-port-XGigabitEthernet0/0/2"]').classes()).toContain('led-critical')
+    expect(chassis.find('[data-testid="sw-port-XGigabitEthernet0/0/3"]').classes()).toContain('led-warning')
+    expect(chassis.find('[data-testid="sw-port-XGigabitEthernet0/0/4"]').classes()).toContain('led-off')
+    expect(chassis.find('[data-testid="sw-port-MEth0/0/1"]').exists()).toBe(true)
+    expect(chassis.get('[data-testid="chassis-legend-count"]').text()).toBe('3 portas ativas · 1 livres')
+    expect(chassis.text()).toContain('10G SFP+')
+    w.unmount()
+  })
+
+  it('o inspetor abre na porta mais crítica e segue o clique; copiar resumo e enlace no mapa', async () => {
+    const writeText = vi.fn(() => Promise.resolve())
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const { w } = await mountChassis()
+    const insp = () => w.get('[data-testid="sw-inspector-6"]')
+    expect(insp().get('[data-testid="spi-name"]').text()).toBe('XGigabitEthernet0/0/2')
+    expect(insp().get('[data-testid="spi-state"]').text()).toBe('DOWN · LOS')
+    expect(insp().find('[data-testid="spi-preview"]').exists()).toBe(true)
+    await insp().get('[data-testid="spi-map"]').trigger('click')
+    expect(push).toHaveBeenCalledWith({ path: '/monitoring/backbone/map/default', query: { cable: '9' } })
+    await w.get('[data-testid="sw-port-XGigabitEthernet0/0/1"]').trigger('click')
+    expect(insp().get('[data-testid="spi-name"]').text()).toBe('XGigabitEthernet0/0/1')
+    expect(insp().find('[data-testid="spi-preview"]').exists()).toBe(false)
+    expect(insp().get('[data-testid="spi-map"]').attributes('disabled')).toBeDefined() // sem cabo
+    await insp().get('[data-testid="spi-copy"]').trigger('click')
+    await flushPromises()
+    expect(writeText.mock.calls[0][0]).toContain('Porta: XGigabitEthernet0/0/1 — Enlace-Veranopolis')
+    expect(insp().get('[data-testid="spi-copy"]').text()).toBe('Copiado!')
+    w.unmount()
+  })
+
+  it('24 h de tráfego e RX pela porta do inventário; sem inventário diz que não há histórico', async () => {
+    const t0 = 1795453740
+    const traffic = { in: { history: [{ timestamp: t0, value: 1.2e9 }, { timestamp: t0 + 60, value: 1.1e9 }] }, out: { history: [{ timestamp: t0, value: 1e8 }, { timestamp: t0 + 60, value: 2e8 }] } }
+    const optical = [{ timestamp: '2026-11-24T10:00:00+00:00', rx_power: -15.4, tx_power: 1.3 }, { timestamp: '2026-11-24T11:00:00+00:00', rx_power: -15.5, tx_power: 1.3 }]
+    const { w, spy } = await mountChassis({ '/api/v1/ports/101/traffic_history/': traffic, '/api/v1/ports/101/optical_history/': optical })
+    await w.get('[data-testid="sw-port-XGigabitEthernet0/0/1"]').trigger('click')
+    await flushPromises()
+    const urls = spy.mock.calls.map(([u]) => u)
+    expect(urls).toContain('/api/v1/ports/101/traffic_history/?hours=24')
+    expect(urls).toContain('/api/v1/ports/101/optical_history/?hours=24')
+    expect(w.get('[data-testid="sw-inspector-6"]').findAll('canvas')).toHaveLength(2)
+    await w.get('[data-testid="sw-port-XGigabitEthernet0/0/3"]').trigger('click') // port_id null
+    await flushPromises()
+    expect(w.find('[data-testid="spi-no-inventory"]').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('filtro esbate no chassi as portas que não passam', async () => {
+    const { w } = await mountChassis()
+    await w.get('[data-testid="sw-filter-down"]').trigger('click')
+    const chassis = w.get('[data-testid="sw-chassis-6"]')
+    expect(chassis.get('[data-testid="sw-port-XGigabitEthernet0/0/1"]').classes()).toContain('port-dim')
+    expect(chassis.get('[data-testid="sw-port-XGigabitEthernet0/0/2"]').classes()).not.toContain('port-dim')
+    w.unmount()
+  })
+
+  it('a vista escolhida fica guardada', async () => {
+    const { w } = await mountChassis()
+    await w.get('[data-testid="sw-view-grid"]').trigger('click')
+    expect(localStorage.getItem('provemaps.switches.view')).toBe('grid')
+    expect(w.findAll('[data-testid="sw-card"]')).toHaveLength(2)
+    w.unmount()
+  })
+})
+
