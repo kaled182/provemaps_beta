@@ -126,6 +126,16 @@ describe('MapboxMarker (EV-0012b)', () => {
 });
 
 describe('MapboxPolyline (EV-0012b)', () => {
+  it('EV-0126: área de hit de 8 px por omissão e configurável por hitWidth', async () => {
+    const map = await makeMap();
+    const line = map.createPolyline({ path: [{ lat: 1, lng: 2 }, { lat: 3, lng: 4 }] });
+    const wide = map.createPolyline({ path: [{ lat: 1, lng: 2 }, { lat: 3, lng: 4 }], hitWidth: 12 });
+    const native = created.maps[0];
+    const hit = (id) => native.addLayer.mock.calls.map(([l]) => l).find((l) => l.id === id);
+    expect(hit(line.hitLayerId).paint['line-width']).toBe(8);
+    expect(hit(wide.hitLayerId).paint['line-width']).toBe(12);
+  });
+
   it('mouseenter/mousemove/mouseleave na camada de hit viram mouseover/mousemove/mouseout', async () => {
     const map = await makeMap();
     const line = map.createPolyline({ path: [{ lat: 1, lng: 2 }, { lat: 3, lng: 4 }] });

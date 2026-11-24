@@ -129,7 +129,8 @@ class MapboxPolyline extends IPolyline {
       type: 'line',
       source: this.sourceId,
       layout: { 'line-join': 'round', 'line-cap': 'round' },
-      paint: { 'line-color': 'transparent', 'line-width': 16, 'line-opacity': 0 },
+      // EV-0126: 8 px (era 16) — a área larga apanhava o rato junto aos sites
+      paint: { 'line-color': 'transparent', 'line-width': this.options.hitWidth ?? 8, 'line-opacity': 0 },
     });
 
     // Reposição depois de uma troca de estilo (EV-0045): as camadas voltam, os

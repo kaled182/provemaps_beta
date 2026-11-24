@@ -58,6 +58,7 @@
  * @property {boolean} [editable]
  * @property {boolean} [draggable]
  * @property {boolean} [clickable]
+ * @property {number} [hitWidth]     - só Mapbox: largura (px) da área invisível de clique/hover (padrão 8)
  */
 
 /**

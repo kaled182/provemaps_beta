@@ -39,6 +39,8 @@ function makeFakeMap(options) {
       return g;
     }),
     fitBounds: vi.fn(),
+    // projeção simples para os testes: 0,001° = 1 px (EV-0126 mede a distância cabo × site)
+    latLngToPixel: ({ lat, lng }) => ({ x: Number(lng) * 1000, y: -Number(lat) * 1000 }),
     setCenter: vi.fn(),
     setZoom: vi.fn(),
     setCursor: vi.fn(),
@@ -213,27 +215,48 @@ describe('CustomMapViewer (EV-0012c)', () => {
     wrapper.unmount();
   });
 
-  it('hover no cabo mostra o tooltip na posição do rato após 300 ms; fecha pelo botão, não pelo mouseout', async () => {
+  it('EV-0126: hover no cabo só mostra «nome · km» (segue o rato e some no mouseout); o card abre no clique', async () => {
+    dataFake.availableItems.value.cables[0].length_km = 73.13;
     const wrapper = mountViewer();
     await flushPromises();
     const line = fakeFactory.maps[0].polylines[0];
+    expect(line.opts.hitWidth).toBe(8);
 
-    line.fire('mouseover', { clientX: 120, clientY: 80 });
-    vi.advanceTimersByTime(300);
+    // meio do cabo, longe dos dois sites
+    line.fire('mouseover', { lat: -16.65, lng: -49.25, clientX: 120, clientY: 80 });
+    await flushPromises();
+    vi.advanceTimersByTime(1000);
+    await flushPromises();
+    expect(wrapper.find('[data-testid="cable-hover-label"]').text()).toBe('Cabo 1 · 73,13 km');
+    expect(wrapper.findComponent({ name: 'CableOpticalTooltip' }).exists()).toBe(false); // nada de card no hover
+    line.fire('mousemove', { lat: -16.66, lng: -49.26, clientX: 150, clientY: 90 });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="cable-hover-label"]').attributes('style')).toContain('left: 162px');
+    line.fire('mouseout');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="cable-hover-label"]').exists()).toBe(false);
+
+    line.fire('click', { lat: -16.65, lng: -49.25, clientX: 200, clientY: 100 });
     await flushPromises();
     const tooltip = wrapper.findComponent({ name: 'CableOpticalTooltip' });
     expect(tooltip.props('visible')).toBe(true);
-    expect(tooltip.props('position')).toEqual({ x: 120, y: 80 });
+    expect(tooltip.props('position')).toEqual({ x: 200, y: 100 });
     expect(tooltip.props('cableData')).toEqual(expect.objectContaining({ id: 'c1' }));
-
-    // O tooltip tem botão de fechar (main): sair do cabo com o rato não o esconde,
-    // senão nunca se chegava ao botão «Atualizar agora» dentro dele.
-    line.fire('mouseout');
-    await flushPromises();
-    expect(wrapper.findComponent({ name: 'CableOpticalTooltip' }).exists()).toBe(true);
-
     tooltip.vm.$emit('close');
     await flushPromises();
+    expect(wrapper.findComponent({ name: 'CableOpticalTooltip' }).exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('EV-0126: junto a um site (< 18 px) o cabo cede — sem etiqueta nem card', async () => {
+    const wrapper = mountViewer();
+    await flushPromises();
+    const line = fakeFactory.maps[0].polylines[0];
+    // a 10 px do marcador do OLT-01 (-16.6, -49.2)
+    line.fire('mouseover', { lat: -16.6, lng: -49.21, clientX: 10, clientY: 10 });
+    line.fire('click', { lat: -16.6, lng: -49.21, clientX: 10, clientY: 10 });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="cable-hover-label"]').exists()).toBe(false);
     expect(wrapper.findComponent({ name: 'CableOpticalTooltip' }).exists()).toBe(false);
     wrapper.unmount();
   });

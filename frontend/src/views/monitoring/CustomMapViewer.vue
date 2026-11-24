@@ -136,6 +136,17 @@
       @close="showCableDetailModal = false"
     />
 
+    <!-- EV-0126: etiqueta mínima do cabo no hover (o card completo abre no clique) -->
+    <div
+      v-if="cableHover"
+      class="cable-hover-label"
+      :style="{ left: `${cableHover.x + 12}px`, top: `${cableHover.y + 12}px` }"
+      role="tooltip"
+      data-testid="cable-hover-label"
+    >
+      {{ cableHover.text }}
+    </div>
+
     <!-- Cable Optical Tooltip (lazy) -->
     <CableOpticalTooltip
       v-if="showCableTooltip"
@@ -226,6 +237,9 @@ const CABLE_STATUS_COLORS = {
   unknown: '#6b7280',
 }
 const DEVICE_MARKER_SIZE = 14
+// EV-0126: área de clique do cabo (Mapbox) e raio (px) à volta de um site em que o cabo cede
+const CABLE_HIT_WIDTH = 8
+const SITE_PRIORITY_PX = 18
 const MAINTENANCE_STYLE = { strokeColor: '#f59e0b', strokeOpacity: 0.9, strokeWeight: 2, fillColor: '#f59e0b', fillOpacity: 0.12 }
 const DEFAULT_CENTER = { lat: -15.7801, lng: -47.9292 }
 const DEFAULT_ZOOM = 12
@@ -338,7 +352,6 @@ const selectedCable = ref(null)
 const showCableTooltip = ref(false)
 const hoveredCable = ref(null)
 const tooltipPosition = ref({ x: 0, y: 0 })
-let tooltipTimeout = null
 
 // ── Estado em tempo real (EV-0014) ───────────────────────────────────────────
 // WebSocket `/ws/dashboard/status/` é a fonte; o polling só entra como
@@ -694,9 +707,11 @@ function updatePolylines() {
         strokeColor: cableColor(cable.status),
         ...base,
         clickable: true,
+        hitWidth: CABLE_HIT_WIDTH,
       })
-      polyline.on('click', () => handleCableClick(cable))
+      polyline.on('click', (event) => handleCableClick(cable, event))
       polyline.on('mouseover', (event) => handleCableHover(cable, event))
+      polyline.on('mousemove', (event) => handleCableHover(cable, event))
       polyline.on('mouseout', handleCableUnhover)
       activePolylines.set(cable.id, polyline)
     })
@@ -921,8 +936,36 @@ const handleDeviceClick = (device) => {
   }
 }
 
-const handleCableClick = (cable) => {
+/**
+ * EV-0126: o site tem prioridade — um evento de cabo a menos de SITE_PRIORITY_PX de um marcador
+ * (no ecrã) é do site, não do cabo. Mede em pixels pelo IMap (os três providers).
+ */
+function nearSiteMarker(event) {
+  if (!map.value || !Number.isFinite(event?.lat) || !Number.isFinite(event?.lng)) return false
+  const p = map.value.latLngToPixel({ lat: event.lat, lng: event.lng })
+  if (!p) return false
+  for (const marker of activeMarkers.values()) {
+    const m = map.value.latLngToPixel(marker.getPosition())
+    if (m && Math.hypot(m.x - p.x, m.y - p.y) < SITE_PRIORITY_PX) return true
+  }
+  return false
+}
+
+/** «MANDI - VLP · 73,13 km» — o comprimento só quando o inventário o tem. */
+function cableHoverText(cable) {
+  const km = Number(cable?.length_km)
+  const name = cable?.name || cable?.label || 'Cabo'
+  return Number.isFinite(km) && km > 0
+    ? `${name} · ${km.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km`
+    : name
+}
+
+/** Clique no cabo: o card completo (TX/RX/atenuação e ações), onde se clicou. */
+const handleCableClick = (cable, event) => {
+  if (nearSiteMarker(event)) return
+  cableHover.value = null
   hoveredCable.value = cable
+  tooltipPosition.value = { x: event?.clientX || 0, y: event?.clientY || 0 }
   showCableTooltip.value = true
 }
 
@@ -932,29 +975,19 @@ const openCableDetailsFromTooltip = (cable) => {
   showCableDetailModal.value = true
 }
 
-// Handlers para hover em cabos (tooltip) — `event` é o MapEvent comum (clientX/clientY)
+// EV-0126: hover no cabo = só o realce do traço (provider) + etiqueta mínima «nome · km» que
+// segue o rato; o card de telemetria abre no clique. Junto a um site, o hover é do site.
+const cableHover = ref(null)
 const handleCableHover = (cable, event) => {
-  if (tooltipTimeout) {
-    clearTimeout(tooltipTimeout)
+  if (nearSiteMarker(event)) {
+    cableHover.value = null
+    return
   }
-
-  // Pequeno delay antes de mostrar tooltip
-  tooltipTimeout = setTimeout(() => {
-    hoveredCable.value = cable
-    tooltipPosition.value = {
-      x: event?.clientX || 0,
-      y: event?.clientY || 0
-    }
-    showCableTooltip.value = true
-  }, 300)
+  cableHover.value = { text: cableHoverText(cable), x: event?.clientX || 0, y: event?.clientY || 0 }
 }
 
 const handleCableUnhover = () => {
-  if (tooltipTimeout) {
-    clearTimeout(tooltipTimeout)
-    tooltipTimeout = null
-  }
-  // Tooltip now has a close button — do not auto-close on mouse out
+  cableHover.value = null
 }
 
 // ── Mapa: criação pelo provider configurado ──────────────────────────────────
@@ -1239,13 +1272,25 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', _hideCtxMenu)
   document.removeEventListener('keydown', _globalKeydown)
   if (_resizeObserver) { _resizeObserver.disconnect(); _resizeObserver = null }
-  if (tooltipTimeout) clearTimeout(tooltipTimeout)
   if (_toastTimer) clearTimeout(_toastTimer)
   if (_badgeTimer) clearTimeout(_badgeTimer)
 })
 </script>
 
 <style scoped>
+.cable-hover-label {
+  position: fixed;
+  z-index: 1200;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  color: rgb(var(--n-50));
+  background: rgb(var(--n-900) / 0.92);
+  box-shadow: 0 4px 12px rgb(var(--n-950) / 0.25);
+}
 .custom-map-viewer {
   /* Ocupa a área de conteúdo do App (main relative), abaixo do AppHeader (EV-0044) */
   position: absolute;
