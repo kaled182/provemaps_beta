@@ -117,18 +117,18 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**A fazer (2)**
+**A fazer (1)**
 
 💡 Ideias
-- `EV-0115` **Tela /monitoring/switches: coleta dos switches Huawei, API, cabeçalho com filtros, 5 KPIs e tabela densa de portas com gráfico histórico** · P2 · admin · há 0 dias
 - `EV-0116` **Tela de Switches: chassi 1U desenhado a partir das portas reais + painel de inspeção da porta (sparkline 24 h, Copiar resumo, Ver enlace no mapa)** · P2 · admin · há 0 dias
 
-**Entrada, por triar (3)**
+**Entrada, por triar (4)**
 
 🐛 Problemas
 - `EV-0104` **nginx sem gzip: o GET do ecrã GPON pesa 2,3 MB por atualização (e todo o JSON/JS vai sem compressão)** · por triar · admin · há 0 dias
 - `EV-0110` **Coleta GPON leva ~50 s em vez de ~22 s: regrava todas as ONUs (≈4.100 × 21 campos) a cada 2 min com bulk_update** · por triar · admin · há 0 dias
 - `EV-0117` **Switches Ubiquiti (Barreira Velha, Ouro Verde) fora da tela de Switches: template Zabbix diferente (chaves net.*) e portas sem itens de tráfego ligados** · por triar · admin · há 0 dias
+- `EV-0118` **Mutações com fetch cru a ler o CSRF de csrfmiddlewaretoken (inexistente na SPA): o DRF recusa com 403** · por triar · admin · há 0 dias
 
 <!-- EVOLUCAO:FIM -->
 
