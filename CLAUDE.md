@@ -117,10 +117,9 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**A fazer (3)**
+**A fazer (2)**
 
 💡 Ideias
-- `EV-0134` **Diagrama de tubos e fibras com estado (iluminada, fusionada, livre, rompida por OTDR ativo) e «Conectar a porta» nas pontas Site A/B** · P2 · admin · há 0 dias
 - `EV-0135` **CEO no traçado: inserir clicando no cabo no mapa (nome, coordenadas, km, reserva, bandejas), modos Sangria/Corte e cabos com origem/destino numa CEO** · P2 · admin · há 0 dias
 - `EV-0136` **Fusões na CEO («Criar fusão» fibra A ↔ fibra B, sangria) e rastreamento fim-a-fim da luz (porta → cabos/CEOs → porta)** · P2 · admin · há 0 dias
 
