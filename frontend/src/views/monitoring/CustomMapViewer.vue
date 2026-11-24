@@ -31,7 +31,7 @@
           <CeoPin :name="c.name" :mode="c.mode" @open="ceoOpenId = c.id" />
         </MapPopup>
         <MapPopup v-if="ceoOpen" :map="map" :position="{ lat: ceoOpen.point[1], lng: ceoOpen.point[0] }" :offset-y="14">
-          <CeoCard :ceo="ceoOpen" @close="ceoOpenId = null" @derive="startDerive" />
+          <CeoCard :ceo="ceoOpen" @close="ceoOpenId = null" @derive="startDerive" @fusions="ceoFusionsFor = $event" />
         </MapPopup>
       </template>
       <CeoDerivePanel
@@ -219,6 +219,9 @@
       @created="onCeoCreated"
     />
 
+    <!-- EV-0136: emendas da CEO -->
+    <CeoFusionsModal v-if="ceoFusionsFor" :show="!!ceoFusionsFor" :ceo="ceoFusionsFor" @close="ceoFusionsFor = null" />
+
     <!-- EV-0127: localizador OTDR -->
     <OtdrLocatorModal
       v-if="otdrModalOpen"
@@ -277,6 +280,7 @@ import CeoPin from '@/components/Ceo/CeoPin.vue'
 import CeoCard from '@/components/Ceo/CeoCard.vue'
 const CeoCreateModal = defineAsyncComponent(() => import('@/components/Ceo/CeoCreateModal.vue'))
 const CeoDerivePanel = defineAsyncComponent(() => import('@/components/Ceo/CeoDerivePanel.vue'))
+const CeoFusionsModal = defineAsyncComponent(() => import('@/components/Ceo/CeoFusionsModal.vue'))
 import OtdrResultCard from '@/components/Otdr/OtdrResultCard.vue'
 
 // Componentes pesados: lazy via defineAsyncComponent — só baixam o JS quando renderizados.
@@ -1066,6 +1070,7 @@ const ceos = ref([])
 const ceoOpenId = ref(null)
 const ceoCreate = ref(null) // {cable, point}
 const ceoDeriving = ref(null)
+const ceoFusionsFor = ref(null) // EV-0136
 const cableClickPoint = ref(null)
 const ceoOpen = computed(() => ceos.value.find((c) => c.id === ceoOpenId.value) || null)
 const siteOptions = computed(() =>

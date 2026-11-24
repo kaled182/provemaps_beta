@@ -1233,6 +1233,10 @@ class FiberFusion(models.Model):
         related_name="fusions_as_b",
         help_text="Segunda fibra participante da fusão",
     )
+    # EV-0136: numa CEO a meio do cabo a fibra é cortada em duas metades; o lado diz para onde
+    # segue a metade emendada ("a" = rumo à ponta A do cabo, "b" = rumo à ponta B)
+    fiber_a_side = models.CharField(max_length=1, blank=True, default="")
+    fiber_b_side = models.CharField(max_length=1, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

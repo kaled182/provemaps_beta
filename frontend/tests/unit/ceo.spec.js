@@ -7,6 +7,8 @@ import { mount, flushPromises } from '@vue/test-utils'
 import CeoCreateModal from '@/components/Ceo/CeoCreateModal.vue'
 import CeoDerivePanel from '@/components/Ceo/CeoDerivePanel.vue'
 import CeoCard from '@/components/Ceo/CeoCard.vue'
+import CeoFusionsModal from '@/components/Ceo/CeoFusionsModal.vue'
+import FiberTrace from '@/components/Inventory/Fibers/FiberTrace.vue'
 
 const ok = (body, status = 200) => Promise.resolve({ ok: status < 400, status, json: () => Promise.resolve(body) })
 const CEO = { id: 4, name: 'CEO-04', cable_id: 1, cable_name: 'MANDI - VLP', point: [-50, 0.045], km: 4.976, mode: 'sangria', mode_label: 'Sangria (passagem direta)', slack_m: 20, trays: 2, derived: [] }
@@ -113,3 +115,74 @@ describe('CeoDerivePanel', () => {
     expect(map.handlers.click).toHaveLength(0) // o desenho sai do mapa ao fechar
   })
 })
+
+const end = (strand, side, cable, n, toward, fusion = null) => ({ key: `${strand}:${side}`, strand_id: strand, side, cable_id: cable === 'MANDI - VLP' ? 1 : 2, cable_name: cable, tube_number: 1, tube_color: 'Verde', number: n, absolute_number: n, color: 'Verde', color_hex: '#009900', toward, fusion_id: fusion })
+const FUSIONS = {
+  ceo: { id: 4, name: 'CEO-04', mode: 'sangria', trays: 2, splices_per_tray: 24 },
+  cables: [
+    { id: 1, name: 'MANDI - VLP', role: 'tronco', ends: [end(101, 'a', 'MANDI - VLP', 1, 'SITE - VILA MANDI'), end(101, 'b', 'MANDI - VLP', 1, 'SITE - VILA RICA'), end(102, 'a', 'MANDI - VLP', 2, 'SITE - VILA MANDI', 9)] },
+    { id: 2, name: 'CEO-04 - VILA NOVA', role: 'derivado', ends: [end(201, 'b', 'CEO-04 - VILA NOVA', 1, 'SITE - VILA NOVA')] },
+  ],
+  fusions: [{ id: 9, tray: 1, slot: 1, a: end(102, 'a', 'MANDI - VLP', 2, 'SITE - VILA MANDI'), b: end(202, 'b', 'CEO-04 - VILA NOVA', 2, 'SITE - VILA NOVA') }],
+}
+
+describe('CeoFusionsModal (EV-0136)', () => {
+  it('escolhe fibra A e B (pontas emendadas desativadas), cria a fusão com bandeja/posição e desfaz', async () => {
+    const calls = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation((url, o = {}) => {
+      calls.push([url, o.method || 'GET', o.body ? JSON.parse(o.body) : null])
+      return o.method === 'DELETE' ? Promise.resolve({ ok: true, status: 204, json: () => Promise.resolve(null) }) : ok(o.method === 'POST' ? { id: 10 } : FUSIONS)
+    })
+    const w = mount(CeoFusionsModal, { props: { show: true, ceo: CEO }, attachTo: document.body })
+    await flushPromises()
+    const q = (sel) => document.body.querySelector(sel)
+    expect(q('[data-testid="end-102:a"]').disabled).toBe(true)
+    q('[data-testid="end-101:a"]').click()
+    q('[data-testid="end-201:b"]').click()
+    await flushPromises()
+    expect(q('[data-testid="fusion-pick-b"]').textContent).toContain('CEO-04 - VILA NOVA · F1 (Verde) → SITE - VILA NOVA')
+    q('[data-testid="fusion-tray"]').value = '1'
+    q('[data-testid="fusion-tray"]').dispatchEvent(new Event('input'))
+    q('[data-testid="fusion-slot"]').value = '2'
+    q('[data-testid="fusion-slot"]').dispatchEvent(new Event('input'))
+    await flushPromises()
+    q('[data-testid="fusion-create"]').click()
+    await flushPromises()
+    q('[data-testid="fusion-del-9"]').click()
+    await flushPromises()
+    const writes = calls.filter(([, m]) => m !== 'GET')
+    expect(writes).toEqual([
+      ['/api/v1/inventory/ceos/4/fusions/', 'POST', { a: { strand_id: 101, side: 'a' }, b: { strand_id: 201, side: 'b' }, tray: 1, slot: 2 }],
+      ['/api/v1/inventory/ceos/4/fusions/9/', 'DELETE', null],
+    ])
+    w.unmount()
+  })
+})
+
+describe('FiberTrace (EV-0136)', () => {
+  it('mostra porta → cabo → fusão → cabo → porta, o fim e a perda marcada como cálculo', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      ok({
+        steps: [
+          { type: 'port', device_name: 'OLT Mandi', port_name: 'gpon 1/1/1', site_name: 'SITE - VILA MANDI' },
+          { type: 'cable', cable_name: 'MANDI - VLP', absolute_number: 1, color: 'Verde', color_hex: '#009900', toward: 'SITE - VILA RICA', km: 4.976, passes: [] },
+          { type: 'fusion', ceo_name: 'CEO-04', tray: 1, slot: 1 },
+          { type: 'cable', cable_name: 'CEO-04 - VILA NOVA', absolute_number: 1, color: 'Verde', color_hex: '#009900', toward: 'SITE - VILA NOVA', km: 5.56, passes: [] },
+          { type: 'port', device_name: 'SW Vila Nova', port_name: 'ge-0/0/1', site_name: 'SITE - VILA NOVA' },
+        ],
+        end: { reason: 'port', label: 'SW Vila Nova → ge-0/0/1' },
+        total_km: 10.536,
+        fusions: 1,
+        loss_db_estimate: 3.79,
+      }),
+    )
+    const w = mount(FiberTrace, { props: { strandId: 101, start: 'a' } })
+    await flushPromises()
+    expect(globalThis.fetch.mock.calls[0][0]).toBe('/api/v1/inventory/strands/101/trace/?from=a')
+    expect(w.findAll('[data-testid="trace-step-cable"]')).toHaveLength(2)
+    expect(w.get('[data-testid="trace-step-fusion"]').text()).toContain('CEO-04')
+    expect(w.get('[data-testid="trace-end"]').text()).toBe('Chega a: SW Vila Nova → ge-0/0/1')
+    expect(w.get('[data-testid="trace-total"]').text().replace(/\s+/g, ' ')).toContain('10,54 km · 1 fusão · perda estimada 3,79 dB')
+  })
+})
+

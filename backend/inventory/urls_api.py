@@ -63,7 +63,14 @@ from inventory.api.cable_types import (  # noqa: E402
     api_list_cable_types,
     api_update_cable_type,
 )
-from inventory.api.ceo import CeoDeriveView, CeosView, SitePortsView  # noqa: E402
+from inventory.api.ceo import (  # noqa: E402
+    CeoDeriveView,
+    CeoFusionDeleteView,
+    CeoFusionsView,
+    CeosView,
+    SitePortsView,
+    StrandTraceView,
+)
 from inventory.api.check_update import api_check_update  # noqa: E402
 from inventory.api.collection_health import api_collection_health  # noqa: E402
 from inventory.api.device_summaries import DeviceTemperatureView, PortsSummaryView  # noqa: E402
@@ -438,6 +445,14 @@ urlpatterns = [
     path("ceos/", CeosView.as_view(), name="ceos"),
     path("ceos/<int:ceo_id>/derive/", CeoDeriveView.as_view(), name="ceo-derive"),
     path("ceos/site-ports/", SitePortsView.as_view(), name="ceo-site-ports"),
+    # EV-0136: fusões na CEO e rastreamento da luz
+    path("ceos/<int:ceo_id>/fusions/", CeoFusionsView.as_view(), name="ceo-fusions"),
+    path(
+        "ceos/<int:ceo_id>/fusions/<int:fusion_id>/",
+        CeoFusionDeleteView.as_view(),
+        name="ceo-fusion-delete",
+    ),
+    path("strands/<int:strand_id>/trace/", StrandTraceView.as_view(), name="strand-trace"),
     # EV-0128: pontos OTDR fixados no mapa para toda a equipa
     path("otdr-alerts/", OtdrAlertsView.as_view(), name="otdr-alerts"),
     path("otdr-alerts/<int:alert_id>/", OtdrAlertDetailView.as_view(), name="otdr-alert-detail"),

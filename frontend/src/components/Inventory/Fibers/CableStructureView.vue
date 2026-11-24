@@ -105,6 +105,17 @@
             <p v-else-if="ends[end]?.site_name" class="end-free">Nenhum equipamento cadastrado neste site.</p>
           </div>
 
+          <!-- EV-0136: rastreamento da luz fim-a-fim -->
+          <div class="panel-end" data-testid="fiber-trace-box">
+            <p class="end-title">Rastrear a luz</p>
+            <div class="end-form">
+              <button v-for="e in ['a', 'b']" :key="e" type="button" class="csv-btn" :class="{ 'csv-btn-on': traceFrom === e }" :data-testid="`trace-from-${e}`" @click="traceFrom = traceFrom === e ? null : e">
+                da ponta {{ e.toUpperCase() }}
+              </button>
+            </div>
+            <FiberTrace v-if="traceFrom" :strand-id="selected.id" :start="traceFrom" />
+          </div>
+
           <div v-if="selected.fusions?.length" class="panel-fusions">
             <p class="end-title">Fusões</p>
             <p v-for="(fu, i) in selected.fusions" :key="i" class="end-port">{{ fusionText(fu) }}</p>
@@ -124,6 +135,7 @@
  */
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useApi } from '@/composables/useApi'
+import FiberTrace from './FiberTrace.vue'
 
 const props = defineProps({
   cableId: { type: [Number, String], required: true },
@@ -148,6 +160,7 @@ const actionError = ref('')
 const pickedProfile = ref(null)
 const selectedId = ref(null)
 const pick = reactive({ a: null, b: null })
+const traceFrom = ref(null)
 
 const tubes = computed(() => structure.value.tubes || [])
 const allStrands = computed(() => tubes.value.flatMap((t) => t.strands || []))
@@ -202,6 +215,7 @@ async function generate() {
 }
 
 function select(fiber, tube) {
+  if (selectedId.value !== fiber.id) traceFrom.value = null
   selectedId.value = fiber.id
   actionError.value = ''
   pick.a = fiber.port_a?.id ?? null
@@ -497,6 +511,11 @@ onMounted(fetchStructure)
   border-color: rgb(var(--primary-600));
   background: rgb(var(--primary-600));
   @apply text-white;
+}
+.csv-btn-on {
+  border-color: rgb(var(--primary-500));
+  color: rgb(var(--primary-700));
+  background: rgb(var(--primary-500) / 0.1);
 }
 .csv-btn:disabled {
   opacity: 0.5;

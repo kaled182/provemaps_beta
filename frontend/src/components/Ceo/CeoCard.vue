@@ -20,6 +20,7 @@
       <dd data-testid="ceo-card-derived">{{ ceo.derived.length ? ceo.derived.map((d) => d.name).join(', ') : 'nenhum' }}</dd>
     </dl>
     <div class="cc-actions">
+      <button type="button" class="cc-btn" data-testid="ceo-fusions" @click="$emit('fusions', ceo)">Emendas</button>
       <button type="button" class="cc-btn" data-testid="ceo-derive" @click="$emit('derive', ceo)">Derivar cabo</button>
     </div>
   </div>
@@ -28,7 +29,7 @@
 <script setup>
 /** Cartão de uma CEO no mapa (EV-0135). */
 defineProps({ ceo: { type: Object, required: true } })
-defineEmits(['close', 'derive'])
+defineEmits(['close', 'derive', 'fusions'])
 </script>
 
 <style scoped>
@@ -76,6 +77,8 @@ defineEmits(['close', 'derive'])
   overflow-wrap: anywhere;
 }
 .cc-actions {
+  display: flex;
+  gap: 6px;
   margin-top: 10px;
 }
 .cc-btn {

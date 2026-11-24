@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import serializers
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -16,6 +16,7 @@ from rest_framework.views import APIView
 
 from inventory.models import Site
 from inventory.usecases.ceo import MODES, create_ceo, derive_cable, list_ceos
+from inventory.usecases.ceo_fusions import ceo_fusions, create_fusion, delete_fusion, trace_light
 from inventory.usecases.devices_common import InventoryValidationError
 from inventory.usecases.strand_ports import site_ports
 
@@ -137,3 +138,60 @@ class SitePortsView(APIView):
         if not site_id or not str(site_id).isdigit():
             return Response({"detail": "indique ?site=<id>"}, status=400)
         return Response(site_ports(get_object_or_404(Site, pk=int(site_id))))
+
+
+class FusionEndSerializer(serializers.Serializer):
+    strand_id = serializers.IntegerField(min_value=1)
+    side = serializers.ChoiceField(choices=["a", "b", ""], required=False, default="")
+
+
+class FusionCreateSerializer(serializers.Serializer):
+    a = FusionEndSerializer()
+    b = FusionEndSerializer()
+    tray = serializers.IntegerField(required=False, allow_null=True)
+    slot = serializers.IntegerField(required=False, allow_null=True)
+
+
+class CeoFusionsView(APIView):
+    """EV-0136: pontas de fibra da CEO e as fusões (GET); criar fusão (POST)."""
+
+    @extend_schema(responses=serializers.DictField(), summary="Pontas de fibra e fusões da CEO")
+    def get(self, request: Request, ceo_id: int) -> Response:
+        return Response(ceo_fusions(ceo_id))
+
+    @extend_schema(
+        request=FusionCreateSerializer,
+        responses={201: serializers.DictField()},
+        summary="Cria uma fusão fibra A ↔ fibra B na CEO",
+    )
+    def post(self, request: Request, ceo_id: int) -> Response:
+        body = FusionCreateSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        v = body.validated_data
+        try:
+            data = create_fusion(ceo_id, a=v["a"], b=v["b"], tray=v.get("tray"), slot=v.get("slot"))
+        except InventoryValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(data, status=201)
+
+
+class CeoFusionDeleteView(APIView):
+    @extend_schema(responses={204: None}, summary="Desfaz uma fusão da CEO")
+    def delete(self, request: Request, ceo_id: int, fusion_id: int) -> Response:
+        delete_fusion(ceo_id, fusion_id)
+        return Response(status=204)
+
+
+class StrandTraceView(APIView):
+    """EV-0136: rastreamento da luz a partir de uma ponta da fibra."""
+
+    @extend_schema(
+        parameters=[OpenApiParameter("from", str, enum=["a", "b"], description="ponta de partida")],
+        responses=serializers.DictField(),
+        summary="Rastreia a luz pela fibra, cabos e CEOs até uma porta",
+    )
+    def get(self, request: Request, strand_id: int) -> Response:
+        try:
+            return Response(trace_light(strand_id, start=request.query_params.get("from", "a")))
+        except InventoryValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
