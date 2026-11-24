@@ -122,15 +122,6 @@ log em inglês, como já está.
 💡 Ideias
 - `EV-0085` **«Saúde da coleta»: equipamentos com host Zabbix inexistente e portas sem leitura, com o motivo e aviso por e-mail** · por triar · admin · há 0 dias
 
-**Entrada, por triar (5)**
-
-🐛 Problemas
-- `EV-0089` **Duas portas Huawei mostram a leitura óptica de outra interface (chave gravada pela heurística antiga)** · por triar · admin · há 0 dias
-- `EV-0090` **Ecrãs de leitura gravam chaves ópticas na base (persist_keys=True em GET)** · por triar · admin · há 0 dias
-- `EV-0091` **fiber_status._get_item procura a chave com search (LIKE) em vez de filter exato** · por triar · admin · há 0 dias
-- `EV-0092` **add_device_from_zabbix processa duas vezes cada candidato ifOperStatus** · por triar · admin · há 0 dias
-- `EV-0093` **test_optical_endpoint.py tem dois test_endpoint_requires_authentication na mesma classe: um nunca corre** · por triar · admin · há 0 dias
-
 <!-- EVOLUCAO:FIM -->
 
 ---
