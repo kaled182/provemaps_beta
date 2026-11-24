@@ -117,11 +117,6 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**A fazer (1)**
-
-💡 Ideias
-- `EV-0109` **Painel da PON: tendência 24 h do RX médio (histórico do Zabbix) e tráfego atual da porta PON** · P2 · admin · há 0 dias
-
 **Entrada, por triar (2)**
 
 🐛 Problemas
