@@ -117,3 +117,35 @@ export function applyRealtimeHost(device, host) {
   })
   return device
 }
+
+/**
+ * EV-0111: indicador operacional do card no modal de Site, a partir dos resumos
+ * `olt-summary` (GPON) e `ports-summary` (inventário). Sem resumo → null (o card não
+ * inventa «0 ONUs» nem «0 portas»).
+ *  - OLT: «282/347 ONUs» + alertas ópticos (críticas/atenção).
+ *  - Resto: «N portas em uso» + pior RX fresco com o nível pelos limiares.
+ */
+export function deviceIndicator(device) {
+  const olt = device?.olt
+  if (olt) {
+    const alerts = []
+    if (olt.signal_critical) alerts.push({ level: 'critical', text: `${olt.signal_critical} crít.` })
+    if (olt.signal_warning) alerts.push({ level: 'warning', text: `${olt.signal_warning} atenção` })
+    return {
+      kind: 'olt',
+      badge: `OLT ${String(olt.technology || '').toUpperCase()}`.trim(),
+      main: olt.onus_total ? `${olt.onus_online}/${olt.onus_total} ONUs` : 'sem ONUs coletadas',
+      alerts,
+    }
+  }
+  const ports = device?.ports
+  if (!ports) return null
+  return {
+    kind: 'ports',
+    badge: null,
+    main: `${ports.ports_in_use} de ${ports.ports_total} portas em uso`,
+    worstRx: ports.worst_rx_dbm,
+    worstLevel: ports.worst_rx_level,
+    alerts: [],
+  }
+}

@@ -65,6 +65,7 @@ from inventory.api.cable_types import (  # noqa: E402
 )
 from inventory.api.check_update import api_check_update  # noqa: E402
 from inventory.api.collection_health import api_collection_health  # noqa: E402
+from inventory.api.device_summaries import PortsSummaryView  # noqa: E402
 from inventory.api.fibers import api_fiber_audit_log  # noqa: E402
 from inventory.api.infrastructure import (  # noqa: E402
     api_create_infrastructure,
@@ -423,6 +424,12 @@ urlpatterns = [
         "devices/grouped/",
         device_api.api_inventory_grouped,
         name="inventory-grouped",
+    ),
+    # EV-0111: resumo de portas por dispositivo (cards do modal de Site)
+    path(
+        "devices/ports-summary/",
+        PortsSummaryView.as_view(),
+        name="devices-ports-summary",
     ),
     path(
         "devices/zabbix-status/",

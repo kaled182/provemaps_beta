@@ -16,6 +16,7 @@ import {
   formatUptimeSeconds,
   buildSiteDevice,
   applyRealtimeHost,
+  deviceIndicator,
 } from '@/utils/siteDevices'
 import SiteDetailsModal from '@/components/SiteDetailsModal.vue'
 
@@ -64,6 +65,30 @@ describe('siteDevices', () => {
   })
 })
 
+describe('deviceIndicator (EV-0111)', () => {
+  it('OLT: ONUs online/total e alertas; sem ONUs não diz «0/0»', () => {
+    const olt = { technology: 'gpon', onus_total: 347, onus_online: 282, signal_warning: 5, signal_critical: 3 }
+    expect(deviceIndicator({ olt })).toEqual({
+      kind: 'olt',
+      badge: 'OLT GPON',
+      main: '282/347 ONUs',
+      alerts: [
+        { level: 'critical', text: '3 crít.' },
+        { level: 'warning', text: '5 atenção' },
+      ],
+    })
+    expect(deviceIndicator({ olt: { ...olt, onus_total: 0, onus_online: 0, signal_warning: 0, signal_critical: 0 } }).main).toBe(
+      'sem ONUs coletadas',
+    )
+  })
+
+  it('switch: portas em uso e pior RX; sem resumo não há indicador', () => {
+    const ports = { ports_total: 24, ports_in_use: 6, worst_rx_dbm: -25.1, worst_rx_level: 'warning' }
+    expect(deviceIndicator({ ports })).toMatchObject({ kind: 'ports', main: '6 de 24 portas em uso', worstRx: -25.1, worstLevel: 'warning' })
+    expect(deviceIndicator({ olt: null, ports: null })).toBeNull()
+  })
+})
+
 describe('SiteDetailsModal', () => {
   const ok = (body) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) })
   const DEVICES = [
@@ -82,6 +107,10 @@ describe('SiteDetailsModal', () => {
     }
     vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {
       if (url.startsWith('/api/v1/devices/metrics-batch/')) return ok(m)
+      if (url.startsWith('/api/v1/monitoring/gpon/olt-summary/'))
+        return ok({ olts: { 1: { vendor: 'zte', technology: 'gpon', onus_total: 347, onus_online: 282, signal_warning: 5, signal_critical: 0 } } })
+      if (url.startsWith('/api/v1/inventory/devices/ports-summary/'))
+        return ok({ devices: { 2: { ports_total: 24, ports_in_use: 6, worst_rx_dbm: -27.5, worst_rx_level: 'critical', stale_readings: 0 } } })
       if (url.startsWith('/api/v1/inventory/devices/zabbix-status/')) return ok(status)
       if (url.startsWith('/api/v1/devices/')) return ok({ results: DEVICES })
       if (url.startsWith('/api/v1/cameras/')) return ok({ results: [], count: 4 })
@@ -124,6 +153,21 @@ describe('SiteDetailsModal', () => {
     expect(cards[2].querySelector('[data-testid="site-device-cpu"]').textContent.trim()).toBe('—')
     expect(cards[2].querySelector('[data-testid="site-device-memory"]').textContent.trim()).toBe('—')
     w.unmount()
+  })
+
+  it('EV-0111: cards com badge do tipo, ONUs da OLT, portas e pior RX do switch, e «Inspecionar →»', async () => {
+    await mountModal()
+    const cards = qa('[data-testid="site-device-card"]')
+    expect(cards[0].querySelector('[data-testid="site-device-type"]').textContent.trim()).toBe('OLT GPON')
+    expect(cards[0].querySelector('[data-testid="site-device-indicator"]').textContent).toContain('282/347 ONUs')
+    expect(cards[0].querySelector('[data-testid="site-device-indicator"]').textContent).toContain('5 atenção')
+    expect(cards[1].querySelector('[data-testid="site-device-type"]').textContent.trim()).toBe('Switch')
+    expect(cards[1].querySelector('[data-testid="site-device-indicator"]').textContent).toContain('6 de 24 portas em uso')
+    const rx = cards[1].querySelector('[data-testid="site-device-worst-rx"]')
+    expect(rx.textContent).toContain('-27.50 dBm')
+    expect(rx.className).toContain('sdc-lv-critical')
+    expect(cards[2].querySelector('[data-testid="site-device-indicator"]')).toBeNull() // sem resumo: nada inventado
+    expect(cards[0].textContent).toContain('Inspecionar →')
   })
 
   it('Zabbix fora é avisado', async () => {

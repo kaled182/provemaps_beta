@@ -767,16 +767,25 @@ const loadDevices = async () => {
     const response = await get(`/api/v1/devices/?site=${encodeURIComponent(siteId)}&page_size=200`)
     const raw = response?.results || []
     const ids = raw.map((d) => d.id).filter(Boolean).join(',')
-    const [status, metrics] = ids
+    const [status, metrics, oltSummary, portsSummary] = ids
       ? await Promise.all([
           get('/api/v1/inventory/devices/zabbix-status/', { device_ids: ids }).catch(() => ({ statuses: {}, zabbix_error: true })),
           get('/api/v1/devices/metrics-batch/', { ids }).catch(() => ({ results: {}, zabbix_error: true })),
+          // EV-0111: indicadores dos cards (sem eles o card fica só com CPU/memória)
+          get('/api/v1/monitoring/gpon/olt-summary/', { device_ids: ids }).catch(() => ({ olts: {} })),
+          get('/api/v1/inventory/devices/ports-summary/', { device_ids: ids }).catch(() => ({ devices: {} })),
         ])
-      : [{ statuses: {} }, { results: {} }]
+      : [{ statuses: {} }, { results: {} }, { olts: {} }, { devices: {} }]
     zabbixError.value = Boolean(status?.zabbix_error || metrics?.zabbix_error)
     const statuses = status?.statuses || {}
     const results = metrics?.results || {}
-    devices.value = raw.map((d) => buildSiteDevice(d, statuses[String(d.id)], results[String(d.id)]))
+    const olts = oltSummary?.olts || {}
+    const ports = portsSummary?.devices || {}
+    devices.value = raw.map((d) => ({
+      ...buildSiteDevice(d, statuses[String(d.id)], results[String(d.id)]),
+      olt: olts[String(d.id)] || null,
+      ports: ports[String(d.id)] || null,
+    }))
   } catch (error) {
     console.error('[SiteDetailsModal] Erro ao carregar dispositivos:', error)
     devices.value = []

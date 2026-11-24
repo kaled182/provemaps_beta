@@ -16,8 +16,10 @@ from inventory.models import Device
 
 from . import usecases
 from .serializers import (
+    DeviceIdsQuerySerializer,
     GponOverviewQuerySerializer,
     GponOverviewSerializer,
+    OltSummariesSerializer,
     OnuHistoryQuerySerializer,
     OnuHistorySerializer,
     PonEventsQuerySerializer,
@@ -86,3 +88,17 @@ class PonTrendView(APIView):
         query.is_valid(raise_exception=True)
         v = query.validated_data
         return Response(usecases.pon_trend(v["device"], v["pon"]))
+
+
+class OltSummaryView(APIView):
+    @extend_schema(
+        parameters=[
+            OpenApiParameter("device_ids", str, description="ids separados por vírgula (até 200)")
+        ],
+        responses=OltSummariesSerializer,
+        summary="ONUs online/total e alertas ópticos por OLT (só os ids que são OLT)",
+    )
+    def get(self, request: Request) -> Response:
+        query = DeviceIdsQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        return Response(usecases.olt_summaries(query.validated_data["device_ids"]))

@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import time
 from collections import Counter, defaultdict
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -1040,3 +1040,50 @@ def pon_trend(device_id: int, pon_id: str, now: datetime | None = None) -> dict[
         return payload  # sem cache: tenta de novo no próximo pedido
     cache.set(key, payload, TREND_CACHE_SECONDS)
     return payload
+
+
+# ── EV-0111: resumo por OLT para os cards do modal de Site ───────────────────
+
+
+def olt_summaries(device_ids: Iterable[int], now: datetime | None = None) -> dict[str, Any]:
+    """ONUs online/total e alertas ópticos por OLT, para os ``device_ids`` que são OLT.
+
+    Mesmas regras do ecrã GPON (ONU sem coleta há mais de ``STALE_AFTER`` = desconhecida,
+    sinal pelos limiares da configuração), mas sem a lista de ONUs: uma consulta agregada
+    em vez dos ~2 MB da visão geral. Quem não é OLT simplesmente não aparece.
+    """
+    now = now or timezone.now()
+    warning, critical, _ = _thresholds()
+    wanted = {int(pk) for pk in device_ids}
+    olts = {device.pk: (device, vendor) for device, vendor in olt_devices() if device.pk in wanted}
+    out: dict[str, dict[str, Any]] = {
+        str(pk): {
+            "vendor": vendor,
+            "technology": parsers.TECHNOLOGY_BY_VENDOR[vendor],
+            "onus_total": 0,
+            "onus_online": 0,
+            "signal_warning": 0,
+            "signal_critical": 0,
+        }
+        for pk, (_, vendor) in olts.items()
+    }
+    technologies: dict[int, Counter[str]] = defaultdict(Counter)
+    rows = OnuState.objects.filter(device_id__in=list(olts)).values_list(
+        "device_id", "technology", "status", "rx_onu_dbm", "rx_olt_dbm", "last_seen"
+    )
+    for device_id, technology, status, rx_onu, rx_olt, last_seen in rows:
+        item = out[str(device_id)]
+        technologies[device_id][technology] += 1
+        item["onus_total"] += 1
+        if last_seen < now - STALE_AFTER:
+            continue
+        if status == parsers.STATUS_ONLINE:
+            item["onus_online"] += 1
+        signal = rules.classify_signal(rules.signal_dbm(rx_onu, rx_olt), warning, critical)
+        if signal == rules.SIGNAL_WARNING:
+            item["signal_warning"] += 1
+        elif signal == rules.SIGNAL_CRITICAL:
+            item["signal_critical"] += 1
+    for device_id, counted in technologies.items():
+        out[str(device_id)]["technology"] = counted.most_common(1)[0][0]
+    return {"olts": out}

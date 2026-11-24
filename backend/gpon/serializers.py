@@ -8,6 +8,10 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from inventory.api.device_summaries import (  # noqa: F401 (reexportado para gpon.api)
+    DeviceIdsQuerySerializer,
+)
+
 from .usecases import HISTORY_HOURS_DEFAULT, HISTORY_HOURS_MAX, HISTORY_HOURS_MIN
 
 
@@ -205,3 +209,18 @@ class PonTrendSerializer(serializers.Serializer):
     traffic = PonTrafficSerializer()
     zabbix_ok = serializers.BooleanField()
     zabbix_error = serializers.CharField(allow_null=True)
+
+
+# ── EV-0111: resumo por OLT (cards do modal de Site) ─────────────────────────
+# A consulta (`device_ids=1,2`) usa DeviceIdsQuerySerializer do inventário (importado no topo).
+class OltSummarySerializer(serializers.Serializer):
+    vendor = serializers.CharField()
+    technology = serializers.CharField()
+    onus_total = serializers.IntegerField()
+    onus_online = serializers.IntegerField()
+    signal_warning = serializers.IntegerField()
+    signal_critical = serializers.IntegerField()
+
+
+class OltSummariesSerializer(serializers.Serializer):
+    olts = serializers.DictField(child=OltSummarySerializer())
