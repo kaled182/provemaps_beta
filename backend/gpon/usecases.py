@@ -189,6 +189,7 @@ def _store_olt(device: Device, vendor: str, now: datetime, reading: parsers.OltR
     existing = {state.onu_key: state for state in OnuState.objects.filter(device=device)}
     to_create: list[OnuState] = []
     to_update: list[OnuState] = []
+    unchanged: list[int] = []
     events: list[OnuEvent] = []
     transitions = 0
     # Um valuemap.get por OLT (e em cache 1 h), não um por ONU.
@@ -237,25 +238,41 @@ def _store_olt(device: Device, vendor: str, now: datetime, reading: parsers.OltR
                 )
             )
             continue
+        # EV-0110: só se regrava a ONU em que algo mudou; as outras só renovam o last_seen,
+        # num UPDATE único por OLT (antes: ~4.100 ONUs com 21 campos a cada 2 min, ~35 s).
+        changed = False
         if state.status != onu.status or state.reason != reason:
             state.status_since = now
             state.status_since_is_first_seen = False
             transitions += 1
+            changed = True
         if known:
             event = _event_for(state, onu.status, reason, reason_label, now)
             if event is not None:
                 events.append(event)
-            state.last_known_status = onu.status
-            state.last_known_reason = reason
+            if (state.last_known_status, state.last_known_reason) != (onu.status, reason):
+                state.last_known_status = onu.status
+                state.last_known_reason = reason
+                changed = True
         for field_name, value in values.items():
-            setattr(state, field_name, value)
-        to_update.append(state)
+            if field_name == "last_seen":
+                continue
+            if getattr(state, field_name) != value:
+                setattr(state, field_name, value)
+                changed = True
+        state.last_seen = now
+        if changed:
+            to_update.append(state)
+        else:
+            unchanged.append(state.pk)
 
     with transaction.atomic():
         if to_create:
             OnuState.objects.bulk_create(to_create, batch_size=500)
         if to_update:
             OnuState.objects.bulk_update(to_update, _UPDATE_FIELDS, batch_size=500)
+        if unchanged:
+            OnuState.objects.filter(pk__in=unchanged).update(last_seen=now)
         if events:
             OnuEvent.objects.bulk_create(events, batch_size=500)
     return transitions

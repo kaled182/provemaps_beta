@@ -151,3 +151,36 @@ def test_exception_from_gateway_does_not_raise(olts, monkeypatch):
     result = usecases.collect_onu_states()
     assert result["zabbix_ok"] is False
     assert "connection refused" in result["zabbix_error"]
+
+
+def test_unchanged_onus_only_renew_last_seen_and_only_changed_ones_are_rewritten(
+    olts, fake_zabbix, monkeypatch
+):
+    """EV-0110: sem mudanças, nenhuma ONU vai ao bulk_update (só um UPDATE do last_seen)."""
+    rewritten: list[list[str]] = []
+    real = OnuState.objects.bulk_update
+
+    def spy(objs, fields, **kw):
+        rewritten.append(sorted(o.onu_key for o in objs))
+        return real(objs, fields, **kw)
+
+    monkeypatch.setattr(OnuState.objects, "bulk_update", spy)
+    t0 = timezone.now()
+    onus = zte_onu("AAAA00000001", 13, 1, rx="-20.0") + zte_onu("AAAA00000002", 13, 2, rx="-21.0")
+    fake_zabbix.items[ZTE_HOST] = onus
+    usecases.collect_onu_states(now=t0)  # cria (bulk_create)
+
+    t1 = t0 + timedelta(minutes=2)
+    usecases.collect_onu_states(now=t1)  # nada mudou
+    assert rewritten == []
+    assert set(OnuState.objects.values_list("last_seen", flat=True)) == {t1}
+
+    t2 = t0 + timedelta(minutes=4)
+    fake_zabbix.items[ZTE_HOST] = zte_onu("AAAA00000001", 13, 1, rx="-20.0") + zte_onu(
+        "AAAA00000002", 13, 2, rx="-22.5"
+    )
+    usecases.collect_onu_states(now=t2)
+    assert len(rewritten) == 1 and len(rewritten[0]) == 1  # só a ONU 2
+    changed = OnuState.objects.get(onu_index=2)
+    assert changed.rx_olt_dbm == -22.5 and changed.last_seen == t2
+    assert OnuState.objects.get(onu_index=1).last_seen == t2
