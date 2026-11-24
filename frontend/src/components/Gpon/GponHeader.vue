@@ -9,8 +9,16 @@
     </span>
 
     <div class="ml-auto flex items-center gap-2 flex-wrap">
+      <select v-model="vendor" class="field" aria-label="Fabricante" data-testid="gpon-vendor-select">
+        <option :value="null">Todos os fabricantes</option>
+        <option v-for="v in vendors" :key="v.value" :value="v.value">{{ v.label }}</option>
+      </select>
+      <select v-model="pop" class="field" aria-label="POP" data-testid="gpon-pop-select">
+        <option :value="null">Todos os POPs</option>
+        <option v-for="p in pops" :key="p.value" :value="p.value">{{ p.label }}</option>
+      </select>
       <select v-model="olt" class="field" aria-label="OLT" data-testid="gpon-olt-select">
-        <option :value="null">Todas as OLTs</option>
+        <option :value="null">{{ olts.length === allCount ? 'Todas as OLTs' : `Todas as OLTs (${olts.length})` }}</option>
         <option v-for="o in olts" :key="o.device_id" :value="o.device_id">{{ o.name }}</option>
       </select>
       <div class="pills" role="group" aria-label="Filtro">
@@ -49,10 +57,16 @@ const props = defineProps({
   zabbixError: { type: String, default: null },
   thresholds: { type: Object, default: null },
   olts: { type: Array, default: () => [] },
+  /** Nº de OLTs sem recorte — o rótulo diz «(N)» quando o fabricante/POP as reduz. */
+  allCount: { type: Number, default: 0 },
+  vendors: { type: Array, default: () => [] },
+  pops: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
 })
 defineEmits(['refresh'])
 const olt = defineModel('olt', { type: Number, default: null })
+const vendor = defineModel('vendor', { type: String, default: null })
+const pop = defineModel('pop', { type: String, default: null })
 const filter = defineModel('filter', { type: String, default: 'all' })
 const query = defineModel('query', { type: String, default: '' })
 

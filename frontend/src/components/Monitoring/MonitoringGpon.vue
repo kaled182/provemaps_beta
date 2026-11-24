@@ -2,12 +2,17 @@
   <div class="h-full flex flex-col bg-canvas text-neutral-900">
     <GponHeader
       v-model:olt="oltFilter"
+      v-model:vendor="vendorFilter"
+      v-model:pop="popFilter"
       v-model:filter="filter"
       v-model:query="query"
       :zabbix="zabbix"
       :zabbix-error="data?.zabbix_error || null"
       :thresholds="thresholds"
-      :olts="allOlts"
+      :olts="scopedOlts"
+      :all-count="allOlts.length"
+      :vendors="vendors"
+      :pops="pops"
       :loading="loading"
       @refresh="load"
     />
@@ -105,6 +110,11 @@ const {
   selectedPon,
   selectedSlot,
   allOlts,
+  vendorFilter,
+  popFilter,
+  vendors,
+  pops,
+  scopedOlts,
   thresholds,
   totals,
   zabbix,

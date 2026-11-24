@@ -48,6 +48,56 @@ export function zabbixState(data, now = Date.now()) {
   return 'ok'
 }
 
+export const VENDOR_LABELS = { zte: 'ZTE', vsol: 'VSOL' }
+export const NO_POP = '__sem_pop__'
+
+/**
+ * Totais do recorte (EV-0105): as mesmas contas do backend (`gpon_overview` → `totals`), sobre as
+ * OLTs e ONUs filtradas. Sem recorte usa-se o `totals` do payload, tal e qual.
+ */
+export function computeTotals(olts, onus) {
+  const pons = olts.flatMap((o) => o.pons || [])
+  const count = (list, pred) => list.reduce((n, x) => n + (pred(x) ? 1 : 0), 0)
+  return {
+    olts: olts.length,
+    olts_online: count(olts, (o) => o.status === 'online'),
+    olts_offline: count(olts, (o) => o.status === 'offline'),
+    pons: pons.length,
+    onus_provisioned: onus.length,
+    onus_online: count(onus, (o) => o.status === 'online'),
+    onus_offline: count(onus, (o) => o.status === 'offline'),
+    onus_unknown: count(onus, (o) => o.status === 'unknown'),
+    signal_warning: count(onus, (o) => o.signal === 'warning'),
+    signal_critical: count(onus, (o) => o.signal === 'critical'),
+    los: count(onus, (o) => o.reason === 'los'),
+    dying_gasp: count(onus, (o) => o.reason === 'dying_gasp'),
+    pons_collective_drop: count(pons, (p) => p.collective_drop),
+  }
+}
+
+/** Filtros de recorte no endereço (?fabricante=zte&pop=…), para o link ser partilhável. */
+function readUrlScope() {
+  try {
+    const q = new URLSearchParams(window.location.search)
+    return { vendor: q.get('fabricante') || null, pop: q.get('pop') || null }
+  } catch {
+    return { vendor: null, pop: null }
+  }
+}
+
+function writeUrlScope(vendor, pop) {
+  try {
+    const url = new URL(window.location.href)
+    for (const [k, v] of [['fabricante', vendor], ['pop', pop]]) {
+      if (v) url.searchParams.set(k, v)
+      else url.searchParams.delete(k)
+    }
+    window.history.replaceState(window.history.state, '', url.toString())
+  } catch {
+    /* sem history (testes/SSR): o filtro funciona na mesma */
+  }
+}
+
 function ponMatches(pon, filter) {
   if (filter === 'los') return pon.collective_drop || (pon.los ?? 0) > 0
   if (filter === 'critical') return (pon.signal_critical ?? 0) > 0
@@ -61,6 +111,9 @@ export function useGponOverview({ autoRefresh = true } = {}) {
   const loading = ref(false)
   const error = ref('')
   const oltFilter = ref(null)
+  const initialScope = readUrlScope()
+  const vendorFilter = ref(initialScope.vendor)
+  const popFilter = ref(initialScope.pop)
   const filter = ref('all')
   const query = ref('')
   const selectedPon = ref(null)
@@ -81,7 +134,44 @@ export function useGponOverview({ autoRefresh = true } = {}) {
 
   const allOlts = computed(() => data.value?.olts || [])
   const thresholds = computed(() => data.value?.thresholds || null)
-  const totals = computed(() => data.value?.totals || {})
+
+  // EV-0105: recorte por fabricante e por POP (site da OLT).
+  const popOf = (o) => o.site_name || NO_POP
+  const vendors = computed(() =>
+    [...new Set(allOlts.value.map((o) => o.vendor).filter(Boolean))]
+      .sort()
+      .map((v) => ({ value: v, label: VENDOR_LABELS[v] || v.toUpperCase() })),
+  )
+  const pops = computed(() => {
+    const inVendor = allOlts.value.filter((o) => vendorFilter.value === null || o.vendor === vendorFilter.value)
+    return [...new Set(inVendor.map(popOf))]
+      .sort((a, b) => (a === NO_POP) - (b === NO_POP) || a.localeCompare(b, 'pt-BR'))
+      .map((p) => ({ value: p, label: p === NO_POP ? 'Sem POP' : p }))
+  })
+  const scopeActive = computed(() => vendorFilter.value !== null || popFilter.value !== null)
+  const scopedOlts = computed(() =>
+    allOlts.value.filter(
+      (o) =>
+        (vendorFilter.value === null || o.vendor === vendorFilter.value) &&
+        (popFilter.value === null || popOf(o) === popFilter.value),
+    ),
+  )
+  const scopedIds = computed(() => new Set(scopedOlts.value.map((o) => o.device_id)))
+  const scopedOnus = computed(() =>
+    scopeActive.value ? (data.value?.onus || []).filter((o) => scopedIds.value.has(o.device_id)) : data.value?.onus || [],
+  )
+  const totals = computed(() =>
+    scopeActive.value ? computeTotals(scopedOlts.value, scopedOnus.value) : data.value?.totals || {},
+  )
+
+  // Um POP que não existe no fabricante escolhido cai; a OLT escolhida fora do recorte também.
+  watch([vendorFilter, data], () => {
+    if (popFilter.value !== null && data.value && !pops.value.some((p) => p.value === popFilter.value)) popFilter.value = null
+  })
+  watch([vendorFilter, popFilter, data], () => {
+    if (oltFilter.value !== null && data.value && !scopedIds.value.has(oltFilter.value)) oltFilter.value = null
+  })
+  watch([vendorFilter, popFilter], ([v, p]) => writeUrlScope(v, p))
   const zabbix = computed(() => zabbixState(data.value))
 
   const ponIndex = computed(() => {
@@ -92,7 +182,7 @@ export function useGponOverview({ autoRefresh = true } = {}) {
 
   /** OLTs no ecrã com as PONs que passam a pílula; OLT sem PON nesse filtro sai. */
   const visibleOlts = computed(() =>
-    allOlts.value
+    scopedOlts.value
       .filter((o) => oltFilter.value === null || o.device_id === oltFilter.value)
       .map((o) => ({ ...o, pons: (o.pons || []).filter((p) => ponMatches(p, filter.value)) }))
       .filter((o) => filter.value === 'all' || o.pons.length),
@@ -121,7 +211,7 @@ export function useGponOverview({ autoRefresh = true } = {}) {
     const sel = selectedPon.value
     const slot = selectedSlot.value === null ? null : splitKey(selectedSlot.value)
     const scoped = sel !== null || slot !== null || oltFilter.value !== null
-    return (data.value?.onus || []).filter((o) => {
+    return scopedOnus.value.filter((o) => {
       if (sel !== null && ponKey(o.device_id, o.pon_id) !== sel) return false
       if (slot !== null && (o.device_id !== slot[0] || !String(o.pon_id).startsWith(`${slot[1]}/`))) return false
       if (sel === null && slot === null && oltFilter.value !== null && o.device_id !== oltFilter.value) return false
@@ -139,6 +229,7 @@ export function useGponOverview({ autoRefresh = true } = {}) {
     }
     if (selectedSlot.value !== null) return `Slot ${splitKey(selectedSlot.value)[1]}`
     if (oltFilter.value !== null) return allOlts.value.find((o) => o.device_id === oltFilter.value)?.name || 'OLT'
+    if (scopeActive.value && filter.value === 'all' && !query.value.trim()) return 'ONUs com problema no recorte'
     if (filter.value === 'all' && !query.value.trim()) return 'ONUs com problema'
     return 'ONUs'
   })
@@ -181,7 +272,7 @@ export function useGponOverview({ autoRefresh = true } = {}) {
   }
 
   // A seleção tem de continuar no ecrã; trocar de OLT ou de filtro que a esconde desmarca.
-  watch([oltFilter, filter, data], () => {
+  watch([oltFilter, vendorFilter, popFilter, filter, data], () => {
     if (selectedPon.value === null && selectedSlot.value === null) return
     const keys = selectableKeys()
     if (selectedPon.value !== null && !keys.pons.has(selectedPon.value)) selectedPon.value = null
@@ -204,6 +295,11 @@ export function useGponOverview({ autoRefresh = true } = {}) {
     loading,
     error,
     oltFilter,
+    vendorFilter,
+    popFilter,
+    vendors,
+    pops,
+    scopedOlts,
     filter,
     query,
     selectedPon,
