@@ -117,10 +117,9 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**A fazer (2)**
+**A fazer (1)**
 
 💡 Ideias
-- `EV-0127` **Localizador de rompimento OTDR: cálculo PostGIS sobre o traçado (sentido, folga, ±40 m), modal a partir do cabo, marcador e trecho no mapa, Google Maps / Waze / WhatsApp** · P2 · admin · há 0 dias
 - `EV-0128` **OTDR: acesso pela aba Informações do cabo e pela barra do mapa (escolher cabo) + «Fixar alerta no mapa» partilhado pela equipa (gravado no servidor) / «Limpar»** · P2 · admin · há 0 dias
 
 **Entrada, por triar (4)**
