@@ -117,10 +117,7 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**A fazer (1)**
-
-💡 Ideias
-- `EV-0132` **OTDR: estado do atendimento no pino fixado (Em deslocamento / Em fusão / Concluído) e histórico dos rompimentos na aba Histórico do cabo** · P2 · admin · há 0 dias
+**Nada aberto.**
 
 <!-- EVOLUCAO:FIM -->
 
