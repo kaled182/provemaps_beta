@@ -140,3 +140,49 @@ describe('OtdrResultCard', () => {
     expect(w.emitted('clear')).toBeTruthy()
   })
 })
+
+describe('OtdrResultCard — EV-0130', () => {
+  const withRefs = (over = {}) => ({
+    ...RESULT,
+    base_map_distance_m: 14630.5,
+    offset_m: 0,
+    references: {
+      registered: 2,
+      before: { id: 1, type: 'splice_box', type_label: 'Caixa de Emenda (CEO)', name: 'CEO-07', distance_m: 820 },
+      after: { id: 2, type: 'slack', type_label: 'Reserva Técnica', name: null, distance_m: 1450 },
+    },
+    ...over,
+  })
+
+  it('passos e slider emitem o novo deslocamento; Street View abre noutra aba', async () => {
+    const w = mount(OtdrResultCard, { props: { result: withRefs({ offset_m: 100 }) } })
+    await w.get('[data-testid="otdr-step-500"]').trigger('click')
+    await w.get('[data-testid="otdr-step--100"]').trigger('click')
+    expect(w.emitted('adjust').map(([v]) => v)).toEqual([600, 0])
+    const slider = w.get('[data-testid="otdr-slider"]')
+    expect(slider.attributes('max')).toBe('73130')
+    await slider.setValue('15000')
+    await slider.trigger('change')
+    expect(w.emitted('adjust').at(-1)[0]).toBeCloseTo(369.5)
+    expect(w.get('[data-testid="otdr-card-offset"]').text()).toBe('ajuste +100 m')
+    const sv = w.get('[data-testid="otdr-streetview"]')
+    expect(sv.attributes('href')).toBe('https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=-9.5338865,-50.7330878')
+    expect(sv.attributes('target')).toBe('_blank')
+  })
+
+  it('caixas anterior e posterior; sem cadastro diz isso', () => {
+    let w = mount(OtdrResultCard, { props: { result: withRefs() } })
+    const refs = w.get('[data-testid="otdr-refs"]').text()
+    expect(refs).toContain('Anterior: Caixa de Emenda (CEO) CEO-07 · 820 m')
+    expect(refs).toContain('Posterior: Reserva Técnica · 1,45 km')
+    w = mount(OtdrResultCard, { props: { result: withRefs({ references: { registered: 0, before: null, after: null } }) } })
+    expect(w.get('[data-testid="otdr-refs"]').text()).toBe('Nenhuma caixa ou reserva cadastrada neste cabo.')
+  })
+
+  it('WhatsApp leva o ajuste e o Street View', () => {
+    const msg = whatsappText(withRefs({ offset_m: -200 }))
+    expect(msg).toContain('Ajuste em campo: -200 m sobre o traçado')
+    expect(msg).toContain('Street View: https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=-9.5338865,-50.7330878')
+  })
+})
+

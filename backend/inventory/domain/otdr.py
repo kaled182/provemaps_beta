@@ -66,3 +66,23 @@ def path_starts_at_a(coords: Sequence[Coord], a: Coord | None, b: Coord | None) 
     straight = _seg_m(coords[0], a) + _seg_m(coords[-1], b)
     swapped = _seg_m(coords[0], b) + _seg_m(coords[-1], a)
     return straight <= swapped
+
+
+def along_m(coords: Sequence[Coord], acc: Sequence[float], point: Coord) -> float:
+    """Distância sobre o traçado (desde o 1.º vértice) do ponto do traçado mais próximo de
+    ``point`` — projeção num plano local (equiretangular), suficiente à escala de um segmento."""
+    from math import cos, radians
+
+    best_d2, best_along = float("inf"), 0.0
+    for i in range(1, len(coords)):
+        (x1, y1), (x2, y2) = coords[i - 1], coords[i]
+        k = cos(radians((y1 + y2) / 2))
+        ax, ay = (x2 - x1) * k, y2 - y1
+        px, py = (point[0] - x1) * k, point[1] - y1
+        seg2 = ax * ax + ay * ay
+        t = 0.0 if seg2 == 0 else max(0.0, min(1.0, (px * ax + py * ay) / seg2))
+        dx, dy = px - t * ax, py - t * ay
+        d2 = dx * dx + dy * dy
+        if d2 < best_d2:
+            best_d2, best_along = d2, acc[i - 1] + t * (acc[i] - acc[i - 1])
+    return best_along

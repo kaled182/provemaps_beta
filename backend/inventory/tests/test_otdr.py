@@ -142,3 +142,73 @@ def test_pin_validates_like_locate_and_requires_login(cable):
     )
     assert over.status_code == 400 and "passa do fim" in over.json()["detail"]
     assert c.post(f"{url}999999/clear/").status_code == 404
+
+
+# ── EV-0130: ajuste fino, referências no traçado, ajuste de um ponto fixado ───
+def test_offset_moves_the_point_along_the_trace_and_stays_between_the_ends(cable):
+    base = locate_otdr(cable.pk, direction="ab", distance_m=2500, slack_pct=0)
+    moved = locate_otdr(cable.pk, direction="ab", distance_m=2500, slack_pct=0, offset_m=500)
+    assert (moved["base_map_distance_m"], moved["map_distance_m"], moved["offset_m"]) == (
+        2500,
+        3000,
+        500,
+    )
+    assert moved["point"][1] > base["point"][1]  # mais para B
+    clamped = locate_otdr(cable.pk, direction="ab", distance_m=2500, slack_pct=0, offset_m=-9000)
+    assert clamped["map_distance_m"] == 0 and clamped["offset_m"] == -2500
+
+
+def test_references_before_and_after_the_point(cable):
+    from django.contrib.gis.geos import Point
+
+    from inventory.models import FiberInfrastructure
+
+    # ~1 km e ~4 km a partir de A (0,009° ≈ 1 km de latitude)
+    FiberInfrastructure.objects.create(
+        cable=cable, type="splice_box", name="CEO-01", location=Point(-50.0, 0.009, srid=4326)
+    )
+    FiberInfrastructure.objects.create(
+        cable=cable, type="slack", name="", location=Point(-50.0001, 0.036, srid=4326)
+    )
+    r = locate_otdr(cable.pk, direction="ab", distance_m=2500, slack_pct=0)["references"]
+    assert r["registered"] == 2
+    assert (r["before"]["name"], r["before"]["type_label"]) == ("CEO-01", "Caixa de Emenda (CEO)")
+    assert r["before"]["distance_m"] == pytest.approx(1500, abs=15)
+    assert r["after"]["type"] == "slack" and r["after"]["distance_m"] == pytest.approx(1500, abs=15)
+    # medido de B, a ordem inverte-se
+    rb = locate_otdr(cable.pk, direction="ba", distance_m=2500, slack_pct=0)["references"]
+    assert rb["before"] is None and rb["after"]["type"] == "slack"
+
+
+def test_no_references_registered(cable):
+    r = locate_otdr(cable.pk, direction="ab", distance_m=2500, slack_pct=0)["references"]
+    assert r == {"registered": 0, "before": None, "after": None}
+
+
+def test_adjusting_a_pinned_alert_recomputes_for_everyone_and_logs_it(cable):
+    c = Client()
+    c.force_login(
+        get_user_model().objects.create_user(username="ana", password="x", first_name="Ana")
+    )
+    url = "/api/v1/inventory/otdr-alerts/"
+    alert = c.post(
+        url,
+        {"cable_id": cable.pk, "direction": "ab", "distance_m": 2500},
+        content_type="application/json",
+    ).json()
+    adjusted = c.patch(f"{url}{alert['id']}/", {"offset_m": 200}, content_type="application/json")
+    assert adjusted.status_code == 200
+    body = adjusted.json()
+    assert body["result"]["map_distance_m"] == 2700
+    assert [e["action"] for e in body["log"]] == ["pinned", "adjusted"]
+    assert body["log"][1]["delta_m"] == 200 and body["log"][1]["by"] == "Ana"
+    other = Client()
+    other.force_login(get_user_model().objects.create_user(username="rui", password="x"))
+    assert other.get(url).json()[0]["result"]["map_distance_m"] == 2700  # todos veem
+    other.post(f"{url}{alert['id']}/clear/")
+    assert (
+        c.patch(
+            f"{url}{alert['id']}/", {"offset_m": 0}, content_type="application/json"
+        ).status_code
+        == 404
+    )

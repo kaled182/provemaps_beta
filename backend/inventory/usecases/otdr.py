@@ -12,7 +12,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from inventory.domain import otdr as geo
-from inventory.models import FiberCable, OtdrAlert, Site
+from inventory.models import FiberCable, FiberInfrastructure, OtdrAlert, Site
 
 from .devices_common import InventoryValidationError
 
@@ -43,8 +43,47 @@ def _site_payload(site: Site | None, along_m: float) -> dict[str, Any]:
     }
 
 
+INFRA_LABELS = dict(FiberInfrastructure.TYPES)
+
+
+def _references(
+    cable: FiberCable, coords: list[geo.Coord], acc: list[float], map_m: float
+) -> dict[str, Any]:
+    """EV-0130: caixas/reservas cadastradas no cabo imediatamente antes e depois do ponto,
+    medidas sobre o traçado (no sentido da medição)."""
+    rows = list(
+        FiberInfrastructure.objects.filter(cable=cable).only("id", "type", "name", "location")
+    )
+    placed = sorted(
+        ((geo.along_m(coords, acc, (r.location.x, r.location.y)), r) for r in rows),
+        key=lambda x: x[0],
+    )
+
+    def item(along: float, row: FiberInfrastructure) -> dict[str, Any]:
+        return {
+            "id": row.pk,
+            "type": row.type,
+            "type_label": INFRA_LABELS.get(row.type, row.type),
+            "name": row.name or None,
+            "distance_m": round(abs(along - map_m), 1),
+        }
+
+    before = [(a, r) for a, r in placed if a <= map_m]
+    after = [(a, r) for a, r in placed if a > map_m]
+    return {
+        "registered": len(rows),
+        "before": item(*before[-1]) if before else None,
+        "after": item(*after[0]) if after else None,
+    }
+
+
 def locate_otdr(
-    cable_id: int, *, direction: str, distance_m: float, slack_pct: float
+    cable_id: int,
+    *,
+    direction: str,
+    distance_m: float,
+    slack_pct: float,
+    offset_m: float = 0.0,
 ) -> dict[str, Any]:
     """Ponto provável do rompimento a ``distance_m`` (leitura do OTDR) medidos a partir do site
     de origem do sentido escolhido, descontada a folga; trecho de ±40 m à volta.
@@ -77,12 +116,14 @@ def locate_otdr(
 
     acc = geo.cumulative_m(coords)
     total_m = acc[-1]
-    map_m = distance_m / (1 + slack_pct / 100.0)
-    if map_m > total_m:
+    base_m = distance_m / (1 + slack_pct / 100.0)
+    if base_m > total_m:
         raise InventoryValidationError(
-            f"a leitura, descontada a folga ({map_m / 1000:.2f} km), passa do fim do traçado "
+            f"a leitura, descontada a folga ({base_m / 1000:.2f} km), passa do fim do traçado "
             f"({total_m / 1000:.2f} km) — verificar o sentido, a folga ou o cabo"
         )
+    # EV-0130: ajuste fino em campo — desloca o ponto sobre o traçado, sem sair das pontas
+    map_m = min(max(base_m + offset_m, 0.0), total_m)
     lng, lat = geo.point_at(coords, acc, map_m)
     segment = geo.substring(coords, acc, map_m - geo.TOLERANCE_M, map_m + geo.TOLERANCE_M)
     return {
@@ -92,6 +133,8 @@ def locate_otdr(
         "otdr_m": round(distance_m, 1),
         "slack_pct": slack_pct,
         "map_distance_m": round(map_m, 1),
+        "base_map_distance_m": round(base_m, 1),
+        "offset_m": round(map_m - base_m, 1),
         "path_length_m": round(total_m, 1),
         "inventory_length_km": float(cable.length_km) if cable.length_km is not None else None,
         "origin": _site_payload(origin, map_m),
@@ -99,6 +142,7 @@ def locate_otdr(
         "point": [round(lng, 7), round(lat, 7)],
         "segment": [[round(x, 7), round(y, 7)] for x, y in segment],
         "tolerance_m": geo.TOLERANCE_M,
+        "references": _references(cable, coords, acc, map_m),
     }
 
 
@@ -110,6 +154,10 @@ def _user_label(user: Any) -> str | None:
     return full or getattr(user, "username", None)
 
 
+def _now_iso() -> str:
+    return timezone.now().isoformat().replace("+00:00", "Z")
+
+
 def alert_payload(alert: OtdrAlert) -> dict[str, Any]:
     return {
         "id": alert.pk,
@@ -118,6 +166,7 @@ def alert_payload(alert: OtdrAlert) -> dict[str, Any]:
         "created_by": _user_label(alert.created_by),
         "created_at": alert.created_at.isoformat().replace("+00:00", "Z"),
         "result": alert.result,
+        "log": alert.log or [],
     }
 
 
@@ -140,7 +189,36 @@ def pin_alert(
         result=result,
         note=note[:200],
         created_by=user if getattr(user, "is_authenticated", False) else None,
+        log=[{"at": _now_iso(), "by": _user_label(user), "action": "pinned"}],
     )
+    return alert_payload(alert)
+
+
+def adjust_alert(alert_id: int, *, offset_m: float, user: Any) -> dict[str, Any]:
+    """EV-0130: ajuste fino de um ponto fixado — recalcula no servidor com os parâmetros
+    guardados e o novo deslocamento; fica para todos e no registo («+200 m por Ana»)."""
+    alert = get_object_or_404(OtdrAlert, pk=alert_id, cleared_at__isnull=True)
+    result = locate_otdr(
+        alert.cable_id,
+        direction=alert.direction,
+        distance_m=alert.otdr_m,
+        slack_pct=alert.slack_pct,
+        offset_m=offset_m,
+    )
+    previous = float(alert.offset_m or 0)
+    alert.offset_m = result["offset_m"]
+    alert.result = result
+    alert.log = [
+        *(alert.log or []),
+        {
+            "at": _now_iso(),
+            "by": _user_label(user),
+            "action": "adjusted",
+            "delta_m": round(alert.offset_m - previous, 1),
+            "offset_m": alert.offset_m,
+        },
+    ]
+    alert.save(update_fields=["offset_m", "result", "log"])
     return alert_payload(alert)
 
 
@@ -150,5 +228,9 @@ def clear_alert(alert_id: int, *, user: Any) -> dict[str, Any]:
     if alert.cleared_at is None:
         alert.cleared_at = timezone.now()
         alert.cleared_by = user if getattr(user, "is_authenticated", False) else None
-        alert.save(update_fields=["cleared_at", "cleared_by"])
+        alert.log = [
+            *(alert.log or []),
+            {"at": _now_iso(), "by": _user_label(user), "action": "cleared"},
+        ]
+        alert.save(update_fields=["cleared_at", "cleared_by", "log"])
     return {"id": alert.pk, "cleared_at": alert.cleared_at.isoformat().replace("+00:00", "Z")}

@@ -76,7 +76,12 @@ from inventory.api.maintenance_alert import (  # noqa: E402
     api_maintenance_recipients,
     api_maintenance_send_alert,
 )
-from inventory.api.otdr import OtdrAlertClearView, OtdrAlertsView, OtdrLocateView  # noqa: E402
+from inventory.api.otdr import (  # noqa: E402
+    OtdrAlertClearView,
+    OtdrAlertDetailView,
+    OtdrAlertsView,
+    OtdrLocateView,
+)
 from inventory.api.perform_update import api_perform_update  # noqa: E402
 from inventory.api.responsibles import api_create_responsible, api_list_responsibles  # noqa: E402
 from inventory.api.search import api_global_search  # noqa: E402
@@ -428,6 +433,7 @@ urlpatterns = [
     ),
     # EV-0128: pontos OTDR fixados no mapa para toda a equipa
     path("otdr-alerts/", OtdrAlertsView.as_view(), name="otdr-alerts"),
+    path("otdr-alerts/<int:alert_id>/", OtdrAlertDetailView.as_view(), name="otdr-alert-detail"),
     path(
         "otdr-alerts/<int:alert_id>/clear/",
         OtdrAlertClearView.as_view(),

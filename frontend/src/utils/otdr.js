@@ -32,6 +32,15 @@ export function googleMapsUrl(point) {
   return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
 }
 
+/** EV-0130: Street View no ponto (inspeção do poste/rodovia pelo NOC). */
+export function streetViewUrl(point) {
+  const [lng, lat] = point
+  return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`
+}
+
+/** EV-0130: passos do ajuste fino em campo (m sobre o traçado). */
+export const ADJUST_STEPS = Object.freeze([-500, -100, 100, 500])
+
 export function wazeUrl(point) {
   const [lng, lat] = point
   return `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`
@@ -46,8 +55,10 @@ export function whatsappText(r) {
     `Cabo: ${r.cable_name}`,
     `Sentido: ${from} → ${to}`,
     `Leitura OTDR: ${formatMeters(r.otdr_m)} (folga ${String(r.slack_pct).replace('.', ',')}% → ${formatMeters(r.map_distance_m)} no traçado)`,
+    ...(Number(r.offset_m) ? [`Ajuste em campo: ${r.offset_m > 0 ? '+' : ''}${formatMeters(r.offset_m)} sobre o traçado`] : []),
     `Coordenadas: ${formatCoords(r.point)} (±${Math.round(r.tolerance_m)} m)`,
     `Até ${from}: ${formatMeters(r.origin?.distance_m)} · até ${to}: ${formatMeters(r.target?.distance_m)}`,
     `Google Maps: ${googleMapsUrl(r.point)}`,
+    `Street View: ${streetViewUrl(r.point)}`,
   ].join('\n')
 }

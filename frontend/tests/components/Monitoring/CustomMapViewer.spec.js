@@ -500,4 +500,49 @@ describe('CustomMapViewer (EV-0012c)', () => {
     expect(wrapper.findAll('[data-testid="otdr-pin"]')).toHaveLength(1);
     wrapper.unmount();
   }, 15_000); // imports dinâmicos (modal OTDR): na suite completa a 1.ª compilação passa dos 5 s
+
+  it('EV-0130: ajuste fino — na medição pede o locate com offset; num fixado faz PATCH; o trecho redesenha', async () => {
+    const result = (lng, lat, offset = 0) => ({
+      cable_id: 1, cable_name: 'Cabo 1', direction: 'ab', otdr_m: 1000, slack_pct: 0, map_distance_m: 1000 + offset,
+      base_map_distance_m: 1000, offset_m: offset, path_length_m: 15000, inventory_length_km: null,
+      origin: { id: 1, name: 'A', distance_m: 1000 + offset }, target: { id: 2, name: 'B', distance_m: 14000 - offset },
+      point: [lng, lat], segment: [[lng, lat], [lng + 0.001, lat]], tolerance_m: 40,
+      references: { registered: 0, before: null, after: null },
+    });
+    const calls = [];
+    global.fetch = vi.fn(async (url, opts = {}) => {
+      calls.push([url, opts.method || 'GET', opts.body]);
+      if (url.startsWith('/api/v1/inventory/cables/1/otdr-locate/')) return { ok: true, status: 200, json: async () => result(-49.22, -16.62, 100) };
+      if (url === '/api/v1/inventory/otdr-alerts/' && (opts.method || 'GET') === 'GET') return { ok: true, status: 200, json: async () => [] };
+      if (url === '/api/v1/inventory/otdr-alerts/' && opts.method === 'POST')
+        return { ok: true, status: 201, json: async () => ({ id: 9, cable_id: 1, note: '', created_by: 'Ana', created_at: '2026-11-24T19:00:00Z', result: result(-49.22, -16.62, 100), log: [] }) };
+      if (url === '/api/v1/inventory/otdr-alerts/9/' && opts.method === 'PATCH')
+        return { ok: true, status: 200, json: async () => ({ id: 9, cable_id: 1, note: '', created_by: 'Ana', created_at: '2026-11-24T19:00:00Z', result: result(-49.3, -16.7, 600), log: [] }) };
+      return { ok: true, status: 200, json: async () => ({ hosts_status: [] }) };
+    });
+    const wrapper = mountViewer();
+    await flushPromises();
+    const map = fakeFactory.maps[0];
+    await wrapper.find('[data-testid="map-otdr-btn"]').trigger('click');
+    await vi.dynamicImportSettled();
+    await flushPromises();
+    wrapper.findComponent({ name: 'OtdrLocatorModal' }).vm.$emit('located', result(-49.21, -16.61));
+    await flushPromises();
+    const firstLine = map.polylines.at(-1);
+    await wrapper.find('[data-testid="otdr-step-100"]').trigger('click');
+    await flushPromises();
+    const locate = calls.find(([u]) => u.startsWith('/api/v1/inventory/cables/1/otdr-locate/'));
+    expect(locate[0]).toContain('offset_m=100');
+    expect(firstLine.remove).toHaveBeenCalled(); // trecho redesenhado
+    expect(map.polylines.at(-1).opts.path[0]).toEqual({ lat: -16.62, lng: -49.22 });
+    // fixar e ajustar o fixado → PATCH
+    await wrapper.find('[data-testid="otdr-pin-alert"]').trigger('click');
+    await flushPromises();
+    await wrapper.find('[data-testid="otdr-step-500"]').trigger('click');
+    await flushPromises();
+    const patch = calls.find(([u, m]) => u === '/api/v1/inventory/otdr-alerts/9/' && m === 'PATCH');
+    expect(JSON.parse(patch[2])).toEqual({ offset_m: 600 });
+    expect(wrapper.find('[data-testid="otdr-card-offset"]').text()).toContain('+600 m');
+    wrapper.unmount();
+  }, 15_000);
 });

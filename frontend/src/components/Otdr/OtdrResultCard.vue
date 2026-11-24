@@ -13,7 +13,10 @@
       <dt>Leitura OTDR</dt>
       <dd class="num">{{ formatMeters(result.otdr_m) }}</dd>
       <dt>No traçado</dt>
-      <dd class="num" data-testid="otdr-card-map">{{ formatMeters(result.map_distance_m) }} <span class="text-neutral-500">(folga {{ slackText }}%)</span></dd>
+      <dd class="num" data-testid="otdr-card-map">
+        {{ formatMeters(result.map_distance_m) }} <span class="text-neutral-500">(folga {{ slackText }}%)</span>
+        <span v-if="offset" class="orc-offset" data-testid="otdr-card-offset">ajuste {{ offset > 0 ? '+' : '' }}{{ formatMeters(offset) }}</span>
+      </dd>
       <dt>GPS</dt>
       <dd class="num" data-testid="otdr-card-coords">{{ formatCoords(result.point) }} <span class="text-neutral-500">±{{ Math.round(result.tolerance_m) }} m</span></dd>
       <dt>Até {{ originName }}</dt>
@@ -21,9 +24,56 @@
       <dt>Até {{ targetName }}</dt>
       <dd class="num">{{ formatMeters(result.target.distance_m) }}</dd>
     </dl>
+
+    <!-- EV-0130: ajuste fino em campo, ao longo do traçado -->
+    <div class="orc-adjust" data-testid="otdr-adjust">
+      <div class="orc-steps">
+        <button
+          v-for="step in ADJUST_STEPS"
+          :key="step"
+          type="button"
+          class="orc-step"
+          :disabled="busy"
+          :data-testid="`otdr-step-${step}`"
+          @click="$emit('adjust', offset + step)"
+        >
+          {{ step > 0 ? '+' : '−' }}{{ Math.abs(step) }} m
+        </button>
+      </div>
+      <input
+        v-model.number="slider"
+        type="range"
+        class="orc-slider"
+        min="0"
+        :max="Math.round(result.path_length_m)"
+        step="10"
+        :disabled="busy"
+        aria-label="Posição ao longo do traçado"
+        data-testid="otdr-slider"
+        @change="$emit('adjust', slider - result.base_map_distance_m)"
+      />
+      <p class="orc-hint">{{ alert ? 'Num ponto fixado, o ajuste vale para toda a equipa.' : 'Arraste ou use os passos para acertar o ponto no terreno.' }}</p>
+    </div>
+
+    <!-- EV-0130: caixas/reservas cadastradas antes e depois do ponto -->
+    <div class="orc-refs" data-testid="otdr-refs">
+      <template v-if="refs.registered">
+        <p v-for="side in ['before', 'after']" :key="side">
+          <span class="text-neutral-500">{{ side === 'before' ? 'Anterior: ' : 'Posterior: ' }}</span>
+          <template v-if="refs[side]">
+            {{ refs[side].type_label }}{{ refs[side].name ? ` ${refs[side].name}` : '' }} ·
+            <span class="num">{{ formatMeters(refs[side].distance_m) }}</span>
+          </template>
+          <template v-else>— (nenhuma neste lado)</template>
+        </p>
+      </template>
+      <p v-else class="text-neutral-500">Nenhuma caixa ou reserva cadastrada neste cabo.</p>
+    </div>
+
     <div class="orc-actions">
       <a class="orc-btn" :href="googleMapsUrl(result.point)" target="_blank" rel="noopener noreferrer" data-testid="otdr-gmaps">Google Maps</a>
       <a class="orc-btn" :href="wazeUrl(result.point)" target="_blank" rel="noopener noreferrer" data-testid="otdr-waze">Waze</a>
+      <a class="orc-btn" :href="streetViewUrl(result.point)" target="_blank" rel="noopener noreferrer" data-testid="otdr-streetview">Street View</a>
       <button type="button" class="orc-btn" data-testid="otdr-whatsapp" @click="copyWhatsapp">
         {{ copied ? 'Copiado!' : 'Copiar para WhatsApp' }}
       </button>
@@ -43,9 +93,9 @@
 
 <script setup>
 /** Cartão do ponto OTDR no mapa (EV-0127): dados para o campo e navegação externa. */
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { copyText } from '@/components/Gpon/ponDiagnosis'
-import { formatCoords, formatMeters, googleMapsUrl, wazeUrl, whatsappText } from '@/utils/otdr'
+import { ADJUST_STEPS, formatCoords, formatMeters, googleMapsUrl, streetViewUrl, wazeUrl, whatsappText } from '@/utils/otdr'
 
 const props = defineProps({
   result: { type: Object, required: true },
@@ -54,7 +104,18 @@ const props = defineProps({
   busy: { type: Boolean, default: false },
   error: { type: String, default: '' },
 })
-defineEmits(['close', 'clear', 'pin'])
+defineEmits(['close', 'clear', 'pin', 'adjust'])
+
+const offset = computed(() => Number(props.result.offset_m) || 0)
+const refs = computed(() => props.result.references || { registered: 0, before: null, after: null })
+/** slider = posição absoluta no traçado; segue o resultado (ajustes vindos do servidor) */
+const slider = ref(Math.round(props.result.map_distance_m))
+watch(
+  () => props.result.map_distance_m,
+  (v) => {
+    slider.value = Math.round(v)
+  },
+)
 
 const pinnedAt = computed(() =>
   props.alert?.created_at
@@ -127,6 +188,60 @@ onBeforeUnmount(() => clearTimeout(timer))
   margin: 0;
   color: rgb(var(--n-900));
   overflow-wrap: anywhere;
+}
+.orc-offset {
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: rgb(var(--warning) / 0.14);
+  color: rgb(var(--warning));
+}
+.orc-adjust {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgb(var(--n-200));
+}
+.orc-steps {
+  display: flex;
+  gap: 4px;
+}
+.orc-step {
+  flex: 1;
+  height: 26px;
+  border: 1px solid rgb(var(--n-300));
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: rgb(var(--n-700));
+  background: rgb(var(--surface));
+}
+.orc-step:hover:not(:disabled) {
+  border-color: rgb(var(--primary-500));
+  color: rgb(var(--primary-600));
+}
+.orc-step:disabled {
+  opacity: 0.5;
+}
+.orc-slider {
+  width: 100%;
+  margin-top: 6px;
+  accent-color: rgb(var(--danger));
+}
+.orc-hint {
+  margin: 2px 0 0;
+  font-size: 10px;
+  color: rgb(var(--n-500));
+}
+.orc-refs {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgb(var(--n-200));
+  font-size: 11px;
+  color: rgb(var(--n-800));
+}
+.orc-refs p {
+  margin: 1px 0;
 }
 .orc-actions {
   display: flex;

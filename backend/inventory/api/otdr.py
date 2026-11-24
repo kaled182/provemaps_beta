@@ -14,6 +14,7 @@ from inventory.usecases.otdr import (
     DIRECTIONS,
     SLACK_PCT_MAX,
     active_alerts,
+    adjust_alert,
     clear_alert,
     locate_otdr,
     pin_alert,
@@ -24,12 +25,28 @@ class OtdrQuerySerializer(serializers.Serializer):
     direction = serializers.ChoiceField(choices=list(DIRECTIONS))
     distance_m = serializers.FloatField(min_value=1)
     slack_pct = serializers.FloatField(min_value=0, max_value=SLACK_PCT_MAX, default=0)
+    # EV-0130: ajuste fino (m sobre o traçado; o ponto fica entre as pontas)
+    offset_m = serializers.FloatField(default=0, min_value=-500_000, max_value=500_000)
 
 
 class OtdrSiteSerializer(serializers.Serializer):
     id = serializers.IntegerField(allow_null=True)
     name = serializers.CharField(allow_null=True)
     distance_m = serializers.FloatField()
+
+
+class OtdrRefSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    type = serializers.CharField()
+    type_label = serializers.CharField()
+    name = serializers.CharField(allow_null=True)
+    distance_m = serializers.FloatField(help_text="distância sobre o traçado até ao ponto")
+
+
+class OtdrReferencesSerializer(serializers.Serializer):
+    registered = serializers.IntegerField(help_text="caixas/reservas cadastradas no cabo")
+    before = OtdrRefSerializer(allow_null=True)
+    after = OtdrRefSerializer(allow_null=True)
 
 
 class OtdrResultSerializer(serializers.Serializer):
@@ -39,6 +56,8 @@ class OtdrResultSerializer(serializers.Serializer):
     otdr_m = serializers.FloatField()
     slack_pct = serializers.FloatField()
     map_distance_m = serializers.FloatField()
+    base_map_distance_m = serializers.FloatField()
+    offset_m = serializers.FloatField()
     path_length_m = serializers.FloatField()
     inventory_length_km = serializers.FloatField(allow_null=True)
     origin = OtdrSiteSerializer()
@@ -46,6 +65,7 @@ class OtdrResultSerializer(serializers.Serializer):
     point = serializers.ListField(child=serializers.FloatField(), help_text="[lng, lat]")
     segment = serializers.ListField(child=serializers.ListField(child=serializers.FloatField()))
     tolerance_m = serializers.FloatField()
+    references = OtdrReferencesSerializer()
 
 
 class OtdrLocateView(APIView):
@@ -70,6 +90,7 @@ class OtdrLocateView(APIView):
                 direction=v["direction"],
                 distance_m=v["distance_m"],
                 slack_pct=v["slack_pct"],
+                offset_m=v["offset_m"],
             )
         except InventoryValidationError as exc:
             return Response({"detail": str(exc)}, status=400)
@@ -91,6 +112,11 @@ class OtdrAlertSerializer(serializers.Serializer):
     created_by = serializers.CharField(allow_null=True)
     created_at = serializers.DateTimeField()
     result = OtdrResultSerializer()
+    log = serializers.ListField(child=serializers.DictField(), help_text="registo do atendimento")
+
+
+class OtdrAdjustSerializer(serializers.Serializer):
+    offset_m = serializers.FloatField(min_value=-500_000, max_value=500_000)
 
 
 class OtdrAlertClearedSerializer(serializers.Serializer):
@@ -137,3 +163,21 @@ class OtdrAlertClearView(APIView):
     )
     def post(self, request: Request, alert_id: int) -> Response:
         return Response(clear_alert(alert_id, user=request.user))
+
+
+class OtdrAlertDetailView(APIView):
+    @extend_schema(
+        request=OtdrAdjustSerializer,
+        responses=OtdrAlertSerializer,
+        summary="Ajuste fino de um ponto OTDR fixado (grava para toda a equipa, com registo)",
+    )
+    def patch(self, request: Request, alert_id: int) -> Response:
+        body = OtdrAdjustSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        try:
+            data = adjust_alert(
+                alert_id, offset_m=body.validated_data["offset_m"], user=request.user
+            )
+        except InventoryValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(data)

@@ -1737,6 +1737,10 @@ class OtdrAlert(models.Model):
     slack_pct = models.FloatField()
     result = models.JSONField(help_text="Resposta de otdr-locate no momento em que foi fixado")
     note = models.CharField(max_length=200, blank=True)
+    # EV-0130: ajuste fino em campo (m sobre o traçado, a partir do ponto calculado)
+    offset_m = models.FloatField(default=0)
+    # Registo do atendimento: [{at, by, action: pinned|adjusted|cleared|…, …}]
+    log = models.JSONField(default=list, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
     )

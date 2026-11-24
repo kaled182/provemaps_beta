@@ -18,6 +18,7 @@
             :error="otdrError"
             @close="otdrOpenKey = null"
             @pin="pinOtdr"
+            @adjust="adjustOtdr(otdrOpen, $event)"
             @clear="clearOtdr(otdrOpen)"
           />
         </MapPopup>
@@ -1023,7 +1024,7 @@ const openCableDetailsFromTooltip = (cable) => {
 }
 
 // ── EV-0127/0128: localizador OTDR ───────────────────────────────────────────
-const { get: apiGet, post: apiPost } = useApi()
+const { get: apiGet, post: apiPost, patch: apiPatch } = useApi()
 const OTDR_ALERTS_URL = '/api/v1/inventory/otdr-alerts/'
 const OTDR_ALERTS_REFRESH_MS = 60 * 1000
 const otdrModalOpen = ref(false)
@@ -1033,7 +1034,7 @@ const otdrAlerts = ref([]) // fixados pela equipa (servidor)
 const otdrOpenKey = ref(null)
 const otdrBusy = ref(false)
 const otdrError = ref('')
-const otdrLines = new Map() // key → polilinha do trecho ±40 m
+const otdrLines = new Map() // key → { line, sig } do trecho ±40 m
 let otdrTimer = null
 
 const pointLatLng = (result) => {
@@ -1051,16 +1052,20 @@ const otdrOpen = computed(() => otdrPoints.value.find((p) => p.key === otdrOpenK
 function syncOtdrLines() {
   if (!map.value) return
   const wanted = new Map(otdrPoints.value.map((p) => [p.key, p]))
-  for (const [key, line] of otdrLines) {
-    if (!wanted.has(key)) {
-      line.remove()
+  const sigOf = (pt) => JSON.stringify(pt.result.segment || [])
+  for (const [key, drawn] of otdrLines) {
+    // EV-0130: um ajuste muda o trecho — redesenha-se
+    if (!wanted.has(key) || drawn.sig !== sigOf(wanted.get(key))) {
+      drawn.line.remove()
       otdrLines.delete(key)
     }
   }
   for (const [key, pt] of wanted) {
     if (otdrLines.has(key)) continue
     const path = (pt.result.segment || []).map(([lng, lat]) => ({ lat, lng }))
-    if (path.length >= 2) otdrLines.set(key, map.value.createPolyline({ path, ...OTDR_SEGMENT_STYLE, clickable: false }))
+    if (path.length >= 2) {
+      otdrLines.set(key, { line: map.value.createPolyline({ path, ...OTDR_SEGMENT_STYLE, clickable: false }), sig: sigOf(pt) })
+    }
   }
 }
 watch([otdrPoints, map], syncOtdrLines)
@@ -1111,6 +1116,34 @@ async function pinOtdr() {
     otdrOpenKey.value = `a${alert.id}`
   } catch (e) {
     otdrError.value = `Não foi possível fixar: ${e?.message || 'erro desconhecido'}`
+  } finally {
+    otdrBusy.value = false
+  }
+}
+
+/**
+ * EV-0130: ajuste fino — o servidor recalcula o ponto com o deslocamento. Na medição em curso
+ * pede-se de novo o otdr-locate; num ponto fixado grava-se para toda a equipa (com registo).
+ */
+async function adjustOtdr(pt, offsetM) {
+  if (!pt || otdrBusy.value) return
+  otdrBusy.value = true
+  otdrError.value = ''
+  try {
+    if (pt.alert) {
+      const updated = await apiPatch(`${OTDR_ALERTS_URL}${pt.alert.id}/`, { offset_m: offsetM })
+      otdrAlerts.value = otdrAlerts.value.map((a) => (a.id === updated.id ? updated : a))
+    } else {
+      const r = pt.result
+      otdrDraft.value = await apiGet(`/api/v1/inventory/cables/${encodeURIComponent(r.cable_id)}/otdr-locate/`, {
+        direction: r.direction,
+        distance_m: r.otdr_m,
+        slack_pct: r.slack_pct,
+        offset_m: offsetM,
+      })
+    }
+  } catch (e) {
+    otdrError.value = `Não foi possível ajustar: ${e?.message || 'erro desconhecido'}`
   } finally {
     otdrBusy.value = false
   }
@@ -1414,7 +1447,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   clearTimeout(focusTimer)
   clearTimeout(cableFocusTimer)
-  otdrLines.forEach((line) => line.remove())
+  otdrLines.forEach((drawn) => drawn.line.remove())
   otdrLines.clear()
   clearInterval(otdrTimer)
   stopStatusPolling()
