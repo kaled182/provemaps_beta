@@ -2260,6 +2260,8 @@ onUnmounted(() => {
 }
 
 #contextMenu {
+  /* EV-0138: acima dos painéis flutuantes (35) — o menu abre junto ao cabo, sobre o painel de detalhes */
+  z-index: 45;
   width: 260px;
   background: var(--nd-context-bg);
   border-radius: 12px;
