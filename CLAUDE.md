@@ -117,10 +117,9 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**A fazer (2)**
+**A fazer (1)**
 
 💡 Ideias
-- `EV-0142` **Splitters na bandeja da CEO/CTO (1x2…1x16): fibra de entrada, portas de atendimento Livre/Ocupada/Reservada e dBm estimado em cada porta** · P2 · admin · há 0 dias
 - `EV-0143` **Rastreamento destacado no editor de CEO/CTO e no mapa: caminho da OLT/switch até ao destino com distância óptica e dBm acumulados** · P2 · admin · há 0 dias
 
 **Entrada, por triar (23)**
