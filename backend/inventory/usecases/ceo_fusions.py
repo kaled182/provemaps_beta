@@ -311,14 +311,23 @@ def delete_fusion(ceo_id: int, fusion_id: int) -> None:
 # ── rastreamento ─────────────────────────────────────────────────────────────
 
 
+def _where(box: FiberInfrastructure) -> dict[str, Any]:
+    """EV-0143: coordenadas da caixa, para o destaque no mapa."""
+    loc = box.location
+    return {"lat": loc.y, "lng": loc.x} if loc is not None else {"lat": None, "lng": None}
+
+
 def _port_step(port) -> dict[str, Any]:
     device = port.device
+    site = device.site
     return {
         "type": "port",
         "port_id": port.pk,
         "port_name": port.name,
         "device_name": device.name,
-        "site_name": getattr(device.site, "display_name", None),
+        "site_name": getattr(site, "display_name", None),
+        "lat": float(site.latitude) if site and site.latitude is not None else None,
+        "lng": float(site.longitude) if site and site.longitude is not None else None,
     }
 
 
@@ -387,6 +396,7 @@ def _through_splitter(
             "ratio": splitter.ratio,
             "port": sp["port"].number,
             "loss_db": budget["splitters"].get(splitter.ratio, 0.0),
+            **_where(box),
         }
     )
     strand = splitter.input_strand
@@ -422,6 +432,7 @@ def _walk(
     total_km = 0.0
     fusions = 0
     last_port = None
+    port_end: tuple[int, str] | None = None
     end: dict[str, Any] = {"reason": "loop", "label": "rastreamento interrompido (laço)"}
 
     for _ in range(MAX_HOPS):
@@ -469,6 +480,7 @@ def _walk(
             nonlocal total_km
             seg = abs(at_km - start_km)
             step["km"] = round(seg, 3)
+            step["from_km"], step["to_km"] = start_km, at_km  # EV-0143: troço para o mapa
             total_km += seg
             # EV-0140: atenuação do tipo de cabo; sem tipo, a da fibra do orçamento
             att = getattr(cable.cable_group, "attenuation_db_per_km", None)
@@ -500,6 +512,7 @@ def _walk(
                         "mode": _mode(x),
                         "tray": fusion.tray,
                         "slot": fusion.slot,
+                        **_where(x),
                     }
                 )
                 strand, direction, pos = partner, p_side, _pos_on(partner.tube.cable, x)
@@ -540,6 +553,7 @@ def _walk(
         port = strand.connected_device_port_b if direction == "b" else strand.connected_device_port
         if port is not None:
             last_port = port
+            port_end = (strand.pk, direction)
             steps.append(_port_step(port))
             end = {"reason": "port", "label": f"{port.device.name} → {port.name}"}
             break
@@ -559,6 +573,7 @@ def _walk(
                         "mode": _mode(end_ceo),
                         "tray": fusion.tray,
                         "slot": fusion.slot,
+                        **_where(end_ceo),
                     }
                 )
                 strand, direction, pos = partner, p_side, _pos_on(partner.tube.cable, end_ceo)
@@ -583,7 +598,14 @@ def _walk(
         }
         break
 
-    return {"steps": steps, "end": end, "total_km": total_km, "fusions": fusions, "port": last_port}
+    return {
+        "steps": steps,
+        "end": end,
+        "total_km": total_km,
+        "fusions": fusions,
+        "port": last_port,
+        "port_end": port_end,
+    }
 
 
 def trace_light(strand_id: int, *, start: str = "a") -> dict[str, Any]:
@@ -634,10 +656,16 @@ def _start_tx(port, budget: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _accumulate(
-    steps: list[dict[str, Any]], budget: dict[str, Any], tx: dict[str, Any] | None
+    steps: list[dict[str, Any]],
+    budget: dict[str, Any],
+    tx: dict[str, Any] | None,
+    *,
+    km0: float = 0.0,
+    loss0: float = 0.0,
 ) -> float:
-    """Acrescenta a cada passo os km, a perda e (com TX) a potência estimada acumulados."""
-    km = loss = 0.0
+    """Acrescenta a cada passo os km, a perda e (com TX) a potência estimada acumulados, a partir
+    de ``km0``/``loss0`` (EV-0143: um ramo continua do que já se perdeu até ao splitter)."""
+    km, loss = km0, loss0
     for step in steps:
         if step["type"] == "cable":
             seg = step.get("km") or 0.0

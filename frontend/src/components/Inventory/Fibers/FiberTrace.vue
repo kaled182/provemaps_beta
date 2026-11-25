@@ -4,54 +4,47 @@
     <p v-else-if="error" class="ft-msg text-danger" role="alert">Erro no rastreamento: {{ error }}</p>
     <template v-else-if="trace">
       <p v-if="trace.tx" class="ft-tx" data-testid="trace-tx">
-        Partida <span class="num">{{ dbm(trace.tx.dbm) }}</span>
+        Partida <span class="num">{{ fmtDbm(trace.tx.dbm) }}</span>
         <span class="ft-sub"> — {{ trace.tx.source === 'zabbix' ? `TX coletado do Zabbix (${trace.tx.port_name})` : 'TX padrão da configuração (sem coleta nesta porta)' }}</span>
       </p>
-      <ol class="ft-steps">
-        <li v-for="(s, i) in trace.steps" :key="i" class="ft-step" :class="`ft-${s.type}`" :data-testid="`trace-step-${s.type}`">
-          <template v-if="s.type === 'port'">
-            <b>{{ s.device_name }}</b> → <span class="num">{{ s.port_name }}</span>
-            <span v-if="s.site_name" class="ft-sub"> · {{ s.site_name }}</span>
-          </template>
-          <template v-else-if="s.type === 'cable'">
-            <span class="core" :style="{ background: s.color_hex }" aria-hidden="true" />
-            {{ s.cable_name }} · F{{ s.absolute_number }} ({{ s.color }})
-            <span class="ft-sub">rumo a {{ s.toward }} · <span class="num">{{ fmtKm(s.km) }}</span></span>
-            <span v-if="s.passes?.length" class="ft-sub"> · passa direto: {{ s.passes.join(', ') }}</span>
-            <span v-if="s.broken" class="text-danger"> · rompido</span>
-            <span class="ft-sub num"> · −{{ db(s.loss_db) }}</span>
-            <span v-if="s.dbm !== null && s.dbm !== undefined" class="ft-dbm num">{{ dbm(s.dbm) }}</span>
-          </template>
-          <template v-else-if="s.type === 'fusion'">
-            Fusão na <b>{{ s.ceo_name }}</b>
-            <span v-if="s.tray" class="ft-sub num"> · bandeja {{ s.tray }}{{ s.slot ? `, posição ${s.slot}` : '' }}</span>
-            <span class="ft-sub num"> · −{{ db(s.loss_db) }}</span>
-            <span v-if="s.dbm !== null && s.dbm !== undefined" class="ft-dbm num">{{ dbm(s.dbm) }}</span>
-          </template>
-        </li>
-      </ol>
-      <p class="ft-end" :class="trace.end.reason === 'port' ? 'text-success' : 'text-warning'" data-testid="trace-end">
-        {{ trace.end.reason === 'port' ? 'Chega a' : 'Fim' }}: {{ trace.end.label }}
+      <p v-else-if="!trace.source?.found" class="ft-tx text-warning" data-testid="trace-nosource">
+        Sem fonte de luz a montante ({{ trace.source?.label || 'nenhuma porta ligada' }}) — só distâncias, sem dBm.
+      </p>
+      <TraceNode :node="trace.tree" />
+      <p class="ft-end" :class="leaf.end.reason === 'port' ? 'text-success' : 'text-warning'" data-testid="trace-end">
+        {{ leaf.end.reason === 'port' ? 'Chega a' : 'Fim' }}: {{ leaf.end.label }}
       </p>
       <p class="ft-sub" data-testid="trace-total">
-        <span class="num">{{ fmtKm(trace.total_km) }}</span> · {{ trace.fusions }} {{ trace.fusions === 1 ? 'fusão' : 'fusões' }}
-        · perda estimada <span class="num">{{ db(trace.loss_db_estimate) }}</span>
-        <template v-if="trace.rx_estimate_dbm !== null && trace.rx_estimate_dbm !== undefined">
-          · chega com ≈ <span class="num" data-testid="trace-rx">{{ dbm(trace.rx_estimate_dbm) }}</span>
+        <span class="num">{{ fmtKm(leaf.km) }}</span> · {{ fusions }} {{ fusions === 1 ? 'fusão' : 'fusões' }}
+        <template v-if="splitters"> · {{ splitters }} {{ splitters === 1 ? 'splitter' : 'splitters' }}</template>
+        · perda estimada <span class="num">{{ db(leaf.loss_db) }}</span>
+        <template v-if="leaf.dbm !== null && leaf.dbm !== undefined">
+          · chega com ≈ <span class="num" data-testid="trace-rx">{{ fmtDbm(leaf.dbm) }}</span>
         </template>
       </p>
+      <p v-if="trace.truncated" class="ft-note text-warning">Árvore grande: alguns ramos não foram percorridos.</p>
       <p class="ft-note" data-testid="trace-note">
-        Cálculo, não medição: {{ fmtDec(trace.budget?.fiber_db_km) }} dB/km (ou o do tipo de cabo) e
-        {{ fmtDec(trace.budget?.fusion_db) }} dB por fusão — Configuração › Orçamento óptico.
+        Cálculo, não medição: {{ fmtDec(trace.budget?.fiber_db_km) }} dB/km (ou o do tipo de cabo),
+        {{ fmtDec(trace.budget?.fusion_db) }} dB por fusão e a perda de cada splitter — Configuração › Orçamento óptico.
       </p>
+      <button v-if="traceMapAvailable" type="button" class="ft-map" data-testid="trace-show-map" @click="showOnMap">
+        Ver no mapa
+      </button>
     </template>
   </div>
 </template>
 
 <script setup>
-/** Rastreamento da luz fim-a-fim a partir de uma ponta da fibra (EV-0136). */
-import { ref, watch } from 'vue'
+/**
+ * Rastreamento da luz (EV-0136) em árvore (EV-0143): da fonte (OLT/switch, procurada a montante)
+ * até aos destinos, com os ramos dos splitters; o ramo da fibra pedida vem aberto e destacado.
+ * No Projeto de Rede, «Ver no mapa» desenha o caminho com km e dBm (DesignLayer → TraceOverlay).
+ */
+import { computed, ref, watch } from 'vue'
+import TraceNode from './TraceNode.vue'
 import { useApi } from '@/composables/useApi'
+import { emitDesign, traceMapAvailable } from '@/features/networkDesign/modules/designMode.js'
+import { fmtDbm, fmtKm, focusPath } from '@/utils/traceTree'
 
 const props = defineProps({
   strandId: { type: Number, required: true },
@@ -63,8 +56,15 @@ const loading = ref(false)
 const error = ref('')
 const fmtDec = (v) => Number(v ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const db = (v) => `${fmtDec(v)} dB`
-const dbm = (v) => `${v > 0 ? '+' : ''}${fmtDec(v)} dBm`
-const fmtKm = (v) => `${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km`
+
+const path = computed(() => (trace.value ? focusPath(trace.value.tree) : []))
+const leaf = computed(() => path.value[path.value.length - 1])
+const fusions = computed(() => path.value.flatMap((n) => n.steps).filter((s) => s.type === 'fusion').length)
+const splitters = computed(() => path.value.filter((n) => n.splitter).length)
+
+function showOnMap() {
+  emitDesign('trace-show', trace.value)
+}
 
 watch(
   () => [props.strandId, props.start],
@@ -72,7 +72,7 @@ watch(
     loading.value = true
     error.value = ''
     try {
-      trace.value = await api.get(`/api/v1/inventory/strands/${props.strandId}/trace/`, { from: props.start })
+      trace.value = await api.get(`/api/v1/inventory/strands/${props.strandId}/trace/tree/`, { from: props.start })
     } catch (e) {
       error.value = e?.message || 'erro desconhecido'
     } finally {
@@ -95,36 +95,6 @@ watch(
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
 }
-.ft-steps {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border-left: 2px solid rgb(var(--n-200));
-}
-.ft-step {
-  position: relative;
-  margin: 0 0 6px;
-  padding-left: 12px;
-  color: rgb(var(--n-900));
-}
-.ft-step::before {
-  content: '';
-  position: absolute;
-  left: -5px;
-  top: 5px;
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: rgb(var(--n-400));
-}
-.ft-port::before {
-  background: rgb(var(--success));
-}
-.ft-fusion::before {
-  background: rgb(var(--info));
-  border-radius: 2px;
-  transform: rotate(45deg);
-}
 .ft-sub {
   color: rgb(var(--n-500));
 }
@@ -132,26 +102,23 @@ watch(
   margin: 0 0 6px;
   color: rgb(var(--n-900));
 }
-.ft-dbm {
-  float: right;
-  font-weight: 600;
-  color: rgb(var(--n-900));
-}
 .ft-note {
   margin: 2px 0 0;
   font-size: 11px;
   color: rgb(var(--n-500));
 }
+.ft-map {
+  margin-top: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid rgb(var(--primary-500));
+  background: rgb(var(--primary-500) / 0.1);
+  color: rgb(var(--primary-700));
+  font-weight: 600;
+  cursor: pointer;
+}
 .ft-end {
   margin: 4px 0 2px;
   font-weight: 600;
-}
-.core {
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  border: 1px solid rgb(var(--n-400));
-  vertical-align: -1px;
 }
 </style>

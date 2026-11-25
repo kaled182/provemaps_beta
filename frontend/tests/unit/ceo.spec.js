@@ -269,37 +269,107 @@ describe('Splitters na bandeja (EV-0142)', () => {
   })
 })
 
-describe('FiberTrace (EV-0136)', () => {
+const CABLE = (name, km, extra = {}) => ({
+  type: 'cable', cable_name: name, absolute_number: 1, color: 'Verde', color_hex: '#009900', toward: 'X', km, passes: [], ...extra,
+})
+
+describe('FiberTrace (EV-0136, árvore EV-0143)', () => {
   it('mostra porta → cabo → fusão → cabo → porta, o fim e a perda marcada como cálculo', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
       ok({
-        steps: [
-          { type: 'port', device_name: 'OLT Mandi', port_name: 'gpon 1/1/1', site_name: 'SITE - VILA MANDI' },
-          { type: 'cable', cable_name: 'MANDI - VLP', absolute_number: 1, color: 'Verde', color_hex: '#009900', toward: 'SITE - VILA RICA', km: 4.976, passes: [] },
-          { type: 'fusion', ceo_name: 'CEO-04', tray: 1, slot: 1, loss_db: 0.1, dbm: 1.36 },
-          { type: 'cable', cable_name: 'CEO-04 - VILA NOVA', absolute_number: 1, color: 'Verde', color_hex: '#009900', toward: 'SITE - VILA NOVA', km: 5.56, passes: [] },
-          { type: 'port', device_name: 'SW Vila Nova', port_name: 'ge-0/0/1', site_name: 'SITE - VILA NOVA' },
-        ],
-        end: { reason: 'port', label: 'SW Vila Nova → ge-0/0/1' },
-        total_km: 10.536,
-        fusions: 1,
-        loss_db_estimate: 3.79,
+        source: { found: true, label: 'OLT Mandi → gpon 1/1/1' },
         tx: { dbm: 3.2, source: 'zabbix', port_name: 'gpon 1/1/1' },
-        rx_estimate_dbm: -0.59,
+        tree: {
+          steps: [
+            { type: 'port', device_name: 'OLT Mandi', port_name: 'gpon 1/1/1', site_name: 'SITE - VILA MANDI' },
+            CABLE('MANDI - VLP', 4.976, { strand_id: 101 }),
+            { type: 'fusion', ceo_name: 'CEO-04', tray: 1, slot: 1, loss_db: 0.1, dbm: 1.36 },
+            CABLE('CEO-04 - VILA NOVA', 5.56),
+            { type: 'port', device_name: 'SW Vila Nova', port_name: 'ge-0/0/1', site_name: 'SITE - VILA NOVA' },
+          ],
+          end: { reason: 'port', label: 'SW Vila Nova → ge-0/0/1' },
+          km: 10.536,
+          loss_db: 3.79,
+          dbm: -0.59,
+          focus: true,
+          splitter: null,
+          branches: [],
+        },
+        truncated: false,
         budget: { fiber_db_km: 0.25, fusion_db: 0.1 },
       }),
     )
     const w = mount(FiberTrace, { props: { strandId: 101, start: 'a' } })
     await flushPromises()
-    expect(globalThis.fetch.mock.calls[0][0]).toBe('/api/v1/inventory/strands/101/trace/?from=a')
+    expect(globalThis.fetch.mock.calls[0][0]).toBe('/api/v1/inventory/strands/101/trace/tree/?from=a')
     expect(w.findAll('[data-testid="trace-step-cable"]')).toHaveLength(2)
     expect(w.get('[data-testid="trace-step-fusion"]').text()).toContain('CEO-04')
     expect(w.get('[data-testid="trace-end"]').text()).toBe('Chega a: SW Vila Nova → ge-0/0/1')
     expect(w.get('[data-testid="trace-total"]').text().replace(/\s+/g, ' ')).toContain('10,54 km · 1 fusão · perda estimada 3,79 dB · chega com ≈ -0,59 dBm')
-    // EV-0140: partida com a origem do TX, dBm acumulado por passo, e a nota de que é cálculo
     expect(w.get('[data-testid="trace-tx"]').text()).toContain('+3,20 dBm — TX coletado do Zabbix (gpon 1/1/1)')
     expect(w.get('[data-testid="trace-step-fusion"]').text()).toContain('+1,36 dBm')
     expect(w.get('[data-testid="trace-note"]').text()).toContain('0,25 dB/km')
+    // fora do Projeto de Rede não há mapa a ouvir: sem «Ver no mapa»
+    expect(w.find('[data-testid="trace-show-map"]').exists()).toBe(false)
+  })
+
+  it('árvore: o ramo da fibra abre sozinho, os outros fecham; «Ver no mapa» envia o rastreamento', async () => {
+    const leaf = { steps: [CABLE('CEO-04 - CTO-01', 0.8, { strand_id: 202, acc_km: 5.8, dbm: -8.6 })], end: { reason: 'dead_end', label: 'ponta B sem porta' }, km: 5.8, loss_db: 13.6, dbm: -8.6, focus: true, splitter: null, branches: [] }
+    const other = { steps: [CABLE('CEO-04 - CTO-02', 1.2)], end: { reason: 'dead_end', label: 'ponta B do outro' }, km: 6.2, loss_db: 13.7, dbm: -8.7, focus: false, splitter: null, branches: [] }
+    const data = {
+      source: { found: true, label: 'OLT Mandi → gpon 1/1/1' },
+      tx: { dbm: 5, source: 'padrao', port_name: 'gpon 1/1/1' },
+      tree: {
+        steps: [{ type: 'port', device_name: 'OLT Mandi', port_name: 'gpon 1/1/1' }, CABLE('MANDI - VLP', 5)],
+        end: { reason: 'splitter', label: 'entra no splitter 1x8 da CEO-04', splitter_id: 7 },
+        km: 5, loss_db: 1.75, dbm: 3.25, focus: true,
+        splitter: { id: 7, name: 'Primário', ratio: '1x8', loss_db: 10.5, ceo_name: 'CEO-04', dbm_out: -7.25 },
+        branches: [
+          { number: 1, status: 'ocupada', customer: 'Cliente 1', dbm: -7.25, node: other },
+          { number: 2, status: 'ocupada', customer: 'Cliente 2', dbm: -7.25, node: leaf },
+          { number: 3, status: 'livre', customer: '', dbm: -7.25, node: null },
+        ],
+      },
+      truncated: false,
+      budget: { fiber_db_km: 0.25, fusion_db: 0.1 },
+    }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => ok(data))
+    const { traceMapAvailable, onDesign } = await import('@/features/networkDesign/modules/designMode.js')
+    traceMapAvailable.value = true
+    const got = []
+    const off = onDesign('trace-show', (t) => got.push(t))
+    const w = mount(FiberTrace, { props: { strandId: 202, start: 'a' } })
+    await flushPromises()
+    expect(w.get('[data-testid="trace-splitter"]').text()).toContain('Primário (1x8) na CEO-04')
+    expect(w.get('[data-testid="trace-splitter"]').text()).toContain('-7,25 dBm')
+    // o ramo 2 (foco) está aberto; o 1 fechado; a porta 3 não tem saída
+    expect(w.text()).toContain('CEO-04 - CTO-01')
+    expect(w.text()).not.toContain('CEO-04 - CTO-02')
+    expect(w.get('[data-testid="trace-branch-3"]').text()).toContain('livre')
+    await w.get('[data-testid="trace-branch-1"] button').trigger('click')
+    expect(w.text()).toContain('CEO-04 - CTO-02')
+    expect(w.get('[data-testid="trace-end"]').text()).toBe('Fim: ponta B sem porta')
+    expect(w.get('[data-testid="trace-total"]').text().replace(/\s+/g, ' ')).toContain('5,80 km · 0 fusões · 1 splitter · perda estimada 13,60 dB · chega com ≈ -8,60 dBm')
+    await w.get('[data-testid="trace-show-map"]').trigger('click')
+    expect(got).toHaveLength(1)
+    expect(got[0].tree.splitter.ratio).toBe('1x8')
+    off()
+    traceMapAvailable.value = false
+  })
+
+  it('sem fonte a montante: avisa e não mostra dBm', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      ok({
+        source: { found: false, label: 'ponta A do cabo (SITE X) sem porta ligada' },
+        tx: null,
+        tree: { steps: [CABLE('MANDI - VLP', 10, { dbm: null })], end: { reason: 'dead_end', label: 'ponta B sem porta' }, km: 10, loss_db: 3.5, dbm: null, focus: true, splitter: null, branches: [] },
+        truncated: false,
+        budget: { fiber_db_km: 0.25, fusion_db: 0.1 },
+      }),
+    )
+    const w = mount(FiberTrace, { props: { strandId: 5, start: 'a' } })
+    await flushPromises()
+    expect(w.get('[data-testid="trace-nosource"]').text()).toContain('Sem fonte de luz a montante (ponta A do cabo (SITE X) sem porta ligada)')
+    expect(w.find('[data-testid="trace-rx"]').exists()).toBe(false)
   })
 })
-

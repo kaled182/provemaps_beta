@@ -37,6 +37,8 @@
   <PoleCreateModal v-if="poleCreate" :show="!!poleCreate" :point="poleCreate.point" @close="poleCreate = null" @created="afterCreate('Poste inserido.')" />
   <SpliceBoxModal v-if="fusionsFor" :show="!!fusionsFor" :ceo="fusionsFor" @close="fusionsFor = null" />
   <CableStructureModal v-if="structureFor" :show="!!structureFor" :cable-id="structureFor" @close="structureFor = null" />
+  <!-- EV-0143: rastreamento destacado (FiberTrace › «Ver no mapa») -->
+  <TraceOverlay v-if="traced" :map="map" :trace="traced" @close="traced = null" />
   <CeoDerivePanel v-if="deriving" :map="map" :ceo="deriving" :ceos="ceos" :sites="sites" @close="deriving = null" @created="onDerived" />
 </template>
 
@@ -50,6 +52,7 @@
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import PointsOverlay from './PointsOverlay.vue'
+import TraceOverlay from './TraceOverlay.vue'
 import NdDock from './NdDock.vue'
 import NdObjectMenu from './NdObjectMenu.vue'
 import { useDesignPoints } from './useDesignPoints'
@@ -63,6 +66,7 @@ import {
   lastMapContext,
   onDesign,
   setSnapProvider,
+  traceMapAvailable,
 } from '@/features/networkDesign/modules/designMode.js'
 import {
   clickFromLayer,
@@ -108,6 +112,14 @@ let lastCablePickAt = 0
 const fusionsFor = ref(null)
 const structureFor = ref(null)
 const deriving = ref(null)
+const traced = ref(null)
+
+/** O editor da caixa pediu o rastreamento no mapa: fecha os modais para o mapa ficar à vista. */
+function onTraceShow(trace) {
+  traced.value = trace
+  fusionsFor.value = null
+  structureFor.value = null
+}
 
 // ── sites: marcadores do provider (clique direito = menu; no traçado conta como ponto) ──
 let siteMarkers = []
@@ -366,7 +378,8 @@ function onKey(e) {
 
 onMounted(async () => {
   setSnapProvider((lat, lng) => snap(props.map, lat, lng))
-  offs.push(onDesign('map-click', onMapClick), onDesign('cable-pick', onCablePick), onDesign('menu-action', onMenuAction))
+  offs.push(onDesign('map-click', onMapClick), onDesign('cable-pick', onCablePick), onDesign('menu-action', onMenuAction), onDesign('trace-show', onTraceShow))
+  traceMapAvailable.value = true
   document.addEventListener('keydown', onKey)
   await reload()
 })
@@ -374,6 +387,7 @@ onBeforeUnmount(() => {
   offs.forEach((off) => off())
   document.removeEventListener('keydown', onKey)
   setSnapProvider(null)
+  traceMapAvailable.value = false
   siteMarkers.forEach((m) => m.remove())
   measure?.destroy()
   designMode.value = 'select'

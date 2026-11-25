@@ -76,6 +76,7 @@ from inventory.api.ceo import (  # noqa: E402
     SplitterDetailView,
     SplitterPortView,
     SplittersView,
+    StrandTraceTreeView,
     StrandTraceView,
 )
 from inventory.api.check_update import api_check_update  # noqa: E402
@@ -488,6 +489,11 @@ urlpatterns = [
         name="ceo-fusion-delete",
     ),
     path("strands/<int:strand_id>/trace/", StrandTraceView.as_view(), name="strand-trace"),
+    path(
+        "strands/<int:strand_id>/trace/tree/",
+        StrandTraceTreeView.as_view(),
+        name="strand-trace-tree",
+    ),
     # EV-0128: pontos OTDR fixados no mapa para toda a equipa
     path("otdr-alerts/", OtdrAlertsView.as_view(), name="otdr-alerts"),
     path("otdr-alerts/<int:alert_id>/", OtdrAlertDetailView.as_view(), name="otdr-alert-detail"),

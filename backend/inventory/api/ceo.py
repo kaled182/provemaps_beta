@@ -40,6 +40,7 @@ from inventory.usecases.ceo_fusions import (
 )
 from inventory.usecases.devices_common import InventoryValidationError
 from inventory.usecases.strand_ports import site_ports
+from inventory.usecases.trace_tree import trace_tree
 
 
 class CeoCreateSerializer(serializers.Serializer):
@@ -226,6 +227,23 @@ class StrandTraceView(APIView):
     def get(self, request: Request, strand_id: int) -> Response:
         try:
             return Response(trace_light(strand_id, start=request.query_params.get("from", "a")))
+        except InventoryValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+
+class StrandTraceTreeView(APIView):
+    """EV-0143: rastreamento em árvore — fonte, ramos dos splitters, km/dBm e geometria."""
+
+    permission_classes = [StaffWritePermission]
+
+    @extend_schema(
+        parameters=[OpenApiParameter("from", str, enum=["a", "b"], description="ponta de partida")],
+        responses=serializers.DictField(),
+        summary="Rastreia da OLT/switch até cada destino, com os ramos dos splitters",
+    )
+    def get(self, request: Request, strand_id: int) -> Response:
+        try:
+            return Response(trace_tree(strand_id, start=request.query_params.get("from", "a")))
         except InventoryValidationError as exc:
             return Response({"detail": str(exc)}, status=400)
 

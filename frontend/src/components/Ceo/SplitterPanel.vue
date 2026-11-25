@@ -25,6 +25,15 @@
           <span class="spp-core" :style="{ background: sp.input.color_hex }" />
           {{ sp.input.cable_name }} · F{{ sp.input.absolute_number }} ({{ sp.input.color }})
           <button v-if="!readonly" type="button" class="spp-link" :disabled="busy" :data-testid="`splitter-unlink-${sp.id}`" @click="$emit('unlink-input', sp)">desligar</button>
+          <button
+            type="button"
+            class="spp-link"
+            :class="{ on: tracing === sp.id }"
+            :data-testid="`splitter-trace-${sp.id}`"
+            @click="tracing = tracing === sp.id ? null : sp.id"
+          >
+            {{ tracing === sp.id ? 'fechar rastreamento' : 'rastrear' }}
+          </button>
         </template>
         <template v-else>
           <span class="text-neutral-500">sem fibra</span>
@@ -47,6 +56,8 @@
         </template>
         <span v-else class="text-neutral-500">Sem potência estimada: {{ sp.power.reason }}</span>
       </p>
+
+      <FiberTrace v-if="tracing === sp.id && sp.input" class="spp-trace" :strand-id="sp.input.strand_id" :start="sp.input.side" />
 
       <div class="spp-ports">
         <button
@@ -114,6 +125,7 @@
  * (TX da fonte a montante − perdas − perda do splitter, calculado no servidor).
  */
 import { reactive, ref } from 'vue'
+import FiberTrace from '@/components/Inventory/Fibers/FiberTrace.vue'
 
 const props = defineProps({
   splitters: { type: Array, required: true },
@@ -128,6 +140,7 @@ const RATIOS = ['1x2', '1x4', '1x8', '1x16', '1x32']
 const STATUS = { livre: 'Livre', reservada: 'Reservada', ocupada: 'Ocupada', bloqueada: 'Bloqueada' }
 const ratio = ref('1x8')
 const editing = ref(null) // {sp, number}
+const tracing = ref(null) // EV-0143: splitter com o rastreamento aberto (da OLT até aos ramos)
 const form = reactive({ status: 'livre', customer: '', note: '' })
 
 const fmt = (v) => Number(v ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -232,6 +245,12 @@ function save(sp) {
 }
 .spp-link.on {
   font-weight: 700;
+}
+.spp-trace {
+  margin: 4px 0 8px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgb(var(--n-50));
 }
 .spp-ports {
   display: grid;

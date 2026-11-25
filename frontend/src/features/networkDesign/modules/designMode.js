@@ -45,3 +45,6 @@ export const designLayers = reactive({ sites: true, ceos: true, ctos: true, pole
 
 /** Zoom a partir do qual CTOs e postes deixam de agrupar e mostram rótulos. */
 export const LABEL_ZOOM = 16;
+
+/** EV-0143: há um mapa do Projeto de Rede a ouvir «trace-show» (o FiberTrace mostra «Ver no mapa»). */
+export const traceMapAvailable = ref(false);
