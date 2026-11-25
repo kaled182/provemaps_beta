@@ -72,6 +72,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useApi } from '@/composables/useApi'
 import { createRouteDrawing } from '@/composables/useRouteDrawing'
+import { tokenColor } from '@/utils/cssToken'
 
 const props = defineProps({
   map: { type: Object, required: true },
@@ -124,11 +125,6 @@ watch(siteId, async (id) => {
 function undo() {
   const p = path.value.slice(0, -1)
   drawing?.setPath(p.length ? p : [ceoPoint()])
-}
-/** O provider do mapa pede uma cor CSS; lê-se o token (tripleto RGB) do tema. */
-function tokenColor(name) {
-  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
-  return v ? `rgb(${v.split(/[\s,]+/).join(', ')})` : 'currentColor'
 }
 const ceoPoint = () => ({ lat: props.ceo.point[1], lng: props.ceo.point[0] })
 

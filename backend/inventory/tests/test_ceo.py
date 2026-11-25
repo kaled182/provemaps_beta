@@ -7,7 +7,16 @@ from django.contrib.gis.geos import LineString
 from django.test import Client
 
 from inventory.models import CableGroup, Device, FiberCable, FiberStrand, Port, Site
-from inventory.usecases.ceo import create_ceo, derive_cable, list_ceos
+from inventory.usecases.ceo import (
+    create_ceo,
+    create_slack,
+    delete_ceo,
+    delete_slack,
+    derive_cable,
+    list_ceos,
+    list_slacks,
+    move_ceo,
+)
 from inventory.usecases.devices_common import InventoryValidationError
 
 pytestmark = pytest.mark.django_db
@@ -107,7 +116,7 @@ def test_endpoints_require_login(trunk):
     url = "/api/v1/inventory/ceos/"
     assert Client().get(url).status_code in (401, 403, 302)
     c = Client()
-    c.force_login(get_user_model().objects.create_user(username="noc", password="x"))
+    c.force_login(get_user_model().objects.create_user(username="eng", password="x", is_staff=True))
     created = c.post(
         url,
         {"cable_id": trunk.pk, "lat": 0.02, "lng": -50.0, "name": "CEO-01"},
@@ -132,3 +141,45 @@ def test_endpoints_require_login(trunk):
     Port.objects.create(device=Device.objects.create(name="SW", site=nova), name="ge-1")
     sp = c.get(f"{url}site-ports/", {"site": nova.pk}).json()
     assert sp["site_name"] == "NOVA" and sp["devices"][0]["ports"][0]["name"] == "ge-1"
+
+
+def test_writes_are_staff_only_reads_are_not(trunk):
+    """EV-0138: a operação (não-staff) lê; só a engenharia (staff) altera a topologia física."""
+    noc = Client()
+    noc.force_login(get_user_model().objects.create_user(username="noc", password="x"))
+    url = "/api/v1/inventory/ceos/"
+    assert noc.get(url).status_code == 200
+    body = {"cable_id": trunk.pk, "lat": 0.02, "lng": -50.0, "name": "CEO-01"}
+    assert noc.post(url, body, content_type="application/json").status_code == 403
+    assert (
+        noc.post(
+            "/api/v1/inventory/slacks/", {**body, "meters": 20}, content_type="application/json"
+        ).status_code
+        == 403
+    )
+
+
+def test_move_and_delete_ceo(trunk):
+    ceo = create_ceo(trunk.pk, lat=0.02, lng=-50.0, name="CEO-01")
+    moved = move_ceo(ceo["id"], lat=0.07, lng=-49.98)
+    assert moved["point"][0] == pytest.approx(-50.0, abs=1e-6) and moved["km"] == pytest.approx(
+        7.74, abs=0.05
+    )
+    derived = derive_cable(ceo["id"], name="D", path=[{"lat": 0.07, "lng": -49.9}])
+    with pytest.raises(InventoryValidationError, match="1 cabo"):
+        delete_ceo(ceo["id"])
+    FiberCable.objects.filter(pk=derived["id"]).update(origin_infrastructure=None)
+    delete_ceo(ceo["id"])
+    assert list_ceos() == []
+
+
+def test_slack_adds_and_removes_length(trunk):
+    FiberCable.objects.filter(pk=trunk.pk).update(length_km=10)
+    s = create_slack(trunk.pk, lat=0.03, lng=-49.99, meters=50)
+    assert s["slack_m"] == 50 and s["km"] == pytest.approx(3.32, abs=0.05)
+    assert float(FiberCable.objects.get(pk=trunk.pk).length_km) == pytest.approx(10.05)
+    assert [x["name"] for x in list_slacks()] == ["Reserva 50 m"]
+    delete_slack(s["id"])
+    assert float(FiberCable.objects.get(pk=trunk.pk).length_km) == pytest.approx(10.0)
+    with pytest.raises(InventoryValidationError, match="metros"):
+        create_slack(trunk.pk, lat=0.03, lng=-49.99, meters=0)

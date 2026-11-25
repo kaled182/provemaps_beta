@@ -172,7 +172,7 @@ export function updateContextMenuState({ hasActiveFiber, fiberMeta, pathLength, 
         _renderCableBadges(fiberMeta);
         if (reloadButtonEl && reloadTextEl) {
             reloadButtonEl.classList.remove('hidden');
-            reloadTextEl.textContent = 'Reload This Cable';
+            reloadTextEl.textContent = 'Recarregar este cabo';
         }
         if (savePathEl) {
             const enabled = pathLength >= 2;
@@ -183,7 +183,7 @@ export function updateContextMenuState({ hasActiveFiber, fiberMeta, pathLength, 
         generalOptionsEl?.classList.remove('hidden');
         if (reloadButtonEl && reloadTextEl) {
             reloadButtonEl.classList.remove('hidden');
-            reloadTextEl.textContent = 'Reload All Cables';
+            reloadTextEl.textContent = 'Recarregar cabos';
         }
     }
 }

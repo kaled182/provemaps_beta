@@ -23,6 +23,7 @@ from inventory.domain.zabbix_history import (
 )
 from inventory.metrics import track_endpoint_usage, track_model_operation, track_viewset_action
 from inventory.models import Device, DeviceGroup, FiberCable, FiberProfile, ImportRule, Port, Site
+from inventory.permissions import StaffWritePermission
 from inventory.usecases import fiber_alarm_configs
 from maps_view.cache_swr import invalidate_dashboard_cache
 
@@ -1077,7 +1078,12 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             data["available_profiles"] = available_profiles()
         return Response(data)
 
-    @action(detail=True, methods=["post"], url_path=r"strands/(?P<strand_id>\d+)/port")
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"strands/(?P<strand_id>\d+)/port",
+        permission_classes=[StaffWritePermission],
+    )
     def strand_port(self, request, pk=None, strand_id=None):
         """EV-0134: liga/desliga a ponta A ou B de uma fibra a uma porta do site dessa ponta."""
         from inventory.usecases.devices_common import InventoryValidationError
@@ -1095,7 +1101,12 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             return Response({"detail": str(exc)}, status=400)
         return Response(data)
 
-    @action(detail=True, methods=["post"], url_path="structure/profile")
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="structure/profile",
+        permission_classes=[StaffWritePermission],
+    )
     def structure_profile(self, request, pk=None):
         """EV-0133: escolhe o perfil (nº de fibras) de um cabo sem estrutura e gera-a."""
         from inventory.usecases.cable_structure import set_cable_profile

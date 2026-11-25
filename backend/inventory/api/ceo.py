@@ -15,7 +15,18 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from inventory.models import Site
-from inventory.usecases.ceo import MODES, create_ceo, derive_cable, list_ceos
+from inventory.permissions import StaffWritePermission
+from inventory.usecases.ceo import (
+    MODES,
+    create_ceo,
+    create_slack,
+    delete_ceo,
+    delete_slack,
+    derive_cable,
+    list_ceos,
+    list_slacks,
+    move_ceo,
+)
 from inventory.usecases.ceo_fusions import ceo_fusions, create_fusion, delete_fusion, trace_light
 from inventory.usecases.devices_common import InventoryValidationError
 from inventory.usecases.strand_ports import site_ports
@@ -73,6 +84,8 @@ class CeoDeriveResultSerializer(serializers.Serializer):
 
 
 class CeosView(APIView):
+    permission_classes = [StaffWritePermission]
+
     @extend_schema(
         responses=CeoSerializer(many=True), summary="CEOs (caixas de emenda) nos traçados"
     )
@@ -104,6 +117,8 @@ class CeosView(APIView):
 
 
 class CeoDeriveView(APIView):
+    permission_classes = [StaffWritePermission]
+
     @extend_schema(
         request=CeoDeriveSerializer,
         responses={201: CeoDeriveResultSerializer},
@@ -129,6 +144,8 @@ class CeoDeriveView(APIView):
 
 
 class SitePortsView(APIView):
+    permission_classes = [StaffWritePermission]
+
     @extend_schema(
         responses=serializers.DictField(),
         summary="Equipamentos e portas de um site (destino de um cabo derivado)",
@@ -155,6 +172,8 @@ class FusionCreateSerializer(serializers.Serializer):
 class CeoFusionsView(APIView):
     """EV-0136: pontas de fibra da CEO e as fusões (GET); criar fusão (POST)."""
 
+    permission_classes = [StaffWritePermission]
+
     @extend_schema(responses=serializers.DictField(), summary="Pontas de fibra e fusões da CEO")
     def get(self, request: Request, ceo_id: int) -> Response:
         return Response(ceo_fusions(ceo_id))
@@ -176,6 +195,8 @@ class CeoFusionsView(APIView):
 
 
 class CeoFusionDeleteView(APIView):
+    permission_classes = [StaffWritePermission]
+
     @extend_schema(responses={204: None}, summary="Desfaz uma fusão da CEO")
     def delete(self, request: Request, ceo_id: int, fusion_id: int) -> Response:
         delete_fusion(ceo_id, fusion_id)
@@ -184,6 +205,8 @@ class CeoFusionDeleteView(APIView):
 
 class StrandTraceView(APIView):
     """EV-0136: rastreamento da luz a partir de uma ponta da fibra."""
+
+    permission_classes = [StaffWritePermission]
 
     @extend_schema(
         parameters=[OpenApiParameter("from", str, enum=["a", "b"], description="ponta de partida")],
@@ -195,3 +218,86 @@ class StrandTraceView(APIView):
             return Response(trace_light(strand_id, start=request.query_params.get("from", "a")))
         except InventoryValidationError as exc:
             return Response({"detail": str(exc)}, status=400)
+
+
+class PointSerializer(serializers.Serializer):
+    lat = serializers.FloatField(min_value=-90, max_value=90)
+    lng = serializers.FloatField(min_value=-180, max_value=180)
+
+
+class CeoDetailView(APIView):
+    """EV-0138: mover (PATCH {lat, lng}, reprojetado no traçado) ou excluir (vazia) a CEO."""
+
+    permission_classes = [StaffWritePermission]
+
+    @extend_schema(
+        request=PointSerializer, responses=CeoSerializer, summary="Move a CEO no traçado"
+    )
+    def patch(self, request: Request, ceo_id: int) -> Response:
+        body = PointSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        try:
+            return Response(move_ceo(ceo_id, **body.validated_data))
+        except InventoryValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+    @extend_schema(responses={204: None}, summary="Exclui a CEO (só vazia)")
+    def delete(self, request: Request, ceo_id: int) -> Response:
+        try:
+            delete_ceo(ceo_id)
+        except InventoryValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(status=204)
+
+
+class SlackCreateSerializer(PointSerializer):
+    cable_id = serializers.IntegerField(min_value=1)
+    meters = serializers.FloatField(min_value=0.1, max_value=5000)
+    name = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
+
+
+class SlacksView(APIView):
+    """EV-0138: reservas técnicas nos traçados."""
+
+    permission_classes = [StaffWritePermission]
+
+    @extend_schema(responses=serializers.DictField(), summary="Reservas técnicas nos traçados")
+    def get(self, request: Request) -> Response:
+        return Response(list_slacks())
+
+    @extend_schema(
+        request=SlackCreateSerializer,
+        responses={201: serializers.DictField()},
+        summary="Insere reserva técnica no traçado",
+    )
+    def post(self, request: Request) -> Response:
+        body = SlackCreateSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        v = body.validated_data
+        try:
+            data = create_slack(
+                v["cable_id"], lat=v["lat"], lng=v["lng"], meters=v["meters"], name=v["name"]
+            )
+        except InventoryValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(data, status=201)
+
+
+class SlackDetailView(APIView):
+    permission_classes = [StaffWritePermission]
+
+    @extend_schema(
+        request=PointSerializer, responses=serializers.DictField(), summary="Move a reserva técnica"
+    )
+    def patch(self, request: Request, slack_id: int) -> Response:
+        body = PointSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        try:
+            return Response(move_ceo(slack_id, **body.validated_data))
+        except InventoryValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+    @extend_schema(responses={204: None}, summary="Exclui a reserva técnica")
+    def delete(self, request: Request, slack_id: int) -> Response:
+        delete_slack(slack_id)
+        return Response(status=204)

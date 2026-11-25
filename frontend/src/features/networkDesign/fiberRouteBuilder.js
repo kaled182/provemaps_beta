@@ -6,6 +6,7 @@ import { latLngToPixel, distanceBetweenPixels, distancePointToSegmentPx } from '
 import { getMapConfig } from '@/providers/maps/MapProviderFactory.js';
 import { getCsrfToken } from '@/composables/useApi';
 import { initContextMenu, showContextMenu, hideContextMenu, updateContextMenuState, cleanupContextMenu } from './modules/contextMenu.js';
+import { designMode, emitDesign, lastCableContext, lastMapContext, routeClicksEnabled, snapPoint } from './modules/designMode.js';
 import {
     initModalEditor,
     openModalForCreate,
@@ -778,12 +779,21 @@ async function initMap() {
     console.log("[initMap] cableService initialized.");
 
     // Setup click handler via mapCore
-    onMapClick(({ lat, lng }) => {
+    onMapClick(handleBuilderMapClick);
+    layerClickHandler = handleBuilderMapClick;
+    function handleBuilderMapClick(clicked) {
         hideContextMenu();
-        
+
         // Store last map click for proximity sorting in device autocomplete
-        window.__lastMapClick = { lat, lng };
-        
+        window.__lastMapClick = { lat: clicked.lat, lng: clicked.lng };
+
+        // EV-0138: a camada Vue trata os modos Site/CEO/Reserva/Medir/Mover; fora de «Traçar»
+        // (ou de uma rota em edição) um clique no mapa não acrescenta pontos de rota.
+        emitDesign('map-click', { lat: clicked.lat, lng: clicked.lng, mode: designMode.value });
+        const editing = Boolean(activeFiberId) || getPath().length > 0;
+        if (!['select', 'trace'].includes(designMode.value) || !routeClicksEnabled({ editing })) return;
+        const { lat, lng } = snapPoint(clicked.lat, clicked.lng);
+
         const currentPath = getPath();
         if (activeFiberId && currentPath.length === 0) {
             activeFiberId = null;
@@ -804,10 +814,11 @@ async function initMap() {
         }
         extendPathAtEndpoint(lat, lng);
         return;
-    });
+    }
     
     // Setup right-click handler via mapCore
-    onMapRightClick(({ clientX, clientY }) => {
+    onMapRightClick(({ lat, lng, clientX, clientY }) => {
+        lastMapContext.value = { lat, lng, at: Date.now() };
         showContextMenu(clientX, clientY);
         updateContextMenuStateWrapper();
     });
@@ -863,8 +874,18 @@ function makeCableEditable(cablePolyline, cableId, cableName) {
     cablePolyline.set('cableId', cableId);
     cablePolyline.set('cableName', cableName);
     
+    // EV-0138: nos modos «Inserir CEO» / «Reserva técnica» o clique esquerdo no cabo escolhe o ponto
+    cablePolyline.addListener('click', (event) => {
+        if (!['ceo', 'slack'].includes(designMode.value)) return;
+        if (!Number.isFinite(event?.lat) || !Number.isFinite(event?.lng)) return;
+        emitDesign('cable-pick', { mode: designMode.value, cableId, cableName, lat: event.lat, lng: event.lng });
+    });
+
     // Right-click on cable to load + open menu
     cablePolyline.addListener('rightclick', async (event) => {
+        if (Number.isFinite(event?.lat) && Number.isFinite(event?.lng)) {
+            lastCableContext.value = { cableId, cableName, lat: event.lat, lng: event.lng, at: Date.now() };
+        }
         if (event.domEvent && typeof event.domEvent.stopPropagation === 'function') {
             event.domEvent.stopPropagation();
         } else if (typeof event.stop === 'function') {
@@ -884,9 +905,12 @@ function makeCableEditable(cablePolyline, cableId, cableName) {
             await previewCable(cableId);
 
             // Show context menu
-            const clickPos = event.domEvent
-                ? { clientX: event.domEvent.clientX, clientY: event.domEvent.clientY }
-                : { clientX: 0, clientY: 0 };
+            // EV-0138: IMap (Mapbox/Leaflet) entrega clientX/clientY; o domEvent é só do Google
+            const clickPos = Number.isFinite(event?.clientX)
+                ? { clientX: event.clientX, clientY: event.clientY }
+                : event?.domEvent
+                    ? { clientX: event.domEvent.clientX, clientY: event.domEvent.clientY }
+                    : { clientX: window.innerWidth / 2, clientY: window.innerHeight / 2 };
             showContextMenu(clickPos.clientX, clickPos.clientY);
             updateContextMenuStateWrapper();
 
@@ -1013,7 +1037,7 @@ export { handleSaveClick as saveNetworkDesignRoute };
 
 async function openEditFiberModal() {
     if (!activeFiberId || !currentFiberMeta) {
-        showErrorMessage('Select a cable first.');
+        showErrorMessage('Selecione um cabo primeiro.');
         return;
     }
 
@@ -1472,7 +1496,7 @@ function initializeDomBindings() {
 
     document.getElementById('contextEditMetaPreview')?.addEventListener('click', () => {
         hideContextMenu();
-        if (previewCableId) openEditFiberModal();
+        if (previewCableId) openMetadataModalForPreview();
     });
 
     document.getElementById('contextStartEdit')?.addEventListener('click', async () => {
@@ -1485,10 +1509,13 @@ function initializeDomBindings() {
     document.getElementById('contextDeletePreview')?.addEventListener('click', async () => {
         hideContextMenu();
         if (!previewCableId || !previewCableMeta) return;
-        const confirmed = await showConfirmDialog(
-            `Excluir cabo "${previewCableMeta.name || `#${previewCableId}`}"?`,
-            'Esta ação não pode ser desfeita.',
-        );
+        const confirmed = await showConfirmDialog({
+            title: 'Excluir cabo',
+            description: `Excluir o cabo «${previewCableMeta.name || `#${previewCableId}`}»? Esta ação não pode ser desfeita.`,
+            confirmText: 'Excluir',
+            cancelText: 'Cancelar',
+            tone: 'danger',
+        });
         if (!confirmed) return;
         try {
             await deleteCable(previewCableId);
@@ -1519,10 +1546,13 @@ function initializeDomBindings() {
 
     document.getElementById('cableDetailDeleteBtn')?.addEventListener('click', async () => {
         if (!previewCableId || !previewCableMeta) return;
-        const confirmed = await showConfirmDialog(
-            `Excluir cabo "${previewCableMeta.name || `#${previewCableId}`}"?`,
-            'Esta ação não pode ser desfeita.',
-        );
+        const confirmed = await showConfirmDialog({
+            title: 'Excluir cabo',
+            description: `Excluir o cabo «${previewCableMeta.name || `#${previewCableId}`}»? Esta ação não pode ser desfeita.`,
+            confirmText: 'Excluir',
+            cancelText: 'Cancelar',
+            tone: 'danger',
+        });
         if (!confirmed) return;
         try {
             await deleteCable(previewCableId);
@@ -1584,7 +1614,7 @@ function initializeDomBindings() {
         const cableLabel = currentFiberMeta?.name || activeFiberId;
         const confirmed = await showConfirmDialog({
             title: 'Excluir cabo',
-            description: `Delete cable "${cableLabel}"? This action cannot be undone.`,
+            description: `Excluir o cabo «${cableLabel}»? Esta ação não pode ser desfeita.`,
             confirmText: 'Excluir',
             cancelText: 'Cancelar',
             tone: 'danger',
@@ -1708,7 +1738,7 @@ function initializeDomBindings() {
     document.getElementById('loadFiber')?.addEventListener('click', () => {
         const id = document.getElementById('fiberSelect')?.value;
         if (!id) {
-            showErrorMessage('Select a cable first.');
+            showErrorMessage('Selecione um cabo primeiro.');
             return;
         }
         loadFiberDetail(id);
@@ -2184,4 +2214,34 @@ export function highlightSearchResult(item) {
     if (item.lat != null && item.lng != null) {
         _addHighlightPoint(mapInstance, item.lng, item.lat);
     }
+}
+
+// ── EV-0138: ações chamadas pela camada Vue (DesignLayer) ───────────────────
+
+let layerClickHandler = null;
+
+/** Um clique num site/CEO (marcador Vue/HTML não passa ao mapa) conta como clique no mapa. */
+export function clickFromLayer(lat, lng) {
+    if (layerClickHandler) layerClickHandler({ lat, lng });
+}
+
+/** «Conectar novo cabo aqui» num site: começa um traçado novo nesse ponto (modo Traçar). */
+export function startRouteAt(lat, lng) {
+    hideContextMenu();
+    clearPreview();
+    setCableDetailsPanelVisible(false);
+    activeFiberId = null;
+    designMode.value = 'trace';
+    setPath([{ lat, lng }]);
+}
+
+/** «Adicionar vértice» / «Editar rota» de um cabo (entra na edição do traçado). */
+export async function editCableRoute(cableId) {
+    hideContextMenu();
+    await loadFiberDetail(cableId);
+}
+
+/** Recarrega os cabos do mapa (ex.: depois de derivar um cabo de uma CEO). */
+export function reloadNetworkDesignCables() {
+    return loadAllCablesForVisualization({ fitToBounds: false });
 }

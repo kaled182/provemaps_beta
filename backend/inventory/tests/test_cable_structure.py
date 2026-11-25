@@ -34,7 +34,7 @@ def profiles():
 @pytest.fixture
 def client():
     c = Client()
-    c.force_login(get_user_model().objects.create_user(username="noc", password="x"))
+    c.force_login(get_user_model().objects.create_user(username="eng", password="x", is_staff=True))
     return c
 
 

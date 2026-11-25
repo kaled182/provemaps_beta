@@ -66,6 +66,8 @@
 
     <div class="map-container">
       <div id="builderMap" class="map-canvas" role="presentation"></div>
+      <!-- EV-0138: barra de modos, sites, CEOs, reservas e menus de objeto -->
+      <DesignLayer v-if="designMap" :map="designMap" />
     </div>
 
     <section
@@ -154,6 +156,10 @@
           <span id="contextLoadAllText">Recarregar cabos</span>
         </button>
         <button id="contextImportKML" type="button">Importar rota (KML)</button>
+        <!-- EV-0138 -->
+        <button type="button" data-testid="ctx-new-site" @click="designAction('site')">Novo site / POP aqui</button>
+        <button type="button" data-testid="ctx-trace" @click="designAction('trace')">Iniciar traçado de cabo</button>
+        <button type="button" data-testid="ctx-measure" @click="designAction('measure')">Medir distância</button>
       </div>
 
       <!-- Cabo selecionado (preview) -->
@@ -167,6 +173,11 @@
           <svg viewBox="0 0 16 16" class="ctx-icon" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="3.5" width="13" height="9" rx="1.5"/><circle cx="8" cy="8" r="2"/><path stroke-linecap="round" d="M5.5 3.5l1-1.5h3l1 1.5"/></svg>
           Ver fotos
         </button>
+        <!-- EV-0138: no ponto do cabo onde se clicou -->
+        <button type="button" data-testid="ctx-insert-ceo" @click="designAction('ceo')">Inserir CEO aqui (sangria ou corte)</button>
+        <button type="button" data-testid="ctx-insert-slack" @click="designAction('slack')">Inserir reserva técnica aqui</button>
+        <button type="button" data-testid="ctx-structure" @click="designAction('structure')">Abrir estrutura de fibras</button>
+        <button type="button" data-testid="ctx-vertex" @click="designAction('vertex')">Adicionar vértice (editar rota)</button>
         <button id="contextStartEdit" type="button">
           <svg viewBox="0 0 16 16" class="ctx-icon" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2 12l8.5-8.5 2 2L4 14H2v-2z"/></svg>
           Editar rota
@@ -223,7 +234,7 @@
       :style="cableDetailPanelStyle"
     >
       <div class="floating-panel__header cable-detail-drag-handle" @mousedown.prevent="startCableDetailDrag">
-        <h3 id="cableDetailsPanelTitle">Cable details</h3>
+        <h3 id="cableDetailsPanelTitle">Detalhes do cabo</h3>
         <button id="closeCableDetails" type="button" class="panel-toggle-btn" aria-label="Fechar painel" @mousedown.stop>
           <svg viewBox="0 0 20 20" aria-hidden="true" style="width:18px;height:18px">
             <path d="M5 5l10 10M15 5L5 15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -806,13 +817,17 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, onUnmounted, watch } from 'vue';
+import { ref, shallowRef, computed, onMounted, nextTick, onUnmounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { parseFocusQuery } from '@/utils/mapFocus';
 import { initializeNetworkDesignApp, whenNetworkDesignMapReady, flyToLocation, highlightSearchResult, cancelNetworkDesignEditing, saveNetworkDesignRoute } from '@/features/networkDesign/fiberRouteBuilder.js';
 import { getLoadedGroups, setGroupLayerVisible, setFolderFilter, getFallbackCables, setApiGroups, getGroupCounts, getTypeCounts, setTypeFilter } from '@/features/networkDesign/modules/cableService.js';
 import { request as apiRequest } from '@/features/networkDesign/modules/apiClient.js';
 import KmlImportModal from '@/components/NetworkDesign/KmlImportModal.vue';
+import DesignLayer from '@/components/NetworkDesign/design/DesignLayer.vue';
+import { getMapInstance } from '@/features/networkDesign/modules/mapCore-refactored.js';
+import { emitDesign } from '@/features/networkDesign/modules/designMode.js';
+import { hideContextMenu } from '@/features/networkDesign/modules/contextMenu.js';
 
 const route = useRoute();
 const csrfToken = ref(window.CSRF_TOKEN || '');
@@ -1041,6 +1056,14 @@ function selectSearchResult(item) {
   }
   searchQuery.value = item.name;
   closeSearch();
+}
+
+// ── EV-0138: camada de engenharia ────────────────────────────────────────
+const designMap = shallowRef(null);
+/** Entradas novas do menu de contexto legado → DesignLayer (usa o último clique direito). */
+function designAction(action) {
+  hideContextMenu();
+  emitDesign('menu-action', { action });
 }
 
 // Foco vindo da busca rápida (Ctrl K): ?foco=<site|cable|device>&id=&lat=&lng=&nome=
@@ -1608,6 +1631,10 @@ onMounted(async () => {
   await nextTick();
 
   initializeNetworkDesignApp({ force: true });
+  // EV-0138: a camada de engenharia monta quando o mapa do construtor existe
+  whenNetworkDesignMapReady().then(() => {
+    designMap.value = getMapInstance();
+  });
   loadFolderTree();
   loadCableGroupsFromApi();
   focusFromQuery();
@@ -2124,44 +2151,39 @@ onUnmounted(() => {
 
 .toast-host {
   position: fixed;
-  top: 1.25rem;
-  right: 1.25rem;
+  top: 150px;
+  right: 72px;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.5rem;
   z-index: 60;
+  max-width: 360px;
   pointer-events: none;
 }
 
-.toast-card {
+/* EV-0138: os avisos são criados por JS (uiHelpers) — sem :global o scoped não os alcança */
+:global(.toast-card) {
   display: flex;
-  gap: 0.75rem;
-  align-items: flex-start;
-  background: var(--surface-card);
-  color: var(--text-primary);
-  padding: 0.75rem 1rem;
-  border-radius: 0.75rem;
-  box-shadow: var(--shadow-md);
-  border: 1px solid var(--border-primary);
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgb(var(--n-200));
+  border-left-width: 4px;
+  background: rgb(var(--surface));
+  color: rgb(var(--n-900));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+  font-size: 13px;
   transition: opacity 0.16s ease;
   pointer-events: auto;
 }
-
-.toast-card.toast-success {
-  border-left: 4px solid #22c55e;
+:global(.toast-card strong) {
+  display: block;
+  margin-bottom: 2px;
+  font-weight: 600;
 }
-
-.toast-card.toast-error {
-  border-left: 4px solid #ef4444;
-}
-
-.toast-card.toast-warning {
-  border-left: 4px solid #f97316;
-}
-
-.toast-card.toast-info {
-  border-left: 4px solid #3b82f6;
-}
+:global(.toast-card.toast-success) { border-left-color: rgb(var(--success)); }
+:global(.toast-card.toast-error) { border-left-color: rgb(var(--danger)); }
+:global(.toast-card.toast-warning) { border-left-color: rgb(var(--warning)); }
+:global(.toast-card.toast-info) { border-left-color: rgb(var(--info)); }
 
 .confirm-host {
   position: fixed;

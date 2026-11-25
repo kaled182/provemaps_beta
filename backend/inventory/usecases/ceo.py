@@ -14,10 +14,12 @@ e termina num site/porta ou noutra CEO.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 from django.contrib.gis.geos import Point
 from django.db import connection, transaction
+from django.db.models import F
 from django.shortcuts import get_object_or_404
 
 from inventory.cache.fibers import invalidate_fiber_cache
@@ -31,6 +33,7 @@ from .devices_common import InventoryValidationError
 
 MODES = {"sangria": "Sangria (passagem direta)", "corte": "Corte / emenda total"}
 CEO_TYPE = "splice_box"
+SLACK_TYPE = "slack"
 
 
 def _project(cable: FiberCable, lat: float, lng: float) -> tuple[Point, float]:
@@ -183,3 +186,91 @@ def derive_cable(
         "origin_ceo": ceo_payload(ceo),
         "needs_profile": structure["needs_profile"],
     }
+
+
+def move_ceo(ceo_id: int, *, lat: float, lng: float) -> dict[str, Any]:
+    """Move a CEO: o novo ponto é projetado no traçado do cabo e o km recalculado."""
+    ceo = get_object_or_404(FiberInfrastructure.objects.select_related("cable"), pk=ceo_id)
+    if ceo.cable is None or ceo.cable.path is None:
+        raise InventoryValidationError("a caixa não está sobre um cabo com traçado")
+    ceo.location, ceo.distance_from_origin = _project(ceo.cable, lat, lng)
+    ceo.save(update_fields=["location", "distance_from_origin"])
+    invalidate_fiber_cache()
+    invalidate_dashboard_cache()
+    return ceo_payload(ceo) if ceo.type == CEO_TYPE else slack_payload(ceo)
+
+
+def delete_ceo(ceo_id: int) -> None:
+    """Exclui a CEO só se estiver vazia (sem fusões nem cabos que nascem/terminam nela)."""
+    ceo = get_object_or_404(FiberInfrastructure, pk=ceo_id, type=CEO_TYPE)
+    fusions = ceo.fusions.count()
+    cables = ceo.derived_cables.count() + ceo.arriving_cables.count()
+    if fusions or cables:
+        raise InventoryValidationError(
+            f"a {ceo.name or 'CEO'} tem {fusions} fusão(ões) e {cables} cabo(s) ligados; "
+            "desfaça as emendas e mude a ponta dos cabos antes de a excluir"
+        )
+    ceo.delete()
+    invalidate_fiber_cache()
+    invalidate_dashboard_cache()
+
+
+# ── reserva técnica (sobra de cabo enrolada num ponto do traçado) ─────────────
+
+
+def slack_payload(slack: FiberInfrastructure) -> dict[str, Any]:
+    meta = slack.metadata or {}
+    return {
+        "id": slack.pk,
+        "name": slack.name or f"Reserva #{slack.pk}",
+        "cable_id": slack.cable_id,
+        "cable_name": slack.cable.name if slack.cable_id else None,
+        "point": [round(slack.location.x, 7), round(slack.location.y, 7)],
+        "km": round((slack.distance_from_origin or 0) / 1000, 3),
+        "slack_m": float(meta.get("slack_length") or 0),
+    }
+
+
+def list_slacks() -> list[dict[str, Any]]:
+    qs = FiberInfrastructure.objects.filter(type=SLACK_TYPE).select_related("cable")
+    return [slack_payload(s) for s in qs.order_by("cable_id", "distance_from_origin")]
+
+
+def create_slack(
+    cable_id: int, *, lat: float, lng: float, meters: float, name: str = ""
+) -> dict[str, Any]:
+    """Reserva técnica no traçado: a sobra soma ao comprimento do cabo (como no OTDR)."""
+    if not meters or meters <= 0:
+        raise InventoryValidationError("indique os metros da reserva técnica")
+    cable = get_object_or_404(FiberCable, pk=cable_id)
+    if cable.path is None or cable.path.num_points < 2:
+        raise InventoryValidationError("o cabo não tem traçado no mapa")
+    point, along = _project(cable, lat, lng)
+    with transaction.atomic():
+        slack = FiberInfrastructure.objects.create(
+            cable=cable,
+            type=SLACK_TYPE,
+            name=(name or "").strip()[:100] or f"Reserva {meters:g} m",
+            location=point,
+            distance_from_origin=along,
+            metadata={"slack_length": meters},
+        )
+        FiberCable.objects.filter(pk=cable.pk).update(
+            length_km=F("length_km") + Decimal(str(meters)) / 1000
+        )
+    invalidate_fiber_cache()
+    invalidate_dashboard_cache()
+    return slack_payload(slack)
+
+
+def delete_slack(slack_id: int) -> None:
+    slack = get_object_or_404(FiberInfrastructure, pk=slack_id, type=SLACK_TYPE)
+    meters = float((slack.metadata or {}).get("slack_length") or 0)
+    with transaction.atomic():
+        if meters and slack.cable_id:
+            FiberCable.objects.filter(pk=slack.cable_id, length_km__isnull=False).update(
+                length_km=F("length_km") - Decimal(str(meters)) / 1000
+            )
+        slack.delete()
+    invalidate_fiber_cache()
+    invalidate_dashboard_cache()

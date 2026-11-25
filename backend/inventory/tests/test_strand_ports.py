@@ -39,7 +39,7 @@ def net():
     ensure_cable_structure(cable)
     strands = list(FiberStrand.objects.filter(tube__cable=cable).order_by("absolute_number"))
     c = Client()
-    c.force_login(get_user_model().objects.create_user(username="noc", password="x"))
+    c.force_login(get_user_model().objects.create_user(username="eng", password="x", is_staff=True))
     return SimpleNamespace(cable=cable, strands=strands, pa=pa, pa2=pa2, pb=pb, c=c, mandi=mandi)
 
 

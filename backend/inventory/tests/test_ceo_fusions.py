@@ -152,7 +152,7 @@ def test_endpoints(net):
     url = f"/api/v1/inventory/ceos/{net.ceo}/fusions/"
     assert Client().get(url).status_code in (401, 403, 302)
     c = Client()
-    c.force_login(get_user_model().objects.create_user(username="noc", password="x"))
+    c.force_login(get_user_model().objects.create_user(username="eng", password="x", is_staff=True))
     f1, d1 = _fiber(net.trunk, 1), _fiber(net.derived, 1)
     r = c.post(
         url,
