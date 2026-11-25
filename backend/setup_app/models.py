@@ -147,6 +147,8 @@ class FirstTimeSetup(models.Model):
     # chegam mais fortes que uma ONU; por isso não são os do GPON. Nulo = padrão (-20/-24).
     backbone_rx_warning_threshold = models.FloatField(null=True, blank=True)
     backbone_rx_critical_threshold = models.FloatField(null=True, blank=True)
+    # EV-0140: orçamento óptico (fibra dB/km, fusão, splitters, TX padrão). Nulo = padrão.
+    optical_budget = models.JSONField(null=True, blank=True)
     configured = models.BooleanField(default=False)
     configured_at = models.DateTimeField(auto_now_add=True)
 

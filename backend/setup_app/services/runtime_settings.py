@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from django.conf import settings
 
 from setup_app.models import FirstTimeSetup
+from setup_app.optical_budget import parse_optical_budget
 
 
 @dataclass
@@ -96,6 +97,8 @@ class RuntimeConfig:
     # EV-0115: limiares de RX das portas de switch (tela «Monitoramento de Switches»).
     backbone_rx_warning_threshold: float = -20.0
     backbone_rx_critical_threshold: float = -24.0
+    # EV-0140: orçamento óptico normalizado (setup_app.optical_budget)
+    optical_budget: dict = field(default_factory=lambda: parse_optical_budget(None))
 
 
 PON_CAPACITY_MIN = 1
@@ -224,6 +227,7 @@ def _fallback_config() -> RuntimeConfig:
         epon_pon_capacity=_int_setting("EPON_PON_CAPACITY", 64, PON_CAPACITY_MIN, PON_CAPACITY_MAX),
         backbone_rx_warning_threshold=_float_setting("BACKBONE_RX_WARNING_THRESHOLD", -20.0),
         backbone_rx_critical_threshold=_float_setting("BACKBONE_RX_CRITICAL_THRESHOLD", -24.0),
+        optical_budget=parse_optical_budget(getattr(settings, "OPTICAL_BUDGET", None)),
     )
 
 
@@ -407,6 +411,11 @@ def _load_runtime_config() -> RuntimeConfig:
             record.backbone_rx_critical_threshold
             if record.backbone_rx_critical_threshold is not None
             else _float_setting("BACKBONE_RX_CRITICAL_THRESHOLD", -24.0)
+        ),
+        optical_budget=parse_optical_budget(
+            record.optical_budget
+            if isinstance(record.optical_budget, dict)
+            else getattr(settings, "OPTICAL_BUDGET", None)
         ),
     )
 

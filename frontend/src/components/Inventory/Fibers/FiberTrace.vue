@@ -3,6 +3,10 @@
     <p v-if="loading" class="ft-msg">A rastrear a luz…</p>
     <p v-else-if="error" class="ft-msg text-danger" role="alert">Erro no rastreamento: {{ error }}</p>
     <template v-else-if="trace">
+      <p v-if="trace.tx" class="ft-tx" data-testid="trace-tx">
+        Partida <span class="num">{{ dbm(trace.tx.dbm) }}</span>
+        <span class="ft-sub"> — {{ trace.tx.source === 'zabbix' ? `TX coletado do Zabbix (${trace.tx.port_name})` : 'TX padrão da configuração (sem coleta nesta porta)' }}</span>
+      </p>
       <ol class="ft-steps">
         <li v-for="(s, i) in trace.steps" :key="i" class="ft-step" :class="`ft-${s.type}`" :data-testid="`trace-step-${s.type}`">
           <template v-if="s.type === 'port'">
@@ -15,10 +19,14 @@
             <span class="ft-sub">rumo a {{ s.toward }} · <span class="num">{{ fmtKm(s.km) }}</span></span>
             <span v-if="s.passes?.length" class="ft-sub"> · passa direto: {{ s.passes.join(', ') }}</span>
             <span v-if="s.broken" class="text-danger"> · rompido</span>
+            <span class="ft-sub num"> · −{{ db(s.loss_db) }}</span>
+            <span v-if="s.dbm !== null && s.dbm !== undefined" class="ft-dbm num">{{ dbm(s.dbm) }}</span>
           </template>
           <template v-else-if="s.type === 'fusion'">
             Fusão na <b>{{ s.ceo_name }}</b>
             <span v-if="s.tray" class="ft-sub num"> · bandeja {{ s.tray }}{{ s.slot ? `, posição ${s.slot}` : '' }}</span>
+            <span class="ft-sub num"> · −{{ db(s.loss_db) }}</span>
+            <span v-if="s.dbm !== null && s.dbm !== undefined" class="ft-dbm num">{{ dbm(s.dbm) }}</span>
           </template>
         </li>
       </ol>
@@ -27,10 +35,14 @@
       </p>
       <p class="ft-sub" data-testid="trace-total">
         <span class="num">{{ fmtKm(trace.total_km) }}</span> · {{ trace.fusions }} {{ trace.fusions === 1 ? 'fusão' : 'fusões' }}
-        <template v-if="trace.loss_db_estimate !== null">
-          · perda estimada <span class="num">{{ trace.loss_db_estimate.toLocaleString('pt-BR') }} dB</span>
-          <span title="Atenuação do tipo de cabo × km + 0,1 dB por fusão; não é medição">(cálculo)</span>
+        · perda estimada <span class="num">{{ db(trace.loss_db_estimate) }}</span>
+        <template v-if="trace.rx_estimate_dbm !== null && trace.rx_estimate_dbm !== undefined">
+          · chega com ≈ <span class="num" data-testid="trace-rx">{{ dbm(trace.rx_estimate_dbm) }}</span>
         </template>
+      </p>
+      <p class="ft-note" data-testid="trace-note">
+        Cálculo, não medição: {{ fmtDec(trace.budget?.fiber_db_km) }} dB/km (ou o do tipo de cabo) e
+        {{ fmtDec(trace.budget?.fusion_db) }} dB por fusão — Configuração › Orçamento óptico.
       </p>
     </template>
   </div>
@@ -49,6 +61,9 @@ const api = useApi()
 const trace = ref(null)
 const loading = ref(false)
 const error = ref('')
+const fmtDec = (v) => Number(v ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const db = (v) => `${fmtDec(v)} dB`
+const dbm = (v) => `${v > 0 ? '+' : ''}${fmtDec(v)} dBm`
 const fmtKm = (v) => `${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km`
 
 watch(
@@ -111,6 +126,20 @@ watch(
   transform: rotate(45deg);
 }
 .ft-sub {
+  color: rgb(var(--n-500));
+}
+.ft-tx {
+  margin: 0 0 6px;
+  color: rgb(var(--n-900));
+}
+.ft-dbm {
+  float: right;
+  font-weight: 600;
+  color: rgb(var(--n-900));
+}
+.ft-note {
+  margin: 2px 0 0;
+  font-size: 11px;
   color: rgb(var(--n-500));
 }
 .ft-end {

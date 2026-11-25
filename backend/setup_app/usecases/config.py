@@ -19,6 +19,7 @@ from integrations.zabbix.guards import reload_diagnostics_flag_cache
 
 from ..models import FirstTimeSetup
 from ..models_audit import ConfigurationAudit
+from ..optical_budget import parse_optical_budget
 from ..services import runtime_settings
 from ..services.config_loader import clear_runtime_config_cache
 from ..services.service_reloader import trigger_restart
@@ -128,6 +129,8 @@ EDITABLE_KEYS = [
     # EV-0115: limiares de RX das portas de switch (backbone)
     "BACKBONE_RX_WARNING_THRESHOLD",
     "BACKBONE_RX_CRITICAL_THRESHOLD",
+    # EV-0140: orçamento óptico do projeto (JSON)
+    "OPTICAL_BUDGET",
     # Backup automation
     "BACKUP_AUTO_ENABLED",
     "BACKUP_FREQUENCY",
@@ -153,6 +156,7 @@ _EXPORT_EXCLUDED = {
     "EPON_PON_CAPACITY",
     "BACKBONE_RX_WARNING_THRESHOLD",
     "BACKBONE_RX_CRITICAL_THRESHOLD",
+    "OPTICAL_BUDGET",
     "BACKUP_AUTO_ENABLED",
     "BACKUP_FREQUENCY",
     "BACKUP_RETENTION_DAYS",
@@ -394,6 +398,7 @@ def _fallback_values(current_values: dict[str, str]) -> dict[str, Any]:
         "EPON_PON_CAPACITY": str(runtime_config.epon_pon_capacity),
         "BACKBONE_RX_WARNING_THRESHOLD": str(runtime_config.backbone_rx_warning_threshold),
         "BACKBONE_RX_CRITICAL_THRESHOLD": str(runtime_config.backbone_rx_critical_threshold),
+        "OPTICAL_BUDGET": parse_optical_budget(runtime_config.optical_budget),
         "BACKUP_AUTO_ENABLED": False,
         "BACKUP_FREQUENCY": "weekly",
         "BACKUP_RETENTION_DAYS": "30",
@@ -640,6 +645,7 @@ def build_configuration_payload(
         "BACKBONE_RX_CRITICAL_THRESHOLD": _parse_float_str(
             data.get("BACKBONE_RX_CRITICAL_THRESHOLD", "-24"), -24
         ),
+        "OPTICAL_BUDGET": json.dumps(parse_optical_budget(data.get("OPTICAL_BUDGET"))),
     }
 
     # E-mail: o backend SMTP do Django segue a secção SMTP
@@ -709,6 +715,9 @@ def _apply_runtime_overrides(payload: dict[str, str]) -> None:
             setattr(settings, key, int(payload[key]))
         except (TypeError, ValueError):
             setattr(settings, key, default)
+    budget = parse_optical_budget(payload.get("OPTICAL_BUDGET"))
+    os.environ["OPTICAL_BUDGET"] = json.dumps(budget)
+    settings.OPTICAL_BUDGET = budget
     distance = parse_distance_thresholds(payload.get("OPTICAL_THRESHOLDS_BY_DISTANCE"))
     os.environ["OPTICAL_THRESHOLDS_BY_DISTANCE"] = json.dumps(distance)
     settings.OPTICAL_THRESHOLDS_BY_DISTANCE = distance
@@ -812,6 +821,7 @@ def _persist_configuration(payload: dict[str, str]) -> None:
             "epon_pon_capacity": int(payload["EPON_PON_CAPACITY"]),
             "backbone_rx_warning_threshold": float(payload["BACKBONE_RX_WARNING_THRESHOLD"]),
             "backbone_rx_critical_threshold": float(payload["BACKBONE_RX_CRITICAL_THRESHOLD"]),
+            "optical_budget": parse_optical_budget(payload.get("OPTICAL_BUDGET")),
         },
     )
 

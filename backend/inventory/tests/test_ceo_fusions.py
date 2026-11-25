@@ -171,3 +171,31 @@ def test_endpoints(net):
     t = c.get(f"/api/v1/inventory/strands/{f1.pk}/trace/", {"from": "a"}).json()
     assert t["end"]["reason"] == "port"
     assert c.delete(f"{url}{r.json()['id']}/").status_code == 204
+
+
+def test_trace_power_budget_zabbix_tx_and_default(net):
+    """EV-0140: perda acumulada por passo (0,35 dB/km do tipo de cabo + 0,10 dB por fusão) e dBm
+    a partir do TX real da porta (Zabbix) ou do TX padrão (+5 dBm) quando não há coleta."""
+    from decimal import Decimal
+
+    f1, d1 = _fiber(net.trunk, 1), _fiber(net.derived, 1)
+    create_fusion(net.ceo, a={"strand_id": f1.pk, "side": "a"}, b={"strand_id": d1.pk})
+    t = trace_light(f1.pk, start="a")
+    assert t["tx"] == {"dbm": 5.0, "source": "padrao", "port_name": "gpon 1/1/1"}
+    cable1, fusion = t["steps"][1], t["steps"][2]
+    assert cable1["loss_db"] == pytest.approx(cable1["km"] * 0.35, abs=1e-3)
+    assert fusion["loss_db"] == 0.10 and fusion["acc_loss_db"] == pytest.approx(
+        cable1["loss_db"] + 0.10, abs=0.01
+    )
+    assert (
+        t["steps"][-1]["dbm"]
+        == t["rx_estimate_dbm"]
+        == pytest.approx(5.0 - t["loss_db_estimate"], abs=0.01)
+    )
+    net.pon.last_tx_power = Decimal("3.20")
+    net.pon.save()
+    t = trace_light(f1.pk, start="a")
+    assert t["tx"]["source"] == "zabbix" and t["rx_estimate_dbm"] == pytest.approx(
+        3.2 - t["loss_db_estimate"], abs=0.01
+    )
+    assert t["budget"] == {"fiber_db_km": 0.25, "fusion_db": 0.10}

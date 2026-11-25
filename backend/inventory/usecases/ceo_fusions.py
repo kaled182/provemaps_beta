@@ -23,6 +23,7 @@ from django.shortcuts import get_object_or_404
 from inventory.cache.fibers import invalidate_fiber_cache
 from inventory.models import FiberCable, FiberFusion, FiberInfrastructure, FiberStrand
 from maps_view.cache_swr import invalidate_dashboard_cache
+from setup_app.services import runtime_settings
 
 from .ceo import CEO_TYPE
 from .devices_common import InventoryValidationError
@@ -31,7 +32,6 @@ from .strand_ports import active_otdr, end_site
 SIDES = ("a", "b")
 SPLICES_PER_TRAY = 24
 MAX_HOPS = 64
-FUSION_LOSS_DB = 0.1
 
 
 def _ceo_label(ceo: FiberInfrastructure) -> str:
@@ -268,10 +268,9 @@ def trace_light(strand_id: int, *, start: str = "a") -> dict[str, Any]:
     direction = "b" if start == "a" else "a"  # para onde a luz segue no cabo
     pos = -math.inf if start == "a" else math.inf  # km de onde a luz entrou no cabo
     seen: set[tuple[int, str, float]] = set()
+    budget = runtime_settings.get_runtime_config().optical_budget
     total_km = 0.0
     fusions = 0
-    loss_known = True
-    loss_db = 0.0
     end: dict[str, Any] = {"reason": "loop", "label": "rastreamento interrompido (laço)"}
 
     for _ in range(MAX_HOPS):
@@ -316,15 +315,13 @@ def trace_light(strand_id: int, *, start: str = "a") -> dict[str, Any]:
             start_km: float = start_km,
             cable: FiberCable = cable,
         ) -> None:
-            nonlocal total_km, loss_db, loss_known
+            nonlocal total_km
             seg = abs(at_km - start_km)
             step["km"] = round(seg, 3)
             total_km += seg
+            # EV-0140: atenuação do tipo de cabo; sem tipo, a da fibra do orçamento
             att = getattr(cable.cable_group, "attenuation_db_per_km", None)
-            if att is None:
-                loss_known = False
-            else:
-                loss_db += seg * float(att)
+            step["db_km"] = float(att) if att is not None else budget["fiber_db_km"]
 
         if otdr is not None:
             close_cable(length if direction == "b" else 0.0)
@@ -412,15 +409,49 @@ def trace_light(strand_id: int, *, start: str = "a") -> dict[str, Any]:
         }
         break
 
+    tx = _start_tx(first_port, budget)
+    loss = _accumulate(steps, budget, tx)
     return {
         "start": {"strand_id": strand_id, "end": start},
         "steps": steps,
         "end": end,
         "total_km": round(total_km, 3),
         "fusions": fusions,
-        # estimativa: atenuação do tipo de cabo * km + 0,1 dB por fusão; None se falta o tipo
-        "loss_db_estimate": round(loss_db + fusions * FUSION_LOSS_DB, 2) if loss_known else None,
+        # estimativa (orçamento óptico, EV-0140): dB/km do cabo * km + perda por fusão
+        "loss_db_estimate": round(loss, 2),
+        "tx": tx,
+        "rx_estimate_dbm": round(tx["dbm"] - loss, 2) if tx else None,
+        "budget": {"fiber_db_km": budget["fiber_db_km"], "fusion_db": budget["fusion_db"]},
     }
+
+
+def _start_tx(port, budget: dict[str, Any]) -> dict[str, Any] | None:
+    """Potência de partida: TX coletado da porta (Zabbix) ou o TX padrão; sem porta, nenhuma."""
+    if port is None:
+        return None
+    if port.last_tx_power is not None:
+        return {"dbm": float(port.last_tx_power), "source": "zabbix", "port_name": port.name}
+    return {"dbm": budget["tx_default_dbm"], "source": "padrao", "port_name": port.name}
+
+
+def _accumulate(
+    steps: list[dict[str, Any]], budget: dict[str, Any], tx: dict[str, Any] | None
+) -> float:
+    """Acrescenta a cada passo os km, a perda e (com TX) a potência estimada acumulados."""
+    km = loss = 0.0
+    for step in steps:
+        if step["type"] == "cable":
+            seg = step.get("km") or 0.0
+            km += seg
+            step["loss_db"] = round(seg * step.get("db_km", budget["fiber_db_km"]), 3)
+            loss += step["loss_db"]
+        elif step["type"] == "fusion":
+            step["loss_db"] = budget["fusion_db"]
+            loss += budget["fusion_db"]
+        step["acc_km"] = round(km, 3)
+        step["acc_loss_db"] = round(loss, 2)
+        step["dbm"] = round(tx["dbm"] - loss, 2) if tx else None
+    return loss
 
 
 def _pos_on(cable: FiberCable, ceo: FiberInfrastructure) -> float:

@@ -542,6 +542,49 @@
             <p class="text-xs text-neutral-500 mt-1">Padrão: -24 dBm</p>
           </div>
         </div>
+        <!-- EV-0140: orçamento óptico do projeto (rastreamento da luz e portas dos splitters) -->
+        <div class="mt-6" data-testid="cfg-optical-budget">
+          <h4 class="text-sm font-semibold text-neutral-800">Orçamento óptico do projeto</h4>
+          <p class="text-xs text-neutral-500 mt-0.5">
+            Estimam o sinal em cada ponto da rede (rastreamento da luz, portas dos splitters). A atenuação do tipo de cabo,
+            quando cadastrada, vence a da fibra; o TX coletado do Zabbix na porta de origem vence o TX padrão.
+          </p>
+        </div>
+        <div v-if="config.OPTICAL_BUDGET" class="grid grid-cols-3 gap-6 mt-3">
+          <div>
+            <label class="label-custom" for="ob-fiber">Fibra</label>
+            <div class="flex items-center gap-2">
+              <input id="ob-fiber" v-model.number="config.OPTICAL_BUDGET.fiber_db_km" type="number" step="0.01" min="0" class="input-custom" data-testid="cfg-ob-fiber" />
+              <span class="text-sm text-neutral-500 flex-none">dB/km</span>
+            </div>
+            <p class="text-xs text-neutral-500 mt-1">Padrão: 0,25 dB/km</p>
+          </div>
+          <div>
+            <label class="label-custom" for="ob-fusion">Fusão</label>
+            <div class="flex items-center gap-2">
+              <input id="ob-fusion" v-model.number="config.OPTICAL_BUDGET.fusion_db" type="number" step="0.01" min="0" class="input-custom" data-testid="cfg-ob-fusion" />
+              <span class="text-sm text-neutral-500 flex-none">dB</span>
+            </div>
+            <p class="text-xs text-neutral-500 mt-1">Padrão: 0,10 dB</p>
+          </div>
+          <div>
+            <label class="label-custom" for="ob-tx">TX padrão da porta de origem</label>
+            <div class="flex items-center gap-2">
+              <input id="ob-tx" v-model.number="config.OPTICAL_BUDGET.tx_default_dbm" type="number" step="0.5" class="input-custom" data-testid="cfg-ob-tx" />
+              <span class="text-sm text-neutral-500 flex-none">dBm</span>
+            </div>
+            <p class="text-xs text-neutral-500 mt-1">Padrão: +5 dBm (PON C+) — usado quando o Zabbix não tem o TX da porta</p>
+          </div>
+        </div>
+        <div v-if="config.OPTICAL_BUDGET?.splitters" class="grid grid-cols-5 gap-4 mt-4">
+          <div v-for="r in SPLITTER_RATIOS" :key="r">
+            <label class="label-custom" :for="`ob-split-${r}`">Splitter {{ r }}</label>
+            <div class="flex items-center gap-2">
+              <input :id="`ob-split-${r}`" v-model.number="config.OPTICAL_BUDGET.splitters[r]" type="number" step="0.1" min="0" class="input-custom" :data-testid="`cfg-ob-split-${r}`" />
+              <span class="text-sm text-neutral-500 flex-none">dB</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="flex justify-end gap-3">
@@ -571,6 +614,9 @@ import { ref, onMounted, watch } from 'vue'
 import { useSystemConfig } from '@/composables/useSystemConfig'
 import { useCompanyProfile } from '@/composables/useCompanyProfile'
 import CronTab from '@/components/Configuration/CronTab.vue'
+
+/** EV-0140: razões de splitter do orçamento óptico (mesma ordem de setup_app/optical_budget.py) */
+const SPLITTER_RATIOS = ['1x2', '1x4', '1x8', '1x16', '1x32']
 
 // ── System config composable ──────────────────────────────
 const {

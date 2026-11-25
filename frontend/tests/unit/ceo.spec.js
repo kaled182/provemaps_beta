@@ -168,7 +168,7 @@ describe('FiberTrace (EV-0136)', () => {
         steps: [
           { type: 'port', device_name: 'OLT Mandi', port_name: 'gpon 1/1/1', site_name: 'SITE - VILA MANDI' },
           { type: 'cable', cable_name: 'MANDI - VLP', absolute_number: 1, color: 'Verde', color_hex: '#009900', toward: 'SITE - VILA RICA', km: 4.976, passes: [] },
-          { type: 'fusion', ceo_name: 'CEO-04', tray: 1, slot: 1 },
+          { type: 'fusion', ceo_name: 'CEO-04', tray: 1, slot: 1, loss_db: 0.1, dbm: 1.36 },
           { type: 'cable', cable_name: 'CEO-04 - VILA NOVA', absolute_number: 1, color: 'Verde', color_hex: '#009900', toward: 'SITE - VILA NOVA', km: 5.56, passes: [] },
           { type: 'port', device_name: 'SW Vila Nova', port_name: 'ge-0/0/1', site_name: 'SITE - VILA NOVA' },
         ],
@@ -176,6 +176,9 @@ describe('FiberTrace (EV-0136)', () => {
         total_km: 10.536,
         fusions: 1,
         loss_db_estimate: 3.79,
+        tx: { dbm: 3.2, source: 'zabbix', port_name: 'gpon 1/1/1' },
+        rx_estimate_dbm: -0.59,
+        budget: { fiber_db_km: 0.25, fusion_db: 0.1 },
       }),
     )
     const w = mount(FiberTrace, { props: { strandId: 101, start: 'a' } })
@@ -184,7 +187,11 @@ describe('FiberTrace (EV-0136)', () => {
     expect(w.findAll('[data-testid="trace-step-cable"]')).toHaveLength(2)
     expect(w.get('[data-testid="trace-step-fusion"]').text()).toContain('CEO-04')
     expect(w.get('[data-testid="trace-end"]').text()).toBe('Chega a: SW Vila Nova → ge-0/0/1')
-    expect(w.get('[data-testid="trace-total"]').text().replace(/\s+/g, ' ')).toContain('10,54 km · 1 fusão · perda estimada 3,79 dB')
+    expect(w.get('[data-testid="trace-total"]').text().replace(/\s+/g, ' ')).toContain('10,54 km · 1 fusão · perda estimada 3,79 dB · chega com ≈ -0,59 dBm')
+    // EV-0140: partida com a origem do TX, dBm acumulado por passo, e a nota de que é cálculo
+    expect(w.get('[data-testid="trace-tx"]').text()).toContain('+3,20 dBm — TX coletado do Zabbix (gpon 1/1/1)')
+    expect(w.get('[data-testid="trace-step-fusion"]').text()).toContain('+1,36 dBm')
+    expect(w.get('[data-testid="trace-note"]').text()).toContain('0,25 dB/km')
   })
 })
 

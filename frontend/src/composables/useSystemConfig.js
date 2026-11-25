@@ -109,6 +109,8 @@ export function useSystemConfig() {
     // Limiares de RX das portas de switch / backbone (EV-0115)
     BACKBONE_RX_WARNING_THRESHOLD: '-20',
     BACKBONE_RX_CRITICAL_THRESHOLD: '-24',
+    // Orçamento óptico do projeto (EV-0140)
+    OPTICAL_BUDGET: defaultOpticalBudget(),
   })
 
   // Estados de teste
@@ -174,7 +176,8 @@ export function useSystemConfig() {
           'MAP_LANGUAGE', 'MAP_THEME', 'ENABLE_MAP_CLUSTERING', 'ENABLE_DRAWING_TOOLS', 'ENABLE_FULLSCREEN',
           'OPTICAL_RX_WARNING_THRESHOLD', 'OPTICAL_RX_CRITICAL_THRESHOLD',
           'GPON_PON_CAPACITY', 'EPON_PON_CAPACITY',
-          'BACKBONE_RX_WARNING_THRESHOLD', 'BACKBONE_RX_CRITICAL_THRESHOLD'
+          'BACKBONE_RX_WARNING_THRESHOLD', 'BACKBONE_RX_CRITICAL_THRESHOLD',
+          'OPTICAL_BUDGET'
         ]
         
         const booleanFields = new Set([
@@ -381,6 +384,7 @@ export function useSystemConfig() {
       EPON_PON_CAPACITY: '64',
       BACKBONE_RX_WARNING_THRESHOLD: '-20',
       BACKBONE_RX_CRITICAL_THRESHOLD: '-24',
+      OPTICAL_BUDGET: defaultOpticalBudget(),
     }
     clearTestResults()
   }
@@ -472,4 +476,9 @@ export function useSystemConfig() {
     clearTestResults,
     resetForm,
   }
+}
+
+/** EV-0140: valores padrão do orçamento óptico (iguais a setup_app/optical_budget.py). */
+export function defaultOpticalBudget() {
+  return { fiber_db_km: 0.25, fusion_db: 0.1, splitters: { '1x2': 3.7, '1x4': 7.1, '1x8': 10.5, '1x16': 13.7, '1x32': 17.1 }, tx_default_dbm: 5 }
 }
