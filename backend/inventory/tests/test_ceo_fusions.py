@@ -199,3 +199,47 @@ def test_trace_power_budget_zabbix_tx_and_default(net):
         3.2 - t["loss_db_estimate"], abs=0.01
     )
     assert t["budget"] == {"fiber_db_km": 0.25, "fusion_db": 0.10}
+
+
+def test_fuse_tube_one_to_one_skips_busy_fibers_and_numbers_slots(net):
+    """EV-0141: «Fusionar tubo 1:1» — 12 fibras do tubo 1 do tronco (lado A) com o tubo 1 do
+    derivado, cor com cor; a fibra já emendada fica de fora; bandeja/posição automáticas."""
+    from inventory.usecases.ceo_fusions import fuse_tubes
+
+    f1, d1 = _fiber(net.trunk, 1), _fiber(net.derived, 1)
+    create_fusion(net.ceo, a={"strand_id": f1.pk, "side": "a"}, b={"strand_id": d1.pk})
+    r = fuse_tubes(
+        net.ceo,
+        a={"cable_id": net.trunk.pk, "tube_number": 1, "side": "a"},
+        b={"cable_id": net.derived.pk, "tube_number": 1},
+    )
+    assert r == {"created": 11, "skipped": 1}
+    fus = ceo_fusions(net.ceo)["fusions"]
+    assert len(fus) == 12
+    assert [(f["tray"], f["slot"]) for f in fus[:3]] == [(1, 1), (1, 2), (1, 3)]
+    assert all(f["a"]["color"] == f["b"]["color"] for f in fus)  # cor com cor
+    with pytest.raises(InventoryValidationError, match="lado"):
+        fuse_tubes(
+            net.ceo,
+            a={"cable_id": net.trunk.pk, "tube_number": 1},
+            b={"cable_id": net.derived.pk, "tube_number": 1},
+        )
+
+
+def test_cto_on_cable_accepts_fusions_and_trace_crosses_it(net):
+    """EV-0141: a CTO (splitter_box) sobre o cabo também recebe emendas; o rastreamento atravessa-a."""
+    from inventory.usecases.design_points import create_cto
+
+    cto = create_cto(lat=0.07, lng=-50.0, name="CTO-07", capacity=8, cable_id=net.trunk.pk)
+    f3, f4 = _fiber(net.trunk, 3), _fiber(net.trunk, 4)
+    create_fusion(
+        cto["id"], a={"strand_id": f3.pk, "side": "a"}, b={"strand_id": f4.pk, "side": "a"}
+    )
+    d = ceo_fusions(cto["id"])
+    assert d["ceo"]["kind"] == "cto" and d["fusions"][0]["tray"] == 1
+    t = trace_light(
+        f3.pk, start="a"
+    )  # vai para B, passa a CEO-04 (sangria), na CTO volta pela fibra 4
+    kinds = [s["type"] for s in t["steps"]]
+    assert kinds[:3] == ["cable", "fusion", "cable"] and t["steps"][1]["ceo_name"] == "CTO-07"
+    assert t["steps"][0]["passes"] == ["CEO-04"]

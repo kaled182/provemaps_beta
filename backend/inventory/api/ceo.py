@@ -27,7 +27,13 @@ from inventory.usecases.ceo import (
     list_slacks,
     move_ceo,
 )
-from inventory.usecases.ceo_fusions import ceo_fusions, create_fusion, delete_fusion, trace_light
+from inventory.usecases.ceo_fusions import (
+    ceo_fusions,
+    create_fusion,
+    delete_fusion,
+    fuse_tubes,
+    trace_light,
+)
 from inventory.usecases.devices_common import InventoryValidationError
 from inventory.usecases.strand_ports import site_ports
 
@@ -301,3 +307,34 @@ class SlackDetailView(APIView):
     def delete(self, request: Request, slack_id: int) -> Response:
         delete_slack(slack_id)
         return Response(status=204)
+
+
+class TubeEndSerializer(serializers.Serializer):
+    cable_id = serializers.IntegerField(min_value=1)
+    tube_number = serializers.IntegerField(min_value=1)
+    side = serializers.ChoiceField(choices=["a", "b", ""], required=False, default="")
+
+
+class TubeFusionSerializer(serializers.Serializer):
+    a = TubeEndSerializer()
+    b = TubeEndSerializer()
+
+
+class CeoTubeFusionView(APIView):
+    """EV-0141: «Fusionar tubo 1:1» — fibra n ↔ fibra n, cor com cor."""
+
+    permission_classes = [StaffWritePermission]
+
+    @extend_schema(
+        request=TubeFusionSerializer,
+        responses={201: serializers.DictField()},
+        summary="Funde um tubo inteiro com outro, fibra a fibra (cor com cor)",
+    )
+    def post(self, request: Request, ceo_id: int) -> Response:
+        body = TubeFusionSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        try:
+            data = fuse_tubes(ceo_id, **body.validated_data)
+        except InventoryValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(data, status=201)

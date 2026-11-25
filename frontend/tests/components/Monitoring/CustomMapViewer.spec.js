@@ -479,9 +479,9 @@ describe('CustomMapViewer (EV-0012c)', () => {
     await card.get('[data-testid="ceo-fusions"]').trigger('click');
     await vi.dynamicImportSettled();
     await flushPromises();
-    expect(wrapper.findComponent({ name: 'CeoFusionsModal' }).props('readonly')).toBe(true);
-    expect(document.body.querySelector('[data-testid="fusion-readonly"]')).not.toBeNull();
-    expect(document.body.querySelector('[data-testid="fusion-create"]')).toBeNull();
+    expect(wrapper.findComponent({ name: 'SpliceBoxModal' }).props('readonly')).toBe(true);
+    expect(document.body.querySelector('[data-testid="splice-box"]')).not.toBeNull();
+    expect(document.body.querySelector('[data-testid="splice-help"]')).toBeNull(); // sem instruções de edição
     wrapper.unmount();
   }, 15_000);
 

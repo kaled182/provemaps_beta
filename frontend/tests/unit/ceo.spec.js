@@ -7,7 +7,7 @@ import { mount, flushPromises, RouterLinkStub } from '@vue/test-utils'
 import CeoCreateModal from '@/components/Ceo/CeoCreateModal.vue'
 import CeoDerivePanel from '@/components/Ceo/CeoDerivePanel.vue'
 import CeoCard from '@/components/Ceo/CeoCard.vue'
-import CeoFusionsModal from '@/components/Ceo/CeoFusionsModal.vue'
+import SpliceBoxModal from '@/components/Ceo/SpliceBoxModal.vue'
 import FiberTrace from '@/components/Inventory/Fibers/FiberTrace.vue'
 
 const ok = (body, status = 200) => Promise.resolve({ ok: status < 400, status, json: () => Promise.resolve(body) })
@@ -118,7 +118,7 @@ describe('CeoDerivePanel', () => {
   })
 })
 
-const end = (strand, side, cable, n, toward, fusion = null) => ({ key: `${strand}:${side}`, strand_id: strand, side, cable_id: cable === 'MANDI - VLP' ? 1 : 2, cable_name: cable, tube_number: 1, tube_color: 'Verde', number: n, absolute_number: n, color: 'Verde', color_hex: '#009900', toward, fusion_id: fusion })
+const end = (strand, side, cable, n, toward, fusion = null) => ({ key: `${strand}:${side}`, strand_id: strand, side, cable_id: cable === 'MANDI - VLP' ? 1 : 2, cable_name: cable, tube_number: 1, tube_color: 'Verde', tube_color_hex: '#009900', number: n, absolute_number: n, color: 'Verde', color_hex: '#009900', toward, fusion_id: fusion })
 const FUSIONS = {
   ceo: { id: 4, name: 'CEO-04', mode: 'sangria', trays: 2, splices_per_tray: 24 },
   cables: [
@@ -128,35 +128,62 @@ const FUSIONS = {
   fusions: [{ id: 9, tray: 1, slot: 1, a: end(102, 'a', 'MANDI - VLP', 2, 'SITE - VILA MANDI'), b: end(202, 'b', 'CEO-04 - VILA NOVA', 2, 'SITE - VILA NOVA') }],
 }
 
-describe('CeoFusionsModal (EV-0136)', () => {
-  it('escolhe fibra A e B (pontas emendadas desativadas), cria a fusão com bandeja/posição e desfaz', async () => {
+describe('SpliceBoxModal (EV-0141)', () => {
+  function mountBox(extra = {}) {
     const calls = []
     vi.spyOn(globalThis, 'fetch').mockImplementation((url, o = {}) => {
       calls.push([url, o.method || 'GET', o.body ? JSON.parse(o.body) : null])
-      return o.method === 'DELETE' ? Promise.resolve({ ok: true, status: 204, json: () => Promise.resolve(null) }) : ok(o.method === 'POST' ? { id: 10 } : FUSIONS)
+      if (o.method === 'DELETE') return Promise.resolve({ ok: true, status: 204, json: () => Promise.resolve(null) })
+      if (o.method === 'POST') return ok(String(url).endsWith('/tube/') ? { created: 11, skipped: 1 } : { id: 10 })
+      return ok(FUSIONS)
     })
-    const w = mount(CeoFusionsModal, { props: { show: true, ceo: CEO }, attachTo: document.body })
+    const w = mount(SpliceBoxModal, { props: { show: true, ceo: CEO, ...extra }, attachTo: document.body, global: { stubs: { RouterLink: RouterLinkStub } } })
+    return { w, calls, q: (sel) => document.body.querySelector(sel) }
+  }
+
+  it('3 colunas: lado A à esquerda, B à direita, fusões na bandeja; o tubo mostra a ocupação', async () => {
+    const { w, q } = mountBox()
     await flushPromises()
-    const q = (sel) => document.body.querySelector(sel)
-    expect(q('[data-testid="end-102:a"]').disabled).toBe(true)
-    q('[data-testid="end-101:a"]').click()
-    q('[data-testid="end-201:b"]').click()
+    expect(q('[data-testid="splice-side-a"]').textContent).toContain('MANDI - VLP')
+    expect(q('[data-testid="splice-side-b"]').textContent).toContain('CEO-04 - VILA NOVA')
+    expect(q('[data-testid="tube-badge-1-a-1"]').textContent.trim()).toBe('1/2') // fibra 2 (lado A) está emendada
+    expect(q('[data-testid="splice-tray"]').textContent).toContain('Bandeja 1')
+    expect(q('[data-testid="fiber-102:a"]').disabled).toBe(true)
+    expect(q('[data-testid="fiber-102:a"]').textContent).toContain('↔ CEO-04 - VILA NOVA · F2')
+    w.unmount()
+  })
+
+  it('dois cliques criam a fusão (posição automática); «1:1» + «Fundir aqui» funde o tubo; «Desfazer» apaga', async () => {
+    const { w, calls, q } = mountBox()
     await flushPromises()
-    expect(q('[data-testid="fusion-pick-b"]').textContent).toContain('CEO-04 - VILA NOVA · F1 (Verde) → SITE - VILA NOVA')
-    q('[data-testid="fusion-tray"]').value = '1'
-    q('[data-testid="fusion-tray"]').dispatchEvent(new Event('input'))
-    q('[data-testid="fusion-slot"]').value = '2'
-    q('[data-testid="fusion-slot"]').dispatchEvent(new Event('input'))
+    q('[data-testid="fiber-101:a"]').click()
     await flushPromises()
-    q('[data-testid="fusion-create"]').click()
+    expect(q('[data-testid="splice-help"]').textContent).toContain('MANDI - VLP · fibra 1')
+    q('[data-testid="fiber-201:b"]').click()
     await flushPromises()
+    q('[data-testid="tube-11-1-a-1"]').click()
+    await flushPromises()
+    q('[data-testid="tube-target-2-b-1"]').click()
+    await flushPromises()
+    expect(q('[data-testid="splice-notice"]').textContent).toContain('11 fusões criadas · 1 fibra(s)')
     q('[data-testid="fusion-del-9"]').click()
     await flushPromises()
-    const writes = calls.filter(([, m]) => m !== 'GET')
-    expect(writes).toEqual([
-      ['/api/v1/inventory/ceos/4/fusions/', 'POST', { a: { strand_id: 101, side: 'a' }, b: { strand_id: 201, side: 'b' }, tray: 1, slot: 2 }],
+    expect(calls.filter(([, m]) => m !== 'GET')).toEqual([
+      ['/api/v1/inventory/ceos/4/fusions/', 'POST', { a: { strand_id: 101, side: 'a' }, b: { strand_id: 201, side: 'b' } }],
+      ['/api/v1/inventory/ceos/4/fusions/tube/', 'POST', { a: { cable_id: 1, tube_number: 1, side: 'a' }, b: { cable_id: 2, tube_number: 1, side: 'b' } }],
       ['/api/v1/inventory/ceos/4/fusions/9/', 'DELETE', null],
     ])
+    w.unmount()
+  })
+
+  it('só leitura (monitoramento): sem cliques de fusão, sem «1:1» nem «Desfazer»; com «Rastrear» e «Editar no Projeto ↗»', async () => {
+    const { w, q } = mountBox({ readonly: true })
+    await flushPromises()
+    expect(q('[data-testid="fiber-101:a"]').disabled).toBe(true)
+    expect(q('[data-testid="tube-11-1-a-1"]')).toBeNull()
+    expect(q('[data-testid="fusion-del-9"]')).toBeNull()
+    expect(q('[data-testid="fusion-trace-9"]')).not.toBeNull()
+    expect(q('[data-testid="splice-help"]')).toBeNull()
     w.unmount()
   })
 })

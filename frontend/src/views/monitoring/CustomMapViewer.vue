@@ -200,7 +200,7 @@
     />
 
     <!-- EV-0136/0137: emendas da CEO em leitura (a edição é no Projeto de Rede) -->
-    <CeoFusionsModal v-if="ceoFusionsFor" :show="!!ceoFusionsFor" :ceo="ceoFusionsFor" readonly @close="ceoFusionsFor = null" />
+    <SpliceBoxModal v-if="ceoFusionsFor" :show="!!ceoFusionsFor" :ceo="ceoFusionsFor" readonly @close="ceoFusionsFor = null" />
 
     <!-- EV-0127: localizador OTDR -->
     <OtdrLocatorModal
@@ -258,7 +258,7 @@ import MapPopup from '@/components/Map/MapPopup.vue'
 import OtdrPin from '@/components/Otdr/OtdrPin.vue'
 import CeoPin from '@/components/Ceo/CeoPin.vue'
 import CeoCard from '@/components/Ceo/CeoCard.vue'
-const CeoFusionsModal = defineAsyncComponent(() => import('@/components/Ceo/CeoFusionsModal.vue'))
+const SpliceBoxModal = defineAsyncComponent(() => import('@/components/Ceo/SpliceBoxModal.vue'))
 import OtdrResultCard from '@/components/Otdr/OtdrResultCard.vue'
 
 // Componentes pesados: lazy via defineAsyncComponent — só baixam o JS quando renderizados.

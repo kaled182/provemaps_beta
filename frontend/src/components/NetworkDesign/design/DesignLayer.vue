@@ -35,7 +35,7 @@
     @created="afterCreate('CTO inserida.')"
   />
   <PoleCreateModal v-if="poleCreate" :show="!!poleCreate" :point="poleCreate.point" @close="poleCreate = null" @created="afterCreate('Poste inserido.')" />
-  <CeoFusionsModal v-if="fusionsFor" :show="!!fusionsFor" :ceo="fusionsFor" @close="fusionsFor = null" />
+  <SpliceBoxModal v-if="fusionsFor" :show="!!fusionsFor" :ceo="fusionsFor" @close="fusionsFor = null" />
   <CableStructureModal v-if="structureFor" :show="!!structureFor" :cable-id="structureFor" @close="structureFor = null" />
   <CeoDerivePanel v-if="deriving" :map="map" :ceo="deriving" :ceos="ceos" :sites="sites" @close="deriving = null" @created="onDerived" />
 </template>
@@ -77,7 +77,7 @@ const SlackCreateModal = defineAsyncComponent(() => import('./SlackCreateModal.v
 const CtoCreateModal = defineAsyncComponent(() => import('./CtoCreateModal.vue'))
 const PoleCreateModal = defineAsyncComponent(() => import('./PoleCreateModal.vue'))
 const CeoCreateModal = defineAsyncComponent(() => import('@/components/Ceo/CeoCreateModal.vue'))
-const CeoFusionsModal = defineAsyncComponent(() => import('@/components/Ceo/CeoFusionsModal.vue'))
+const SpliceBoxModal = defineAsyncComponent(() => import('@/components/Ceo/SpliceBoxModal.vue'))
 const CeoDerivePanel = defineAsyncComponent(() => import('@/components/Ceo/CeoDerivePanel.vue'))
 const CableStructureModal = defineAsyncComponent(() => import('@/components/Inventory/Fibers/CableStructureModal.vue'))
 
@@ -161,6 +161,8 @@ const MENUS = {
   cto: (c) => ({
     title: `${c.name}${c.capacity ? ` · ${c.capacity} portas` : ''}${c.cable_name ? ` · ${c.cable_name}` : ''}`,
     items: [
+      // EV-0141: a CTO sobre um cabo também tem emendas (o editor em 3 colunas)
+      ...(c.cable_id ? [{ key: 'fusions', label: 'Abrir diagrama de emendas' }] : []),
       { key: 'connect', label: 'Conectar novo cabo aqui' },
       { key: 'move', label: 'Mover posição' },
       { key: 'delete', label: 'Excluir CTO', danger: true },

@@ -69,6 +69,7 @@ from inventory.api.ceo import (  # noqa: E402
     CeoFusionDeleteView,
     CeoFusionsView,
     CeosView,
+    CeoTubeFusionView,
     SitePortsView,
     SlackDetailView,
     SlacksView,
@@ -465,6 +466,7 @@ urlpatterns = [
     path("slacks/<int:slack_id>/", SlackDetailView.as_view(), name="slack-detail"),
     # EV-0136: fusões na CEO e rastreamento da luz
     path("ceos/<int:ceo_id>/fusions/", CeoFusionsView.as_view(), name="ceo-fusions"),
+    path("ceos/<int:ceo_id>/fusions/tube/", CeoTubeFusionView.as_view(), name="ceo-tube-fusion"),
     path(
         "ceos/<int:ceo_id>/fusions/<int:fusion_id>/",
         CeoFusionDeleteView.as_view(),

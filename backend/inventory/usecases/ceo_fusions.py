@@ -29,6 +29,8 @@ from .ceo import CEO_TYPE
 from .devices_common import InventoryValidationError
 from .strand_ports import active_otdr, end_site
 
+# EV-0141: emendas também na CTO (caixa de atendimento, splitter_box)
+BOX_TYPES = (CEO_TYPE, "splitter_box")
 SIDES = ("a", "b")
 SPLICES_PER_TRAY = 24
 MAX_HOPS = 64
@@ -84,6 +86,7 @@ def _fiber_end(strand: FiberStrand, side: str, cable: FiberCable) -> dict[str, A
         "cable_name": cable.name,
         "tube_number": strand.tube.number,
         "tube_color": strand.tube.color,
+        "tube_color_hex": strand.tube.color_hex,
         "number": strand.number,
         "absolute_number": strand.absolute_number,
         "color": strand.color,
@@ -95,7 +98,7 @@ def _fiber_end(strand: FiberStrand, side: str, cable: FiberCable) -> dict[str, A
 def ceo_fusions(ceo_id: int) -> dict[str, Any]:
     """Pontas de fibra disponíveis na CEO (por cabo) e as fusões feitas nela."""
     ceo = get_object_or_404(
-        FiberInfrastructure.objects.select_related("cable"), pk=ceo_id, type=CEO_TYPE
+        FiberInfrastructure.objects.select_related("cable"), pk=ceo_id, type__in=BOX_TYPES
     )
     fusions = list(
         FiberFusion.objects.filter(infrastructure=ceo)
@@ -125,6 +128,7 @@ def ceo_fusions(ceo_id: int) -> dict[str, Any]:
         "ceo": {
             "id": ceo.pk,
             "name": _ceo_label(ceo),
+            "kind": "cto" if ceo.type == "splitter_box" else "ceo",
             "mode": _mode(ceo),
             "trays": ceo.installed_trays or 1,
             "splices_per_tray": SPLICES_PER_TRAY,
@@ -168,7 +172,7 @@ def create_fusion(
     tray: int | None = None,
     slot: int | None = None,
 ) -> dict[str, Any]:
-    ceo = get_object_or_404(FiberInfrastructure, pk=ceo_id, type=CEO_TYPE)
+    ceo = get_object_or_404(FiberInfrastructure, pk=ceo_id, type__in=BOX_TYPES)
     if tray is not None and not 1 <= tray <= (ceo.installed_trays or 1):
         raise InventoryValidationError(f"bandeja entre 1 e {ceo.installed_trays or 1}")
     if slot is not None and not 1 <= slot <= SPLICES_PER_TRAY:
@@ -190,6 +194,8 @@ def create_fusion(
                 )
         if tray is not None and slot is not None and busy.filter(tray=tray, slot=slot).exists():
             raise InventoryValidationError(f"a posição {slot} da bandeja {tray} já está ocupada")
+        if tray is None and slot is None:
+            tray, slot = _next_free_slot(ceo)  # EV-0141: sem posição indicada, a próxima livre
         fusion = FiberFusion.objects.create(
             infrastructure=ceo,
             tray=tray,
@@ -202,6 +208,77 @@ def create_fusion(
     invalidate_fiber_cache()
     invalidate_dashboard_cache()
     return {"id": fusion.pk}
+
+
+def _next_free_slot(ceo: FiberInfrastructure) -> tuple[int | None, int | None]:
+    """Primeira posição livre, bandeja a bandeja; (None, None) se a caixa está cheia."""
+    taken = set(
+        FiberFusion.objects.filter(
+            infrastructure=ceo, tray__isnull=False, slot__isnull=False
+        ).values_list("tray", "slot")
+    )
+    for tray in range(1, (ceo.installed_trays or 1) + 1):
+        for slot in range(1, SPLICES_PER_TRAY + 1):
+            if (tray, slot) not in taken:
+                return tray, slot
+    return None, None
+
+
+def fuse_tubes(ceo_id: int, *, a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
+    """«Fusionar tubo 1:1» (EV-0141): fibra n do tubo A com a fibra n do tubo B (cor com cor).
+
+    ``a``/``b`` = ``{cable_id, tube_number, side}``. Fibras já emendadas (de um lado ou do
+    outro) ficam de fora e são contadas em ``skipped``; posições na bandeja automáticas.
+    """
+    ceo = get_object_or_404(FiberInfrastructure, pk=ceo_id, type__in=BOX_TYPES)
+
+    def strands(end: dict[str, Any], label: str) -> tuple[list[FiberStrand], str]:
+        cable = get_object_or_404(FiberCable, pk=end.get("cable_id"))
+        sides = sides_at(cable, ceo)
+        side = end.get("side") or (sides[0] if len(sides) == 1 else "")
+        if side not in sides:
+            raise InventoryValidationError(f"indique o lado do tubo {label} nesta caixa")
+        rows = list(
+            FiberStrand.objects.filter(tube__cable=cable, tube__number=end.get("tube_number"))
+            .select_related("tube__cable")
+            .order_by("number")
+        )
+        if not rows:
+            raise InventoryValidationError(f"o tubo {label} não existe no cabo {cable.name}")
+        return rows, side
+
+    fa, side_a = strands(a, "A")
+    fb, side_b = strands(b, "B")
+    if fa[0].tube_id == fb[0].tube_id and side_a == side_b:
+        raise InventoryValidationError("escolha dois tubos diferentes (ou lados diferentes)")
+    created = skipped = 0
+    with transaction.atomic():
+        busy = FiberFusion.objects.select_for_update().filter(infrastructure=ceo)
+        used = {(f.fiber_a_id, f.fiber_a_side) for f in busy} | {
+            (f.fiber_b_id, f.fiber_b_side) for f in busy
+        }
+        for sa, sb in zip(
+            fa, fb, strict=False
+        ):  # tubos de tamanhos diferentes: o resto conta em skipped
+            if (sa.pk, side_a) in used or (sb.pk, side_b) in used:
+                skipped += 1
+                continue
+            tray, slot = _next_free_slot(ceo)
+            FiberFusion.objects.create(
+                infrastructure=ceo,
+                tray=tray,
+                slot=slot,
+                fiber_a=sa,
+                fiber_a_side=side_a,
+                fiber_b=sb,
+                fiber_b_side=side_b,
+            )
+            used |= {(sa.pk, side_a), (sb.pk, side_b)}
+            created += 1
+        skipped += abs(len(fa) - len(fb))
+    invalidate_fiber_cache()
+    invalidate_dashboard_cache()
+    return {"created": created, "skipped": skipped}
 
 
 def delete_fusion(ceo_id: int, fusion_id: int) -> None:
@@ -280,7 +357,7 @@ def trace_light(strand_id: int, *, start: str = "a") -> dict[str, Any]:
         seen.add((strand.pk, direction, pos))
         length = float(cable.length_km or 0)
         mids = list(
-            FiberInfrastructure.objects.filter(cable=cable, type=CEO_TYPE).order_by(
+            FiberInfrastructure.objects.filter(cable=cable, type__in=BOX_TYPES).order_by(
                 "distance_from_origin"
             )
         )

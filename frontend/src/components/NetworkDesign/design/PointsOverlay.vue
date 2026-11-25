@@ -32,7 +32,7 @@
 <script setup>
 /**
  * Pontos do Projeto de Rede sobre o mapa (EV-0139): CEOs, CTOs, postes e reservas num só overlay
- * posicionado por `IMap.latLngToPixel` e recalculado no `move` (um rAF por frame). Abaixo do
+ * posicionado por `IMap.latLngToPixel` e recalculado no `move` e no `idle` (um rAF por frame). Abaixo do
  * zoom 16, CTOs e postes agrupam-se por célula de ecrã (cluster com a contagem, clique aproxima);
  * a partir do 16 cada ponto aparece com o rótulo.
  */
@@ -113,11 +113,15 @@ function zoomInto(c) {
 
 onMounted(() => {
   props.map.on('move', schedule)
+  // os pontos podem chegar antes de o mapa ter projeção/tamanho; o `idle` (fim do desenho)
+  // recalcula, senão ficariam invisíveis até o primeiro arrasto
+  props.map.on('idle', schedule)
   schedule()
 })
 watch(() => props.points, schedule)
 onBeforeUnmount(() => {
   props.map.off?.('move', schedule)
+  props.map.off?.('idle', schedule)
   if (raf) cancelAnimationFrame(raf)
 })
 </script>

@@ -2126,14 +2126,6 @@ function initializeDomBindings() {
     void ensureDeviceOptionsLoaded();
 }
 
-function runWhenDomReady(callback) {
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', callback, { once: true });
-    } else {
-        setTimeout(callback, 0);
-    }
-}
-
 export function initializeNetworkDesignApp(options = {}) {
     const { bindDom = true, initMap = true, force = false } = options;
 
@@ -2156,13 +2148,10 @@ export function initializeNetworkDesignApp(options = {}) {
     appInitialized = true;
 }
 
-// Auto-bootstrap for legacy usage
-runWhenDomReady(() => {
-    if (document.getElementById('builderMap')) {
-        console.log('[NetworkDesign] DOM ready; auto bootstrapping fiber route builder.');
-        initializeNetworkDesignApp();
-    }
-});
+// EV-0141: sem arranque automático. O NetworkDesignView chama initializeNetworkDesignApp({force:
+// true}) no onMounted; o arranque legado ao carregar o módulo corria em paralelo nesse caso (página
+// aberta direto) e criava DOIS mapas no mesmo contentor («map container should be empty») — a
+// camada de engenharia ficava presa a um deles, às vezes ao que não estava à vista.
 
 window.closeManualSaveModal = closeManualSaveModal;
 window.loadFibers = loadFibers;
