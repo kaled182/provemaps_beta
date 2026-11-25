@@ -137,8 +137,10 @@ function populateCableDetailsPanel(meta) {
 
 /**
  * Select a cable for preview (right-click) without entering edit mode.
+ * EV-0145: o clique direito só carrega o cabo e abre o menu (showPanel=false); o painel
+ * «Detalhes do cabo» abre por «Ver detalhes»/«Ver fotos» — antes abriam os dois ao mesmo tempo.
  */
-async function previewCable(id) {
+async function previewCable(id, { showPanel = true } = {}) {
     try {
         const data = await fetchFiber(id);
         previewCableId = data.id;
@@ -146,7 +148,7 @@ async function previewCable(id) {
         // Hide edit panel, show details panel
         setRoutePointsPanelVisible(false);
         populateCableDetailsPanel(data);
-        setCableDetailsPanelVisible(true);
+        setCableDetailsPanelVisible(showPanel);
         _setHelpMode('preview');
         updateContextMenuStateWrapper();
     } catch (err) {
@@ -902,7 +904,7 @@ function makeCableEditable(cablePolyline, cableId, cableName) {
         
         try {
             // Load cable for preview (no edit mode)
-            await previewCable(cableId);
+            await previewCable(cableId, { showPanel: false });
 
             // Show context menu
             // EV-0138: IMap (Mapbox/Leaflet) entrega clientX/clientY; o domEvent é só do Google
@@ -950,6 +952,9 @@ function startMapInit() {
  * NetworkDesignView para centrar num resultado da busca rápida (`?foco=`).
  * @returns {Promise<void>}
  */
+/** Só para testes (EV-0145): o clique direito num cabo. */
+export { makeCableEditable as _makeCableEditableForTest };
+
 export function whenNetworkDesignMapReady() {
     return mapInitPromise || Promise.resolve();
 }
