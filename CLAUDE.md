@@ -117,34 +117,35 @@ log em inglês, como já está.
 > `/system/evolucao` ou a API `/api/v1/evolucao/` — uma edição à mão aqui desaparece na
 > próxima geração. A ordem de trabalho é prioridade, depois código; problemas antes de ideias.
 
-**Entrada, por triar (23)**
+**A fazer (21)**
+
+💡 Ideias
+- `EV-0146` **ONU/cliente ligado à porta do splitter da CTO (serial, MAC, RX real da ONU vindo do GPON)** · P2 · admin · há 0 dias
+- `EV-0147` **Viabilidade por endereço/coordenada com veredicto (porta livre a X m) e link para o cliente enviar a localização GPS** · P2 · admin · há 0 dias
+- `EV-0148` **Integração com o SGP: clientes e portas sincronizados, comparação «só aqui / só no ERP», cadastro da CTO no ERP** · P2 · admin · há 0 dias
+- `EV-0149` **Relatório de área e quantitativo de materiais (BOM): polígono → metros de cabo por tipo, CTO/CEO/postes/drops/splitters** · P2 · admin · há 0 dias
+- `EV-0150` **Diagrama lógico/unifilar e rota completa de uma fibra exportáveis (PDF/CSV/KML)** · P2 · admin · há 0 dias
+- `EV-0151` **App de campo offline com pendências e «sugestão de alteração» revista no escritório** · P2 · admin · há 0 dias
+- `EV-0152` **Postes da distribuidora (BDGD/ANEEL) como camada, convertíveis em poste do projeto, com atributos de compartilhamento** · P2 · admin · há 0 dias
+- `EV-0153` **Ciclo de vida dos elementos (planejado → implantado → certificado) e percentagem de documentação** · P2 · admin · há 0 dias
+- `EV-0154` **Condomínio vertical: andares e unidades, ocupação e splitters por andar** · P2 · admin · há 0 dias
+- `EV-0155` **POP: rack em U, DIO com bandejas, auto-fusão do cabo para o DIO e «folha do POP»** · P2 · admin · há 0 dias
+- `EV-0156` **Exportação do projeto em KMZ/PDF/planilha** · P2 · admin · há 0 dias
+- `EV-0157` **Permissões por área/projeto e por papel, com auditoria em cascata das alterações** · P2 · admin · há 0 dias
+- `EV-0158` **Dutos e subdutos com caixas de passagem** · P2 · admin · há 0 dias
+- `EV-0159` **API de viabilidade para site/chatbot com tokens e scopes (devolve CTO/porta e OLT/slot/PON)** · P2 · admin · há 0 dias
+- `EV-0160` **Potência medida × projetada por porta, contínua: CTO com perda real acima do projeto marcada no mapa** · P2 · admin · há 0 dias
+- `EV-0161` **Alarme físico correlacionado com a topologia: queda de várias ONUs do mesmo splitter/cabo → segmento provável no mapa** · P2 · admin · há 0 dias
+- `EV-0162` **Impacto antes da manutenção: numa janela num cabo/CEO, clientes, PONs e enlaces de backbone afetados** · P2 · admin · há 0 dias
+- `EV-0163` **Validação do cadastro pela telemetria: divergência automática entre a PON onde a OLT vê a ONU e a CTO do cadastro** · P2 · admin · há 0 dias
+- `EV-0164` **Backbone, DWDM, switches e FTTH no mesmo mapa com estado ao vivo (a mesma fibra servindo backbone e acesso)** · P2 · admin · há 0 dias
+- `EV-0165` **Histórico de degradação por fibra/CTO: tendência de RX ligada ao elemento físico para manutenção preventiva** · P2 · admin · há 0 dias
+- `EV-0166` **MTTR real de ponta a ponta: alarme Zabbix → alerta OTDR → pendência de campo → reposição confirmada pelo Zabbix** · P2 · admin · há 0 dias
+
+**Entrada, por triar (1)**
 
 🐛 Problemas
 - `EV-0144` **REST /api/v1/fiber-cables/ (FiberCableViewSet) aceita criar/alterar/apagar cabos por qualquer utilizador autenticado; /api/v1/inventory/fibers/ exige staff** · por triar · admin · há 0 dias
-- `EV-0145` **Projeto de Rede: botão direito num cabo abre ao mesmo tempo o painel «Detalhes do cabo» e o menu de contexto (dois «modais»)** · por triar · admin · há 0 dias
-
-💡 Ideias
-- `EV-0146` **ONU/cliente ligado à porta do splitter da CTO (serial, MAC, RX real da ONU vindo do GPON)** · por triar · admin · há 0 dias
-- `EV-0147` **Viabilidade por endereço/coordenada com veredicto (porta livre a X m) e link para o cliente enviar a localização GPS** · por triar · admin · há 0 dias
-- `EV-0148` **Integração com o SGP: clientes e portas sincronizados, comparação «só aqui / só no ERP», cadastro da CTO no ERP** · por triar · admin · há 0 dias
-- `EV-0149` **Relatório de área e quantitativo de materiais (BOM): polígono → metros de cabo por tipo, CTO/CEO/postes/drops/splitters** · por triar · admin · há 0 dias
-- `EV-0150` **Diagrama lógico/unifilar e rota completa de uma fibra exportáveis (PDF/CSV/KML)** · por triar · admin · há 0 dias
-- `EV-0151` **App de campo offline com pendências e «sugestão de alteração» revista no escritório** · por triar · admin · há 0 dias
-- `EV-0152` **Postes da distribuidora (BDGD/ANEEL) como camada, convertíveis em poste do projeto, com atributos de compartilhamento** · por triar · admin · há 0 dias
-- `EV-0153` **Ciclo de vida dos elementos (planejado → implantado → certificado) e percentagem de documentação** · por triar · admin · há 0 dias
-- `EV-0154` **Condomínio vertical: andares e unidades, ocupação e splitters por andar** · por triar · admin · há 0 dias
-- `EV-0155` **POP: rack em U, DIO com bandejas, auto-fusão do cabo para o DIO e «folha do POP»** · por triar · admin · há 0 dias
-- `EV-0156` **Exportação do projeto em KMZ/PDF/planilha** · por triar · admin · há 0 dias
-- `EV-0157` **Permissões por área/projeto e por papel, com auditoria em cascata das alterações** · por triar · admin · há 0 dias
-- `EV-0158` **Dutos e subdutos com caixas de passagem** · por triar · admin · há 0 dias
-- `EV-0159` **API de viabilidade para site/chatbot com tokens e scopes (devolve CTO/porta e OLT/slot/PON)** · por triar · admin · há 0 dias
-- `EV-0160` **Potência medida × projetada por porta, contínua: CTO com perda real acima do projeto marcada no mapa** · por triar · admin · há 0 dias
-- `EV-0161` **Alarme físico correlacionado com a topologia: queda de várias ONUs do mesmo splitter/cabo → segmento provável no mapa** · por triar · admin · há 0 dias
-- `EV-0162` **Impacto antes da manutenção: numa janela num cabo/CEO, clientes, PONs e enlaces de backbone afetados** · por triar · admin · há 0 dias
-- `EV-0163` **Validação do cadastro pela telemetria: divergência automática entre a PON onde a OLT vê a ONU e a CTO do cadastro** · por triar · admin · há 0 dias
-- `EV-0164` **Backbone, DWDM, switches e FTTH no mesmo mapa com estado ao vivo (a mesma fibra servindo backbone e acesso)** · por triar · admin · há 0 dias
-- `EV-0165` **Histórico de degradação por fibra/CTO: tendência de RX ligada ao elemento físico para manutenção preventiva** · por triar · admin · há 0 dias
-- `EV-0166` **MTTR real de ponta a ponta: alarme Zabbix → alerta OTDR → pendência de campo → reposição confirmada pelo Zabbix** · por triar · admin · há 0 dias
 
 <!-- EVOLUCAO:FIM -->
 
