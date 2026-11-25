@@ -1202,6 +1202,28 @@ class FiberStrand(models.Model):
         }
 
 
+class Pole(models.Model):
+    """Poste de rede (EV-0139): ponto de apoio dos cabos aéreos no Projeto de Rede."""
+
+    name = models.CharField(
+        max_length=60, help_text="Código/número do poste (placa da concessionária)"
+    )
+    location = gis_models.PointField(geography=True, srid=4326)
+    owner = models.CharField(max_length=60, blank=True, default="", help_text="Concessionária/dono")
+    height_m = models.FloatField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "inventory_pole"
+        verbose_name = "Poste"
+        verbose_name_plural = "Postes"
+        ordering = ["name", "id"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class FiberFusion(models.Model):
     """Fusão física entre duas fibras em uma infraestrutura."""
 

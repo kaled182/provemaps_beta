@@ -874,9 +874,9 @@ function makeCableEditable(cablePolyline, cableId, cableName) {
     cablePolyline.set('cableId', cableId);
     cablePolyline.set('cableName', cableName);
     
-    // EV-0138: nos modos «Inserir CEO» / «Reserva técnica» o clique esquerdo no cabo escolhe o ponto
+    // EV-0138/0139: nos modos «Inserir CEO» / «Inserir CTO» / «Reserva técnica» o clique esquerdo no cabo escolhe o ponto
     cablePolyline.addListener('click', (event) => {
-        if (!['ceo', 'slack'].includes(designMode.value)) return;
+        if (!['ceo', 'slack', 'cto'].includes(designMode.value)) return;
         if (!Number.isFinite(event?.lat) || !Number.isFinite(event?.lng)) return;
         emitDesign('cable-pick', { mode: designMode.value, cableId, cableName, lat: event.lat, lng: event.lng });
     });

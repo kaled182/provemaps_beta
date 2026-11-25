@@ -134,7 +134,7 @@ describe('DesignLayer', () => {
       ok(String(url).startsWith('/api/v1/sites/') ? { results: [{ id: 7, name: 'SITE - VILA NOVA', latitude: '-10.5', longitude: '-50.1' }] } : []),
     )
     const map = fakeMap()
-    const w = mount(DesignLayer, { props: { map }, attachTo: document.body, global: { stubs: { MapPopup: true } } })
+    const w = mount(DesignLayer, { props: { map }, attachTo: document.body })
     return { w, map }
   }
 
@@ -174,6 +174,97 @@ describe('DesignLayer', () => {
     designMode.value = 'trace'
     map.markers[0].fire('click', { clientX: 1, clientY: 1 })
     expect(builder.clickFromLayer).toHaveBeenCalledWith(-10.5, -50.1)
+    w.unmount()
+  })
+})
+
+import PointsOverlay from '@/components/NetworkDesign/design/PointsOverlay.vue'
+import { designLayers } from '@/features/networkDesign/modules/designMode.js'
+
+describe('PointsOverlay (EV-0139)', () => {
+  function overlayMap(zoom) {
+    const h = {}
+    return {
+      getZoom: () => zoom,
+      getContainer: () => ({ clientWidth: 800, clientHeight: 600 }),
+      latLngToPixel: ({ lat, lng }) => ({ x: lng * 1000, y: -lat * 1000 }),
+      on: (e, cb) => ((h[e] ||= []).push(cb)),
+      off: vi.fn(),
+      flyTo: vi.fn(),
+    }
+  }
+  const POINTS = [
+    { kind: 'cto', item: { id: 1, name: 'CTO-01', point: [0.1, -0.1] } },
+    { kind: 'cto', item: { id: 2, name: 'CTO-02', point: [0.105, -0.105] } },
+    { kind: 'pole', item: { id: 9, name: 'P-9', point: [0.4, -0.3] } },
+    { kind: 'ceo', item: { id: 4, name: 'CEO-04', point: [0.11, -0.1], mode: 'corte' } },
+  ]
+  const raf = () => new Promise((r) => requestAnimationFrame(() => r()))
+
+  it('abaixo do zoom 16: CTOs próximas agrupam (clique aproxima); CEO e poste isolado ficam pino, sem rótulos', async () => {
+    const map = overlayMap(13)
+    const w = mount(PointsOverlay, { props: { map, points: POINTS } })
+    await raf()
+    await nextTick()
+    const cl = w.get('[data-testid="cluster-cto"]')
+    expect(cl.text()).toBe('2')
+    expect(w.findAll('[data-testid="pin-ceo"]')).toHaveLength(1)
+    expect(w.findAll('[data-testid="pin-pole"]')).toHaveLength(1)
+    expect(w.find('[data-testid^="label-"]').exists()).toBe(false)
+    await cl.trigger('click')
+    const [center, z] = map.flyTo.mock.calls[0]
+    expect([center.lat, center.lng, z]).toEqual([expect.closeTo(-0.1025, 9), expect.closeTo(0.1025, 9), 15])
+  })
+
+  it('a partir do zoom 16: cada ponto com o rótulo; o clique direito pede o menu do objeto', async () => {
+    const w = mount(PointsOverlay, { props: { map: overlayMap(16), points: POINTS } })
+    await raf()
+    await nextTick()
+    expect(w.findAll('[data-testid="label-cto"]').map((l) => l.text())).toEqual(['CTO-01', 'CTO-02'])
+    await w.findAll('[data-testid="pin-cto"]')[0].trigger('contextmenu')
+    expect(w.emitted('menu')[0].slice(0, 2)).toEqual(['cto', POINTS[0].item])
+  })
+})
+
+describe('DesignLayer — CTO e poste (EV-0139)', () => {
+  it('modo CTO: clique num cabo → CTO no cabo; clique só no mapa → CTO solta; modo poste → formulário do poste; camadas escondem pontos', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] })
+    vi.spyOn(globalThis, 'fetch').mockImplementation((url) =>
+      ok(String(url).startsWith('/api/v1/inventory/ctos/') ? [{ id: 1, name: 'CTO-01', point: [-50, -10] }] : String(url).startsWith('/api/v1/sites/') ? { results: [] } : []),
+    )
+    const w = mount(DesignLayer, { props: { map: fakeMap() }, attachTo: document.body })
+    await flushPromises()
+    expect(w.findComponent(PointsOverlay).props('points').map((p) => p.kind)).toEqual(['cto'])
+    designLayers.ctos = false
+    await nextTick()
+    expect(w.findComponent(PointsOverlay).props('points')).toEqual([])
+    designLayers.ctos = true
+
+    designMode.value = 'cto'
+    emitDesign('cable-pick', { mode: 'cto', cableId: 3, cableName: 'DROP', lat: -10.1, lng: -50.1 })
+    emitDesign('map-click', { lat: -10.1, lng: -50.1, mode: 'cto' })
+    vi.advanceTimersByTime(200)
+    vi.useRealTimers()
+    await vi.dynamicImportSettled()
+    await flushPromises()
+    expect(w.findComponent({ name: 'CtoCreateModal' }).props('cable')).toEqual({ id: 3, name: 'DROP' })
+    w.findComponent({ name: 'CtoCreateModal' }).vm.$emit('close')
+    await flushPromises()
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] })
+    vi.setSystemTime(Date.now() + 5000)
+    emitDesign('map-click', { lat: -10.2, lng: -50.2, mode: 'cto' })
+    vi.advanceTimersByTime(200)
+    vi.useRealTimers()
+    await vi.dynamicImportSettled()
+    await flushPromises()
+    expect(w.findComponent({ name: 'CtoCreateModal' }).props()).toMatchObject({ cable: null, point: { lat: -10.2, lng: -50.2 } })
+
+    designMode.value = 'pole'
+    emitDesign('map-click', { lat: -10.3, lng: -50.3, mode: 'pole' })
+    await vi.dynamicImportSettled()
+    await flushPromises()
+    expect(w.findComponent({ name: 'PoleCreateModal' }).props('point')).toEqual({ lat: -10.3, lng: -50.3 })
     w.unmount()
   })
 })

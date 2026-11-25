@@ -23,7 +23,7 @@
 <script setup>
 /** Barra de modos do Projeto de Rede (EV-0138). */
 import { computed } from 'vue'
-import { PhCursor, PhMapPin, PhPath, PhPackage, PhSpiral, PhRuler } from '@phosphor-icons/vue'
+import { PhCursor, PhMapPin, PhPath, PhPackage, PhSquare, PhLineVertical, PhSpiral, PhRuler } from '@phosphor-icons/vue'
 
 const props = defineProps({
   modelValue: { type: String, default: 'select' },
@@ -37,6 +37,8 @@ const TOOLS = [
   { mode: 'site', label: 'Novo site', icon: PhMapPin, hint: 'clique no mapa onde fica o site / POP' },
   { mode: 'trace', label: 'Traçar cabo', icon: PhPath, hint: 'clique ponto a ponto; perto de um site ou CEO o ponto cola nele' },
   { mode: 'ceo', label: 'Inserir CEO', icon: PhPackage, hint: 'clique sobre um cabo onde fica a caixa' },
+  { mode: 'cto', label: 'Inserir CTO', icon: PhSquare, hint: 'clique sobre um cabo (fica no traçado) ou no mapa (solta)' },
+  { mode: 'pole', label: 'Inserir poste', icon: PhLineVertical, hint: 'clique no mapa onde fica o poste' },
   { mode: 'slack', label: 'Reserva técnica', icon: PhSpiral, hint: 'clique sobre um cabo onde fica a sobra' },
   { mode: 'measure', label: 'Medir', icon: PhRuler, hint: 'clique ponto a ponto para medir a distância' },
 ]
@@ -50,18 +52,30 @@ const hint = computed(() => {
 
 <style scoped>
 .dock {
+  /* EV-0139: horizontal no topo, por baixo da busca — à esquerda abrem Pastas e Camadas */
   position: absolute;
-  left: 14px;
-  top: 200px;
+  left: 50%;
+  top: 62px;
   z-index: 25;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 32px);
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 2px;
   padding: 4px;
   border: 1px solid rgb(var(--n-200));
   border-radius: 10px;
   background: rgb(var(--surface));
   box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
+}
+@media (max-width: 1280px) {
+  .dock-label {
+    display: none;
+  }
+  .dock-on .dock-label {
+    display: inline;
+  }
 }
 .dock-btn {
   display: flex;

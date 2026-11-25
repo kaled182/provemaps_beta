@@ -159,6 +159,8 @@
         <!-- EV-0138 -->
         <button type="button" data-testid="ctx-new-site" @click="designAction('site')">Novo site / POP aqui</button>
         <button type="button" data-testid="ctx-trace" @click="designAction('trace')">Iniciar traçado de cabo</button>
+        <button type="button" data-testid="ctx-cto" @click="designAction('cto')">Inserir CTO aqui</button>
+        <button type="button" data-testid="ctx-pole" @click="designAction('pole')">Inserir poste aqui</button>
         <button type="button" data-testid="ctx-measure" @click="designAction('measure')">Medir distância</button>
       </div>
 
@@ -175,6 +177,7 @@
         </button>
         <!-- EV-0138: no ponto do cabo onde se clicou -->
         <button type="button" data-testid="ctx-insert-ceo" @click="designAction('ceo')">Inserir CEO aqui (sangria ou corte)</button>
+        <button type="button" data-testid="ctx-insert-cto" @click="designAction('cto-cable')">Inserir CTO aqui</button>
         <button type="button" data-testid="ctx-insert-slack" @click="designAction('slack')">Inserir reserva técnica aqui</button>
         <button type="button" data-testid="ctx-structure" @click="designAction('structure')">Abrir estrutura de fibras</button>
         <button type="button" data-testid="ctx-vertex" @click="designAction('vertex')">Adicionar vértice (editar rota)</button>
@@ -343,7 +346,15 @@
           </svg>
         </button>
       </div>
-      <div v-if="layerPanelOpen && (layerGroups.length || typeItems.length)" class="nd-layer-panel__body">
+      <div v-if="layerPanelOpen" class="nd-layer-panel__body">
+        <!-- EV-0139: camadas do projeto -->
+        <div class="nd-layer-section-label">Projeto</div>
+        <label v-for="l in DESIGN_LAYERS" :key="l.key" class="nd-layer-row" :data-testid="`layer-${l.key}`">
+          <input v-model="designLayers[l.key]" type="checkbox" />
+          <span class="nd-layer-dot" :class="`nd-layer-dot--${l.key}`"></span>
+          <span>{{ l.label }}</span>
+        </label>
+        <div v-if="layerGroups.length || typeItems.length" class="nd-layer-divider"></div>
         <label class="nd-layer-row nd-layer-row--all">
           <input type="checkbox" v-model="layerAllVisible" @change="toggleAllLayers" />
           <span>Todos os cabos</span>
@@ -826,7 +837,7 @@ import { request as apiRequest } from '@/features/networkDesign/modules/apiClien
 import KmlImportModal from '@/components/NetworkDesign/KmlImportModal.vue';
 import DesignLayer from '@/components/NetworkDesign/design/DesignLayer.vue';
 import { getMapInstance } from '@/features/networkDesign/modules/mapCore-refactored.js';
-import { emitDesign } from '@/features/networkDesign/modules/designMode.js';
+import { designLayers, emitDesign } from '@/features/networkDesign/modules/designMode.js';
 import { hideContextMenu } from '@/features/networkDesign/modules/contextMenu.js';
 
 const route = useRoute();
@@ -1060,6 +1071,13 @@ function selectSearchResult(item) {
 
 // ── EV-0138: camada de engenharia ────────────────────────────────────────
 const designMap = shallowRef(null);
+const DESIGN_LAYERS = [
+  { key: 'sites', label: 'Sites / POPs' },
+  { key: 'ceos', label: 'CEOs' },
+  { key: 'ctos', label: 'CTOs' },
+  { key: 'poles', label: 'Postes' },
+  { key: 'slacks', label: 'Reservas técnicas' },
+];
 /** Entradas novas do menu de contexto legado → DesignLayer (usa o último clique direito). */
 function designAction(action) {
   hideContextMenu();
@@ -1666,34 +1684,37 @@ onUnmounted(() => {
 
 <style scoped>
 :global(:root) {
-  --nd-bg: #f9fafb;
-  --nd-text: #111827;
-  --nd-muted: #6b7280;
-  --nd-panel-bg: #ffffff;
-  --nd-panel-border: #e5e7eb;
-  --nd-panel-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --nd-panel-text: #111827;
-  --nd-panel-muted: #6b7280;
-  --nd-chip-bg: #dbeafe;
-  --nd-chip-text: #1e40af;
-  --nd-list-bg: #f9fafb;
-  --nd-list-border: #e5e7eb;
-  --nd-list-item-hover: #f3f4f6;
-  --nd-btn-bg: #fef2f2;
-  --nd-btn-border: #fecaca;
-  --nd-btn-text: #b91c1c;
-  --nd-help-emphasis: #b45309;
-  --nd-shortcut-bg: #f3f4f6;
-  --nd-shortcut-border: #d1d5db;
-  --nd-context-bg: #ffffff;
-  --nd-context-border: #e5e7eb;
-  --nd-context-text: #111827;
-  --nd-context-hover: #f3f4f6;
-  --nd-modal-bg: #ffffff;
-  --nd-modal-text: #111827;
-  --nd-modal-muted: #6b7280;
-  --nd-input-bg: #ffffff;
-  --nd-input-border: #d1d5db;
+  /* EV-0139: paleta do Projeto de Rede derivada dos tokens do design system (ADR 0007) —
+     os tokens invertem sozinhos no escuro, por isso já não há bloco escuro à parte. */
+  --nd-bg: rgb(var(--canvas));
+  --nd-text: rgb(var(--n-900));
+  --nd-muted: rgb(var(--n-500));
+  --nd-panel-bg: rgb(var(--surface));
+  --nd-panel-border: rgb(var(--n-200));
+  --nd-panel-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
+  --nd-panel-text: rgb(var(--n-900));
+  --nd-panel-muted: rgb(var(--n-500));
+  --nd-chip-bg: rgb(var(--primary-500) / 0.14);
+  --nd-chip-text: rgb(var(--primary-700));
+  --nd-list-bg: rgb(var(--n-50));
+  --nd-list-border: rgb(var(--n-200));
+  --nd-list-item-hover: rgb(var(--n-100));
+  --nd-btn-bg: rgb(var(--danger) / 0.08);
+  --nd-btn-border: rgb(var(--danger) / 0.35);
+  --nd-btn-text: rgb(var(--danger));
+  --nd-help-emphasis: rgb(var(--warning));
+  --nd-shortcut-bg: rgb(var(--n-100));
+  --nd-shortcut-border: rgb(var(--n-300));
+  --nd-context-bg: rgb(var(--surface));
+  --nd-context-border: rgb(var(--n-200));
+  --nd-context-text: rgb(var(--n-900));
+  --nd-context-hover: rgb(var(--n-100));
+  --nd-modal-bg: rgb(var(--surface));
+  --nd-modal-text: rgb(var(--n-900));
+  --nd-modal-muted: rgb(var(--n-500));
+  --nd-input-bg: rgb(var(--surface));
+  --nd-input-border: rgb(var(--n-300));
+  --nd-accent: rgb(var(--primary-600));
 }
 
 .network-design-page {
@@ -1705,37 +1726,6 @@ onUnmounted(() => {
   background: var(--nd-bg);
 }
 
-:global(.dark),
-:global([data-theme='dark']) {
-  --nd-bg: #111827;
-  --nd-text: #f9fafb;
-  --nd-muted: #9ca3af;
-  --nd-panel-bg: #1f2937;
-  --nd-panel-border: #374151;
-  --nd-panel-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
-  --nd-panel-text: #f9fafb;
-  --nd-panel-muted: #9ca3af;
-  --nd-chip-bg: #1e3a8a;
-  --nd-chip-text: #93c5fd;
-  --nd-list-bg: #111827;
-  --nd-list-border: #374151;
-  --nd-list-item-hover: #374151;
-  --nd-btn-bg: #7f1d1d;
-  --nd-btn-border: #991b1b;
-  --nd-btn-text: #fecaca;
-  --nd-help-emphasis: #fbbf24;
-  --nd-shortcut-bg: #374151;
-  --nd-shortcut-border: #4b5563;
-  --nd-context-bg: #1f2937;
-  --nd-context-border: #374151;
-  --nd-context-text: #f9fafb;
-  --nd-context-hover: #374151;
-  --nd-modal-bg: #1f2937;
-  --nd-modal-text: #f9fafb;
-  --nd-modal-muted: #9ca3af;
-  --nd-input-bg: #111827;
-  --nd-input-border: #374151;
-}
 
 .map-container {
   position: relative;
@@ -2711,7 +2701,12 @@ onUnmounted(() => {
 }
 .nd-layer-row:hover { background: var(--nd-list-bg); }
 .nd-layer-row--all { font-weight: 600; }
-.nd-layer-row input[type="checkbox"] { accent-color: var(--nd-accent, #3b82f6); flex-shrink: 0; }
+.nd-layer-row input[type="checkbox"] { accent-color: var(--nd-accent); flex-shrink: 0; }
+.nd-layer-dot--sites { background: rgb(var(--primary-600)); }
+.nd-layer-dot--ceos { background: rgb(var(--info)); border-radius: 2px; transform: rotate(45deg); }
+.nd-layer-dot--ctos { background: rgb(var(--success)); border-radius: 2px; }
+.nd-layer-dot--poles { background: rgb(var(--n-400)); }
+.nd-layer-dot--slacks { background: transparent; border: 2px solid rgb(var(--warning)); }
 .nd-layer-dot {
   width: 10px;
   height: 10px;
@@ -2743,7 +2738,7 @@ onUnmounted(() => {
   color: var(--nd-modal-muted);
 }
 .nd-layer-dot--type {
-  background: linear-gradient(135deg, #6366f1 50%, #a855f7 50%);
+  background: linear-gradient(135deg, rgb(var(--primary-500)) 50%, rgb(var(--info)) 50%);
 }
 
 /* ── Global search bar ───────────────────────────────────── */
@@ -3016,15 +3011,10 @@ onUnmounted(() => {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  background: #dbeafe;
-  color: #1e40af;
+  background: var(--nd-chip-bg);
+  color: var(--nd-chip-text);
   padding: 0.1rem 0.4rem;
   border-radius: 999px;
-}
-:global(.dark) .nd-folder-active-badge,
-:global([data-theme='dark']) .nd-folder-active-badge {
-  background: #1e3a8a;
-  color: #93c5fd;
 }
 .nd-folder-panel__body {
   background: var(--nd-panel-bg);
@@ -3059,7 +3049,7 @@ onUnmounted(() => {
 .nd-folder-icon {
   width: 13px;
   height: 13px;
-  color: #f59e0b;
+  color: rgb(var(--warning));
   flex-shrink: 0;
 }
 .nd-folder-name {
@@ -3106,7 +3096,7 @@ onUnmounted(() => {
 }
 .nd-drop-target {
   background: color-mix(in srgb, var(--nd-chip-bg) 60%, transparent) !important;
-  outline: 2px dashed var(--nd-chip-text, #6366f1);
+  outline: 2px dashed var(--nd-chip-text);
   outline-offset: -2px;
 }
 .nd-cable-drag-handle {
@@ -3163,12 +3153,12 @@ onUnmounted(() => {
   outline: none;
   min-width: 0;
 }
-.nd-folder-create-input:focus { border-color: #2563eb; }
+.nd-folder-create-input:focus { border-color: var(--nd-accent); }
 .nd-folder-create-ok {
   font-size: 0.75rem;
   font-weight: 600;
   padding: 0.25rem 0.5rem;
-  background: #2563eb;
+  background: var(--nd-accent);
   color: #fff;
   border: none;
   border-radius: 0.25rem;
@@ -3186,7 +3176,7 @@ onUnmounted(() => {
   cursor: pointer;
   transition: color 0.1s;
 }
-.nd-folder-new-root:hover { color: #2563eb; }
+.nd-folder-new-root:hover { color: var(--nd-accent); }
 
 /* ── Move-to-folder picker ────────────────────────────────── */
 .nd-move-folder-overlay {

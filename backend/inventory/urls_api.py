@@ -76,6 +76,12 @@ from inventory.api.ceo import (  # noqa: E402
 )
 from inventory.api.check_update import api_check_update  # noqa: E402
 from inventory.api.collection_health import api_collection_health  # noqa: E402
+from inventory.api.design_points import (  # noqa: E402
+    CtoDetailView,
+    CtosView,
+    PoleDetailView,
+    PolesView,
+)
 from inventory.api.device_summaries import DeviceTemperatureView, PortsSummaryView  # noqa: E402
 from inventory.api.fibers import api_fiber_audit_log  # noqa: E402
 from inventory.api.infrastructure import (  # noqa: E402
@@ -449,6 +455,11 @@ urlpatterns = [
     path("ceos/<int:ceo_id>/derive/", CeoDeriveView.as_view(), name="ceo-derive"),
     path("ceos/site-ports/", SitePortsView.as_view(), name="ceo-site-ports"),
     path("ceos/<int:ceo_id>/", CeoDetailView.as_view(), name="ceo-detail"),
+    # EV-0139: CTOs e postes
+    path("ctos/", CtosView.as_view(), name="ctos"),
+    path("ctos/<int:cto_id>/", CtoDetailView.as_view(), name="cto-detail"),
+    path("poles/", PolesView.as_view(), name="poles"),
+    path("poles/<int:pole_id>/", PoleDetailView.as_view(), name="pole-detail"),
     # EV-0138: reservas técnicas
     path("slacks/", SlacksView.as_view(), name="slacks"),
     path("slacks/<int:slack_id>/", SlackDetailView.as_view(), name="slack-detail"),

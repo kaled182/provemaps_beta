@@ -4,22 +4,8 @@
     <span class="num">{{ measureKm }}</span> · {{ measurePoints }} pontos
   </p>
 
-  <!-- CEOs e reservas técnicas (Vue, ancorados por coordenada) -->
-  <MapPopup v-for="c in ceos" :key="`ceo-${c.id}`" :map="map" :position="{ lat: c.point[1], lng: c.point[0] }" bare>
-    <span class="pin-wrap" @contextmenu.prevent.stop="openMenu('ceo', c, $event)">
-      <CeoPin :name="c.name" :mode="c.mode" @open="pinClick('ceo', c, $event)" />
-    </span>
-  </MapPopup>
-  <MapPopup v-for="s in slacks" :key="`slack-${s.id}`" :map="map" :position="{ lat: s.point[1], lng: s.point[0] }" bare>
-    <button
-      type="button"
-      class="slack-pin"
-      :title="`${s.name} · ${s.slack_m} m · ${s.cable_name}`"
-      data-testid="slack-pin"
-      @click="pinClick('slack', s, $event)"
-      @contextmenu.prevent.stop="openMenu('slack', s, $event)"
-    />
-  </MapPopup>
+  <!-- EV-0139: CEOs, CTOs, postes e reservas — cluster abaixo do zoom 16, rótulos a partir dele -->
+  <PointsOverlay :map="map" :points="overlayPoints" @pick="pinClick" @menu="openMenu" />
 
   <NdObjectMenu v-if="menu" :x="menu.x" :y="menu.y" :title="menu.title" :items="menu.items" @pick="onMenuPick" @close="menu = null" />
 
@@ -40,6 +26,15 @@
     @close="ceoCreate = null"
     @created="afterCreate('CEO inserida no traçado.')"
   />
+  <CtoCreateModal
+    v-if="ctoCreate"
+    :show="!!ctoCreate"
+    :point="ctoCreate.point"
+    :cable="ctoCreate.cable"
+    @close="ctoCreate = null"
+    @created="afterCreate('CTO inserida.')"
+  />
+  <PoleCreateModal v-if="poleCreate" :show="!!poleCreate" :point="poleCreate.point" @close="poleCreate = null" @created="afterCreate('Poste inserido.')" />
   <CeoFusionsModal v-if="fusionsFor" :show="!!fusionsFor" :ceo="fusionsFor" @close="fusionsFor = null" />
   <CableStructureModal v-if="structureFor" :show="!!structureFor" :cable-id="structureFor" @close="structureFor = null" />
   <CeoDerivePanel v-if="deriving" :map="map" :ceo="deriving" :ceos="ceos" :sites="sites" @close="deriving = null" @created="onDerived" />
@@ -48,14 +43,13 @@
 <script setup>
 /**
  * Camada de engenharia do Projeto de Rede (EV-0138), por cima do construtor legado de traçados:
- * barra de modos, sites (com snap), CEOs e reservas técnicas, menus de contexto por objeto e as
+ * barra de modos, sites (com snap), CEOs, CTOs, postes (EV-0139) e reservas técnicas, menus de contexto por objeto e as
  * ações de CEO (inserir Sangria/Corte, emendas, derivar cabo, mover, excluir) e de reserva.
  * As escritas exigem staff no servidor (StaffWritePermission).
  */
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import MapPopup from '@/components/Map/MapPopup.vue'
-import CeoPin from '@/components/Ceo/CeoPin.vue'
+import PointsOverlay from './PointsOverlay.vue'
 import NdDock from './NdDock.vue'
 import NdObjectMenu from './NdObjectMenu.vue'
 import { useDesignPoints } from './useDesignPoints'
@@ -63,6 +57,7 @@ import { useApi } from '@/composables/useApi'
 import { createRouteDrawing } from '@/composables/useRouteDrawing'
 import { tokenColor } from '@/utils/cssToken'
 import {
+  designLayers,
   designMode,
   lastCableContext,
   lastMapContext,
@@ -79,6 +74,8 @@ import { showConfirmDialog, showErrorMessage, showSuccessMessage } from '@/featu
 
 const SiteCreateModal = defineAsyncComponent(() => import('./SiteCreateModal.vue'))
 const SlackCreateModal = defineAsyncComponent(() => import('./SlackCreateModal.vue'))
+const CtoCreateModal = defineAsyncComponent(() => import('./CtoCreateModal.vue'))
+const PoleCreateModal = defineAsyncComponent(() => import('./PoleCreateModal.vue'))
 const CeoCreateModal = defineAsyncComponent(() => import('@/components/Ceo/CeoCreateModal.vue'))
 const CeoFusionsModal = defineAsyncComponent(() => import('@/components/Ceo/CeoFusionsModal.vue'))
 const CeoDerivePanel = defineAsyncComponent(() => import('@/components/Ceo/CeoDerivePanel.vue'))
@@ -91,7 +88,7 @@ const props = defineProps({
 
 const api = useApi()
 const router = useRouter()
-const { sites, ceos, slacks, load, snap } = useDesignPoints()
+const { sites, ceos, slacks, ctos, poles, load, snap } = useDesignPoints()
 
 const mode = computed({
   get: () => designMode.value,
@@ -105,6 +102,9 @@ const moving = ref(null) // {type, obj, label}
 const siteCreate = ref(null)
 const slackCreate = ref(null)
 const ceoCreate = ref(null)
+const ctoCreate = ref(null)
+const poleCreate = ref(null)
+let lastCablePickAt = 0
 const fusionsFor = ref(null)
 const structureFor = ref(null)
 const deriving = ref(null)
@@ -113,6 +113,10 @@ const deriving = ref(null)
 let siteMarkers = []
 function drawSites() {
   siteMarkers.forEach((m) => m.remove())
+  if (!designLayers.sites) {
+    siteMarkers = []
+    return
+  }
   siteMarkers = sites.value.map((s) => {
     const m = props.map.createMarker({ position: { lat: s.lat, lng: s.lng }, title: s.name, color: tokenColor('--primary-600'), size: 12 })
     m.on?.('rightclick', (e) => openMenu('site', s, e))
@@ -125,6 +129,15 @@ async function reload() {
   await load()
   drawSites()
 }
+
+/** Pontos do overlay conforme as camadas ligadas no painel «Camadas». */
+const overlayPoints = computed(() => [
+  ...(designLayers.poles ? poles.value.map((item) => ({ kind: 'pole', item })) : []),
+  ...(designLayers.slacks ? slacks.value.map((item) => ({ kind: 'slack', item })) : []),
+  ...(designLayers.ctos ? ctos.value.map((item) => ({ kind: 'cto', item })) : []),
+  ...(designLayers.ceos ? ceos.value.map((item) => ({ kind: 'ceo', item })) : []),
+])
+watch(() => designLayers.sites, drawSites)
 
 // ── menus ───────────────────────────────────────────────────────────────────
 const MENUS = {
@@ -143,6 +156,21 @@ const MENUS = {
       { key: 'connect', label: 'Conectar novo cabo aqui' },
       { key: 'move', label: 'Mover posição' },
       { key: 'delete', label: 'Excluir CEO', danger: true },
+    ],
+  }),
+  cto: (c) => ({
+    title: `${c.name}${c.capacity ? ` · ${c.capacity} portas` : ''}${c.cable_name ? ` · ${c.cable_name}` : ''}`,
+    items: [
+      { key: 'connect', label: 'Conectar novo cabo aqui' },
+      { key: 'move', label: 'Mover posição' },
+      { key: 'delete', label: 'Excluir CTO', danger: true },
+    ],
+  }),
+  pole: (p) => ({
+    title: `Poste ${p.name}${p.owner ? ` · ${p.owner}` : ''}`,
+    items: [
+      { key: 'move', label: 'Mover posição' },
+      { key: 'delete', label: 'Excluir poste', danger: true },
     ],
   }),
   slack: (s) => ({
@@ -166,6 +194,10 @@ function openMenu(type, obj, e) {
 /** Clique esquerdo num pino/site: a traçar conta como ponto (com snap no objeto); senão abre o menu. */
 function pinClick(type, obj, e) {
   const point = type === 'site' ? { lat: obj.lat, lng: obj.lng } : { lat: obj.point[1], lng: obj.point[0] }
+  if (designMode.value === 'trace' && type === 'pole') {
+    clickFromLayer(point.lat, point.lng) // o traçado passa pelo poste
+    return
+  }
   if (designMode.value === 'trace') {
     clickFromLayer(point.lat, point.lng)
     return
@@ -182,6 +214,8 @@ async function onMenuPick(key) {
     designMode.value = 'move'
   } else if (key === 'connect' && type === 'site') {
     startRouteAt(obj.lat, obj.lng)
+  } else if (key === 'connect' && type === 'cto') {
+    startRouteAt(obj.point[1], obj.point[0])
   } else if (key === 'connect' && type === 'ceo') {
     designMode.value = 'select'
     deriving.value = obj
@@ -194,21 +228,32 @@ async function onMenuPick(key) {
   }
 }
 
+const ENDPOINT = {
+  ceo: (id) => `/api/v1/inventory/ceos/${id}/`,
+  slack: (id) => `/api/v1/inventory/slacks/${id}/`,
+  cto: (id) => `/api/v1/inventory/ctos/${id}/`,
+  pole: (id) => `/api/v1/inventory/poles/${id}/`,
+}
+const DELETE_TEXT = {
+  ceo: (o) => ['Excluir CEO', `Excluir a ${o.name}? Só é possível com a caixa vazia (sem emendas nem cabos ligados).`, 'CEO excluída.'],
+  slack: (o) => ['Excluir reserva técnica', `Excluir a ${o.name}? Os ${o.slack_m} m saem do comprimento do cabo.`, 'Reserva técnica excluída.'],
+  cto: (o) => ['Excluir CTO', `Excluir a ${o.name}? Só é possível sem fusões.`, 'CTO excluída.'],
+  pole: (o) => ['Excluir poste', `Excluir o poste ${o.name}?`, 'Poste excluído.'],
+}
+
 async function remove(type, obj) {
+  const [title, description, done] = DELETE_TEXT[type](obj)
   const ok = await showConfirmDialog({
-    title: type === 'ceo' ? 'Excluir CEO' : 'Excluir reserva técnica',
-    description:
-      type === 'ceo'
-        ? `Excluir a ${obj.name}? Só é possível com a caixa vazia (sem emendas nem cabos ligados).`
-        : `Excluir a ${obj.name}? Os ${obj.slack_m} m saem do comprimento do cabo.`,
+    title,
+    description,
     confirmText: 'Excluir',
     cancelText: 'Cancelar',
     tone: 'danger',
   })
   if (!ok) return
   try {
-    await api.delete(type === 'ceo' ? `/api/v1/inventory/ceos/${obj.id}/` : `/api/v1/inventory/slacks/${obj.id}/`)
-    showSuccessMessage(type === 'ceo' ? 'CEO excluída.' : 'Reserva técnica excluída.')
+    await api.delete(ENDPOINT[type](obj.id))
+    showSuccessMessage(done)
     await reload()
   } catch (e) {
     showErrorMessage(e?.message || 'erro desconhecido')
@@ -223,7 +268,7 @@ async function finishMove(lat, lng) {
     if (type === 'site') {
       await api.patch(`/api/v1/sites/${obj.id}/`, { latitude: lat.toFixed(6), longitude: lng.toFixed(6) })
     } else {
-      await api.patch(type === 'ceo' ? `/api/v1/inventory/ceos/${obj.id}/` : `/api/v1/inventory/slacks/${obj.id}/`, { lat, lng })
+      await api.patch(ENDPOINT[type](obj.id), { lat, lng })
     }
     showSuccessMessage(type === 'site' ? 'Site movido (os traçados dos cabos não mudam).' : 'Posição atualizada no traçado.')
     await reload()
@@ -236,6 +281,8 @@ async function afterCreate(message) {
   siteCreate.value = null
   slackCreate.value = null
   ceoCreate.value = null
+  ctoCreate.value = null
+  poleCreate.value = null
   designMode.value = 'select'
   showSuccessMessage(message)
   await reload()
@@ -253,17 +300,29 @@ function cableTarget(ctx) {
 }
 function onMapClick({ lat, lng, mode: m }) {
   if (m === 'site') siteCreate.value = { point: { lat, lng } }
+  else if (m === 'pole') poleCreate.value = { point: { lat, lng } }
+  else if (m === 'cto') {
+    // num cabo o clique chega também ao mapa: se o cabo foi escolhido, a CTO fica nele
+    setTimeout(() => {
+      if (Date.now() - lastCablePickAt > 400 && !ctoCreate.value) ctoCreate.value = { point: { lat, lng }, cable: null }
+    }, 120)
+  }
   else if (m === 'move' && moving.value) finishMove(lat, lng)
 }
 function onCablePick({ mode: m, cableId, cableName, lat, lng }) {
   const target = { cable: { id: cableId, name: cableName }, point: { lat, lng } }
+  lastCablePickAt = Date.now()
   if (m === 'ceo') ceoCreate.value = target
+  else if (m === 'cto') ctoCreate.value = target
   else if (m === 'slack') slackCreate.value = target
 }
 function onMenuAction({ action }) {
   const cable = cableTarget(lastCableContext.value)
   const point = lastMapContext.value
   if (action === 'site' && point) siteCreate.value = { point: { lat: point.lat, lng: point.lng } }
+  else if (action === 'cto' && point) ctoCreate.value = { point: { lat: point.lat, lng: point.lng }, cable: null }
+  else if (action === 'pole' && point) poleCreate.value = { point: { lat: point.lat, lng: point.lng } }
+  else if (action === 'cto-cable' && cable) ctoCreate.value = cable
   else if (action === 'trace' || action === 'measure') designMode.value = action
   else if (action === 'ceo' && cable) ceoCreate.value = cable
   else if (action === 'slack' && cable) slackCreate.value = cable

@@ -2,9 +2,9 @@
  * Projeto de Rede (EV-0138): estado partilhado entre o construtor legado (fiberRouteBuilder)
  * e a camada Vue (DesignLayer) — modo da barra, último clique direito, eventos e snap.
  */
-import { ref } from 'vue';
+import { reactive, ref } from 'vue';
 
-/** 'select' | 'trace' | 'site' | 'ceo' | 'slack' | 'measure' | 'move' */
+/** 'select' | 'trace' | 'site' | 'ceo' | 'cto' | 'pole' | 'slack' | 'measure' | 'move' */
 export const designMode = ref('select');
 
 /** Último clique direito: no mapa vazio e num cabo (com o ponto clicado). */
@@ -39,3 +39,9 @@ export function snapPoint(lat, lng) {
     const hit = snapProvider ? snapProvider(lat, lng) : null;
     return hit || { lat, lng };
 }
+
+/** EV-0139: camadas do projeto ligáveis no painel «Camadas». */
+export const designLayers = reactive({ sites: true, ceos: true, ctos: true, poles: true, slacks: true });
+
+/** Zoom a partir do qual CTOs e postes deixam de agrupar e mostram rótulos. */
+export const LABEL_ZOOM = 16;
