@@ -1224,6 +1224,76 @@ class Pole(models.Model):
         return self.name
 
 
+class Splitter(models.Model):
+    """Splitter óptico na bandeja de uma CEO/CTO (EV-0142): uma fibra de entrada (fibra + lado na
+    caixa) e N portas de saída. A perda vem do orçamento óptico (``setup_app.optical_budget``)."""
+
+    RATIOS = [("1x2", "1x2"), ("1x4", "1x4"), ("1x8", "1x8"), ("1x16", "1x16"), ("1x32", "1x32")]
+
+    infrastructure = models.ForeignKey(
+        "FiberInfrastructure", on_delete=models.CASCADE, related_name="splitters"
+    )
+    name = models.CharField(max_length=60, blank=True, default="")
+    ratio = models.CharField(max_length=5, choices=RATIOS)
+    input_strand = models.ForeignKey(
+        "FiberStrand",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="splitter_inputs",
+    )
+    input_side = models.CharField(max_length=1, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "inventory_splitter"
+        ordering = ["id"]
+
+    @property
+    def port_count(self) -> int:
+        return int(self.ratio.split("x")[1])
+
+
+class SplitterPort(models.Model):
+    """Porta de saída do splitter: estado de atendimento e, opcionalmente, a fibra que segue."""
+
+    STATUS_FREE = "livre"
+    STATUS_RESERVED = "reservada"
+    STATUS_BUSY = "ocupada"
+    STATUS_BLOCKED = "bloqueada"
+    STATUSES = [
+        (STATUS_FREE, "Livre"),
+        (STATUS_RESERVED, "Reservada"),
+        (STATUS_BUSY, "Ocupada"),
+        (STATUS_BLOCKED, "Bloqueada"),
+    ]
+
+    splitter = models.ForeignKey(Splitter, on_delete=models.CASCADE, related_name="ports")
+    number = models.PositiveSmallIntegerField()
+    status = models.CharField(max_length=10, choices=STATUSES, default=STATUS_FREE)
+    customer = models.CharField(
+        max_length=120, blank=True, default="", help_text="Cliente / reserva"
+    )
+    note = models.CharField(max_length=200, blank=True, default="")
+    output_strand = models.ForeignKey(
+        "FiberStrand",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="splitter_outputs",
+    )
+    output_side = models.CharField(max_length=1, blank=True, default="")
+
+    class Meta:
+        db_table = "inventory_splitter_port"
+        ordering = ["splitter_id", "number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["splitter", "number"], name="inventory_splitter_port_unique"
+            )
+        ]
+
+
 class FiberFusion(models.Model):
     """Fusão física entre duas fibras em uma infraestrutura."""
 

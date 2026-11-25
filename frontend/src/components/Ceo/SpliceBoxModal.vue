@@ -4,7 +4,8 @@
     <p v-else-if="error && !data" class="py-8 text-center text-sm text-danger" role="alert">Erro ao carregar: {{ error }}</p>
     <div v-else-if="data" data-testid="splice-box">
       <p v-if="!readonly" class="sb-help" data-testid="splice-help">
-        <template v-if="tubePick">Escolha o tubo de destino de <b>{{ tubePick.label }}</b> («Fundir aqui») — fibra 1 com 1, 2 com 2…</template>
+        <template v-if="pickTarget">Clique na fibra para a <b>{{ pickTarget.label }}</b>.</template>
+        <template v-else-if="tubePick">Escolha o tubo de destino de <b>{{ tubePick.label }}</b> («Fundir aqui») — fibra 1 com 1, 2 com 2…</template>
         <template v-else-if="picked">Fibra escolhida: <b>{{ endLabel(picked) }}</b> — clique na fibra a fundir.</template>
         <template v-else>Clique numa fibra e depois noutra para criar a fusão, ou «1:1» num tubo para o fundir inteiro.</template>
       </p>
@@ -44,6 +45,18 @@
               <FiberTrace v-if="traced?.id === f.id" class="sb-trace-box" :strand-id="f.a.strand_id" :start="f.a.side" />
             </div>
           </div>
+          <!-- EV-0142: splitters -->
+          <SplitterPanel
+            :splitters="data.splitters || []"
+            :readonly="readonly"
+            :busy="busy"
+            :pick-target="pickTarget"
+            @add="addSplitter"
+            @remove="removeSplitter"
+            @unlink-input="(sp) => patchSplitter(sp, { input: null }, 'Entrada desligada.')"
+            @pick-target="setPickTarget"
+            @save-port="savePort"
+          />
         </section>
 
         <SpliceSide
@@ -82,6 +95,7 @@ import BaseModal from '@/components/Common/BaseModal.vue'
 import EditInProjectLink from '@/components/Map/EditInProjectLink.vue'
 import FiberTrace from '@/components/Inventory/Fibers/FiberTrace.vue'
 import SpliceSide from './SpliceSide.vue'
+import SplitterPanel from './SplitterPanel.vue'
 import { useApi } from '@/composables/useApi'
 
 const props = defineProps({
@@ -100,6 +114,7 @@ const notice = ref('')
 const picked = ref(null)
 const tubePick = ref(null)
 const traced = ref(null)
+const pickTarget = ref(null) // EV-0142: a fibra clicada vai para a entrada/saída de um splitter
 const url = computed(() => `/api/v1/inventory/ceos/${props.ceo.id}/fusions/`)
 
 const title = computed(() => `${data.value?.ceo?.kind === 'cto' ? 'CTO' : 'Emendas'} · ${data.value?.ceo?.name || props.ceo.name}`)
@@ -119,7 +134,7 @@ function groupsOf(side) {
       for (const e of ends) {
         const t = byTube.get(e.tube_number) || { number: e.tube_number, color: e.tube_color, colorHex: e.tube_color_hex, ends: [], fused: 0 }
         t.ends.push(e)
-        if (e.fusion_id) t.fused += 1
+        if (e.fusion_id || e.splitter_use) t.fused += 1
         byTube.set(e.tube_number, t)
       }
       return { key: `${c.id}:${side}`, cableId: c.id, cableName: c.name, toward: ends[0].toward, tubes: [...byTube.values()] }
@@ -182,6 +197,16 @@ async function run(fn, done) {
 function pick(e) {
   if (props.readonly || busy.value) return
   tubePick.value = null
+  if (pickTarget.value) {
+    const t = pickTarget.value
+    pickTarget.value = null
+    const end = { strand_id: e.strand_id, side: e.side }
+    if (t.type === 'input') return patchSplitter({ id: t.splitterId }, { input: end }, `Entrada ligada: ${short(e)}.`)
+    return run(
+      () => api.patch(`${spUrl(t.splitterId)}ports/${t.number}/`, { output: end }),
+      () => `Porta ${t.number} → ${short(e)}.`,
+    )
+  }
   if (!picked.value) {
     picked.value = e
     return
@@ -208,6 +233,26 @@ function fuseTube(target) {
   )
 }
 
+// ── splitters (EV-0142) ──────────────────────────────────────────────────────
+const spUrl = (id) => `/api/v1/inventory/ceos/${props.ceo.id}/splitters/${id}/`
+function setPickTarget(t) {
+  picked.value = null
+  tubePick.value = null
+  pickTarget.value = t
+}
+function addSplitter(ratio) {
+  run(() => api.post(`/api/v1/inventory/ceos/${props.ceo.id}/splitters/`, { ratio }), () => `Splitter ${ratio} acrescentado.`)
+}
+function removeSplitter(sp) {
+  run(() => api.delete(spUrl(sp.id)), () => `${sp.name} removido.`)
+}
+function patchSplitter(sp, body, done) {
+  return run(() => api.patch(spUrl(sp.id), body), () => done)
+}
+function savePort(sp, number, body) {
+  run(() => api.patch(`${spUrl(sp.id)}ports/${number}/`, body), () => `Porta ${number} atualizada.`)
+}
+
 function remove(f) {
   run(() => api.delete(`${url.value}${f.id}/`), () => 'Fusão desfeita.')
 }
@@ -218,6 +263,7 @@ watch(
     if (open) {
       picked.value = null
       tubePick.value = null
+      pickTarget.value = null
       notice.value = ''
       load()
     }

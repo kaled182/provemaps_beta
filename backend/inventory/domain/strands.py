@@ -18,6 +18,9 @@ _USED = (
     | Q(tubes__strands__connected_device_port__isnull=False)
     | Q(tubes__strands__fusions_as_a__isnull=False)
     | Q(tubes__strands__fusions_as_b__isnull=False)
+    # EV-0142: fibra ligada a um splitter (entrada ou saída de porta) também está usada
+    | Q(tubes__strands__splitter_inputs__isnull=False)
+    | Q(tubes__strands__splitter_outputs__isnull=False)
 )
 
 # Anotações para um queryset de FiberCable (uma consulta para a lista toda).

@@ -73,6 +73,9 @@ from inventory.api.ceo import (  # noqa: E402
     SitePortsView,
     SlackDetailView,
     SlacksView,
+    SplitterDetailView,
+    SplitterPortView,
+    SplittersView,
     StrandTraceView,
 )
 from inventory.api.check_update import api_check_update  # noqa: E402
@@ -467,6 +470,18 @@ urlpatterns = [
     # EV-0136: fusões na CEO e rastreamento da luz
     path("ceos/<int:ceo_id>/fusions/", CeoFusionsView.as_view(), name="ceo-fusions"),
     path("ceos/<int:ceo_id>/fusions/tube/", CeoTubeFusionView.as_view(), name="ceo-tube-fusion"),
+    # EV-0142: splitters na bandeja
+    path("ceos/<int:ceo_id>/splitters/", SplittersView.as_view(), name="ceo-splitters"),
+    path(
+        "ceos/<int:ceo_id>/splitters/<int:splitter_id>/",
+        SplitterDetailView.as_view(),
+        name="ceo-splitter-detail",
+    ),
+    path(
+        "ceos/<int:ceo_id>/splitters/<int:splitter_id>/ports/<int:number>/",
+        SplitterPortView.as_view(),
+        name="ceo-splitter-port",
+    ),
     path(
         "ceos/<int:ceo_id>/fusions/<int:fusion_id>/",
         CeoFusionDeleteView.as_view(),

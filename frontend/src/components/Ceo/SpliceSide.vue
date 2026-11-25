@@ -43,15 +43,16 @@
             :key="e.key"
             type="button"
             class="ss-fiber"
-            :class="{ used: e.fusion_id, picked: picked === e.key }"
-            :disabled="readonly || !!e.fusion_id"
-            :title="partnerOf(e) ? `Fusionada com ${partnerOf(e)}` : `Fibra ${e.absolute_number} · ${e.color}`"
+            :class="{ used: e.fusion_id || e.splitter_use, picked: picked === e.key }"
+            :disabled="readonly || !!e.fusion_id || !!e.splitter_use"
+            :title="partnerOf(e) ? `Fusionada com ${partnerOf(e)}` : e.splitter_use ? `Ligada a ${e.splitter_use}` : `Fibra ${e.absolute_number} · ${e.color}`"
             :data-testid="`fiber-${e.key}`"
             @click="$emit('pick', e)"
           >
             <span class="ss-core" :style="{ background: e.color_hex }" aria-hidden="true" />
             <span class="num">{{ e.number }}</span>
             <span v-if="partnerOf(e)" class="ss-partner">↔ {{ partnerOf(e) }}</span>
+            <span v-else-if="e.splitter_use" class="ss-partner">⑂ {{ e.splitter_use }}</span>
           </button>
         </div>
       </div>

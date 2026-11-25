@@ -21,7 +21,14 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404
 
 from inventory.cache.fibers import invalidate_fiber_cache
-from inventory.models import FiberCable, FiberFusion, FiberInfrastructure, FiberStrand
+from inventory.models import (
+    FiberCable,
+    FiberFusion,
+    FiberInfrastructure,
+    FiberStrand,
+    Splitter,
+    SplitterPort,
+)
 from maps_view.cache_swr import invalidate_dashboard_cache
 from setup_app.services import runtime_settings
 
@@ -109,12 +116,22 @@ def ceo_fusions(ceo_id: int) -> dict[str, Any]:
     for f in fusions:
         used[f"{f.fiber_a_id}:{f.fiber_a_side}"] = f.pk
         used[f"{f.fiber_b_id}:{f.fiber_b_side}"] = f.pk
+    # EV-0142: pontas ligadas a um splitter (entrada ou saída de porta)
+    splitter_use = {
+        f"{sid}:{side}": what
+        for (sid, side), what in _busy_ends(ceo).items()
+        if what != "uma fusão"
+    }
     cables = []
     for cable in _cables_at(ceo):
         sides = sides_at(cable, ceo)
         strands = FiberStrand.objects.filter(tube__cable=cable).select_related("tube")
         ends = [
-            {**_fiber_end(s, side, cable), "fusion_id": used.get(f"{s.pk}:{side}")}
+            {
+                **_fiber_end(s, side, cable),
+                "fusion_id": used.get(f"{s.pk}:{side}"),
+                "splitter_use": splitter_use.get(f"{s.pk}:{side}"),
+            }
             for s in strands.order_by("tube__number", "number")
             for side in sides
         ]
@@ -134,6 +151,7 @@ def ceo_fusions(ceo_id: int) -> dict[str, Any]:
             "splices_per_tray": SPLICES_PER_TRAY,
         },
         "cables": cables,
+        "splitters": splitters_payload(ceo),
         "fusions": [
             {
                 "id": f.pk,
@@ -183,14 +201,18 @@ def create_fusion(
         if sa.pk == sb.pk and side_a == side_b:
             raise InventoryValidationError("as duas pontas da fusão são a mesma")
         busy = FiberFusion.objects.select_for_update().filter(infrastructure=ceo)
+        used = _busy_ends(ceo)
         for strand, side, label in ((sa, side_a, "A"), (sb, side_b, "B")):
-            taken = busy.filter(
-                Q(fiber_a=strand, fiber_a_side=side) | Q(fiber_b=strand, fiber_b_side=side)
-            ).first()
-            if taken is not None:
+            what = used.get((strand.pk, side))
+            if what == "uma fusão":
                 raise InventoryValidationError(
                     f"a ponta {label} (fibra {strand.absolute_number} de "
                     f"{strand.tube.cable.name}) já está emendada nesta CEO"
+                )
+            if what:
+                raise InventoryValidationError(
+                    f"a ponta {label} (fibra {strand.absolute_number} de "
+                    f"{strand.tube.cable.name}) já está ligada a {what}"
                 )
         if tray is not None and slot is not None and busy.filter(tray=tray, slot=slot).exists():
             raise InventoryValidationError(f"a posição {slot} da bandeja {tray} já está ocupada")
@@ -253,10 +275,8 @@ def fuse_tubes(ceo_id: int, *, a: dict[str, Any], b: dict[str, Any]) -> dict[str
         raise InventoryValidationError("escolha dois tubos diferentes (ou lados diferentes)")
     created = skipped = 0
     with transaction.atomic():
-        busy = FiberFusion.objects.select_for_update().filter(infrastructure=ceo)
-        used = {(f.fiber_a_id, f.fiber_a_side) for f in busy} | {
-            (f.fiber_b_id, f.fiber_b_side) for f in busy
-        }
+        FiberFusion.objects.select_for_update().filter(infrastructure=ceo).exists()
+        used = set(_busy_ends(ceo))  # EV-0142: fusões e splitters
         for sa, sb in zip(
             fa, fb, strict=False
         ):  # tubos de tamanhos diferentes: o resto conta em skipped
@@ -326,28 +346,82 @@ def _fusion_at(ceo: FiberInfrastructure, strand_id: int, side: str) -> FiberFusi
     )
 
 
-def trace_light(strand_id: int, *, start: str = "a") -> dict[str, Any]:
-    """Segue a luz que entra pela ponta ``start`` da fibra até uma porta ou um fim sem saída."""
-    if start not in SIDES:
-        raise InventoryValidationError("a ponta de partida é «a» ou «b»")
-    strand = get_object_or_404(
-        FiberStrand.objects.select_related(
-            "tube__cable",
-            "connected_device_port__device__site",
-            "connected_device_port_b__device__site",
-        ),
-        pk=strand_id,
+def _splitter_at(box: FiberInfrastructure, strand_id: int, side: str) -> dict[str, Any] | None:
+    """EV-0142: a ponta (fibra, lado) na caixa liga-se a um splitter? → {splitter, role, port}."""
+    sp = (
+        Splitter.objects.filter(infrastructure=box, input_strand_id=strand_id, input_side=side)
+        .select_related("input_strand__tube__cable")
+        .first()
     )
+    if sp is not None:
+        return {"splitter": sp, "role": "in", "port": None}
+    port = (
+        SplitterPort.objects.filter(
+            splitter__infrastructure=box, output_strand_id=strand_id, output_side=side
+        )
+        .select_related("splitter__input_strand__tube__cable")
+        .first()
+    )
+    if port is not None:
+        return {"splitter": port.splitter, "role": "out", "port": port}
+    return None
+
+
+def _through_splitter(
+    sp: dict[str, Any],
+    box: FiberInfrastructure,
+    steps: list[dict[str, Any]],
+    budget: dict[str, Any],
+    upstream: bool,
+) -> tuple[FiberStrand, str, float] | None:
+    """A montante, chegar à saída de um splitter continua pela entrada dele (com a perda do
+    splitter). A jusante a luz reparte-se: o rastreamento linear para ali (None)."""
+    splitter = sp["splitter"]
+    if not upstream or sp["role"] != "out" or splitter.input_strand is None:
+        return None
+    steps.append(
+        {
+            "type": "splitter",
+            "ceo_id": box.pk,
+            "ceo_name": _ceo_label(box),
+            "ratio": splitter.ratio,
+            "port": sp["port"].number,
+            "loss_db": budget["splitters"].get(splitter.ratio, 0.0),
+        }
+    )
+    strand = splitter.input_strand
+    return strand, splitter.input_side, _pos_on(strand.tube.cable, box)
+
+
+def _splitter_stop(sp: dict[str, Any], box: FiberInfrastructure, upstream: bool) -> dict[str, Any]:
+    splitter = sp["splitter"]
+    label = f"splitter {splitter.ratio} da {_ceo_label(box)}"
+    if not upstream and sp["role"] == "in":
+        return {"reason": "splitter", "label": f"entra no {label}", "splitter_id": splitter.pk}
+    if upstream and sp["role"] == "out":
+        return {
+            "reason": "dead_end",
+            "label": f"{label} sem fibra de entrada",
+            "splitter_id": splitter.pk,
+        }
+    return {"reason": "dead_end", "label": f"chega a uma porta do {label} no sentido contrário"}
+
+
+def _walk(
+    strand: FiberStrand,
+    direction: str,
+    pos: float,
+    budget: dict[str, Any],
+    *,
+    upstream: bool = False,
+) -> dict[str, Any]:
+    """Percorre a fibra a partir de ``pos`` (km no cabo) no sentido ``direction``, atravessando
+    fusões e (a montante, EV-0142) splitters, até uma porta ou um fim sem saída."""
     steps: list[dict[str, Any]] = []
-    first_port = strand.connected_device_port if start == "a" else strand.connected_device_port_b
-    if first_port is not None:
-        steps.append(_port_step(first_port))
-    direction = "b" if start == "a" else "a"  # para onde a luz segue no cabo
-    pos = -math.inf if start == "a" else math.inf  # km de onde a luz entrou no cabo
     seen: set[tuple[int, str, float]] = set()
-    budget = runtime_settings.get_runtime_config().optical_budget
     total_km = 0.0
     fusions = 0
+    last_port = None
     end: dict[str, Any] = {"reason": "loop", "label": "rastreamento interrompido (laço)"}
 
     for _ in range(MAX_HOPS):
@@ -431,7 +505,21 @@ def trace_light(strand_id: int, *, start: str = "a") -> dict[str, Any]:
                 strand, direction, pos = partner, p_side, _pos_on(partner.tube.cable, x)
                 jumped = True
                 break
-            cut = _mode(x) == "corte" or _fusion_at(x, strand.pk, direction) is not None
+            sp = _splitter_at(x, strand.pk, our_side)
+            if sp is not None:
+                close_cable(km(x))
+                hop = _through_splitter(sp, x, steps, budget, upstream)
+                if hop is None:
+                    stop = _splitter_stop(sp, x, upstream)
+                    break
+                strand, direction, pos = hop
+                jumped = True
+                break
+            cut = (
+                _mode(x) == "corte"
+                or _fusion_at(x, strand.pk, direction) is not None
+                or _splitter_at(x, strand.pk, direction) is not None
+            )
             if cut:
                 close_cable(km(x))
                 stop = {
@@ -451,6 +539,7 @@ def trace_light(strand_id: int, *, start: str = "a") -> dict[str, Any]:
         close_cable(length if direction == "b" else 0.0)
         port = strand.connected_device_port_b if direction == "b" else strand.connected_device_port
         if port is not None:
+            last_port = port
             steps.append(_port_step(port))
             end = {"reason": "port", "label": f"{port.device.name} → {port.name}"}
             break
@@ -474,6 +563,14 @@ def trace_light(strand_id: int, *, start: str = "a") -> dict[str, Any]:
                 )
                 strand, direction, pos = partner, p_side, _pos_on(partner.tube.cable, end_ceo)
                 continue
+            sp = _splitter_at(end_ceo, strand.pk, our_side)
+            if sp is not None:
+                hop = _through_splitter(sp, end_ceo, steps, budget, upstream)
+                if hop is not None:
+                    strand, direction, pos = hop
+                    continue
+                end = _splitter_stop(sp, end_ceo, upstream)
+                break
             end = {
                 "reason": "dead_end",
                 "label": f"ponta do cabo na {_ceo_label(end_ceo)} sem emenda",
@@ -486,6 +583,31 @@ def trace_light(strand_id: int, *, start: str = "a") -> dict[str, Any]:
         }
         break
 
+    return {"steps": steps, "end": end, "total_km": total_km, "fusions": fusions, "port": last_port}
+
+
+def trace_light(strand_id: int, *, start: str = "a") -> dict[str, Any]:
+    """Segue a luz que entra pela ponta ``start`` da fibra até uma porta ou um fim sem saída."""
+    if start not in SIDES:
+        raise InventoryValidationError("a ponta de partida é «a» ou «b»")
+    strand = get_object_or_404(
+        FiberStrand.objects.select_related(
+            "tube__cable",
+            "connected_device_port__device__site",
+            "connected_device_port_b__device__site",
+        ),
+        pk=strand_id,
+    )
+    steps: list[dict[str, Any]] = []
+    first_port = strand.connected_device_port if start == "a" else strand.connected_device_port_b
+    if first_port is not None:
+        steps.append(_port_step(first_port))
+    direction = "b" if start == "a" else "a"  # para onde a luz segue no cabo
+    pos = -math.inf if start == "a" else math.inf  # km de onde a luz entrou no cabo
+    budget = runtime_settings.get_runtime_config().optical_budget
+    walked = _walk(strand, direction, pos, budget)
+    steps += walked["steps"]
+    end, total_km, fusions = walked["end"], walked["total_km"], walked["fusions"]
     tx = _start_tx(first_port, budget)
     loss = _accumulate(steps, budget, tx)
     return {
@@ -525,6 +647,8 @@ def _accumulate(
         elif step["type"] == "fusion":
             step["loss_db"] = budget["fusion_db"]
             loss += budget["fusion_db"]
+        elif step["type"] == "splitter":  # EV-0142: perda do splitter (orçamento óptico)
+            loss += step["loss_db"]
         step["acc_km"] = round(km, 3)
         step["acc_loss_db"] = round(loss, 2)
         step["dbm"] = round(tx["dbm"] - loss, 2) if tx else None
@@ -538,3 +662,184 @@ def _pos_on(cable: FiberCable, ceo: FiberInfrastructure) -> float:
     if cable.origin_infrastructure_id == ceo.pk:
         return -math.inf
     return math.inf
+
+
+# ── splitters na bandeja (EV-0142) ───────────────────────────────────────────
+
+_UNSET: Any = object()
+
+
+def _busy_ends(box: FiberInfrastructure) -> dict[tuple[int, str], str]:
+    """(fibra, lado) já usados na caixa → o que os usa (fusão ou splitter)."""
+    out: dict[tuple[int, str], str] = {}
+    for f in FiberFusion.objects.filter(infrastructure=box):
+        out[(f.fiber_a_id, f.fiber_a_side)] = "uma fusão"
+        out[(f.fiber_b_id, f.fiber_b_side)] = "uma fusão"
+    for sp in Splitter.objects.filter(infrastructure=box, input_strand__isnull=False):
+        out[(sp.input_strand_id, sp.input_side)] = f"a entrada do splitter {sp.ratio}"
+    for p in SplitterPort.objects.filter(splitter__infrastructure=box, output_strand__isnull=False):
+        out[(p.output_strand_id, p.output_side)] = f"a porta {p.number} de um splitter"
+    return out
+
+
+def _check_free(box: FiberInfrastructure, strand: FiberStrand, side: str, label: str) -> None:
+    used = _busy_ends(box).get((strand.pk, side))
+    if used:
+        raise InventoryValidationError(
+            f"a {label} (fibra {strand.absolute_number} de {strand.tube.cable.name}) já está em {used}"
+        )
+
+
+def _splitter_power(
+    sp: Splitter, box: FiberInfrastructure, budget: dict[str, Any]
+) -> dict[str, Any]:
+    """Potência estimada na entrada do splitter: TX da fonte (a montante) - perdas até à caixa."""
+    if sp.input_strand is None:
+        return {"dbm": None, "reason": "sem fibra de entrada"}
+    strand = sp.input_strand
+    walked = _walk(strand, sp.input_side, _pos_on(strand.tube.cable, box), budget, upstream=True)
+    if walked["end"]["reason"] != "port":
+        return {"dbm": None, "reason": walked["end"]["label"]}
+    tx = _start_tx(walked["port"], budget)
+    loss = _accumulate(walked["steps"], budget, None)
+    return {
+        "dbm": round(tx["dbm"] - loss, 2),
+        "source": tx["source"],
+        "from": f"{walked['port'].device.name} → {walked['port'].name}",
+        "loss_db": round(loss, 2),
+        "km": round(walked["total_km"], 3),
+    }
+
+
+def splitters_payload(box: FiberInfrastructure) -> list[dict[str, Any]]:
+    budget = runtime_settings.get_runtime_config().optical_budget
+    out = []
+    qs = Splitter.objects.filter(infrastructure=box).select_related("input_strand__tube__cable")
+    for sp in qs.prefetch_related("ports__output_strand__tube__cable"):
+        loss = budget["splitters"].get(sp.ratio, 0.0)
+        power = _splitter_power(sp, box, budget)
+        port_dbm = round(power["dbm"] - loss, 2) if power["dbm"] is not None else None
+        ports = [
+            {
+                "number": p.number,
+                "status": p.status,
+                "customer": p.customer,
+                "note": p.note,
+                "output": (
+                    _fiber_end(p.output_strand, p.output_side, p.output_strand.tube.cable)
+                    if p.output_strand_id
+                    else None
+                ),
+                "dbm": port_dbm,
+            }
+            for p in sp.ports.all()
+        ]
+        counts = {k: 0 for k, _ in SplitterPort.STATUSES}
+        for p in ports:
+            counts[p["status"]] += 1
+        out.append(
+            {
+                "id": sp.pk,
+                "name": sp.name or f"Splitter {sp.ratio}",
+                "ratio": sp.ratio,
+                "loss_db": loss,
+                "input": (
+                    _fiber_end(sp.input_strand, sp.input_side, sp.input_strand.tube.cable)
+                    if sp.input_strand_id
+                    else None
+                ),
+                "power": power,
+                "counts": counts,
+                "ports": ports,
+            }
+        )
+    return out
+
+
+def _box(box_id: int) -> FiberInfrastructure:
+    return get_object_or_404(FiberInfrastructure, pk=box_id, type__in=BOX_TYPES)
+
+
+def create_splitter(box_id: int, *, ratio: str, name: str = "") -> dict[str, Any]:
+    box = _box(box_id)
+    if ratio not in dict(Splitter.RATIOS):
+        raise InventoryValidationError("razão do splitter: 1x2, 1x4, 1x8, 1x16 ou 1x32")
+    with transaction.atomic():
+        sp = Splitter.objects.create(
+            infrastructure=box, ratio=ratio, name=(name or "").strip()[:60]
+        )
+        SplitterPort.objects.bulk_create(
+            [SplitterPort(splitter=sp, number=n) for n in range(1, sp.port_count + 1)]
+        )
+    _invalidate_all()
+    return {"id": sp.pk}
+
+
+def update_splitter(
+    box_id: int, splitter_id: int, *, name: Any = _UNSET, input: Any = _UNSET
+) -> dict[str, Any]:
+    box = _box(box_id)
+    sp = get_object_or_404(Splitter, pk=splitter_id, infrastructure=box)
+    with transaction.atomic():
+        if name is not _UNSET:
+            sp.name = (name or "").strip()[:60]
+        if input is not _UNSET:
+            if input is None:
+                sp.input_strand, sp.input_side = None, ""
+            else:
+                strand, side = _resolve_end(box, input, "entrada")
+                if (strand.pk, side) != (sp.input_strand_id, sp.input_side):
+                    _check_free(box, strand, side, "fibra de entrada")
+                sp.input_strand, sp.input_side = strand, side
+        sp.save()
+    _invalidate_all()
+    return {"id": sp.pk}
+
+
+def delete_splitter(box_id: int, splitter_id: int) -> None:
+    sp = get_object_or_404(Splitter, pk=splitter_id, infrastructure=_box(box_id))
+    sp.delete()
+    _invalidate_all()
+
+
+def update_splitter_port(
+    box_id: int,
+    splitter_id: int,
+    number: int,
+    *,
+    status: Any = _UNSET,
+    customer: Any = _UNSET,
+    note: Any = _UNSET,
+    output: Any = _UNSET,
+) -> dict[str, Any]:
+    box = _box(box_id)
+    port = get_object_or_404(
+        SplitterPort, splitter_id=splitter_id, splitter__infrastructure=box, number=number
+    )
+    with transaction.atomic():
+        if status is not _UNSET:
+            if status not in dict(SplitterPort.STATUSES):
+                raise InventoryValidationError("estado: livre, reservada, ocupada ou bloqueada")
+            port.status = status
+        if customer is not _UNSET:
+            port.customer = (customer or "").strip()[:120]
+        if note is not _UNSET:
+            port.note = (note or "").strip()[:200]
+        if port.status == SplitterPort.STATUS_RESERVED and not port.customer:
+            raise InventoryValidationError("uma porta reservada precisa do cliente/reserva")
+        if output is not _UNSET:
+            if output is None:
+                port.output_strand, port.output_side = None, ""
+            else:
+                strand, side = _resolve_end(box, output, "saída")
+                if (strand.pk, side) != (port.output_strand_id, port.output_side):
+                    _check_free(box, strand, side, "fibra de saída")
+                port.output_strand, port.output_side = strand, side
+        port.save()
+    _invalidate_all()
+    return {"number": port.number, "status": port.status}
+
+
+def _invalidate_all() -> None:
+    invalidate_fiber_cache()
+    invalidate_dashboard_cache()

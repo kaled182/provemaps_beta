@@ -30,9 +30,13 @@ from inventory.usecases.ceo import (
 from inventory.usecases.ceo_fusions import (
     ceo_fusions,
     create_fusion,
+    create_splitter,
     delete_fusion,
+    delete_splitter,
     fuse_tubes,
     trace_light,
+    update_splitter,
+    update_splitter_port,
 )
 from inventory.usecases.devices_common import InventoryValidationError
 from inventory.usecases.strand_ports import site_ports
@@ -338,3 +342,79 @@ class CeoTubeFusionView(APIView):
         except InventoryValidationError as exc:
             return Response({"detail": str(exc)}, status=400)
         return Response(data, status=201)
+
+
+class SplitterCreateSerializer(serializers.Serializer):
+    ratio = serializers.ChoiceField(choices=["1x2", "1x4", "1x8", "1x16", "1x32"])
+    name = serializers.CharField(max_length=60, required=False, allow_blank=True, default="")
+
+
+class SplitterUpdateSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=60, required=False, allow_blank=True)
+    input = FusionEndSerializer(required=False, allow_null=True)
+
+
+class SplitterPortSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(
+        choices=["livre", "reservada", "ocupada", "bloqueada"], required=False
+    )
+    customer = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    note = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    output = FusionEndSerializer(required=False, allow_null=True)
+
+
+def _run(fn, *args, http_status=200, **kwargs) -> Response:
+    # `http_status`, não `status`: o PATCH da porta tem um campo `status` (livre/reservada/…)
+    try:
+        data = fn(*args, **kwargs)
+    except InventoryValidationError as exc:
+        return Response({"detail": str(exc)}, status=400)
+    return Response(data, status=http_status) if data is not None else Response(status=204)
+
+
+class SplittersView(APIView):
+    """EV-0142: splitters na bandeja da CEO/CTO."""
+
+    permission_classes = [StaffWritePermission]
+
+    @extend_schema(
+        request=SplitterCreateSerializer,
+        responses={201: serializers.DictField()},
+        summary="Acrescenta um splitter à caixa (cria as portas)",
+    )
+    def post(self, request: Request, ceo_id: int) -> Response:
+        body = SplitterCreateSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        return _run(create_splitter, ceo_id, http_status=201, **body.validated_data)
+
+
+class SplitterDetailView(APIView):
+    permission_classes = [StaffWritePermission]
+
+    @extend_schema(
+        request=SplitterUpdateSerializer,
+        responses=serializers.DictField(),
+        summary="Renomeia o splitter ou liga/desliga a fibra de entrada",
+    )
+    def patch(self, request: Request, ceo_id: int, splitter_id: int) -> Response:
+        body = SplitterUpdateSerializer(data=request.data, partial=True)
+        body.is_valid(raise_exception=True)
+        return _run(update_splitter, ceo_id, splitter_id, **body.validated_data)
+
+    @extend_schema(responses={204: None}, summary="Remove o splitter")
+    def delete(self, request: Request, ceo_id: int, splitter_id: int) -> Response:
+        return _run(delete_splitter, ceo_id, splitter_id)
+
+
+class SplitterPortView(APIView):
+    permission_classes = [StaffWritePermission]
+
+    @extend_schema(
+        request=SplitterPortSerializer,
+        responses=serializers.DictField(),
+        summary="Estado da porta (livre/reservada/ocupada/bloqueada), cliente e fibra de saída",
+    )
+    def patch(self, request: Request, ceo_id: int, splitter_id: int, number: int) -> Response:
+        body = SplitterPortSerializer(data=request.data, partial=True)
+        body.is_valid(raise_exception=True)
+        return _run(update_splitter_port, ceo_id, splitter_id, number, **body.validated_data)

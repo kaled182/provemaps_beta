@@ -188,6 +188,87 @@ describe('SpliceBoxModal (EV-0141)', () => {
   })
 })
 
+describe('Splitters na bandeja (EV-0142)', () => {
+  const SPLIT = {
+    ...FUSIONS,
+    // o servidor marca as pontas ligadas a um splitter (aqui: entrada do 1x4)
+    cables: FUSIONS.cables.map((c) => ({ ...c, ends: c.ends.map((e) => (e.key === '101:b' ? { ...e, splitter_use: 'a entrada do splitter 1x4' } : e)) })),
+    splitters: [
+      {
+        id: 7, name: 'Primário', ratio: '1x8', loss_db: 10.5,
+        input: null,
+        power: { dbm: null, reason: 'sem fibra de entrada' },
+        counts: { livre: 7, reservada: 1, ocupada: 0, bloqueada: 0 },
+        ports: Array.from({ length: 8 }, (_, k) => ({ number: k + 1, status: k === 1 ? 'reservada' : 'livre', customer: k === 1 ? 'Fulano' : '', note: '', output: null, dbm: null })),
+      },
+      {
+        id: 8, name: 'Splitter 1x4', ratio: '1x4', loss_db: 7.1,
+        input: end(101, 'b', 'MANDI - VLP', 1, 'SITE - VILA RICA'),
+        power: { dbm: 3.26, source: 'zabbix', from: 'OLT Mandi → gpon 1/1/1', km: 4.98, loss_db: 1.74 },
+        counts: { livre: 4, reservada: 0, ocupada: 0, bloqueada: 0 },
+        ports: Array.from({ length: 4 }, (_, k) => ({ number: k + 1, status: 'livre', customer: '', note: '', output: null, dbm: -3.84 })),
+      },
+    ],
+  }
+  function mountSplit(extra = {}) {
+    const calls = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation((url, o = {}) => {
+      calls.push([url, o.method || 'GET', o.body ? JSON.parse(o.body) : null])
+      return o.method && o.method !== 'GET' ? ok({ id: 9 }, 201) : ok(SPLIT)
+    })
+    mount(SpliceBoxModal, { props: { show: true, ceo: CEO, ...extra }, attachTo: document.body, global: { stubs: { RouterLink: RouterLinkStub } } })
+    return { calls, q: (sel) => document.body.querySelector(sel) }
+  }
+
+  it('mostra a potência que chega e o dBm por porta; reservada a âmbar; sem entrada diz porquê', async () => {
+    const { q } = mountSplit()
+    await flushPromises()
+    expect(q('[data-testid="splitter-power-8"]').textContent.replace(/\s+/g, ' ')).toContain('Chega +3,26 dBm · TX do Zabbix em OLT Mandi → gpon 1/1/1, 4,98 km, −1,74 dB')
+    expect(q('[data-testid="port-8-1"]').textContent).toContain('-3,84')
+    expect(q('[data-testid="port-7-2"]').className).toContain('st-reservada')
+    expect(q('[data-testid="splitter-power-7"]').textContent).toContain('sem fibra de entrada')
+    expect(q('[data-testid="fiber-101:b"]').disabled).toBe(true) // já é entrada do 1x4
+  })
+
+  it('acrescenta splitter, liga a entrada clicando numa fibra e grava o estado da porta', async () => {
+    const { calls, q } = mountSplit()
+    await flushPromises()
+    q('[data-testid="splitter-add"]').click()
+    await flushPromises()
+    q('[data-testid="splitter-pick-input-7"]').click()
+    await flushPromises()
+    expect(q('[data-testid="splice-help"]').textContent).toContain('entrada do Primário')
+    q('[data-testid="fiber-101:a"]').click()
+    await flushPromises()
+    q('[data-testid="port-7-3"]').click()
+    await flushPromises()
+    const status = q('[data-testid="port-status"]')
+    status.value = 'ocupada'
+    status.dispatchEvent(new Event('change'))
+    const cust = q('[data-testid="port-customer"]')
+    cust.value = 'Cliente 3'
+    cust.dispatchEvent(new Event('input'))
+    await flushPromises()
+    q('[data-testid="port-save"]').click()
+    await flushPromises()
+    expect(calls.filter(([, m]) => m !== 'GET')).toEqual([
+      ['/api/v1/inventory/ceos/4/splitters/', 'POST', { ratio: '1x8' }],
+      ['/api/v1/inventory/ceos/4/splitters/7/', 'PATCH', { input: { strand_id: 101, side: 'a' } }],
+      ['/api/v1/inventory/ceos/4/splitters/7/ports/3/', 'PATCH', { status: 'ocupada', customer: 'Cliente 3', note: '' }],
+    ])
+  })
+
+  it('só leitura: sem acrescentar nem editar; a porta mostra o estado e o cliente', async () => {
+    const { q } = mountSplit({ readonly: true })
+    await flushPromises()
+    expect(q('[data-testid="splitter-add"]')).toBeNull()
+    q('[data-testid="port-7-2"]').click()
+    await flushPromises()
+    expect(q('[data-testid="port-editor-7"]').textContent).toContain('Reservada · Fulano')
+    expect(q('[data-testid="port-save"]')).toBeNull()
+  })
+})
+
 describe('FiberTrace (EV-0136)', () => {
   it('mostra porta → cabo → fusão → cabo → porta, o fim e a perda marcada como cálculo', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(() =>

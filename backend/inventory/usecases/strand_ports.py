@@ -41,7 +41,12 @@ def strand_state(strand: FiberStrand, *, cable_broken: bool) -> str:
         or strand.connected_device_port_b_id
     ):
         return STATE_LIT
-    if strand.fusions_as_a.exists() or strand.fusions_as_b.exists():
+    if (
+        strand.fusions_as_a.exists()
+        or strand.fusions_as_b.exists()
+        or strand.splitter_inputs.exists()  # EV-0142
+        or strand.splitter_outputs.exists()
+    ):
         return STATE_FUSED
     return STATE_FREE
 
