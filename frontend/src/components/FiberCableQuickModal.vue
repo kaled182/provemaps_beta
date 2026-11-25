@@ -316,23 +316,23 @@ const getAttenuationQuality = () => {
   z-index: 9999;
   width: min(480px, calc(100vw - 16px));
   max-height: min(520px, calc(100vh - 32px));
-  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  background: rgb(var(--surface));
   border-radius: 16px;
   box-shadow:
     0 24px 48px -12px rgba(0, 0, 0, 0.7),
-    0 0 0 1px rgba(255, 255, 255, 0.08);
+    0 0 0 1px rgb(var(--n-100));
   display: flex;
   flex-direction: column;
   overflow: hidden;
   /* Sombra de borda luminosa sutil para destacar sobre o mapa */
-  outline: 1px solid rgba(99, 102, 241, 0.25);
+  outline: 1px solid rgb(var(--primary-500) / 0.25);
   transition: box-shadow 0.15s;
 }
 
 .quick-modal-container.dragging {
   box-shadow:
     0 32px 64px -12px rgba(0, 0, 0, 0.85),
-    0 0 0 2px rgba(99, 102, 241, 0.5);
+    0 0 0 2px rgb(var(--primary-500) / 0.5);
   cursor: grabbing;
 }
 
@@ -342,8 +342,8 @@ const getAttenuationQuality = () => {
   align-items: center;
   gap: 12px;
   padding: 14px 16px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 100%);
+  border-bottom: 1px solid rgb(var(--n-100));
+  background: linear-gradient(180deg, rgb(var(--n-100)) 0%, transparent 100%);
   cursor: grab;
   user-select: none;
   -webkit-user-select: none;
@@ -368,7 +368,7 @@ const getAttenuationQuality = () => {
   display: block;
   width: 18px;
   height: 2px;
-  background: #94a3b8;
+  background: rgb(var(--n-400));
   border-radius: 1px;
 }
 
@@ -384,35 +384,35 @@ const getAttenuationQuality = () => {
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  background: linear-gradient(135deg, rgb(var(--info)) 0%, rgb(var(--info)) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 4px 12px rgb(var(--info) / 0.3);
 }
 
 .cable-icon.status-up,
 .cable-icon.status-online {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  background: linear-gradient(135deg, rgb(var(--success)) 0%, rgb(var(--success)) 100%);
+  box-shadow: 0 4px 12px rgb(var(--success) / 0.3);
 }
 
 .cable-icon.status-down,
 .cable-icon.status-offline {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+  background: linear-gradient(135deg, rgb(var(--danger)) 0%, rgb(var(--danger)) 100%);
+  box-shadow: 0 4px 12px rgb(var(--danger) / 0.3);
 }
 
 .cable-icon.status-degraded,
 .cable-icon.status-warning {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+  background: linear-gradient(135deg, rgb(var(--warning)) 0%, rgb(var(--warning)) 100%);
+  box-shadow: 0 4px 12px rgb(var(--warning) / 0.3);
 }
 
 .cable-icon.status-critical {
-  background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+  background: rgb(var(--danger));
+  box-shadow: 0 4px 12px rgb(var(--danger) / 0.3);
 }
 
 .cable-icon .icon {
@@ -438,7 +438,7 @@ const getAttenuationQuality = () => {
 
 .cable-route {
   margin: 2px 0 0;
-  color: #94a3b8;
+  color: rgb(var(--n-500));
   font-size: 12px;
   display: flex;
   align-items: center;
@@ -451,7 +451,7 @@ const getAttenuationQuality = () => {
 .arrow-icon {
   width: 12px;
   height: 12px;
-  color: #64748b;
+  color: rgb(var(--n-500));
   flex-shrink: 0;
 }
 
@@ -459,9 +459,9 @@ const getAttenuationQuality = () => {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #94a3b8;
+  background: rgb(var(--n-100));
+  border: 1px solid rgb(var(--n-200));
+  color: rgb(var(--n-500));
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -471,9 +471,9 @@ const getAttenuationQuality = () => {
 }
 
 .close-btn:hover {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.3);
-  color: #fca5a5;
+  background: rgb(var(--danger) / 0.2);
+  border-color: rgb(var(--danger) / 0.3);
+  color: rgb(var(--danger));
 }
 
 .close-btn .icon {
@@ -493,8 +493,8 @@ const getAttenuationQuality = () => {
 }
 
 .info-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgb(var(--n-100));
+  border: 1px solid rgb(var(--n-100));
   border-radius: 10px;
   padding: 12px;
   display: flex;
@@ -503,14 +503,14 @@ const getAttenuationQuality = () => {
 }
 
 .info-card:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--n-100));
 }
 
 .card-icon {
   width: 36px;
   height: 36px;
   border-radius: 8px;
-  background: rgba(59, 130, 246, 0.15);
+  background: rgb(var(--info) / 0.15);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -520,26 +520,26 @@ const getAttenuationQuality = () => {
 .card-icon .icon {
   width: 18px;
   height: 18px;
-  color: #60a5fa;
+  color: rgb(var(--info));
 }
 
 .card-icon.status-up .icon,
-.card-icon.status-online .icon  { color: #10b981; }
+.card-icon.status-online .icon  { color: rgb(var(--success)); }
 .card-icon.status-up,
-.card-icon.status-online         { background: rgba(16, 185, 129, 0.15); }
+.card-icon.status-online         { background: rgb(var(--success) / 0.15); }
 
 .card-icon.status-down .icon,
-.card-icon.status-offline .icon { color: #ef4444; }
+.card-icon.status-offline .icon { color: rgb(var(--danger)); }
 .card-icon.status-down,
-.card-icon.status-offline        { background: rgba(239, 68, 68, 0.15); }
+.card-icon.status-offline        { background: rgb(var(--danger) / 0.15); }
 
 .card-icon.status-degraded .icon,
-.card-icon.status-warning .icon { color: #f59e0b; }
+.card-icon.status-warning .icon { color: rgb(var(--warning)); }
 .card-icon.status-degraded,
-.card-icon.status-warning        { background: rgba(245, 158, 11, 0.15); }
+.card-icon.status-warning        { background: rgb(var(--warning) / 0.15); }
 
-.card-icon.status-critical .icon { color: #dc2626; }
-.card-icon.status-critical        { background: rgba(220, 38, 38, 0.15); }
+.card-icon.status-critical .icon { color: rgb(var(--danger)); }
+.card-icon.status-critical        { background: rgb(var(--danger) / 0.15); }
 
 .card-content {
   flex: 1;
@@ -547,7 +547,7 @@ const getAttenuationQuality = () => {
 }
 
 .card-label {
-  color: #64748b;
+  color: rgb(var(--n-500));
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
@@ -567,19 +567,19 @@ const getAttenuationQuality = () => {
 
 .status-detail,
 .optical-quality {
-  color: #64748b;
+  color: rgb(var(--n-500));
   font-size: 11px;
   margin-top: 2px;
 }
 
 .text-up,
-.text-online  { color: #10b981; }
+.text-online  { color: rgb(var(--success)); }
 .text-down,
-.text-offline { color: #ef4444; }
+.text-offline { color: rgb(var(--danger)); }
 .text-degraded,
-.text-warning  { color: #f59e0b; }
-.text-critical { color: #dc2626; }
-.text-unknown  { color: #6b7280; }
+.text-warning  { color: rgb(var(--warning)); }
+.text-critical { color: rgb(var(--danger)); }
+.text-unknown  { color: rgb(var(--n-500)); }
 
 .notes-card,
 .coordinates-card {
@@ -587,7 +587,7 @@ const getAttenuationQuality = () => {
 }
 
 .notes-text {
-  color: #cbd5e1;
+  color: rgb(var(--n-600));
   font-size: 12px;
   line-height: 1.5;
   margin-top: 3px;
@@ -596,8 +596,8 @@ const getAttenuationQuality = () => {
 /* ── Footer ────────────────────────────────────────────────────────────────── */
 .quick-modal-footer {
   padding: 12px 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.25);
+  border-top: 1px solid rgb(var(--n-100));
+  background: rgb(var(--n-50));
   display: flex;
   gap: 10px;
   justify-content: flex-end;
@@ -620,24 +620,24 @@ const getAttenuationQuality = () => {
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.08);
-  color: #94a3b8;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgb(var(--n-100));
+  color: rgb(var(--n-500));
+  border: 1px solid rgb(var(--n-200));
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.13);
+  background: rgb(var(--n-200));
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  background: linear-gradient(135deg, rgb(var(--info)) 0%, rgb(var(--info)) 100%);
   color: white;
-  box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 4px 10px rgb(var(--info) / 0.3);
 }
 
 .btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 14px rgba(59, 130, 246, 0.4);
+  box-shadow: 0 6px 14px rgb(var(--info) / 0.4);
 }
 
 .btn-primary .icon {
@@ -649,7 +649,7 @@ const getAttenuationQuality = () => {
 .quick-modal-body::-webkit-scrollbar { width: 5px; }
 .quick-modal-body::-webkit-scrollbar-track { background: transparent; }
 .quick-modal-body::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgb(var(--n-200));
   border-radius: 4px;
 }
 

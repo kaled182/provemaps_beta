@@ -1,9 +1,9 @@
 """Tests for setup_app.services.runtime_settings."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 from django.test import TestCase, override_settings
 
 
@@ -35,6 +35,7 @@ class FallbackConfigTests(TestCase):
     )
     def test_fallback_reads_django_settings(self):
         from setup_app.services.runtime_settings import _fallback_config
+
         cfg = _fallback_config()
         self.assertEqual(cfg.zabbix_api_url, "http://zabbix.test")
         self.assertEqual(cfg.google_maps_api_key, "AIzaXXXX")
@@ -50,6 +51,7 @@ class FallbackConfigTests(TestCase):
     )
     def test_fallback_handles_non_list_allowed_hosts(self):
         from setup_app.services.runtime_settings import _fallback_config
+
         cfg = _fallback_config()
         self.assertEqual(cfg.allowed_hosts, [])
 
@@ -59,6 +61,7 @@ class GetRuntimeConfigTests(TestCase):
 
     def tearDown(self):
         from setup_app.services.runtime_settings import get_runtime_config
+
         get_runtime_config.cache_clear()
 
     def _make_record(self, **kwargs):
@@ -136,17 +139,26 @@ class GetRuntimeConfigTests(TestCase):
         record.enable_map_clustering = kwargs.get("enable_map_clustering", True)
         record.enable_drawing_tools = kwargs.get("enable_drawing_tools", True)
         record.enable_fullscreen = kwargs.get("enable_fullscreen", True)
+        # EV-0096: campos guardados na base; None = não definido (vale o settings)
+        for name in (
+            "optical_rx_warning_threshold",
+            "optical_rx_critical_threshold",
+            "optical_thresholds_by_distance",
+            "gpon_pon_capacity",
+            "epon_pon_capacity",
+        ):
+            setattr(record, name, kwargs.get(name))
         return record
 
     @override_settings(ALLOWED_HOSTS=["app.test"], DATABASES={"default": {}})
     def test_uses_first_time_setup_when_configured(self):
         from setup_app.services.runtime_settings import get_runtime_config
+
         get_runtime_config.cache_clear()
         record = self._make_record(zabbix_url="http://zabbix.prod")
 
         with patch(
-            "setup_app.services.runtime_settings.FirstTimeSetup"
-            ".objects.filter"
+            "setup_app.services.runtime_settings.FirstTimeSetup" ".objects.filter"
         ) as mock_filter:
             mock_filter.return_value.order_by.return_value.first.return_value = record
             cfg = get_runtime_config()
@@ -161,11 +173,11 @@ class GetRuntimeConfigTests(TestCase):
     )
     def test_falls_back_when_no_configured_setup(self):
         from setup_app.services.runtime_settings import get_runtime_config
+
         get_runtime_config.cache_clear()
 
         with patch(
-            "setup_app.services.runtime_settings.FirstTimeSetup"
-            ".objects.filter"
+            "setup_app.services.runtime_settings.FirstTimeSetup" ".objects.filter"
         ) as mock_filter:
             mock_filter.return_value.order_by.return_value.first.return_value = None
             cfg = get_runtime_config()
@@ -174,25 +186,21 @@ class GetRuntimeConfigTests(TestCase):
 
     @override_settings(ALLOWED_HOSTS=["app.test"], DATABASES={"default": {}})
     def test_reload_config_clears_cache(self):
-        from setup_app.services.runtime_settings import (
-            get_runtime_config,
-            reload_config,
-        )
+        from setup_app.services.runtime_settings import get_runtime_config, reload_config
+
         get_runtime_config.cache_clear()
         record = self._make_record()
 
         with patch(
-            "setup_app.services.runtime_settings.FirstTimeSetup"
-            ".objects.filter"
+            "setup_app.services.runtime_settings.FirstTimeSetup" ".objects.filter"
         ) as mock_filter:
             mock_filter.return_value.order_by.return_value.first.return_value = record
-            cfg1 = get_runtime_config()
+            get_runtime_config()
 
         reload_config()
         # Cache should be cleared; calling again should re-query
         with patch(
-            "setup_app.services.runtime_settings.FirstTimeSetup"
-            ".objects.filter"
+            "setup_app.services.runtime_settings.FirstTimeSetup" ".objects.filter"
         ) as mock_filter2:
             mock_filter2.return_value.order_by.return_value.first.return_value = None
             cfg2 = get_runtime_config()
@@ -205,17 +213,44 @@ class FloatSettingTests(TestCase):
     @override_settings(OPTICAL_RX_WARNING_THRESHOLD="-24.5")
     def test_float_setting_valid(self):
         from setup_app.services.runtime_settings import _float_setting
+
         result = _float_setting("OPTICAL_RX_WARNING_THRESHOLD", -24.0)
         self.assertEqual(result, -24.5)
 
     @override_settings()
     def test_float_setting_missing_uses_default(self):
         from setup_app.services.runtime_settings import _float_setting
+
         result = _float_setting("NONEXISTENT_SETTING", -99.0)
         self.assertEqual(result, -99.0)
 
     @override_settings(OPTICAL_RX_WARNING_THRESHOLD="not-a-float")
     def test_float_setting_invalid_uses_default(self):
         from setup_app.services.runtime_settings import _float_setting
+
         result = _float_setting("OPTICAL_RX_WARNING_THRESHOLD", -24.0)
         self.assertEqual(result, -24.0)
+
+
+class PonCapacitySettingTests(TestCase):
+    """EV-0095: GPON_PON_CAPACITY / EPON_PON_CAPACITY, inteiros 1..1024."""
+
+    def test_defaults(self):
+        from setup_app.services.runtime_settings import _fallback_config
+
+        cfg = _fallback_config()
+        self.assertEqual((cfg.gpon_pon_capacity, cfg.epon_pon_capacity), (128, 64))
+
+    @override_settings(GPON_PON_CAPACITY="256", EPON_PON_CAPACITY=32)
+    def test_values_from_settings(self):
+        from setup_app.services.runtime_settings import _fallback_config
+
+        cfg = _fallback_config()
+        self.assertEqual((cfg.gpon_pon_capacity, cfg.epon_pon_capacity), (256, 32))
+
+    @override_settings(GPON_PON_CAPACITY="0", EPON_PON_CAPACITY="abc")
+    def test_invalid_or_out_of_range_use_default(self):
+        from setup_app.services.runtime_settings import _int_setting
+
+        self.assertEqual(_int_setting("GPON_PON_CAPACITY", 128, 1, 1024), 128)
+        self.assertEqual(_int_setting("EPON_PON_CAPACITY", 64, 1, 1024), 64)

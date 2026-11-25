@@ -3,8 +3,8 @@
     <!-- Header with Add Button -->
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Gateways de Comunicação</h3>
-        <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+        <h3 class="text-lg font-semibold text-neutral-900">Gateways de Comunicação</h3>
+        <p class="text-sm text-neutral-600 mt-1">
           {{ gatewayCount?.total || 0 }} {{ (gatewayCount?.total || 0) === 1 ? 'gateway' : 'gateways' }} configurado{{ (gatewayCount?.total || 0) !== 1 ? 's' : '' }}
         </p>
       </div>
@@ -26,7 +26,7 @@
     </div>
 
     <!-- Gateway Type Tabs -->
-    <div class="border-b border-gray-200 dark:border-gray-700">
+    <div class="border-b border-neutral-200">
       <nav class="-mb-px flex space-x-8">
         <button 
           v-for="tab in tabs" 
@@ -34,14 +34,14 @@
           @click="activeTab = tab.type"
           class="whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors"
           :class="activeTab === tab.type 
-            ? 'border-primary-500 text-primary-600 dark:text-primary-400' 
-            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'"
+            ? 'border-primary-500 text-primary-600 ' 
+            : 'border-transparent text-neutral-500 hover:text-neutral-700 hover:border-neutral-300  '"
         >
           {{ tab.label }}
           <span class="ml-2 px-2 py-0.5 rounded-full text-xs" 
                 :class="activeTab === tab.type 
-                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400' 
-                  : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'">
+                  ? 'bg-primary-100 text-primary-700  ' 
+                  : 'bg-neutral-100 text-neutral-600  '">
             {{ tab.count }}
           </span>
         </button>
@@ -416,6 +416,6 @@ onMounted(async () => {
 }
 
 .btn-outline {
-  @apply inline-flex items-center justify-center rounded-md border border-primary-200 px-4 py-2 text-sm font-semibold text-primary-600 hover:bg-primary-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 transition-all duration-200 dark:text-primary-300 dark:border-primary-700 dark:hover:bg-primary-900/40;
+  @apply inline-flex items-center justify-center rounded-md border border-primary-200 px-4 py-2 text-sm font-semibold text-primary-600 hover:bg-primary-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 transition-all duration-200;
 }
 </style>

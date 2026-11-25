@@ -262,3 +262,7 @@ backend/nul
 # Documentação de backups (gerada automaticamente)
 backups/*.md
 backups/*.txt
+
+# Ficheiros locais de database/ (segredo ou gerados; nunca versionar)
+database/fernet.key
+database/provemaps.crontab

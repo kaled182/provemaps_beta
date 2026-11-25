@@ -59,6 +59,12 @@ const routes = [
     component: () => import('@/components/Monitoring/MonitoringGpon.vue'),
   },
   {
+    // EV-0115: switches de backbone (Huawei) — portas, RX/TX e tráfego do Zabbix
+    path: '/monitoring/switches',
+    name: 'monitoring-switches',
+    component: () => import('@/components/Monitoring/MonitoringSwitches.vue'),
+  },
+  {
     path: '/monitoring/dwdm',
     name: 'monitoring-dwdm',
     component: () => import('@/components/Monitoring/MonitoringDwdm.vue'),
@@ -72,6 +78,36 @@ const routes = [
     path: '/Network/DeviceImport/',
     name: 'device-import',
     component: () => import('@/components/DeviceImport/DeviceImportManager.vue'),
+  },
+  {
+    // EV-0057: níveis ópticos de todos os enlaces
+    path: '/enlaces',
+    name: 'links',
+    component: () => import('@/views/LinksView.vue'),
+  },
+  {
+    // EV-0058: equipamentos com estado, uptime, CPU e portas ópticas
+    path: '/ativos',
+    name: 'assets',
+    component: () => import('@/views/AssetsView.vue'),
+  },
+  {
+    // EV-0059: incidentes de fibra + equipamentos offline
+    path: '/alarmes',
+    name: 'alarms',
+    component: () => import('@/views/AlarmsView.vue'),
+  },
+  {
+    // EV-0085: o que não está a ser coletado do Zabbix
+    path: '/saude-coleta',
+    name: 'collection-health',
+    component: () => import('@/views/CollectionHealthView.vue'),
+  },
+  {
+    // EV-0060 / ADR 0009: POPs e enlaces em SVG
+    path: '/topologia',
+    name: 'topology',
+    component: () => import('@/views/TopologyView.vue'),
   },
   {
     path: '/network/inventory',

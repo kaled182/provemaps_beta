@@ -98,6 +98,8 @@ onMounted(() => startStreams())
 
 ## 📅 Fase 1: SiteDetailsModal.vue (Semana 1-2)
 
+> **Nota (2026-11-23, EV-0070):** esta fase ficou a meio — os separadores `components/Site/*` e os `composables/useSite*.js` foram escritos mas o `SiteDetailsModal` nunca os usou, e foram apagados. O modal foi reorganizado de outra forma no EV-0065 (`components/SiteDetails/SiteDeviceCard.vue`, `utils/siteDevices.js`).
+
 ### Objetivo
 Reduzir de **2757 → 600 linhas** extraindo responsabilidades
 

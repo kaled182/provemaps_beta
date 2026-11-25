@@ -92,10 +92,6 @@ SERVICE_RESTART_COMMANDS = os.getenv(
     "",
 )
 
-# Vue 3 Dashboard Feature Flag (Phase 11 - Sprint 3)
-USE_VUE_DASHBOARD = os.getenv("USE_VUE_DASHBOARD", "false").lower() == "true"
-VUE_DASHBOARD_ROLLOUT_PERCENTAGE = int(os.getenv("VUE_DASHBOARD_ROLLOUT_PERCENTAGE", "0"))
-
 fernet_keys = [key.strip() for key in os.getenv("FERNET_KEYS", "").split(",") if key.strip()]
 if not fernet_keys:
     single_fernet = os.getenv("FERNET_KEY")
@@ -114,6 +110,12 @@ CSRF_TRUSTED_ORIGINS = [
     origin.strip() for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if origin.strip()
 ]
 
+# Sondas de saúde do Docker (`/healthz`, `/ready`, `/live`) batem em http://localhost
+# dentro do container: com SECURE_SSL_REDIRECT iriam para https://localhost:8000, onde
+# não há TLS, e o web ficava «unhealthy» — e o nginx (depends_on: service_healthy) não
+# arrancaria. Ficam isentas; tudo o resto continua a ser redirecionado (EV-0046).
+SECURE_REDIRECT_EXEMPT = [r"^healthz/?$", r"^ready/?$", r"^live/?$"]
+
 # Extra security toggles when DEBUG is disabled
 if not DEBUG:
     SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "True").lower() == "true"
@@ -126,14 +128,15 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Content Security Policy (basic; override via env vars)
-# Allow trusted CDNs for Chart.js, Tailwind CSS, and Google Maps API
+# EV-0031: sem Tailwind Play CDN (compilador em runtime) em nenhum template — o
+# `'unsafe-eval'` e os hosts cdn.tailwindcss.com / cdnjs.cloudflare.com saíram.
+# EV-0075/EV-0079: sem cdn.jsdelivr.net (o dashboard legado, que usava o Chart.js, saiu).
+# Ficam: fonts.googleapis.com/fonts.gstatic.com (o SDK do Google Maps carrega
+# Roboto/Google Sans de lá) e os hosts do Google Maps/Mapbox.
 CSP_DEFAULT_SRC = os.getenv("CSP_DEFAULT_SRC", "'self'").split()
 CSP_SCRIPT_SRC = os.getenv(
     "CSP_SCRIPT_SRC",
-    "'self' 'unsafe-inline' 'unsafe-eval' "
-    "https://cdn.jsdelivr.net "
-    "https://cdn.tailwindcss.com "
-    "https://cdnjs.cloudflare.com "
+    "'self' 'unsafe-inline' "
     "https://maps.googleapis.com "
     "https://api.mapbox.com "
     "https://events.mapbox.com "
@@ -141,11 +144,7 @@ CSP_SCRIPT_SRC = os.getenv(
 ).split()
 CSP_STYLE_SRC = os.getenv(
     "CSP_STYLE_SRC",
-    "'self' 'unsafe-inline' "
-    "https://cdn.tailwindcss.com "
-    "https://cdnjs.cloudflare.com "
-    "https://fonts.googleapis.com "
-    "https://api.mapbox.com",
+    "'self' 'unsafe-inline' https://fonts.googleapis.com https://api.mapbox.com",
 ).split()
 CSP_IMG_SRC = os.getenv(
     "CSP_IMG_SRC",
@@ -162,13 +161,12 @@ CSP_IMG_SRC = os.getenv(
 ).split()
 CSP_FONT_SRC = os.getenv(
     "CSP_FONT_SRC",
-    "'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com https://api.mapbox.com",
+    "'self' data: https://fonts.gstatic.com https://api.mapbox.com",
 ).split()
 CSP_CONNECT_SRC = os.getenv(
     "CSP_CONNECT_SRC",
     "'self' "
     "https://maps.googleapis.com "
-    "https://cdn.jsdelivr.net "
     "https://maps.gstatic.com "
     "https://api.mapbox.com "
     "https://events.mapbox.com "
@@ -274,6 +272,7 @@ INSTALLED_APPS = [
     # Modular apps (Phase 0 scaffolding)
     "monitoring",
     "gpon",
+    "switches",  # EV-0115 Monitoramento de Switches
     "dwdm",
     # Telemetry — anonymous usage stats (opt-out via TELEMETRY_ENABLED=false)
     "telemetry",

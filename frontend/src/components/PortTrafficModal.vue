@@ -1,228 +1,218 @@
 <template>
-  <Teleport to="body">
-    <Transition name="modal-fade">
-      <div v-if="isOpen" class="modal-overlay" @click.self="close">
-        <div class="modal-container traffic-modal">
-          <!-- Header -->
-          <div class="modal-header">
-            <div class="header-content">
+  <BaseModal
+    :show="isOpen"
+    :title="`Tráfego · ${port?.name || ''}`"
+    :subtitle="port?.description || ''"
+    :icon="PhChartLine"
+    :z-index="3500"
+    size="detail"
+    @close="requestClose"
+  >
+    <!-- Body — sempre renderizado para que tráfego e óptico sejam
+         independentes (porta offline ainda mostra histórico óptico) -->
+    <div class="modal-body">
+      <div>
+        <!-- Period Selector -->
+        <div class="period-selector">
+          <button
+            v-for="period in periods"
+            :key="period.value"
+            class="period-btn"
+            :class="{ active: selectedPeriod === period.value }"
+            @click="changePeriod(period.value)"
+          >
+            {{ period.label }}
+          </button>
+        </div>
+
+        <!-- Seção: Tráfego de Rede -->
+        <div class="collapsible-section">
+          <button class="section-header" @click="trafficSectionOpen = !trafficSectionOpen">
+            <div class="section-title">
               <i class="fas fa-chart-line"></i>
-              <div>
-                <h2>Tráfego de Rede</h2>
-                <p class="subtitle">{{ port?.name }} - {{ port?.description || 'Sem descrição' }}</p>
-              </div>
+              <span>Tráfego de Rede</span>
+              <!-- Última atividade — útil para identificar quando aconteceu o incidente -->
+              <span v-if="lastTrafficActivity" class="last-activity" :class="{ 'last-activity--stale': isStale }">
+                · Última atividade: {{ lastTrafficActivity }}
+              </span>
             </div>
-            <button class="btn-close" @click="close">
-              <i class="fas fa-times"></i>
-            </button>
-          </div>
+            <i class="fas" :class="trafficSectionOpen ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+          </button>
 
-          <!-- Body — sempre renderizado para que tráfego e óptico sejam
-               independentes (porta offline ainda mostra histórico óptico) -->
-          <div class="modal-body">
-            <div>
-              <!-- Period Selector -->
-              <div class="period-selector">
-                <button
-                  v-for="period in periods"
-                  :key="period.value"
-                  class="period-btn"
-                  :class="{ active: selectedPeriod === period.value }"
-                  @click="changePeriod(period.value)"
-                >
-                  {{ period.label }}
+          <Transition name="collapse">
+            <div v-show="trafficSectionOpen" class="section-content">
+              <!-- Loading interno da seção -->
+              <div v-if="loading" class="loading-state">
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>Carregando dados de tráfego...</span>
+              </div>
+
+              <!-- Erro: porta offline / Zabbix lento / sem item configurado -->
+              <div v-else-if="error" class="error-state">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span>{{ error }}</span>
+                <button class="btn-retry" @click="loadTrafficData">
+                  <i class="fas fa-redo"></i>
+                  Tentar Novamente
                 </button>
               </div>
 
-              <!-- Seção: Tráfego de Rede -->
-              <div class="collapsible-section">
-                <button class="section-header" @click="trafficSectionOpen = !trafficSectionOpen">
-                  <div class="section-title">
+              <!-- Sem dados (porta nunca teve histórico ou janela vazia) -->
+              <div v-else-if="trafficData && (!trafficData.history || trafficData.history.length === 0)" class="empty-state">
+                <i class="fas fa-chart-line"></i>
+                <span>Sem dados de tráfego no período selecionado.</span>
+                <small>Tente um período maior — a porta pode estar offline desde antes.</small>
+              </div>
+
+              <!-- Statistics Cards -->
+              <template v-else-if="trafficData">
+              <div class="stats-grid">
+                <div class="stat-card percentile-95">
+                  <div class="stat-header">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>95º Percentil</span>
+                  </div>
+                  <div class="stat-values">
+                    <div class="stat-row">
+                      <span class="stat-label">Download:</span>
+                      <span class="stat-value">{{ formatBandwidth(trafficData.statistics.percentile_95_in) }}</span>
+                    </div>
+                    <div class="stat-row">
+                      <span class="stat-label">Upload:</span>
+                      <span class="stat-value">{{ formatBandwidth(trafficData.statistics.percentile_95_out) }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="stat-card">
+                  <div class="stat-header">
                     <i class="fas fa-chart-line"></i>
-                    <span>Tráfego de Rede</span>
-                    <!-- Última atividade — útil para identificar quando aconteceu o incidente -->
-                    <span v-if="lastTrafficActivity" class="last-activity" :class="{ 'last-activity--stale': isStale }">
-                      · Última atividade: {{ lastTrafficActivity }}
-                    </span>
+                    <span>Média</span>
                   </div>
-                  <i class="fas" :class="trafficSectionOpen ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
-                </button>
-
-                <Transition name="collapse">
-                  <div v-show="trafficSectionOpen" class="section-content">
-                    <!-- Loading interno da seção -->
-                    <div v-if="loading" class="loading-state">
-                      <i class="fas fa-spinner fa-spin"></i>
-                      <span>Carregando dados de tráfego...</span>
+                  <div class="stat-values">
+                    <div class="stat-row">
+                      <span class="stat-label">Download:</span>
+                      <span class="stat-value">{{ formatBandwidth(trafficData.statistics.avg_in) }}</span>
                     </div>
-
-                    <!-- Erro: porta offline / Zabbix lento / sem item configurado -->
-                    <div v-else-if="error" class="error-state">
-                      <i class="fas fa-exclamation-triangle"></i>
-                      <span>{{ error }}</span>
-                      <button class="btn-retry" @click="loadTrafficData">
-                        <i class="fas fa-redo"></i>
-                        Tentar Novamente
-                      </button>
+                    <div class="stat-row">
+                      <span class="stat-label">Upload:</span>
+                      <span class="stat-value">{{ formatBandwidth(trafficData.statistics.avg_out) }}</span>
                     </div>
-
-                    <!-- Sem dados (porta nunca teve histórico ou janela vazia) -->
-                    <div v-else-if="trafficData && (!trafficData.history || trafficData.history.length === 0)" class="empty-state">
-                      <i class="fas fa-chart-line"></i>
-                      <span>Sem dados de tráfego no período selecionado.</span>
-                      <small>Tente um período maior — a porta pode estar offline desde antes.</small>
-                    </div>
-
-                    <!-- Statistics Cards -->
-                    <template v-else-if="trafficData">
-                    <div class="stats-grid">
-                      <div class="stat-card percentile-95">
-                        <div class="stat-header">
-                          <i class="fas fa-chart-bar"></i>
-                          <span>95º Percentil</span>
-                        </div>
-                        <div class="stat-values">
-                          <div class="stat-row">
-                            <span class="stat-label">Download:</span>
-                            <span class="stat-value">{{ formatBandwidth(trafficData.statistics.percentile_95_in) }}</span>
-                          </div>
-                          <div class="stat-row">
-                            <span class="stat-label">Upload:</span>
-                            <span class="stat-value">{{ formatBandwidth(trafficData.statistics.percentile_95_out) }}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div class="stat-card">
-                        <div class="stat-header">
-                          <i class="fas fa-chart-line"></i>
-                          <span>Média</span>
-                        </div>
-                        <div class="stat-values">
-                          <div class="stat-row">
-                            <span class="stat-label">Download:</span>
-                            <span class="stat-value">{{ formatBandwidth(trafficData.statistics.avg_in) }}</span>
-                          </div>
-                          <div class="stat-row">
-                            <span class="stat-label">Upload:</span>
-                            <span class="stat-value">{{ formatBandwidth(trafficData.statistics.avg_out) }}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div class="stat-card">
-                        <div class="stat-header">
-                          <i class="fas fa-arrow-up"></i>
-                          <span>Pico</span>
-                        </div>
-                        <div class="stat-values">
-                          <div class="stat-row">
-                            <span class="stat-label">Download:</span>
-                            <span class="stat-value">{{ formatBandwidth(trafficData.statistics.max_in) }}</span>
-                          </div>
-                          <div class="stat-row">
-                            <span class="stat-label">Upload:</span>
-                            <span class="stat-value">{{ formatBandwidth(trafficData.statistics.max_out) }}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- Chart -->
-                    <div class="chart-container">
-                      <TimeSeriesChart ref="trafficChartRef" :series="trafficSeries" unit="Mbps" :begin-at-zero="true" :height="260" empty-message="Sem dados de tráfego para o período selecionado" />
-                    </div>
-                    </template>
                   </div>
-                </Transition>
+                </div>
+
+                <div class="stat-card">
+                  <div class="stat-header">
+                    <i class="fas fa-arrow-up"></i>
+                    <span>Pico</span>
+                  </div>
+                  <div class="stat-values">
+                    <div class="stat-row">
+                      <span class="stat-label">Download:</span>
+                      <span class="stat-value">{{ formatBandwidth(trafficData.statistics.max_in) }}</span>
+                    </div>
+                    <div class="stat-row">
+                      <span class="stat-label">Upload:</span>
+                      <span class="stat-value">{{ formatBandwidth(trafficData.statistics.max_out) }}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <!-- Seção: Sinal Óptico -->
-              <div v-if="port?.optical_rx_power !== null || port?.optical_tx_power !== null" class="collapsible-section">
-                <button class="section-header" @click="opticalSectionOpen = !opticalSectionOpen">
-                  <div class="section-title">
-                    <i class="fas fa-signal"></i>
-                    <span>Sinal Óptico</span>
-                  </div>
-                  <i class="fas" :class="opticalSectionOpen ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+              <!-- Chart -->
+              <div class="chart-container">
+                <TimeSeriesChart ref="trafficChartRef" :series="trafficSeries" unit="Mbps" :begin-at-zero="true" :height="260" empty-message="Sem dados de tráfego para o período selecionado" />
+              </div>
+              </template>
+            </div>
+          </Transition>
+        </div>
+
+        <!-- Seção: Sinal Óptico -->
+        <div v-if="port?.optical_rx_power !== null || port?.optical_tx_power !== null" class="collapsible-section">
+          <button class="section-header" @click="opticalSectionOpen = !opticalSectionOpen">
+            <div class="section-title">
+              <i class="fas fa-signal"></i>
+              <span>Sinal Óptico</span>
+            </div>
+            <i class="fas" :class="opticalSectionOpen ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+          </button>
+
+          <Transition name="collapse">
+            <div v-show="opticalSectionOpen" class="section-content">
+              <!-- Current Signal -->
+              <div class="optical-current">
+                <div class="optical-stat">
+                  <span class="optical-label">RX:</span>
+                  <span class="optical-value" :class="getOpticalClass(port?.optical_rx_power)">
+                    {{ formatOptical(port?.optical_rx_power) }} dBm
+                  </span>
+                </div>
+                <div class="optical-stat">
+                  <span class="optical-label">TX:</span>
+                  <span class="optical-value" :class="getOpticalClass(port?.optical_tx_power)">
+                    {{ formatOptical(port?.optical_tx_power) }} dBm
+                  </span>
+                </div>
+              </div>
+
+              <!-- Optical Chart -->
+              <div class="chart-container">
+                <TimeSeriesChart ref="opticalChartRef" :series="opticalSeries" :thresholds="opticalThresholds" unit="dBm" :decimals="2" :height="260" :empty-message="opticalEmptyMessage" />
+              </div>
+
+              <!-- Botão Configurar Alarme -->
+              <div class="alarm-config-section">
+                <button class="btn-config-alarm" @click="openAlarmConfig">
+                  <i class="fas fa-bell"></i>
+                  Configurar Alarme
                 </button>
-
-                <Transition name="collapse">
-                  <div v-show="opticalSectionOpen" class="section-content">
-                    <!-- Current Signal -->
-                    <div class="optical-current">
-                      <div class="optical-stat">
-                        <span class="optical-label">RX:</span>
-                        <span class="optical-value" :class="getOpticalClass(port?.optical_rx_power)">
-                          {{ formatOptical(port?.optical_rx_power) }} dBm
-                        </span>
-                      </div>
-                      <div class="optical-stat">
-                        <span class="optical-label">TX:</span>
-                        <span class="optical-value" :class="getOpticalClass(port?.optical_tx_power)">
-                          {{ formatOptical(port?.optical_tx_power) }} dBm
-                        </span>
-                      </div>
-                    </div>
-
-                    <!-- Optical Chart -->
-                    <div class="chart-container">
-                      <TimeSeriesChart ref="opticalChartRef" :series="opticalSeries" :thresholds="opticalThresholds" unit="dBm" :decimals="2" :height="260" :empty-message="opticalEmptyMessage" />
-                    </div>
-
-                    <!-- Botão Configurar Alarme -->
-                    <div class="alarm-config-section">
-                      <button class="btn-config-alarm" @click="openAlarmConfig">
-                        <i class="fas fa-bell"></i>
-                        Configurar Alarme
-                      </button>
-                      <div v-if="port?.alarm_enabled" class="alarm-status">
-                        <i class="fas fa-check-circle"></i>
-                        Alarme Personalizado Ativo
-                      </div>
-                    </div>
-                  </div>
-                </Transition>
+                <div v-if="port?.alarm_enabled" class="alarm-status">
+                  <i class="fas fa-check-circle"></i>
+                  Alarme Personalizado Ativo
+                </div>
               </div>
             </div>
-          </div>
+          </Transition>
+        </div>
+      </div>
+    </div>
 
-          <!-- Footer -->
-          <div class="modal-footer">
-            <button class="btn-secondary" @click="close">
-              Fechar
-            </button>
-            <div class="export-dropdown-wrapper" @click.stop>
-              <button class="btn-primary" @click="exportMenuOpen = !exportMenuOpen">
-                <i class="fas fa-download"></i>
-                Exportar
-                <i class="fas fa-chevron-up" :class="{ 'fa-chevron-down': !exportMenuOpen, 'fa-chevron-up': exportMenuOpen }"></i>
-              </button>
-              <div v-if="exportMenuOpen" class="export-options">
-                <button @click="exportCSV"><i class="fas fa-file-csv"></i> CSV</button>
-                <button @click="exportPNG"><i class="fas fa-image"></i> PNG</button>
-                <button @click="exportPDF"><i class="fas fa-file-pdf"></i> PDF</button>
-              </div>
-            </div>
+    <template #footer>
+      <div class="flex items-center justify-end gap-2">
+        <button class="btn-secondary" @click="close">
+          Fechar
+        </button>
+        <div class="export-dropdown-wrapper" @click.stop>
+          <button class="btn-primary" @click="exportMenuOpen = !exportMenuOpen">
+            <i class="fas fa-download"></i>
+            Exportar
+            <i class="fas fa-chevron-up" :class="{ 'fa-chevron-down': !exportMenuOpen, 'fa-chevron-up': exportMenuOpen }"></i>
+          </button>
+          <div v-if="exportMenuOpen" class="export-options">
+            <button @click="exportCSV"><i class="fas fa-file-csv"></i> CSV</button>
+            <button @click="exportPNG"><i class="fas fa-image"></i> PNG</button>
+            <button @click="exportPDF"><i class="fas fa-file-pdf"></i> PDF</button>
           </div>
         </div>
       </div>
-    </Transition>
+    </template>
+  </BaseModal>
 
-    <!-- Alarm Config Modal -->
-    <AlarmConfigModal
-      :is-open="showAlarmConfig"
-      :port="port"
-      @close="closeAlarmConfig"
-      @saved="handleAlarmSaved"
-    />
-  </Teleport>
+  <!-- Alarm Config Modal -->
+  <AlarmConfigModal
+    :is-open="showAlarmConfig"
+    :port="port"
+    @close="closeAlarmConfig"
+    @saved="handleAlarmSaved"
+  />
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick, defineAsyncComponent } from 'vue'
 import { useApi } from '@/composables/useApi'
-import { useEscapeKey } from '@/composables/useEscapeKey'
+import { PhChartLine } from '@phosphor-icons/vue'
+import BaseModal from '@/components/Common/BaseModal.vue'
 import TimeSeriesChart from './charts/TimeSeriesChart.vue'
 import {
   normalizeOpticalHistory,
@@ -298,8 +288,10 @@ const close = () => {
   emit('close')
 }
 
-// Gerenciar ESC key - ignora quando AlarmConfigModal está aberto
-useEscapeKey(() => close(), { isOpen: computed(() => props.isOpen), shouldIgnore: showAlarmConfig })
+// Esc/clique fora chegam pelo BaseModal; com a configuração de alarme aberta, quem fecha é ela.
+const requestClose = () => {
+  if (!showAlarmConfig.value) close()
+}
 
 const periods = [
   { label: '1h', value: 1 },
@@ -523,7 +515,7 @@ const exportPDF = async () => {
     console.warn('[PortTrafficModal] Popup bloqueado: não foi possível abrir a janela de impressão')
     return
   }
-  win.document.write(`<!DOCTYPE html><html><head><title>${device}</title><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#fff;display:flex;flex-direction:column;align-items:center;padding:24px;font-family:sans-serif;}h2{font-size:14px;color:#334155;margin-bottom:4px;}p{font-size:12px;color:#64748b;margin-bottom:16px;}img{max-width:100%;border:1px solid #e2e8f0;border-radius:8px;}</style></head><body><h2>${device}</h2><p>${desc} — Período: ${selectedPeriod.value}h</p><img src="${imgData}"/><script>window.onload=()=>{window.print()}<${'/'}script></body></html>`)
+  win.document.write(`<!DOCTYPE html><html><head><title>${device}</title><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:rgb(var(--surface));display:flex;flex-direction:column;align-items:center;padding:24px;font-family:sans-serif;}h2{font-size:14px;color:rgb(var(--n-700));margin-bottom:4px;}p{font-size:12px;color:rgb(var(--n-500));margin-bottom:16px;}img{max-width:100%;border:1px solid rgb(var(--n-200));border-radius:8px;}</style></head><body><h2>${device}</h2><p>${desc} — Período: ${selectedPeriod.value}h</p><img src="${imgData}"/><script>window.onload=()=>{window.print()}<${'/'}script></body></html>`)
   win.document.close()
 }
 
@@ -597,84 +589,11 @@ watch(chartCanvas, (canvas) => {
 </script>
 
 <style scoped>
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.75);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 13000;
-  padding: 20px;
-  overflow: hidden;
-}
-
-.traffic-modal {
-  width: 100%;
-  max-width: 1000px;
-  max-height: 88vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.modal-container {
-  background: linear-gradient(135deg, var(--surface-card) 0%, var(--bg-secondary) 100%);
-  border-radius: 16px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(59, 130, 246, 0.2);
-  overflow: hidden;
-}
-
-.modal-header {
-  padding: 24px;
-  border-bottom: 1px solid rgba(75, 85, 99, 0.3);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: rgba(59, 130, 246, 0.05);
-}
-
-.header-content {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.header-content i {
-  font-size: 28px;
-  color: #3b82f6;
-}
-
-.header-content h2 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 700;
-  color: #f3f4f6;
-}
 
 .subtitle {
   margin: 4px 0 0 0;
   font-size: 14px;
-  color: #9ca3af;
-}
-
-.btn-close {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  border: none;
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-close:hover {
-  background: rgba(239, 68, 68, 0.2);
-  transform: scale(1.05);
+  color: rgb(var(--n-500));
 }
 
 .modal-body {
@@ -696,26 +615,26 @@ watch(chartCanvas, (canvas) => {
   justify-content: center;
   gap: 12px;
   padding: 32px 20px;
-  color: #9ca3af;
+  color: rgb(var(--n-500));
 }
 
 .loading-state i {
   font-size: 40px;
-  color: #3b82f6;
+  color: rgb(var(--info));
 }
 
 .error-state i {
   font-size: 40px;
-  color: #ef4444;
+  color: rgb(var(--danger));
 }
 
 .empty-state i {
   font-size: 40px;
-  color: #6b7280;
+  color: rgb(var(--n-500));
 }
 
 .empty-state small {
-  color: #6b7280;
+  color: rgb(var(--n-500));
   font-size: 12px;
 }
 
@@ -724,19 +643,19 @@ watch(chartCanvas, (canvas) => {
   margin-left: 6px;
   font-size: 12px;
   font-weight: 400;
-  color: #10b981; /* verde — porta ativa recente */
+  color: rgb(var(--success)); /* verde — porta ativa recente */
 }
 .last-activity--stale {
-  color: #ef4444; /* vermelho — provavelmente offline (>5 min sem tráfego) */
+  color: rgb(var(--danger)); /* vermelho — provavelmente offline (>5 min sem tráfego) */
 }
 
 .btn-retry {
   margin-top: 12px;
   padding: 10px 20px;
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid #3b82f6;
+  background: rgb(var(--info) / 0.1);
+  border: 1px solid rgb(var(--info));
   border-radius: 8px;
-  color: #3b82f6;
+  color: rgb(var(--info));
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -745,7 +664,7 @@ watch(chartCanvas, (canvas) => {
 }
 
 .btn-retry:hover {
-  background: rgba(59, 130, 246, 0.2);
+  background: rgb(var(--info) / 0.2);
   transform: translateY(-1px);
 }
 
@@ -753,7 +672,7 @@ watch(chartCanvas, (canvas) => {
   display: flex;
   gap: 8px;
   padding: 4px;
-  background: rgba(31, 41, 55, 0.5);
+  background: rgb(var(--n-50));
   border-radius: 12px;
   width: fit-content;
   flex-shrink: 0;
@@ -763,7 +682,7 @@ watch(chartCanvas, (canvas) => {
   padding: 8px 20px;
   border: none;
   background: transparent;
-  color: #9ca3af;
+  color: rgb(var(--n-500));
   border-radius: 8px;
   cursor: pointer;
   font-weight: 500;
@@ -771,13 +690,13 @@ watch(chartCanvas, (canvas) => {
 }
 
 .period-btn.active {
-  background: #3b82f6;
+  background: rgb(var(--info));
   color: white;
 }
 
 .period-btn:hover:not(.active) {
-  background: rgba(59, 130, 246, 0.1);
-  color: #60a5fa;
+  background: rgb(var(--info) / 0.1);
+  color: rgb(var(--info));
 }
 
 .stats-grid {
@@ -800,25 +719,21 @@ watch(chartCanvas, (canvas) => {
     padding: 12px;
   }
   
-  .modal-overlay {
-    padding: 10px;
-  }
-  
   .modal-body {
     padding: 16px;
   }
 }
 
 .stat-card {
-  background: linear-gradient(135deg, rgba(31, 41, 55, 0.8) 0%, rgba(17, 24, 39, 0.9) 100%);
-  border: 1px solid rgba(75, 85, 99, 0.3);
+  background: rgb(var(--n-50));
+  border: 1px solid rgb(var(--n-200));
   border-radius: 12px;
   padding: 16px;
 }
 
 .stat-card.percentile-95 {
-  border-color: rgba(59, 130, 246, 0.5);
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(17, 24, 39, 0.9) 100%);
+  border-color: rgb(var(--info) / 0.5);
+  background: linear-gradient(135deg, rgb(var(--info) / 0.1) 0%, rgb(var(--n-50)) 100%);
 }
 
 .stat-header {
@@ -826,7 +741,7 @@ watch(chartCanvas, (canvas) => {
   align-items: center;
   gap: 10px;
   margin-bottom: 16px;
-  color: #9ca3af;
+  color: rgb(var(--n-500));
   font-size: 14px;
   font-weight: 600;
   text-transform: uppercase;
@@ -834,7 +749,7 @@ watch(chartCanvas, (canvas) => {
 }
 
 .stat-header i {
-  color: #3b82f6;
+  color: rgb(var(--info));
   font-size: 18px;
 }
 
@@ -851,19 +766,19 @@ watch(chartCanvas, (canvas) => {
 }
 
 .stat-label {
-  color: #9ca3af;
+  color: rgb(var(--n-500));
   font-size: 13px;
 }
 
 .stat-value {
-  color: #f3f4f6;
+  color: rgb(var(--n-900));
   font-size: 18px;
   font-weight: 700;
 }
 
 .chart-container {
-  background: rgba(31, 41, 55, 0.5);
-  border: 1px solid rgba(75, 85, 99, 0.3);
+  background: rgb(var(--n-50));
+  border: 1px solid rgb(var(--n-200));
   border-radius: 12px;
   padding: 12px;
   height: 280px;
@@ -875,15 +790,6 @@ watch(chartCanvas, (canvas) => {
   /* Let Chart.js handle sizing with maintainAspectRatio: false */
   max-width: 100%;
   max-height: 100%;
-}
-
-.modal-footer {
-  padding: 20px 24px;
-  border-top: 1px solid rgba(75, 85, 99, 0.3);
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  background: rgba(17, 24, 39, 0.5);
 }
 
 .btn-secondary,
@@ -900,24 +806,24 @@ watch(chartCanvas, (canvas) => {
 }
 
 .btn-secondary {
-  background: rgba(107, 114, 128, 0.1);
-  color: #9ca3af;
-  border: 1px solid rgba(107, 114, 128, 0.3);
+  background: rgb(var(--n-500) / 0.1);
+  color: rgb(var(--n-500));
+  border: 1px solid rgb(var(--n-500) / 0.3);
 }
 
 .btn-secondary:hover {
-  background: rgba(107, 114, 128, 0.2);
+  background: rgb(var(--n-500) / 0.2);
   transform: translateY(-1px);
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  background: linear-gradient(135deg, rgb(var(--info)) 0%, rgb(var(--info)) 100%);
   color: white;
 }
 
 .btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 10px 15px -3px rgb(var(--info) / 0.3);
 }
 
 .export-dropdown-wrapper {
@@ -945,7 +851,7 @@ watch(chartCanvas, (canvas) => {
   padding: 9px 14px;
   background: transparent;
   border: none;
-  color: #e2e8f0;
+  color: rgb(var(--n-700));
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -954,43 +860,22 @@ watch(chartCanvas, (canvas) => {
 }
 
 .export-options button:hover {
-  background: rgba(59, 130, 246, 0.15);
-  color: #60a5fa;
+  background: rgb(var(--info) / 0.15);
+  color: rgb(var(--info));
 }
 
 .export-options button i {
   width: 14px;
-  color: #94a3b8;
-}
-
-/* Transitions */
-.modal-fade-enter-active,
-.modal-fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.modal-fade-enter-from,
-.modal-fade-leave-to {
-  opacity: 0;
-}
-
-.modal-fade-enter-active .modal-container,
-.modal-fade-leave-active .modal-container {
-  transition: transform 0.3s ease;
-}
-
-.modal-fade-enter-from .modal-container,
-.modal-fade-leave-to .modal-container {
-  transform: scale(0.9);
+  color: rgb(var(--n-500));
 }
 
 /* Collapsible Sections */
 .collapsible-section {
   margin-bottom: 20px;
-  border: 1px solid rgba(75, 85, 99, 0.3);
+  border: 1px solid rgb(var(--n-200));
   border-radius: 12px;
   overflow: hidden;
-  background: rgba(31, 41, 55, 0.5);
+  background: rgb(var(--n-50));
 }
 
 .section-header {
@@ -999,14 +884,14 @@ watch(chartCanvas, (canvas) => {
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+  background: linear-gradient(135deg, rgb(var(--info) / 0.1) 0%, rgb(var(--primary-500) / 0.1) 100%);
   border: none;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .section-header:hover {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
+  background: linear-gradient(135deg, rgb(var(--info) / 0.15) 0%, rgb(var(--primary-500) / 0.15) 100%);
 }
 
 .section-title {
@@ -1015,17 +900,17 @@ watch(chartCanvas, (canvas) => {
   gap: 12px;
   font-size: 16px;
   font-weight: 600;
-  color: #f3f4f6;
+  color: rgb(var(--n-900));
 }
 
 .section-title i {
-  color: #3b82f6;
+  color: rgb(var(--info));
   font-size: 18px;
 }
 
 .section-header i.fa-chevron-up,
 .section-header i.fa-chevron-down {
-  color: #9ca3af;
+  color: rgb(var(--n-500));
   transition: transform 0.2s;
 }
 
@@ -1062,8 +947,8 @@ watch(chartCanvas, (canvas) => {
 }
 
 .optical-stat {
-  background: linear-gradient(135deg, rgba(31, 41, 55, 0.8) 0%, rgba(17, 24, 39, 0.9) 100%);
-  border: 1px solid rgba(75, 85, 99, 0.3);
+  background: rgb(var(--n-50));
+  border: 1px solid rgb(var(--n-200));
   border-radius: 12px;
   padding: 20px;
   display: flex;
@@ -1074,7 +959,7 @@ watch(chartCanvas, (canvas) => {
 .optical-label {
   font-size: 14px;
   font-weight: 600;
-  color: #9ca3af;
+  color: rgb(var(--n-500));
   text-transform: uppercase;
 }
 
@@ -1084,22 +969,22 @@ watch(chartCanvas, (canvas) => {
 }
 
 .optical-value.signal-good {
-  color: #10b981;
+  color: rgb(var(--success));
 }
 
 .optical-value.signal-warning {
-  color: #f59e0b;
+  color: rgb(var(--warning));
 }
 
 .optical-value.signal-critical {
-  color: #ef4444;
+  color: rgb(var(--danger));
 }
 
 /* Alarm Configuration Section */
 .alarm-config-section {
   margin-top: 20px;
   padding-top: 20px;
-  border-top: 1px solid rgba(75, 85, 99, 0.3);
+  border-top: 1px solid rgb(var(--n-200));
   display: flex;
   align-items: center;
   gap: 16px;
@@ -1107,10 +992,10 @@ watch(chartCanvas, (canvas) => {
 
 .btn-config-alarm {
   padding: 12px 24px;
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(251, 191, 36, 0.1) 100%);
-  border: 1px solid rgba(245, 158, 11, 0.4);
+  background: linear-gradient(135deg, rgb(var(--warning) / 0.2) 0%, rgb(var(--warning) / 0.1) 100%);
+  border: 1px solid rgb(var(--warning) / 0.4);
   border-radius: 8px;
-  color: #fbbf24;
+  color: rgb(var(--warning));
   font-weight: 600;
   cursor: pointer;
   display: flex;
@@ -1120,10 +1005,10 @@ watch(chartCanvas, (canvas) => {
 }
 
 .btn-config-alarm:hover {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.3) 0%, rgba(251, 191, 36, 0.2) 100%);
-  border-color: rgba(245, 158, 11, 0.6);
+  background: linear-gradient(135deg, rgb(var(--warning) / 0.3) 0%, rgb(var(--warning) / 0.2) 100%);
+  border-color: rgb(var(--warning) / 0.6);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+  box-shadow: 0 4px 12px rgb(var(--warning) / 0.3);
 }
 
 .btn-config-alarm i {
@@ -1135,10 +1020,10 @@ watch(chartCanvas, (canvas) => {
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: rgb(var(--success) / 0.1);
+  border: 1px solid rgb(var(--success) / 0.3);
   border-radius: 8px;
-  color: #10b981;
+  color: rgb(var(--success));
   font-size: 13px;
   font-weight: 500;
 }

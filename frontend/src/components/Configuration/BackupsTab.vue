@@ -3,8 +3,8 @@
     <!-- Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Backups do Sistema</h3>
-        <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+        <h3 class="text-lg font-semibold text-neutral-900">Backups do Sistema</h3>
+        <p class="text-sm text-neutral-600 mt-1">
           {{ hasBackups ? `${backups.length} backups • ${totalBackupSize}` : 'Nenhum backup disponível' }}
         </p>
       </div>
@@ -29,16 +29,16 @@
     </div>
 
     <!-- Backup List -->
-    <div v-if="hasBackups" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-      <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-        <h4 class="text-base font-semibold text-gray-900 dark:text-white">Backups Disponíveis</h4>
+    <div v-if="hasBackups" class="bg-surface rounded-lg border border-neutral-200">
+      <div class="px-6 py-4 border-b border-neutral-200">
+        <h4 class="text-base font-semibold text-neutral-900">Backups Disponíveis</h4>
       </div>
 
-      <div class="divide-y divide-gray-200 dark:divide-gray-700">
+      <div class="divide-y divide-neutral-200">
         <div 
           v-for="backup in backups" 
           :key="backup.id"
-          class="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+          class="px-6 py-4 hover:bg-neutral-50 transition-colors"
         >
           <div class="flex items-center justify-between">
             <div class="flex-1">
@@ -47,10 +47,10 @@
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"/>
                 </svg>
                 <div>
-                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ backup.filename }}</p>
-                  <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  <p class="text-sm font-medium text-neutral-900">{{ backup.filename }}</p>
+                  <p class="text-xs text-neutral-500 mt-0.5">
                     {{ formatDate(backup.created_at) }} • {{ formatSize(backup.size) }}
-                    <span v-if="backup.cloud_uploaded" class="ml-2 text-green-600 dark:text-green-400">
+                    <span v-if="backup.cloud_uploaded" class="ml-2 text-success">
                       ☁️ Enviado para nuvem
                     </span>
                   </p>
@@ -103,7 +103,7 @@
 
               <button 
                 @click="handleDelete(backup)" 
-                class="btn-icon text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                class="btn-icon text-danger hover:bg-danger/10"
                 title="Excluir"
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -117,26 +117,26 @@
     </div>
 
     <!-- Empty State -->
-    <div v-else class="text-center py-12 bg-gray-50 dark:bg-gray-800/50 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700">
-      <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <div v-else class="text-center py-12 bg-neutral-50 rounded-lg border-2 border-dashed border-neutral-300">
+      <svg class="mx-auto h-12 w-12 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
       </svg>
-      <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">Nenhum backup criado ainda</p>
+      <p class="mt-2 text-sm text-neutral-600">Nenhum backup criado ainda</p>
       <button @click="handleCreateBackup" class="mt-4 btn-primary">
         Criar Primeiro Backup
       </button>
     </div>
 
     <!-- Upload File -->
-    <div class="bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 p-4">
-      <h4 class="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-2">Restaurar de Arquivo</h4>
-      <p class="text-xs text-blue-700 dark:text-blue-400 mb-3">Faça upload de um arquivo de backup (.zip) para restaurar</p>
+    <div class="bg-info/10 rounded-lg border border-info/40 p-4">
+      <h4 class="text-sm font-semibold text-info mb-2">Restaurar de Arquivo</h4>
+      <p class="text-xs text-info mb-3">Faça upload de um arquivo de backup (.zip) para restaurar</p>
       <input 
         type="file" 
         accept=".zip"
         @change="handleFileUpload"
         ref="fileInput"
-        class="block w-full text-sm text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded-md cursor-pointer bg-white dark:bg-gray-700 focus:outline-none"
+        class="block w-full text-sm text-neutral-900 border border-neutral-300 rounded-md cursor-pointer bg-surface focus:outline-none"
       />
     </div>
 
@@ -395,11 +395,11 @@ onMounted(async () => {
 
 <style scoped>
 .label-custom {
-  @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5;
+  @apply block text-sm font-medium text-neutral-700 mb-1.5;
 }
 
 .input-custom {
-  @apply w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors;
+  @apply w-full rounded-md border border-neutral-300 bg-surface px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors;
 }
 
 .btn-primary {
@@ -407,10 +407,10 @@ onMounted(async () => {
 }
 
 .btn-secondary {
-  @apply inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200;
+  @apply inline-flex items-center justify-center rounded-md border border-neutral-300 bg-surface px-4 py-2 text-sm font-semibold text-neutral-700 shadow-sm hover:bg-neutral-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200;
 }
 
 .btn-icon {
-  @apply p-2 rounded-md text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  @apply p-2 rounded-md text-neutral-600 hover:bg-neutral-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
 }
 </style>

@@ -12,6 +12,10 @@ from typing import Any
 import structlog
 
 from .base import *  # noqa
+from .runtime_env import load_runtime_email_env
+
+# EV-0037: e-mail configurado pelo gateway SMTP vive no database/runtime.env
+load_runtime_email_env(globals()["DATABASE_DIR"])
 
 # -----------------------------------------------------
 # Initial validation
@@ -58,7 +62,9 @@ if USE_X_FORWARDED_HOST:
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 SESSION_COOKIE_HTTPONLY = True
-CSRF_COOKIE_HTTPONLY = True
+# EV-0037: o frontend lê o cookie csrftoken (ZabbixLookupView, SystemPanel, CronTab);
+# HttpOnly partiria os POSTs desses ecrãs. Igual ao base.
+CSRF_COOKIE_HTTPONLY = False
 SESSION_COOKIE_SAMESITE = os.getenv("SESSION_COOKIE_SAMESITE", "Lax")
 
 # HSTS
@@ -83,7 +89,8 @@ X_FRAME_OPTIONS = "DENY"
 
 # Database
 _db_default = globals()["DATABASES"]["default"]
-_db_default["CONN_MAX_AGE"] = int(os.getenv("DB_CONN_MAX_AGE", "300"))
+# EV-0037: 0 por omissão (como hoje): workers ASGI + conexões persistentes esgotam o Postgres
+_db_default["CONN_MAX_AGE"] = int(os.getenv("DB_CONN_MAX_AGE", "0"))
 _db_default["OPTIONS"].update(
     {
         "connect_timeout": 10,
@@ -91,6 +98,10 @@ _db_default["OPTIONS"].update(
 )
 
 # Template caching
+# Com `loaders` explícitos o Django exige APP_DIRS=False (o base liga-o) — sem isto
+# o arranque falhava com ImproperlyConfigured (EV-0037). O app_directories.Loader
+# abaixo cobre o que o APP_DIRS fazia.
+globals()["TEMPLATES"][0]["APP_DIRS"] = False
 _template_options = globals()["TEMPLATES"][0]["OPTIONS"]
 _template_options["loaders"] = [
     (
@@ -102,8 +113,8 @@ _template_options["loaders"] = [
     )
 ]
 
-# Static files
-STATICFILES_STORAGE = "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"
+# Static files: STATICFILES_STORAGE já não existe no Django 5.2 (era ignorado); o
+# armazenamento vem do base (WhiteNoise). EV-0037.
 
 # File upload limits
 DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv("DATA_UPLOAD_MAX_MEMORY_SIZE", "10485760"))  # 10 MB
@@ -182,38 +193,14 @@ if REDIS_USE_SENTINEL:
             },
         },
     }
-else:
-    # Standard Redis configuration (Managed Service or single instance)
-    CACHES = {
-        "default": {
-            "BACKEND": "django_redis.cache.RedisCache",
-            "LOCATION": REDIS_URL,
-            "OPTIONS": {
-                "CLIENT_CLASS": "django_redis.client.DefaultClient",
-                "SOCKET_CONNECT_TIMEOUT": 5,
-                "SOCKET_TIMEOUT": 5,
-                "CONNECTION_POOL_KWARGS": {"max_connections": 50, "retry_on_timeout": True},
-                "PARSER_CLASS": "redis.connection.HiredisParser",
-            },
-        }
-    }
+# Sem Sentinel: mantém CACHES / CHANNEL_LAYERS / Celery do base (get_cache_config,
+# com degradação sem Redis). A versão anterior forçava PARSER_CLASS=HiredisParser,
+# que não existe no redis-py 7 instalado — a cache rebentaria no 1.º acesso (EV-0037).
 
-    # Celery
-    CELERY_BROKER_URL = REDIS_URL
-    CELERY_RESULT_BACKEND = REDIS_URL
-    CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
-
-    # Channels
-    CHANNEL_LAYERS = {
-        "default": {
-            "BACKEND": "channels_redis.core.RedisChannelLayer",
-            "CONFIG": {
-                "hosts": [REDIS_URL],
-                "capacity": 1500,
-                "expiry": 10,
-            },
-        },
-    }
+# -----------------------------------------------------
+# Frontend / versão (iguais ao que a produção corria em settings.dev — EV-0037)
+# -----------------------------------------------------
+GIT_SHA = os.getenv("GIT_SHA", "")  # cozido na imagem quando o deploy o passa (EV-0039)
 
 # -----------------------------------------------------
 # Email

@@ -3,15 +3,15 @@
     <div class="fixed inset-0 z-50 overflow-y-auto">
       <div class="flex min-h-screen items-center justify-center p-4">
         <!-- Backdrop -->
-        <div class="fixed inset-0 bg-black/50 dark:bg-black/70 transition-opacity" @click="$emit('close')"></div>
+        <div class="fixed inset-0 bg-black/50 transition-opacity" @click="$emit('close')"></div>
 
         <!-- Modal -->
-        <div class="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full">
-          <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+        <div class="relative bg-surface rounded-lg shadow-xl max-w-4xl w-full">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-neutral-200">
+            <h3 class="text-lg font-semibold text-neutral-900">
               Histórico de Auditoria
             </h3>
-            <button @click="$emit('close')" class="text-gray-400 hover:text-gray-500">
+            <button @click="$emit('close')" class="text-neutral-400 hover:text-neutral-500">
               <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
               </svg>
@@ -49,7 +49,7 @@
               <div 
                 v-for="log in filteredLogs" 
                 :key="log.id"
-                class="flex items-start gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
+                class="flex items-start gap-4 p-4 bg-neutral-50 rounded-lg"
               >
                 <div class="flex-shrink-0">
                   <div class="w-8 h-8 rounded-full flex items-center justify-center"
@@ -64,21 +64,21 @@
 
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2">
-                    <span class="text-sm font-medium text-gray-900 dark:text-white">
+                    <span class="text-sm font-medium text-neutral-900">
                       {{ log.user }}
                     </span>
                     <span class="text-xs px-2 py-0.5 rounded-full"
                           :class="getActionBadge(log.action)">
                       {{ log.action }}
                     </span>
-                    <span class="text-xs text-gray-500 dark:text-gray-400">
+                    <span class="text-xs text-neutral-500">
                       {{ formatDate(log.timestamp) }}
                     </span>
                   </div>
-                  <p class="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                  <p class="text-sm text-neutral-600 mt-1">
                     {{ log.description }}
                   </p>
-                  <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  <p class="text-xs text-neutral-500 mt-1">
                     {{ log.entity_type }}: {{ log.entity_name }}
                   </p>
                 </div>
@@ -87,14 +87,14 @@
 
             <!-- Empty State -->
             <div v-else class="text-center py-12">
-              <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="mx-auto h-12 w-12 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
               </svg>
-              <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">Nenhum registro de auditoria encontrado</p>
+              <p class="mt-2 text-sm text-neutral-600">Nenhum registro de auditoria encontrado</p>
             </div>
           </div>
 
-          <div class="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+          <div class="flex justify-end gap-3 px-6 py-4 border-t border-neutral-200">
             <button @click="$emit('close')" class="btn-primary">
               Fechar
             </button>
@@ -203,7 +203,7 @@ onMounted(() => {
 
 <style scoped>
 .input-sm {
-  @apply rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20;
+  @apply rounded-md border border-neutral-300 bg-surface px-3 py-1.5 text-sm text-neutral-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20;
 }
 
 .btn-primary {

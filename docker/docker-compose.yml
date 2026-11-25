@@ -3,6 +3,13 @@
     build:
       context: ..
       dockerfile: docker/dockerfile
+      # EV-0039: commit e versão cozidos na imagem (saem no /healthz; a Central fecha itens por eles).
+      # `docker compose build` simples continua a funcionar (fica git_sha "" e version "dev");
+      # para os passar: GIT_SHA=$(git rev-parse HEAD) APP_VERSION=$(cat VERSION) docker compose … build
+      # (o scripts/update.sh já o faz). Não os ponha fixos no docker/.env — mentiriam no deploy seguinte.
+      args:
+        GIT_SHA: "${GIT_SHA:-}"
+        APP_VERSION: "${APP_VERSION:-}"
     command: >
       gunicorn core.asgi:application
       -k uvicorn.workers.UvicornWorker
@@ -12,7 +19,8 @@
       --max-requests 1000
     entrypoint: ["/docker-entrypoint.sh"]
     ports:
-      - "8100:8000"
+      # EV-0087: só no próprio servidor (scripts, healthchecks); o acesso é pelo nginx (80/443).
+      - "127.0.0.1:8100:8000"
     env_file:
       - path: ../.env
         required: false   # .env é opcional — todas as config essenciais já estão aqui
@@ -23,11 +31,9 @@
       DB_PORT: "5432"
       DB_NAME: app
       DB_USER: app
-      DB_PASSWORD: app
-      DJANGO_SETTINGS_MODULE: settings.dev
-      SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
-      # Aceita qualquer host/IP — configuração via web, sem precisar editar .env
-      ALLOWED_HOSTS: "*"
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-settings.prod}  # EV-0037 (dev local: DJANGO_SETTINGS_MODULE=settings.dev em docker/.env)
+      # EV-0083: ALLOWED_HOSTS vem do ../.env (env_file); um "*" aqui sobrepunha-se e o Django
+      # aceitava qualquer cabeçalho Host (envenenamento de links, ex.: recuperação de senha).
       PYTHONPATH: "/app/backend:/app"
       PYTHONUNBUFFERED: 1
       GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
@@ -43,11 +49,6 @@
       ENABLE_URL_PERSISTENCE: "True"
       # Disable Debug Toolbar in Docker (prevents redirect interception)
       ENABLE_DEBUG_TOOLBAR: "False"
-      # Vue 3 Dashboard Feature Flags (Phase 11 - Canary Rollout)
-      # Permite rollout gradual: 0% (desabilitado) -> 10% -> 25% -> 50% -> 100%
-      # Usar scripts/rollout_vue.ps1 para ajustar percentual com segurança
-      USE_VUE_DASHBOARD: "${USE_VUE_DASHBOARD:-true}"
-      VUE_DASHBOARD_ROLLOUT_PERCENTAGE: "${VUE_DASHBOARD_ROLLOUT_PERCENTAGE:-0}"
       # Sentry APM (Phase 12 - Error Tracking & Performance Monitoring)
       SENTRY_DSN: "https://2b2a767ff10ec5ce098ba093c054a300@o4510353484742656.ingest.us.sentry.io/4510353502371840"
       SENTRY_ENVIRONMENT: "development"
@@ -56,6 +57,7 @@
       INIT_MIGRATE: "true"
       # Ensure collectstatic runs in the container so static files are available to the web server
       INIT_COLLECTSTATIC: "true"
+      SYNC_SPA_ASSETS: "true"
       INIT_ENSURE_SUPERUSER: "true"
       CELERY_STATUS_TIMEOUT: "6"
       CELERY_PING_TIMEOUT: "2"
@@ -88,7 +90,9 @@
       - ../docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
       - ../database:/app/database
       - ../logs:/app/backend/logs
-      - ../backend/staticfiles:/app/backend/staticfiles  # serve static files directly from host build output
+      # EV-0052: estáticos num volume (não na pasta do host). O SPA vem da imagem:
+      # o entrypoint copia /app/spa-dist para aqui a cada arranque (SYNC_SPA_ASSETS).
+      - static_data:/app/backend/staticfiles
 
   whatsapp-qr:
     build:
@@ -98,7 +102,7 @@
       LOG_LEVEL: "info"
       DATA_DIR: /data
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
     volumes:
       - whatsapp_qr_data:/data
     restart: unless-stopped
@@ -107,6 +111,10 @@
     build:
       context: ..
       dockerfile: docker/dockerfile
+      # EV-0039: ver o comentário do serviço web.
+      args:
+        GIT_SHA: "${GIT_SHA:-}"
+        APP_VERSION: "${APP_VERSION:-}"
     command: celery -A core.celery_app worker -Q default,zabbix,maps -l info -c 4
     entrypoint: ["/docker-entrypoint.sh"]
     env_file:
@@ -119,10 +127,7 @@
       DB_PORT: "5432"
       DB_NAME: app
       DB_USER: app
-      DB_PASSWORD: app
-      DJANGO_SETTINGS_MODULE: settings.dev
-      SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
-      ALLOWED_HOSTS: "*"
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-settings.prod}  # EV-0037 (dev local: DJANGO_SETTINGS_MODULE=settings.dev em docker/.env)
       PYTHONPATH: "/app/backend:/app"
       PYTHONUNBUFFERED: 1
       GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
@@ -158,6 +163,10 @@
     build:
       context: ..
       dockerfile: docker/dockerfile
+      # EV-0039: ver o comentário do serviço web.
+      args:
+        GIT_SHA: "${GIT_SHA:-}"
+        APP_VERSION: "${APP_VERSION:-}"
     command: celery -A core.celery_app beat -l info --pidfile=/tmp/celerybeat.pid
     entrypoint: ["/docker-entrypoint.sh"]
     env_file:
@@ -170,10 +179,7 @@
       DB_PORT: "5432"
       DB_NAME: app
       DB_USER: app
-      DB_PASSWORD: app
-      DJANGO_SETTINGS_MODULE: settings.dev
-      SECRET_KEY: "django-insecure-docker-dev-key-change-in-production"
-      ALLOWED_HOSTS: "*"
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-settings.prod}  # EV-0037 (dev local: DJANGO_SETTINGS_MODULE=settings.dev em docker/.env)
       PYTHONPATH: "/app/backend:/app"
       PYTHONUNBUFFERED: 1
       GDAL_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu/libgdal.so
@@ -207,7 +213,7 @@
   redis:
     image: redis:7-alpine
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"  # nunca 0.0.0.0: Redis sem senha foi invadido em 2026-11-07
     command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -220,16 +226,17 @@
 
   postgres:
     image: postgis/postgis:16-3.4
+    env_file:
+      - ../.env   # POSTGRES_PASSWORD (= DB_PASSWORD); só é lido na criação do volume
     environment:
       POSTGRES_DB: app
       POSTGRES_USER: app
-      POSTGRES_PASSWORD: app
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.utf8"
       POSTGIS_GDAL_ENABLED_DRIVERS: ENABLE_ALL
       POSTGIS_ENABLE_OUTDB_RASTERS: 1
     # Map to host port 5433 to avoid conflicts with local Postgres installations on 5432
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./sql/init_postgis.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
@@ -241,72 +248,14 @@
       start_period: 30s
     restart: unless-stopped
 
-  # Prometheus - Metrics collection and alerting
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: docker-prometheus-1
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
-      - '--web.enable-lifecycle'
-      - '--storage.tsdb.retention.time=30d'
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./prometheus/alerts:/etc/prometheus/alerts:ro
-      - prometheus_data:/prometheus
-    restart: unless-stopped
-    networks:
-      - default
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-
-  # Grafana - Metrics visualization and dashboards
-  grafana:
-    image: grafana/grafana:latest
-    container_name: docker-grafana-1
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_SERVER_ROOT_URL=http://localhost:3000
-      - GF_ANALYTICS_REPORTING_ENABLED=false
-      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
-      - GF_INSTALL_PLUGINS=
-    ports:
-      - "3002:3000"
-    volumes:
-      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
-      - grafana_data:/var/lib/grafana
-    restart: unless-stopped
-    depends_on:
-      prometheus:
-        condition: service_healthy
-    networks:
-      - default
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
   video-hls:
     build:
       context: ./hls
     image: docker-video-hls:latest
     container_name: docker-video-hls-1
     ports:
-      - "1935:1935"
-      - "8083:8080"
+      - "127.0.0.1:1935:1935"
+      - "127.0.0.1:8083:8080"
     volumes:
       - hls_cache:/var/www/hls
     healthcheck:
@@ -330,7 +279,7 @@
       mediamtx:
         condition: service_started
     ports:
-      - "9000:9000"
+      - "127.0.0.1:9000:9000"
     restart: unless-stopped
     volumes:
       - hls_cache:/var/www/hls
@@ -345,7 +294,7 @@
       - MTX_WEBRTCICEUDPMUXADDRESS=:8189
       - MTX_WEBRTCICEHOSTNAT=localhost
     ports:
-      - "8554:8554"   # RTSP
+      - "127.0.0.1:8554:8554"   # RTSP
       - "8888:8888"   # HLS (LL-HLS)
       - "8889:8889"   # WebRTC (HTTP signaling)
       - "8189:8189/udp" # WebRTC ICE/UDP candidates
@@ -367,9 +316,7 @@
       DB_PORT: "5432"
       DB_NAME: app
       DB_USER: app
-      DB_PASSWORD: app
       DJANGO_SETTINGS_MODULE: settings.test
-      SECRET_KEY: "django-insecure-test-key"
       PYTHONPATH: "/app/backend:/app"
       PYTHONUNBUFFERED: 1
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
@@ -401,23 +348,23 @@
       - ./nginx:/etc/nginx/setup:ro          # configs e templates
       - certbot_www:/var/www/certbot         # desafio ACME
       - certbot_certs:/etc/letsencrypt       # certificados
-      - ../backend/staticfiles:/app/staticfiles:ro  # static files
+      - static_data:/app/staticfiles:ro  # mesmo volume que o web publica (EV-0052)
     depends_on:
       web:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "nginx -t 2>/dev/null && wget -qO- http://localhost/healthz || exit 1"]
+      # EV-0047: 127.0.0.1 (localhost resolvia para ::1, onde o nginx não escuta)
+      test: ["CMD-SHELL", "nginx -t 2>/dev/null && wget -qO- http://127.0.0.1/healthz || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
 
 volumes:
+  static_data:  # STATIC_ROOT: collectstatic + SPA da imagem (EV-0052)
   redis_data:
   postgres_data:
-  prometheus_data:
-  grafana_data:
   whatsapp_qr_data:
   certbot_www:
   certbot_certs:

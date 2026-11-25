@@ -58,6 +58,7 @@
  * @property {boolean} [editable]
  * @property {boolean} [draggable]
  * @property {boolean} [clickable]
+ * @property {number} [hitWidth]     - só Mapbox: largura (px) da área invisível de clique/hover (padrão 8)
  */
 
 /**
@@ -292,7 +293,9 @@ export class IMap {
   }
 
   /**
-   * Muda o tema base. Google re-estiliza; Mapbox/Leaflet mantêm o estilo configurado.
+   * Muda o tema base (EV-0045: a factory chama-o quando o tema da interface muda).
+   * Google re-estiliza; Mapbox troca para a variante clara/escura do estilo de base e
+   * repõe as camadas; Leaflet escurece os tiles. Overlays (cabos, marcadores) ficam.
    * @param {'light'|'dark'} theme
    */
   setTheme(theme) {

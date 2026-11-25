@@ -19,6 +19,7 @@ from integrations.zabbix.guards import reload_diagnostics_flag_cache
 
 from ..models import FirstTimeSetup
 from ..models_audit import ConfigurationAudit
+from ..optical_budget import parse_optical_budget
 from ..services import runtime_settings
 from ..services.config_loader import clear_runtime_config_cache
 from ..services.service_reloader import trigger_restart
@@ -122,6 +123,14 @@ EDITABLE_KEYS = [
     "OPTICAL_RX_WARNING_THRESHOLD",
     "OPTICAL_RX_CRITICAL_THRESHOLD",
     "OPTICAL_THRESHOLDS_BY_DISTANCE",
+    # EV-0095: capacidade de ONUs por PON (inteiros 1..1024)
+    "GPON_PON_CAPACITY",
+    "EPON_PON_CAPACITY",
+    # EV-0115: limiares de RX das portas de switch (backbone)
+    "BACKBONE_RX_WARNING_THRESHOLD",
+    "BACKBONE_RX_CRITICAL_THRESHOLD",
+    # EV-0140: orçamento óptico do projeto (JSON)
+    "OPTICAL_BUDGET",
     # Backup automation
     "BACKUP_AUTO_ENABLED",
     "BACKUP_FREQUENCY",
@@ -143,6 +152,11 @@ _EXPORT_EXCLUDED = {
     "OPTICAL_RX_WARNING_THRESHOLD",
     "OPTICAL_RX_CRITICAL_THRESHOLD",
     "OPTICAL_THRESHOLDS_BY_DISTANCE",
+    "GPON_PON_CAPACITY",
+    "EPON_PON_CAPACITY",
+    "BACKBONE_RX_WARNING_THRESHOLD",
+    "BACKBONE_RX_CRITICAL_THRESHOLD",
+    "OPTICAL_BUDGET",
     "BACKUP_AUTO_ENABLED",
     "BACKUP_FREQUENCY",
     "BACKUP_RETENTION_DAYS",
@@ -380,6 +394,11 @@ def _fallback_values(current_values: dict[str, str]) -> dict[str, Any]:
         "OPTICAL_THRESHOLDS_BY_DISTANCE": parse_distance_thresholds(
             runtime_config.optical_thresholds_by_distance
         ),
+        "GPON_PON_CAPACITY": str(runtime_config.gpon_pon_capacity),
+        "EPON_PON_CAPACITY": str(runtime_config.epon_pon_capacity),
+        "BACKBONE_RX_WARNING_THRESHOLD": str(runtime_config.backbone_rx_warning_threshold),
+        "BACKBONE_RX_CRITICAL_THRESHOLD": str(runtime_config.backbone_rx_critical_threshold),
+        "OPTICAL_BUDGET": parse_optical_budget(runtime_config.optical_budget),
         "BACKUP_AUTO_ENABLED": False,
         "BACKUP_FREQUENCY": "weekly",
         "BACKUP_RETENTION_DAYS": "30",
@@ -480,6 +499,9 @@ def _parse_float_str(value: Any, default: float) -> str:
         return str(float(str(value).strip()))
     except Exception:
         return str(default)
+
+
+_PON_CAPACITY_RANGE = (runtime_settings.PON_CAPACITY_MIN, runtime_settings.PON_CAPACITY_MAX)
 
 
 def _clamp_int(raw: str, default: int, low: int, high: int) -> int:
@@ -611,6 +633,19 @@ def build_configuration_payload(
         "OPTICAL_THRESHOLDS_BY_DISTANCE": json.dumps(
             parse_distance_thresholds(data.get("OPTICAL_THRESHOLDS_BY_DISTANCE"))
         ),
+        "GPON_PON_CAPACITY": str(
+            _clamp_int(_str(data, "GPON_PON_CAPACITY"), 128, *_PON_CAPACITY_RANGE)
+        ),
+        "EPON_PON_CAPACITY": str(
+            _clamp_int(_str(data, "EPON_PON_CAPACITY"), 64, *_PON_CAPACITY_RANGE)
+        ),
+        "BACKBONE_RX_WARNING_THRESHOLD": _parse_float_str(
+            data.get("BACKBONE_RX_WARNING_THRESHOLD", "-20"), -20
+        ),
+        "BACKBONE_RX_CRITICAL_THRESHOLD": _parse_float_str(
+            data.get("BACKBONE_RX_CRITICAL_THRESHOLD", "-24"), -24
+        ),
+        "OPTICAL_BUDGET": json.dumps(parse_optical_budget(data.get("OPTICAL_BUDGET"))),
     }
 
     # E-mail: o backend SMTP do Django segue a secção SMTP
@@ -649,6 +684,10 @@ def _apply_runtime_overrides(payload: dict[str, str]) -> None:
     """Efeito imediato, sem reiniciar: thresholds, e-mail e comandos de restart."""
     os.environ["OPTICAL_RX_WARNING_THRESHOLD"] = payload["OPTICAL_RX_WARNING_THRESHOLD"]
     os.environ["OPTICAL_RX_CRITICAL_THRESHOLD"] = payload["OPTICAL_RX_CRITICAL_THRESHOLD"]
+    os.environ["GPON_PON_CAPACITY"] = payload["GPON_PON_CAPACITY"]
+    os.environ["EPON_PON_CAPACITY"] = payload["EPON_PON_CAPACITY"]
+    os.environ["BACKBONE_RX_WARNING_THRESHOLD"] = payload["BACKBONE_RX_WARNING_THRESHOLD"]
+    os.environ["BACKBONE_RX_CRITICAL_THRESHOLD"] = payload["BACKBONE_RX_CRITICAL_THRESHOLD"]
     os.environ["SERVICE_RESTART_COMMANDS"] = payload["SERVICE_RESTART_COMMANDS"]
     settings.EMAIL_BACKEND = payload.get("EMAIL_BACKEND", settings.EMAIL_BACKEND)
     settings.EMAIL_HOST = payload.get("EMAIL_HOST", settings.EMAIL_HOST)
@@ -664,11 +703,21 @@ def _apply_runtime_overrides(payload: dict[str, str]) -> None:
     for key, default in (
         ("OPTICAL_RX_WARNING_THRESHOLD", -24.0),
         ("OPTICAL_RX_CRITICAL_THRESHOLD", -27.0),
+        ("BACKBONE_RX_WARNING_THRESHOLD", -20.0),
+        ("BACKBONE_RX_CRITICAL_THRESHOLD", -24.0),
     ):
         try:
             setattr(settings, key, float(payload[key]))
         except (TypeError, ValueError):
             setattr(settings, key, default)
+    for key, default in (("GPON_PON_CAPACITY", 128), ("EPON_PON_CAPACITY", 64)):
+        try:
+            setattr(settings, key, int(payload[key]))
+        except (TypeError, ValueError):
+            setattr(settings, key, default)
+    budget = parse_optical_budget(payload.get("OPTICAL_BUDGET"))
+    os.environ["OPTICAL_BUDGET"] = json.dumps(budget)
+    settings.OPTICAL_BUDGET = budget
     distance = parse_distance_thresholds(payload.get("OPTICAL_THRESHOLDS_BY_DISTANCE"))
     os.environ["OPTICAL_THRESHOLDS_BY_DISTANCE"] = json.dumps(distance)
     settings.OPTICAL_THRESHOLDS_BY_DISTANCE = distance
@@ -762,6 +811,17 @@ def _persist_configuration(payload: dict[str, str]) -> None:
             "sms_aws_access_key_id": payload["SMS_AWS_ACCESS_KEY_ID"],
             "sms_aws_secret_access_key": payload["SMS_AWS_SECRET_ACCESS_KEY"],
             "sms_infobip_base_url": payload["SMS_INFOBIP_BASE_URL"],
+            # EV-0096: sem isto os limiares e capacidades perdiam-se no reinício.
+            "optical_rx_warning_threshold": float(payload["OPTICAL_RX_WARNING_THRESHOLD"]),
+            "optical_rx_critical_threshold": float(payload["OPTICAL_RX_CRITICAL_THRESHOLD"]),
+            "optical_thresholds_by_distance": parse_distance_thresholds(
+                payload.get("OPTICAL_THRESHOLDS_BY_DISTANCE")
+            ),
+            "gpon_pon_capacity": int(payload["GPON_PON_CAPACITY"]),
+            "epon_pon_capacity": int(payload["EPON_PON_CAPACITY"]),
+            "backbone_rx_warning_threshold": float(payload["BACKBONE_RX_WARNING_THRESHOLD"]),
+            "backbone_rx_critical_threshold": float(payload["BACKBONE_RX_CRITICAL_THRESHOLD"]),
+            "optical_budget": parse_optical_budget(payload.get("OPTICAL_BUDGET")),
         },
     )
 

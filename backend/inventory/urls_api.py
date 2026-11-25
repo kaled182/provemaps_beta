@@ -63,7 +63,31 @@ from inventory.api.cable_types import (  # noqa: E402
     api_list_cable_types,
     api_update_cable_type,
 )
+from inventory.api.ceo import (  # noqa: E402
+    CeoDeriveView,
+    CeoDetailView,
+    CeoFusionDeleteView,
+    CeoFusionsView,
+    CeosView,
+    CeoTubeFusionView,
+    SitePortsView,
+    SlackDetailView,
+    SlacksView,
+    SplitterDetailView,
+    SplitterPortView,
+    SplittersView,
+    StrandTraceTreeView,
+    StrandTraceView,
+)
 from inventory.api.check_update import api_check_update  # noqa: E402
+from inventory.api.collection_health import api_collection_health  # noqa: E402
+from inventory.api.design_points import (  # noqa: E402
+    CtoDetailView,
+    CtosView,
+    PoleDetailView,
+    PolesView,
+)
+from inventory.api.device_summaries import DeviceTemperatureView, PortsSummaryView  # noqa: E402
 from inventory.api.fibers import api_fiber_audit_log  # noqa: E402
 from inventory.api.infrastructure import (  # noqa: E402
     api_create_infrastructure,
@@ -73,6 +97,14 @@ from inventory.api.infrastructure import (  # noqa: E402
 from inventory.api.maintenance_alert import (  # noqa: E402
     api_maintenance_recipients,
     api_maintenance_send_alert,
+)
+from inventory.api.otdr import (  # noqa: E402
+    CableOtdrHistoryView,
+    OtdrAlertClearView,
+    OtdrAlertDetailView,
+    OtdrAlertStatusView,
+    OtdrAlertsView,
+    OtdrLocateView,
 )
 from inventory.api.perform_update import api_perform_update  # noqa: E402
 from inventory.api.responsibles import api_create_responsible, api_list_responsibles  # noqa: E402
@@ -145,6 +177,8 @@ urlpatterns = [
         name="maintenance-alert-recipients",
     ),
     path("maintenance-alert/send/", api_maintenance_send_alert, name="maintenance-alert-send"),
+    # EV-0085: saúde da coleta óptica
+    path("collection-health/", api_collection_health, name="collection-health"),
     # Alarm configuration sources (users, groups, contacts)
     path("alarm-config-sources/", api_alarm_config_sources, name="alarm-config-sources"),
     # Cable Attachments
@@ -420,6 +454,81 @@ urlpatterns = [
         "devices/grouped/",
         device_api.api_inventory_grouped,
         name="inventory-grouped",
+    ),
+    # EV-0135: CEOs no traçado e cabos derivados
+    path("ceos/", CeosView.as_view(), name="ceos"),
+    path("ceos/<int:ceo_id>/derive/", CeoDeriveView.as_view(), name="ceo-derive"),
+    path("ceos/site-ports/", SitePortsView.as_view(), name="ceo-site-ports"),
+    path("ceos/<int:ceo_id>/", CeoDetailView.as_view(), name="ceo-detail"),
+    # EV-0139: CTOs e postes
+    path("ctos/", CtosView.as_view(), name="ctos"),
+    path("ctos/<int:cto_id>/", CtoDetailView.as_view(), name="cto-detail"),
+    path("poles/", PolesView.as_view(), name="poles"),
+    path("poles/<int:pole_id>/", PoleDetailView.as_view(), name="pole-detail"),
+    # EV-0138: reservas técnicas
+    path("slacks/", SlacksView.as_view(), name="slacks"),
+    path("slacks/<int:slack_id>/", SlackDetailView.as_view(), name="slack-detail"),
+    # EV-0136: fusões na CEO e rastreamento da luz
+    path("ceos/<int:ceo_id>/fusions/", CeoFusionsView.as_view(), name="ceo-fusions"),
+    path("ceos/<int:ceo_id>/fusions/tube/", CeoTubeFusionView.as_view(), name="ceo-tube-fusion"),
+    # EV-0142: splitters na bandeja
+    path("ceos/<int:ceo_id>/splitters/", SplittersView.as_view(), name="ceo-splitters"),
+    path(
+        "ceos/<int:ceo_id>/splitters/<int:splitter_id>/",
+        SplitterDetailView.as_view(),
+        name="ceo-splitter-detail",
+    ),
+    path(
+        "ceos/<int:ceo_id>/splitters/<int:splitter_id>/ports/<int:number>/",
+        SplitterPortView.as_view(),
+        name="ceo-splitter-port",
+    ),
+    path(
+        "ceos/<int:ceo_id>/fusions/<int:fusion_id>/",
+        CeoFusionDeleteView.as_view(),
+        name="ceo-fusion-delete",
+    ),
+    path("strands/<int:strand_id>/trace/", StrandTraceView.as_view(), name="strand-trace"),
+    path(
+        "strands/<int:strand_id>/trace/tree/",
+        StrandTraceTreeView.as_view(),
+        name="strand-trace-tree",
+    ),
+    # EV-0128: pontos OTDR fixados no mapa para toda a equipa
+    path("otdr-alerts/", OtdrAlertsView.as_view(), name="otdr-alerts"),
+    path("otdr-alerts/<int:alert_id>/", OtdrAlertDetailView.as_view(), name="otdr-alert-detail"),
+    path(
+        "otdr-alerts/<int:alert_id>/status/",
+        OtdrAlertStatusView.as_view(),
+        name="otdr-alert-status",
+    ),
+    path(
+        "cables/<int:cable_id>/otdr-alerts/",
+        CableOtdrHistoryView.as_view(),
+        name="cable-otdr-history",
+    ),
+    path(
+        "otdr-alerts/<int:alert_id>/clear/",
+        OtdrAlertClearView.as_view(),
+        name="otdr-alert-clear",
+    ),
+    # EV-0127: localizador de rompimento OTDR sobre o traçado do cabo
+    path(
+        "cables/<int:cable_id>/otdr-locate/",
+        OtdrLocateView.as_view(),
+        name="cable-otdr-locate",
+    ),
+    # EV-0111: resumo de portas por dispositivo (cards do modal de Site)
+    path(
+        "devices/ports-summary/",
+        PortsSummaryView.as_view(),
+        name="devices-ports-summary",
+    ),
+    # EV-0112: temperatura para a faixa do equipamento no modal de Site
+    path(
+        "devices/<int:device_id>/temperature/",
+        DeviceTemperatureView.as_view(),
+        name="device-temperature",
     ),
     path(
         "devices/zabbix-status/",

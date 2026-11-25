@@ -5,6 +5,45 @@
       <!-- Mapa: criado pelo provider configurado (providers/maps) -->
       <div ref="mapContainer" class="map-container"></div>
 
+      <!-- EV-0127/0128: pontos de rompimento OTDR (o desta medição e os fixados pela equipa) -->
+      <template v-if="map">
+        <MapPopup v-for="pt in otdrPoints" :key="pt.key" :map="map" :position="pointLatLng(pt.result)" bare>
+          <OtdrPin @open="otdrOpenKey = pt.key" />
+        </MapPopup>
+        <MapPopup v-if="otdrOpen" :map="map" :position="pointLatLng(otdrOpen.result)" :offset-y="18">
+          <OtdrResultCard
+            :result="otdrOpen.result"
+            :alert="otdrOpen.alert"
+            :busy="otdrBusy"
+            :error="otdrError"
+            @close="otdrOpenKey = null"
+            @pin="pinOtdr"
+            @adjust="adjustOtdr(otdrOpen, $event)"
+            @status="setOtdrStatus(otdrOpen, $event)"
+            @clear="clearOtdr(otdrOpen)"
+          />
+        </MapPopup>
+      </template>
+
+      <!-- EV-0135: CEOs nos traçados -->
+      <template v-if="map">
+        <MapPopup v-for="c in ceos" :key="`ceo-${c.id}`" :map="map" :position="{ lat: c.point[1], lng: c.point[0] }" bare>
+          <CeoPin :name="c.name" :mode="c.mode" @open="ceoOpenId = c.id" />
+        </MapPopup>
+        <MapPopup v-if="ceoOpen" :map="map" :position="{ lat: ceoOpen.point[1], lng: ceoOpen.point[0] }" :offset-y="14">
+          <CeoCard :ceo="ceoOpen" @close="ceoOpenId = null" @fusions="ceoFusionsFor = $event" />
+        </MapPopup>
+      </template>
+
+      <!-- EV-0128: localizar OTDR escolhendo o cabo -->
+      <button class="map-otdr-btn" title="Localizar rompimento por leitura do OTDR" data-testid="map-otdr-btn" @click="openOtdr(null)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+          <circle cx="12" cy="12" r="7" stroke-width="2" />
+          <path stroke-linecap="round" stroke-width="2" d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+        </svg>
+        Localizar OTDR
+      </button>
+
       <!-- Painel Lateral: Gerenciar Itens (lazy: só monta após 1ª abertura, depois mantém estado) -->
       <MapInventoryPanel
         v-if="inventoryPanelMounted"
@@ -102,18 +141,14 @@
       </div>
     </transition>
 
-    <!-- Status badge — live Zabbix polling indicator (Fase 5.1) -->
-    <div class="status-poll-badge" :class="{ 'status-poll-badge--stale': !lastStatusUpdate }">
-      <span class="spb-dot" :class="`spb-dot--${statusSummary.offline > 0 ? 'warning' : 'ok'}`"></span>
-      <span class="spb-counts">
-        <span class="spb-online">{{ statusSummary.online }} online</span>
-        <template v-if="statusSummary.offline > 0">
-          · <span class="spb-offline">{{ statusSummary.offline }} offline</span>
-        </template>
-      </span>
-      <span v-if="lastUpdateLabel" class="spb-time">· {{ lastUpdateLabel }}</span>
-      <span v-else class="spb-time">· aguardando…</span>
-    </div>
+    <!-- HUD de KPIs no topo do mapa (EV-0048): clicar filtra o mapa -->
+    <MapKpiHud
+      v-model:filter="kpiFilter"
+      :kpis="mapKpis"
+      :telemetry="telemetryState"
+      :last-update="lastStatusUpdate"
+      :optical="opticalHud"
+    />
 
     <!-- Site Details Modal (lazy: monta na 1ª abertura) -->
     <SiteDetailsModal
@@ -137,10 +172,21 @@
       v-if="showCableDetailModal"
       :show="showCableDetailModal"
       :cable="selectedCable"
-      :can-edit="true"
+      show-otdr
       @close="showCableDetailModal = false"
-      @save="handleCableSave"
+      @otdr="openOtdr"
     />
+
+    <!-- EV-0126: etiqueta mínima do cabo no hover (o card completo abre no clique) -->
+    <div
+      v-if="cableHover"
+      class="cable-hover-label"
+      :style="{ left: `${cableHover.x + 12}px`, top: `${cableHover.y + 12}px` }"
+      role="tooltip"
+      data-testid="cable-hover-label"
+    >
+      {{ cableHover.text }}
+    </div>
 
     <!-- Cable Optical Tooltip (lazy) -->
     <CableOpticalTooltip
@@ -150,6 +196,20 @@
       :position="tooltipPosition"
       @close="showCableTooltip = false"
       @open-details="openCableDetailsFromTooltip"
+      @otdr="openOtdr"
+    />
+
+    <!-- EV-0136/0137: emendas da CEO em leitura (a edição é no Projeto de Rede) -->
+    <SpliceBoxModal v-if="ceoFusionsFor" :show="!!ceoFusionsFor" :ceo="ceoFusionsFor" readonly @close="ceoFusionsFor = null" />
+
+    <!-- EV-0127: localizador OTDR -->
+    <OtdrLocatorModal
+      v-if="otdrModalOpen"
+      :show="otdrModalOpen"
+      :cable="otdrCable"
+      :cables="availableItems.cables"
+      @close="otdrModalOpen = false"
+      @located="showOtdr"
     />
 
     <!-- Toast notification -->
@@ -183,13 +243,23 @@
  */
 import { ref, shallowRef, computed, onMounted, onBeforeUnmount, watch, defineAsyncComponent } from 'vue'
 import { useRoute } from 'vue-router'
+import { useApi } from '@/composables/useApi'
 import { useUiStore } from '@/stores/ui'
 import { useRealtimeStatus, availabilityToStatus } from '@/composables/useRealtimeStatus'
 import { createMap, getMapConfig } from '@/providers/maps/MapProviderFactory.js'
 import { useMapSelection } from '@/composables/map/useMapSelection'
 import { useMapData } from '@/composables/map/useMapData'
 import MapLegend from './components/MapLegend.vue'
+import MapKpiHud from './components/MapKpiHud.vue'
+import { useOpticalSummary } from '@/composables/useOpticalSummary'
+import { computeMapKpis, siteStatuses, deviceMatchesKpiFilter, cableMatchesKpiFilter } from '@/utils/mapKpis'
 import MapContextMenu from './components/MapContextMenu.vue'
+import MapPopup from '@/components/Map/MapPopup.vue'
+import OtdrPin from '@/components/Otdr/OtdrPin.vue'
+import CeoPin from '@/components/Ceo/CeoPin.vue'
+import CeoCard from '@/components/Ceo/CeoCard.vue'
+const SpliceBoxModal = defineAsyncComponent(() => import('@/components/Ceo/SpliceBoxModal.vue'))
+import OtdrResultCard from '@/components/Otdr/OtdrResultCard.vue'
 
 // Componentes pesados: lazy via defineAsyncComponent — só baixam o JS quando renderizados.
 // Modais (SiteDetails, FiberCable*, CableOpticalTooltip, MaintenanceNotify) são montados
@@ -199,6 +269,7 @@ const SiteDetailsModal = defineAsyncComponent(() => import('@/components/SiteDet
 const FiberCableQuickModal = defineAsyncComponent(() => import('@/components/FiberCableQuickModal.vue'))
 const FiberCableDetailModal = defineAsyncComponent(() => import('@/components/FiberCableDetailModal.vue'))
 const CableOpticalTooltip = defineAsyncComponent(() => import('@/components/CableOpticalTooltip.vue'))
+const OtdrLocatorModal = defineAsyncComponent(() => import('@/components/Otdr/OtdrLocatorModal.vue'))
 const MapInventoryPanel = defineAsyncComponent(() => import('./components/MapInventoryPanel.vue'))
 const MaintenanceAreaPanel = defineAsyncComponent(() => import('./components/MaintenanceAreaPanel.vue'))
 const MaintenanceNotifyModal = defineAsyncComponent(() => import('./components/MaintenanceNotifyModal.vue'))
@@ -229,6 +300,11 @@ const CABLE_STATUS_COLORS = {
   unknown: '#6b7280',
 }
 const DEVICE_MARKER_SIZE = 14
+// EV-0126: área de clique do cabo (Mapbox) e raio (px) à volta de um site em que o cabo cede
+const CABLE_HIT_WIDTH = 8
+const SITE_PRIORITY_PX = 18
+// EV-0127: trecho provável da falha (±40 m) — âmbar, por cima do cabo
+const OTDR_SEGMENT_STYLE = { strokeColor: '#f59e0b', strokeOpacity: 0.95, strokeWeight: 8 }
 const MAINTENANCE_STYLE = { strokeColor: '#f59e0b', strokeOpacity: 0.9, strokeWeight: 2, fillColor: '#f59e0b', fillOpacity: 0.12 }
 const DEFAULT_CENTER = { lat: -15.7801, lng: -47.9292 }
 const DEFAULT_ZOOM = 12
@@ -341,7 +417,6 @@ const selectedCable = ref(null)
 const showCableTooltip = ref(false)
 const hoveredCable = ref(null)
 const tooltipPosition = ref({ x: 0, y: 0 })
-let tooltipTimeout = null
 
 // ── Estado em tempo real (EV-0014) ───────────────────────────────────────────
 // WebSocket `/ws/dashboard/status/` é a fonte; o polling só entra como
@@ -354,22 +429,41 @@ const realtime = useRealtimeStatus({ autoConnect: false })
 
 const STATUS_SEVERITY = { offline: 4, critical: 3, warning: 2, online: 1, unknown: 0 }
 
-const statusSummary = computed(() => {
-  const counts = { online: 0, warning: 0, critical: 0, offline: 0, unknown: 0 }
-  availableItems.value.devices.forEach(d => {
-    const k = d.status || 'unknown'
-    counts[k] = (counts[k] || 0) + 1
-  })
-  const total = availableItems.value.devices.length
-  return { ...counts, total }
+// ── HUD de KPIs (EV-0048) ────────────────────────────────────────────────────
+const kpiFilter = ref(null) // null | KPI_FILTERS.*
+const degradedPolling = ref(false)
+
+const mapKpis = computed(() => computeMapKpis({
+  devices: availableItems.value.devices,
+  cables: availableItems.value.cables,
+  selectedDeviceIds: selectedItems.value.devices,
+  selectedCableIds: selectedItems.value.cables,
+}))
+
+const siteStatusMap = computed(() => {
+  const selected = new Set(selectedItems.value.devices)
+  return siteStatuses(availableItems.value.devices.filter(d => selected.has(d.id)))
 })
 
-const lastUpdateLabel = computed(() => {
-  if (!lastStatusUpdate.value) return null
-  const diffMs = Date.now() - lastStatusUpdate.value.getTime()
-  const secs = Math.round(diffMs / 1000)
-  if (secs < 60) return `${secs}s atrás`
-  return `${Math.round(secs / 60)}min atrás`
+// Pior RX da rede (EV-0049): agregado lido do banco; recarrega quando o WebSocket
+// anuncia mudança de estado de cabos (sem polling).
+const opticalSummary = useOpticalSummary()
+const opticalHud = computed(() => {
+  const body = opticalSummary.data.value
+  const worst = body?.worst || null
+  let critical = null
+  if (worst) {
+    const cable = (body.cables || []).find(c => c.id === worst.cable_id)
+    critical = cable?.[worst.side]?.critical_threshold ?? null
+  }
+  return { worst, critical, error: opticalSummary.error.value }
+})
+
+const telemetryState = computed(() => {
+  if (realtime.connected.value) return 'live'
+  if (degradedPolling.value) return 'degraded'
+  if (realtime.connecting?.value) return 'connecting'
+  return 'offline'
 })
 
 const _normalizeAvailability = (avail) => availabilityToStatus(avail, 'unknown')
@@ -446,12 +540,16 @@ async function fetchAndApplyDeviceStatuses() {
 
 function startDegradedPolling() {
   if (statusPollTimer) return
+  degradedPolling.value = true
   console.warn('[CustomMapViewer] WebSocket indisponível; polling de 60 s em modo degradado')
   statusPollTimer = setInterval(fetchAndApplyDeviceStatuses, STATUS_POLL_INTERVAL)
 }
 
 realtime.onHosts((_hosts, next) => applyDeviceStatuses(new Map([...deviceStatusMap.value, ...next])))
-realtime.onCables((_cables, next) => applyCableStatuses(next))
+realtime.onCables((_cables, next) => {
+  applyCableStatuses(next)
+  opticalSummary.load()
+})
 watch(realtime.error, (err) => {
   if (err === 'Max reconnect attempts reached') startDegradedPolling()
 })
@@ -459,11 +557,13 @@ watch(realtime.connected, (isConnected) => {
   if (isConnected && statusPollTimer) {
     clearInterval(statusPollTimer)
     statusPollTimer = null
+    degradedPolling.value = false
   }
 })
 
 function startStatusPolling() {
   fetchAndApplyDeviceStatuses()
+  opticalSummary.load()
   realtime.connect()
 }
 
@@ -566,9 +666,29 @@ const toggleCameraSite = (siteName, cameras) => {
 // ── Marcadores (diff incremental por id) ────────────────────────────────────
 const activeMarkers = new Map() // deviceId → IMarker
 
+// Ids no mapa = selecionados ∩ filtro do card do HUD
+function visibleDeviceIds() {
+  const ids = new Set(selectedItems.value.devices)
+  if (!kpiFilter.value) return ids
+  const bySite = siteStatusMap.value
+  availableItems.value.devices.forEach(d => {
+    if (ids.has(d.id) && !deviceMatchesKpiFilter(d, kpiFilter.value, bySite)) ids.delete(d.id)
+  })
+  return ids
+}
+
+function visibleCableIds() {
+  const ids = new Set(selectedItems.value.cables)
+  if (!kpiFilter.value) return ids
+  availableItems.value.cables.forEach(c => {
+    if (ids.has(c.id) && !cableMatchesKpiFilter(c, kpiFilter.value)) ids.delete(c.id)
+  })
+  return ids
+}
+
 function updateMarkers() {
   if (!map.value) return
-  const wanted = new Set(selectedItems.value.devices)
+  const wanted = visibleDeviceIds()
 
   activeMarkers.forEach((marker, id) => {
     if (!wanted.has(id)) {
@@ -622,7 +742,7 @@ function cablePath(cable) {
 
 function updatePolylines() {
   if (!map.value) return
-  const wanted = new Set(selectedItems.value.cables)
+  const wanted = visibleCableIds()
   const base = cableBaseStyle()
 
   activePolylines.forEach((polyline, id) => {
@@ -652,9 +772,11 @@ function updatePolylines() {
         strokeColor: cableColor(cable.status),
         ...base,
         clickable: true,
+        hitWidth: CABLE_HIT_WIDTH,
       })
-      polyline.on('click', () => handleCableClick(cable))
+      polyline.on('click', (event) => handleCableClick(cable, event))
       polyline.on('mouseover', (event) => handleCableHover(cable, event))
+      polyline.on('mousemove', (event) => handleCableHover(cable, event))
       polyline.on('mouseout', handleCableUnhover)
       activePolylines.set(cable.id, polyline)
     })
@@ -709,9 +831,59 @@ const updateMap = () => {
   // Carga inicial: ajusta bounds se há itens; sem itens permanece na localização configurada.
   // Sem setTimeout: a factory só devolve o mapa quando o provider está pronto.
   if (wasInitialLoad) {
+    // EV-0107: «Ver no mapa» do ecrã GPON abre com ?site=<id> — enquadra e destaca esse POP
+    if (focusSiteFromQuery()) return
+    // EV-0116: «Ver enlace no mapa» da tela de Switches abre com ?cable=<id>
+    if (focusCableFromQuery()) return
     const hasItems = selectedItems.value.devices.length > 0 || selectedItems.value.cables.length > 0
     if (hasItems) fitAllItemsBounds()
   }
+}
+
+// ── Foco num POP vindo de outro ecrã (?site=<id>) — EV-0107 ───────────────────
+const FOCUS_HIGHLIGHT_MS = 6000
+const FOCUS_MARKER_SIZE = 24
+let focusTimer = null
+
+function focusSiteFromQuery() {
+  const siteId = Number(route.query?.site)
+  if (!map.value || !Number.isFinite(siteId) || siteId <= 0) return false
+  const ids = availableItems.value.devices
+    .filter((d) => Number(d.site ?? d.site_id) === siteId)
+    .map((d) => d.id)
+  const markers = ids.map((id) => activeMarkers.get(id)).filter(Boolean)
+  if (!markers.length) {
+    showToast('O POP pedido não tem equipamentos com coordenadas neste mapa.', 'warning', 5000)
+    return false
+  }
+  map.value.fitBounds(
+    markers.map((m) => m.getPosition()),
+    { padding: 80, maxZoom: 16 },
+  )
+  markers.forEach((m) => m.setStyle({ size: FOCUS_MARKER_SIZE }))
+  clearTimeout(focusTimer)
+  focusTimer = setTimeout(() => {
+    markers.forEach((m) => m.setStyle({ size: DEVICE_MARKER_SIZE }))
+  }, FOCUS_HIGHLIGHT_MS)
+  return true
+}
+
+/** EV-0116: ?cable=<id> — enquadra o cabo e destaca-o durante uns segundos. */
+let cableFocusTimer = null
+function focusCableFromQuery() {
+  const wanted = String(route.query?.cable ?? '').trim()
+  if (!map.value || !wanted) return false
+  const cable = availableItems.value.cables.find((c) => String(c.id) === wanted)
+  const path = cable ? cablePath(cable) : []
+  if (!cable || !activePolylines.get(cable.id) || path.length < 2) {
+    showToast('O cabo pedido não tem traçado neste mapa.', 'warning', 5000)
+    return false
+  }
+  map.value.fitBounds(path, { padding: 80, maxZoom: 16 })
+  highlightCable(cable.id)
+  clearTimeout(cableFocusTimer)
+  cableFocusTimer = setTimeout(() => unhighlightCable(cable.id), FOCUS_HIGHLIGHT_MS)
+  return true
 }
 
 const toggleItem = (itemId) => {
@@ -829,8 +1001,36 @@ const handleDeviceClick = (device) => {
   }
 }
 
-const handleCableClick = (cable) => {
+/**
+ * EV-0126: o site tem prioridade — um evento de cabo a menos de SITE_PRIORITY_PX de um marcador
+ * (no ecrã) é do site, não do cabo. Mede em pixels pelo IMap (os três providers).
+ */
+function nearSiteMarker(event) {
+  if (!map.value || !Number.isFinite(event?.lat) || !Number.isFinite(event?.lng)) return false
+  const p = map.value.latLngToPixel({ lat: event.lat, lng: event.lng })
+  if (!p) return false
+  for (const marker of activeMarkers.values()) {
+    const m = map.value.latLngToPixel(marker.getPosition())
+    if (m && Math.hypot(m.x - p.x, m.y - p.y) < SITE_PRIORITY_PX) return true
+  }
+  return false
+}
+
+/** «MANDI - VLP · 73,13 km» — o comprimento só quando o inventário o tem. */
+function cableHoverText(cable) {
+  const km = Number(cable?.length_km)
+  const name = cable?.name || cable?.label || 'Cabo'
+  return Number.isFinite(km) && km > 0
+    ? `${name} · ${km.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km`
+    : name
+}
+
+/** Clique no cabo: o card completo (TX/RX/atenuação e ações), onde se clicou. */
+const handleCableClick = (cable, event) => {
+  if (nearSiteMarker(event)) return
+  cableHover.value = null
   hoveredCable.value = cable
+  tooltipPosition.value = { x: event?.clientX || 0, y: event?.clientY || 0 }
   showCableTooltip.value = true
 }
 
@@ -840,29 +1040,198 @@ const openCableDetailsFromTooltip = (cable) => {
   showCableDetailModal.value = true
 }
 
-// Handlers para hover em cabos (tooltip) — `event` é o MapEvent comum (clientX/clientY)
-const handleCableHover = (cable, event) => {
-  if (tooltipTimeout) {
-    clearTimeout(tooltipTimeout)
+// ── EV-0135/0137: CEOs nos traçados — só leitura aqui (a edição é no Projeto de Rede) ──
+const CEOS_URL = '/api/v1/inventory/ceos/'
+const ceos = ref([])
+const ceoOpenId = ref(null)
+const ceoFusionsFor = ref(null) // EV-0136
+const ceoOpen = computed(() => ceos.value.find((c) => c.id === ceoOpenId.value) || null)
+async function loadCeos() {
+  try {
+    const body = await apiGet(CEOS_URL)
+    ceos.value = Array.isArray(body) ? body.filter((c) => Array.isArray(c?.point)) : []
+  } catch (e) {
+    console.warn('[CustomMapViewer] CEOs indisponíveis:', e?.message)
   }
+}
 
-  // Pequeno delay antes de mostrar tooltip
-  tooltipTimeout = setTimeout(() => {
-    hoveredCable.value = cable
-    tooltipPosition.value = {
-      x: event?.clientX || 0,
-      y: event?.clientY || 0
+// ── EV-0127/0128: localizador OTDR ───────────────────────────────────────────
+const { get: apiGet, post: apiPost, patch: apiPatch } = useApi()
+const OTDR_ALERTS_URL = '/api/v1/inventory/otdr-alerts/'
+const OTDR_ALERTS_REFRESH_MS = 60 * 1000
+const otdrModalOpen = ref(false)
+const otdrCable = ref(null) // null = escolher o cabo no formulário
+const otdrDraft = ref(null) // resultado desta medição, ainda não fixado
+const otdrAlerts = ref([]) // fixados pela equipa (servidor)
+const otdrOpenKey = ref(null)
+const otdrBusy = ref(false)
+const otdrError = ref('')
+const otdrLines = new Map() // key → { line, sig } do trecho ±40 m
+let otdrTimer = null
+
+const pointLatLng = (result) => {
+  const [lng, lat] = result?.point || []
+  return { lat, lng }
+}
+/** Pontos no mapa: os fixados e, se houver, o desta medição. */
+const otdrPoints = computed(() => [
+  ...otdrAlerts.value.map((a) => ({ key: `a${a.id}`, result: a.result, alert: a })),
+  ...(otdrDraft.value ? [{ key: 'draft', result: otdrDraft.value, alert: null }] : []),
+])
+const otdrOpen = computed(() => otdrPoints.value.find((p) => p.key === otdrOpenKey.value) || null)
+
+/** Trechos âmbar: cria os que faltam, tira os que já não estão. */
+function syncOtdrLines() {
+  if (!map.value) return
+  const wanted = new Map(otdrPoints.value.map((p) => [p.key, p]))
+  const sigOf = (pt) => JSON.stringify(pt.result.segment || [])
+  for (const [key, drawn] of otdrLines) {
+    // EV-0130: um ajuste muda o trecho — redesenha-se
+    if (!wanted.has(key) || drawn.sig !== sigOf(wanted.get(key))) {
+      drawn.line.remove()
+      otdrLines.delete(key)
     }
-    showCableTooltip.value = true
-  }, 300)
+  }
+  for (const [key, pt] of wanted) {
+    if (otdrLines.has(key)) continue
+    const path = (pt.result.segment || []).map(([lng, lat]) => ({ lat, lng }))
+    if (path.length >= 2) {
+      otdrLines.set(key, { line: map.value.createPolyline({ path, ...OTDR_SEGMENT_STYLE, clickable: false }), sig: sigOf(pt) })
+    }
+  }
+}
+watch([otdrPoints, map], syncOtdrLines)
+
+/** «Localizar OTDR»: com o cabo (cartão, detalhes) ou a escolher (barra do mapa). */
+function openOtdr(cable) {
+  showCableTooltip.value = false
+  showCableDetailModal.value = false
+  otdrCable.value = cable || null
+  otdrModalOpen.value = true
+}
+
+/** Resultado do backend: trecho, pino e cartão; centra no ponto. */
+function showOtdr(result) {
+  otdrModalOpen.value = false
+  otdrError.value = ''
+  otdrDraft.value = result
+  otdrOpenKey.value = 'draft'
+  if (!map.value) return
+  map.value.setCenter(pointLatLng(result))
+  map.value.setZoom(16)
+}
+
+async function loadOtdrAlerts() {
+  try {
+    const list = await apiGet(OTDR_ALERTS_URL)
+    otdrAlerts.value = Array.isArray(list) ? list : []
+  } catch {
+    /* sem alertas visíveis até ao próximo ciclo; o mapa continua */
+  }
+}
+
+/** «Fixar alerta no mapa»: o servidor recalcula e guarda; passa a ser visto por todos. */
+async function pinOtdr() {
+  const r = otdrDraft.value
+  if (!r || otdrBusy.value) return
+  otdrBusy.value = true
+  otdrError.value = ''
+  try {
+    // o servidor recalcula com os mesmos parâmetros: leitura(s), folga e o ajuste fino já feito
+    const body = { cable_id: r.cable_id, direction: r.direction, distance_m: r.otdr_m, offset_m: Number(r.offset_m) || 0 }
+    if (r.mode === 'cross' && r.cross) body.distance_b_m = r.cross.reading_b_m // EV-0131
+    else body.slack_pct = r.slack_pct
+    const alert = await apiPost(OTDR_ALERTS_URL, body)
+    otdrDraft.value = null
+    otdrAlerts.value = [alert, ...otdrAlerts.value.filter((a) => a.id !== alert.id)]
+    otdrOpenKey.value = `a${alert.id}`
+  } catch (e) {
+    otdrError.value = `Não foi possível fixar: ${e?.message || 'erro desconhecido'}`
+  } finally {
+    otdrBusy.value = false
+  }
+}
+
+/**
+ * EV-0130: ajuste fino — o servidor recalcula o ponto com o deslocamento. Na medição em curso
+ * pede-se de novo o otdr-locate; num ponto fixado grava-se para toda a equipa (com registo).
+ */
+async function adjustOtdr(pt, offsetM) {
+  if (!pt || otdrBusy.value) return
+  otdrBusy.value = true
+  otdrError.value = ''
+  try {
+    if (pt.alert) {
+      const updated = await apiPatch(`${OTDR_ALERTS_URL}${pt.alert.id}/`, { offset_m: offsetM })
+      otdrAlerts.value = otdrAlerts.value.map((a) => (a.id === updated.id ? updated : a))
+    } else {
+      const r = pt.result
+      const params = { direction: r.direction, distance_m: r.otdr_m, offset_m: offsetM }
+      if (r.mode === 'cross' && r.cross) params.distance_b_m = r.cross.reading_b_m // EV-0131
+      else params.slack_pct = r.slack_pct
+      otdrDraft.value = await apiGet(`/api/v1/inventory/cables/${encodeURIComponent(r.cable_id)}/otdr-locate/`, params)
+    }
+  } catch (e) {
+    otdrError.value = `Não foi possível ajustar: ${e?.message || 'erro desconhecido'}`
+  } finally {
+    otdrBusy.value = false
+  }
+}
+
+/** EV-0132: estado do atendimento (para toda a equipa); «Concluído» tira o pino do mapa. */
+async function setOtdrStatus(pt, status) {
+  if (!pt?.alert || otdrBusy.value) return
+  otdrBusy.value = true
+  otdrError.value = ''
+  try {
+    const updated = await apiPost(`${OTDR_ALERTS_URL}${pt.alert.id}/status/`, { status })
+    if (updated.status === 'done') {
+      otdrAlerts.value = otdrAlerts.value.filter((a) => a.id !== updated.id)
+      otdrOpenKey.value = null
+    } else {
+      otdrAlerts.value = otdrAlerts.value.map((a) => (a.id === updated.id ? updated : a))
+    }
+  } catch (e) {
+    otdrError.value = `Não foi possível mudar o estado: ${e?.message || 'erro desconhecido'}`
+  } finally {
+    otdrBusy.value = false
+  }
+}
+
+/** «Limpar»: o desta medição sai só daqui; um fixado é limpo para toda a equipa. */
+async function clearOtdr(pt) {
+  if (!pt) return
+  otdrError.value = ''
+  if (!pt.alert) {
+    otdrDraft.value = null
+    otdrOpenKey.value = null
+    return
+  }
+  otdrBusy.value = true
+  try {
+    await apiPost(`${OTDR_ALERTS_URL}${pt.alert.id}/clear/`, {})
+    otdrAlerts.value = otdrAlerts.value.filter((a) => a.id !== pt.alert.id)
+    otdrOpenKey.value = null
+  } catch (e) {
+    otdrError.value = `Não foi possível limpar: ${e?.message || 'erro desconhecido'}`
+  } finally {
+    otdrBusy.value = false
+  }
+}
+
+// EV-0126: hover no cabo = só o realce do traço (provider) + etiqueta mínima «nome · km» que
+// segue o rato; o card de telemetria abre no clique. Junto a um site, o hover é do site.
+const cableHover = ref(null)
+const handleCableHover = (cable, event) => {
+  if (nearSiteMarker(event)) {
+    cableHover.value = null
+    return
+  }
+  cableHover.value = { text: cableHoverText(cable), x: event?.clientX || 0, y: event?.clientY || 0 }
 }
 
 const handleCableUnhover = () => {
-  if (tooltipTimeout) {
-    clearTimeout(tooltipTimeout)
-    tooltipTimeout = null
-  }
-  // Tooltip now has a close button — do not auto-close on mouse out
+  cableHover.value = null
 }
 
 // ── Mapa: criação pelo provider configurado ──────────────────────────────────
@@ -901,10 +1270,16 @@ const initMap = async () => {
   }
 }
 
-// Tema do utilizador: o provider re-estiliza o fundo (Google) e os cabos mudam de espessura
-watch(() => uiStore.theme, (newTheme) => {
+// Card do HUD: redesenha só o que passa no filtro (sem reenquadrar)
+watch(kpiFilter, () => {
+  updateMarkers()
+  updatePolylines()
+})
+
+// Tema do utilizador: o fundo do mapa segue-o pela factory (EV-0045); aqui só os
+// cabos mudam de espessura
+watch(() => uiStore.theme, () => {
   if (!map.value) return
-  map.value.setTheme(newTheme === 'dark' ? 'dark' : 'light')
   updatePolylines()
 })
 
@@ -916,21 +1291,9 @@ const saveMapItems = async () => {
       return
     }
 
-    const response = await fetch(`/api/v1/maps/custom/${mapId}/items/`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
-      },
-      body: JSON.stringify({
-        selected_items: selectedItems.value
-      })
-    })
-
-    if (!response.ok) {
-      throw new Error(`Erro ao salvar: ${response.status}`)
-    }
+    // EV-0118: pelo useApi (CSRF do window.CSRF_TOKEN/cookie); o fetch cru lia um
+    // csrfmiddlewaretoken que a SPA não tem e o DRF respondia 403.
+    await apiPost(`/api/v1/maps/custom/${mapId}/items/`, { selected_items: selectedItems.value })
 
     showToast('Itens salvos com sucesso!')
   } catch (error) {
@@ -1100,14 +1463,11 @@ const openCableFullDetails = (cable) => {
 }
 
 // Função para salvar alterações do cabo
-const handleCableSave = async () => {
-  // TODO(EV-0012d): persistir no backend; hoje só recarrega o inventário
-  showCableDetailModal.value = false
-  await loadInventoryItems()
-  updateMap()
-}
-
 onMounted(async () => {
+  loadCeos() // EV-0135
+  // EV-0128: pontos OTDR fixados pela equipa — ao abrir e a cada minuto
+  loadOtdrAlerts()
+  otdrTimer = setInterval(loadOtdrAlerts, OTDR_ALERTS_REFRESH_MS)
   document.addEventListener('click', _hideCtxMenu)
   document.addEventListener('keydown', _globalKeydown)
 
@@ -1135,6 +1495,11 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  clearTimeout(focusTimer)
+  clearTimeout(cableFocusTimer)
+  otdrLines.forEach((drawn) => drawn.line.remove())
+  otdrLines.clear()
+  clearInterval(otdrTimer)
   stopStatusPolling()
 
   if (maintenanceMode.value) {
@@ -1146,43 +1511,35 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', _hideCtxMenu)
   document.removeEventListener('keydown', _globalKeydown)
   if (_resizeObserver) { _resizeObserver.disconnect(); _resizeObserver = null }
-  if (tooltipTimeout) clearTimeout(tooltipTimeout)
   if (_toastTimer) clearTimeout(_toastTimer)
   if (_badgeTimer) clearTimeout(_badgeTimer)
 })
 </script>
 
 <style scoped>
-.custom-map-viewer {
+.cable-hover-label {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  z-index: 1200;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  color: rgb(var(--n-50));
+  background: rgb(var(--n-900) / 0.92);
+  box-shadow: 0 4px 12px rgb(var(--n-950) / 0.25);
+}
+.custom-map-viewer {
+  /* Ocupa a área de conteúdo do App (main relative), abaixo do AppHeader (EV-0044) */
+  position: absolute;
+  inset: 0;
   background: var(--bg-primary);
   display: flex;
   flex-direction: column;
-  /* Ajustar margem baseado no estado do menu */
-  margin-left: var(--nav-menu-width, 72px);
-  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;
+  transition: background-color 0.3s ease;
 }
 
-/* Quando o menu está expandido */
-:root[data-nav-menu-open="true"] .custom-map-viewer {
-  margin-left: 280px;
-}
-
-/* Quando o menu está colapsado */
-:root[data-nav-menu-open="false"] .custom-map-viewer {
-  margin-left: 72px;
-}
-
-/* Mobile: menu é overlay fixo, mapa ocupa tela toda */
-@media (max-width: 768px) {
-  .custom-map-viewer {
-    margin-left: 0 !important;
-  }
-}
 
 .map-content {
   flex: 1;
@@ -1201,40 +1558,6 @@ onBeforeUnmount(() => {
   left: 0 !important;
 }
 
-/* ── Status poll badge (Fase 5.1) ── */
-.status-poll-badge {
-  position: absolute;
-  bottom: 80px;
-  left: 16px;
-  z-index: 900;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(15, 23, 42, 0.82);
-  backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-  padding: 5px 12px;
-  font-size: 0.75rem;
-  color: #cbd5e1;
-  pointer-events: none;
-}
-.spb-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  animation: spb-pulse 2s ease-in-out infinite;
-}
-.spb-dot--ok      { background: #10b981; }
-.spb-dot--warning { background: #f59e0b; }
-.spb-online { color: #6ee7b7; font-weight: 600; }
-.spb-offline { color: #fca5a5; font-weight: 600; }
-.spb-time   { color: #64748b; }
-@keyframes spb-pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.5; }
-}
 
 /* ==========================================
    LIGHT THEME OVERRIDES
@@ -1975,6 +2298,27 @@ html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary:hover {
 }
 
 /* ── Notify sent badge ───────────────────────────────────────────────────── */
+.map-otdr-btn {
+  position: absolute;
+  bottom: 124px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid rgb(var(--n-300));
+  border-radius: 8px;
+  background: rgb(var(--surface));
+  color: rgb(var(--n-800));
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgb(var(--n-950) / 0.15);
+}
+.map-otdr-btn:hover {
+  color: rgb(var(--danger));
+  border-color: rgb(var(--danger) / 0.5);
+}
 .map-fit-btn {
   position: absolute;
   bottom: 80px;
@@ -1984,18 +2328,18 @@ html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary:hover {
   align-items: center;
   gap: 6px;
   padding: 7px 12px;
-  background: var(--bg-card, #1e2433);
-  color: var(--text-primary, #e2e8f0);
-  border: 1px solid var(--border-primary, rgba(255,255,255,0.08));
+  background: rgb(var(--surface) / 0.95);
+  color: rgb(var(--n-800));
+  border: 1px solid rgb(var(--n-200));
   border-radius: 8px;
   font-size: 0.78rem;
   font-weight: 500;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.15);
   transition: background 0.15s, transform 0.1s;
 }
 .map-fit-btn:hover {
-  background: var(--bg-hover, #2a3347);
+  background: rgb(var(--n-100));
   transform: translateY(-1px);
 }
 .map-fit-btn:active {
@@ -2012,28 +2356,29 @@ html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary:hover {
   align-items: center;
   gap: 8px;
   padding: 10px 14px 10px 12px;
-  background: rgba(10, 60, 40, 0.96);
-  border: 1px solid #10b981;
+  background: rgb(var(--surface) / 0.96);
+  border: 1px solid rgb(var(--success));
   border-radius: 10px;
-  color: #ecfdf5;
+  color: rgb(var(--n-900));
   font-size: 0.82rem;
   font-weight: 600;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.2);
   white-space: nowrap;
   pointer-events: all;
 }
+.notify-sent-badge > svg { color: rgb(var(--success)); flex-shrink: 0; }
 .nsb-close {
   display: flex;
   align-items: center;
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgb(var(--n-500));
   cursor: pointer;
   padding: 0;
   margin-left: 4px;
   transition: color 0.15s;
 }
-.nsb-close:hover { color: #fff; }
+.nsb-close:hover { color: rgb(var(--n-900)); }
 
 /* ── Toast notification ──────────────────────────────────────────────────── */
 .map-toast {
@@ -2048,30 +2393,22 @@ html:not(.dark)[data-theme="light"] .btn-panel.btn-secondary:hover {
   padding: 11px 20px 11px 14px;
   border-radius: 10px;
   backdrop-filter: blur(12px);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.2);
+  background: rgb(var(--surface) / 0.96);
+  color: rgb(var(--n-900));
   font-size: 0.82rem;
   font-weight: 600;
   white-space: nowrap;
   pointer-events: none;
 }
 
-.map-toast--success {
-  background: rgba(10, 60, 40, 0.96);
-  border: 1px solid #10b981;
-  color: #ecfdf5;
-}
-
-.map-toast--error {
-  background: rgba(80, 10, 10, 0.96);
-  border: 1px solid #ef4444;
-  color: #fff1f2;
-}
-
-.map-toast--warning {
-  background: rgba(70, 45, 0, 0.96);
-  border: 1px solid #f59e0b;
-  color: #fffbeb;
-}
+/* Superfície do tema + borda/ícone semânticos (EV-0050): legível em claro e escuro */
+.map-toast--success { border: 1px solid rgb(var(--success)); }
+.map-toast--success .map-toast__icon { color: rgb(var(--success)); }
+.map-toast--error { border: 1px solid rgb(var(--danger)); }
+.map-toast--error .map-toast__icon { color: rgb(var(--danger)); }
+.map-toast--warning { border: 1px solid rgb(var(--warning)); }
+.map-toast--warning .map-toast__icon { color: rgb(var(--warning)); }
 
 .map-toast__icon {
   display: flex;

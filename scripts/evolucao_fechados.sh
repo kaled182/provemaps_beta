@@ -38,9 +38,15 @@ primeiro=1
 printf '['
 # `git log "$sha"` e não `git log`: só o que é ALCANÇÁVEL a partir do que está implantado.
 # A janela de dias evita reler a história toda a cada sessão.
-while IFS=$'\t' read -r commit assunto; do
-  [ -n "$commit" ] || continue
-  for codigo in $(printf '%s' "$assunto" \
+# A mensagem inteira (assunto + corpo): o verbo pode estar no corpo (`fecha EV-0072` numa linha
+# própria, como manda o CLAUDE.md). Registos separados por \x1e, campos por \x1f.
+while IFS= read -r -d $'\x1e' registo; do
+  registo="${registo#$'\n'}"
+  [ -n "$registo" ] || continue
+  commit="${registo%%$'\x1f'*}"
+  mensagem="${registo#*$'\x1f'}"
+  assunto="${mensagem%%$'\n'*}"
+  for codigo in $(printf '%s' "$mensagem" \
       | grep -oiE '(fecha|fecham|resolve|resolvem|closes|fixes) +(o +|os +)?EV-[0-9]{4}' \
       | grep -oE 'EV-[0-9]{4}' | sort -u); do
     [ $primeiro -eq 1 ] || printf ','
@@ -49,5 +55,5 @@ while IFS=$'\t' read -r commit assunto; do
     printf '{"codigo":"%s","commit":"%s","mensagem":"%s","deploy_em":"%s"}' \
       "$codigo" "$commit" "$esc" "$iniciado"
   done
-done < <(git -C "$REPO" log "$sha" --since="${JANELA} days ago" --format='%h%x09%s' 2>/dev/null)
+done < <(git -C "$REPO" log "$sha" --since="${JANELA} days ago" --format='%h%x1f%B%x1e' 2>/dev/null)
 printf ']\n'

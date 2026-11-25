@@ -59,10 +59,13 @@ vi.mock('mapbox-gl', () => {
 
 import { MapboxProvider, resolveMapboxStyle, mapboxStyleCandidates, MAPBOX_DEFAULT_STYLE } from '@/providers/maps/MapboxProvider.js';
 
-async function makeMap(config = {}, options = {}) {
+async function makeMap(config = {}, options = {}, { loaded = true } = {}) {
   const provider = new MapboxProvider();
   await provider.load({ mapboxToken: 'pk.test', ...config });
-  return provider.createMap({ id: 'c' }, { center: { lat: 0, lng: 0 }, zoom: 3, ...options });
+  const map = provider.createMap({ id: 'c' }, { center: { lat: 0, lng: 0 }, zoom: 3, ...options });
+  // Por omissão o estilo já carregou: sources/camadas entram logo (é o caso dos testes antigos).
+  if (loaded) created.maps[created.maps.length - 1].fire('load');
+  return map;
 }
 
 beforeEach(() => {
@@ -123,6 +126,16 @@ describe('MapboxMarker (EV-0012b)', () => {
 });
 
 describe('MapboxPolyline (EV-0012b)', () => {
+  it('EV-0126: área de hit de 8 px por omissão e configurável por hitWidth', async () => {
+    const map = await makeMap();
+    const line = map.createPolyline({ path: [{ lat: 1, lng: 2 }, { lat: 3, lng: 4 }] });
+    const wide = map.createPolyline({ path: [{ lat: 1, lng: 2 }, { lat: 3, lng: 4 }], hitWidth: 12 });
+    const native = created.maps[0];
+    const hit = (id) => native.addLayer.mock.calls.map(([l]) => l).find((l) => l.id === id);
+    expect(hit(line.hitLayerId).paint['line-width']).toBe(8);
+    expect(hit(wide.hitLayerId).paint['line-width']).toBe(12);
+  });
+
   it('mouseenter/mousemove/mouseleave na camada de hit viram mouseover/mousemove/mouseout', async () => {
     const map = await makeMap();
     const line = map.createPolyline({ path: [{ lat: 1, lng: 2 }, { lat: 3, lng: 4 }] });
@@ -167,7 +180,7 @@ describe('MapboxProvider — estilo configurado com fallback (EV-0012c)', () => 
   });
 
   it('o mapa nasce com o 1.º candidato e, se falhar antes do load, passa ao seguinte', async () => {
-    const map = await makeMap({ mapboxCustomStyle: 'mapbox://styles/x/custom', mapboxStyle: 'light' });
+    const map = await makeMap({ mapboxCustomStyle: 'mapbox://styles/x/custom', mapboxStyle: 'light' }, {}, { loaded: false });
     const native = created.maps[0];
     expect(native.opts.style).toBe('mapbox://styles/x/custom');
 
@@ -266,5 +279,95 @@ describe('MapboxMarker — rightclick (EV-0012d)', () => {
     el.dispatchEvent(ev);
     expect(cb).toHaveBeenCalledWith(expect.objectContaining({ lat: 1, lng: 2, clientX: 5, clientY: 6 }));
     expect(ev.defaultPrevented).toBe(true);
+  });
+});
+
+describe('MapboxMap — sources só depois do estilo carregar (produção 1.5.0: «Style is not done loading»)', () => {
+  it('polyline e polígono criados antes do load ficam em fila e entram no load; estilo e traçado dados entretanto são respeitados', async () => {
+    const map = await makeMap({}, {}, { loaded: false });
+    const native = created.maps[0];
+    const line = map.createPolyline({ path: [{ lat: 0, lng: 0 }, { lat: 1, lng: 1 }], strokeColor: '#111' });
+    const poly = map.createPolygon({ path: [{ lat: 0, lng: 0 }, { lat: 1, lng: 1 }, { lat: 1, lng: 0 }] });
+    expect(native.addSource).not.toHaveBeenCalled();
+
+    line.setStyle({ strokeColor: '#ef4444' });
+    poly.setPath([{ lat: 0, lng: 0 }, { lat: 2, lng: 2 }, { lat: 2, lng: 0 }]);
+    expect(native.setPaintProperty).not.toHaveBeenCalled();
+
+    native.fire('load');
+    expect(native.addSource).toHaveBeenCalledTimes(2);
+    const lineLayer = native.addLayer.mock.calls.find(([l]) => l.id === line.layerId)[0];
+    expect(lineLayer.paint['line-color']).toBe('#ef4444');
+    const polySource = native.addSource.mock.calls.find(([id]) => id === poly.sourceId)[1];
+    expect(polySource.data.geometry.coordinates[0][1]).toEqual([2, 2]);
+  });
+
+  it('remover antes do load cancela a entrada; o fallback de estilo volta a esperar pelo load', async () => {
+    const map = await makeMap({ mapboxCustomStyle: 'mapbox://styles/x/custom' }, {}, { loaded: false });
+    const native = created.maps[0];
+    const line = map.createPolyline({ path: [{ lat: 0, lng: 0 }, { lat: 1, lng: 1 }] });
+    line.remove();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    native.fire('error', { error: new Error('style not found') }); // → setStyle(default), estilo por carregar
+    const kept = map.createPolyline({ path: [{ lat: 0, lng: 0 }, { lat: 1, lng: 1 }] });
+    expect(native.addSource).not.toHaveBeenCalled();
+    native.fire('style.load');
+    expect(native.addSource).toHaveBeenCalledTimes(1);
+    expect(native.addSource.mock.calls[0][0]).toBe(kept.sourceId);
+    expect(native.removeSource).not.toHaveBeenCalled();
+  });
+
+  it('com o estilo já carregado, criar uma polyline entra no mapa imediatamente', async () => {
+    const map = await makeMap();
+    map.createPolyline({ path: [{ lat: 0, lng: 0 }, { lat: 1, lng: 1 }] });
+    expect(created.maps[0].addSource).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('MapboxMap segue o tema (EV-0045)', () => {
+  it('nasce na variante do tema: streets → dark-v11 no escuro', async () => {
+    await makeMap({ mapboxStyle: 'streets' }, { theme: 'dark' });
+    expect(created.maps[0].opts.style).toBe('mapbox://styles/mapbox/dark-v11');
+  });
+
+  it('satélite e estilo próprio não mudam com o tema', async () => {
+    await makeMap({ mapboxStyle: 'satellite' }, { theme: 'dark' });
+    expect(created.maps[0].opts.style).toBe('mapbox://styles/mapbox/satellite-v9');
+    const map = await makeMap({ mapboxCustomStyle: 'mapbox://styles/x/custom' }, { theme: 'light' });
+    map.setTheme('dark');
+    expect(created.maps[1].setStyle).not.toHaveBeenCalled();
+  });
+
+  it('setTheme troca o estilo e repõe cabos e polígonos no style.load, sem duplicar ouvintes', async () => {
+    const map = await makeMap({}, { theme: 'light' });
+    const native = created.maps[0];
+    const line = map.createPolyline({ path: [{ lat: 0, lng: 0 }, { lat: 1, lng: 1 }], strokeColor: '#111' });
+    const poly = map.createPolygon({ path: [{ lat: 0, lng: 0 }, { lat: 0, lng: 1 }, { lat: 1, lng: 1 }] });
+    const gone = map.createPolyline({ path: [{ lat: 0, lng: 0 }, { lat: 2, lng: 2 }] });
+    gone.remove();
+    const clickBinds = native.on.mock.calls.filter(([ev, layer]) => ev === 'click' && layer === line.hitLayerId).length;
+    native.addSource.mockClear();
+
+    map.setTheme('dark');
+    expect(native.setStyle).toHaveBeenCalledWith('mapbox://styles/mapbox/dark-v11');
+    line.setPath([{ lat: 5, lng: 5 }, { lat: 6, lng: 6 }]); // durante a troca: guardado
+    const queued = map.createPolyline({ path: [{ lat: 0, lng: 0 }, { lat: 3, lng: 3 }] });
+    expect(native.addSource).not.toHaveBeenCalled();
+
+    native.fire('style.load');
+    const ids = native.addSource.mock.calls.map(([id]) => id);
+    expect(ids).toEqual([line.sourceId, poly.sourceId, queued.sourceId]);
+    const lineData = native.addSource.mock.calls[0][1].data;
+    expect(lineData.geometry.coordinates[0]).toEqual([5, 5]);
+    const clickBindsAfter = native.on.mock.calls.filter(([ev, layer]) => ev === 'click' && layer === line.hitLayerId).length;
+    expect(clickBindsAfter).toBe(clickBinds);
+  });
+
+  it('o mesmo tema duas vezes não recarrega o estilo', async () => {
+    const map = await makeMap({}, { theme: 'dark' });
+    map.setTheme('dark');
+    expect(created.maps[0].setStyle).not.toHaveBeenCalled();
+    map.setTheme('light');
+    expect(created.maps[0].setStyle).toHaveBeenCalledWith(MAPBOX_DEFAULT_STYLE);
   });
 });

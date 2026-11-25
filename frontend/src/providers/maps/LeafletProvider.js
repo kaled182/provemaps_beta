@@ -12,6 +12,7 @@
  */
 
 import L from 'leaflet';
+import { OSM_DARK_FILTER } from './mapTheme.js';
 import 'leaflet/dist/leaflet.css';
 import { IMapProvider, IMap, IPolyline, IMarker, IPolygon } from './IMapProvider.js';
 import { getMarkerConfig } from './markerStyles.js';
@@ -357,6 +358,7 @@ class LeafletMap extends IMap {
       attribution: OSM_ATTRIBUTION,
       maxZoom: OSM_MAX_ZOOM,
     }).addTo(this.leafletMap);
+    this.setTheme(options.theme);
 
     this.leafletMap.on('click', (e) => this._emit('click', toMapEvent(e)));
     this.leafletMap.on('contextmenu', (e) => {
@@ -462,6 +464,12 @@ class LeafletMap extends IMap {
 
   createPolygon(options) {
     return new LeafletPolygon(this, options);
+  }
+
+  setTheme(theme) {
+    const el = this.tileLayer?.getContainer?.();
+    if (!el) return;
+    el.style.filter = theme === 'dark' ? OSM_DARK_FILTER : '';
   }
 
   destroy() {

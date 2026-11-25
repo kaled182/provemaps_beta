@@ -66,6 +66,8 @@
 
     <div class="map-container">
       <div id="builderMap" class="map-canvas" role="presentation"></div>
+      <!-- EV-0138: barra de modos, sites, CEOs, reservas e menus de objeto -->
+      <DesignLayer v-if="designMap" :map="designMap" />
     </div>
 
     <section
@@ -154,6 +156,12 @@
           <span id="contextLoadAllText">Recarregar cabos</span>
         </button>
         <button id="contextImportKML" type="button">Importar rota (KML)</button>
+        <!-- EV-0138 -->
+        <button type="button" data-testid="ctx-new-site" @click="designAction('site')">Novo site / POP aqui</button>
+        <button type="button" data-testid="ctx-trace" @click="designAction('trace')">Iniciar traçado de cabo</button>
+        <button type="button" data-testid="ctx-cto" @click="designAction('cto')">Inserir CTO aqui</button>
+        <button type="button" data-testid="ctx-pole" @click="designAction('pole')">Inserir poste aqui</button>
+        <button type="button" data-testid="ctx-measure" @click="designAction('measure')">Medir distância</button>
       </div>
 
       <!-- Cabo selecionado (preview) -->
@@ -167,6 +175,12 @@
           <svg viewBox="0 0 16 16" class="ctx-icon" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="3.5" width="13" height="9" rx="1.5"/><circle cx="8" cy="8" r="2"/><path stroke-linecap="round" d="M5.5 3.5l1-1.5h3l1 1.5"/></svg>
           Ver fotos
         </button>
+        <!-- EV-0138: no ponto do cabo onde se clicou -->
+        <button type="button" data-testid="ctx-insert-ceo" @click="designAction('ceo')">Inserir CEO aqui (sangria ou corte)</button>
+        <button type="button" data-testid="ctx-insert-cto" @click="designAction('cto-cable')">Inserir CTO aqui</button>
+        <button type="button" data-testid="ctx-insert-slack" @click="designAction('slack')">Inserir reserva técnica aqui</button>
+        <button type="button" data-testid="ctx-structure" @click="designAction('structure')">Abrir estrutura de fibras</button>
+        <button type="button" data-testid="ctx-vertex" @click="designAction('vertex')">Adicionar vértice (editar rota)</button>
         <button id="contextStartEdit" type="button">
           <svg viewBox="0 0 16 16" class="ctx-icon" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2 12l8.5-8.5 2 2L4 14H2v-2z"/></svg>
           Editar rota
@@ -223,7 +237,7 @@
       :style="cableDetailPanelStyle"
     >
       <div class="floating-panel__header cable-detail-drag-handle" @mousedown.prevent="startCableDetailDrag">
-        <h3 id="cableDetailsPanelTitle">Cable details</h3>
+        <h3 id="cableDetailsPanelTitle">Detalhes do cabo</h3>
         <button id="closeCableDetails" type="button" class="panel-toggle-btn" aria-label="Fechar painel" @mousedown.stop>
           <svg viewBox="0 0 20 20" aria-hidden="true" style="width:18px;height:18px">
             <path d="M5 5l10 10M15 5L5 15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -332,7 +346,15 @@
           </svg>
         </button>
       </div>
-      <div v-if="layerPanelOpen && (layerGroups.length || typeItems.length)" class="nd-layer-panel__body">
+      <div v-if="layerPanelOpen" class="nd-layer-panel__body">
+        <!-- EV-0139: camadas do projeto -->
+        <div class="nd-layer-section-label">Projeto</div>
+        <label v-for="l in DESIGN_LAYERS" :key="l.key" class="nd-layer-row" :data-testid="`layer-${l.key}`">
+          <input v-model="designLayers[l.key]" type="checkbox" />
+          <span class="nd-layer-dot" :class="`nd-layer-dot--${l.key}`"></span>
+          <span>{{ l.label }}</span>
+        </label>
+        <div v-if="layerGroups.length || typeItems.length" class="nd-layer-divider"></div>
         <label class="nd-layer-row nd-layer-row--all">
           <input type="checkbox" v-model="layerAllVisible" @change="toggleAllLayers" />
           <span>Todos os cabos</span>
@@ -799,182 +821,26 @@
       </div>
     </div>
 
-    <div
-      id="importKmlModal"
-      class="fixed inset-0 flex items-center justify-center bg-black/60 opacity-0 pointer-events-none transition-opacity duration-300 z-50"
-    >
-      <div
-        id="importKmlModalContent"
-        class="modal-card rounded-2xl shadow-2xl w-full max-w-md p-6 relative transform scale-95 opacity-0 transition-all duration-300 overflow-y-auto"
-        style="max-height:90vh"
-      >
-        <button
-          type="button"
-          class="absolute top-4 right-4 text-gray-400 hover:text-gray-200 text-xl leading-none bg-transparent border-none cursor-pointer"
-          @click="closeKmlModal"
-          aria-label="Fechar"
-        >
-          &times;
-        </button>
-
-        <h2 class="text-lg font-semibold mb-2">Importar rota via KML</h2>
-
-        <p class="text-xs text-gray-400 mb-3 leading-relaxed">
-          Vincule o arquivo <strong>.kml</strong> aos dispositivos monitorados. Você pode monitorar apenas a porta de origem (uma via) ou definir dispositivos de origem e destino distintos.
-        </p>
-
-        <div class="rounded-lg px-3 py-2 text-xs text-blue-300 mb-4 leading-relaxed" style="background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.3)">
-          O arquivo deve conter um <em>LineString</em> com a sequência de pontos (origem → destino) que representa o cabo físico.
-        </div>
-
-        <form id="importKmlForm" enctype="multipart/form-data" class="space-y-3">
-          <input type="hidden" name="csrfmiddlewaretoken" :value="csrfToken" />
-
-          <!-- Nome da rota -->
-          <div>
-            <label class="block text-xs font-medium mb-1">Nome da rota</label>
-            <input
-              type="text"
-              name="name"
-              required
-              placeholder="Ex: Backbone GYN → BSB"
-              class="nd-kml-input w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
-            />
-          </div>
-
-          <!-- Grupo do cabo -->
-          <div>
-            <label class="block text-xs font-medium mb-1">Grupo do cabo</label>
-            <select
-              id="kmlCableGroupSelect"
-              name="cable_group_id"
-              class="nd-kml-input w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
-            >
-              <option value="">— Sem grupo —</option>
-            </select>
-          </div>
-
-          <!-- Responsável -->
-          <div>
-            <label class="block text-xs font-medium mb-1">Responsável</label>
-            <select
-              id="kmlResponsibleSelect"
-              name="responsible_user_id"
-              class="nd-kml-input w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
-            >
-              <option value="">— Sem responsável —</option>
-            </select>
-          </div>
-
-          <!-- Dispositivo origem -->
-          <div>
-            <label class="block text-xs font-medium mb-1">Dispositivo origem</label>
-            <select
-              name="origin_device_id"
-              id="kmlOriginDeviceSelect"
-              required
-              data-placeholder="Selecione..."
-              class="nd-kml-input w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
-            >
-              <option value="">Selecione...</option>
-            </select>
-          </div>
-
-          <!-- Porta origem -->
-          <div>
-            <label class="block text-xs font-medium mb-1">Porta origem</label>
-            <select
-              name="origin_port_id"
-              id="kmlOriginPortSelect"
-              required
-              class="nd-kml-input w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
-            >
-              <option value="">Selecione...</option>
-            </select>
-          </div>
-
-          <!-- Monitorar apenas porta de origem -->
-          <div class="flex items-center justify-between">
-            <label for="kmlSinglePortOnly" class="text-xs cursor-pointer select-none">Monitorar apenas porta de origem</label>
-            <input
-              type="checkbox"
-              id="kmlSinglePortOnly"
-              name="single_port"
-              value="true"
-              class="w-4 h-4 cursor-pointer flex-shrink-0"
-              style="accent-color:#3b82f6"
-            />
-          </div>
-
-          <div
-            id="kmlDestNotice"
-            class="hidden text-xs text-blue-300 rounded-lg px-3 py-2"
-            style="background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25)"
-          >
-            Campos de destino desabilitados — apenas a porta de origem será monitorada.
-          </div>
-
-          <!-- Dispositivo destino -->
-          <div>
-            <label class="block text-xs font-medium mb-1">Dispositivo destino</label>
-            <select
-              name="dest_device_id"
-              id="kmlDestDeviceSelect"
-              required
-              data-placeholder="Selecione..."
-              class="nd-kml-input w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
-            >
-              <option value="">Selecione...</option>
-            </select>
-          </div>
-
-          <!-- Porta destino -->
-          <div>
-            <label class="block text-xs font-medium mb-1">Porta destino</label>
-            <select
-              name="dest_port_id"
-              id="kmlDestPortSelect"
-              required
-              class="nd-kml-input w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
-            >
-              <option value="">Selecione...</option>
-            </select>
-          </div>
-
-          <!-- Arquivo KML -->
-          <div>
-            <label class="block text-xs font-medium mb-1">Arquivo KML</label>
-            <input
-              type="file"
-              name="kml_file"
-              accept=".kml"
-              required
-              class="nd-kml-input w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
-            />
-          </div>
-
-          <div class="flex justify-end gap-2 pt-2">
-            <button type="button" class="nd-kml-btn-cancel px-4 py-2 rounded-lg text-sm font-medium cursor-pointer" @click="closeKmlModal">
-              Cancelar
-            </button>
-            <button type="submit" class="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer bg-blue-600 border-none text-white hover:bg-blue-700 transition">
-              Importar rota
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <!-- EV-0034: importação KML como componente Vue (era DOM legado + window.*) -->
+    <KmlImportModal :show="kmlOpen" :devices="kmlDevices" @close="kmlOpen = false" />
   </div>
 
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, onUnmounted } from 'vue';
-import { initializeNetworkDesignApp, flyToLocation, highlightSearchResult, cancelNetworkDesignEditing, saveNetworkDesignRoute } from '@/features/networkDesign/fiberRouteBuilder.js';
+import { ref, shallowRef, computed, onMounted, nextTick, onUnmounted, watch } from 'vue';
+import { useRoute } from 'vue-router';
+import { parseFocusQuery } from '@/utils/mapFocus';
+import { initializeNetworkDesignApp, whenNetworkDesignMapReady, flyToLocation, highlightSearchResult, cancelNetworkDesignEditing, saveNetworkDesignRoute } from '@/features/networkDesign/fiberRouteBuilder.js';
 import { getLoadedGroups, setGroupLayerVisible, setFolderFilter, getFallbackCables, setApiGroups, getGroupCounts, getTypeCounts, setTypeFilter } from '@/features/networkDesign/modules/cableService.js';
 import { request as apiRequest } from '@/features/networkDesign/modules/apiClient.js';
-import { initializeKmlModal, cleanupKmlModal } from '@/features/networkDesign/partials/import_kml.js';
+import KmlImportModal from '@/components/NetworkDesign/KmlImportModal.vue';
+import DesignLayer from '@/components/NetworkDesign/design/DesignLayer.vue';
+import { getMapInstance } from '@/features/networkDesign/modules/mapCore-refactored.js';
+import { designLayers, emitDesign } from '@/features/networkDesign/modules/designMode.js';
+import { hideContextMenu } from '@/features/networkDesign/modules/contextMenu.js';
 
+const route = useRoute();
 const csrfToken = ref(window.CSRF_TOKEN || '');
 const helpOpen = ref(false);
 const closeHelpPopover = () => { helpOpen.value = false; };
@@ -1202,6 +1068,31 @@ function selectSearchResult(item) {
   searchQuery.value = item.name;
   closeSearch();
 }
+
+// ── EV-0138: camada de engenharia ────────────────────────────────────────
+const designMap = shallowRef(null);
+const DESIGN_LAYERS = [
+  { key: 'sites', label: 'Sites / POPs' },
+  { key: 'ceos', label: 'CEOs' },
+  { key: 'ctos', label: 'CTOs' },
+  { key: 'poles', label: 'Postes' },
+  { key: 'slacks', label: 'Reservas técnicas' },
+];
+/** Entradas novas do menu de contexto legado → DesignLayer (usa o último clique direito). */
+function designAction(action) {
+  hideContextMenu();
+  emitDesign('menu-action', { action });
+}
+
+// Foco vindo da busca rápida (Ctrl K): ?foco=<site|cable|device>&id=&lat=&lng=&nome=
+async function focusFromQuery() {
+  const item = parseFocusQuery(route.query);
+  if (!item) return;
+  await whenNetworkDesignMapReady();
+  selectSearchResult(item);
+}
+// Já no Projeto de rede, um novo resultado do Ctrl K só muda a query.
+watch(() => route.fullPath, () => focusFromQuery());
 
 // ── Layer control state ──────────────────────────────────────────────────
 const LAYER_STORAGE_KEY = 'nd_layer_visibility';
@@ -1680,33 +1571,22 @@ const vClickOutside = {
   },
 };
 
-const ensureFiberGlobals = () => {
-  if (!Array.isArray(window.__FIBER_DEVICE_OPTIONS)) {
-    window.__FIBER_DEVICE_OPTIONS = [];
-  }
+// EV-0034: modal KML em Vue. O fiberRouteBuilder pede para abrir por evento e
+// publica os equipamentos por `fiber:device-options-loaded` (sem globais window.*).
+const kmlOpen = ref(false);
+const kmlDevices = ref([]);
+const onOpenKmlImport = () => {
+  kmlOpen.value = true;
 };
-
-const waitForKmlModal = async (retries = 5) => {
-  for (let attempt = 0; attempt < retries; attempt += 1) {
-    const ready = await initializeKmlModal(attempt > 0);
-    if (ready) {
-      return true;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 120 * (attempt + 1)));
-  }
-  console.warn('[NetworkDesign] KML modal could not be initialized.');
-  return false;
+const onDeviceOptionsLoaded = (event) => {
+  if (Array.isArray(event.detail?.devices)) kmlDevices.value = event.detail.devices;
 };
+document.addEventListener('fiber:open-kml-import', onOpenKmlImport);
+document.addEventListener('fiber:device-options-loaded', onDeviceOptionsLoaded);
 
 const closeManualModal = () => {
   if (typeof window.closeManualSaveModal === 'function') {
     window.closeManualSaveModal();
-  }
-};
-
-const closeKmlModal = () => {
-  if (typeof window.closeKmlModal === 'function') {
-    window.closeKmlModal();
   }
 };
 
@@ -1719,8 +1599,7 @@ onMounted(async () => {
     'toastHost',
     'confirmHost',
     'contextMenu',
-    'manualSaveModal',
-    'importKmlModal'
+    'manualSaveModal'
   ];
   
   orphanedElements.forEach(id => {
@@ -1730,8 +1609,6 @@ onMounted(async () => {
       bodyElement.remove();
     }
   });
-
-  ensureFiberGlobals();
 
   // IMPORTANTE: NetworkDesign refatorado para usar Provider Pattern
   // Funciona com qualquer provider configurado (Mapbox, Google Maps, etc.)
@@ -1771,10 +1648,14 @@ onMounted(async () => {
 
   await nextTick();
 
-  await waitForKmlModal();
   initializeNetworkDesignApp({ force: true });
+  // EV-0138: a camada de engenharia monta quando o mapa do construtor existe
+  whenNetworkDesignMapReady().then(() => {
+    designMap.value = getMapInstance();
+  });
   loadFolderTree();
   loadCableGroupsFromApi();
+  focusFromQuery();
 
   if (!csrfToken.value && window.CSRF_TOKEN) {
     csrfToken.value = window.CSRF_TOKEN;
@@ -1786,8 +1667,9 @@ onMounted(async () => {
 onUnmounted(() => {
   console.log('[NetworkDesignView] Component unmounting, cleaning up...');
   
-  closeKmlModal();
-  cleanupKmlModal();
+  kmlOpen.value = false;
+  document.removeEventListener('fiber:open-kml-import', onOpenKmlImport);
+  document.removeEventListener('fiber:device-options-loaded', onDeviceOptionsLoaded);
   
   // Call the comprehensive cleanup function
   if (typeof window.destroyNetworkDesignApp === 'function') {
@@ -1802,34 +1684,37 @@ onUnmounted(() => {
 
 <style scoped>
 :global(:root) {
-  --nd-bg: #f9fafb;
-  --nd-text: #111827;
-  --nd-muted: #6b7280;
-  --nd-panel-bg: #ffffff;
-  --nd-panel-border: #e5e7eb;
-  --nd-panel-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --nd-panel-text: #111827;
-  --nd-panel-muted: #6b7280;
-  --nd-chip-bg: #dbeafe;
-  --nd-chip-text: #1e40af;
-  --nd-list-bg: #f9fafb;
-  --nd-list-border: #e5e7eb;
-  --nd-list-item-hover: #f3f4f6;
-  --nd-btn-bg: #fef2f2;
-  --nd-btn-border: #fecaca;
-  --nd-btn-text: #b91c1c;
-  --nd-help-emphasis: #b45309;
-  --nd-shortcut-bg: #f3f4f6;
-  --nd-shortcut-border: #d1d5db;
-  --nd-context-bg: #ffffff;
-  --nd-context-border: #e5e7eb;
-  --nd-context-text: #111827;
-  --nd-context-hover: #f3f4f6;
-  --nd-modal-bg: #ffffff;
-  --nd-modal-text: #111827;
-  --nd-modal-muted: #6b7280;
-  --nd-input-bg: #ffffff;
-  --nd-input-border: #d1d5db;
+  /* EV-0139: paleta do Projeto de Rede derivada dos tokens do design system (ADR 0007) —
+     os tokens invertem sozinhos no escuro, por isso já não há bloco escuro à parte. */
+  --nd-bg: rgb(var(--canvas));
+  --nd-text: rgb(var(--n-900));
+  --nd-muted: rgb(var(--n-500));
+  --nd-panel-bg: rgb(var(--surface));
+  --nd-panel-border: rgb(var(--n-200));
+  --nd-panel-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
+  --nd-panel-text: rgb(var(--n-900));
+  --nd-panel-muted: rgb(var(--n-500));
+  --nd-chip-bg: rgb(var(--primary-500) / 0.14);
+  --nd-chip-text: rgb(var(--primary-700));
+  --nd-list-bg: rgb(var(--n-50));
+  --nd-list-border: rgb(var(--n-200));
+  --nd-list-item-hover: rgb(var(--n-100));
+  --nd-btn-bg: rgb(var(--danger) / 0.08);
+  --nd-btn-border: rgb(var(--danger) / 0.35);
+  --nd-btn-text: rgb(var(--danger));
+  --nd-help-emphasis: rgb(var(--warning));
+  --nd-shortcut-bg: rgb(var(--n-100));
+  --nd-shortcut-border: rgb(var(--n-300));
+  --nd-context-bg: rgb(var(--surface));
+  --nd-context-border: rgb(var(--n-200));
+  --nd-context-text: rgb(var(--n-900));
+  --nd-context-hover: rgb(var(--n-100));
+  --nd-modal-bg: rgb(var(--surface));
+  --nd-modal-text: rgb(var(--n-900));
+  --nd-modal-muted: rgb(var(--n-500));
+  --nd-input-bg: rgb(var(--surface));
+  --nd-input-border: rgb(var(--n-300));
+  --nd-accent: rgb(var(--primary-600));
 }
 
 .network-design-page {
@@ -1841,37 +1726,6 @@ onUnmounted(() => {
   background: var(--nd-bg);
 }
 
-:global(.dark),
-:global([data-theme='dark']) {
-  --nd-bg: #111827;
-  --nd-text: #f9fafb;
-  --nd-muted: #9ca3af;
-  --nd-panel-bg: #1f2937;
-  --nd-panel-border: #374151;
-  --nd-panel-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
-  --nd-panel-text: #f9fafb;
-  --nd-panel-muted: #9ca3af;
-  --nd-chip-bg: #1e3a8a;
-  --nd-chip-text: #93c5fd;
-  --nd-list-bg: #111827;
-  --nd-list-border: #374151;
-  --nd-list-item-hover: #374151;
-  --nd-btn-bg: #7f1d1d;
-  --nd-btn-border: #991b1b;
-  --nd-btn-text: #fecaca;
-  --nd-help-emphasis: #fbbf24;
-  --nd-shortcut-bg: #374151;
-  --nd-shortcut-border: #4b5563;
-  --nd-context-bg: #1f2937;
-  --nd-context-border: #374151;
-  --nd-context-text: #f9fafb;
-  --nd-context-hover: #374151;
-  --nd-modal-bg: #1f2937;
-  --nd-modal-text: #f9fafb;
-  --nd-modal-muted: #9ca3af;
-  --nd-input-bg: #111827;
-  --nd-input-border: #374151;
-}
 
 .map-container {
   position: relative;
@@ -2287,44 +2141,39 @@ onUnmounted(() => {
 
 .toast-host {
   position: fixed;
-  top: 1.25rem;
-  right: 1.25rem;
+  top: 150px;
+  right: 72px;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.5rem;
   z-index: 60;
+  max-width: 360px;
   pointer-events: none;
 }
 
-.toast-card {
+/* EV-0138: os avisos são criados por JS (uiHelpers) — sem :global o scoped não os alcança */
+:global(.toast-card) {
   display: flex;
-  gap: 0.75rem;
-  align-items: flex-start;
-  background: var(--surface-card);
-  color: var(--text-primary);
-  padding: 0.75rem 1rem;
-  border-radius: 0.75rem;
-  box-shadow: var(--shadow-md);
-  border: 1px solid var(--border-primary);
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgb(var(--n-200));
+  border-left-width: 4px;
+  background: rgb(var(--surface));
+  color: rgb(var(--n-900));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+  font-size: 13px;
   transition: opacity 0.16s ease;
   pointer-events: auto;
 }
-
-.toast-card.toast-success {
-  border-left: 4px solid #22c55e;
+:global(.toast-card strong) {
+  display: block;
+  margin-bottom: 2px;
+  font-weight: 600;
 }
-
-.toast-card.toast-error {
-  border-left: 4px solid #ef4444;
-}
-
-.toast-card.toast-warning {
-  border-left: 4px solid #f97316;
-}
-
-.toast-card.toast-info {
-  border-left: 4px solid #3b82f6;
-}
+:global(.toast-card.toast-success) { border-left-color: rgb(var(--success)); }
+:global(.toast-card.toast-error) { border-left-color: rgb(var(--danger)); }
+:global(.toast-card.toast-warning) { border-left-color: rgb(var(--warning)); }
+:global(.toast-card.toast-info) { border-left-color: rgb(var(--info)); }
 
 .confirm-host {
   position: fixed;
@@ -2401,6 +2250,8 @@ onUnmounted(() => {
 }
 
 #contextMenu {
+  /* EV-0138: acima dos painéis flutuantes (35) — o menu abre junto ao cabo, sobre o painel de detalhes */
+  z-index: 45;
   width: 260px;
   background: var(--nd-context-bg);
   border-radius: 12px;
@@ -2532,45 +2383,6 @@ onUnmounted(() => {
   background: var(--nd-input-bg);
   color: var(--nd-modal-text);
   border-color: var(--nd-input-border);
-}
-
-.network-design-page #importKmlModalContent {
-  color: var(--nd-modal-text);
-}
-
-.network-design-page #importKmlModalContent h2 {
-  color: var(--nd-modal-text);
-}
-
-.network-design-page #importKmlModalContent p,
-.network-design-page #importKmlModalContent .text-gray-500,
-.network-design-page #importKmlModalContent .text-gray-600,
-.network-design-page #importKmlModalContent .text-gray-700 {
-  color: var(--nd-modal-muted);
-}
-
-.network-design-page #importKmlModalContent input,
-.network-design-page #importKmlModalContent select,
-.network-design-page #importKmlModalContent textarea {
-  background: var(--nd-input-bg);
-  color: var(--nd-modal-text);
-  border-color: var(--nd-input-border);
-}
-
-.network-design-page #importKmlModalContent .bg-gray-100 {
-  background: var(--nd-list-bg);
-}
-
-.network-design-page .nd-kml-input {
-  background: var(--nd-input-bg);
-  color: var(--nd-modal-text);
-  border: 1px solid var(--nd-input-border);
-}
-
-.network-design-page .nd-kml-btn-cancel {
-  background: transparent;
-  border: 1px solid var(--nd-input-border);
-  color: var(--nd-modal-text);
 }
 
 .network-design-page .modal-card .bg-blue-50 {
@@ -2889,7 +2701,12 @@ onUnmounted(() => {
 }
 .nd-layer-row:hover { background: var(--nd-list-bg); }
 .nd-layer-row--all { font-weight: 600; }
-.nd-layer-row input[type="checkbox"] { accent-color: var(--nd-accent, #3b82f6); flex-shrink: 0; }
+.nd-layer-row input[type="checkbox"] { accent-color: var(--nd-accent); flex-shrink: 0; }
+.nd-layer-dot--sites { background: rgb(var(--primary-600)); }
+.nd-layer-dot--ceos { background: rgb(var(--info)); border-radius: 2px; transform: rotate(45deg); }
+.nd-layer-dot--ctos { background: rgb(var(--success)); border-radius: 2px; }
+.nd-layer-dot--poles { background: rgb(var(--n-400)); }
+.nd-layer-dot--slacks { background: transparent; border: 2px solid rgb(var(--warning)); }
 .nd-layer-dot {
   width: 10px;
   height: 10px;
@@ -2921,7 +2738,7 @@ onUnmounted(() => {
   color: var(--nd-modal-muted);
 }
 .nd-layer-dot--type {
-  background: linear-gradient(135deg, #6366f1 50%, #a855f7 50%);
+  background: linear-gradient(135deg, rgb(var(--primary-500)) 50%, rgb(var(--info)) 50%);
 }
 
 /* ── Global search bar ───────────────────────────────────── */
@@ -3194,15 +3011,10 @@ onUnmounted(() => {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  background: #dbeafe;
-  color: #1e40af;
+  background: var(--nd-chip-bg);
+  color: var(--nd-chip-text);
   padding: 0.1rem 0.4rem;
   border-radius: 999px;
-}
-:global(.dark) .nd-folder-active-badge,
-:global([data-theme='dark']) .nd-folder-active-badge {
-  background: #1e3a8a;
-  color: #93c5fd;
 }
 .nd-folder-panel__body {
   background: var(--nd-panel-bg);
@@ -3237,7 +3049,7 @@ onUnmounted(() => {
 .nd-folder-icon {
   width: 13px;
   height: 13px;
-  color: #f59e0b;
+  color: rgb(var(--warning));
   flex-shrink: 0;
 }
 .nd-folder-name {
@@ -3284,7 +3096,7 @@ onUnmounted(() => {
 }
 .nd-drop-target {
   background: color-mix(in srgb, var(--nd-chip-bg) 60%, transparent) !important;
-  outline: 2px dashed var(--nd-chip-text, #6366f1);
+  outline: 2px dashed var(--nd-chip-text);
   outline-offset: -2px;
 }
 .nd-cable-drag-handle {
@@ -3341,12 +3153,12 @@ onUnmounted(() => {
   outline: none;
   min-width: 0;
 }
-.nd-folder-create-input:focus { border-color: #2563eb; }
+.nd-folder-create-input:focus { border-color: var(--nd-accent); }
 .nd-folder-create-ok {
   font-size: 0.75rem;
   font-weight: 600;
   padding: 0.25rem 0.5rem;
-  background: #2563eb;
+  background: var(--nd-accent);
   color: #fff;
   border: none;
   border-radius: 0.25rem;
@@ -3364,7 +3176,7 @@ onUnmounted(() => {
   cursor: pointer;
   transition: color 0.1s;
 }
-.nd-folder-new-root:hover { color: #2563eb; }
+.nd-folder-new-root:hover { color: var(--nd-accent); }
 
 /* ── Move-to-folder picker ────────────────────────────────── */
 .nd-move-folder-overlay {

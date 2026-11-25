@@ -321,6 +321,7 @@ def api_fiber_refresh_optical(request: HttpRequest, cable_id: int) -> JsonRespon
     from django.utils import timezone
 
     from inventory.domain.optical import fetch_ports_optical_snapshots
+    from inventory.domain.optical_apply import apply_optical_snapshot
 
     try:
         cable = FiberCable.objects.select_related(
@@ -342,16 +343,9 @@ def api_fiber_refresh_optical(request: HttpRequest, cable_id: int) -> JsonRespon
     now = timezone.now()
     for port in ports:
         snap = snapshots.get(port.pk) or {}
-        update_fields: list[str] = []
-        if snap.get("rx_dbm") is not None:
-            port.last_rx_power = snap["rx_dbm"]
-            update_fields.append("last_rx_power")
-        if snap.get("tx_dbm") is not None:
-            port.last_tx_power = snap["tx_dbm"]
-            update_fields.append("last_tx_power")
+        # EV-0088: mesma regra da coleta automática (helper partilhado).
+        update_fields = apply_optical_snapshot(port, snap, now)
         if update_fields:
-            port.last_optical_check = now
-            update_fields.append("last_optical_check")
             port.save(update_fields=update_fields)
 
     # Reusa o builder do payload (sem decorators que rejeitariam o POST)

@@ -39,6 +39,8 @@ function makeFakeMap(options) {
       return g;
     }),
     fitBounds: vi.fn(),
+    // projeção simples para os testes: 0,001° = 1 px (EV-0126 mede a distância cabo × site)
+    latLngToPixel: ({ lat, lng }) => ({ x: Number(lng) * 1000, y: -Number(lat) * 1000 }),
     setCenter: vi.fn(),
     setZoom: vi.fn(),
     setCursor: vi.fn(),
@@ -55,9 +57,15 @@ vi.mock('@/providers/maps/MapProviderFactory.js', () => ({
   createMap: vi.fn(async (container, options) => makeFakeMap(options)),
 }));
 
-vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: { mapId: 'default', category: 'backbone' } }),
-}));
+const routeFake = { params: { mapId: 'default', category: 'backbone' }, query: {} };
+vi.mock('vue-router', async () => {
+  const { h } = await vi.importActual('vue');
+  return {
+    useRoute: () => routeFake,
+    // EV-0137: «Editar no Projeto ↗» — o destino fica legível no atributo
+    RouterLink: { props: ['to'], setup: (p, { slots, attrs }) => () => h('a', { ...attrs, 'data-to': JSON.stringify(p.to) }, slots.default?.()) },
+  };
+});
 
 const realtimeFake = { hostsCb: null, cablesCb: null, connect: vi.fn(), disconnect: vi.fn(), error: ref(null), connected: ref(false) };
 vi.mock('@/composables/useRealtimeStatus', () => ({
@@ -212,27 +220,48 @@ describe('CustomMapViewer (EV-0012c)', () => {
     wrapper.unmount();
   });
 
-  it('hover no cabo mostra o tooltip na posição do rato após 300 ms; fecha pelo botão, não pelo mouseout', async () => {
+  it('EV-0126: hover no cabo só mostra «nome · km» (segue o rato e some no mouseout); o card abre no clique', async () => {
+    dataFake.availableItems.value.cables[0].length_km = 73.13;
     const wrapper = mountViewer();
     await flushPromises();
     const line = fakeFactory.maps[0].polylines[0];
+    expect(line.opts.hitWidth).toBe(8);
 
-    line.fire('mouseover', { clientX: 120, clientY: 80 });
-    vi.advanceTimersByTime(300);
+    // meio do cabo, longe dos dois sites
+    line.fire('mouseover', { lat: -16.65, lng: -49.25, clientX: 120, clientY: 80 });
+    await flushPromises();
+    vi.advanceTimersByTime(1000);
+    await flushPromises();
+    expect(wrapper.find('[data-testid="cable-hover-label"]').text()).toBe('Cabo 1 · 73,13 km');
+    expect(wrapper.findComponent({ name: 'CableOpticalTooltip' }).exists()).toBe(false); // nada de card no hover
+    line.fire('mousemove', { lat: -16.66, lng: -49.26, clientX: 150, clientY: 90 });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="cable-hover-label"]').attributes('style')).toContain('left: 162px');
+    line.fire('mouseout');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="cable-hover-label"]').exists()).toBe(false);
+
+    line.fire('click', { lat: -16.65, lng: -49.25, clientX: 200, clientY: 100 });
     await flushPromises();
     const tooltip = wrapper.findComponent({ name: 'CableOpticalTooltip' });
     expect(tooltip.props('visible')).toBe(true);
-    expect(tooltip.props('position')).toEqual({ x: 120, y: 80 });
+    expect(tooltip.props('position')).toEqual({ x: 200, y: 100 });
     expect(tooltip.props('cableData')).toEqual(expect.objectContaining({ id: 'c1' }));
-
-    // O tooltip tem botão de fechar (main): sair do cabo com o rato não o esconde,
-    // senão nunca se chegava ao botão «Atualizar agora» dentro dele.
-    line.fire('mouseout');
-    await flushPromises();
-    expect(wrapper.findComponent({ name: 'CableOpticalTooltip' }).exists()).toBe(true);
-
     tooltip.vm.$emit('close');
     await flushPromises();
+    expect(wrapper.findComponent({ name: 'CableOpticalTooltip' }).exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('EV-0126: junto a um site (< 18 px) o cabo cede — sem etiqueta nem card', async () => {
+    const wrapper = mountViewer();
+    await flushPromises();
+    const line = fakeFactory.maps[0].polylines[0];
+    // a 10 px do marcador do OLT-01 (-16.6, -49.2)
+    line.fire('mouseover', { lat: -16.6, lng: -49.21, clientX: 10, clientY: 10 });
+    line.fire('click', { lat: -16.6, lng: -49.21, clientX: 10, clientY: 10 });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="cable-hover-label"]').exists()).toBe(false);
     expect(wrapper.findComponent({ name: 'CableOpticalTooltip' }).exists()).toBe(false);
     wrapper.unmount();
   });
@@ -272,7 +301,7 @@ describe('CustomMapViewer (EV-0012c)', () => {
     wrapper.unmount();
   });
 
-  it('tema do utilizador re-estiliza o mapa e os cabos; desmontar destrói o mapa e desliga o tempo real', async () => {
+  it('tema do utilizador re-estiliza os cabos; desmontar destrói o mapa e desliga o tempo real', async () => {
     const wrapper = mountViewer();
     await flushPromises();
     const map = fakeFactory.maps[0];
@@ -281,7 +310,8 @@ describe('CustomMapViewer (EV-0012c)', () => {
     // a store nasce em dark nos testes: muda-se para light e verifica-se a re-estilização
     ui.theme = 'light';
     await flushPromises();
-    expect(map.setTheme).toHaveBeenCalledWith('light');
+    // O fundo do mapa segue o tema pela factory (EV-0045, testado em providers/); aqui só os cabos
+    expect(map.setTheme).not.toHaveBeenCalled();
     expect(map.polylines[0].setStyle).toHaveBeenCalledWith(expect.objectContaining({ strokeWeight: 3, strokeOpacity: 0.8 }));
 
     wrapper.unmount();
@@ -298,4 +328,268 @@ describe('CustomMapViewer (EV-0012c)', () => {
     expect(wrapper.find('.map-toast').text()).toContain('Mapbox token not configured');
     wrapper.unmount();
   });
+
+  it('EV-0048: HUD conta sites e enlaces do mapa e os cards filtram o desenho', async () => {
+    useUiStore().theme = 'light';
+    const wrapper = mountViewer();
+    await flushPromises();
+    const map = fakeFactory.maps[0];
+    const hud = wrapper.get('[data-testid="map-kpi-hud"]');
+    // POP A tem um equipamento online → site online; o cabo está ok
+    expect(hud.get('[data-testid="kpi-sites"]').text()).toMatch(/1\s*online.*0\s*offline/);
+    expect(hud.get('[data-testid="kpi-links"]').text()).toMatch(/1\s*\/1 ok/);
+    expect(hud.get('[data-testid="kpi-attenuation"]').text()).toContain('sem dados');
+
+    // Só enlaces com problema: o único cabo está ok → sai do mapa
+    await hud.get('[data-testid="kpi-links"]').trigger('click');
+    await flushPromises();
+    expect(map.polylines[0].remove).toHaveBeenCalled();
+    expect(map.markers[0].remove).not.toHaveBeenCalled();
+
+    // Clicar de novo limpa o filtro e o cabo volta
+    await hud.get('[data-testid="kpi-links"]').trigger('click');
+    await flushPromises();
+    expect(map.createPolyline).toHaveBeenCalledTimes(2);
+
+    // Só sites offline: o POP A está online → marcadores saem
+    await hud.get('[data-testid="kpi-sites"]').trigger('click');
+    await flushPromises();
+    expect(map.markers[0].remove).toHaveBeenCalled();
+    expect(map.markers[1].remove).toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('EV-0107: ?site= enquadra e destaca os equipamentos do POP em vez de enquadrar tudo', async () => {
+    routeFake.query = { site: '10' };
+    try {
+      const wrapper = mountViewer();
+      await flushPromises();
+      const map = fakeFactory.maps[0];
+      expect(map.fitBounds).toHaveBeenCalledTimes(1);
+      expect(map.fitBounds).toHaveBeenCalledWith(expect.any(Array), { padding: 80, maxZoom: 16 });
+      expect(map.fitBounds.mock.calls[0][0]).toHaveLength(2); // os 2 equipamentos com coordenadas do POP 10
+      expect(map.markers[0].setStyle).toHaveBeenCalledWith({ size: 24 });
+      vi.advanceTimersByTime(6000);
+      expect(map.markers[0].setStyle).toHaveBeenLastCalledWith({ size: 14 });
+      wrapper.unmount();
+    } finally {
+      routeFake.query = {};
+    }
+  });
+
+  it('EV-0107: ?site= de um POP sem equipamentos no mapa avisa e enquadra tudo', async () => {
+    routeFake.query = { site: '999' };
+    try {
+      const wrapper = mountViewer();
+      await flushPromises();
+      const map = fakeFactory.maps[0];
+      expect(map.fitBounds).toHaveBeenCalledWith(expect.any(Array), { padding: 50, maxZoom: 15 });
+      expect(wrapper.text()).toContain('O POP pedido não tem equipamentos com coordenadas neste mapa.');
+      wrapper.unmount();
+    } finally {
+      routeFake.query = {};
+    }
+  });
+
+  it('EV-0116: ?cable= enquadra o cabo e destaca-o; volta ao estilo normal depois', async () => {
+    routeFake.query = { cable: String(CABLES[0].id) };
+    try {
+      const wrapper = mountViewer();
+      await flushPromises();
+      const map = fakeFactory.maps[0];
+      expect(map.fitBounds).toHaveBeenCalledTimes(1);
+      expect(map.fitBounds).toHaveBeenCalledWith(expect.any(Array), { padding: 80, maxZoom: 16 });
+      expect(map.polylines[0].setStyle).toHaveBeenCalledWith(expect.objectContaining({ strokeWeight: 5, zIndex: 1000 }));
+      vi.advanceTimersByTime(6000);
+      expect(map.polylines[0].setStyle).toHaveBeenLastCalledWith(expect.objectContaining({ zIndex: 1 }));
+      wrapper.unmount();
+    } finally {
+      routeFake.query = {};
+    }
+  });
+
+  it('EV-0116: ?cable= de um cabo sem traçado avisa e enquadra tudo', async () => {
+    routeFake.query = { cable: '99999' };
+    try {
+      const wrapper = mountViewer();
+      await flushPromises();
+      expect(fakeFactory.maps[0].fitBounds).toHaveBeenCalledWith(expect.any(Array), { padding: 50, maxZoom: 15 });
+      expect(wrapper.text()).toContain('O cabo pedido não tem traçado neste mapa.');
+      wrapper.unmount();
+    } finally {
+      routeFake.query = {};
+    }
+  });
+
+  it('EV-0127: «Localizar OTDR» no cartão do cabo abre o formulário; o resultado desenha trecho, pino e cartão; Limpar tira tudo', async () => {
+    const wrapper = mountViewer();
+    await flushPromises();
+    const map = fakeFactory.maps[0];
+    map.polylines[0].fire('click', { lat: -16.65, lng: -49.25, clientX: 200, clientY: 100 });
+    await flushPromises();
+    wrapper.findComponent({ name: 'CableOpticalTooltip' }).vm.$emit('otdr', { id: 'c1', name: 'Cabo 1' });
+    await vi.dynamicImportSettled();
+    await flushPromises();
+    const modal = wrapper.findComponent({ name: 'OtdrLocatorModal' });
+    expect(modal.props('cable')).toEqual({ id: 'c1', name: 'Cabo 1' });
+    const result = {
+      cable_id: 1, cable_name: 'Cabo 1', direction: 'ab', otdr_m: 1000, slack_pct: 0, map_distance_m: 1000,
+      path_length_m: 15000, inventory_length_km: null, origin: { id: 1, name: 'A', distance_m: 1000 },
+      target: { id: 2, name: 'B', distance_m: 14000 }, point: [-49.21, -16.61],
+      segment: [[-49.209, -16.609], [-49.211, -16.611]], tolerance_m: 40,
+    };
+    modal.vm.$emit('located', result);
+    await flushPromises();
+    const seg = map.polylines.at(-1);
+    expect(seg.opts).toEqual(expect.objectContaining({ strokeColor: '#f59e0b', clickable: false }));
+    expect(seg.opts.path).toEqual([{ lat: -16.609, lng: -49.209 }, { lat: -16.611, lng: -49.211 }]);
+    expect(map.setCenter).toHaveBeenCalledWith({ lat: -16.61, lng: -49.21 });
+    expect(wrapper.find('[data-testid="otdr-pin"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="otdr-card"]').exists()).toBe(true);
+    await wrapper.find('[data-testid="otdr-clear"]').trigger('click');
+    expect(seg.remove).toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="otdr-pin"]').exists()).toBe(false);
+    wrapper.unmount();
+  }, 15_000); // imports dinâmicos (modal OTDR): na suite completa a 1.ª compilação passa dos 5 s
+
+  it('EV-0137: só leitura — o cartão do cabo não insere CEO; a CEO mostra-se, as emendas abrem em leitura e «Editar no Projeto ↗» leva ao Projeto de Rede focado', async () => {
+    const CEO = { id: 4, name: 'CEO-04', cable_id: 1, cable_name: 'Cabo 1', point: [-49.25, -16.65], km: 1.2, mode: 'corte', mode_label: 'Corte / emenda total', slack_m: null, trays: 2, derived: [] };
+    global.fetch = vi.fn(async (url) =>
+      url === '/api/v1/inventory/ceos/'
+        ? { ok: true, status: 200, json: async () => [CEO] }
+        : String(url).startsWith('/api/v1/inventory/ceos/4/fusions/')
+          ? { ok: true, status: 200, json: async () => ({ ceo: { id: 4, name: 'CEO-04', mode: 'corte', trays: 2, splices_per_tray: 24 }, cables: [], fusions: [] }) }
+          : { ok: true, status: 200, json: async () => ({ hosts_status: [] }) },
+    );
+    const wrapper = mountViewer();
+    await flushPromises();
+    const map = fakeFactory.maps[0];
+    map.polylines[0].fire('click', { lat: -16.66, lng: -49.24, clientX: 200, clientY: 100 });
+    await flushPromises();
+    await vi.dynamicImportSettled();
+    await flushPromises();
+    expect(wrapper.find('[data-testid="cable-insert-ceo"]').exists()).toBe(false);
+    expect(wrapper.findAll('[data-testid="ceo-pin"]')).toHaveLength(1);
+    await wrapper.find('[data-testid="ceo-pin"]').trigger('click');
+    const card = wrapper.find('[data-testid="ceo-card-4"]');
+    expect(card.text()).toContain('Corte / emenda total');
+    expect(card.find('[data-testid="ceo-derive"]').exists()).toBe(false);
+    const to = JSON.parse(card.get('[data-testid="edit-in-project"]').attributes('data-to'));
+    expect(to).toEqual({ path: '/Network/NetworkDesign/', query: { foco: 'ceo', id: '4', lat: '-16.65', lng: '-49.25', nome: 'CEO-04' } });
+    await card.get('[data-testid="ceo-fusions"]').trigger('click');
+    await vi.dynamicImportSettled();
+    await flushPromises();
+    expect(wrapper.findComponent({ name: 'SpliceBoxModal' }).props('readonly')).toBe(true);
+    expect(document.body.querySelector('[data-testid="splice-box"]')).not.toBeNull();
+    expect(document.body.querySelector('[data-testid="splice-help"]')).toBeNull(); // sem instruções de edição
+    wrapper.unmount();
+  }, 15_000);
+
+  it('EV-0128: alertas da equipa aparecem ao abrir; fixar grava no servidor; limpar um fixado limpa para todos; barra abre o formulário', async () => {
+    const result = (lng, lat) => ({
+      cable_id: 1, cable_name: 'Cabo 1', direction: 'ab', otdr_m: 1000, slack_pct: 1.5, map_distance_m: 985.2,
+      path_length_m: 15000, inventory_length_km: null, origin: { id: 1, name: 'A', distance_m: 985.2 },
+      target: { id: 2, name: 'B', distance_m: 14014.8 }, point: [lng, lat],
+      segment: [[lng, lat], [lng + 0.001, lat]], tolerance_m: 40,
+    });
+    const alerts = [{ id: 5, cable_id: 1, note: '', created_by: 'Ana', created_at: '2026-11-24T19:00:00Z', result: result(-49.3, -16.7) }];
+    const calls = [];
+    global.fetch = vi.fn(async (url, opts = {}) => {
+      calls.push([url, opts.method || 'GET', opts.body]);
+      if (url === '/api/v1/inventory/otdr-alerts/' && (opts.method || 'GET') === 'GET')
+        return { ok: true, status: 200, json: async () => alerts };
+      if (url === '/api/v1/inventory/otdr-alerts/' && opts.method === 'POST')
+        return { ok: true, status: 201, json: async () => ({ id: 6, cable_id: 1, note: '', created_by: 'Rui', created_at: '2026-11-24T19:30:00Z', result: result(-49.21, -16.61) }) };
+      if (url.endsWith('/clear/')) return { ok: true, status: 200, json: async () => ({ id: 5, cleared_at: '2026-11-24T20:00:00Z' }) };
+      if (url.endsWith('/status/')) {
+        const st = JSON.parse(opts.body).status;
+        return { ok: true, status: 200, json: async () => ({ ...alerts[0], status: st, status_label: st === 'done' ? 'Concluído' : 'Em deslocamento' }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ hosts_status: [] }) };
+    });
+    const wrapper = mountViewer();
+    await flushPromises();
+    const map = fakeFactory.maps[0];
+    // o alerta da equipa já está no mapa
+    expect(wrapper.findAll('[data-testid="otdr-pin"]')).toHaveLength(1);
+    expect(map.polylines.some((p) => p.opts.strokeColor === '#f59e0b')).toBe(true);
+
+    // barra do mapa: formulário sem cabo (escolher)
+    await wrapper.find('[data-testid="map-otdr-btn"]').trigger('click');
+    await vi.dynamicImportSettled();
+    await flushPromises();
+    const modal = wrapper.findComponent({ name: 'OtdrLocatorModal' });
+    expect(modal.props('cable')).toBeNull();
+    expect(modal.props('cables')).toHaveLength(1);
+
+    // nova medição → fixar
+    modal.vm.$emit('located', result(-49.21, -16.61));
+    await flushPromises();
+    await wrapper.find('[data-testid="otdr-pin-alert"]').trigger('click');
+    await flushPromises();
+    const post = calls.find(([u, m]) => u === '/api/v1/inventory/otdr-alerts/' && m === 'POST');
+    expect(JSON.parse(post[2])).toEqual({ cable_id: 1, direction: 'ab', distance_m: 1000, offset_m: 0, slack_pct: 1.5 });
+    expect(wrapper.findAll('[data-testid="otdr-pin"]')).toHaveLength(2);
+    expect(wrapper.find('[data-testid="otdr-card-pinned"]').text()).toContain('por Rui');
+
+    // abrir o da Ana pelo pino: estado do atendimento (EV-0132) e concluir (sai do mapa para todos)
+    await wrapper.findAll('[data-testid="otdr-pin"]')[1].trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="otdr-card-pinned"]').text()).toContain('por Ana');
+    expect(wrapper.find('[data-testid="otdr-clear"]').exists()).toBe(false); // num fixado conclui-se
+    await wrapper.find('[data-testid="otdr-status-en_route"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="otdr-status-label"]').text()).toBe('Em deslocamento');
+    await wrapper.find('[data-testid="otdr-status-done"]').trigger('click');
+    await flushPromises();
+    const statusCalls = calls.filter(([u, m]) => u === '/api/v1/inventory/otdr-alerts/5/status/' && m === 'POST');
+    expect(statusCalls.map(([, , b]) => JSON.parse(b).status)).toEqual(['en_route', 'done']);
+    expect(wrapper.findAll('[data-testid="otdr-pin"]')).toHaveLength(1);
+    wrapper.unmount();
+  }, 15_000); // imports dinâmicos (modal OTDR): na suite completa a 1.ª compilação passa dos 5 s
+
+  it('EV-0130: ajuste fino — na medição pede o locate com offset; num fixado faz PATCH; o trecho redesenha', async () => {
+    const result = (lng, lat, offset = 0) => ({
+      cable_id: 1, cable_name: 'Cabo 1', direction: 'ab', otdr_m: 1000, slack_pct: 0, map_distance_m: 1000 + offset,
+      base_map_distance_m: 1000, offset_m: offset, path_length_m: 15000, inventory_length_km: null,
+      origin: { id: 1, name: 'A', distance_m: 1000 + offset }, target: { id: 2, name: 'B', distance_m: 14000 - offset },
+      point: [lng, lat], segment: [[lng, lat], [lng + 0.001, lat]], tolerance_m: 40,
+      references: { registered: 0, before: null, after: null },
+    });
+    const calls = [];
+    global.fetch = vi.fn(async (url, opts = {}) => {
+      calls.push([url, opts.method || 'GET', opts.body]);
+      if (url.startsWith('/api/v1/inventory/cables/1/otdr-locate/')) return { ok: true, status: 200, json: async () => result(-49.22, -16.62, 100) };
+      if (url === '/api/v1/inventory/otdr-alerts/' && (opts.method || 'GET') === 'GET') return { ok: true, status: 200, json: async () => [] };
+      if (url === '/api/v1/inventory/otdr-alerts/' && opts.method === 'POST')
+        return { ok: true, status: 201, json: async () => ({ id: 9, cable_id: 1, note: '', created_by: 'Ana', created_at: '2026-11-24T19:00:00Z', result: result(-49.22, -16.62, 100), log: [] }) };
+      if (url === '/api/v1/inventory/otdr-alerts/9/' && opts.method === 'PATCH')
+        return { ok: true, status: 200, json: async () => ({ id: 9, cable_id: 1, note: '', created_by: 'Ana', created_at: '2026-11-24T19:00:00Z', result: result(-49.3, -16.7, 600), log: [] }) };
+      return { ok: true, status: 200, json: async () => ({ hosts_status: [] }) };
+    });
+    const wrapper = mountViewer();
+    await flushPromises();
+    const map = fakeFactory.maps[0];
+    await wrapper.find('[data-testid="map-otdr-btn"]').trigger('click');
+    await vi.dynamicImportSettled();
+    await flushPromises();
+    wrapper.findComponent({ name: 'OtdrLocatorModal' }).vm.$emit('located', result(-49.21, -16.61));
+    await flushPromises();
+    const firstLine = map.polylines.at(-1);
+    await wrapper.find('[data-testid="otdr-step-100"]').trigger('click');
+    await flushPromises();
+    const locate = calls.find(([u]) => u.startsWith('/api/v1/inventory/cables/1/otdr-locate/'));
+    expect(locate[0]).toContain('offset_m=100');
+    expect(firstLine.remove).toHaveBeenCalled(); // trecho redesenhado
+    expect(map.polylines.at(-1).opts.path[0]).toEqual({ lat: -16.62, lng: -49.22 });
+    // fixar e ajustar o fixado → PATCH
+    await wrapper.find('[data-testid="otdr-pin-alert"]').trigger('click');
+    await flushPromises();
+    await wrapper.find('[data-testid="otdr-step-500"]').trigger('click');
+    await flushPromises();
+    const patch = calls.find(([u, m]) => u === '/api/v1/inventory/otdr-alerts/9/' && m === 'PATCH');
+    expect(JSON.parse(patch[2])).toEqual({ offset_m: 600 });
+    expect(wrapper.find('[data-testid="otdr-card-offset"]').text()).toContain('+600 m');
+    wrapper.unmount();
+  }, 15_000);
 });

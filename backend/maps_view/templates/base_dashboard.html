@@ -7,7 +7,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/x-icon" href="{% static 'favicon.ico' %}">
 
-  <!-- Tailwind is pulled from CDN for local work; wire up a build step in production -->
   <script>
     (function() {
       const theme = localStorage.getItem('ui.theme') || 'dark';
@@ -15,7 +14,15 @@
       document.documentElement.classList.toggle('dark', theme === 'dark');
     })();
   </script>
-  <script src="https://cdn.tailwindcss.com"></script>
+  {# EV-0031: Tailwind vem do CSS do build do Vite (manifest), não do Play CDN. #}
+  {% static 'vue-spa/' as vite_base %}
+  {% if VITE_ENTRY %}
+    {% for css in VITE_ENTRY.css %}
+      <link rel="stylesheet" href="{{ vite_base }}{{ css }}">
+    {% endfor %}
+  {% else %}
+    <link rel="stylesheet" href="{% static 'vue-spa/assets/main.css' %}?v={{ STATIC_ASSET_VERSION|default:'1' }}">
+  {% endif %}
   {% block extra_head %}{% endblock %}
 </head>
 <body class="bg-white dark:bg-gray-900 text-gray-900 dark:text-white flex flex-col min-h-screen">

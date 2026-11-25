@@ -75,39 +75,39 @@
           <table class="w-full text-left border-collapse">
             <thead class="app-surface-muted sticky top-0 z-10">
               <tr>
-                <th class="p-4 text-xs font-semibold app-text-tertiary uppercase">Nome</th>
-                <th class="p-4 text-xs font-semibold app-text-tertiary uppercase">Tipo</th>
-                <th class="p-4 text-xs font-semibold app-text-tertiary uppercase">Endereço</th>
-                <th class="p-4 text-xs font-semibold app-text-tertiary uppercase text-center">Devices</th>
-                <th class="p-4 text-xs font-semibold app-text-tertiary uppercase text-center">Câmeras</th>
-                <th class="p-4 text-xs font-semibold app-text-tertiary uppercase text-right">Ações</th>
+                <th class="px-3 py-2 text-xs font-semibold app-text-tertiary uppercase">Nome</th>
+                <th class="px-3 py-2 text-xs font-semibold app-text-tertiary uppercase">Tipo</th>
+                <th class="px-3 py-2 text-xs font-semibold app-text-tertiary uppercase">Endereço</th>
+                <th class="px-3 py-2 text-xs font-semibold app-text-tertiary uppercase text-center">Devices</th>
+                <th class="px-3 py-2 text-xs font-semibold app-text-tertiary uppercase text-center">Câmeras</th>
+                <th class="px-3 py-2 text-xs font-semibold app-text-tertiary uppercase text-right">Ações</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+            <tbody class="divide-y divide-neutral-100">
               <tr v-for="site in filteredSites" :key="site.id" class="transition-colors app-row">
-                <td class="p-4 font-medium app-text-primary">{{ site.name }}</td>
-                <td class="p-4">
-                  <span :class="getTypeClass(site.type)" class="px-2 py-1 rounded-full text-xs font-medium capitalize">
+                <td class="px-3 py-1.5 font-medium app-text-primary">{{ site.name }}</td>
+                <td class="px-3 py-1.5">
+                  <span :class="getTypeClass(site.type)" class="px-2 py-0.5 rounded-full text-xs font-medium capitalize">
                     {{ site.type || 'Geral' }}
                   </span>
                 </td>
-                <td class="p-4 app-text-tertiary text-sm">{{ site.address }}</td>
-                <td class="p-4 text-center">
-                  <span class="app-chip px-2 py-0.5 rounded text-xs font-bold">
+                <td class="px-3 py-1.5 app-text-tertiary text-sm">{{ site.address }}</td>
+                <td class="px-3 py-1.5 text-center">
+                  <span class="app-chip px-2 py-0.5 rounded text-xs font-bold tabular-nums">
                     {{ site.device_count || 0 }}
                   </span>
                 </td>
-                <td class="p-4 text-center">
+                <td class="px-3 py-1.5 text-center">
                   <div class="inline-flex items-center gap-1.5">
-                    <svg v-if="(site.camera_count || 0) > 0" class="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg v-if="(site.camera_count || 0) > 0" class="w-4 h-4 text-info" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                     </svg>
-                    <span class="app-chip px-2 py-0.5 rounded text-xs font-bold" :class="(site.camera_count || 0) > 0 ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : ''">
+                    <span class="app-chip px-2 py-0.5 rounded text-xs font-bold tabular-nums" :class="(site.camera_count || 0) > 0 ? 'bg-info/15 text-info ' : ''">
                       {{ site.camera_count || 0 }}
                     </span>
                   </div>
                 </td>
-                <td class="p-4 text-right space-x-2">
+                <td class="px-3 py-1.5 text-right space-x-2">
                   <button @click="goToDetails(site)" class="app-text-secondary hover:text-[var(--accent-info)] p-1">
                     <i class="fas fa-eye"></i>
                   </button>

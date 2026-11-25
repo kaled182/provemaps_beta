@@ -60,3 +60,40 @@ export function bpsToMbps(value) {
   const n = toNumberOrNull(value)
   return n === null ? null : n / 1_000_000
 }
+
+const mean = (values) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : null)
+
+/**
+ * Estatísticas RX/TX de uma porta (EV-0053). Sem leituras → `null`, nunca 0:
+ * «0.00 dBm» parece um sinal excelente e escondia justamente a ponta em LOS.
+ * `lastRx` é a leitura RX mais recente (por timestamp) — é a que decide o alarme.
+ *
+ * @param {Array<{timestamp: string|number, rx_power?: number|null, tx_power?: number|null}>} historyArray
+ */
+export function opticalPortStats(historyArray) {
+  const sorted = (Array.isArray(historyArray) ? [...historyArray] : []).sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+  )
+  const rx = sorted.map((p) => toNumberOrNull(p.rx_power)).filter((v) => v !== null)
+  const tx = sorted.map((p) => toNumberOrNull(p.tx_power)).filter((v) => v !== null)
+  return {
+    avgRx: mean(rx),
+    minRx: rx.length ? Math.min(...rx) : null,
+    maxRx: rx.length ? Math.max(...rx) : null,
+    avgTx: mean(tx),
+    minTx: tx.length ? Math.min(...tx) : null,
+    maxTx: tx.length ? Math.max(...tx) : null,
+    lastRx: rx.length ? rx[rx.length - 1] : null,
+  }
+}
+
+/**
+ * A ponta está em perda de sinal? Só com leitura real e limiar crítico da
+ * configuração (CLAUDE.md §7: limiares não são constantes do componente).
+ * Sem leitura ou sem limiar → `false` (não se acusa sem prova).
+ */
+export function isRxCritical(lastRx, critical) {
+  if (lastRx === null || lastRx === undefined) return false
+  if (critical === null || critical === undefined) return false
+  return Number(lastRx) <= Number(critical)
+}

@@ -51,6 +51,65 @@ class ComandoFecharTests(TestCase):
         out, _ = self._run(entradas)
         self.assertIn("0 item(ns) fechado(s)", out)
 
+    def test_item_ja_feito_sem_observacao_recebe_o_deploy(self):
+        """Semeado do quadro como `feito`, sem `fechado_por`: senão ficava para sempre em
+        «aguarda deploy» no quadro gerado."""
+        EvolucaoItem.objects.filter(pk=self.item.pk).update(estado="feito")
+        out, _ = self._run(
+            [
+                {
+                    "codigo": "EV-0001",
+                    "commit": "abc1234",
+                    "mensagem": "m",
+                    "deploy_em": "2026-11-23T22:00:00+00:00",
+                }
+            ]
+        )
+        self.assertIn("1 item(ns) fechado(s)", out)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.fechado_por["deploy_em"], "2026-11-23T22:00:00+00:00")
+
+    def test_item_semeado_do_quadro_recebe_o_deploy(self):
+        """O seed escreve `fechado_por` com `deploy_em: None` (fechado no quadro manual, deploy
+        por observar) — também tem de receber a observação."""
+        EvolucaoItem.objects.filter(pk=self.item.pk).update(
+            estado="feito",
+            fechado_por={"commit": "", "mensagem": "x", "deploy_em": None, "fonte": "CLAUDE.md"},
+        )
+        out, _ = self._run(
+            [
+                {
+                    "codigo": "EV-0001",
+                    "commit": "abc1234",
+                    "mensagem": "m",
+                    "deploy_em": "2026-11-23T22:00:00+00:00",
+                }
+            ]
+        )
+        self.assertIn("1 item(ns) fechado(s)", out)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.fechado_por["commit"], "abc1234")
+        self.assertEqual(self.item.fechado_por["deploy_em"], "2026-11-23T22:00:00+00:00")
+
+    def test_item_recusado_nao_e_reaberto(self):
+        EvolucaoItem.objects.filter(pk=self.item.pk).update(
+            estado="recusado", recusa_motivo="duplicado"
+        )
+        out, _ = self._run(
+            [
+                {
+                    "codigo": "EV-0001",
+                    "commit": "abc1234",
+                    "mensagem": "m",
+                    "deploy_em": "2026-11-23T22:00:00+00:00",
+                }
+            ]
+        )
+        self.assertIn("0 item(ns) fechado(s)", out)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.estado, "recusado")
+        self.assertIsNone(self.item.fechado_por)
+
     def test_deploy_em_invalido_usa_agora(self):
         out, _ = self._run(
             [{"codigo": "EV-0001", "commit": "a", "mensagem": "m", "deploy_em": "ontem"}]
@@ -117,6 +176,8 @@ class ScriptFechadosTests(SimpleTestCase):
                     "feat: abre EV-0001 (menciona, não fecha)",
                     "fix(mapa): osm — fecha EV-0002",
                     'fix: aspas "x" — resolve o EV-0003 e closes EV-0004',
+                    # o verbo no CORPO, numa linha própria (como manda o CLAUDE.md)
+                    "fix(csrf): leitor único\n\nPorquê: o cookie tinha outro nome.\n\nfecha EV-0006",
                 ],
             )
             # um commit DEPOIS do implantado não conta
@@ -144,7 +205,9 @@ class ScriptFechadosTests(SimpleTestCase):
                 repo, {"status": "ok", "git_sha": sha, "iniciado_em": "2026-10-04T10:00:00+00:00"}
             )
             codigos = sorted(e["codigo"] for e in saida)
-            self.assertEqual(codigos, ["EV-0002", "EV-0003", "EV-0004"])
+            self.assertEqual(codigos, ["EV-0002", "EV-0003", "EV-0004", "EV-0006"])
+            e6 = next(e for e in saida if e["codigo"] == "EV-0006")
+            self.assertEqual(e6["mensagem"], "fix(csrf): leitor único")  # só o assunto
             e3 = next(e for e in saida if e["codigo"] == "EV-0003")
             self.assertIn('aspas "x"', e3["mensagem"])
             self.assertEqual(e3["deploy_em"], "2026-10-04T10:00:00+00:00")

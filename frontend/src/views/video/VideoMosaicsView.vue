@@ -1,28 +1,23 @@
 <template>
-  <div :class="embedded ? '' : 'min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col h-[calc(100vh-64px)] overflow-hidden transition-colors duration-300'">
+  <div :class="embedded ? '' : 'h-full bg-neutral-50 text-neutral-900 flex flex-col overflow-hidden transition-colors duration-300'">
     
-    <!-- Header para modo embedded -->
-    <div v-if="embedded" class="flex-none px-4 py-3 border-b app-divider flex justify-between items-center">
-      <div>
-        <h2 class="text-lg font-bold app-text-primary">Mosaicos</h2>
-        <p class="text-xs app-text-tertiary">Visualização em grade de múltiplas câmeras</p>
-      </div>
-      <button @click="openMosaicModal()" class="px-3 py-2 rounded-lg shadow-md transition-colors flex items-center gap-2 text-sm app-btn-primary">
+    <!-- Modo embebido: a aba já diz «Mosaicos»; aqui fica só a ação (EV-0055) -->
+    <div v-if="embedded" class="flex-none py-1 flex justify-end">
+      <button @click="openMosaicModal()" class="px-2.5 py-1.5 rounded-md transition-colors flex items-center gap-2 text-sm app-btn-primary">
         <i class="fas fa-plus"></i>
-        <span>Novo Mosaico</span>
+        <span>Novo mosaico</span>
       </button>
     </div>
     
-    <div v-if="!embedded" class="flex-none px-6 py-5 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 z-10">
+    <div v-if="!embedded" class="flex-none px-4 md:px-6 py-2 border-b border-neutral-200 bg-surface z-10">
       <div class="flex justify-between items-center">
         <div>
-          <h1 class="text-xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-2">
-            <svg class="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <h1 class="text-base font-semibold text-neutral-900 flex items-center gap-2">
+            <svg class="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z"/>
             </svg>
             Mosaicos
           </h1>
-          <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Visualização em grade de múltiplas câmeras.</p>
         </div>
         
         <button @click="openMosaicModal()" class="btn-primary">
@@ -32,22 +27,22 @@
       </div>
     </div>
 
-    <div :class="embedded ? 'flex-1 overflow-y-auto p-4' : 'flex-1 overflow-y-auto custom-scrollbar p-6 bg-gray-50 dark:bg-gray-900'">
+    <div :class="embedded ? 'flex-1 overflow-y-auto p-4' : 'flex-1 overflow-y-auto custom-scrollbar p-6 bg-neutral-50 '">
       <div :class="embedded ? '' : 'max-w-7xl mx-auto'">
         
         <div v-if="mosaicsLoading" class="text-center py-12">
-          <svg class="animate-spin h-8 w-8 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24">
+          <svg class="animate-spin h-8 w-8 mx-auto text-neutral-400" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
-          <p class="text-sm text-gray-500 mt-2">Carregando...</p>
+          <p class="text-sm text-neutral-500 mt-2">Carregando...</p>
         </div>
 
-        <div v-else-if="mosaics.length === 0" class="text-center py-12 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
-          <svg class="w-12 h-12 mx-auto text-gray-400 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div v-else-if="mosaics.length === 0" class="text-center py-12 border-2 border-dashed border-neutral-200 rounded-lg">
+          <svg class="w-12 h-12 mx-auto text-neutral-400 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z"/>
           </svg>
-          <p class="text-sm text-gray-500 mt-2">Nenhum mosaico configurado</p>
+          <p class="text-sm text-neutral-500 mt-2">Nenhum mosaico configurado</p>
           <button @click="openMosaicModal()" class="btn-primary mt-4">
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
             Criar Primeiro Mosaico
@@ -55,44 +50,44 @@
         </div>
 
         <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <div v-for="mosaic in mosaicsSorted" :key="mosaic.id" class="group bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-all cursor-pointer" @click="viewMosaic(mosaic)">
+          <div v-for="mosaic in mosaicsSorted" :key="mosaic.id" class="group bg-surface rounded-lg border border-neutral-200 p-4 hover:shadow-md transition-all cursor-pointer" @click="viewMosaic(mosaic)">
             <div class="flex justify-between items-start mb-3">
               <div class="flex-1">
-                <h4 class="font-bold text-gray-900 dark:text-white">{{ mosaic.name }}</h4>
-                <p class="text-xs text-gray-500 mt-1">{{ getLayoutLabel(mosaic.layout) }}</p>
+                <h4 class="font-bold text-neutral-900">{{ mosaic.name }}</h4>
+                <p class="text-xs text-neutral-500 mt-1">{{ getLayoutLabel(mosaic.layout) }}</p>
                 <div class="flex flex-wrap gap-1 mt-2">
                   <span 
                     v-if="!mosaic.departments || mosaic.departments.length === 0" 
-                    class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                    class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-success/15 text-success"
                   >
                     <i class="fas fa-globe mr-1"></i> Público
                   </span>
                   <span 
                     v-for="dept in mosaic.departments" 
                     :key="dept.id"
-                    class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
+                    class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-info/15 text-info"
                   >
                     {{ dept.name }}
                   </span>
                 </div>
               </div>
-              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wide bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400">
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wide bg-primary-100 text-primary-600">
                 {{ mosaic.cameras?.length || 0 }} câm.
               </span>
             </div>
             
             <div class="mt-3 grid gap-1" :class="getGridClass(mosaic.layout)">
-              <div v-for="(camera, idx) in getMosaicCameras(mosaic).slice(0, getLayoutCapacity(mosaic.layout))" :key="idx" class="aspect-video bg-gray-100 dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700 flex items-center justify-center text-[10px] text-gray-400 overflow-hidden">
+              <div v-for="(camera, idx) in getMosaicCameras(mosaic).slice(0, getLayoutCapacity(mosaic.layout))" :key="idx" class="aspect-video bg-neutral-100 rounded border border-neutral-200 flex items-center justify-center text-[10px] text-neutral-400 overflow-hidden">
                 <span class="truncate px-1">{{ camera?.name || '—' }}</span>
               </div>
-              <div v-for="n in (getLayoutCapacity(mosaic.layout) - getMosaicCameras(mosaic).length)" :key="'empty-' + n" class="aspect-video bg-gray-50 dark:bg-gray-900/50 rounded border border-dashed border-gray-300 dark:border-gray-700"></div>
+              <div v-for="n in (getLayoutCapacity(mosaic.layout) - getMosaicCameras(mosaic).length)" :key="'empty-' + n" class="aspect-video bg-neutral-50 rounded border border-dashed border-neutral-300"></div>
             </div>
             
-            <div class="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
-              <button @click.stop="openMosaicModal(mosaic)" class="p-1 text-gray-400 hover:text-blue-600 rounded transition-colors" title="Editar">
+            <div class="mt-4 pt-3 border-t border-neutral-100 flex justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+              <button @click.stop="openMosaicModal(mosaic)" class="p-1 text-neutral-400 hover:text-info rounded transition-colors" title="Editar">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
               </button>
-              <button @click.stop="confirmDeleteMosaic(mosaic)" class="p-1 text-gray-400 hover:text-red-600 rounded transition-colors" title="Excluir">
+              <button @click.stop="confirmDeleteMosaic(mosaic)" class="p-1 text-neutral-400 hover:text-danger rounded transition-colors" title="Excluir">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
               </button>
             </div>
@@ -107,13 +102,13 @@
       <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity" @click="closeMosaicModal"></div>
       <div class="fixed inset-0 z-10 overflow-y-auto">
         <div class="flex min-h-full items-center justify-center p-4 text-center">
-          <div class="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-3xl border border-gray-200 dark:border-gray-700 animate-fade-in">
-            <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+          <div class="relative transform overflow-hidden rounded-lg bg-surface text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-3xl border border-neutral-200 animate-fade-in">
+            <div class="px-6 py-4 border-b border-neutral-100 flex justify-between items-center">
               <div>
-                <h3 class="text-base font-bold leading-6 text-gray-900 dark:text-white" id="mosaic-config-title">{{ mosaicForm.id ? 'Editar Mosaico' : 'Novo Mosaico' }}</h3>
-                <p class="text-xs text-gray-500">Configure o layout e selecione as câmeras.</p>
+                <h3 class="text-base font-bold leading-6 text-neutral-900" id="mosaic-config-title">{{ mosaicForm.id ? 'Editar Mosaico' : 'Novo Mosaico' }}</h3>
+                <p class="text-xs text-neutral-500">Configure o layout e selecione as câmeras.</p>
               </div>
-              <button @click="closeMosaicModal" class="text-gray-400 hover:text-gray-600">✕</button>
+              <button @click="closeMosaicModal" class="text-neutral-400 hover:text-neutral-600">✕</button>
             </div>
             <form class="p-6 space-y-4" autocomplete="off" @submit.prevent>
               <div class="space-y-4">
@@ -131,7 +126,7 @@
                       <option value="4x3">4x3 (12 câmeras)</option>
                       <option value="4x4">4x4 (16 câmeras)</option>
                     </select>
-                    <p class="text-xs text-gray-400 mt-2">Escolha a disposição das câmeras na grade.</p>
+                    <p class="text-xs text-neutral-400 mt-2">Escolha a disposição das câmeras na grade.</p>
                   </div>
                 </div>
 
@@ -148,7 +143,7 @@
                       {{ dept.name }}
                     </option>
                   </select>
-                  <p class="text-xs text-gray-400 mt-2">
+                  <p class="text-xs text-neutral-400 mt-2">
                     Selecione os departamentos que podem visualizar este mosaico. 
                     Deixe vazio para acesso público (todos departamentos). 
                     Use Ctrl/Cmd para selecionar múltiplos.
@@ -163,7 +158,7 @@
                       {{ site.name }}
                     </option>
                   </select>
-                  <p class="text-xs text-gray-400 mt-2">
+                  <p class="text-xs text-neutral-400 mt-2">
                     Selecione um site específico ou deixe "Todos os sites" para exibir câmeras de todos os locais.
                   </p>
                 </div>
@@ -171,39 +166,39 @@
 
                 <div>
                   <label class="label-custom">Câmeras Selecionadas</label>
-                  <div class="border border-gray-200 dark:border-gray-700 rounded-md p-3 bg-gray-50 dark:bg-gray-900/50 min-h-[120px] max-h-[200px] overflow-y-auto custom-scrollbar">
-                    <div v-if="selectedCameras.length === 0" class="text-center py-6 text-sm text-gray-400">
+                  <div class="border border-neutral-200 rounded-md p-3 bg-neutral-50 min-h-[120px] max-h-[200px] overflow-y-auto custom-scrollbar">
+                    <div v-if="selectedCameras.length === 0" class="text-center py-6 text-sm text-neutral-400">
                       Nenhuma câmera selecionada
                     </div>
                     <div v-else class="flex flex-wrap gap-2">
-                      <div v-for="camera in selectedCameras" :key="camera.id" class="inline-flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-sm">
-                        <span class="text-gray-900 dark:text-gray-100">{{ camera.name }}</span>
-                        <button @click="removeCameraFromSelection(camera.id)" class="text-gray-400 hover:text-red-500 transition-colors" type="button">
+                      <div v-for="camera in selectedCameras" :key="camera.id" class="inline-flex items-center gap-2 px-3 py-1.5 bg-surface border border-neutral-200 rounded-md text-sm">
+                        <span class="text-neutral-900">{{ camera.name }}</span>
+                        <button @click="removeCameraFromSelection(camera.id)" class="text-neutral-400 hover:text-danger transition-colors" type="button">
                           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                         </button>
                       </div>
                     </div>
                   </div>
-                  <p class="text-xs text-gray-400 mt-2">{{ selectedCameras.length }} de {{ getLayoutCapacity(mosaicForm.layout) }} câmeras</p>
+                  <p class="text-xs text-neutral-400 mt-2">{{ selectedCameras.length }} de {{ getLayoutCapacity(mosaicForm.layout) }} câmeras</p>
                 </div>
 
                 <div>
                   <label class="label-custom">Câmeras Disponíveis</label>
-                  <div class="border border-gray-200 dark:border-gray-700 rounded-md max-h-[320px] overflow-y-auto custom-scrollbar">
-                    <div v-if="availableCamerasBySite.length === 0" class="text-center py-6 text-sm text-gray-400">
+                  <div class="border border-neutral-200 rounded-md max-h-[320px] overflow-y-auto custom-scrollbar">
+                    <div v-if="availableCamerasBySite.length === 0" class="text-center py-6 text-sm text-neutral-400">
                       Nenhuma câmera disponível
                     </div>
                     <div v-else>
-                      <div v-for="siteGroup in availableCamerasBySite" :key="siteGroup.siteName" class="border-b border-gray-100 dark:border-gray-700/50 last:border-b-0">
+                      <div v-for="siteGroup in availableCamerasBySite" :key="siteGroup.siteName" class="border-b border-neutral-100 last:border-b-0">
                         <button
                           type="button"
                           @click="toggleSite(siteGroup.siteName)"
-                          class="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700/30 sticky top-0 z-10 hover:bg-gray-200 dark:hover:bg-gray-700/50 transition-colors"
+                          class="w-full px-4 py-2 bg-neutral-100 sticky top-0 z-10 hover:bg-neutral-200 transition-colors"
                         >
                           <div class="flex items-center justify-between">
                             <div class="flex items-center gap-2">
                               <svg 
-                                class="w-4 h-4 text-gray-500 dark:text-gray-400 transition-transform"
+                                class="w-4 h-4 text-neutral-500 transition-transform"
                                 :class="{ 'rotate-90': !isSiteCollapsed(siteGroup.siteName) }"
                                 fill="none" 
                                 stroke="currentColor" 
@@ -211,11 +206,11 @@
                               >
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                               </svg>
-                              <span class="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+                              <span class="text-xs font-semibold text-neutral-600 uppercase tracking-wide">
                                 {{ siteGroup.siteName }}
                               </span>
                             </div>
-                            <span class="text-xs text-gray-500 dark:text-gray-400">
+                            <span class="text-xs text-neutral-500">
                               {{ siteGroup.cameras.length }}
                             </span>
                           </div>
@@ -226,10 +221,10 @@
                             :key="camera.id" 
                             @click="addCameraToSelection(camera)" 
                             type="button" 
-                            class="w-full px-4 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b border-gray-50 dark:border-gray-700/30 last:border-b-0 transition-colors flex items-center justify-between group"
+                            class="w-full px-4 py-2.5 text-left hover:bg-neutral-50 border-b border-neutral-50 last:border-b-0 transition-colors flex items-center justify-between group"
                           >
-                            <span class="text-sm text-gray-900 dark:text-gray-100">{{ camera.name }}</span>
-                            <svg class="w-4 h-4 text-gray-400 group-hover:text-primary-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <span class="text-sm text-neutral-900">{{ camera.name }}</span>
+                            <svg class="w-4 h-4 text-neutral-400 group-hover:text-primary-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                             </svg>
                           </button>
@@ -241,9 +236,9 @@
 
               </div>
             </form>
-            <div class="bg-gray-50 dark:bg-gray-800/50 px-6 py-3 flex justify-between gap-3 border-t border-gray-100 dark:border-gray-700">
+            <div class="bg-neutral-50 px-6 py-3 flex justify-between gap-3 border-t border-neutral-100">
               <div>
-                <button v-if="mosaicForm.id" @click="deleteMosaic" class="btn-secondary text-red-500 border-red-500/40 hover:border-red-400 hover:text-red-400">
+                <button v-if="mosaicForm.id" @click="deleteMosaic" class="btn-secondary text-danger border-danger/40 hover:border-danger hover:text-danger">
                   Remover
                 </button>
               </div>
@@ -262,12 +257,12 @@
       <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity"></div>
       <div class="fixed inset-0 z-10 overflow-y-auto">
         <div class="flex min-h-full items-center justify-center p-4">
-          <div class="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-left shadow-2xl transition-all sm:w-full sm:max-w-lg border border-gray-200 dark:border-gray-700">
+          <div class="relative transform overflow-hidden rounded-lg bg-surface text-left shadow-2xl transition-all sm:w-full sm:max-w-lg border border-neutral-200">
             <div class="px-6 py-4">
-              <h3 class="text-base font-semibold text-gray-900 dark:text-white mb-2" id="delete-confirm-title">Confirmar Exclusão</h3>
-              <p class="text-sm text-gray-500 dark:text-gray-400">{{ deleteMessage }}</p>
+              <h3 class="text-base font-semibold text-neutral-900 mb-2" id="delete-confirm-title">Confirmar Exclusão</h3>
+              <p class="text-sm text-neutral-500">{{ deleteMessage }}</p>
             </div>
-            <div class="bg-gray-50 dark:bg-gray-800/50 px-6 py-3 flex justify-end gap-3">
+            <div class="bg-neutral-50 px-6 py-3 flex justify-end gap-3">
               <button @click="showDeleteConfirm = false; mosaicToDelete = null" class="btn-secondary">Cancelar</button>
               <button @click="confirmDelete" class="btn-primary bg-red-600 hover:bg-red-700">Excluir</button>
             </div>
@@ -607,7 +602,7 @@ onMounted(async () => {
 
 <style scoped>
 .label-custom {
-  @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5;
+  @apply block text-sm font-medium text-neutral-700 mb-1.5;
 }
 
 .input-custom {
@@ -669,7 +664,7 @@ html:not(.dark)[data-theme="light"] .input-custom {
 }
 
 .btn-secondary {
-  @apply inline-flex items-center justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-600 dark:hover:bg-gray-700 transition-all duration-200;
+  @apply inline-flex items-center justify-center rounded-md bg-surface px-3 py-2 text-sm font-semibold text-neutral-900 shadow-sm ring-1 ring-inset ring-neutral-300 hover:bg-neutral-50 transition-all duration-200;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -680,10 +675,10 @@ html:not(.dark)[data-theme="light"] .input-custom {
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 dark:bg-gray-600 rounded-full;
+  @apply bg-neutral-300 rounded-full;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-400 dark:bg-gray-500;
+  @apply bg-neutral-400;
 }
 
 .animate-fade-in {

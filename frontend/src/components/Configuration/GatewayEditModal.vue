@@ -3,15 +3,15 @@
     <div class="fixed inset-0 z-50 overflow-y-auto">
       <div class="flex min-h-screen items-center justify-center p-4">
         <!-- Backdrop -->
-        <div class="fixed inset-0 bg-black/50 dark:bg-black/70 transition-opacity" @click="$emit('close')"></div>
+        <div class="fixed inset-0 bg-black/50 transition-opacity" @click="$emit('close')"></div>
 
         <!-- Modal -->
-        <div class="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full p-6">
+        <div class="relative bg-surface rounded-lg shadow-xl max-w-2xl w-full p-6">
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+            <h3 class="text-lg font-semibold text-neutral-900">
               {{ isEditing ? 'Editar Gateway' : 'Adicionar Gateway' }}
             </h3>
-            <button @click="$emit('close')" class="text-gray-400 hover:text-gray-500">
+            <button @click="$emit('close')" class="text-neutral-400 hover:text-neutral-500">
               <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
               </svg>
@@ -119,8 +119,8 @@
                   placeholder="http://localhost:3001"
                   required
                 />
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  URL do serviço docker-whatsapp. Use <code class="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded">http://localhost:3001</code> se estiver rodando localmente, ou <code class="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded">http://whatsapp-qr-1:3000</code> se dentro do Docker.
+                <p class="text-xs text-neutral-500 mt-1">
+                  URL do serviço docker-whatsapp. Use <code class="px-1 py-0.5 bg-neutral-200 rounded">http://localhost:3001</code> se estiver rodando localmente, ou <code class="px-1 py-0.5 bg-neutral-200 rounded">http://whatsapp-qr-1:3000</code> se dentro do Docker.
                 </p>
               </div>
 
@@ -146,16 +146,16 @@
               </div>
 
               <!-- WhatsApp Connection Status (only when editing) -->
-              <div v-if="isEditing" class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+              <div v-if="isEditing" class="bg-neutral-50 rounded-lg p-4 border border-neutral-200">
                 <div class="flex items-center justify-between mb-3">
-                  <h4 class="text-sm font-semibold text-gray-900 dark:text-white">
+                  <h4 class="text-sm font-semibold text-neutral-900">
                     Status da Conexão
                   </h4>
                   <button 
                     type="button"
                     @click="refreshWhatsAppStatus"
                     :disabled="checkingStatus"
-                    class="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 flex items-center gap-1"
+                    class="text-xs text-primary-600 hover:text-primary-700 flex items-center gap-1"
                   >
                     <svg :class="{'animate-spin': checkingStatus}" class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -176,21 +176,21 @@
                       }"
                     ></div>
                     <span class="text-sm font-medium" :class="{
-                      'text-green-600 dark:text-green-400': whatsappStatus === 'connected',
-                      'text-yellow-600 dark:text-yellow-400': whatsappStatus === 'connecting' || whatsappStatus === 'qr_pending',
-                      'text-gray-600 dark:text-gray-400': whatsappStatus === 'disconnected' || !whatsappStatus,
-                      'text-red-600 dark:text-red-400': whatsappStatus === 'error'
+                      'text-success ': whatsappStatus === 'connected',
+                      'text-warning ': whatsappStatus === 'connecting' || whatsappStatus === 'qr_pending',
+                      'text-neutral-600 ': whatsappStatus === 'disconnected' || !whatsappStatus,
+                      'text-danger ': whatsappStatus === 'error'
                     }">
                       {{ getWhatsAppStatusText(whatsappStatus) }}
                     </span>
                   </div>
 
-                  <div v-if="lastWhatsAppConnection" class="text-xs text-gray-500 dark:text-gray-400 border-l border-gray-300 dark:border-gray-600 pl-3">
+                  <div v-if="lastWhatsAppConnection" class="text-xs text-neutral-500 border-l border-neutral-300 pl-3">
                     Última conexão: {{ formatDate(lastWhatsAppConnection) }}
                   </div>
                 </div>
 
-                <div v-if="whatsappStatus === 'disconnected'" class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                <div v-if="whatsappStatus === 'disconnected'" class="mt-2 text-xs text-neutral-500">
                   Conecte escaneando um QR Code
                 </div>
               </div>
@@ -283,9 +283,9 @@
                     v-model="form.use_tls" 
                     type="checkbox" 
                     id="use-tls"
-                    class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300 rounded"
                   />
-                  <label for="use-tls" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                  <label for="use-tls" class="ml-2 text-sm text-neutral-700">
                     Usar TLS
                   </label>
                 </div>
@@ -295,9 +295,9 @@
                     v-model="form.use_ssl" 
                     type="checkbox" 
                     id="use-ssl"
-                    class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300 rounded"
                   />
-                  <label for="use-ssl" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                  <label for="use-ssl" class="ml-2 text-sm text-neutral-700">
                     Usar SSL
                   </label>
                 </div>
@@ -354,22 +354,22 @@
                 v-model="form.is_active" 
                 type="checkbox" 
                 id="is-active-gateway"
-                class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300 rounded"
               />
-              <label for="is-active-gateway" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+              <label for="is-active-gateway" class="ml-2 text-sm text-neutral-700">
                 Gateway ativo
               </label>
             </div>
 
             <!-- Action Buttons -->
-            <div class="flex justify-between gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div class="flex justify-between gap-3 pt-4 border-t border-neutral-200">
               <div class="flex gap-3">
                 <!-- Test SMS Button (only for editing SMS) -->
                 <button 
                   v-if="isEditing && form.type === 'sms'" 
                   type="button" 
                   @click="showTestModal = true"
-                  class="btn-secondary text-blue-600 dark:text-blue-400"
+                  class="btn-secondary text-info"
                 >
                   <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
@@ -383,7 +383,7 @@
                   <button 
                     type="button" 
                     @click="showTestWhatsAppModal = true"
-                    class="btn-secondary text-blue-600 dark:text-blue-400"
+                    class="btn-secondary text-info"
                   >
                     <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
@@ -395,7 +395,7 @@
                   <button 
                     type="button" 
                     @click="handleGenerateQR"
-                    class="btn-secondary text-green-600 dark:text-green-400"
+                    class="btn-secondary text-success"
                   >
                     <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
@@ -911,11 +911,11 @@ const handleResetWhatsApp = async () => {
 
 <style scoped>
 .label-custom {
-  @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5;
+  @apply block text-sm font-medium text-neutral-700 mb-1.5;
 }
 
 .input-custom {
-  @apply w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors;
+  @apply w-full rounded-md border border-neutral-300 bg-surface px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors;
 }
 
 .btn-primary {
@@ -923,6 +923,6 @@ const handleResetWhatsApp = async () => {
 }
 
 .btn-secondary {
-  @apply inline-flex items-center justify-center rounded-md bg-white dark:bg-gray-800 px-4 py-2 text-sm font-semibold text-gray-900 dark:text-gray-200 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200;
+  @apply inline-flex items-center justify-center rounded-md bg-surface px-4 py-2 text-sm font-semibold text-neutral-900 shadow-sm ring-1 ring-inset ring-neutral-300 hover:bg-neutral-50 transition-all duration-200;
 }
 </style>

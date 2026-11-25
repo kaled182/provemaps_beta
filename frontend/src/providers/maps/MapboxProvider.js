@@ -7,6 +7,7 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { IMapProvider, IMap, IPolyline, IMarker, IPolygon } from './IMapProvider.js';
 import { getMarkerConfig } from './markerStyles.js';
+import { mapboxStyleForTheme } from './mapTheme.js';
 
 let mapboxLoaded = false;
 let layerIdCounter = 0;
@@ -86,14 +87,19 @@ class MapboxPolyline extends IPolyline {
     this._editable = options.editable || false;
     this._draggable = options.draggable || false;
     this.metadata = {};  // For storing custom data
+    this._added = false;
+    this._removed = false;
 
-    this._addToMap();
+    map.whenStyleReady(() => {
+      if (!this._removed) this._addToMap();
+    });
   }
 
   _addToMap() {
     const coordinates = this.path.map(p => [p.lng, p.lat]);
     this.hitLayerId = `${this.layerId}-hit`;
     this._hovered = false;
+    this._added = true;
 
     // Add source (shared by visible + hit layers)
     this.mapboxMap.addSource(this.sourceId, {
@@ -123,8 +129,18 @@ class MapboxPolyline extends IPolyline {
       type: 'line',
       source: this.sourceId,
       layout: { 'line-join': 'round', 'line-cap': 'round' },
-      paint: { 'line-color': 'transparent', 'line-width': 16, 'line-opacity': 0 },
+      // EV-0126: 8 px (era 16) — a área larga apanhava o rato junto aos sites
+      paint: { 'line-color': 'transparent', 'line-width': this.options.hitWidth ?? 8, 'line-opacity': 0 },
     });
+
+    // Reposição depois de uma troca de estilo (EV-0045): as camadas voltam, os
+    // ouvintes por camada do Mapbox continuam registados no mapa — não duplicar.
+    if (this._onTop) {
+      this.mapboxMap.moveLayer(this.layerId);
+      this.mapboxMap.moveLayer(this.hitLayerId);
+    }
+    if (this._eventsBound) return;
+    this._eventsBound = true;
 
     if (this.options.clickable !== false) {
       // Use hit layer for events so the wider area is responsive
@@ -215,21 +231,23 @@ class MapboxPolyline extends IPolyline {
   }
 
   setStyle(style) {
-    if (!this.mapboxMap.getLayer(this.layerId)) return;
+    // Ainda em fila (estilo por carregar): guarda-se nas opções e o `_addToMap` usa-as.
+    if (style.strokeColor !== undefined) this.options.strokeColor = style.strokeColor;
+    if (style.strokeWeight !== undefined) this.options.strokeWeight = style.strokeWeight;
+    if (style.strokeOpacity !== undefined) this.options.strokeOpacity = style.strokeOpacity;
+    if (!this._added || !this.mapboxMap.getLayer(this.layerId)) return;
     if (style.strokeColor !== undefined) {
-      this.options.strokeColor = style.strokeColor;
       this.mapboxMap.setPaintProperty(this.layerId, 'line-color', style.strokeColor);
     }
     if (style.strokeWeight !== undefined) {
-      this.options.strokeWeight = style.strokeWeight;
       if (!this._hovered) this.mapboxMap.setPaintProperty(this.layerId, 'line-width', style.strokeWeight);
     }
     if (style.strokeOpacity !== undefined) {
-      this.options.strokeOpacity = style.strokeOpacity;
       if (!this._hovered) this.mapboxMap.setPaintProperty(this.layerId, 'line-opacity', style.strokeOpacity);
     }
     // zIndex: o Mapbox desenha camadas por ordem de inserção; traz-se para cima
     if (style.zIndex !== undefined && style.zIndex >= 1000) {
+      this._onTop = true;
       this.mapboxMap.moveLayer(this.layerId);
       this.mapboxMap.moveLayer(this.hitLayerId);
     }
@@ -272,6 +290,9 @@ class MapboxPolyline extends IPolyline {
   }
 
   remove() {
+    this._removed = true;
+    this.map._overlays?.delete(this);
+    if (!this._added) return; // ainda em fila: nunca chegou a entrar no mapa
     // Remove hit layer first (it's on top)
     if (this.hitLayerId && this.mapboxMap.getLayer(this.hitLayerId)) {
       this.mapboxMap.off('click', this.hitLayerId, this._handleClick);
@@ -471,13 +492,26 @@ class MapboxMarker extends IMarker {
 class MapboxPolygon extends IPolygon {
   constructor(map, options) {
     super();
+    this.map = map;
     this.mapboxMap = map.mapboxMap;
+    this.options = { ...options };
+    this.path = options.path;
     const id = ++polygonIdCounter;
     this.sourceId = `polygon-source-${id}`;
     this.fillLayerId = `polygon-fill-${id}`;
     this.lineLayerId = `polygon-line-${id}`;
+    this._added = false;
+    this._removed = false;
 
-    this.mapboxMap.addSource(this.sourceId, { type: 'geojson', data: this._geojson(options.path) });
+    map.whenStyleReady(() => {
+      if (!this._removed) this._addToMap();
+    });
+  }
+
+  _addToMap() {
+    const options = this.options;
+    this._added = true;
+    this.mapboxMap.addSource(this.sourceId, { type: 'geojson', data: this._geojson(this.path) });
     this.mapboxMap.addLayer({
       id: this.fillLayerId,
       type: 'fill',
@@ -506,10 +540,14 @@ class MapboxPolygon extends IPolygon {
   }
 
   setPath(path) {
+    this.path = path;
+    if (!this._added) return;
     this.mapboxMap.getSource(this.sourceId)?.setData(this._geojson(path));
   }
 
   setStyle(style) {
+    Object.assign(this.options, style);
+    if (!this._added) return;
     const paint = (layer, prop, value) => {
       if (value !== undefined && this.mapboxMap.getLayer(layer)) this.mapboxMap.setPaintProperty(layer, prop, value);
     };
@@ -521,6 +559,9 @@ class MapboxPolygon extends IPolygon {
   }
 
   remove() {
+    this._removed = true;
+    this.map._overlays?.delete(this);
+    if (!this._added) return;
     [this.lineLayerId, this.fillLayerId].forEach((id) => {
       if (this.mapboxMap.getLayer(id)) this.mapboxMap.removeLayer(id);
     });
@@ -540,11 +581,24 @@ class MapboxMap extends IMap {
 
     // Estilo: o pedido, senão a cadeia configurada (personalizado → configurado → padrão).
     // Se um estilo falhar antes do primeiro `load`, tenta-se o seguinte.
-    this._styleCandidates = options.style
+    // EV-0045: cada candidato passa à variante do tema (streets/light ↔ dark,
+    // navigation-day ↔ night); satélite/outdoors/personalizado não mudam.
+    this._baseStyleCandidates = options.style
       ? [resolveMapboxStyle(options.style) || options.style]
       : (options.styleCandidates?.length ? options.styleCandidates : [MAPBOX_DEFAULT_STYLE]);
+    this._theme = options.theme;
+    this._styleCandidates = this._baseStyleCandidates.map((s) => mapboxStyleForTheme(s, this._theme));
     this._styleIndex = 0;
+    this._appliedStyle = this._styleCandidates[0];
+    // Polylines/polígonos vivos: uma troca de estilo apaga sources/camadas e
+    // estes são repostos no `style.load` seguinte.
+    this._overlays = new Set();
+    this._restyling = false;
     this._loaded = false;
+    // Sources/camadas só podem entrar depois de o estilo carregar («Style is not done
+    // loading»); quem cria polylines/polígonos antes disso fica em fila até ao `load`.
+    this._styleReady = false;
+    this._styleReadyQueue = [];
 
     this.mapboxMap = new mapboxgl.Map({
       container: container,
@@ -557,7 +611,14 @@ class MapboxMap extends IMap {
       ...(options.maxZoom ? { maxZoom: options.maxZoom } : {}),
     });
 
-    this.mapboxMap.once('load', () => { this._loaded = true; });
+    this.mapboxMap.once('load', () => { this._loaded = true; this._flushStyleReady(); });
+    this.mapboxMap.on('style.load', () => {
+      if (this._restyling) {
+        this._restyling = false;
+        this._readdOverlays();
+      }
+      this._flushStyleReady();
+    });
     this.mapboxMap.on('error', (event) => this._onStyleError(event));
 
     // Add controls
@@ -576,7 +637,56 @@ class MapboxMap extends IMap {
     if (next >= this._styleCandidates.length) return;
     console.warn('[MapboxProvider] Estilo falhou, a tentar o seguinte:', this._styleCandidates[this._styleIndex], event?.error?.message);
     this._styleIndex = next;
-    this.mapboxMap.setStyle(this._styleCandidates[next]);
+    this._styleReady = false;
+    this._appliedStyle = this._styleCandidates[next];
+    this.mapboxMap.setStyle(this._appliedStyle);
+  }
+
+  /**
+   * Troca para a variante clara/escura do estilo carregado e repõe os overlays
+   * no `style.load`. Marcadores são DOM e não precisam de reposição.
+   * @param {'light'|'dark'} theme
+   */
+  setTheme(theme) {
+    if (!theme || theme === this._theme) return;
+    this._theme = theme;
+    const base = this._baseStyleCandidates[this._styleIndex];
+    const next = mapboxStyleForTheme(base, theme);
+    this._styleCandidates = this._baseStyleCandidates.map((s) => mapboxStyleForTheme(s, theme));
+    if (next === this._appliedStyle) return;
+    this._appliedStyle = next;
+    this._styleReady = false;
+    this._restyling = true;
+    this.mapboxMap.setStyle(next);
+  }
+
+  _readdOverlays() {
+    this._overlays.forEach((overlay) => {
+      if (overlay._added && !overlay._removed) {
+        try {
+          overlay._addToMap();
+        } catch (e) {
+          console.warn('[MapboxProvider] Falha a repor camada depois da troca de estilo:', e);
+        }
+      }
+    });
+  }
+
+  _flushStyleReady() {
+    this._styleReady = true;
+    const queue = this._styleReadyQueue.splice(0);
+    queue.forEach((fn) => fn());
+  }
+
+  /**
+   * Executa `fn` já, se o estilo está carregado, senão quando o `load`/`style.load`
+   * chegar. É o que permite ao CustomMapViewer desenhar cabos logo a seguir a `createMap`
+   * sem rebentar com «Style is not done loading».
+   * @param {() => void} fn
+   */
+  whenStyleReady(fn) {
+    if (this._styleReady) fn();
+    else this._styleReadyQueue.push(fn);
   }
 
   /** Estilo efetivamente carregado (depois de eventuais fallbacks) */
@@ -713,7 +823,9 @@ class MapboxMap extends IMap {
   }
 
   createPolyline(options) {
-    return new MapboxPolyline(this, options);
+    const polyline = new MapboxPolyline(this, options);
+    this._overlays.add(polyline);
+    return polyline;
   }
 
   createMarker(options) {
@@ -721,7 +833,9 @@ class MapboxMap extends IMap {
   }
 
   createPolygon(options) {
-    return new MapboxPolygon(this, options);
+    const polygon = new MapboxPolygon(this, options);
+    this._overlays.add(polygon);
+    return polygon;
   }
 
   destroy() {

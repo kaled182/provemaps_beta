@@ -101,17 +101,8 @@ const onKmlSelected = async (evt) => {
   try {
     const form = new FormData();
     form.append('kml', file);
-    const resp = await fetch(`/api/v1/fiber-cables/${props.cableId}/import-kml/`, {
-      method: 'POST',
-      body: form,
-      credentials: 'same-origin',
-      headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || '' },
-    });
-    if (!resp.ok) {
-      const txt = await resp.text();
-      throw new Error(`HTTP ${resp.status} ${resp.statusText}: ${txt.slice(0, 200)}`);
-    }
-    const json = await resp.json();
+    // EV-0118: pelo useApi (CSRF certo); o fetch cru mandava o cabeçalho vazio → 403
+    const json = await api.postFormData(`/api/v1/fiber-cables/${props.cableId}/import-kml/`, form);
     const points = json?.points || 0;
     if (drawing) {
       drawing.setPath(json?.path || []);

@@ -20,7 +20,12 @@ from typing import Any, cast
 from django.core.cache import cache
 from django.db.models import Q, QuerySet
 
-from inventory.domain.optical import fetch_port_optical_snapshot, fetch_ports_optical_snapshots
+from inventory.domain.optical import (
+    DISCOVERY_ITEM_OUTPUT,
+    fetch_port_optical_snapshot,
+    fetch_ports_optical_snapshots,
+    match_optical_keys_for_ports,
+)
 from inventory.domain.zabbix_history import fetch_aligned_series
 from inventory.models import Device, FiberCable, Port
 
@@ -30,11 +35,9 @@ from .devices_common import (
     InventoryNotFound,
     InventoryValidationError,
     PortLike,
-    PortRecord,
     TrafficChannel,
     TrafficData,
     _coerce_dict_list,
-    _extract_key_tokens,
     _normalize_identifier,
     _PortEntry,
 )
@@ -45,251 +48,94 @@ logger = logging.getLogger(__name__)
 OPTICAL_DISCOVERY_CACHE_TTL = 120  # seconds (2 minutes max)
 
 
-def _score_optical_candidate_local(item: dict[str, Any], kind: str) -> int:
-    text = " ".join(
-        [
-            (cast(str, item.get("key_", "")) or "").lower(),
-            (cast(str, item.get("name", "")) or "").lower(),
-        ]
-    )
-    units = (cast(str, item.get("units", "")) or "").lower()
-    score = 0
-
-    if "power" in text:
-        score += 2
-    if "optical" in text or "fiber" in text:
-        score += 1
-    if "dbm" in text or "dbm" in units:
-        score += 3
-
-    if kind == "rx":
-        if any(token in text for token in ("rx", "receive", "input")):
-            score += 2
-        if "tx" in text:
-            score -= 1
-    else:
-        if any(token in text for token in ("tx", "transmit", "output")):
-            score += 2
-        if "rx" in text:
-            score -= 1
-
-    if any(word in text for word in ("threshold", "alarm", "bias", "temperature", "fault")):
-        score -= 3
-    return score
-
-
 def _preload_optical_discovery_cache(
     hostid: str,
     ports: Sequence[Port],
-) -> dict[tuple[str, str | None], dict[str, str | None]]:
+) -> dict[Any, Any]:
+    """Map ``(hostid, port name) → {"rx": key|None, "tx": key|None}`` for a host's ports.
+
+    EV-0086: um só ``item.get`` (itens ativos do host, com ``units``/``value_type``) e a
+    regra única ``domain.optical.match_optical_keys_for_ports``: só potências ópticas (dBm
+    ou família conhecida), correspondência EXATA do nome da porta ao nome da interface ou
+    ao índice do item, e um só candidato por sentido. Antes: 7 procuras ``LIKE`` («power»,
+    «optical», «laser»…) e pontuação por palavras e por substring do nome da porta, que
+    atribuía tráfego, a fonte da OLT e itens de outras ONU (EV-0081).
+    """
     hostid_str = str(hostid).strip()
     if not hostid_str:
         return {}
 
-    # Try to reuse cached discovery map when port set did not change recently
-    try:
-        signature_data: list[dict[str, str]] = [
-            {
-                "id": str(getattr(port, "pk", getattr(port, "id", "")) or ""),
-                "name": (getattr(cast(Any, port), "name", "") or "").strip(),
-            }
-            for port in ports
-        ]
-        signature_bytes = json.dumps(signature_data, sort_keys=True).encode("utf-8")
-        signature_hash = hashlib.sha1(signature_bytes).hexdigest()
-        cache_key_map = f"optical:discovery:{hostid_str}:{signature_hash}"
-    except Exception:
-        signature_hash = ""
-        cache_key_map = f"optical:discovery:{hostid_str}:generic"
-
-    cached_map: dict[tuple[str, str | None], dict[str, str | None]] | None = None
-    try:
-        cached_value = cache.get(cache_key_map)
-        if isinstance(cached_value, dict):
-            cached_map = cast(
-                dict[tuple[str, str | None], dict[str, str | None]],
-                cached_value,
-            )
-    except Exception:
-        cached_map = None
-    if cached_map:
-        return cached_map
-
-    port_entries: list[_PortEntry] = []
+    port_names: list[str] = []
     for port in ports:
         name = (getattr(cast(Any, port), "name", "") or "").strip()
-        if not name:
-            continue
-        lower = name.lower()
-        trimmed = lower.replace(" ", "")
-        normalized = _normalize_identifier(name)
-        normalized_trimmed = _normalize_identifier(trimmed)
-        port_entries.append(
-            _PortEntry(
-                port=port,
-                record=PortRecord(port=port, created=False, defaults={}),
-                lower=lower,
-                normalized=normalized,
-                trimmed=trimmed,
-                normalized_trimmed=normalized_trimmed,
-            )
-        )
-
-    if not port_entries:
+        if name and name not in port_names:
+            port_names.append(name)
+    if not port_names:
         return {}
 
-    default_cache: dict[tuple[str, str | None], dict[str, str | None]] = {}
-    for entry in port_entries:
-        entry_name = cast(str, getattr(cast(Any, entry.port), "name", "")) or None
-        default_cache[(hostid_str, entry_name)] = {"rx": None, "tx": None}
+    signature_hash = hashlib.sha1(json.dumps(sorted(port_names)).encode("utf-8")).hexdigest()
+    # `v2` (EV-0086): os mapas gravados pela heurística antiga não são reaproveitados.
+    cache_key_map = f"optical:discovery:v2:{hostid_str}:{signature_hash}"
+    try:
+        cached_value = cache.get(cache_key_map)
+    except Exception:
+        cached_value = None
+    if isinstance(cached_value, dict) and cached_value:
+        return cast(dict[Any, Any], cached_value)
 
-    base_params: dict[str, Any] = {
-        "output": ["itemid", "key_", "name", "units"],
-        "hostids": [hostid_str],
-        "filter": {"status": "0"},
-        "limit": 5000,
+    default_cache: dict[Any, Any] = {
+        (hostid_str, name): {"rx": None, "tx": None} for name in port_names
     }
 
-    search_variants: list[dict[str, Any]] = [
-        {"search": {"key_": "power"}, "searchByAny": True, "searchWildcardsEnabled": True},
-        {"search": {"name": "optical"}, "searchByAny": True, "searchWildcardsEnabled": True},
-        {"search": {"key_": "optical"}, "searchByAny": True, "searchWildcardsEnabled": True},
-        {"search": {"name": "dbm"}, "searchByAny": True, "searchWildcardsEnabled": True},
-        {"search": {"name": "power"}, "searchByAny": True, "searchWildcardsEnabled": True},
-        {"search": {"key_": "laser"}, "searchByAny": True, "searchWildcardsEnabled": True},
-        {"search": {"name": "laser"}, "searchByAny": True, "searchWildcardsEnabled": True},
-    ]
-
-    gathered: list[dict[str, Any]] = []
-    seen_ids: set[str] = set()
-
-    gathered_items_cache_key = f"optical:gathered:{hostid_str}"
-    cache_hit_items = False
+    gathered_items_cache_key = f"optical:gathered:v2:{hostid_str}"
+    gathered: list[dict[str, Any]] | None = None
     try:
         cached_items = cache.get(gathered_items_cache_key)
         if isinstance(cached_items, list):
             gathered = _coerce_dict_list(cached_items)
-            cache_hit_items = True
     except Exception:
-        cache_hit_items = False
+        gathered = None
 
-    if not cache_hit_items:
-        for variant in search_variants:
-            params = base_params.copy()
-            params.update(variant)
-            try:
-                raw_items = common.ZABBIX_REQUEST("item.get", params)
-            except Exception as exc:  # pragma: no cover - network failure fallback
-                logger.debug(
-                    "Failed preloading optical items for host %s with params %s: %s",
-                    hostid_str,
-                    variant,
-                    exc,
+    if gathered is None:
+        try:
+            gathered = _coerce_dict_list(
+                common.ZABBIX_REQUEST(
+                    "item.get",
+                    {
+                        "output": list(DISCOVERY_ITEM_OUTPUT),
+                        "hostids": [hostid_str],
+                        "filter": {"status": "0"},
+                    },
                 )
-                continue
-            items = _coerce_dict_list(raw_items)
-            for item in items:
-                itemid = cast(str, item.get("itemid"))
-                if not itemid or itemid in seen_ids:
-                    continue
-                seen_ids.add(itemid)
-                gathered.append(item)
-
-        if not gathered:
-            try:
-                fallback_items = _coerce_dict_list(common.ZABBIX_REQUEST("item.get", base_params))
-                for item in fallback_items:
-                    itemid = cast(str, item.get("itemid"))
-                    if not itemid or itemid in seen_ids:
-                        continue
-                    seen_ids.add(itemid)
-                    gathered.append(item)
-            except Exception as exc:  # pragma: no cover - network failure fallback
-                logger.debug(
-                    "Fallback optical preload failed for host %s: %s",
-                    hostid_str,
-                    exc,
-                )
-
+            )
+        except Exception as exc:  # pragma: no cover - network failure fallback
+            logger.debug("Failed preloading optical items for host %s: %s", hostid_str, exc)
+            return default_cache
         if gathered:
             try:
-                cache.set(
-                    gathered_items_cache_key,
-                    gathered,
-                    OPTICAL_DISCOVERY_CACHE_TTL,
-                )
+                cache.set(gathered_items_cache_key, gathered, OPTICAL_DISCOVERY_CACHE_TTL)
             except Exception:
                 pass
 
     if not gathered:
-        logger.debug(
-            "Optical preload returned no candidates for host %s; using default discovery cache",
-            hostid_str,
-        )
+        logger.debug("Optical preload returned no items for host %s", hostid_str)
         return default_cache
 
-    port_match_map: dict[tuple[str, str | None], dict[str, Any]] = {}
-    for item in gathered:
-        key_value = cast(str, item.get("key_", ""))
-        name_value = cast(str, item.get("name", ""))
-        combined_text = f"{key_value.lower()} {name_value.lower()}".strip()
-        if not combined_text:
-            continue
-        combined_normalized = _normalize_identifier(f"{key_value}{name_value}")
-        tokens = _extract_key_tokens(key_value)
-        rx_candidate_score = _score_optical_candidate_local(item, "rx")
-        tx_candidate_score = _score_optical_candidate_local(item, "tx")
-
-        for entry in port_entries:
-            match_score = _score_port_match(entry, tokens, combined_text, combined_normalized)
-            if match_score <= 0:
-                continue
-
-            entry_name = cast(str, getattr(cast(Any, entry.port), "name", "")) or None
-            cache_key: tuple[str, str | None] = (hostid_str, entry_name)
-            match_info = port_match_map.setdefault(
-                cache_key,
-                {"rx": None, "tx": None, "rx_score": float("-inf"), "tx_score": float("-inf")},
-            )
-
-            if rx_candidate_score > 0:
-                rx_total = match_score + rx_candidate_score
-                if rx_total > cast(float, match_info["rx_score"]):
-                    match_info["rx_score"] = rx_total
-                    match_info["rx"] = key_value or None
-
-            if tx_candidate_score > 0:
-                tx_total = match_score + tx_candidate_score
-                if tx_total > cast(float, match_info["tx_score"]):
-                    match_info["tx_score"] = tx_total
-                    match_info["tx"] = key_value or None
-
-    discovery_cache: dict[tuple[str, str | None], dict[str, str | None]] = default_cache.copy()
-    for entry in port_entries:
-        entry_name = cast(str, getattr(cast(Any, entry.port), "name", "")) or None
-        cache_key = (hostid_str, entry_name)
-        match_info = port_match_map.get(cache_key)
-        if match_info is None:
-            continue
-        discovery_cache[cache_key] = {
-            "rx": cast(str | None, match_info.get("rx")),
-            "tx": cast(str | None, match_info.get("tx")),
-        }
+    matched = match_optical_keys_for_ports(port_names, gathered, hostid=hostid_str)
+    discovery_cache: dict[Any, Any] = default_cache.copy()
+    for name, keys in matched.items():
+        discovery_cache[(hostid_str, name)] = keys
 
     logger.debug(
-        "Prefetched %d optical candidates for host %s (ports=%d, mapped=%d)",
+        "Optical preload: %d items for host %s (ports=%d, mapped=%d)",
         len(gathered),
         hostid_str,
-        len(port_entries),
-        len([entry for entry in discovery_cache.values() if entry.get("rx") or entry.get("tx")]),
+        len(port_names),
+        len([keys for keys in matched.values() if keys.get("rx") or keys.get("tx")]),
     )
 
     try:
-        cache.set(
-            cache_key_map,
-            discovery_cache,
-            OPTICAL_DISCOVERY_CACHE_TTL,
-        )
+        cache.set(cache_key_map, discovery_cache, OPTICAL_DISCOVERY_CACHE_TTL)
     except Exception:
         pass
 
@@ -397,11 +243,11 @@ def get_device_ports_with_live_status(device_id: int) -> dict[str, Any]:
     if hostid:
 
         def _fetch_optical():
-            cache = _preload_optical_discovery_cache(hostid, ports_list)
+            # EV-0094: leitura (EV-0090) — só as chaves gravadas; sem pré-carga da
+            # descoberta (um item.get do host inteiro que ninguém lia).
             return fetch_ports_optical_snapshots(
                 ports_list,
-                discovery_cache=cache,
-                persist_keys=True,
+                persist_keys=False,
                 include_status_meta=False,
             )
 
@@ -679,7 +525,17 @@ def import_interfaces_from_zabbix(device: Device) -> dict[str, Any]:
             "item.get",
             {
                 "hostids": [hostid],
-                "output": ["itemid", "key_", "name", "lastvalue", "interfaceid"],
+                "output": [
+                    "itemid",
+                    "key_",
+                    "name",
+                    "lastvalue",
+                    "interfaceid",
+                    "units",
+                    "value_type",
+                    "state",
+                    "lastclock",
+                ],
                 "filter": {"state": "0"},
                 "search": {
                     "key_": ["status", "speed", "optical", "ifOperStatus", "hwIfOperStatus"]
@@ -742,10 +598,19 @@ def import_interfaces_from_zabbix(device: Device) -> dict[str, Any]:
                 interface_map[interface_name]["description"] = name
             elif "speed" in key_lower or "bandwidth" in key_lower:
                 interface_map[interface_name]["speed_item"] = item
-            elif "rx" in key_lower and ("optical" in key_lower or "power" in key_lower):
-                interface_map[interface_name]["rx_optical_item"] = item
-            elif "tx" in key_lower and ("optical" in key_lower or "power" in key_lower):
-                interface_map[interface_name]["tx_optical_item"] = item
+
+        # EV-0086: chaves ópticas só pela regra única (potência em dBm ou família conhecida,
+        # nome da interface exato, um candidato por sentido) — antes bastava «rx»/«tx» e
+        # «power»/«optical» na chave, e o nome da interface podia ser o índice da entidade.
+        items_by_key = {str(it.get("key_") or "").strip(): it for it in items_response}
+        optical_matches = match_optical_keys_for_ports(
+            list(interface_map), items_response, hostid=hostid
+        )
+        for if_name, keys in optical_matches.items():
+            if keys.get("rx"):
+                interface_map[if_name]["rx_optical_item"] = items_by_key.get(keys["rx"])
+            if keys.get("tx"):
+                interface_map[if_name]["tx_optical_item"] = items_by_key.get(keys["tx"])
 
         # 4. Filtra apenas interfaces relevantes e cria/atualiza portas
         for if_name, if_data in interface_map.items():
@@ -826,16 +691,12 @@ def get_device_ports_with_optical(device_id: int) -> dict[str, Any]:
 
     ports_list: list[Port] = list(ports_qs)
     hostid = (getattr(cast(Any, device), "zabbix_hostid", "") or "").strip()
-    discovery_cache: dict[Any, Any] = {}
-    if hostid:
-        discovery_cache = _preload_optical_discovery_cache(hostid, ports_list)
-
     snapshots: dict[int, dict[str, Any]] = {}
     if hostid:
+        # EV-0094: leitura (EV-0090) — sem pré-carga da descoberta.
         snapshots = fetch_ports_optical_snapshots(
             ports_list,
-            discovery_cache=discovery_cache,
-            persist_keys=True,
+            persist_keys=False,
             include_status_meta=False,
         )
 
@@ -992,7 +853,7 @@ def device_port_optical_status(port_id: int) -> dict[str, Any]:
     if not hostid:
         raise InventoryValidationError("Device missing Zabbix Host ID")
 
-    optical_snapshot = fetch_port_optical_snapshot(port)
+    optical_snapshot = fetch_port_optical_snapshot(port, persist_keys=False)
     return {
         "port_id": port.pk,
         "port_name": port.name,

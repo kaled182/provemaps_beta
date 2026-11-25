@@ -309,6 +309,7 @@
 </template>
 
 <script setup>
+import { getCsrfToken } from '@/composables/useApi'
 import { ref, computed, watch } from 'vue';
 import {
   PhHardDrives, PhX, PhTag, PhInfo, PhArrowsClockwise,
@@ -356,7 +357,7 @@ async function performUpdate() {
   updatePhase.value = 'updating';
   resetSteps();
 
-  const csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] ?? '';
+  const csrfToken = getCsrfToken(); // EV-0072: leitor único (nome real do cookie)
   const response = await fetch('/api/v1/inventory/system/perform-update/', {
     method: 'POST',
     headers: { 'X-CSRFToken': csrfToken },

@@ -3,7 +3,7 @@
  */
 
 import { useApi } from '@/composables/useApi'
-import { formatOpticalSeries } from '@/utils/opticalSeries'
+import { formatOpticalSeries, opticalPortStats } from '@/utils/opticalSeries'
 
 const { get, post, patch, delete: del } = useApi()
 
@@ -74,23 +74,8 @@ export async function getCableOpticalHistory(cableId, hours = 24) {
     // EV-0010: sem forward-fill — um ponto sem valor é um buraco no gráfico.
     const formatPortData = (historyArray, thresholds) => formatOpticalSeries(historyArray, thresholds)
     
-    const calculatePortStats = (historyArray) => {
-      if (!historyArray || historyArray.length === 0) {
-        return { avgRx: 0, avgTx: 0, minRx: 0, maxRx: 0, minTx: 0, maxTx: 0 }
-      }
-      
-      const rxValues = historyArray.map(p => p.rx_power).filter(v => v !== null && v !== undefined)
-      const txValues = historyArray.map(p => p.tx_power).filter(v => v !== null && v !== undefined)
-      
-      return {
-        avgRx: rxValues.length > 0 ? rxValues.reduce((a, b) => a + b, 0) / rxValues.length : 0,
-        minRx: rxValues.length > 0 ? Math.min(...rxValues) : 0,
-        maxRx: rxValues.length > 0 ? Math.max(...rxValues) : 0,
-        avgTx: txValues.length > 0 ? txValues.reduce((a, b) => a + b, 0) / txValues.length : 0,
-        minTx: txValues.length > 0 ? Math.min(...txValues) : 0,
-        maxTx: txValues.length > 0 ? Math.max(...txValues) : 0
-      }
-    }
+    // EV-0053: sem leituras → null (o modal mostra «N/A»), nunca 0 dBm.
+    const calculatePortStats = (historyArray) => opticalPortStats(historyArray)
     
     const originThresholds = extractThresholds(cableStatus.origin_optical)
     const destinationThresholds = extractThresholds(cableStatus.destination_optical)

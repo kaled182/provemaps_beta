@@ -71,6 +71,8 @@ def _runtime_config(**overrides) -> MagicMock:
     rc.optical_rx_warning_threshold = -24.0
     rc.optical_rx_critical_threshold = -27.0
     rc.optical_thresholds_by_distance = {}
+    rc.gpon_pon_capacity = 128
+    rc.epon_pon_capacity = 64
     rc.diagnostics_enabled = False
     rc.ftp_enabled = False
     rc.gdrive_enabled = False
@@ -156,6 +158,10 @@ class GetConfigurationUsecaseTests(TestCase):
         by_distance = data["OPTICAL_THRESHOLDS_BY_DISTANCE"]
         self.assertEqual(by_distance["10"], {"warning": -19.0, "critical": -27.0})
         self.assertEqual(by_distance["40"], uc.DEFAULT_DISTANCE_THRESHOLDS["40"])
+
+    def test_pon_capacity_comes_from_runtime_config(self):
+        data = self._get({}, gpon_pon_capacity=256, epon_pon_capacity=32)
+        self.assertEqual((data["GPON_PON_CAPACITY"], data["EPON_PON_CAPACITY"]), ("256", "32"))
 
     def test_oauth_connected_when_refresh_token_present(self):
         data = self._get({"GDRIVE_OAUTH_REFRESH_TOKEN": "tok"})
@@ -348,6 +354,19 @@ class UpdateConfigurationUsecaseTests(TestCase):
         parsed = json.loads(payload["OPTICAL_THRESHOLDS_BY_DISTANCE"])
         self.assertEqual(parsed["80"], {"warning": -25.0, "critical": -31.0})
         self.assertEqual(parsed["10"], uc.DEFAULT_DISTANCE_THRESHOLDS["10"])
+
+    def test_pon_capacity_in_payload_clamped_to_1_1024(self):
+        _, persist, _, _ = self._run({"GPON_PON_CAPACITY": "256", "EPON_PON_CAPACITY": "5000"})
+        payload = persist.call_args.args[0]
+        self.assertEqual(payload["GPON_PON_CAPACITY"], "256")
+        self.assertEqual(payload["EPON_PON_CAPACITY"], "1024")
+
+    def test_pon_capacity_defaults_when_missing(self):
+        _, persist, _, _ = self._run({})
+        payload = persist.call_args.args[0]
+        self.assertEqual(
+            (payload["GPON_PON_CAPACITY"], payload["EPON_PON_CAPACITY"]), ("128", "64")
+        )
 
     def test_new_password_triggers_backup(self):
         result, _, call_command, _ = self._run(

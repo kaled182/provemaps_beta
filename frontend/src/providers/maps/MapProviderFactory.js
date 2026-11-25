@@ -6,6 +6,7 @@
  */
 
 import { GoogleMapsProvider } from './GoogleMapsProvider.js';
+import { currentDocumentTheme, followDocumentTheme } from './mapTheme.js';
 import { MapboxProvider } from './MapboxProvider.js';
 import { LeafletProvider } from './LeafletProvider.js';
 
@@ -128,9 +129,19 @@ export async function createMap(container, options) {
     throw new Error(`Provider ${provider.getName()} not loaded`);
   }
 
-  console.log(`[MapProviderFactory] Creating map with ${provider.getName()} provider`);
-  const map = provider.createMap(container, options);
-  
+  // EV-0045: o mapa nasce no tema da interface e segue-o até ser destruído.
+  // `followTheme: false` desliga (ex.: um mapa que deve ficar sempre claro).
+  const follow = options?.followTheme !== false;
+  const theme = options?.theme || (follow ? currentDocumentTheme() : undefined);
+  const map = provider.createMap(container, { ...options, theme });
+  if (follow && typeof map.setTheme === 'function') {
+    const stop = followDocumentTheme(map);
+    const destroy = map.destroy.bind(map);
+    map.destroy = () => {
+      stop();
+      destroy();
+    };
+  }
   return map;
 }
 

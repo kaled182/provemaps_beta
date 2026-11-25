@@ -1,148 +1,144 @@
 <template>
-  <Teleport to="body">
-    <Transition name="modal">
-      <div v-if="isOpen" class="alarm-modal-overlay" @click.self="close">
-        <div class="alarm-modal-container" :class="{ dark: isDark }">
-          <!-- Header -->
-          <div class="alarm-modal-header">
-            <h3>
-              <i class="fas fa-bell"></i>
-              Alarme de Sinal Óptico - {{ port?.name }}
-            </h3>
-            <button class="close-button" @click="close">
-              <i class="fas fa-times"></i>
-            </button>
+  <BaseModal
+    :show="isOpen"
+    :title="`Alarme de sinal óptico · ${port?.name || ''}`"
+    :icon="PhBell"
+    :dirty="dirty"
+    :z-index="3600"
+    size="md"
+    @close="close"
+  >
+    <!-- Content -->
+    <div class="alarm-modal-content">
+      <!-- Current Signal -->
+      <div class="current-signal">
+        <h4>Sinal Atual</h4>
+        <div class="signal-display">
+          <div class="signal-item">
+            <span class="label">RX:</span>
+            <span class="value" :class="getSignalClass(port?.optical_rx_power)">
+              {{ formatPower(port?.optical_rx_power) }} dBm
+            </span>
           </div>
-
-          <!-- Content -->
-          <div class="alarm-modal-content">
-            <!-- Current Signal -->
-            <div class="current-signal">
-              <h4>Sinal Atual</h4>
-              <div class="signal-display">
-                <div class="signal-item">
-                  <span class="label">RX:</span>
-                  <span class="value" :class="getSignalClass(port?.optical_rx_power)">
-                    {{ formatPower(port?.optical_rx_power) }} dBm
-                  </span>
-                </div>
-                <div class="signal-item">
-                  <span class="label">TX:</span>
-                  <span class="value" :class="getSignalClass(port?.optical_tx_power)">
-                    {{ formatPower(port?.optical_tx_power) }} dBm
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Signal History Chart -->
-            <div class="signal-history">
-              <h4>Histórico do Sinal (últimas 24h)</h4>
-              <div class="chart-container">
-                <TimeSeriesChart :series="historySeries" :thresholds="thresholdLines" unit="dBm" :decimals="2" :height="200" :empty-message="historyEmptyMessage" />
-              </div>
-            </div>
-
-            <!-- Alarm Configuration -->
-            <div class="alarm-config">
-              <h4>Configuração de Alarme</h4>
-              
-              <!-- Info sobre configuração global -->
-              <div v-if="!alarmEnabled" class="config-info">
-                <i class="fas fa-info-circle"></i>
-                <span>Valores padrão globais: {{ globalWarningThreshold }} dBm (Atenção) / {{ globalCriticalThreshold }} dBm (Crítico)</span>
-              </div>
-              
-              <div class="form-field">
-                <label>
-                  <input type="checkbox" v-model="alarmEnabled" />
-                  Habilitar Alarme Personalizado
-                </label>
-                <p v-if="!alarmEnabled" class="field-help">Quando desabilitado, usa configuração global do sistema</p>
-              </div>
-
-              <div v-if="alarmEnabled" class="threshold-config">
-                <div class="form-field">
-                  <label>Threshold de Atenção (dBm)</label>
-                  <input 
-                    v-model.number="warningThreshold" 
-                    type="number" 
-                    step="0.5" 
-                    class="form-input"
-                    placeholder="-24"
-                  />
-                  <p class="field-help">Alerta quando sinal ficar abaixo deste valor</p>
-                </div>
-
-                <div class="form-field">
-                  <label>Threshold Crítico (dBm)</label>
-                  <input 
-                    v-model.number="criticalThreshold" 
-                    type="number" 
-                    step="0.5" 
-                    class="form-input"
-                    placeholder="-27"
-                  />
-                  <p class="field-help">Alarme crítico quando sinal ficar abaixo deste valor</p>
-                </div>
-
-                <div class="form-field">
-                  <label>Notificações</label>
-                  <div class="notification-options">
-                    <label>
-                      <input type="checkbox" v-model="notifications.email" />
-                      <i class="fas fa-envelope"></i>
-                      E-mail
-                    </label>
-                    <label>
-                      <input type="checkbox" v-model="notifications.dashboard" />
-                      <i class="fas fa-th-large"></i>
-                      Dashboard
-                    </label>
-                    <label>
-                      <input type="checkbox" v-model="notifications.whatsapp" />
-                      <i class="fab fa-whatsapp"></i>
-                      WhatsApp
-                    </label>
-                    <label>
-                      <input type="checkbox" v-model="notifications.telegram" />
-                      <i class="fab fa-telegram-plane"></i>
-                      Telegram
-                    </label>
-                    <label>
-                      <input type="checkbox" v-model="notifications.webhook" />
-                      <i class="fas fa-link"></i>
-                      Webhook
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Footer -->
-          <div class="alarm-modal-footer">
-            <button class="btn-secondary" @click="close">
-              <i class="fas fa-times"></i>
-              Cancelar
-            </button>
-            <button class="btn-primary" @click="saveAlarmConfig" :disabled="saving">
-              <i class="fas fa-save"></i>
-              {{ saving ? 'Salvando...' : 'Salvar Configuração' }}
-            </button>
+          <div class="signal-item">
+            <span class="label">TX:</span>
+            <span class="value" :class="getSignalClass(port?.optical_tx_power)">
+              {{ formatPower(port?.optical_tx_power) }} dBm
+            </span>
           </div>
         </div>
       </div>
-    </Transition>
-  </Teleport>
+
+      <!-- Signal History Chart -->
+      <div class="signal-history">
+        <h4>Histórico do Sinal (últimas 24h)</h4>
+        <div class="chart-container">
+          <TimeSeriesChart :series="historySeries" :thresholds="thresholdLines" unit="dBm" :decimals="2" :height="200" :empty-message="historyEmptyMessage" />
+        </div>
+      </div>
+
+      <!-- Alarm Configuration -->
+      <div class="alarm-config">
+        <h4>Configuração de Alarme</h4>
+        
+        <!-- Info sobre configuração global -->
+        <div v-if="!alarmEnabled" class="config-info">
+          <i class="fas fa-info-circle"></i>
+          <span>Valores padrão globais: {{ globalWarningThreshold }} dBm (Atenção) / {{ globalCriticalThreshold }} dBm (Crítico)</span>
+        </div>
+        
+        <div class="form-field">
+          <label>
+            <input type="checkbox" v-model="alarmEnabled" />
+            Habilitar Alarme Personalizado
+          </label>
+          <p v-if="!alarmEnabled" class="field-help">Quando desabilitado, usa configuração global do sistema</p>
+        </div>
+
+        <div v-if="alarmEnabled" class="threshold-config">
+          <div class="form-field">
+            <label>Threshold de Atenção (dBm)</label>
+            <input 
+              v-model.number="warningThreshold" 
+              type="number" 
+              step="0.5" 
+              class="form-input"
+              placeholder="-24"
+            />
+            <p class="field-help">Alerta quando sinal ficar abaixo deste valor</p>
+          </div>
+
+          <div class="form-field">
+            <label>Threshold Crítico (dBm)</label>
+            <input 
+              v-model.number="criticalThreshold" 
+              type="number" 
+              step="0.5" 
+              class="form-input"
+              placeholder="-27"
+            />
+            <p class="field-help">Alarme crítico quando sinal ficar abaixo deste valor</p>
+          </div>
+
+          <div class="form-field">
+            <label>Notificações</label>
+            <div class="notification-options">
+              <label>
+                <input type="checkbox" v-model="notifications.email" />
+                <i class="fas fa-envelope"></i>
+                E-mail
+              </label>
+              <label>
+                <input type="checkbox" v-model="notifications.dashboard" />
+                <i class="fas fa-th-large"></i>
+                Dashboard
+              </label>
+              <label>
+                <input type="checkbox" v-model="notifications.whatsapp" />
+                <i class="fab fa-whatsapp"></i>
+                WhatsApp
+              </label>
+              <label>
+                <input type="checkbox" v-model="notifications.telegram" />
+                <i class="fab fa-telegram-plane"></i>
+                Telegram
+              </label>
+              <label>
+                <input type="checkbox" v-model="notifications.webhook" />
+                <i class="fas fa-link"></i>
+                Webhook
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <template #footer>
+      <div class="flex justify-end gap-2">
+        <button type="button" class="h-8 rounded-md border border-neutral-200 px-3 text-sm text-neutral-700 hover:bg-neutral-100" @click="close">
+          Cancelar
+        </button>
+        <button
+          type="button"
+          class="h-8 rounded-md bg-primary-600 px-3 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+          :disabled="saving"
+          data-testid="alarm-config-save"
+          @click="saveAlarmConfig"
+        >
+          {{ saving ? 'A guardar…' : 'Guardar configuração' }}
+        </button>
+      </div>
+    </template>
+  </BaseModal>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useApi } from '@/composables/useApi'
 import { useNotification } from '@/composables/useNotification'
-import { useEscapeKey } from '@/composables/useEscapeKey'
-import { useUiStore } from '@/stores/ui'
+import { PhBell } from '@phosphor-icons/vue'
+import BaseModal from '@/components/Common/BaseModal.vue'
 import {
   normalizeOpticalHistory,
   OPTICAL_HISTORY_EMPTY_MESSAGE,
@@ -165,10 +161,6 @@ const emit = defineEmits(['close', 'saved'])
 
 const { get, patch } = useApi()
 const { success, error: notifyError } = useNotification()
-const uiStore = useUiStore()
-
-// Gerenciar ESC key
-useEscapeKey(() => close(), { isOpen: computed(() => props.isOpen) })
 
 const alarmEnabled = ref(false)
 const warningThreshold = ref(-24)
@@ -189,7 +181,11 @@ const historyEmptyMessage = ref(OPTICAL_HISTORY_EMPTY_MESSAGE)
 const globalWarningThreshold = ref(-24)
 const globalCriticalThreshold = ref(-27)
 
-const isDark = computed(() => uiStore.theme === 'dark')
+// EV-0068a: o BaseModal avisa ao fechar com alterações por guardar.
+const formSnapshot = () =>
+  JSON.stringify([alarmEnabled.value, warningThreshold.value, criticalThreshold.value, notifications.value])
+const savedSnapshot = ref('')
+const dirty = computed(() => Boolean(savedSnapshot.value) && formSnapshot() !== savedSnapshot.value)
 
 // Load global thresholds from configuration
 const loadGlobalThresholds = async () => {
@@ -260,6 +256,7 @@ const saveAlarmConfig = async () => {
       alarm_critical_threshold: criticalThreshold.value,
       alarm_notifications: notifications.value
     })
+    savedSnapshot.value = formSnapshot()
     success('Alarme configurado', 'As configurações de alarme foram salvas.')
     emit('saved') // Notify parent to reload ports
     close()
@@ -272,6 +269,7 @@ const saveAlarmConfig = async () => {
 }
 
 watch(() => props.isOpen, async (newVal) => {
+  if (!newVal) savedSnapshot.value = ''
   if (newVal && props.port) {
     // Load global thresholds first
     await loadGlobalThresholds()
@@ -287,7 +285,8 @@ watch(() => props.isOpen, async (newVal) => {
       whatsapp: false,
       telegram: false
     }
-    
+    savedSnapshot.value = formSnapshot()
+
     await loadHistoricalData()
   }
 })
@@ -298,89 +297,6 @@ watch(() => props.isOpen, async (newVal) => {
 </script>
 
 <style scoped>
-.alarm-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.75);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 14000;
-  padding: 20px;
-}
-
-.alarm-modal-container {
-  background: #ffffff;
-  border-radius: 12px;
-  max-width: 700px;
-  width: 100%;
-  max-height: 85vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.alarm-modal-container.dark {
-  background: #1e293b;
-  color: #f1f5f9;
-}
-
-.alarm-modal-header {
-  padding: 20px;
-  border-bottom: 1px solid #e2e8f0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.alarm-modal-container.dark .alarm-modal-header {
-  border-bottom-color: #334155;
-}
-
-.alarm-modal-header h3 {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #1e293b;
-}
-
-.alarm-modal-container.dark .alarm-modal-header h3 {
-  color: #f1f5f9;
-}
-
-.alarm-modal-header h3 i {
-  color: #f59e0b;
-}
-
-.close-button {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: #f1f5f9;
-  border: none;
-  color: #64748b;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.alarm-modal-container.dark .close-button {
-  background: #334155;
-  color: #cbd5e1;
-}
-
-.close-button:hover {
-  background: #e2e8f0;
-  transform: scale(1.1);
-}
 
 .alarm-modal-content {
   flex: 1;
@@ -393,13 +309,7 @@ watch(() => props.isOpen, async (newVal) => {
 .signal-history {
   margin-bottom: 24px;
   padding-bottom: 24px;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.alarm-modal-container.dark .current-signal,
-.alarm-modal-container.dark .alarm-config,
-.alarm-modal-container.dark .signal-history {
-  border-bottom-color: #334155;
+  border-bottom: 1px solid rgb(var(--n-200));
 }
 
 .current-signal:last-child,
@@ -413,11 +323,7 @@ h4 {
   font-size: 15px;
   font-weight: 600;
   margin: 0 0 12px 0;
-  color: #1e293b;
-}
-
-.alarm-modal-container.dark h4 {
-  color: #f1f5f9;
+  color: rgb(var(--n-900));
 }
 
 .signal-display {
@@ -428,21 +334,17 @@ h4 {
 .signal-item {
   flex: 1;
   padding: 16px;
-  background: #f8fafc;
+  background: rgb(var(--n-50));
   border-radius: 8px;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.alarm-modal-container.dark .signal-item {
-  background: #0f172a;
-}
-
 .signal-item .label {
   font-size: 12px;
   font-weight: 600;
-  color: #64748b;
+  color: rgb(var(--n-500));
   text-transform: uppercase;
 }
 
@@ -453,15 +355,15 @@ h4 {
 }
 
 .signal-good {
-  color: #10b981;
+  color: rgb(var(--success));
 }
 
 .signal-warning {
-  color: #f59e0b;
+  color: rgb(var(--warning));
 }
 
 .signal-critical {
-  color: #ef4444;
+  color: rgb(var(--danger));
 }
 
 .form-field {
@@ -470,21 +372,15 @@ h4 {
 
 .config-info {
   padding: 12px;
-  background: #dbeafe;
-  border-left: 4px solid #3b82f6;
+  background: rgb(var(--info) / 0.12);
+  border-left: 4px solid rgb(var(--info));
   border-radius: 6px;
   margin-bottom: 16px;
   font-size: 13px;
-  color: #1e40af;
+  color: rgb(var(--info-strong));
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.alarm-modal-container.dark .config-info {
-  background: #1e3a8a;
-  color: #93c5fd;
-  border-left-color: #60a5fa;
 }
 
 .config-info i {
@@ -495,12 +391,8 @@ h4 {
   display: block;
   font-size: 14px;
   font-weight: 500;
-  color: #1e293b;
+  color: rgb(var(--n-900));
   margin-bottom: 6px;
-}
-
-.alarm-modal-container.dark .form-field label {
-  color: #f1f5f9;
 }
 
 .form-field label input[type="checkbox"] {
@@ -510,39 +402,29 @@ h4 {
 .form-input {
   width: 100%;
   padding: 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgb(var(--n-200));
   border-radius: 8px;
   font-size: 14px;
-  color: #1e293b;
-  background: white;
-}
-
-.alarm-modal-container.dark .form-input {
-  background: #0f172a;
-  border-color: #334155;
-  color: #f1f5f9;
+  color: rgb(var(--n-900));
+  background: rgb(var(--surface));
 }
 
 .form-input:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: rgb(var(--primary-500));
 }
 
 .field-help {
   font-size: 12px;
-  color: #64748b;
+  color: rgb(var(--n-500));
   margin: 4px 0 0 0;
 }
 
 .threshold-config {
   margin-top: 16px;
   padding: 16px;
-  background: #f8fafc;
+  background: rgb(var(--n-50));
   border-radius: 8px;
-}
-
-.alarm-modal-container.dark .threshold-config {
-  background: #0f172a;
 }
 
 .notification-options {
@@ -561,7 +443,7 @@ h4 {
 .notification-options label i {
   width: 16px;
   text-align: center;
-  color: #667eea;
+  color: rgb(var(--primary-500));
 }
 
 .notification-options label i.fa-whatsapp {
@@ -577,80 +459,22 @@ h4 {
 }
 
 .notification-options label i.fa-th-large {
-  color: #667eea;
+  color: rgb(var(--primary-500));
 }
 
 .notification-options label i.fa-link {
-  color: #64748b;
+  color: rgb(var(--n-500));
 }
 
 .chart-container {
-  background: #f8fafc;
+  background: rgb(var(--n-50));
   border-radius: 8px;
   padding: 16px;
   overflow-x: auto;
 }
 
-.alarm-modal-container.dark .chart-container {
-  background: #0f172a;
-}
-
 .chart-container canvas {
   width: 100%;
   display: block;
-}
-
-.alarm-modal-footer {
-  padding: 16px 20px;
-  border-top: 1px solid #e2e8f0;
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-.alarm-modal-container.dark .alarm-modal-footer {
-  border-top-color: #334155;
-}
-
-.btn-primary,
-.btn-secondary {
-  padding: 10px 16px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  border: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  transition: all 0.2s;
-}
-
-.btn-primary {
-  background: #667eea;
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: #5568d3;
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  background: #f1f5f9;
-  color: #475569;
-}
-
-.alarm-modal-container.dark .btn-secondary {
-  background: #334155;
-  color: #cbd5e1;
-}
-
-.btn-secondary:hover {
-  background: #e2e8f0;
 }
 </style>

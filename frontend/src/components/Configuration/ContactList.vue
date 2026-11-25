@@ -394,7 +394,8 @@ const formatDate = (value) => {
 
 .contacts-table th,
 .contacts-table td {
-  padding: 12px 14px;
+  /* EV-0056: linhas ~36 px */
+  padding: 6px 12px;
   text-align: left;
   border-bottom: 1px solid var(--border-secondary, #cbd5e1);
 }

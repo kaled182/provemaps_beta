@@ -5,27 +5,11 @@
 //  - Abstract fetch & CSRF details
 //  - Keep responses as-is (caller shapes UI)
 
+import { getCsrfToken } from '@/composables/useApi';
+
 const API_BASE = '/api/v1/inventory';
 
-function getCsrfToken() {
-  // Tenta pegar do window (definido no base_spa.html)
-  if (window.CSRF_TOKEN) {
-    return window.CSRF_TOKEN;
-  }
-
-  // Fallback: busca no cookie
-  const name = 'csrftoken';
-  const cookieValue = document.cookie
-    .split('; ')
-    .find(row => row.startsWith(`${name}=`))
-    ?.split('=')[1];
-
-  if (!cookieValue) {
-    console.warn('[apiClient] CSRF token not found in window.CSRF_TOKEN or cookie');
-  }
-
-  return cookieValue || '';
-}
+// EV-0072: um só leitor do CSRF (useApi), com o nome real do cookie.
 
 async function request(path, { method = 'GET', headers = {}, body, skipJson } = {}) {
   const url = `${API_BASE}${path}`;

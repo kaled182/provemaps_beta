@@ -3,15 +3,15 @@
     <div class="fixed inset-0 z-50 overflow-y-auto">
       <div class="flex min-h-screen items-center justify-center p-4">
         <!-- Backdrop -->
-        <div class="fixed inset-0 bg-black/50 dark:bg-black/70 transition-opacity" @click="$emit('close')"></div>
+        <div class="fixed inset-0 bg-black/50 transition-opacity" @click="$emit('close')"></div>
 
         <!-- Modal -->
-        <div class="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full p-6">
+        <div class="relative bg-surface rounded-lg shadow-xl max-w-2xl w-full p-6">
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+            <h3 class="text-lg font-semibold text-neutral-900">
               {{ isEditing ? 'Editar Servidor' : 'Adicionar Servidor' }}
             </h3>
-            <button @click="$emit('close')" class="text-gray-400 hover:text-gray-500">
+            <button @click="$emit('close')" class="text-neutral-400 hover:text-neutral-500">
               <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
               </svg>
@@ -93,7 +93,7 @@
                 rows="4"
                 placeholder='{"timeout": 30, "verify_ssl": true}'
               ></textarea>
-              <p v-if="jsonError" class="mt-1 text-xs text-red-600 dark:text-red-400">
+              <p v-if="jsonError" class="mt-1 text-xs text-danger">
                 {{ jsonError }}
               </p>
             </div>
@@ -103,14 +103,14 @@
                 v-model="form.is_active" 
                 type="checkbox" 
                 id="is-active"
-                class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300 rounded"
               />
-              <label for="is-active" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+              <label for="is-active" class="ml-2 text-sm text-neutral-700">
                 Servidor ativo
               </label>
             </div>
 
-            <div class="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div class="flex justify-end gap-3 pt-4 border-t border-neutral-200">
               <button type="button" @click="$emit('close')" class="btn-secondary">
                 Cancelar
               </button>
@@ -176,11 +176,11 @@ const handleSubmit = async () => {
 
 <style scoped>
 .label-custom {
-  @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5;
+  @apply block text-sm font-medium text-neutral-700 mb-1.5;
 }
 
 .input-custom {
-  @apply w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors;
+  @apply w-full rounded-md border border-neutral-300 bg-surface px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors;
 }
 
 .btn-primary {
@@ -188,6 +188,6 @@ const handleSubmit = async () => {
 }
 
 .btn-secondary {
-  @apply inline-flex items-center justify-center rounded-md bg-white dark:bg-gray-800 px-4 py-2 text-sm font-semibold text-gray-900 dark:text-gray-200 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200;
+  @apply inline-flex items-center justify-center rounded-md bg-surface px-4 py-2 text-sm font-semibold text-neutral-900 shadow-sm ring-1 ring-inset ring-neutral-300 hover:bg-neutral-50 transition-all duration-200;
 }
 </style>

@@ -57,7 +57,7 @@ NNNN-titulo-em-kebab-case.md
 - **NNNN**: sequencial com zero-padding a 4 dígitos. Nunca reciclado.
 - A numeração continua a dos ADRs legados em
   [`doc/architecture/ADR/`](../architecture/ADR/) (`001`; os antigos `000` e `004` eram cópias de documentos de referência e estão em [`doc/archive/2025-historico/`](../archive/2025-historico/)),
-  que ficam onde estão por valor histórico. O próximo ADR é **`0008`**.
+  que ficam onde estão por valor histórico. O próximo ADR é **`0011`**.
 - Template: [`doc/templates/adr.md`](../templates/adr.md).
 
 ---
@@ -73,6 +73,8 @@ NNNN-titulo-em-kebab-case.md
 | [0006](0006-central-de-evolucao-provemaps.md) | Central de Evolução no ProVeMaps — fila de trabalho observada, não escrita | Aceito | `processo`, `evolucao`, `agente-ia` |
 | [0007](0007-alinhamento-visual-com-o-crm.md) | Alinhamento visual com o CRM — tokens compartilhados, shell e migração incremental | Aceito | `frontend`, `design-system`, `tailwind`, `branding` |
 | [0008](0008-autenticacao-de-contas-de-servico-por-token-bearer.md) | Contas de serviço autenticam a API por `Authorization: Bearer` (classe DRF + middleware sobre `service_accounts`) | Aceito | `segurança`, `autenticação`, `api`, `integrações` |
+| [0009](0009-topologia-esquematica-em-svg-proprio.md) | Topologia da rede em SVG próprio, por projeção das coordenadas dos POPs | Aceito | `frontend`, `visualização`, `topologia` |
+| [0010](0010-estado-de-onu-guardado-pelo-provemaps.md) | O ProVeMaps guarda o estado de cada ONU a cada coleta (transições observadas, não do relógio da OLT) | Proposto | `gpon`, `zabbix`, `monitoramento`, `persistência` |
 
 ---
 

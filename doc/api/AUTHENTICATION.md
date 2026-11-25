@@ -1,552 +1,197 @@
-# API Authentication Guide - MapsProveFiber
+# Autenticação da API - ProVeMaps
 
-**Versão do produto**: ver [VERSION](../../VERSION)  
-**Last Updated**: 2026-10-04  
-**Target Audience**: API Developers, Integrators
+**Versão do produto**: ver [VERSION](../../VERSION)
+**Última atualização**: 2026-11-23 (EV-0033: reescrito a partir do código)
+**Público**: integradores e desenvolvedores de cliente
 
----
-
-## 📖 Overview
-
-MapsProveFiber API uses Django session-based authentication by default, with support for token-based authentication for programmatic access. This guide covers authentication methods, permissions, and security best practices.
+> Este documento descreve só o que o código faz. O que não existe está
+> listado na secção [O que não existe](#o-que-não-existe).
 
 ---
 
-## 🔐 Authentication Methods
+## Visão geral
 
-### 1. Session Authentication (Web Browser)
+Existem **dois** mecanismos de autenticação, ambos configurados em
+`REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"]` (`backend/settings/base.py`):
 
-Default authentication for web-based access. Suitable for:
-- Dashboard access
-- Admin panel
-- Interactive API browsing (Django REST Framework UI)
+| Quem | Mecanismo | CSRF | Principal |
+|------|-----------|------|-----------|
+| Pessoas (navegador/SPA) | Sessão Django + login em dois passos (senha, depois TOTP se ativo) | Exigido em POST/PUT/PATCH/DELETE | `User` do Django |
+| Integrações (scripts, Zabbix, CRM) | `Authorization: Bearer <token>` de conta de serviço (ADR 0008) | Não se aplica | `ServiceAccountPrincipal` (não é `User`) |
 
-**How it works:**
-1. User logs in via `/admin/login/` or setup wizard
-2. Django creates a session cookie
-3. Subsequent requests include session cookie automatically
-4. Session expires after inactivity (default: 2 weeks)
+A ordem das classes é: `ServiceAccountTokenAuthentication`, depois
+`SessionAuthentication`. A permissão por omissão é `IsAuthenticated`: toda a
+API exige autenticação. Um endpoint sem login é exceção escrita (CLAUDE.md §2.6).
 
-**Example:**
-```python
-import requests
+Respostas sem credenciais:
 
-# Login
-session = requests.Session()
-login_url = "http://localhost:8000/admin/login/"
-session.post(login_url, data={
-    "username": "admin",
-    "password": "admin123",
-    "csrfmiddlewaretoken": "..."  # Get from login page
-})
-
-# API request with session
-response = session.get("http://localhost:8000/api/v1/inventory/sites/")
-print(response.json())
-```
-
-### 2. Token Authentication (API Access)
-
-Recommended for:
-- Programmatic access
-- CI/CD integrations
-- Mobile applications
-- Third-party integrations
-
-**Generate Token:**
-```bash
-# Via Django shell
-python manage.py shell
-
->>> from django.contrib.auth import get_user_model
->>> from rest_framework.authtoken.models import Token
->>> user = get_user_model().objects.get(username='api_user')
->>> token = Token.objects.create(user=user)
->>> print(token.key)
-'9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b'
-```
-
-**Use Token:**
-```python
-import requests
-
-url = "http://localhost:8000/api/v1/inventory/sites/"
-headers = {
-    "Authorization": "Token 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b"
-}
-
-response = requests.get(url, headers=headers)
-print(response.json())
-```
-
-```bash
-# cURL
-curl -H "Authorization: Token 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b" \
-     http://localhost:8000/api/v1/inventory/sites/
-```
-
-### 3. Basic Authentication (Testing Only)
-
-**NOT recommended for production.** Use only for testing.
-
-```python
-import requests
-from requests.auth import HTTPBasicAuth
-
-url = "http://localhost:8000/api/v1/inventory/sites/"
-response = requests.get(url, auth=HTTPBasicAuth('admin', 'admin123'))
-```
+- `/api/v1/...` (DRF): **401** com `WWW-Authenticate: Bearer` (a primeira classe
+  de autenticação define o cabeçalho).
+- Outros `/api/*` (rotas legadas, por exemplo `/api/users/`, `/api/config/`):
+  **401** `{"detail": "Authentication required."}` do `AuthRequiredMiddleware`.
+- Páginas fora de `/api/`: redirecionamento 302 para `/accounts/login/?next=...`.
 
 ---
 
-## 🛡️ Permissions & Authorization
+## 1. Sessão (pessoas)
 
-### Permission Levels
+### Login em dois passos
 
-| Permission | Description | Endpoints |
-|------------|-------------|-----------|
-| **Anonymous** | No authentication required | Health checks (`/healthz`, `/live`, `/ready`) |
-| **Authenticated** | Logged-in user | Most read-only endpoints |
-| **Staff** | `user.is_staff = True` | Admin panel, configuration, diagnostics |
-| **Superuser** | `user.is_superuser = True` | Full system access |
+1. `GET /accounts/login/` devolve a página e o cookie CSRF.
+2. `POST /accounts/login/` (formulário, `application/x-www-form-urlencoded`)
+   com `username`, `password` e `csrfmiddlewaretoken`.
+   - Utilizador **sem** TOTP ativo: a sessão fica autenticada e há redirecionamento
+     para o destino (`next` ou `LOGIN_REDIRECT_URL`).
+   - Utilizador **com** TOTP ativo (`profile.totp_enabled`): a sessão guarda
+     apenas `pending_2fa_user_id` e o redirecionamento vai para
+     `/accounts/otp/`.
+3. `POST /accounts/otp/` com o campo `otp` (código TOTP, RFC 6238 via `pyotp`) e
+   `csrfmiddlewaretoken`. Só neste passo o utilizador fica autenticado.
 
-### Common Permission Classes
+Bloqueio de TOTP: 3 falhas seguidas bloqueiam o utilizador por 300 s
+(contador na cache, por utilizador, não na sessão); o redirecionamento volta ao
+login com `?otp=locked` (`backend/core/views_auth.py`).
 
-```python
-# In views.py
-from rest_framework.permissions import (
-    IsAuthenticated,
-    IsAdminUser,
-    AllowAny
-)
+Estes endpoints são formulários HTML, não uma API JSON. Para automação sem
+pessoa, use contas de serviço (secção 2).
 
-class DeviceViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]  # Require authentication
-```
+### Cookies e CSRF
 
-### Custom Permissions
+| Item | Valor | Origem |
+|------|-------|--------|
+| Cookie de sessão | `mapsprovefiber_sessionid`, `HttpOnly`, `SameSite=Lax`, 2 semanas por omissão (`SESSION_COOKIE_AGE`) | `settings/base.py` |
+| Cookie CSRF | `mapsprovefiber_csrftoken`, legível por JavaScript (`CSRF_COOKIE_HTTPONLY = False`) | `settings/base.py` |
+| Cabeçalho CSRF | `X-CSRFToken` | padrão do Django |
 
-```python
-# permissions.py
-from rest_framework import permissions
+Em `POST`, `PUT`, `PATCH` e `DELETE` com sessão, o `SessionAuthentication` do DRF
+exige o cabeçalho `X-CSRFToken` igual ao cookie; sem ele a resposta é **403**.
+`GET` não precisa. Em produção os cookies são `Secure` (`SESSION_COOKIE_SECURE`,
+`CSRF_COOKIE_SECURE`); atrás de outro domínio/porta, o `Origin` tem de constar em
+`CSRF_TRUSTED_ORIGINS`.
 
-class IsStaffOrReadOnly(permissions.BasePermission):
-    """
-    Read-only for authenticated users, write for staff.
-    """
-    def has_permission(self, request, view):
-        if request.method in permissions.SAFE_METHODS:
-            return request.user.is_authenticated
-        return request.user.is_staff
-```
+O padrão do frontend (`frontend/src/composables/useApi.js`): `fetch` com
+`credentials: 'same-origin'` e `X-CSRFToken` vindo de `window.CSRF_TOKEN`
+(injetado em `base_spa.html`). Mutações no SPA passam sempre por `useApi()`.
 
 ---
 
-## 👥 User Management
+## 2. Token Bearer (contas de serviço, integrações)
 
-### Create API User
+```
+Authorization: Bearer <token>
+```
+
+- Esquema único: `Bearer`. `Token <x>` **não** é aceito.
+- O token é opaco (`secrets.token_urlsafe(32)`); no servidor só se guarda o
+  SHA-256 e os 4 últimos caracteres. O valor em claro aparece **uma vez**, ao
+  ser gerado.
+- Cabeçalho Bearer com token desconhecido, revogado, expirado ou de conta
+  inativa devolve **401** (nunca cai para anónimo).
+- Sem CSRF: a classe de token vem antes da sessão, por isso um cliente com token
+  não passa pelo CSRF.
+- Também vale nas rotas `/api/*` guardadas pelo `AuthRequiredMiddleware` (o
+  mesmo cabeçalho é aceito e o principal é reaproveitado pelo DRF).
+- `ServiceAccountToken.last_used_at` regista a última autenticação (no máximo
+  uma escrita por minuto).
+
+### O que o principal pode fazer
+
+O principal **não é um `User`**: `is_staff = False`, `is_superuser = False`,
+`has_perm()` devolve sempre `False`. Só satisfaz `is_authenticated`. Na
+prática passa em `IsAuthenticated` (todos os viewsets de inventário, por
+exemplo `/api/v1/sites/`) e em `@login_required`, mas **não** passa em endpoints
+que exigem `is_staff` ou permissões de modelo. Não há escopos por conta nem
+throttling por token (ADR 0008).
+
+### Como se cria, roda e revoga um token
+
+Só há duas vias (nenhum comando `manage.py` nem endpoint de API existe para isto):
+
+1. **Django admin** (`/admin/`, app *Service accounts*): criar a conta
+   (`ServiceAccount`: nome, e-mail, `auto_rotate_days`, `notify_before_days`,
+   `notification_webhook_url`) e usar a ação *Gerar token* (`generate-token/`),
+   com expiração e observação opcionais. O token em claro é mostrado numa
+   mensagem, uma só vez. Exige superutilizador ou a permissão
+   `service_accounts.manage_tokens`. Cada evento fica em
+   `ServiceAccountAuditLog`.
+2. **Rotação automática**: a tarefa Celery
+   `service_accounts.enforce_rotation_policies_task` corre a cada 3600 s
+   (`SERVICE_ACCOUNT_ROTATION_INTERVAL_SECONDS`). Para contas com
+   `auto_rotate_days`, cria um token novo, revoga o anterior e, se houver
+   `notification_webhook_url`, envia o novo token por webhook; com
+   `notify_before_days` envia também um aviso antes do prazo. O integrador tem
+   de receber o token novo (webhook ou fora de banda) antes de o antigo expirar.
+
+Revogação manual: `ServiceAccountToken.revoke()` existe no modelo, mas o admin
+não tem ação nem botão para isso (o inline de tokens é só de leitura; só há
+`generate-token/`). Na prática um token deixa de valer por expiração, por
+rotação automática, ou ao desativar a conta (`is_active = False`), que o
+invalida de imediato.
+
+### Uso
 
 ```bash
-# Interactive
-python manage.py createsuperuser
-
-# Programmatic
-python manage.py shell
+curl -H "Authorization: Bearer $PROVEMAPS_TOKEN" \
+  https://SEU_HOST/api/v1/sites/
 ```
 
-```python
-from django.contrib.auth import get_user_model
-
-User = get_user_model()
-
-# Create regular user
-user = User.objects.create_user(
-    username='api_user',
-    email='api@example.com',
-    password='secure_password_123'
-)
-
-# Create staff user
-staff_user = User.objects.create_user(
-    username='staff_user',
-    email='staff@example.com',
-    password='secure_password_456',
-    is_staff=True
-)
-
-# Create superuser
-superuser = User.objects.create_superuser(
-    username='admin',
-    email='admin@example.com',
-    password='admin_password_789'
-)
-```
-
-### Manage User Permissions
-
-```python
-# Grant specific permissions
-from django.contrib.auth.models import Permission
-
-user = User.objects.get(username='api_user')
-
-# Add permission
-permission = Permission.objects.get(codename='add_site')
-user.user_permissions.add(permission)
-
-# Add to group
-from django.contrib.auth.models import Group
-api_group = Group.objects.get(name='API Users')
-user.groups.add(api_group)
-```
+Mais exemplos em [EXAMPLES.md](EXAMPLES.md).
 
 ---
 
-## 🔑 Token Management
+## Versionamento
 
-### Create Token
+Só existe `v1`, lido do prefixo do caminho (`/api/v1/`) por
+`core.api_versioning.PathPrefixVersioning`. Rotas legadas sem prefixo
+(`/api/users/`, `/api/config/`) contam como `v1`. Qualquer outra versão
+(`/api/v2/...`) devolve **404**.
 
-```python
-from rest_framework.authtoken.models import Token
-from django.contrib.auth import get_user_model
+## Esquema OpenAPI
 
-User = get_user_model()
-user = User.objects.get(username='api_user')
+- `GET /api/schema/` — esquema OpenAPI 3 (drf-spectacular).
+- `GET /api/schema/swagger/` — Swagger UI auto-hospedado (sem CDN).
 
-# Create or get existing token
-token, created = Token.objects.get_or_create(user=user)
-print(f"Token: {token.key}")
-```
+Ambos exigem autenticação (`SERVE_PERMISSIONS = IsAuthenticated`), sessão ou
+Bearer. Cobrem as views DRF; as function views Django (`/api/v1/inventory/*`,
+`/api/users/*`, `/setup_app/api/*`) ainda não aparecem no esquema (EV-0030).
+Os esquemas de segurança declarados são `cookieAuth` e `bearerAuth`.
 
-### Rotate Token
+## Permissões
 
-```python
-# Delete old token and create new one
-old_token = Token.objects.get(user=user)
-old_token.delete()
+- Padrão DRF: `IsAuthenticated`.
+- Os viewsets de inventário (`sites`, `devices`, `device-groups`, `ports`,
+  `fiber-cables`, `import-rules`) usam `IsAuthenticated` apenas: qualquer
+  sessão autenticada ou conta de serviço lê **e escreve**.
+- Endpoints marcados como `staff_required` ou com permissões de modelo exigem
+  uma pessoa com os flags correspondentes; contas de serviço ficam de fora.
+- Rotas de diagnóstico só existem com `ENABLE_DIAGNOSTIC_ENDPOINTS=true`.
 
-new_token = Token.objects.create(user=user)
-print(f"New Token: {new_token.key}")
-```
+## Limitação de taxa
 
-### List All Tokens
+Não há throttling configurado no `REST_FRAMEWORK` (sem `DEFAULT_THROTTLE_*`).
 
-```python
-tokens = Token.objects.all()
-for token in tokens:
-    print(f"{token.user.username}: {token.key}")
-```
+## CORS
 
-### Revoke Token
+Não há CORS: `corsheaders` não está em `INSTALLED_APPS` nem no middleware. A API
+é pensada para o mesmo domínio do SPA ou para clientes que não são navegadores.
+Um navegador noutro domínio não consegue chamá-la com credenciais.
 
-```python
-token = Token.objects.get(key='9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b')
-token.delete()
-```
+## O que não existe
 
----
+Documentação anterior descrevia estas funcionalidades; **não existem** neste
+código:
 
-## 🚦 Rate Limiting
+- `rest_framework.authtoken`, `Authorization: Token <x>`, `POST /api/token/`.
+- Basic Auth (`BasicAuthentication` não está em `DEFAULT_AUTHENTICATION_CLASSES`).
+- JWT/OAuth.
+- CORS e throttling.
+- Comandos `manage.py` para criar contas de serviço ou tokens.
+- Login por API JSON (o login é de formulário, em dois passos).
 
-### Configure Rate Limits
+## Boas práticas
 
-```python
-# settings/base.py
-REST_FRAMEWORK = {
-    'DEFAULT_THROTTLE_CLASSES': [
-        'rest_framework.throttling.AnonRateThrottle',
-        'rest_framework.throttling.UserRateThrottle'
-    ],
-    'DEFAULT_THROTTLE_RATES': {
-        'anon': '100/hour',    # Anonymous users
-        'user': '1000/hour',   # Authenticated users
-    }
-}
-```
-
-### Custom Rate Limits
-
-```python
-from rest_framework.throttling import UserRateThrottle
-
-class BurstRateThrottle(UserRateThrottle):
-    rate = '60/minute'
-
-class SustainedRateThrottle(UserRateThrottle):
-    rate = '1000/day'
-
-# Apply to view
-class DeviceViewSet(viewsets.ModelViewSet):
-    throttle_classes = [BurstRateThrottle, SustainedRateThrottle]
-```
-
-### Rate Limit Response
-
-```json
-{
-  "detail": "Request was throttled. Expected available in 59 seconds."
-}
-```
-
-HTTP Status: `429 Too Many Requests`
-
----
-
-## 🔒 Security Best Practices
-
-### 1. Use HTTPS in Production
-
-```python
-# settings/prod.py
-SECURE_SSL_REDIRECT = True
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
-```
-
-### 2. Store Tokens Securely
-
-```python
-# ❌ BAD: Hardcoded in code
-token = "9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b"
-
-# ✅ GOOD: Environment variable
-import os
-token = os.getenv('API_TOKEN')
-
-# ✅ BETTER: Secrets manager
-from azure.keyvault.secrets import SecretClient
-token = secret_client.get_secret("api-token").value
-```
-
-### 3. Rotate Tokens Regularly
-
-```python
-# Rotate every 90 days
-from datetime import timedelta
-from django.utils import timezone
-
-def should_rotate_token(token):
-    age = timezone.now() - token.created
-    return age > timedelta(days=90)
-```
-
-### 4. Limit Token Scope
-
-Create separate users/tokens for different integrations:
-
-```python
-# Monitoring integration (read-only)
-monitoring_user = User.objects.create_user(
-    username='monitoring_api',
-    password='...'
-)
-
-# CI/CD integration (write access to specific endpoints)
-cicd_user = User.objects.create_user(
-    username='cicd_api',
-    is_staff=True,
-    password='...'
-)
-```
-
-### 5. Log Authentication Events
-
-```python
-# middleware/auth_logging.py
-import logging
-
-logger = logging.getLogger('security')
-
-def process_request(self, request):
-    if request.user.is_authenticated:
-        logger.info(
-            f"API access: {request.user.username} - {request.path}",
-            extra={'ip': request.META.get('REMOTE_ADDR')}
-        )
-```
-
----
-
-## 🌐 CORS Configuration
-
-For frontend applications on different domains:
-
-```python
-# settings/base.py
-INSTALLED_APPS += ['corsheaders']
-
-MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
-    ...
-]
-
-# Development
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
-
-# Production
-CORS_ALLOWED_ORIGINS = [
-    "https://dashboard.example.com",
-]
-
-# Allow credentials (cookies)
-CORS_ALLOW_CREDENTIALS = True
-```
-
----
-
-## 📝 Example: Complete Integration
-
-### Python Client
-
-```python
-# client.py
-import requests
-import os
-
-class MapsFiberClient:
-    def __init__(self, base_url, token):
-        self.base_url = base_url
-        self.headers = {
-            "Authorization": f"Token {token}",
-            "Content-Type": "application/json"
-        }
-    
-    def get_sites(self):
-        """Get all sites"""
-        response = requests.get(
-            f"{self.base_url}/api/v1/inventory/sites/",
-            headers=self.headers
-        )
-        response.raise_for_status()
-        return response.json()
-    
-    def create_site(self, name, latitude, longitude):
-        """Create a new site"""
-        data = {
-            "name": name,
-            "latitude": latitude,
-            "longitude": longitude
-        }
-        response = requests.post(
-            f"{self.base_url}/api/v1/inventory/sites/",
-            headers=self.headers,
-            json=data
-        )
-        response.raise_for_status()
-        return response.json()
-    
-    def get_device_status(self, device_id):
-        """Get device status from monitoring API"""
-        response = requests.get(
-            f"{self.base_url}/api/v1/monitoring/hosts/status/",
-            headers=self.headers,
-            params={"device_id": device_id}
-        )
-        response.raise_for_status()
-        return response.json()
-
-# Usage
-client = MapsFiberClient(
-    base_url=os.getenv('MAPSFIBER_URL'),
-    token=os.getenv('MAPSFIBER_TOKEN')
-)
-
-# Get sites
-sites = client.get_sites()
-print(f"Total sites: {len(sites)}")
-
-# Create site
-new_site = client.create_site("HQ", -23.5505, -46.6333)
-print(f"Created site: {new_site['id']}")
-```
-
-### JavaScript Client
-
-```javascript
-// client.js
-class MapsFiberClient {
-  constructor(baseUrl, token) {
-    this.baseUrl = baseUrl;
-    this.headers = {
-      'Authorization': `Token ${token}`,
-      'Content-Type': 'application/json'
-    };
-  }
-
-  async getSites() {
-    const response = await fetch(`${this.baseUrl}/api/v1/inventory/sites/`, {
-      headers: this.headers
-    });
-    return response.json();
-  }
-
-  async createSite(name, latitude, longitude) {
-    const response = await fetch(`${this.baseUrl}/api/v1/inventory/sites/`, {
-      method: 'POST',
-      headers: this.headers,
-      body: JSON.stringify({ name, latitude, longitude })
-    });
-    return response.json();
-  }
-}
-
-// Usage
-const client = new MapsFiberClient(
-  process.env.MAPSFIBER_URL,
-  process.env.MAPSFIBER_TOKEN
-);
-
-const sites = await client.getSites();
-console.log(`Total sites: ${sites.length}`);
-```
-
----
-
-## 🔍 Troubleshooting
-
-### Authentication Failed (401)
-
-```json
-{
-  "detail": "Authentication credentials were not provided."
-}
-```
-
-**Solution:** Check token in `Authorization` header.
-
-### Permission Denied (403)
-
-```json
-{
-  "detail": "You do not have permission to perform this action."
-}
-```
-
-**Solution:** User needs staff privileges for this endpoint.
-
-### Invalid Token
-
-```json
-{
-  "detail": "Invalid token."
-}
-```
-
-**Solution:** Token may be expired or revoked. Generate new token.
-
----
-
-## 📚 Additional Resources
-
-- [API Endpoints Reference](ENDPOINTS.md)
-- [API Examples](EXAMPLES.md)
-- [Django REST Framework Authentication](https://www.django-rest-framework.org/api-guide/authentication/)
-- [Security Guide](../security/SECURITY.md)
-
----
-
-**Last Updated**: 2026-10-04  
-**Maintainers**: API Team
+- Guarde o token em cofre/variável de ambiente, nunca em código, HTML de teste
+  ou repositório (CLAUDE.md §2.5). Tokens que vazaram rodam-se.
+- Use HTTPS em produção.
+- Dê a cada integração a sua conta de serviço e use `auto_rotate_days`.
+- Verifique `last_used_at` para detetar tokens mortos.

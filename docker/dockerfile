@@ -54,6 +54,15 @@ RUN npm ci
 RUN mkdir -p /app/backend/staticfiles/vue-spa/assets
 
 COPY frontend/ ./
+# EV-0031: o `content` do tailwind.config.js lê os templates Django (login em 2 passos, setup,
+# dashboard legado) e o JS legado que monta classes. Sem estes ficheiros neste estágio, o CSS
+# da imagem sairia sem as classes deles — o login iria para produção sem estilo.
+COPY backend/templates/ /app/backend/templates/
+COPY backend/maps_view/templates/ /app/backend/maps_view/templates/
+COPY backend/setup_app/templates/ /app/backend/setup_app/templates/
+COPY backend/service_accounts/templates/ /app/backend/service_accounts/templates/
+COPY backend/static/js/ /app/backend/static/js/
+COPY backend/setup_app/static/js/ /app/backend/setup_app/static/js/
 RUN npm run build
 
 RUN ls -lah /app/backend/staticfiles/vue-spa/ && \
@@ -121,9 +130,16 @@ RUN pip install --no-index --find-links=/wheels -r requirements.txt && \
 COPY backend/ /app/backend/
 COPY scripts/ /app/scripts/
 COPY VERSION /app/VERSION
+# EV-0040: `evolucao_seed_quadro`/`evolucao_quadro` leem `settings.BASE_DIR / "CLAUDE.md"`
+# (BASE_DIR = /app). Sem isto falhavam no container com «Ficheiro não encontrado».
+COPY CLAUDE.md /app/CLAUDE.md
 
 # Assets do frontend (compilados no Stage 2)
 COPY --from=frontend-builder /app/backend/staticfiles/vue-spa/ /app/backend/staticfiles/vue-spa/
+# EV-0052: cópia fora do STATIC_ROOT. Em produção o STATIC_ROOT é um volume
+# (tapa o que a imagem traz em /app/backend/staticfiles); o entrypoint do web
+# copia daqui para o volume a cada arranque — o SPA no ar é sempre o da imagem.
+COPY --from=frontend-builder /app/backend/staticfiles/vue-spa/ /app/spa-dist/vue-spa/
 
 RUN ls -lah /app/backend/staticfiles/vue-spa/assets/ || echo "Frontend assets not found"
 
@@ -132,11 +148,18 @@ RUN mkdir -p /app/backend/logs /app/backend/media /app/backend/staticfiles /app/
     chown -R ${APP_USER}:${APP_USER} /app && \
     chmod -R 755 /app
 
-# EV-0027b / ADR 0006: o commit implantado, cozido na imagem. O `scripts/deploy.sh` passa-o;
-# um build à mão sem ele deixa o `/healthz` sem `git_sha` e a Central não fecha nada (fail-closed).
+# EV-0027b / EV-0039 / ADR 0006: o commit e a versão implantados, cozidos na imagem (build args
+# dos compose). O `scripts/update.sh` passa os dois; o `scripts/deploy.sh` (docker-compose.prod.yml)
+# só o GIT_SHA. À mão:
+#   GIT_SHA=$(git rev-parse HEAD) APP_VERSION=$(cat VERSION) docker compose -f docker/docker-compose.yml build web celery beat
+# Sem eles o `/healthz` fica com `git_sha: ""` e `version: "dev"` e a Central não fecha nada (fail-closed).
+# Ficam no fim do estágio: mudar de commit não invalida as camadas de cima.
 ARG GIT_SHA=
-ENV GIT_SHA=${GIT_SHA}
-LABEL org.opencontainers.image.revision="${GIT_SHA}"
+ARG APP_VERSION=
+ENV GIT_SHA=${GIT_SHA} \
+    APP_VERSION=${APP_VERSION:-dev}
+LABEL org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.version="${APP_VERSION}"
 
 USER ${APP_USER}
 

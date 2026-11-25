@@ -79,4 +79,25 @@ describe('MapProviderFactory', () => {
     await factory.getMapProvider();
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
+
+  it('EV-0045: o mapa nasce no tema do documento e segue-o até destroy()', async () => {
+    mockConfig({ mapProvider: 'osm' });
+    const factory = await freshFactory();
+    const provider = await factory.getMapProvider();
+    const spy = vi.spyOn(provider, 'createMap');
+    document.documentElement.classList.add('dark');
+    const map = await factory.createMap({ id: 'c' }, { center: { lat: 0, lng: 0 }, zoom: 5 });
+    expect(spy.mock.calls[0][1].theme).toBe('dark');
+
+    const setTheme = vi.spyOn(map, 'setTheme');
+    document.documentElement.classList.remove('dark');
+    await Promise.resolve();
+    expect(setTheme).toHaveBeenCalledWith('light');
+
+    map.destroy();
+    document.documentElement.classList.add('dark');
+    await Promise.resolve();
+    expect(setTheme).toHaveBeenCalledTimes(1);
+    document.documentElement.classList.remove('dark');
+  });
 });

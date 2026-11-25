@@ -1,268 +1,524 @@
 <template>
-  <div class="flex flex-col h-full bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-    
-    <!-- Header com informações do cabo -->
-    <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex flex-wrap justify-between items-center gap-4 bg-gray-50/50 dark:bg-gray-800">
-      <div>
-        <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-          <i class="fas fa-bullseye text-indigo-500"></i>
-          {{ cableName || 'Carregando estrutura...' }}
-        </h3>
-        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          {{ profileName }} • {{ tubesCount }} Tubos • {{ totalFibers }} Fibras
+  <div class="csv" data-testid="cable-structure">
+    <!-- Cabeçalho: cabo, perfil e contagens por estado -->
+    <header class="csv-head">
+      <div class="min-w-0">
+        <h3 class="csv-title">{{ structure.name || 'A carregar a estrutura…' }}</h3>
+        <p class="csv-sub">
+          {{ structure.profile_name || 'Sem perfil' }} · {{ tubes.length }} {{ tubes.length === 1 ? 'tubo' : 'tubos' }} ·
+          {{ allStrands.length }} fibras
         </p>
       </div>
+      <ul class="csv-legend" aria-label="Legenda">
+        <li v-for="s in STATES" :key="s.key" :data-testid="`legend-${s.key}`">
+          <span class="dot" :class="`st-${s.key}`" aria-hidden="true" />{{ s.label }}
+          <b class="num">{{ counts[s.key] || 0 }}</b>
+        </li>
+      </ul>
+    </header>
 
-      <!-- Legenda de Status -->
-      <div class="flex items-center gap-4 text-xs text-gray-600 dark:text-gray-300">
-        <div class="flex items-center gap-1">
-          <span class="w-3 h-3 rounded-full bg-gray-400"></span> Apagada
-        </div>
-        <div class="flex items-center gap-1">
-          <span class="w-3 h-3 rounded-full bg-green-500 ring-2 ring-green-200 dark:ring-green-900"></span> Iluminada
-        </div>
-        <div class="flex items-center gap-1">
-          <span class="w-3 h-3 rounded-full border border-red-500 flex items-center justify-center text-[8px] text-red-500 font-bold relative">
-            <span class="absolute inset-0 bg-red-500/20 rounded-full"></span>×
-          </span> Rompida
-        </div>
+    <p v-if="loading && !loaded" class="csv-msg">A carregar a estrutura do cabo…</p>
+    <div v-else-if="error" class="csv-msg csv-error" role="alert">
+      Erro ao carregar a estrutura do cabo: {{ error }}
+      <button type="button" class="csv-link" @click="fetchStructure">Tentar novamente</button>
+    </div>
+
+    <!-- EV-0133: cabo sem perfil nem grupo — escolher o nº de fibras para gerar a estrutura -->
+    <div v-else-if="structure.needs_profile" class="csv-msg" data-testid="structure-needs-profile">
+      <p>Este cabo não tem grupo nem perfil: escolha o nº de fibras para gerar os tubos loose e as fibras (cores ABNT).</p>
+      <div class="flex items-center justify-center gap-2 mt-2">
+        <select v-model="pickedProfile" class="csv-select" data-testid="structure-profile-select">
+          <option :value="null" disabled>Escolher o perfil…</option>
+          <option v-for="p in structure.available_profiles || []" :key="p.id" :value="p.id">{{ p.name }}</option>
+        </select>
+        <button type="button" class="csv-btn csv-btn-primary" :disabled="!pickedProfile || busy" data-testid="structure-generate" @click="generate">
+          {{ busy ? 'A gerar…' : 'Gerar estrutura' }}
+        </button>
       </div>
+      <p v-if="actionError" class="csv-error mt-2" role="alert">{{ actionError }}</p>
     </div>
 
-    <!-- Loading State -->
-    <div v-if="loading" class="flex-1 flex flex-col items-center justify-center min-h-[300px]">
-      <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mb-3"></div>
-      <span class="text-sm text-gray-500">Carregando perfil físico...</span>
-    </div>
-
-    <!-- Error State -->
-    <div v-else-if="error" class="flex-1 flex flex-col items-center justify-center min-h-[300px] text-red-500">
-      <i class="fas fa-exclamation-triangle text-3xl mb-2"></i>
-      <p>Erro ao carregar estrutura do cabo.</p>
-      <button @click="fetchStructure" class="mt-4 text-sm underline text-indigo-600">Tentar novamente</button>
-    </div>
-
-    <!-- Estrutura Visual (Tubos e Fibras) -->
-    <div v-else class="flex-1 p-8 overflow-y-auto bg-gray-50 dark:bg-gray-900/50">
-      
-      <div class="flex flex-wrap justify-center gap-8 max-w-5xl mx-auto">
-        
-        <!-- Loop por cada tubo -->
-        <div 
-          v-for="tube in structure.tubes" 
-          :key="tube.id"
-          class="flex flex-col items-center group"
-        >
-          <!-- Círculo do Tubo (borda colorida ABNT) -->
-          <div 
-            class="relative rounded-full bg-white dark:bg-gray-800 shadow-md transition-transform duration-300 hover:scale-105 hover:shadow-lg border-[6px]"
-            :class="[isSingleTube ? 'w-48 h-48 p-6' : 'w-32 h-32 p-3']"
-            :style="{ borderColor: tube.color_hex }"
-          >
-            <!-- Badge do Tubo -->
-            <div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm z-10 whitespace-nowrap border border-gray-600">
-              TUBO {{ tube.number }} <span class="opacity-75 font-normal ml-1">({{ tube.color }})</span>
-            </div>
-
-            <!-- Grid de Fibras dentro do Tubo -->
-            <div class="h-full w-full flex flex-wrap items-center justify-center content-center gap-2">
-              <div 
-                v-for="strand in tube.strands" 
-                :key="strand.id"
-                class="relative group/fiber"
-                @click="handleStrandClick(strand)"
-              >
-                <!-- Bolinha da Fibra (cor ABNT de preenchimento) -->
-                <div 
-                  class="rounded-full shadow-sm cursor-pointer transition-all duration-200 border border-gray-300 dark:border-gray-600 relative overflow-hidden"
-                  :class="[
-                    isSingleTube ? 'w-6 h-6' : 'w-4 h-4',
-                    getStrandClasses(strand)
-                  ]"
-                  :style="{ backgroundColor: strand.color_hex }"
-                >
-                  <!-- Indicador de Fibra Rompida -->
-                  <div v-if="strand.status === 'broken'" class="absolute inset-0 flex items-center justify-center bg-black/20 text-white text-[10px]">
-                    <i class="fas fa-times"></i>
-                  </div>
-                  
-                  <!-- Número da Fibra (apenas em single tube para não poluir) -->
-                  <span v-if="isSingleTube" class="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-gray-800 invert mix-blend-difference opacity-50">
-                    {{ strand.number }}
-                  </span>
-                </div>
-
-                <!-- Tooltip com Detalhes da Fibra (hover) -->
-                <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-gray-900/95 backdrop-blur text-white text-xs rounded-lg py-2 px-3 opacity-0 group-hover/fiber:opacity-100 pointer-events-none transition-opacity z-50 shadow-xl border border-gray-700">
-                  <div class="font-bold border-b border-gray-700 pb-1 mb-1 text-indigo-300">
-                    FO {{ strand.number }} ({{ strand.color }})
-                  </div>
-                  <div class="space-y-1">
-                    <p class="flex justify-between">
-                      <span class="text-gray-400">Absoluto:</span> 
-                      <span>#{{ strand.absolute_number }}</span>
-                    </p>
-                    <p class="flex justify-between">
-                      <span class="text-gray-400">Status:</span> 
-                      <span :class="getStatusColorText(strand.status)">{{ strand.status_display }}</span>
-                    </p>
-                    <div v-if="strand.connected_device_port" class="mt-2 pt-1 border-t border-gray-700">
-                      <p class="text-[10px] text-gray-400 uppercase">Conectado a:</p>
-                      <p class="truncate text-green-300">Porta ID {{ strand.connected_device_port }}</p>
-                    </div>
-                    <div v-if="strand.fused_to" class="mt-2 pt-1 border-t border-gray-700">
-                      <p class="text-[10px] text-gray-400 uppercase">Fusionado com:</p>
-                      <p class="truncate text-yellow-300">Fibra ID {{ strand.fused_to }}</p>
-                    </div>
-                    <div v-if="strand.attenuation_db" class="mt-2 pt-1 border-t border-gray-700">
-                      <p class="flex justify-between">
-                        <span class="text-gray-400">Atenuação:</span>
-                        <span class="text-blue-300">{{ strand.attenuation_db }} dB</span>
-                      </p>
-                    </div>
-                  </div>
-                  <!-- Seta do Tooltip -->
-                  <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
-                </div>
-
-              </div>
-            </div>
+    <div v-else-if="loaded" class="csv-body">
+      <!-- Diagrama -->
+      <div class="csv-diagram">
+        <p v-if="structure.otdr_alert" class="csv-otdr" role="alert" data-testid="structure-otdr">
+          Rompimento OTDR ativo neste cabo{{ otdrWhere }} — as fibras aparecem como rompidas até o atendimento ser concluído.
+        </p>
+        <section v-for="tube in tubes" :key="tube.id" class="tube" :data-testid="`tube-${tube.number}`">
+          <header class="tube-head">
+            <span class="tube-swatch" :style="{ background: tube.color_hex }" aria-hidden="true" />
+            Tubo {{ tube.number }} · {{ tube.color }}
+          </header>
+          <div class="tube-fibers">
+            <button
+              v-for="f in tube.strands"
+              :key="f.id"
+              type="button"
+              class="fiber"
+              :class="[`st-${f.state}`, { 'fiber-on': selected?.id === f.id }]"
+              :title="`Fibra ${f.absolute_number} · ${f.color} · ${STATE_LABEL[f.state]}`"
+              :aria-pressed="selected?.id === f.id"
+              :data-testid="`fiber-${f.absolute_number}`"
+              @click="select(f, tube)"
+            >
+              <span class="fiber-core" :style="{ background: f.color_hex }" aria-hidden="true" />
+              <span class="fiber-num num">{{ f.number }}</span>
+            </button>
           </div>
-        </div>
-
+        </section>
       </div>
-    </div>
 
-    <!-- Footer com Ações -->
-    <div class="px-6 py-3 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex justify-end">
-      <button 
-        @click="handleExport"
-        class="text-xs text-gray-500 hover:text-indigo-600 flex items-center gap-1 transition-colors"
-      >
-        <i class="fas fa-print"></i> Exportar Diagrama
-      </button>
-    </div>
+      <!-- Painel da fibra selecionada -->
+      <aside class="csv-panel" data-testid="fiber-panel">
+        <p v-if="!selected" class="csv-hint" data-testid="fiber-hint">Selecione uma fibra no diagrama.</p>
+        <template v-else>
+          <h4 class="panel-title">
+            <span class="fiber-core sm" :style="{ background: selected.color_hex }" aria-hidden="true" />
+            Fibra {{ selected.absolute_number }}
+            <span class="panel-sub">· Tubo {{ selectedTube.number }} ({{ selectedTube.color }}) · {{ selected.color }}</span>
+          </h4>
+          <p class="panel-state" :class="`st-text-${selected.state}`" data-testid="fiber-state">{{ STATE_LABEL[selected.state] }}</p>
 
+          <!-- Pontas A e B: «Conectar a porta» -->
+          <div v-for="end in ['a', 'b']" :key="end" class="panel-end" :data-testid="`end-${end}`">
+            <p class="end-title">Ponta {{ end.toUpperCase() }} · {{ ends[end]?.site_name || (ends[end]?.ceo_name ? `na ${ends[end].ceo_name} (emenda na caixa)` : 'sem site no cabo') }}</p>
+            <p v-if="portOf(selected, end)" class="end-port" :data-testid="`end-${end}-port`">
+              {{ portOf(selected, end).device_name }} → <span class="num">{{ portOf(selected, end).name }}</span>
+            </p>
+            <p v-else class="end-free">Sem porta ligada</p>
+            <div v-if="ends[end]?.devices?.length" class="end-form">
+              <select v-model="pick[end]" class="csv-select" :aria-label="`Porta da ponta ${end.toUpperCase()}`" :data-testid="`end-${end}-select`">
+                <option :value="null">Escolher a porta…</option>
+                <optgroup v-for="d in ends[end].devices" :key="d.id" :label="d.name">
+                  <option v-for="p in d.ports" :key="p.id" :value="p.id" :disabled="!!p.used_by && p.used_by.strand_id !== selected.id">
+                    {{ p.name }}{{ p.used_by && p.used_by.strand_id !== selected.id ? ` (fibra ${p.used_by.absolute_number} · ${p.used_by.cable_name})` : '' }}
+                  </option>
+                </optgroup>
+              </select>
+              <button type="button" class="csv-btn csv-btn-primary" :disabled="!pick[end] || busy" :data-testid="`end-${end}-connect`" @click="connect(end, pick[end])">
+                Conectar
+              </button>
+              <button v-if="portOf(selected, end)" type="button" class="csv-btn" :disabled="busy" :data-testid="`end-${end}-disconnect`" @click="connect(end, null)">
+                Desligar
+              </button>
+            </div>
+            <p v-else-if="ends[end]?.site_name" class="end-free">Nenhum equipamento cadastrado neste site.</p>
+          </div>
+
+          <!-- EV-0136: rastreamento da luz fim-a-fim -->
+          <div class="panel-end" data-testid="fiber-trace-box">
+            <p class="end-title">Rastrear a luz</p>
+            <div class="end-form">
+              <button v-for="e in ['a', 'b']" :key="e" type="button" class="csv-btn" :class="{ 'csv-btn-on': traceFrom === e }" :data-testid="`trace-from-${e}`" @click="traceFrom = traceFrom === e ? null : e">
+                da ponta {{ e.toUpperCase() }}
+              </button>
+            </div>
+            <FiberTrace v-if="traceFrom" :strand-id="selected.id" :start="traceFrom" />
+          </div>
+
+          <div v-if="selected.fusions?.length" class="panel-fusions">
+            <p class="end-title">Fusões</p>
+            <p v-for="(fu, i) in selected.fusions" :key="i" class="end-port">{{ fusionText(fu) }}</p>
+          </div>
+          <p v-if="actionError" class="csv-error" role="alert" data-testid="fiber-error">{{ actionError }}</p>
+        </template>
+      </aside>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+/**
+ * Estrutura física do cabo (EV-0133/0134): tubos loose com a cor ABNT e as fibras, cada uma com o
+ * estado (rompida > iluminada > fusionada > livre, calculado no servidor) e o painel da fibra
+ * com «Conectar a porta» nas pontas Site A / Site B.
+ */
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useApi } from '@/composables/useApi'
+import FiberTrace from './FiberTrace.vue'
 
 const props = defineProps({
-  cableId: { 
-    type: [Number, String], 
-    required: true 
-  }
+  cableId: { type: [Number, String], required: true },
 })
-
 const emit = defineEmits(['select-fiber'])
 
-const api = useApi()
-const loading = ref(false)
-const error = ref(false)
-const structure = ref({ tubes: [] })
+const STATES = [
+  { key: 'lit', label: 'Iluminada' },
+  { key: 'fused', label: 'Fusionada' },
+  { key: 'free', label: 'Livre' },
+  { key: 'broken', label: 'Rompida' },
+]
+const STATE_LABEL = Object.fromEntries(STATES.map((s) => [s.key, s.label]))
 
-// Computeds para o Header
-const cableName = computed(() => structure.value.name)
-const profileName = computed(() => structure.value.profile_name || 'Perfil Personalizado')
-const tubesCount = computed(() => structure.value.tubes?.length || 0)
-const totalFibers = computed(() => {
-  return structure.value.tubes?.reduce((acc, tube) => acc + (tube.strands?.length || 0), 0) || 0
+const api = useApi()
+const structure = ref({ tubes: [] })
+const loaded = ref(false)
+const loading = ref(false)
+const error = ref('')
+const busy = ref(false)
+const actionError = ref('')
+const pickedProfile = ref(null)
+const selectedId = ref(null)
+const pick = reactive({ a: null, b: null })
+const traceFrom = ref(null)
+
+const tubes = computed(() => structure.value.tubes || [])
+const allStrands = computed(() => tubes.value.flatMap((t) => t.strands || []))
+const counts = computed(() => allStrands.value.reduce((acc, f) => ({ ...acc, [f.state]: (acc[f.state] || 0) + 1 }), {}))
+const ends = computed(() => structure.value.ends || {})
+const selected = computed(() => allStrands.value.find((f) => f.id === selectedId.value) || null)
+const selectedTube = computed(() => tubes.value.find((t) => (t.strands || []).some((f) => f.id === selectedId.value)) || {})
+const otdrWhere = computed(() => {
+  const o = structure.value.otdr_alert
+  if (!o?.map_distance_m) return ''
+  const km = (o.map_distance_m / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return ` (a ${km} km${o.origin_name ? ` de ${o.origin_name}` : ''})`
 })
 
-const isSingleTube = computed(() => tubesCount.value === 1)
+const portOf = (f, end) => (end === 'a' ? f.port_a : f.port_b)
 
-/**
- * Estilos dinâmicos baseados no status da fibra
- * - lit: brilho verde (fibra ativa)
- * - broken: opacidade reduzida + grayscale
- * - reserved: anel amarelo
- */
-const getStrandClasses = (strand) => {
-  const classes = []
-  
-  if (strand.status === 'lit') {
-    // Efeito de brilho para iluminada
-    classes.push('ring-2 ring-green-400 ring-offset-1 dark:ring-offset-gray-800 z-10')
-  } else if (strand.status === 'broken') {
-    classes.push('opacity-70 grayscale')
-  } else if (strand.status === 'reserved') {
-    classes.push('ring-2 ring-yellow-400 ring-offset-1 dark:ring-offset-gray-800')
-  }
-  
-  return classes.join(' ')
+function fusionText(fu) {
+  const where = fu.infrastructure_name || 'CEO'
+  const num = fu.peer_absolute_number ?? fu.peer_number
+  return `${where}: ${fu.peer_cable_name || 'outro cabo'}${num !== null && num !== undefined ? ` · fibra ${num}` : ''}`
 }
 
-const getStatusColorText = (status) => {
-  switch(status) {
-    case 'lit': return 'text-green-400'
-    case 'broken': return 'text-red-400'
-    case 'reserved': return 'text-yellow-400'
-    default: return 'text-gray-400'
-  }
-}
-
-/**
- * Busca estrutura física do cabo via API
- * Lazy Creation: Se o cabo tem profile mas não tem estrutura,
- * o backend gera automaticamente na primeira chamada
- */
-const fetchStructure = async () => {
+async function fetchStructure() {
   if (!props.cableId) return
-  
   loading.value = true
-  error.value = false
-  
+  error.value = ''
   try {
-    const response = await api.get(`/inventory/fiber-cables/${props.cableId}/structure/`)
-    structure.value = response.data
-  } catch (err) {
-    console.error("Erro ao buscar estrutura do cabo:", err)
-    error.value = true
+    // EV-0133: /api/v1/… e o JSON já lido pelo useApi (não há .data)
+    structure.value = await api.get(`/api/v1/fiber-cables/${encodeURIComponent(props.cableId)}/structure/`)
+    loaded.value = true
+  } catch (e) {
+    error.value = e?.message || 'erro desconhecido'
   } finally {
     loading.value = false
   }
 }
 
-/**
- * Evento quando usuário clica em uma fibra
- * Pode ser usado para abrir modal de fusão ou conexão
- */
-const handleStrandClick = (strand) => {
-  console.log("Fibra selecionada:", strand)
-  emit('select-fiber', strand)
+async function generate() {
+  if (!pickedProfile.value || busy.value) return
+  busy.value = true
+  actionError.value = ''
+  try {
+    await api.post(`/api/v1/fiber-cables/${encodeURIComponent(props.cableId)}/structure/profile/`, {
+      profile_id: pickedProfile.value,
+    })
+    await fetchStructure()
+  } catch (e) {
+    actionError.value = `Não foi possível gerar: ${e?.message || 'erro desconhecido'}`
+  } finally {
+    busy.value = false
+  }
 }
 
-/**
- * Exportar diagrama como imagem (feature futura)
- */
-const handleExport = () => {
-  console.log("Exportar diagrama - feature em desenvolvimento")
-  // TODO: Implementar export via html2canvas ou similar
+function select(fiber, tube) {
+  if (selectedId.value !== fiber.id) traceFrom.value = null
+  selectedId.value = fiber.id
+  actionError.value = ''
+  pick.a = fiber.port_a?.id ?? null
+  pick.b = fiber.port_b?.id ?? null
+  emit('select-fiber', { ...fiber, tube_number: tube.number, tube_color: tube.color })
 }
 
-// Watchers e Lifecycle
-watch(() => props.cableId, fetchStructure)
+/** EV-0134: liga (ou desliga, com null) a ponta da fibra a uma porta do site dessa ponta. */
+async function connect(end, portId) {
+  if (!selected.value || busy.value) return
+  busy.value = true
+  actionError.value = ''
+  try {
+    await api.post(
+      `/api/v1/fiber-cables/${encodeURIComponent(props.cableId)}/strands/${selected.value.id}/port/`,
+      { end, port_id: portId },
+    )
+    await fetchStructure()
+    const f = selected.value
+    if (f) {
+      pick.a = f.port_a?.id ?? null
+      pick.b = f.port_b?.id ?? null
+    }
+  } catch (e) {
+    actionError.value = e?.message || 'erro desconhecido'
+  } finally {
+    busy.value = false
+  }
+}
 
-onMounted(() => {
-  fetchStructure()
-})
+watch(
+  () => props.cableId,
+  () => {
+    selectedId.value = null
+    loaded.value = false
+    fetchStructure()
+  },
+)
+onMounted(fetchStructure)
 </script>
 
 <style scoped>
-/* Animações customizadas para fibras iluminadas */
-@keyframes pulse-glow {
-  0%, 100% {
-    box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
-  }
-  50% {
-    box-shadow: 0 0 16px rgba(34, 197, 94, 0.8);
+.csv {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: rgb(var(--surface));
+}
+.num {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.csv-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgb(var(--n-200));
+}
+.csv-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: rgb(var(--n-900));
+}
+.csv-sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: rgb(var(--n-500));
+}
+.csv-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: rgb(var(--n-700));
+}
+.csv-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 2px solid currentColor;
+}
+.csv-msg {
+  padding: 40px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: rgb(var(--n-600));
+}
+.csv-error {
+  color: rgb(var(--danger));
+  font-size: 13px;
+}
+.csv-link {
+  margin-left: 6px;
+  text-decoration: underline;
+}
+.csv-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 1024px) {
+  .csv-body {
+    grid-template-columns: minmax(0, 1fr) 320px;
   }
 }
-
-.ring-green-400 {
-  animation: pulse-glow 2s ease-in-out infinite;
+.csv-diagram {
+  padding: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 12px;
+  overflow-y: auto;
+  background: rgb(var(--canvas));
+}
+.csv-otdr {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid rgb(var(--danger) / 0.4);
+  border-radius: 8px;
+  background: rgb(var(--danger) / 0.08);
+  color: rgb(var(--danger));
+  font-size: 12px;
+}
+.tube {
+  padding: 10px 12px;
+  border: 1px solid rgb(var(--n-200));
+  border-radius: 10px;
+  background: rgb(var(--surface));
+}
+.tube-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(var(--n-800));
+}
+.tube-swatch {
+  width: 22px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid rgb(var(--n-400));
+}
+.tube-fibers {
+  display: grid;
+  grid-template-columns: repeat(6, 34px);
+  gap: 6px;
+}
+.fiber {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 0;
+  border-radius: 8px;
+  border: 2px solid currentColor;
+  background: rgb(var(--surface));
+}
+.fiber-on {
+  box-shadow: 0 0 0 2px rgb(var(--primary-500));
+}
+.fiber-core {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 1px solid rgb(var(--n-400));
+}
+.fiber-core.sm {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  vertical-align: -1px;
+}
+.fiber-num {
+  font-size: 10px;
+  color: rgb(var(--n-700));
+}
+/* estado: a cor do anel (iluminada verde, fusionada ciano/info, livre cinza, rompida coral) */
+.st-lit {
+  color: rgb(var(--success));
+}
+.st-fused {
+  color: rgb(var(--info));
+}
+.st-free {
+  color: rgb(var(--n-300));
+}
+.st-broken {
+  color: rgb(var(--danger));
+}
+.st-text-lit {
+  color: rgb(var(--success));
+}
+.st-text-fused {
+  color: rgb(var(--info));
+}
+.st-text-free {
+  color: rgb(var(--n-500));
+}
+.st-text-broken {
+  color: rgb(var(--danger));
+}
+.csv-panel {
+  padding: 14px 16px;
+  border-left: 1px solid rgb(var(--n-200));
+  overflow-y: auto;
+  font-size: 13px;
+}
+.csv-hint {
+  color: rgb(var(--n-500));
+}
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: rgb(var(--n-900));
+}
+.panel-sub {
+  font-size: 12px;
+  font-weight: 400;
+  color: rgb(var(--n-500));
+}
+.panel-state {
+  margin: 2px 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.panel-end,
+.panel-fusions {
+  padding: 10px 0;
+  border-top: 1px solid rgb(var(--n-200));
+}
+.end-title {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(var(--n-700));
+}
+.end-port {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: rgb(var(--n-900));
+}
+.end-free {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: rgb(var(--n-500));
+}
+.end-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.csv-select {
+  min-width: 0;
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid rgb(var(--n-300));
+  border-radius: 6px;
+  background: rgb(var(--surface));
+  font-size: 12px;
+  color: rgb(var(--n-900));
+}
+.csv-btn {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgb(var(--n-300));
+  border-radius: 6px;
+  background: rgb(var(--surface));
+  font-size: 12px;
+  color: rgb(var(--n-700));
+}
+.csv-btn-primary {
+  border-color: rgb(var(--primary-600));
+  background: rgb(var(--primary-600));
+  @apply text-white;
+}
+.csv-btn-on {
+  border-color: rgb(var(--primary-500));
+  color: rgb(var(--primary-700));
+  background: rgb(var(--primary-500) / 0.1);
+}
+.csv-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

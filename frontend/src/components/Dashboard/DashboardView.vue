@@ -44,9 +44,9 @@
         <div v-if="isSidebarOpen" class="connection-status" :class="wsConnectionState">
           <span class="status-indicator" :class="wsConnectionState"></span>
           <span class="status-text">
-            <template v-if="wsConnectionState === 'connected'">Connected</template>
-            <template v-else-if="wsConnectionState === 'connecting'">Connecting...</template>
-            <template v-else>Offline</template>
+            <template v-if="wsConnectionState === 'connected'">Tempo real</template>
+            <template v-else-if="wsConnectionState === 'connecting'">Conectando…</template>
+            <template v-else>Desconectado</template>
           </span>
         </div>
         

@@ -55,9 +55,9 @@ const open = ref(false)
   align-items: center;
   gap: 5px;
   padding: 5px 12px;
-  background: rgba(15, 23, 42, 0.82);
+  background: rgb(var(--surface) / 0.9);
   backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgb(var(--n-200));
   border-radius: 20px;
   cursor: default;
   user-select: none;
@@ -72,7 +72,7 @@ const open = ref(false)
 
 .pill-label {
   font-size: 0.72rem;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgb(var(--n-600));
   margin-left: 2px;
 }
 
@@ -81,13 +81,13 @@ const open = ref(false)
   position: absolute;
   bottom: calc(100% + 8px);
   right: 0;
-  background: rgba(15, 23, 42, 0.92);
+  background: rgb(var(--surface) / 0.95);
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgb(var(--n-200));
   border-radius: 10px;
   padding: 10px 14px;
   min-width: 130px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 20px rgb(0 0 0 / 0.2);
 }
 
 .legend-item {
@@ -116,7 +116,7 @@ const open = ref(false)
 
 .legend-label {
   font-size: 0.78rem;
-  color: rgba(255, 255, 255, 0.75);
+  color: rgb(var(--n-700));
 }
 
 /* Transition */
@@ -125,14 +125,4 @@ const open = ref(false)
 .legend-fade-enter-from,
 .legend-fade-leave-to { opacity: 0; transform: translateY(4px); }
 
-/* Light theme */
-:root[data-theme="light"] .legend-pill,
-:root[data-theme="light"] .legend-tooltip {
-  background: rgba(255, 255, 255, 0.95);
-  border-color: rgba(0, 0, 0, 0.1);
-}
-:root[data-theme="light"] .pill-label,
-:root[data-theme="light"] .legend-label {
-  color: var(--text-secondary);
-}
 </style>

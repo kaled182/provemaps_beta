@@ -4,6 +4,8 @@ import logging
 
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -11,6 +13,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from inventory.cache.fibers import invalidate_fiber_cache
+from inventory.domain.port_cable import annotate_connected_cable
+from inventory.domain.strands import OCCUPANCY_ANNOTATIONS
 from inventory.domain.zabbix_history import (
     fetch_aligned_series,
     get_item_by_key,
@@ -19,6 +23,7 @@ from inventory.domain.zabbix_history import (
 )
 from inventory.metrics import track_endpoint_usage, track_model_operation, track_viewset_action
 from inventory.models import Device, DeviceGroup, FiberCable, FiberProfile, ImportRule, Port, Site
+from inventory.permissions import StaffWritePermission
 from inventory.usecases import fiber_alarm_configs
 from maps_view.cache_swr import invalidate_dashboard_cache
 
@@ -365,6 +370,15 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                 status=500,
             )
 
+    @extend_schema(
+        summary="CPU, memória e uptime de vários equipamentos numa chamada ao Zabbix",
+        description=(
+            "`cpu_source`/`memory_source`: `zabbix` (medido), `manual` (valor configurado "
+            "no equipamento) ou null. `last_collected`: lastclock mais recente das métricas. "
+            "`zabbix_error: true` quando o Zabbix não respondeu (EV-0058)."
+        ),
+        responses={200: OpenApiTypes.OBJECT},
+    )
     @action(detail=False, methods=["get"], url_path="metrics-batch")
     def metrics_batch(self, request):
         """
@@ -433,7 +447,12 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                 ),
                 "uptime_seconds": None,
                 "uptime_human": None,
+                # EV-0058: de onde vem o número — manual não é medição
+                "cpu_source": "manual" if d.cpu_usage_manual_percent is not None else None,
+                "memory_source": ("manual" if d.memory_usage_manual_percent is not None else None),
+                "last_collected": None,
             }
+        zabbix_error = False
 
         # Uma única consulta ao Zabbix para todos os hostids+keys
         if hostid_to_device and all_keys:
@@ -443,7 +462,7 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                 raw = zabbix_request(
                     "item.get",
                     {
-                        "output": ["key_", "lastvalue", "hostid"],
+                        "output": ["key_", "lastvalue", "lastclock", "hostid"],
                         "hostids": list(hostid_to_device.keys()),
                         "filter": {"key_": list(all_keys)},
                     },
@@ -463,6 +482,11 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                         bucket = results.get(str(device.id))
                         if bucket is None:
                             continue
+                        clock = _lastclock_iso(it.get("lastclock"))
+                        if clock and (
+                            bucket["last_collected"] is None or clock > bucket["last_collected"]
+                        ):
+                            bucket["last_collected"] = clock
 
                         if key == device.uptime_item_key:
                             try:
@@ -482,25 +506,22 @@ class DeviceViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                             except (ValueError, TypeError):
                                 bucket["uptime_human"] = str(last)
                         elif key == device.cpu_usage_item_key:
-                            try:
-                                bucket["cpu"] = float(last)
-                            except (ValueError, TypeError):
-                                try:
-                                    bucket["cpu"] = float(str(last).replace("%", ""))
-                                except (ValueError, TypeError):
-                                    pass
+                            value = _percent_or_none(last)
+                            if value is not None:
+                                bucket["cpu"] = value
+                                bucket["cpu_source"] = "zabbix"
                         elif key == getattr(device, "memory_usage_item_key", None):
-                            try:
-                                bucket["memory"] = float(last)
-                            except (ValueError, TypeError):
-                                try:
-                                    bucket["memory"] = float(str(last).replace("%", ""))
-                                except (ValueError, TypeError):
-                                    pass
+                            value = _percent_or_none(last)
+                            if value is not None:
+                                bucket["memory"] = value
+                                bucket["memory_source"] = "zabbix"
+                else:
+                    zabbix_error = raw is None
             except Exception as exc:
                 logger.warning("Zabbix batch metrics failed: %s", exc, exc_info=True)
+                zabbix_error = True
 
-        return Response({"results": results})
+        return Response({"results": results, "zabbix_error": zabbix_error})
 
     @action(detail=True, methods=["get"], url_path="metrics")
     def metrics(self, request, pk=None):
@@ -692,7 +713,8 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
 
     def get_queryset(self):
         """Filter ports by device if device query param is provided"""
-        queryset = super().get_queryset()
+        # EV-0071: cabo ligado à porta (origem ou destino), numa subconsulta
+        queryset = annotate_connected_cable(super().get_queryset())
         device_id = self.request.query_params.get("device")
 
         if device_id:
@@ -847,6 +869,27 @@ class PortViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         )
 
 
+def _percent_or_none(value):
+    """`'12.5'`/`'12.5%'` → 12.5; ilegível → None."""
+    try:
+        return float(str(value).replace("%", "").strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _lastclock_iso(value):
+    """lastclock do Zabbix (epoch s) → ISO 8601 UTC; 0/ausente → None."""
+    try:
+        seconds = int(value)
+    except (TypeError, ValueError):
+        return None
+    if seconds <= 0:
+        return None
+    from datetime import UTC, datetime
+
+    return datetime.fromtimestamp(seconds, tz=UTC).isoformat()
+
+
 class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
     """ViewSet for FiberCable CRUD operations"""
 
@@ -866,7 +909,12 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             "responsible",
             "responsible_user",
         )
-        .prefetch_related("segments__start_infrastructure", "segments__end_infrastructure")
+        .prefetch_related(
+            "segments__start_infrastructure",
+            "segments__end_infrastructure",
+            "infrastructure_points",  # EV-0062: era uma consulta por cabo
+        )
+        .annotate(**OCCUPANCY_ANNOTATIONS)  # EV-0061: ocupação numa só consulta
         .order_by("name")
     )
     serializer_class = FiberCableSerializer
@@ -955,6 +1003,10 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
     def perform_create(self, serializer):
         """Perform fiber cable creation with metrics."""
         cable = super().perform_create(serializer)
+        # EV-0133: cabo novo já com tubos e fibras (perfil ou grupo)
+        from inventory.usecases.cable_structure import ensure_cable_structure
+
+        ensure_cable_structure(serializer.instance)
         invalidate_fiber_cache()
         invalidate_dashboard_cache()
         return cable
@@ -963,6 +1015,10 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
     def perform_update(self, serializer):
         """Perform fiber cable update with metrics."""
         cable = super().perform_update(serializer)
+        # EV-0133: ganhou grupo/perfil e ainda não tinha estrutura → gera-a
+        from inventory.usecases.cable_structure import ensure_cable_structure
+
+        ensure_cable_structure(serializer.instance)
         invalidate_fiber_cache()
         invalidate_dashboard_cache()
         return cable
@@ -986,16 +1042,11 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         """
         cable = self.get_object()
 
-        # Auto-generation (Lazy Creation) for legacy cables
-        if not cable.tubes.exists() and cable.profile:
-            logger.info(
-                "Auto-generating structure for cable %s (profile: %s)",
-                cable.id,
-                cable.profile.name,
-            )
-            cable.create_structure()
-            # Reload to get newly created relationships
-            cable.refresh_from_db()
+        # EV-0133: gera tubos/fibras na 1.ª abertura — perfil do cabo ou o do nº de fibras do
+        # grupo; sem nenhum dos dois devolve needs_profile (o modal pede o perfil).
+        from inventory.usecases.cable_structure import available_profiles, ensure_cable_structure
+
+        outcome = ensure_cable_structure(cable)
 
         cable = (
             FiberCable.objects.select_related(
@@ -1003,6 +1054,8 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
                 "destination_port__device__site",
             )
             .prefetch_related(
+                "tubes__strands__connected_device_port__device",
+                "tubes__strands__connected_device_port_b__device",
                 "tubes__strands__fusions_as_a__infrastructure",
                 "tubes__strands__fusions_as_a__fiber_b__tube__cable",
                 "tubes__strands__fusions_as_b__infrastructure",
@@ -1011,8 +1064,63 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
             .get(pk=cable.pk)
         )
 
-        serializer = FiberCableStructureSerializer(cable)
-        return Response(serializer.data)
+        # EV-0134: rompimento OTDR ativo no cabo → as fibras aparecem rompidas; pontas A/B com portas
+        from inventory.usecases.strand_ports import active_otdr, cable_ends
+
+        otdr = active_otdr(cable)
+        data = dict(
+            FiberCableStructureSerializer(cable, context={"cable_broken": otdr is not None}).data
+        )
+        data["needs_profile"] = outcome["needs_profile"]
+        data["otdr_alert"] = otdr
+        data["ends"] = cable_ends(cable)
+        if outcome["needs_profile"]:
+            data["available_profiles"] = available_profiles()
+        return Response(data)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"strands/(?P<strand_id>\d+)/port",
+        permission_classes=[StaffWritePermission],
+    )
+    def strand_port(self, request, pk=None, strand_id=None):
+        """EV-0134: liga/desliga a ponta A ou B de uma fibra a uma porta do site dessa ponta."""
+        from inventory.usecases.devices_common import InventoryValidationError
+        from inventory.usecases.strand_ports import connect_strand_port
+
+        end = str(request.data.get("end") or "")
+        raw = request.data.get("port_id")
+        try:
+            port_id = None if raw in (None, "") else int(raw)
+        except (TypeError, ValueError):
+            return Response({"detail": "port_id inválido"}, status=400)
+        try:
+            data = connect_strand_port(int(pk), int(strand_id), end=end, port_id=port_id)
+        except InventoryValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(data)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="structure/profile",
+        permission_classes=[StaffWritePermission],
+    )
+    def structure_profile(self, request, pk=None):
+        """EV-0133: escolhe o perfil (nº de fibras) de um cabo sem estrutura e gera-a."""
+        from inventory.usecases.cable_structure import set_cable_profile
+        from inventory.usecases.devices_common import InventoryValidationError
+
+        try:
+            profile_id = int(request.data.get("profile_id"))
+        except (TypeError, ValueError):
+            return Response({"detail": "profile_id obrigatório"}, status=400)
+        try:
+            outcome = set_cable_profile(int(pk), profile_id)
+        except InventoryValidationError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(outcome)
 
     @action(detail=True, methods=["get"], url_path="metrics")
     def metrics(self, request, pk=None):
@@ -1259,6 +1367,68 @@ class FiberCableViewSet(viewsets.ModelViewSet):  # type: ignore[misc]
         # Return updated cable
         serializer = self.get_serializer(cable)
         return Response(serializer.data)
+
+    @extend_schema(
+        summary="Topologia esquemática: POPs (nós) e enlaces (arestas) com estado e capacidade",
+        description=(
+            "Site de cada ponta pelo equipamento da porta; ocupação só com fibras "
+            "cadastradas, senão null (EV-0060, ADR 0009)."
+        ),
+        responses={200: OpenApiTypes.OBJECT},
+    )
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="topology",
+        permission_classes=[IsAuthenticated],
+    )
+    def topology(self, request):
+        from inventory.usecases.topology import build_topology
+
+        return Response(build_topology())
+
+    @extend_schema(
+        summary="Quadro de alarmes de fibra: ativos, resolvidos 24 h e MTTR",
+        description=(
+            "Derivado do histórico FiberEvent; `unknown` não abre nem fecha incidente "
+            "(EV-0059). `?dias=` ajusta a janela do MTTR (1 a 90, padrão 30)."
+        ),
+        responses={200: OpenApiTypes.OBJECT},
+    )
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="alarm-board",
+        permission_classes=[IsAuthenticated],
+    )
+    def alarm_board(self, request):
+        from inventory.usecases.alarms import DEFAULT_WINDOW_DAYS, build_alarm_board
+
+        try:
+            days = int(request.query_params.get("dias", DEFAULT_WINDOW_DAYS))
+        except (TypeError, ValueError):
+            return Response({"error": "dias inválido"}, status=400)
+        days = max(1, min(days, 90))
+        return Response(build_alarm_board(window_days=days))
+
+    @extend_schema(
+        summary="Níveis ópticos de todos os cabos (RX/TX por ponta, perda, estado)",
+        description=(
+            "Lido do banco (Port.last_*), sem chamar o Zabbix. `totals` por saúde, "
+            "`worst` = cabo com o RX mais baixo entre leituras frescas (EV-0057/EV-0049)."
+        ),
+        responses={200: OpenApiTypes.OBJECT},
+    )
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="optical-summary",
+        permission_classes=[IsAuthenticated],
+    )
+    def optical_summary(self, request):
+        from inventory.usecases.fibers import list_cables_optical_summary
+
+        return Response(list_cables_optical_summary())
 
     @action(
         detail=True,

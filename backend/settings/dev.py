@@ -17,38 +17,9 @@ if "PYTEST_CURRENT_TEST" in os.environ:
     os.environ.pop("SENTRY_DSN", None)
 
 
-def _load_runtime_email_env() -> None:
-    runtime_env_path = os.getenv("ENV_FILE_PATH")
-    if not runtime_env_path:
-        runtime_env_path = str(DATABASE_DIR / "runtime.env")
-    if not os.path.exists(runtime_env_path):
-        return
+from .runtime_env import load_runtime_email_env
 
-    target_keys = {
-        "EMAIL_BACKEND",
-        "EMAIL_HOST",
-        "EMAIL_PORT",
-        "EMAIL_HOST_USER",
-        "EMAIL_HOST_PASSWORD",
-        "EMAIL_USE_TLS",
-        "EMAIL_USE_SSL",
-        "DEFAULT_FROM_EMAIL",
-        "SERVER_EMAIL",
-    }
-    with open(runtime_env_path, encoding="utf-8-sig") as handler:
-        for raw_line in handler:
-            line = raw_line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            key = key.strip()
-            if key not in target_keys or key in os.environ:
-                continue
-            value = value.strip().strip("\"'").strip()
-            os.environ[key] = value
-
-
-_load_runtime_email_env()
+load_runtime_email_env(DATABASE_DIR)  # noqa: F405
 
 if TYPE_CHECKING:  # pragma: no cover - assists type checkers only
     from .base import (
@@ -64,7 +35,10 @@ if TYPE_CHECKING:  # pragma: no cover - assists type checkers only
 # -----------------------------------------------------
 # Core
 # -----------------------------------------------------
-DEBUG = True  # type: ignore[assignment]
+# Por omissão True (desenvolvimento). A produção corre esta pilha com settings.dev
+# (EV-0037) e põe DEBUG=False no .env: um erro 500 não pode mostrar o traceback.
+_debug_env = os.getenv("DEBUG", "True").strip().lower()
+DEBUG = _debug_env in {"1", "true", "yes", "on"}  # type: ignore[assignment]
 
 # Development hosts — aceita qualquer host/IP para facilitar instalação em qualquer servidor
 # Em desenvolvimento nunca restrinja: o servidor pode ter qualquer IP
@@ -179,14 +153,6 @@ else:
 # Static files in development (Manifest to hash by content)
 STATICFILES_STORAGE = "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"
 
-# -----------------------------------------------------
-# Vue 3 Dashboard Feature Flags (always enabled in dev)
-# -----------------------------------------------------
-# Garantimos que o template novo (spa.html) seja usado SEMPRE em desenvolvimento
-# evitando regressões involuntárias para o template legado.
-USE_VUE_DASHBOARD = True  # type: ignore[assignment]
-VUE_DASHBOARD_ROLLOUT_PERCENTAGE = 100  # type: ignore[assignment]
-
 import subprocess  # noqa: E402
 import time as _time  # noqa: E402
 
@@ -232,9 +198,6 @@ print(f"[STATIC_VERSION] STATIC_ASSET_VERSION={STATIC_ASSET_VERSION}")
 
 # Em dev não há build: o SHA vem do próprio repositório (EV-0027b).
 GIT_SHA = os.getenv("GIT_SHA") or _git_sha()
-
-# No-cache middleware for sensitive routes
-MIDDLEWARE.append("core.middleware.no_cache_dev.NoCacheDevMiddleware")
 
 # Security relaxations for development
 if DEBUG:

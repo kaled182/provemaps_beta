@@ -1,10 +1,11 @@
 ﻿from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
+from django.db.models import Model
 from django.forms import ModelForm
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect
@@ -12,27 +13,19 @@ from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils import timezone
 from django.utils.html import format_html
-from django.db.models import Model
 
 from .models import ServiceAccount, ServiceAccountAuditLog, ServiceAccountToken
+from .services import deactivate_accounts, revoke_tokens
 
 MANAGE_PERMISSION = "service_accounts.manage_tokens"
 AUDIT_LOG_VIEW_PERMISSION = "service_accounts.view_serviceaccountauditlog"
 
 
 if TYPE_CHECKING:
-    TabularInlineBase = admin.TabularInline[  # type: ignore[type-arg]
-        ServiceAccountToken
-    ]
-    ServiceAccountAdminBase = admin.ModelAdmin[  # type: ignore[type-arg]
-        ServiceAccount
-    ]
-    AuditLogAdminBase = admin.ModelAdmin[  # type: ignore[type-arg]
-        ServiceAccountAuditLog
-    ]
-    TokenAdminBase = admin.ModelAdmin[  # type: ignore[type-arg]
-        ServiceAccountToken
-    ]
+    TabularInlineBase = admin.TabularInline[ServiceAccountToken]  # type: ignore[type-arg]
+    ServiceAccountAdminBase = admin.ModelAdmin[ServiceAccount]  # type: ignore[type-arg]
+    AuditLogAdminBase = admin.ModelAdmin[ServiceAccountAuditLog]  # type: ignore[type-arg]
+    TokenAdminBase = admin.ModelAdmin[ServiceAccountToken]  # type: ignore[type-arg]
 else:  # pragma: no cover - runtime fallback for Django generics
     TabularInlineBase = admin.TabularInline
     ServiceAccountAdminBase = admin.ModelAdmin
@@ -84,14 +77,13 @@ class ServiceAccountTokenInline(TabularInlineBase):
 
 @admin.register(ServiceAccount)
 class ServiceAccountAdmin(ServiceAccountAdminBase):
-    change_form_template = (
-        "admin/service_accounts/serviceaccount/change_form.html"
-    )
+    change_form_template = "admin/service_accounts/serviceaccount/change_form.html"
     list_display = ("name", "email", "is_active", "created_at", "updated_at")
     list_filter = ("is_active",)
     search_fields = ("name", "email")
     readonly_fields = ("created_at", "updated_at")
     inlines = (ServiceAccountTokenInline,)
+    actions = ("deactivate_selected_accounts",)
 
     class TokenGenerationForm(forms.Form):
         expires_at = forms.DateTimeField(
@@ -106,9 +98,7 @@ class ServiceAccountAdmin(ServiceAccountAdminBase):
         )
 
     def _can_manage(self, request: HttpRequest) -> bool:
-        return request.user.is_superuser or request.user.has_perm(
-            MANAGE_PERMISSION
-        )
+        return request.user.is_superuser or request.user.has_perm(MANAGE_PERMISSION)
 
     def has_module_permission(self, request: HttpRequest) -> bool:
         if super().has_module_permission(request):
@@ -143,9 +133,65 @@ class ServiceAccountAdmin(ServiceAccountAdminBase):
         request: HttpRequest,
         obj: ServiceAccount | None = None,
     ) -> bool:
-        if super().has_delete_permission(request, obj):
-            return True
+        # EV-0080: uma conta desativa-se (ação «Desativar contas selecionadas»), não se
+        # apaga — apagar levava tokens e auditoria. Vale também para superusers.
+        return False
+
+    def has_manage_permission(self, request: HttpRequest) -> bool:
+        """Gate for actions declared with ``permissions=["manage"]`` (EV-0080)."""
         return self._can_manage(request)
+
+    @admin.action(
+        description="Desativar contas selecionadas",
+        permissions=["manage"],
+    )
+    def deactivate_selected_accounts(
+        self,
+        request: HttpRequest,
+        queryset: Any,
+    ) -> None:
+        # Defence in depth: Django already hides the action without the permission,
+        # but a forged POST must not deactivate anything either.
+        if not self.has_manage_permission(request):
+            raise PermissionDenied
+
+        actor: Model | None = None
+        if request.user.is_authenticated:
+            actor = cast(Model, request.user)
+
+        result = deactivate_accounts(
+            account_ids=queryset.values_list("pk", flat=True),
+            actor=actor,
+            reason="Conta desativada via admin",
+            remote_addr=request.META.get("REMOTE_ADDR"),
+        )
+        deactivated = result["deactivated"]
+        already = result["already_inactive"]
+        tokens = result["tokens_revoked"]
+        if deactivated:
+            self.message_user(
+                request,
+                f"{deactivated} conta(s) desativada(s).",
+                level=messages.SUCCESS,
+            )
+        if already:
+            self.message_user(
+                request,
+                f"{already} conta(s) já estavam inativas.",
+                level=messages.WARNING,
+            )
+        if tokens:
+            self.message_user(
+                request,
+                f"{tokens} token(s) revogado(s).",
+                level=messages.SUCCESS,
+            )
+        if not deactivated and not already:
+            self.message_user(
+                request,
+                "Nenhuma conta desativada.",
+                level=messages.WARNING,
+            )
 
     def save_model(
         self,
@@ -205,10 +251,7 @@ class ServiceAccountAdmin(ServiceAccountAdminBase):
                 plain_token, token_obj = account.create_token(
                     created_by=user,
                     expires_at=expires_at,
-                    note=(
-                        form.cleaned_data.get("note")
-                        or "Token gerado via admin"
-                    ),
+                    note=(form.cleaned_data.get("note") or "Token gerado via admin"),
                     remote_addr=request.META.get("REMOTE_ADDR"),
                 )
 
@@ -219,10 +262,7 @@ class ServiceAccountAdmin(ServiceAccountAdminBase):
                 messages.success(
                     request,
                     format_html(
-                        (
-                            "Token criado com sucesso. Copie agora: {} "
-                            "(últimos 4: {})"
-                        ),
+                        ("Token criado com sucesso. Copie agora: {} " "(últimos 4: {})"),
                         token_display,
                         token_obj.last_four,
                     ),
@@ -234,7 +274,7 @@ class ServiceAccountAdmin(ServiceAccountAdminBase):
         else:
             form = FormClass()
 
-        context: Dict[str, Any] = {}
+        context: dict[str, Any] = {}
         context.update(self.admin_site.each_context(request))
         context.update(
             {
@@ -267,9 +307,11 @@ class ServiceAccountAuditLogAdmin(AuditLogAdminBase):
     )
 
     def _can_view(self, request: HttpRequest) -> bool:
-        return request.user.is_superuser or request.user.has_perm(
-            AUDIT_LOG_VIEW_PERMISSION
-        ) or request.user.has_perm(MANAGE_PERMISSION)
+        return (
+            request.user.is_superuser
+            or request.user.has_perm(AUDIT_LOG_VIEW_PERMISSION)
+            or request.user.has_perm(MANAGE_PERMISSION)
+        )
 
     def has_module_permission(self, request: HttpRequest) -> bool:
         if super().has_module_permission(request):
@@ -295,13 +337,19 @@ class ServiceAccountAuditLogAdmin(AuditLogAdminBase):
     ) -> bool:
         return False
 
+    def has_delete_permission(
+        self,
+        request: HttpRequest,
+        obj: ServiceAccountAuditLog | None = None,
+    ) -> bool:
+        # EV-0078: a auditoria não se apaga no admin (nem por superuser).
+        return False
+
 
 @admin.register(ServiceAccountToken)
 class ServiceAccountTokenAdmin(TokenAdminBase):
     def _can_view(self, request: HttpRequest) -> bool:
-        return request.user.is_superuser or request.user.has_perm(
-            MANAGE_PERMISSION
-        )
+        return request.user.is_superuser or request.user.has_perm(MANAGE_PERMISSION)
 
     def has_module_permission(self, request: HttpRequest) -> bool:
         if super().has_module_permission(request):
@@ -338,6 +386,7 @@ class ServiceAccountTokenAdmin(TokenAdminBase):
         "last_notified_at",
     )
     ordering = ("-created_at",)
+    actions = ("revoke_selected_tokens",)
 
     def has_add_permission(self, request: HttpRequest) -> bool:
         return False
@@ -348,3 +397,61 @@ class ServiceAccountTokenAdmin(TokenAdminBase):
         obj: ServiceAccountToken | None = None,
     ) -> bool:
         return False
+
+    def has_delete_permission(
+        self,
+        request: HttpRequest,
+        obj: ServiceAccountToken | None = None,
+    ) -> bool:
+        # EV-0078: um token revoga-se (ação «Revogar tokens selecionados»), não se apaga —
+        # apagar perdia o registo e o rasto. Vale também para superusers.
+        return False
+
+    def has_manage_permission(self, request: HttpRequest) -> bool:
+        """Gate for actions declared with ``permissions=["manage"]`` (EV-0073)."""
+        return self._can_view(request)
+
+    @admin.action(
+        description="Revogar tokens selecionados",
+        permissions=["manage"],
+    )
+    def revoke_selected_tokens(
+        self,
+        request: HttpRequest,
+        queryset: Any,
+    ) -> None:
+        # Defence in depth: Django already hides the action without the permission,
+        # but a forged POST must not revoke anything either.
+        if not self.has_manage_permission(request):
+            raise PermissionDenied
+
+        actor: Model | None = None
+        if request.user.is_authenticated:
+            actor = cast(Model, request.user)
+
+        result = revoke_tokens(
+            token_ids=queryset.values_list("pk", flat=True),
+            actor=actor,
+            reason="Token revogado manualmente via admin",
+            remote_addr=request.META.get("REMOTE_ADDR"),
+        )
+        revoked = result["revoked"]
+        already = result["already_revoked"]
+        if revoked:
+            self.message_user(
+                request,
+                f"{revoked} token(s) revogado(s).",
+                level=messages.SUCCESS,
+            )
+        if already:
+            self.message_user(
+                request,
+                f"{already} token(s) já estavam revogados e foram ignorados.",
+                level=messages.WARNING,
+            )
+        if not revoked and not already:
+            self.message_user(
+                request,
+                "Nenhum token revogado.",
+                level=messages.WARNING,
+            )

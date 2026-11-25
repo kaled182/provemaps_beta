@@ -1,8 +1,8 @@
 <template>
   <div class="space-y-6">
     <!-- Provider Selection -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Provedor de Mapas</h3>
+    <div class="bg-surface rounded-lg border border-neutral-200 p-6">
+      <h3 class="text-lg font-semibold text-neutral-900 mb-4">Provedor de Mapas</h3>
       
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <button
@@ -11,8 +11,8 @@
           @click="selectedProvider = provider.id"
           class="relative p-4 border-2 rounded-lg transition-all hover:shadow-md"
           :class="selectedProvider === provider.id 
-            ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' 
-            : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'"
+            ? 'border-primary-500 bg-primary-50 ' 
+            : 'border-neutral-200 hover:border-neutral-300'"
         >
           <div class="flex items-center justify-between mb-2">
             <div class="flex items-center gap-2">
@@ -20,7 +20,7 @@
                    :style="{ backgroundColor: provider.color + '20', color: provider.color }">
                 <component :is="provider.icon" class="w-4 h-4" />
               </div>
-              <h4 class="font-semibold text-gray-900 dark:text-white">{{ provider.name }}</h4>
+              <h4 class="font-semibold text-neutral-900">{{ provider.name }}</h4>
             </div>
             <div v-if="selectedProvider === provider.id" class="w-5 h-5 rounded-full bg-primary-500 flex items-center justify-center">
               <svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -28,16 +28,16 @@
               </svg>
             </div>
           </div>
-          <p class="text-xs text-gray-500 dark:text-gray-400">{{ provider.description }}</p>
+          <p class="text-xs text-neutral-500">{{ provider.description }}</p>
         </button>
       </div>
     </div>
 
     <!-- Google Maps Configuration -->
-    <div v-if="selectedProvider === 'google'" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+    <div v-if="selectedProvider === 'google'" class="bg-surface rounded-lg border border-neutral-200 p-6">
       <div class="flex items-center gap-2 mb-4">
         <GoogleMapsIcon class="w-5 h-5 text-[#4285F4]" />
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Google Maps</h3>
+        <h3 class="text-lg font-semibold text-neutral-900">Google Maps</h3>
       </div>
       
       <div class="space-y-4">
@@ -50,7 +50,7 @@
             placeholder="AIzaSy..."
             required
           />
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          <p class="mt-1 text-xs text-neutral-500">
             Obtenha sua chave em <a href="https://console.cloud.google.com" target="_blank" class="text-primary-600 hover:underline">Google Cloud Console</a>
           </p>
         </div>
@@ -76,7 +76,7 @@
               <option value="satellite">Satellite (Satélite)</option>
               <option value="hybrid">Hybrid (Satélite + Ruas)</option>
             </select>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 text-xs text-neutral-500">
               Terrain oferece visualização clara com relevo e sem linhas de grid
             </p>
           </div>
@@ -90,7 +90,7 @@
             rows="4"
             placeholder='[{"featureType": "all", "stylers": [{"saturation": -100}]}]'
           ></textarea>
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          <p class="mt-1 text-xs text-neutral-500">
             Personalize em <a href="https://mapstyle.withgoogle.com" target="_blank" class="text-primary-600 hover:underline">Map Styling Wizard</a>
           </p>
         </div>
@@ -101,9 +101,9 @@
               v-model="config.google.enable_street_view" 
               type="checkbox" 
               id="enable-street-view"
-              class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+              class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300 rounded"
             />
-            <label for="enable-street-view" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+            <label for="enable-street-view" class="ml-2 text-sm text-neutral-700">
               Habilitar Street View
             </label>
           </div>
@@ -113,9 +113,9 @@
               v-model="config.google.enable_traffic" 
               type="checkbox" 
               id="enable-traffic"
-              class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+              class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300 rounded"
             />
-            <label for="enable-traffic" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+            <label for="enable-traffic" class="ml-2 text-sm text-neutral-700">
               Mostrar tráfego em tempo real
             </label>
           </div>
@@ -124,10 +124,10 @@
     </div>
 
     <!-- Mapbox Configuration -->
-    <div v-else-if="selectedProvider === 'mapbox'" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+    <div v-else-if="selectedProvider === 'mapbox'" class="bg-surface rounded-lg border border-neutral-200 p-6">
       <div class="flex items-center gap-2 mb-4">
-        <MapboxIcon class="w-5 h-5 text-[#000000] dark:text-white" />
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Mapbox</h3>
+        <MapboxIcon class="w-5 h-5 text-[#000000]" />
+        <h3 class="text-lg font-semibold text-neutral-900">Mapbox</h3>
       </div>
       
       <div class="space-y-4">
@@ -140,7 +140,7 @@
             placeholder="pk.eyJ1..."
             required
           />
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          <p class="mt-1 text-xs text-neutral-500">
             Obtenha seu token em <a href="https://account.mapbox.com" target="_blank" class="text-primary-600 hover:underline">Mapbox Account</a>
           </p>
         </div>
@@ -186,9 +186,9 @@
             v-model="config.mapbox.enable_3d" 
             type="checkbox" 
             id="enable-3d"
-            class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+            class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300 rounded"
           />
-          <label for="enable-3d" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+          <label for="enable-3d" class="ml-2 text-sm text-neutral-700">
             Habilitar visualização 3D de edifícios
           </label>
         </div>
@@ -196,10 +196,10 @@
     </div>
 
     <!-- Esri/ArcGIS Configuration -->
-    <div v-else-if="selectedProvider === 'esri'" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+    <div v-else-if="selectedProvider === 'esri'" class="bg-surface rounded-lg border border-neutral-200 p-6">
       <div class="flex items-center gap-2 mb-4">
         <EsriIcon class="w-5 h-5 text-[#007AC2]" />
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Esri ArcGIS</h3>
+        <h3 class="text-lg font-semibold text-neutral-900">Esri ArcGIS</h3>
       </div>
       
       <div class="space-y-4">
@@ -211,7 +211,7 @@
             class="input-custom font-mono text-xs" 
             placeholder="AAPK..."
           />
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          <p class="mt-1 text-xs text-neutral-500">
             Opcional. Obtenha em <a href="https://developers.arcgis.com" target="_blank" class="text-primary-600 hover:underline">ArcGIS Developers</a>
           </p>
         </div>
@@ -247,8 +247,8 @@
     </div>
 
     <!-- Common Settings -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Configurações Gerais</h3>
+    <div class="bg-surface rounded-lg border border-neutral-200 p-6">
+      <h3 class="text-lg font-semibold text-neutral-900 mb-4">Configurações Gerais</h3>
       
       <div class="space-y-4">
         <div>
@@ -257,7 +257,7 @@
             <button
               @click="showLocationPicker = true"
               type="button"
-              class="inline-flex items-center gap-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
+              class="inline-flex items-center gap-1.5 text-xs font-medium text-primary-600 hover:text-primary-700 transition-colors"
               title="Selecionar no mapa"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -270,7 +270,7 @@
           </div>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="label-custom text-xs text-gray-500 dark:text-gray-400">Latitude</label>
+              <label class="label-custom text-xs text-neutral-500">Latitude</label>
               <input
                 v-model.number="config.common.default_lat"
                 type="number"
@@ -280,7 +280,7 @@
               />
             </div>
             <div>
-              <label class="label-custom text-xs text-gray-500 dark:text-gray-400">Longitude</label>
+              <label class="label-custom text-xs text-neutral-500">Longitude</label>
               <input
                 v-model.number="config.common.default_lng"
                 type="number"
@@ -309,7 +309,7 @@
             <option value="dark">Escuro</option>
             <option value="auto">Automático (seguir sistema)</option>
           </select>
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          <p class="mt-1 text-xs text-neutral-500">
             Define a aparência do mapa (cores claras ou escuras)
           </p>
         </div>
@@ -320,9 +320,9 @@
               v-model="config.common.enable_clustering" 
               type="checkbox" 
               id="enable-clustering"
-              class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+              class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300 rounded"
             />
-            <label for="enable-clustering" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+            <label for="enable-clustering" class="ml-2 text-sm text-neutral-700">
               Agrupar marcadores próximos (clustering)
             </label>
           </div>
@@ -332,9 +332,9 @@
               v-model="config.common.enable_drawing_tools" 
               type="checkbox" 
               id="enable-drawing"
-              class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+              class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300 rounded"
             />
-            <label for="enable-drawing" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+            <label for="enable-drawing" class="ml-2 text-sm text-neutral-700">
               Ferramentas de desenho (polígonos, linhas)
             </label>
           </div>
@@ -344,9 +344,9 @@
               v-model="config.common.enable_fullscreen" 
               type="checkbox" 
               id="enable-fullscreen"
-              class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+              class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300 rounded"
             />
-            <label for="enable-fullscreen" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+            <label for="enable-fullscreen" class="ml-2 text-sm text-neutral-700">
               Botão de tela cheia
             </label>
           </div>
@@ -589,11 +589,11 @@ onMounted(async () => {
 
 <style scoped>
 .label-custom {
-  @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5;
+  @apply block text-sm font-medium text-neutral-700 mb-1.5;
 }
 
 .input-custom {
-  @apply w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors;
+  @apply w-full rounded-md border border-neutral-300 bg-surface px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors;
 }
 
 .btn-primary {
@@ -601,6 +601,6 @@ onMounted(async () => {
 }
 
 .btn-secondary {
-  @apply inline-flex items-center justify-center rounded-md bg-white dark:bg-gray-800 px-4 py-2 text-sm font-semibold text-gray-900 dark:text-gray-200 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200;
+  @apply inline-flex items-center justify-center rounded-md bg-surface px-4 py-2 text-sm font-semibold text-neutral-900 shadow-sm ring-1 ring-inset ring-neutral-300 hover:bg-neutral-50 transition-all duration-200;
 }
 </style>

@@ -54,18 +54,18 @@
           <!-- Origem -->
           <div class="iface-block">
             <div class="iface-header">
-              <span class="iface-icon">📡</span>
+              <span class="iface-end">A</span>
               <span class="iface-name">{{ opticalData.origin?.interface || 'Origem não configurada' }}</span>
             </div>
             <div v-if="opticalData.origin" class="levels">
               <div class="level-row">
-                <span class="level-label">TX (Transmissão):</span>
+                <span class="level-label">TX</span>
                 <span class="level-value" :class="getLevelClass(opticalData.origin.tx, 'origin')">
                   {{ formatLevel(opticalData.origin.tx) }}
                 </span>
               </div>
               <div class="level-row">
-                <span class="level-label">RX (Recepção):</span>
+                <span class="level-label">RX</span>
                 <span class="level-value" :class="getLevelClass(opticalData.origin.rx, 'origin')">
                   {{ formatLevel(opticalData.origin.rx) }}
                 </span>
@@ -77,18 +77,18 @@
           <!-- Destino -->
           <div class="iface-block">
             <div class="iface-header">
-              <span class="iface-icon">📡</span>
+              <span class="iface-end">B</span>
               <span class="iface-name">{{ opticalData.destination?.interface || 'Destino não configurado' }}</span>
             </div>
             <div v-if="opticalData.destination" class="levels">
               <div class="level-row">
-                <span class="level-label">TX (Transmissão):</span>
+                <span class="level-label">TX</span>
                 <span class="level-value" :class="getLevelClass(opticalData.destination.tx, 'destination')">
                   {{ formatLevel(opticalData.destination.tx) }}
                 </span>
               </div>
               <div class="level-row">
-                <span class="level-label">RX (Recepção):</span>
+                <span class="level-label">RX</span>
                 <span class="level-value" :class="getLevelClass(opticalData.destination.rx, 'destination')">
                   {{ formatLevel(opticalData.destination.rx) }}
                 </span>
@@ -123,6 +123,14 @@
 
         <!-- Rodapé com botão de detalhes -->
         <div class="panel-actions">
+          <!-- EV-0127: localizar rompimento por leitura do OTDR -->
+          <button class="details-btn otdr-btn" data-testid="cable-otdr" @click.stop="$emit('otdr', cableData)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="7" stroke-width="2" />
+              <path stroke-linecap="round" stroke-width="2" d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+            </svg>
+            Localizar OTDR
+          </button>
           <button class="details-btn" @click.stop="$emit('open-details', cableData)">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -147,7 +155,7 @@ const props = defineProps({
   position: { type: Object, default: () => ({ x: 0, y: 0 }) },
 })
 
-const emit = defineEmits(['close', 'open-details'])
+const emit = defineEmits(['close', 'open-details', 'otdr'])
 
 const { get } = useApi()
 
@@ -382,303 +390,201 @@ const formatTimestamp = (ts) => {
 </script>
 
 <style scoped>
-/* ── Painel flutuante ──────────────────────────────────────────────────────── */
+/* EV-0064: superfície e bordas por tokens (claro/escuro), 320 px, valores em mono */
 .optical-panel {
   position: fixed;
   z-index: 10000;
-  width: min(400px, calc(100vw - 16px));
-  background: #1e293b;
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 14px;
-  box-shadow: 0 20px 40px -10px rgba(0,0,0,0.7), 0 0 0 1px rgba(99,102,241,0.2);
+  width: min(320px, calc(100vw - 16px));
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--n-200));
+  border-radius: 10px;
+  box-shadow: 0 12px 28px -8px rgb(0 0 0 / 0.25);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   font-size: 13px;
+  color: rgb(var(--n-900));
 }
-
 .optical-panel.dragging {
-  box-shadow: 0 28px 52px -10px rgba(0,0,0,0.85), 0 0 0 2px rgba(99,102,241,0.45);
+  box-shadow: 0 18px 36px -8px rgb(0 0 0 / 0.35), 0 0 0 2px rgb(var(--primary-500) / 0.5);
   cursor: grabbing;
 }
 
-/* ── Header ────────────────────────────────────────────────────────────────── */
 .panel-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 11px 14px;
-  background: #0f172a;
-  border-bottom: 1px solid rgba(255,255,255,0.07);
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgb(var(--n-200));
   cursor: grab;
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;
   flex-shrink: 0;
 }
-
 .panel-header:active { cursor: grabbing; }
-
-.drag-grip {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  opacity: 0.35;
-  flex-shrink: 0;
-}
-
-.drag-grip span {
-  display: block;
-  width: 16px;
-  height: 2px;
-  background: #94a3b8;
-  border-radius: 1px;
-}
-
+.drag-grip { display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; }
+.drag-grip span { display: block; width: 12px; height: 2px; background: rgb(var(--n-400)); border-radius: 1px; }
 .header-text { flex: 1; min-width: 0; }
-
 .panel-title {
-  font-weight: 700;
-  color: #f1f5f9;
+  font-weight: 600;
   font-size: 13px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
 .panel-subtitle {
   font-size: 11px;
-  color: #64748b;
-  margin-top: 1px;
+  color: rgb(var(--n-500));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
 .close-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  background: rgba(255,255,255,0.07);
-  border: 1px solid rgba(255,255,255,0.08);
-  color: #64748b;
-  cursor: pointer;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: rgb(var(--n-500));
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: all 0.15s;
 }
-
-.close-btn:hover {
-  background: rgba(239,68,68,0.18);
-  border-color: rgba(239,68,68,0.3);
-  color: #fca5a5;
-}
-
+.close-btn:hover { background: rgb(var(--n-100)); color: rgb(var(--n-900)); }
 .close-btn svg { width: 14px; height: 14px; }
 
-/* ── Estados ───────────────────────────────────────────────────────────────── */
 .panel-state {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 24px 16px;
-  color: #64748b;
-  font-size: 13px;
+  gap: 8px;
+  padding: 18px 12px;
+  color: rgb(var(--n-500));
 }
-
-.panel-state.error { color: #ef4444; }
-.panel-state.muted { color: #475569; }
-.panel-state svg { width: 18px; height: 18px; flex-shrink: 0; }
-
+.panel-state.error { color: rgb(var(--danger)); }
+.panel-state svg { width: 16px; height: 16px; flex-shrink: 0; }
 .spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid #334155;
-  border-top-color: #3b82f6;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgb(var(--n-200));
+  border-top-color: rgb(var(--primary-500));
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   flex-shrink: 0;
 }
-
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── Body ──────────────────────────────────────────────────────────────────── */
-.panel-body {
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.iface-block {
-  padding: 10px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-}
-
+.panel-body { padding: 4px 12px 8px; display: flex; flex-direction: column; }
+.iface-block { padding: 8px 0; border-bottom: 1px solid rgb(var(--n-100)); }
 .iface-block:last-of-type { border-bottom: none; }
-
-.iface-header {
-  display: flex;
+.iface-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.iface-end {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: rgb(var(--n-100));
+  color: rgb(var(--n-600));
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
 }
-
-.iface-icon { font-size: 14px; line-height: 1; }
-
 .iface-name {
   font-weight: 600;
-  color: #e2e8f0;
   font-size: 12px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-.levels { display: flex; flex-direction: column; gap: 5px; padding-left: 22px; }
-
+/* TX e RX lado a lado */
+.levels { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .level-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px 6px 3px 8px;
+  border: 1px solid rgb(var(--n-200));
+  border-radius: 6px;
 }
-
-.level-label { color: #64748b; font-size: 12px; }
-
+.level-label { color: rgb(var(--n-500)); font-size: 11px; font-weight: 600; }
 .level-value {
-  font-weight: 700;
-  font-size: 13px;
-  padding: 2px 8px;
-  border-radius: 5px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: 4px;
   white-space: nowrap;
 }
+.level-excellent,
+.level-good { color: rgb(var(--success)); background: rgb(var(--success) / 0.12); }
+.level-warning { color: rgb(var(--warning)); background: rgb(var(--warning) / 0.14); }
+.level-critical { color: rgb(var(--danger)); background: rgb(var(--danger) / 0.12); }
+.level-unknown { color: rgb(var(--n-500)); background: rgb(var(--n-100)); }
+.iface-empty { color: rgb(var(--n-500)); font-size: 11px; margin: 0; }
 
-.level-excellent { color: #10b981; background: rgba(16,185,129,0.12); }
-.level-good      { color: #3b82f6; background: rgba(59,130,246,0.12); }
-.level-warning   { color: #f59e0b; background: rgba(245,158,11,0.12); }
-.level-critical  { color: #ef4444; background: rgba(239,68,68,0.12); }
-.level-unknown   { color: #64748b; background: rgba(100,116,139,0.12); }
-
-.iface-empty { color: #475569; font-size: 11px; padding-left: 22px; margin: 0; }
-
-/* ── Atenuação e footer ────────────────────────────────────────────────────── */
 .attenuation-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 0 4px;
-  border-top: 1px solid rgba(255,255,255,0.06);
-  margin-top: 4px;
+  padding: 8px 0 2px;
+  border-top: 1px solid rgb(var(--n-100));
 }
-
-.atten-label { color: #64748b; font-size: 12px; }
-
-.atten-value { font-weight: 700; color: #f1f5f9; font-size: 13px; }
-
+.atten-label { color: rgb(var(--n-500)); font-size: 12px; }
+.atten-value {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
 .panel-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   font-size: 11px;
-  color: #94a3b8;
-  padding-top: 8px;
-}
-.last-check {
-  color: #94a3b8;
+  color: rgb(var(--n-500));
+  padding-top: 6px;
 }
 .refresh-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 10px;
-  background: rgba(99, 102, 241, 0.12);
-  border: 1px solid rgba(99, 102, 241, 0.35);
+  padding: 3px 8px;
+  border: 1px solid rgb(var(--n-300));
   border-radius: 6px;
-  color: #c7d2fe;
+  color: rgb(var(--n-700));
   font-size: 11px;
-  cursor: pointer;
-  transition: background 0.15s;
 }
-.refresh-btn:hover:not(:disabled) {
-  background: rgba(99, 102, 241, 0.22);
-}
-.refresh-btn:disabled {
-  opacity: 0.6;
-  cursor: progress;
-}
-.refresh-btn svg {
-  width: 12px;
-  height: 12px;
-  transition: transform 0.3s;
-}
-.refresh-btn svg.spinning {
-  animation: spin 1s linear infinite;
-}
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
+.refresh-btn:hover:not(:disabled) { background: rgb(var(--n-100)); }
+.refresh-btn:disabled { opacity: 0.6; cursor: progress; }
+.refresh-btn svg { width: 12px; height: 12px; }
+.refresh-btn svg.spinning { animation: spin 1s linear infinite; }
 
-/* ── Botão Ver Detalhes ────────────────────────────────────────────────────── */
-.panel-actions {
-  padding: 10px 14px 12px;
-  border-top: 1px solid rgba(255,255,255,0.07);
+.panel-actions { display: flex; gap: 6px; padding: 8px 12px 10px; border-top: 1px solid rgb(var(--n-200)); }
+/* EV-0127: «Localizar OTDR» ao lado de «Ver detalhes», em estilo secundário */
+.details-btn.otdr-btn {
+  background: rgb(var(--surface));
+  color: rgb(var(--n-700));
+  border: 1px solid rgb(var(--n-300));
 }
-
+.details-btn.otdr-btn:hover { background: rgb(var(--n-100)); color: rgb(var(--danger)); border-color: rgb(var(--danger) / 0.5); }
 .details-btn {
   display: flex;
   align-items: center;
-  gap: 7px;
-  width: 100%;
-  padding: 8px 14px;
-  background: rgba(59,130,246,0.15);
-  border: 1px solid rgba(59,130,246,0.3);
-  border-radius: 8px;
-  color: #93c5fd;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s;
   justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 12px;
+  border-radius: 7px;
+  background: rgb(var(--primary-600));
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
 }
-
-.details-btn:hover {
-  background: rgba(59,130,246,0.28);
-  border-color: rgba(59,130,246,0.5);
-  color: #bfdbfe;
-}
-
-.details-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
-
-/* ── Animação ──────────────────────────────────────────────────────────────── */
-.tooltip-float-enter-active {
-  transition: opacity 0.16s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.tooltip-float-leave-active {
-  transition: opacity 0.12s ease, transform 0.12s ease;
-}
-.tooltip-float-enter-from {
-  opacity: 0;
-  transform: scale(0.93) translateY(8px);
-}
-.tooltip-float-leave-to {
-  opacity: 0;
-  transform: scale(0.97) translateY(4px);
-}
-
-/* ── Mobile ────────────────────────────────────────────────────────────────── */
-@media (max-width: 480px) {
-  .optical-panel {
-    width: calc(100vw - 16px) !important;
-    left: 8px !important;
-    border-radius: 12px 12px 8px 8px;
-  }
-
-  .level-value { font-size: 12px; }
-  .iface-name  { font-size: 11px; }
-}
+.details-btn:hover { background: rgb(var(--primary-700)); }
+.details-btn svg { width: 14px; height: 14px; }
 </style>

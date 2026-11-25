@@ -50,19 +50,19 @@ function createToast(message, { title, type = 'info', duration = TOAST_DEFAULT_D
 
     const card = document.createElement('div');
     card.className = `toast-card toast-${type}`;
-    const icon =
-        type === 'success' ? '[OK]' :
-        type === 'error' ? '[ERROR]' :
-        type === 'warning' ? '[WARN]' :
-        '[INFO]';
-
-    card.innerHTML = `
-        <div class="text-xl leading-none pt-1">${icon}</div>
-        <div class="flex-1">
-            ${title ? `<strong class="block mb-1">${title}</strong>` : ''}
-            <div>${message}</div>
-        </div>
-    `;
+    // EV-0138: texto por textContent (a mensagem pode trazer dados do servidor); estilo global
+    // em NetworkDesignView (o <style scoped> não chega a nós criados por JS)
+    const body = document.createElement('div');
+    body.className = 'toast-body';
+    if (title) {
+        const strong = document.createElement('strong');
+        strong.textContent = title;
+        body.appendChild(strong);
+    }
+    const text = document.createElement('div');
+    text.textContent = message;
+    body.appendChild(text);
+    card.appendChild(body);
 
     host.appendChild(card);
 
@@ -82,17 +82,17 @@ function createToast(message, { title, type = 'info', duration = TOAST_DEFAULT_D
 }
 
 export function showSuccessMessage(message, options = {}) {
-    const { title = 'Success', duration } = options;
+    const { title = 'Concluído', duration } = options;
     createToast(message, { title, type: 'success', duration });
 }
 
 export function showErrorMessage(message, options = {}) {
-    const { title = 'Error', duration } = options;
+    const { title = 'Erro', duration } = options;
     createToast(message, { title, type: 'error', duration: duration ?? 5200 });
 }
 
 export function showInfoMessage(message, options = {}) {
-    const { title = 'Information', duration } = options;
+    const { title = 'Informação', duration } = options;
     createToast(message, { title, type: 'info', duration });
 }
 
@@ -106,23 +106,38 @@ function createConfirm(options = {}) {
     backdrop.className = 'confirm-backdrop';
 
     const {
-        title = 'Confirmation',
+        title = 'Confirmação',
         description = '',
-        confirmText = 'Confirm',
-        cancelText = 'Cancel',
+        confirmText = 'Confirmar',
+        cancelText = 'Cancelar',
         tone = 'primary',
     } = options;
 
+    // EV-0138: textos por textContent (nomes de cabos vêm do utilizador)
     const card = document.createElement('div');
     card.className = 'confirm-card';
-    card.innerHTML = `
-        ${title ? `<h3>${title}</h3>` : ''}
-        ${description ? `<p>${description}</p>` : ''}
-        <div class="confirm-buttons">
-            <button type="button" data-variant="secondary">${cancelText}</button>
-            <button type="button" data-variant="${tone === 'danger' ? 'danger' : 'primary'}">${confirmText}</button>
-        </div>
-    `;
+    if (title) {
+        const h = document.createElement('h3');
+        h.textContent = title;
+        card.appendChild(h);
+    }
+    if (description) {
+        const p = document.createElement('p');
+        p.textContent = description;
+        card.appendChild(p);
+    }
+    const buttons = document.createElement('div');
+    buttons.className = 'confirm-buttons';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.dataset.variant = 'secondary';
+    cancel.textContent = cancelText;
+    const ok = document.createElement('button');
+    ok.type = 'button';
+    ok.dataset.variant = tone === 'danger' ? 'danger' : 'primary';
+    ok.textContent = confirmText;
+    buttons.append(cancel, ok);
+    card.appendChild(buttons);
 
     host.appendChild(backdrop);
     host.appendChild(card);

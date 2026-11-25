@@ -298,6 +298,7 @@
 </template>
 
 <script setup>
+import { getCsrfToken } from '@/composables/useApi'
 import { defineComponent, computed, onMounted, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 
@@ -328,10 +329,6 @@ const testHost = ref('');
 const testPort = ref('');
 const testOutput = ref('Output will appear here...');
 
-const getCsrfToken = () => {
-  const match = document.cookie.match(/csrftoken=([^;]+)/);
-  return match ? match[1] : '';
-};
 
 const fmtDbm = (value) => {
   if (value === null || value === undefined) return '-';

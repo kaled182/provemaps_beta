@@ -420,6 +420,13 @@ class Port(models.Model):
         blank=True,
         help_text="Timestamp da última coleta óptica assíncrona",
     )
+    # EV-0085: motivo da última leitura descartada pela coleta («» = leitura boa).
+    optical_problem = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Motivo da última leitura óptica descartada pela coleta (vazio = leitura boa)",
+    )
 
     # Alarm configuration fields
     alarm_enabled = models.BooleanField(
@@ -636,6 +643,23 @@ class FiberCable(models.Model):
         blank=True,
         related_name="cables_end",
         help_text="Site de destino (opcional até conexão lógica)",
+    )
+    # EV-0135: cabo derivado que nasce (ou termina) numa CEO no meio de outro cabo
+    origin_infrastructure = models.ForeignKey(
+        "FiberInfrastructure",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="derived_cables",
+        help_text="CEO onde o cabo começa (derivação)",
+    )
+    destination_infrastructure = models.ForeignKey(
+        "FiberInfrastructure",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="arriving_cables",
+        help_text="CEO onde o cabo termina",
     )
 
     origin_port = models.ForeignKey(
@@ -1123,6 +1147,15 @@ class FiberStrand(models.Model):
         related_name="connected_fiber",
         help_text="Porta de dispositivo conectada (DIO, ODF, Switch)",
     )
+    # EV-0134: a fibra tem duas pontas — connected_device_port é a do Site A, esta a do Site B
+    connected_device_port_b = models.OneToOneField(
+        Port,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="connected_fiber_b",
+        help_text="Porta de dispositivo conectada na ponta do Site B",
+    )
 
     # Metadados de qualidade (medições ópticas)
     attenuation_db = models.DecimalField(
@@ -1169,6 +1202,98 @@ class FiberStrand(models.Model):
         }
 
 
+class Pole(models.Model):
+    """Poste de rede (EV-0139): ponto de apoio dos cabos aéreos no Projeto de Rede."""
+
+    name = models.CharField(
+        max_length=60, help_text="Código/número do poste (placa da concessionária)"
+    )
+    location = gis_models.PointField(geography=True, srid=4326)
+    owner = models.CharField(max_length=60, blank=True, default="", help_text="Concessionária/dono")
+    height_m = models.FloatField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "inventory_pole"
+        verbose_name = "Poste"
+        verbose_name_plural = "Postes"
+        ordering = ["name", "id"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Splitter(models.Model):
+    """Splitter óptico na bandeja de uma CEO/CTO (EV-0142): uma fibra de entrada (fibra + lado na
+    caixa) e N portas de saída. A perda vem do orçamento óptico (``setup_app.optical_budget``)."""
+
+    RATIOS = [("1x2", "1x2"), ("1x4", "1x4"), ("1x8", "1x8"), ("1x16", "1x16"), ("1x32", "1x32")]
+
+    infrastructure = models.ForeignKey(
+        "FiberInfrastructure", on_delete=models.CASCADE, related_name="splitters"
+    )
+    name = models.CharField(max_length=60, blank=True, default="")
+    ratio = models.CharField(max_length=5, choices=RATIOS)
+    input_strand = models.ForeignKey(
+        "FiberStrand",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="splitter_inputs",
+    )
+    input_side = models.CharField(max_length=1, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "inventory_splitter"
+        ordering = ["id"]
+
+    @property
+    def port_count(self) -> int:
+        return int(self.ratio.split("x")[1])
+
+
+class SplitterPort(models.Model):
+    """Porta de saída do splitter: estado de atendimento e, opcionalmente, a fibra que segue."""
+
+    STATUS_FREE = "livre"
+    STATUS_RESERVED = "reservada"
+    STATUS_BUSY = "ocupada"
+    STATUS_BLOCKED = "bloqueada"
+    STATUSES = [
+        (STATUS_FREE, "Livre"),
+        (STATUS_RESERVED, "Reservada"),
+        (STATUS_BUSY, "Ocupada"),
+        (STATUS_BLOCKED, "Bloqueada"),
+    ]
+
+    splitter = models.ForeignKey(Splitter, on_delete=models.CASCADE, related_name="ports")
+    number = models.PositiveSmallIntegerField()
+    status = models.CharField(max_length=10, choices=STATUSES, default=STATUS_FREE)
+    customer = models.CharField(
+        max_length=120, blank=True, default="", help_text="Cliente / reserva"
+    )
+    note = models.CharField(max_length=200, blank=True, default="")
+    output_strand = models.ForeignKey(
+        "FiberStrand",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="splitter_outputs",
+    )
+    output_side = models.CharField(max_length=1, blank=True, default="")
+
+    class Meta:
+        db_table = "inventory_splitter_port"
+        ordering = ["splitter_id", "number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["splitter", "number"], name="inventory_splitter_port_unique"
+            )
+        ]
+
+
 class FiberFusion(models.Model):
     """Fusão física entre duas fibras em uma infraestrutura."""
 
@@ -1200,6 +1325,10 @@ class FiberFusion(models.Model):
         related_name="fusions_as_b",
         help_text="Segunda fibra participante da fusão",
     )
+    # EV-0136: numa CEO a meio do cabo a fibra é cortada em duas metades; o lado diz para onde
+    # segue a metade emendada ("a" = rumo à ponta A do cabo, "b" = rumo à ponta B)
+    fiber_a_side = models.CharField(max_length=1, blank=True, default="")
+    fiber_b_side = models.CharField(max_length=1, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -1715,3 +1844,48 @@ RouteSegment = cast(
     "type[RouteSegmentModel]",
     _routes.RouteSegment,
 )
+
+
+class OtdrAlert(models.Model):
+    # EV-0132: estado do atendimento; «Concluído» tira o pino do mapa (cleared_at)
+    STATUSES = [
+        ("registered", "Registado"),
+        ("en_route", "Em deslocamento"),
+        ("splicing", "Em fusão"),
+        ("done", "Concluído"),
+    ]
+
+    """Ponto de rompimento OTDR fixado no mapa para toda a equipa (EV-0128).
+
+    O ponto e o trecho guardados são os que o servidor calculou (``usecases.otdr``) a partir dos
+    parâmetros — nunca coordenadas vindas do browser. Fica ativo até alguém o limpar após o reparo.
+    """
+
+    cable = models.ForeignKey(FiberCable, on_delete=models.CASCADE, related_name="otdr_alerts")
+    direction = models.CharField(max_length=2)
+    otdr_m = models.FloatField()
+    # EV-0131: medição cruzada — leitura feita do Site B (otdr_m é então a do Site A)
+    otdr_b_m = models.FloatField(null=True, blank=True)
+    slack_pct = models.FloatField()
+    result = models.JSONField(help_text="Resposta de otdr-locate no momento em que foi fixado")
+    note = models.CharField(max_length=200, blank=True)
+    status = models.CharField(max_length=12, choices=STATUSES, default="registered")
+    # EV-0130: ajuste fino em campo (m sobre o traçado, a partir do ponto calculado)
+    offset_m = models.FloatField(default=0)
+    # Registo do atendimento: [{at, by, action: pinned|adjusted|cleared|…, …}]
+    log = models.JSONField(default=list, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    cleared_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    cleared_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["cleared_at"], name="otdr_alert_active_idx")]
+
+    def __str__(self) -> str:
+        return f"OTDR {self.cable_id} {self.direction} {self.otdr_m:.0f} m"

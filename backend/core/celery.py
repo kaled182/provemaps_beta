@@ -143,13 +143,27 @@ app.conf.update(
             # delay perceptível de até 5 min para o painel óptico refletir
             # mudanças de estado (ex.: cabo voltando ao normal).
             "schedule": 60.0,
-            "options": {"queue": "zabbix"},
+            # EV-0063: uma execução que não começou em 55 s já foi ultrapassada
+            # pela seguinte — expira em vez de se acumular na fila.
+            "options": {"queue": "zabbix", "expires": 55},
+        },
+        # EV-0095: estado das ONU (1 item.get por OLT); a tarefa tem lock próprio (cache.add).
+        "collect-onu-states": {
+            "task": "gpon.tasks.collect_onu_states",
+            "schedule": 120.0,
+            "options": {"queue": "zabbix", "expires": 110},
         },
         # Dispatch de alarmes de fibra (Fase A): a cada 1 min lê FiberEvent novos
         # e envia notificação WhatsApp/Email para configs aplicáveis.
         "dispatch-fiber-alarms": {
             "task": "inventory.tasks.dispatch_fiber_alarms_task",
             "schedule": 60.0,
+            "options": {"queue": "default"},
+        },
+        # EV-0085: aviso por e-mail de equipamentos sem leitura (só quando entra um novo).
+        "notify-collection-health": {
+            "task": "inventory.tasks.notify_collection_health",
+            "schedule": 3600.0,
             "options": {"queue": "default"},
         },
         "sync-zabbix-inventory": {

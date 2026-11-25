@@ -96,4 +96,26 @@ describe('TimeSeriesChart (EV-0011 / EV-0026)', () => {
     await nextTick()
     expect(wrapper.vm.toDataURL()).toMatch(/^data:image\/png/)
   })
+
+  it('EV-0051: ao trocar o tema relê as cores dos tokens e atualiza sem recriar; desmontar desliga', async () => {
+    const root = document.documentElement
+    root.style.setProperty('--text-tertiary', 'rgb(1, 1, 1)')
+    const wrapper = mount(TimeSeriesChart, { props: { series: series([{ x: 1, y: 1 }, { x: 2, y: 2 }]) } })
+    await nextTick()
+    expect(instances[0].options.scales.y.ticks.color).toBe('rgb(1, 1, 1)')
+
+    root.style.setProperty('--text-tertiary', 'rgb(2, 2, 2)')
+    root.classList.add('dark')
+    await Promise.resolve()
+    expect(Chart).toHaveBeenCalledTimes(1)
+    expect(instances[0].update).toHaveBeenCalledWith('none')
+    expect(instances[0].options.scales.y.ticks.color).toBe('rgb(2, 2, 2)')
+
+    wrapper.unmount()
+    instances[0].update.mockClear()
+    root.classList.remove('dark')
+    await Promise.resolve()
+    expect(instances[0].update).not.toHaveBeenCalled()
+    root.style.removeProperty('--text-tertiary')
+  })
 })
